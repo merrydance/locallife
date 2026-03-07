@@ -61,3 +61,45 @@ export async function listMerchantWithdrawals(page: number = 1, limit: number = 
     data: { page, limit }
   })
 }
+
+/* ─────────────────────────── 收付通进件 ─────────────────────────── */
+
+export interface ApplymentStatusResponse {
+  status: string
+  status_desc: string
+  sign_url?: string
+  sub_mch_id?: string
+  reject_reason?: string
+}
+
+export interface MerchantBindBankRequest {
+  account_type: 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
+  account_bank: string
+  bank_address_code: string
+  bank_name?: string
+  account_number: string
+  account_name: string
+  contact_phone: string
+  contact_email?: string
+}
+
+export interface MerchantBindBankResponse {
+  applyment_id: number
+  status: string
+  message: string
+}
+
+export async function getMerchantApplymentStatus(): Promise<ApplymentStatusResponse> {
+  return request({
+    url: '/v1/merchant/applyment/status',
+    method: 'GET'
+  })
+}
+
+export async function merchantBindBank(payload: MerchantBindBankRequest): Promise<MerchantBindBankResponse> {
+  return request({
+    url: '/v1/merchant/applyment/bindbank',
+    method: 'POST',
+    data: payload
+  })
+}

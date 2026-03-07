@@ -45,6 +45,7 @@ type NavItem = {
   href: string;
   activePrefix: string;
   icon: LucideIcon;
+  exact?: boolean;
 };
 
 type NavGroup = {
@@ -112,6 +113,7 @@ const navGroups: NavGroup[] = [
         label: "财务管理",
         href: "/merchant/finance",
         activePrefix: "/merchant/finance",
+        exact: true,
         icon: Wallet,
       },
       {
@@ -329,7 +331,9 @@ export function MerchantSidebar() {
               {/* 分组内的导航项 */}
               <div className="space-y-0.5">
                 {group.items.map((item) => {
-                  const active = pathname.startsWith(item.activePrefix);
+                  const active = item.exact
+                    ? pathname === item.activePrefix
+                    : pathname.startsWith(item.activePrefix);
                   const Icon = item.icon;
                   return (
                     <Link key={item.label} href={item.href} title={item.label}>

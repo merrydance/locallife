@@ -13,65 +13,266 @@
     refresher-enabled
     bindrefresherrefresh="onPullDownRefresh"
   >
-    <view class="section">
-      <view class="section-title">账户余额</view>
-      <t-cell-group theme="card">
-        <t-cell title="可提现余额" note="¥{{formatAmount(balance.withdrawable_amount)}}" />
-        <t-cell title="账户可用余额" note="¥{{formatAmount(balance.available_amount)}}" />
-        <t-cell title="待结算金额" note="¥{{formatAmount(balance.pending_amount)}}" />
-      </t-cell-group>
-    </view>
 
+    <!-- ── 收付通进件状态 ── -->
     <view class="section">
-      <view class="section-title">发起提现</view>
-      <t-cell-group theme="card">
-        <t-input
-          type="number"
-          label="提现金额"
-          placeholder="请输入金额（元）"
-          value="{{withdrawAmountYuan}}"
-          bindchange="onWithdrawAmountChange"
-        />
-        <t-input
-          label="备注"
-          placeholder="请输入提现备注"
-          value="{{withdrawRemark}}"
-          bindchange="onWithdrawRemarkChange"
-        />
-      </t-cell-group>
+      <view class="section-title">收付通进件状态</view>
 
-      <view class="submit-wrap">
-        <t-button
-          theme="primary"
-          size="large"
-          block
-          loading="{{submitting}}"
-          disabled="{{loading || submitting}}"
-          bindtap="onSubmitWithdraw"
-         shape="round">
-          提交提现申请
-        </t-button>
+      <!-- Loading -->
+      <view wx:if="{{loadingApplyment}}" class="applyment-placeholder">
+        <text class="placeholder-text">查询中...</text>
+      </view>
+
+      <!-- Not applied yet -->
+      <view wx:elif="{{!hasApplyment && applymentLoaded}}">
+        <view class="applyment-hint">
+          <text>尚未提交进件申请，请填写银行结算账户信息以开通收付通。</text>
+        </view>
+
+        <view wx:if="{{!showBindForm}}" class="submit-wrap">
+          <t-button theme="primary" size="medium" shape="round" bindtap="onShowBindForm">
+            填写银行账户信息
+          </t-button>
+        </view>
+
+        <!-- Bind bank form -->
+        <view wx:else class="bind-form">
+          <view class="form-title">填写银行结算账户</view>
+
+          <t-cell-group theme="card">
+            <view class="form-radio-row">
+              <text class="form-label">账户类型</text>
+              <t-radio-group value="{{bindAccountType}}" bindchange="onBindAccountTypeChange">
+                <t-radio value="ACCOUNT_TYPE_BUSINESS" label="对公账户" />
+                <t-radio value="ACCOUNT_TYPE_PRIVATE" label="对私（个人）" />
+              </t-radio-group>
+            </view>
+            <t-input
+              label="开户名称"
+              placeholder="{{bindAccountType === 'ACCOUNT_TYPE_BUSINESS' ? '企业/机构全称' : '持卡人姓名'}}"
+              value="{{bindAccountName}}"
+              data-field="bindAccountName"
+              bindchange="onBindFieldChange"
+            />
+            <t-input
+              label="银行账号"
+              placeholder="银行账户号码"
+              value="{{bindAccountNumber}}"
+              data-field="bindAccountNumber"
+              bindchange="onBindFieldChange"
+            />
+            <t-input
+              label="开户银行"
+              placeholder="如：中国工商银行"
+              value="{{bindAccountBank}}"
+              data-field="bindAccountBank"
+              bindchange="onBindFieldChange"
+            />
+            <t-input
+              label="省市编码"
+              placeholder="如：110000（北京市）"
+              value="{{bindBankAddressCode}}"
+              data-field="bindBankAddressCode"
+              bindchange="onBindFieldChange"
+            />
+            <t-input
+              label="开户支行"
+              placeholder="开户支行全称（选填）"
+              value="{{bindBankName}}"
+              data-field="bindBankName"
+              bindchange="onBindFieldChange"
+            />
+            <t-input
+              label="联系手机"
+              type="number"
+              placeholder="11位手机号"
+              value="{{bindContactPhone}}"
+              data-field="bindContactPhone"
+              bindchange="onBindFieldChange"
+            />
+            <t-input
+              label="联系邮箱"
+              placeholder="选填"
+              value="{{bindContactEmail}}"
+              data-field="bindContactEmail"
+              bindchange="onBindFieldChange"
+            />
+          </t-cell-group>
+
+          <view class="form-actions">
+            <t-button
+              theme="primary"
+              size="large"
+              block
+              shape="round"
+              loading="{{submittingBind}}"
+              disabled="{{submittingBind}}"
+              bindtap="onSubmitBindBank"
+            >
+              提交银行账户信息
+            </t-button>
+            <t-button
+              theme="light"
+              size="large"
+              block
+              shape="round"
+              disabled="{{submittingBind}}"
+              bindtap="onHideBindForm"
+              style="margin-top: 8px;"
+            >
+              取消
+            </t-button>
+          </view>
+        </view>
+      </view>
+
+      <!-- Has applyment status -->
+      <view wx:elif="{{hasApplyment && applymentLoaded}}">
+        <t-cell-group theme="card">
+          <t-cell title="进件状态">
+            <view slot="note">
+              <t-tag
+                theme="{{getApplymentStatusTheme(applymentStatus.status)}}"
+                variant="light"
+              >{{getApplymentStatusText(applymentStatus.status)}}</t-tag>
+            </view>
+          </t-cell>
+          <t-cell wx:if="{{applymentStatus.status_desc}}" title="状态说明" note="{{applymentStatus.status_desc}}" />
+          <t-cell wx:if="{{applymentStatus.sub_mch_id}}" title="子商户号" note="{{applymentStatus.sub_mch_id}}" />
+        </t-cell-group>
+
+        <!-- Sign URL -->
+        <view wx:if="{{applymentStatus.sign_url}}" class="applyment-hint applyment-warn">
+          <text>需要前往微信完成签约，请复制签约链接在浏览器中打开：</text>
+          <view class="sign-url">{{applymentStatus.sign_url}}</view>
+        </view>
+
+        <!-- Reject reason -->
+        <view wx:if="{{applymentStatus.reject_reason}}" class="applyment-hint applyment-error">
+          <text class="hint-label">拒绝原因：</text>
+          <text>{{applymentStatus.reject_reason}}</text>
+        </view>
+
+        <!-- Active success -->
+        <view
+          wx:if="{{applymentStatus.status === 'finish' || applymentStatus.status === 'active'}}"
+          class="applyment-hint applyment-success"
+        >
+          <text>✓ 收付通已开通，可正常收款和提现。</text>
+        </view>
+
+        <!-- Rejected: re-apply -->
+        <view wx:if="{{applymentStatus.status === 'rejected' && !showBindForm}}" class="submit-wrap">
+          <t-button theme="primary" size="medium" shape="round" bindtap="onShowBindForm">
+            重新提交银行账户信息
+          </t-button>
+        </view>
+
+        <!-- Re-apply form -->
+        <view wx:if="{{showBindForm}}" class="bind-form">
+          <view class="form-title">重新填写银行结算账户</view>
+
+          <t-cell-group theme="card">
+            <view class="form-radio-row">
+              <text class="form-label">账户类型</text>
+              <t-radio-group value="{{bindAccountType}}" bindchange="onBindAccountTypeChange">
+                <t-radio value="ACCOUNT_TYPE_BUSINESS" label="对公账户" />
+                <t-radio value="ACCOUNT_TYPE_PRIVATE" label="对私（个人）" />
+              </t-radio-group>
+            </view>
+            <t-input label="开户名称" placeholder="开户名称" value="{{bindAccountName}}" data-field="bindAccountName" bindchange="onBindFieldChange" />
+            <t-input label="银行账号" placeholder="银行账户号码" value="{{bindAccountNumber}}" data-field="bindAccountNumber" bindchange="onBindFieldChange" />
+            <t-input label="开户银行" placeholder="如：中国工商银行" value="{{bindAccountBank}}" data-field="bindAccountBank" bindchange="onBindFieldChange" />
+            <t-input label="省市编码" placeholder="如：110000（北京市）" value="{{bindBankAddressCode}}" data-field="bindBankAddressCode" bindchange="onBindFieldChange" />
+            <t-input label="开户支行" placeholder="开户支行全称（选填）" value="{{bindBankName}}" data-field="bindBankName" bindchange="onBindFieldChange" />
+            <t-input label="联系手机" type="number" placeholder="11位手机号" value="{{bindContactPhone}}" data-field="bindContactPhone" bindchange="onBindFieldChange" />
+            <t-input label="联系邮箱" placeholder="选填" value="{{bindContactEmail}}" data-field="bindContactEmail" bindchange="onBindFieldChange" />
+          </t-cell-group>
+
+          <view class="form-actions">
+            <t-button theme="primary" size="large" block shape="round" loading="{{submittingBind}}" disabled="{{submittingBind}}" bindtap="onSubmitBindBank">
+              提交银行账户信息
+            </t-button>
+            <t-button theme="light" size="large" block shape="round" disabled="{{submittingBind}}" bindtap="onHideBindForm" style="margin-top: 8px;">
+              取消
+            </t-button>
+          </view>
+        </view>
       </view>
     </view>
 
-    <view class="section">
-      <view class="section-title">提现记录</view>
-      <t-cell-group theme="card">
-        <block wx:if="{{withdrawals.length > 0}}">
-          <view wx:for="{{withdrawals}}" wx:key="id" class="record-item">
-            <view class="record-row">
-              <text class="record-amount">¥{{formatAmount(item.amount)}}</text>
-              <t-tag theme="{{getStatusTheme(item.status)}}" variant="light">{{getStatusText(item.status)}}</t-tag>
+    <!-- ── 账户余额（收付通未激活时隐藏）── -->
+    <block wx:if="{{notConfigured}}">
+      <view class="section">
+        <view class="applyment-hint applyment-warn">
+          <text>收付通账户尚未激活，完成进件签约后余额数据将自动显示。</text>
+        </view>
+      </view>
+    </block>
+
+    <block wx:else>
+      <view class="section">
+        <view class="section-title">账户余额</view>
+        <t-cell-group theme="card">
+          <t-cell title="可提现余额" note="¥{{formatAmount(balance.withdrawable_amount)}}" />
+          <t-cell title="账户可用余额" note="¥{{formatAmount(balance.available_amount)}}" />
+          <t-cell title="待结算金额" note="¥{{formatAmount(balance.pending_amount)}}" />
+        </t-cell-group>
+      </view>
+
+      <view class="section">
+        <view class="section-title">发起提现</view>
+        <t-cell-group theme="card">
+          <t-input
+            type="number"
+            label="提现金额"
+            placeholder="请输入金额（元）"
+            value="{{withdrawAmountYuan}}"
+            bindchange="onWithdrawAmountChange"
+          />
+          <t-input
+            label="备注"
+            placeholder="请输入提现备注"
+            value="{{withdrawRemark}}"
+            bindchange="onWithdrawRemarkChange"
+          />
+        </t-cell-group>
+
+        <view class="submit-wrap">
+          <t-button
+            theme="primary"
+            size="large"
+            block
+            loading="{{submitting}}"
+            disabled="{{loading || submitting}}"
+            bindtap="onSubmitWithdraw"
+            shape="round"
+          >
+            提交提现申请
+          </t-button>
+        </view>
+      </view>
+
+      <view class="section">
+        <view class="section-title">提现记录</view>
+        <t-cell-group theme="card">
+          <block wx:if="{{withdrawals.length > 0}}">
+            <view wx:for="{{withdrawals}}" wx:key="id" class="record-item">
+              <view class="record-row">
+                <text class="record-amount">¥{{formatAmount(item.amount)}}</text>
+                <t-tag theme="{{getStatusTheme(item.status)}}" variant="light">{{getStatusText(item.status)}}</t-tag>
+              </view>
+              <view class="record-meta">创建时间：{{item.created_at}}</view>
+              <view class="record-meta" wx:if="{{item.completed_at}}">完成时间：{{item.completed_at}}</view>
+              <view class="record-meta" wx:if="{{item.remark}}">备注：{{item.remark}}</view>
+              <view class="record-meta" wx:if="{{item.failure_reason}}">失败原因：{{item.failure_reason}}</view>
             </view>
-            <view class="record-meta">创建时间：{{item.created_at}}</view>
-            <view class="record-meta" wx:if="{{item.completed_at}}">完成时间：{{item.completed_at}}</view>
-            <view class="record-meta" wx:if="{{item.remark}}">备注：{{item.remark}}</view>
-            <view class="record-meta" wx:if="{{item.failure_reason}}">失败原因：{{item.failure_reason}}</view>
-          </view>
-        </block>
-        <t-empty wx:else description="暂无提现记录" />
-      </t-cell-group>
-    </view>
+          </block>
+          <t-empty wx:else description="暂无提现记录" />
+        </t-cell-group>
+      </view>
+    </block>
+
   </scroll-view>
 
   <t-loading wx:if="{{loading}}" text="加载中" fullscreen />
