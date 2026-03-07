@@ -16,7 +16,7 @@
     <!-- 2. 空状态 -->
     <view wx:if="{{reviews.length === 0}}" class="empty-state animate-fade-in">
       <t-empty icon="chat" description="还没有评价过订单" />
-      <t-button theme="primary" variant="outline" size="small" shape="round" bindtap="onGoHome">去探索美食</t-button>
+      <t-button theme="primary" size="small" shape="round" bindtap="onGoHome">去探索美食</t-button>
     </view>
 
     <!-- 3. 评价列表 -->
@@ -52,7 +52,7 @@
 
           <!-- 标签行 -->
           <view class="tag-row" wx:if="{{item.tags && item.tags.length > 0}}">
-            <t-tag wx:for="{{item.tags}}" wx:key="*this" size="small" variant="light" theme="default" shape="round">{{item}}</t-tag>
+            <t-tag wx:for="{{item.tags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{item}}</t-tag>
           </view>
 
           <!-- 评价内容 -->

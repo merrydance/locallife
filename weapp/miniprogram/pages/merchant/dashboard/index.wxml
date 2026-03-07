@@ -15,7 +15,7 @@
         <view class="merchant-profile">
           <t-icon name="avatar" size="48rpx" color="rgba(255,255,255,0.8)" />
           <view class="merchant-name">{{merchantInfo.name || '核心商圈店'}}</view>
-          <t-tag size="small" variant="light" theme="default" shape="round" class="status-tag {{isOpen ? 'tag-open' : 'tag-closed'}}">
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="status-tag {{isOpen ? 'tag-open' : 'tag-closed'}}">
             {{isOpen ? '营业中' : '休息中'}}
           </t-tag>
         </view>
@@ -50,7 +50,7 @@
           <t-icon name="{{isOpen ? 'check-circle' : 'error-circle'}}" size="32rpx" />
           <text class="ops-text">{{isOpen ? '正在接收订单中' : '已暂停接单'}}</text>
         </view>
-        <t-button size="extra-small" theme="primary" variant="outline" bind:tap="onToggleBusiness" shape="round">
+        <t-button size="extra-small" theme="primary" bind:tap="onToggleBusiness" shape="round">
           {{isOpen ? '打烊' : '开门'}}
         </t-button>
       </view>
@@ -82,7 +82,7 @@
         <view class="order-card" wx:for="{{orderFlow}}" wx:key="id" data-id="{{item.id}}" bindtap="onOrderTap">
           <view class="order-header">
             <view class="order-left">
-              <t-tag size="small" variant="light">{{item.order_type_label}}</t-tag>
+              <t-tag size="small" variant="dark">{{item.order_type_label}}</t-tag>
               <text class="order-no">#{{item.order_no_short}}</text>
             </view>
             <text class="order-status" style="color: {{item.status_color}}">{{item.status_label}}</text>
@@ -101,7 +101,7 @@
         </view>
 
         <view class="more-wrap">
-          <t-button size="small" variant="outline" theme="primary" bind:tap="onGoOrderList" shape="round">查看更多订单</t-button>
+          <t-button size="small" theme="primary" bind:tap="onGoOrderList" shape="round">查看更多订单</t-button>
         </view>
       </view>
     </view>

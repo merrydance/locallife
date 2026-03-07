@@ -41,7 +41,7 @@
             <view slot="label" style="display: flex; flex-direction: column;">
               <view style="display: flex; align-items: center; gap: 8rpx;">
                 <text>余额支付</text>
-                <t-tag wx:if="{{memberBalance > 0 && memberBalance < (paymentMode === 'deposit' ? deposit : 0)}}" size="extra-small" theme="warning" variant="light">余额不足以全抵</t-tag>
+                <t-tag wx:if="{{memberBalance > 0 && memberBalance < (paymentMode === 'deposit' ? deposit : 0)}}" size="extra-small" theme="warning" variant="dark">余额不足以全抵</t-tag>
               </view>
               <text class="balance-note" wx:if="{{memberBalanceDisplay}}">可用余额: ¥{{memberBalanceDisplay}}</text>
               <text class="balance-note" wx:else>未加入会员或无余额</text>

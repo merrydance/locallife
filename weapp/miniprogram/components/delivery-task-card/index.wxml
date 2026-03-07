@@ -124,8 +124,7 @@ module.exports = {
 
         <t-button 
             theme="default" 
-            size="small" 
-            variant="outline"
+            size="small"
             bind:tap="onException"
          shape="round">
             上报异常

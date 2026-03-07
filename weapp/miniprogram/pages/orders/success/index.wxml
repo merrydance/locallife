@@ -21,7 +21,7 @@
 
     <view class="action-btns">
       <t-button theme="primary" block size="large" shape="round" bindtap="onViewOrder">{{primaryButtonText}}</t-button>
-      <t-button theme="default" variant="outline" block size="large" shape="round" bindtap="onGoHome" style="margin-top: 32rpx;">返回首页</t-button>
+      <t-button theme="default" block size="large" shape="round" bindtap="onGoHome" style="margin-top: 32rpx;">返回首页</t-button>
     </view>
   </view>
 

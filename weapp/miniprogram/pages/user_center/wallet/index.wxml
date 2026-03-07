@@ -5,7 +5,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
     </t-empty>
   </view>
 
@@ -103,7 +103,7 @@
               </view>
               <view class="asset-balance">
                 <text class="asset-amount">¥{{item.balance_display}}</text>
-                <t-tag variant="light-outline" theme="primary" size="extra-small" catchtap="onTopUp" data-id="{{item.id}}">充值</t-tag>
+                <t-tag variant="dark" theme="primary" size="extra-small" catchtap="onTopUp" data-id="{{item.id}}">充值</t-tag>
               </view>
             </view>
           </block>
@@ -140,7 +140,7 @@
               </view>
               <view class="transaction-right">
                 <text class="transaction-amount {{item.amount > 0 ? 'positive' : 'negative'}}">{{item.amountDisplay}}</text>
-                <t-tag wx:if="{{item.status}}" variant="light" theme="{{item.statusTheme}}" size="extra-small">{{item.statusName}}</t-tag>
+                <t-tag wx:if="{{item.status}}" variant="dark" theme="{{item.statusTheme}}" size="extra-small">{{item.statusName}}</t-tag>
               </view>
             </view>
           </block>

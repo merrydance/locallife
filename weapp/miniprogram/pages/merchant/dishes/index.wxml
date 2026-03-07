@@ -2,7 +2,7 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
   <view class="header-actions">
-    <t-button size="small" variant="outline" theme="primary" bind:tap="onManageCategories" shape="round">分类管理</t-button>
+    <t-button size="small" theme="primary" bind:tap="onManageCategories" shape="round">分类管理</t-button>
   </view>
 
   <!-- 搜索栏 -->
@@ -32,7 +32,7 @@
             <view class="dish-info">
               <view class="dish-name-row">
                 <text class="dish-name">{{item.name}}</text>
-                <t-tag wx:if="{{!item.is_online}}" theme="danger" variant="light" size="extra-small">已下架</t-tag>
+                <t-tag wx:if="{{!item.is_online}}" theme="danger" variant="dark" size="extra-small">已下架</t-tag>
               </view>
               <view class="dish-desc">{{item.description || '暂无描述'}}</view>
               <view class="dish-price-row">

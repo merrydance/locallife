@@ -7,7 +7,7 @@
 
   <view wx:elif="{{error}}" class="card center">
     <t-empty icon="error-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bind:tap="onRetry" shape="round" variant="outline">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bind:tap="onRetry" shape="round">重试</t-button>
     </t-empty>
   </view>
 
@@ -18,7 +18,7 @@
   <view wx:else class="card">
     <view class="title-row">
       <text class="title">{{detail.name}}</text>
-      <t-tag theme="{{detail.status === 'approved' ? 'success' : (detail.status === 'pending' ? 'warning' : 'danger')}}" variant="light-outline">
+      <t-tag theme="{{detail.status === 'approved' ? 'success' : (detail.status === 'pending' ? 'warning' : 'danger')}}" variant="dark">
         {{detail.status}}
       </t-tag>
     </view>

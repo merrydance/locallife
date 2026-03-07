@@ -21,7 +21,7 @@
   <view class="recharge-section" wx:if="{{rechargeRules && rechargeRules.length > 0}}">
     <view class="recharge-header">
       <text class="r-title">会员充值奖励</text>
-      <t-tag wx:if="{{currentBalance < orderTotal}}" size="extra-small" theme="danger" variant="light">当前余额 ¥{{balanceDisplay}}，不足以支付</t-tag>
+      <t-tag wx:if="{{currentBalance < orderTotal}}" size="extra-small" theme="danger" variant="dark">当前余额 ¥{{balanceDisplay}}，不足以支付</t-tag>
     </view>
     <view class="recharge-grid">
       <view 

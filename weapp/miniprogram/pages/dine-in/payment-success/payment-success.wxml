@@ -81,7 +81,7 @@
     <t-button theme="primary" shape="round" block size="large" bindtap="goToOrderDetail" style="margin-bottom: 32rpx;">
       查看订单详情
     </t-button>
-    <t-button theme="default" variant="outline" shape="round" block size="large" bindtap="goToHome">
+    <t-button theme="default" shape="round" block size="large" bindtap="goToHome">
       返回首页
     </t-button>
   </view>

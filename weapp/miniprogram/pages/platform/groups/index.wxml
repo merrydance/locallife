@@ -21,7 +21,7 @@
 
       <view wx:if="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
@@ -32,7 +32,7 @@
       <view wx:for="{{applications}}" wx:key="id" class="section-card app-card">
         <view class="title-row">
           <view class="name">{{item.group_name || ('申请#' + item.id)}}</view>
-          <t-tag theme="{{item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'danger' : item.status === 'submitted' ? 'warning' : 'primary'}}" variant="light-outline">{{getStatusLabel(item.status)}}</t-tag>
+          <t-tag theme="{{item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'danger' : item.status === 'submitted' ? 'warning' : 'primary'}}" variant="dark">{{getStatusLabel(item.status)}}</t-tag>
         </view>
         <view class="meta-row">
           <text class="meta-label">联系人电话</text>
@@ -50,7 +50,6 @@
         <view class="actions">
           <t-button
             theme="primary"
-            variant="outline"
             shape="round"
             size="small"
             bind:tap="onDetailTap"

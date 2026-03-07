@@ -1,7 +1,7 @@
 <!-- 顶部操作区 -->
 <view class="header-actions">
   <picker range="{{dateRangeOptions}}" range-key="label" value="{{selectedDateRange}}" bindchange="onDateRangeChange">
-    <t-tag variant="light" shape="round">
+    <t-tag variant="dark" shape="round">
       {{dateRangeOptions[selectedDateRange].label}} <t-icon name="caret-down-small" size="16" />
     </t-tag>
   </picker>

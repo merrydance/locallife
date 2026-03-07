@@ -23,7 +23,7 @@
     
     <!-- 第3行: 标签 -->
     <view class="row-3" wx:if="{{room.tags && room.tags.length > 0}}">
-      <t-tag wx:for="{{room.tags}}" wx:key="*this" class="merchant-tag" size="small" variant="light" theme="default" shape="round">{{item}}</t-tag>
+      <t-tag wx:for="{{room.tags}}" wx:key="*this" class="merchant-tag" size="small" variant="dark" theme="default" shape="round">{{item}}</t-tag>
     </view>
     
     <!-- 第4行: 月预订量 + 距离（已在TS中格式化为distance_display） -->

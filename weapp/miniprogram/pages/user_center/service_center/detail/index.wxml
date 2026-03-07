@@ -22,7 +22,7 @@
       <view class="info-title">索赔信息</view>
       <view class="info-row">
         <text class="info-label">问题类型</text>
-        <t-tag size="small" variant="outline">{{claim.claimTypeText}}</t-tag>
+        <t-tag size="small" variant="dark">{{claim.claimTypeText}}</t-tag>
       </view>
       <view class="info-row">
         <text class="info-label">索赔金额</text>

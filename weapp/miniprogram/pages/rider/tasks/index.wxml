@@ -30,7 +30,7 @@
     >
       <view class="card-header">
         <text class="date">{{item.completed_at || item.created_at}}</text>
-        <t-tag theme="success" variant="light-outline" size="extra-small">已送达</t-tag>
+        <t-tag theme="success" variant="dark" size="extra-small">已送达</t-tag>
       </view>
       
       <view class="card-body">

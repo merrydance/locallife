@@ -17,16 +17,16 @@
 
       <view class="section-card controls-card">
         <view class="filter-row">
-          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'all' ? 'active' : ''}}" data-name="all" bind:tap="onFilterChange">
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'all' ? 'active' : ''}}" data-name="all" bind:tap="onFilterChange">
             全部 ({{filterStats.all}})
           </t-tag>
-          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'submitted' ? 'active' : ''}}" data-name="submitted" bind:tap="onFilterChange">
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'submitted' ? 'active' : ''}}" data-name="submitted" bind:tap="onFilterChange">
             待审核 ({{filterStats.submitted}})
           </t-tag>
-          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'approved' ? 'active' : ''}}" data-name="approved" bind:tap="onFilterChange">
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'approved' ? 'active' : ''}}" data-name="approved" bind:tap="onFilterChange">
             已通过 ({{filterStats.approved}})
           </t-tag>
-          <t-tag size="small" variant="light" theme="default" shape="round" class="filter-chip {{statusFilter === 'rejected' ? 'active' : ''}}" data-name="rejected" bind:tap="onFilterChange">
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="filter-chip {{statusFilter === 'rejected' ? 'active' : ''}}" data-name="rejected" bind:tap="onFilterChange">
             已驳回 ({{filterStats.rejected}})
           </t-tag>
         </view>
@@ -45,7 +45,7 @@
 
       <view wx:if="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
@@ -56,7 +56,7 @@
       <view wx:for="{{applications}}" wx:key="id" class="section-card app-card" bind:tap="onDetailTap" data-id="{{item.id}}">
         <view class="title-row">
           <view class="name">{{item.name || item.legal_person_name || ('申请#' + item.id)}}</view>
-          <t-tag theme="{{item.statusTheme}}" variant="light-outline">{{item.statusLabel}}</t-tag>
+          <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
         </view>
         <view class="meta-row">
           <text class="meta-label">联系人</text>

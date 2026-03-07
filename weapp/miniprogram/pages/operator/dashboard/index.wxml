@@ -5,8 +5,8 @@
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
       <view slot="action" class="error-actions">
-        <t-button theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
-        <t-button wx:if="{{showApplymentEntry}}" theme="primary" variant="outline" size="small" bindtap="onOpenApplyment" shape="round">去微信开户</t-button>
+        <t-button theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
+        <t-button wx:if="{{showApplymentEntry}}" theme="primary" size="small" bindtap="onOpenApplyment" shape="round">去微信开户</t-button>
       </view>
     </t-empty>
   </view>

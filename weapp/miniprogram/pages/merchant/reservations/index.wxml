@@ -5,7 +5,7 @@
     <picker mode="date" value="{{date}}" bindchange="onDateChange">
       <view class="date-trigger">汇总日期：{{date}}</view>
     </picker>
-    <t-button size="small" variant="outline" theme="primary" bind:tap="onGoOrderList" shape="round">查看订单流转</t-button>
+    <t-button size="small" theme="primary" bind:tap="onGoOrderList" shape="round">查看订单流转</t-button>
   </view>
 
   <view class="summary-card">

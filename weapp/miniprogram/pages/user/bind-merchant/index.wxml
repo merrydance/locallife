@@ -15,7 +15,7 @@
     
     <view class="success-actions">
       <t-button theme="primary" block size="large" shape="round" bindtap="goToMerchant">进入工作台</t-button>
-      <t-button variant="outline" block size="large" shape="round" bindtap="goHome" class="mt-md">返回首页</t-button>
+      <t-button block size="large" shape="round" bindtap="goHome" class="mt-md">返回首页</t-button>
     </view>
   </view>
 
@@ -58,7 +58,6 @@
       </view>
       
       <t-button 
-        variant="outline" 
         block 
         size="large" 
         shape="round" 

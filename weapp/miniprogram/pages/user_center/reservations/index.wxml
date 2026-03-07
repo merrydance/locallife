@@ -13,7 +13,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
       </t-empty>
     </view>
 
@@ -37,7 +37,7 @@
                <text class="merchant-name">{{item.merchantName}}</text>
                <t-icon name="chevron-right" size="32rpx" color="#999" />
              </view>
-             <t-tag variant="light" theme="{{item.statusTagTheme}}">{{item.statusText}}</t-tag>
+             <t-tag variant="dark" theme="{{item.statusTagTheme}}">{{item.statusText}}</t-tag>
           </view>
 
           <!-- 卡片内容: 时间、人数、信息 -->
@@ -60,8 +60,8 @@
 
           <!-- 卡片底部: 操作按钮 -->
           <view class="card-footer" catchtap="preventBubble">
-             <t-button wx:if="{{item.canCancel}}" size="small" variant="outline" shape="round" catchtap="onCancelReservation" data-id="{{item.id}}">取消</t-button>
-             <t-button wx:if="{{item.canViewDetail}}" size="small" variant="outline" shape="round" catchtap="onViewDetail" data-id="{{item.id}}">详情</t-button>
+             <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelReservation" data-id="{{item.id}}">取消</t-button>
+             <t-button wx:if="{{item.canViewDetail}}" size="small" shape="round" catchtap="onViewDetail" data-id="{{item.id}}">详情</t-button>
              <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayReservation" data-id="{{item.id}}">去支付</t-button>
              <t-button wx:if="{{item.canOrder}}" size="small" theme="primary" shape="round" catchtap="onGoToOrder" data-item="{{item}}">加菜/点餐</t-button>
           </view>

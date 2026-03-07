@@ -9,7 +9,7 @@
 
   <view wx:elif="{{isError}}" class="error-container" style="padding-top: 200rpx; display: flex; flex-direction: column; align-items: center; gap: 32rpx;">
      <t-empty icon="error-circle" description="{{errorMessage}}" />
-     <t-button theme="primary" size="medium" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+     <t-button theme="primary" size="medium" bindtap="onRetry" shape="round">重试</t-button>
   </view>
 
   <view wx:elif="{{reservation}}" class="detail-content animate-fade-in">
@@ -90,7 +90,7 @@
 <view wx:if="{{!loading && reservation}}" class="bottom-bar">
    <view class="bottom-actions">
       <view class="secondary-actions">
-         <t-button wx:if="{{reservation.canCancel}}" size="medium" variant="outline" shape="round" bindtap="onCancel">取消预订</t-button>
+         <t-button wx:if="{{reservation.canCancel}}" size="medium" shape="round" bindtap="onCancel">取消预订</t-button>
       </view>
 
       <view class="primary-actions">

@@ -35,13 +35,13 @@
           <text class="picker-text">{{selectedCategoryName || '请选择已有分类'}}</text>
           <text class="picker-arrow">▼</text>
         </view>
-        <t-button size="small" variant="outline" theme="primary" shape="round" bind:tap="onCreateCategory">
+        <t-button size="small" theme="primary" shape="round" bind:tap="onCreateCategory">
           新增分类
         </t-button>
       </view>
 
       <view class="popup-actions">
-        <t-button size="small" variant="outline" theme="default" shape="round" bind:tap="onCloseAddPopup">取消</t-button>
+        <t-button size="small" theme="default" shape="round" bind:tap="onCloseAddPopup">取消</t-button>
         <t-button size="small" theme="primary" shape="round" loading="{{submitting}}" bind:tap="onConfirmLinkCategory">关联分类</t-button>
       </view>
     </view>

@@ -4,7 +4,7 @@
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" variant="outline" size="small" bindtap="loadMerchantInfo" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
+    <t-button theme="primary" size="small" bindtap="loadMerchantInfo" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
   </view>
 
   <!-- 2. 骨架屏状态 (App Shell + Skeleton) -->
@@ -24,11 +24,11 @@
       <view class="hero-overlay">
         <view class="hero-name">{{restaurant.name}}</view>
         <view class="hero-meta">
-          <t-tag size="small" variant="light" theme="default" shape="round" class="hero-static-tag">本月服务 {{restaurant.monthly_sales || 0}} 单</t-tag>
-          <t-tag size="small" variant="light" theme="default" shape="round" class="hero-static-tag">约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</t-tag>
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="hero-static-tag">本月服务 {{restaurant.monthly_sales || 0}} 单</t-tag>
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="hero-static-tag">约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</t-tag>
         </view>
         <view class="hero-tags" wx:if="{{restaurant.tags.length > 0}}">
-          <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="light" theme="default" shape="round" class="hero-static-tag">{{item}}</t-tag>
+          <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round" class="hero-static-tag">{{item}}</t-tag>
         </view>
       </view>
     </view>

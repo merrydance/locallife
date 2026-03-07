@@ -4,7 +4,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
     </t-empty>
   </view>
 
@@ -90,7 +90,7 @@
             bindtap="onViewRefund"
           >
             <view class="refund-card-header">
-              <t-tag variant="light" theme="{{item._statusTheme || 'primary'}}" size="small">{{item._statusText}}</t-tag>
+              <t-tag variant="dark" theme="{{item._statusTheme || 'primary'}}" size="small">{{item._statusText}}</t-tag>
               <text class="refund-card-amount">- ¥{{item._amountDisplay}}</text>
             </view>
             <view class="refund-card-body">
@@ -106,7 +106,7 @@
       <view class="bottom-action-bar animate-slide-up" wx:if="{{showCloseButton || showPayButton}}">
         <view class="action-buttons">
           <t-button wx:if="{{showPayButton}}" theme="primary" shape="round" block size="large" bindtap="onContinuePay" loading="{{paying}}" disabled="{{paying}}">继续支付</t-button>
-          <t-button wx:if="{{showCloseButton}}" theme="primary" variant="outline" shape="round" block size="large" bindtap="onClosePayment" disabled="{{paying}}">关闭支付详情</t-button>
+          <t-button wx:if="{{showCloseButton}}" theme="primary" shape="round" block size="large" bindtap="onClosePayment" disabled="{{paying}}">关闭支付详情</t-button>
         </view>
       </view>
     </view>

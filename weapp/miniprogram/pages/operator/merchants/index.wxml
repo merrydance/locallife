@@ -5,7 +5,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
       </t-empty>
     </view>
 
@@ -26,7 +26,7 @@
           <view wx:for="{{merchants}}" wx:key="id" class="merchant-card">
             <view class="card-header">
               <text class="merchant-name">{{item.name}}</text>
-              <t-tag theme="{{item.status === 'approved' ? 'success' : (item.status === 'pending' ? 'warning' : 'danger')}}" size="small" variant="light-outline">
+              <t-tag theme="{{item.status === 'approved' ? 'success' : (item.status === 'pending' ? 'warning' : 'danger')}}" size="small" variant="dark">
                 {{item.status === 'approved' ? '已通过' : (item.status === 'pending' ? '待审核' : item.status)}}
               </t-tag>
             </view>
@@ -51,7 +51,7 @@
             </view>
 
             <view class="card-actions">
-              <t-button size="small" theme="default" variant="outline" data-id="{{item.id}}" bindtap="onViewDetail" shape="round">查看详情</t-button>
+              <t-button size="small" theme="default" data-id="{{item.id}}" bindtap="onViewDetail" shape="round">查看详情</t-button>
             </view>
           </view>
         </view>

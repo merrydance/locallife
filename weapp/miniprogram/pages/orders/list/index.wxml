@@ -7,7 +7,7 @@
       <t-tab-panel wx:for="{{statusTabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
     </t-tabs>
     <view wx:if="{{currentStatus === 'pending' && pendingPayableCount > 1}}" class="batch-toolbar">
-      <t-button size="small" variant="outline" shape="round" bindtap="onToggleSelectAllPending">
+      <t-button size="small" shape="round" bindtap="onToggleSelectAllPending">
         {{selectedPayCount === pendingPayableCount ? '取消全选' : '全选待支付'}}
       </t-button>
       <text class="batch-tip">已选{{selectedPayCount}}单</text>
@@ -22,7 +22,7 @@
     <!-- 1. 错误状态 -->
     <view wx:if="{{isError}}" class="error-container">
       <t-empty icon="info-circle" description="{{errorMsg}}" />
-      <t-button theme="primary" variant="outline" size="small" bindtap="loadOrders" data-retry="true" style="margin-top: 24rpx;" shape="round">重试</t-button>
+      <t-button theme="primary" size="small" bindtap="loadOrders" data-retry="true" style="margin-top: 24rpx;" shape="round">重试</t-button>
     </view>
 
     <!-- 2. 骨架屏加载 (App Shell + Skeleton) -->
@@ -45,7 +45,7 @@
             <text class="merchant-name">{{item.merchantName}}</text>
             <t-icon name="chevron-right" size="32rpx" color="#999" />
           </view>
-          <t-tag size="small" variant="light" theme="default" shape="round" class="status-tag {{item.statusClass}}">{{item.statusLabel}}</t-tag>
+          <t-tag size="small" variant="dark" theme="default" shape="round" class="status-tag {{item.statusClass}}">{{item.statusLabel}}</t-tag>
         </view>
 
         <!-- 内容区：商品预览 -->
@@ -91,17 +91,17 @@
           <view wx:else></view> <!-- 占位撑开 -->
 
           <view class="footer-actions" catchtap="preventBubble">
-            <t-button wx:if="{{item.canCancel}}" size="small" variant="outline" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
+            <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
 
-            <t-button wx:if="{{orderType === 'dine_in' || orderType === 'reservation'}}" size="small" variant="outline" icon="call" shape="round" catchtap="onCallMerchant" data-phone="{{item.merchantPhone}}" t-class="action-btn">联系商家</t-button>
+            <t-button wx:if="{{orderType === 'dine_in' || orderType === 'reservation'}}" size="small" icon="call" shape="round" catchtap="onCallMerchant" data-phone="{{item.merchantPhone}}" t-class="action-btn">联系商家</t-button>
 
-            <t-button wx:if="{{item.canPay && currentStatus === 'pending' && pendingPayableCount > 1}}" size="small" variant="outline" shape="round" catchtap="onTogglePaySelect" data-id="{{item.id}}" t-class="action-btn">
+            <t-button wx:if="{{item.canPay && currentStatus === 'pending' && pendingPayableCount > 1}}" size="small" shape="round" catchtap="onTogglePaySelect" data-id="{{item.id}}" t-class="action-btn">
               {{selectedPayMap[item.id] ? '已选' : '选择'}}
             </t-button>
             
             <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayOrder" data-id="{{item.id}}" t-class="action-btn">去支付</t-button>
             
-            <t-button wx:if="{{item.canReorder}}" size="small" variant="outline" shape="round" catchtap="onReorder" data-id="{{item.id}}" t-class="action-btn">再来一单</t-button>
+            <t-button wx:if="{{item.canReorder}}" size="small" shape="round" catchtap="onReorder" data-id="{{item.id}}" t-class="action-btn">再来一单</t-button>
           </view>
         </view>
       </view>

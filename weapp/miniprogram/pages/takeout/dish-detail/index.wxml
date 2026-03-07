@@ -5,7 +5,7 @@
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" variant="outline" size="small" bindtap="loadDishDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
+    <t-button theme="primary" size="small" bindtap="loadDishDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
   </view>
 
   <!-- 2. 骨架屏状态 (App Shell with Skeleton) -->
@@ -50,8 +50,8 @@
         <text wx:if="{{dish.originalPriceDisplay && dish.originalPriceDisplay !== dish.priceDisplay}}" class="original-price">¥{{dish.originalPriceDisplay}}</text>
       </view>
       <view class="tags-row" wx:if="{{dish.tags.length > 0 || dish.is_premade}}">
-        <t-tag wx:if="{{dish.is_premade}}" theme="danger" variant="light-outline" size="small">预订款</t-tag>
-        <t-tag wx:for="{{dish.tags}}" wx:key="*this" theme="primary" variant="light-outline" size="small">{{item}}</t-tag>
+        <t-tag wx:if="{{dish.is_premade}}" theme="danger" variant="dark" size="small">预订款</t-tag>
+        <t-tag wx:for="{{dish.tags}}" wx:key="*this" theme="primary" variant="dark" size="small">{{item}}</t-tag>
       </view>
       <view class="meta-row">
         <text class="sales">月销 {{dish.month_sales}}</text>
@@ -109,8 +109,7 @@
       <t-button 
         size="small" 
         icon="remove" 
-        shape="circle" 
-        variant="outline"
+        shape="circle"
         theme="primary"
         data-type="minus" 
         bindtap="onQuantityChange" 
@@ -126,7 +125,7 @@
       />
     </view>
     <view class="btn-group">
-      <t-button class="cart-btn" theme="primary" variant="outline" shape="round" bindtap="onAddToCart">加入购物车</t-button>
+      <t-button class="cart-btn" theme="primary" shape="round" bindtap="onAddToCart">加入购物车</t-button>
       <t-button class="buy-btn" theme="primary" shape="round" bindtap="onBuyNow">立即购买</t-button>
     </view>
   </block>

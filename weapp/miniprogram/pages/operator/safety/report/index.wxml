@@ -11,7 +11,7 @@
     <view class="card" wx:for="{{reports}}" wx:key="id" bindtap="onDetail" data-id="{{item.id}}">
       <view class="card-header">
         <text class="title">{{item.title}}</text>
-        <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'resolved' ? 'success' : 'danger')}}" variant="light-outline" size="small">
+        <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'resolved' ? 'success' : 'danger')}}" variant="dark" size="small">
           {{item.status}}
         </t-tag>
       </view>
@@ -25,6 +25,6 @@
   <t-empty wx:else icon="info-circle" description="暂无食安事件" />
 
   <view class="load-more" wx:if="{{hasMore}}">
-    <t-button size="small" variant="outline" bindtap="onLoadMore" loading="{{loading}}" shape="round">加载更多</t-button>
+    <t-button size="small" bindtap="onLoadMore" loading="{{loading}}" shape="round">加载更多</t-button>
   </view>
 </view>

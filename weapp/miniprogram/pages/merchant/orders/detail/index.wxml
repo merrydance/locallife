@@ -99,7 +99,7 @@
       <t-button block theme="primary" size="large" bind:tap="onAccept" loading="{{submitting}}" shape="round">接单一键制作</t-button>
     </block>
     <block wx:elif="{{order.status === 'preparing'}}">
-      <t-button block theme="primary" variant="outline" size="large" bind:tap="onMarkReady" loading="{{submitting}}" shape="round">标记制作完成</t-button>
+      <t-button block theme="primary" size="large" bind:tap="onMarkReady" loading="{{submitting}}" shape="round">标记制作完成</t-button>
     </block>
     <block wx:elif="{{order.status === 'ready' && (order.order_type === 'dine_in' || order.order_type === 'takeaway')}}">
       <t-button block theme="success" size="large" bind:tap="onComplete" loading="{{submitting}}" shape="round">确认送达/核销</t-button>

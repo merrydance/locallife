@@ -15,7 +15,7 @@
       </view>
       <view class="combo-side">
         <view class="combo-price">¥{{item.combo_price / 100}}</view>
-        <t-tag theme="{{item.is_online ? 'success' : 'default'}}" variant="light" size="small">
+        <t-tag theme="{{item.is_online ? 'success' : 'default'}}" variant="dark" size="small">
           {{item.is_online ? '已上架' : '未上架'}}
         </t-tag>
       </view>
@@ -23,7 +23,6 @@
         <t-button
           size="small"
           theme="danger"
-          variant="outline"
           shape="round"
           data-id="{{item.id}}"
           catch:tap="onDeleteCombo"

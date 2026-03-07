@@ -21,7 +21,7 @@
 
       <view wx:if="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
@@ -32,7 +32,7 @@
       <view wx:for="{{riders}}" wx:key="id" class="section-card rider-card">
         <view class="title-row">
           <view class="name">{{item.name || ('骑手#' + item.id)}}</view>
-          <t-tag theme="{{item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'danger' : 'warning'}}" variant="light-outline">{{getStatusLabel(item.status)}}</t-tag>
+          <t-tag theme="{{item.status === 'approved' ? 'success' : item.status === 'rejected' ? 'danger' : 'warning'}}" variant="dark">{{getStatusLabel(item.status)}}</t-tag>
         </view>
         <view class="meta-row">
           <text class="meta-label">手机号</text>
@@ -54,7 +54,6 @@
         <view wx:if="{{item.status === 'pending' || item.status === 'submitted' || item.status === 'reviewing'}}" class="actions">
           <t-button
             theme="danger"
-            variant="outline"
             shape="round"
             size="small"
             loading="{{submitting}}"

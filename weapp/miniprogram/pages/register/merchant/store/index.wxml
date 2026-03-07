@@ -151,13 +151,13 @@
     </block>
     <block wx:if="{{currentStep > 0 && currentStep < 4}}">
          <view class="btn-row">
-            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep" shape="round">上一步</t-button>
+            <t-button class="half-btn" theme="default" size="large" bindtap="prevStep" shape="round">上一步</t-button>
             <t-button class="half-btn" theme="primary" size="large" bindtap="nextStep" shape="round">下一步</t-button>
          </view>
     </block>
     <block wx:if="{{currentStep === 4}}">
          <view class="btn-row">
-            <t-button class="half-btn" theme="default" variant="outline" size="large" bindtap="prevStep" disabled="{{isSubmitting}}" shape="round">上一步</t-button>
+            <t-button class="half-btn" theme="default" size="large" bindtap="prevStep" disabled="{{isSubmitting}}" shape="round">上一步</t-button>
                         <t-button class="half-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}" shape="round">提交入驻</t-button>
          </view>
     </block>

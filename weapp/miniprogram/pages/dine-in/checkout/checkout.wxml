@@ -28,7 +28,7 @@
   <!-- 错误状态 -->
   <view wx:elif="{{isError}}" class="error-loading-container">
     <t-empty icon="error-circle" description="{{errorMessage}}" />
-    <t-button theme="primary" variant="outline" shape="round" size="small" bindtap="onRetry">重试</t-button>
+    <t-button theme="primary" shape="round" size="small" bindtap="onRetry">重试</t-button>
   </view>
 
   <!-- 主内容 -->

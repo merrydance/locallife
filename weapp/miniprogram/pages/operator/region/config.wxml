@@ -5,7 +5,7 @@
     <!-- Error State -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
       </t-empty>
     </view>
 
@@ -38,7 +38,7 @@
         <view class="section">
           <view class="section-header">
               <view class="section-title">特殊/峰时配置</view>
-              <t-button size="small" variant="outline" bind:tap="onAddPeak" shape="round">添加</t-button>
+              <t-button size="small" bind:tap="onAddPeak" shape="round">添加</t-button>
           </view>
           
           <view class="peak-list">

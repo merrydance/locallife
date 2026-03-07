@@ -18,8 +18,7 @@
   <view class="top-bar">
     <t-button 
       class="filter-btn-new"
-      theme="default" 
-      variant="outline"
+      theme="default"
       icon="filter" 
       size="medium" 
       shape="round"
@@ -55,7 +54,7 @@
     <!-- Error State -->
     <view wx:elif="{{isError && itemList.length === 0}}" class="error-container" style="padding-top: 100rpx; display: flex; flex-direction: column; align-items: center; gap: 32rpx;">
        <t-empty icon="error-circle" description="{{errorMessage}}" />
-       <t-button theme="primary" size="medium" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+       <t-button theme="primary" size="medium" bindtap="onRetry" shape="round">重试</t-button>
     </view>
 
     <!-- Empty State -->
@@ -73,7 +72,7 @@
         />
         <view class="empty-actions">
           <t-button theme="primary" size="large" block bind:tap="onMerchantRegister" shape="round">商户入驻</t-button>
-          <t-button variant="outline" size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
+          <t-button size="large" block bind:tap="onOperatorRegister" shape="round">运营商入驻</t-button>
         </view>
       </block>
     </view>
@@ -181,7 +180,7 @@
     </scroll-view>
 
     <view class="drawer-footer">
-      <t-button variant="outline" theme="default" shape="round" block bind:tap="resetFilter">重置</t-button>
+      <t-button theme="default" shape="round" block bind:tap="resetFilter">重置</t-button>
       <t-button theme="primary" shape="round" block bind:tap="applyFilter">查看结果</t-button>
     </view>
   </view>

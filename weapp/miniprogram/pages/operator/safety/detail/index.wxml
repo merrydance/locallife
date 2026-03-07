@@ -8,7 +8,7 @@
     <view class="card">
       <view class="header-row">
         <text class="title">{{report.title}}</text>
-        <t-tag theme="{{report.status === 'pending' ? 'warning' : (report.status === 'resolved' ? 'success' : 'danger')}}" variant="light-outline">{{report.status}}</t-tag>
+        <t-tag theme="{{report.status === 'pending' ? 'warning' : (report.status === 'resolved' ? 'success' : 'danger')}}" variant="dark">{{report.status}}</t-tag>
       </view>
       <view class="meta">事件ID：{{report.id}}</view>
       <view class="meta">等级：{{report.level}}</view>

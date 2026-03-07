@@ -4,7 +4,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
     </t-empty>
   </view>
 
@@ -24,7 +24,7 @@
         </view>
         <view class="row">
           <text class="label">申诉状态</text>
-          <t-tag theme="{{appeal.status === 'pending' ? 'warning' : (appeal.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="light-outline">
+          <t-tag theme="{{appeal.status === 'pending' ? 'warning' : (appeal.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="dark">
             {{appeal.status === 'pending' ? '待处理' : (appeal.status === 'approved' ? '已通过' : '已驳回')}}
           </t-tag>
         </view>
@@ -61,7 +61,6 @@
         <t-button
           wx:if="{{recovery.status === 'pending' || recovery.status === 'overdue'}}"
           theme="primary"
-          variant="outline"
           block
           loading="{{recoverySubmitting}}"
           bindtap="onWaiveRecovery"
@@ -89,7 +88,7 @@
       </view>
       
       <view class="footer-actions" wx:if="{{appeal.status === 'pending'}}">
-        <t-button theme="danger" variant="outline" block bind:tap="onReject" loading="{{submitting}}" shape="round">驳回申诉</t-button>
+        <t-button theme="danger" block bind:tap="onReject" loading="{{submitting}}" shape="round">驳回申诉</t-button>
         <t-button theme="primary" block bind:tap="onApprove" loading="{{submitting}}" shape="round">审核通过</t-button>
       </view>
     </view>

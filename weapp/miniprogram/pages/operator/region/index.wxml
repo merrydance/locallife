@@ -5,7 +5,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
       </t-empty>
     </view>
 
@@ -39,7 +39,7 @@
               data-name="{{item.name}}"
             >
               <view slot="note" class="status-tag {{item.status}}" wx:if="{{target !== 'rules'}}">
-                  <t-tag variant="light" theme="{{item.status === 'active' ? 'primary' : 'default'}}">{{item.status === 'active' ? '运营中' : '已停用'}}</t-tag>
+                  <t-tag variant="dark" theme="{{item.status === 'active' ? 'primary' : 'default'}}">{{item.status === 'active' ? '运营中' : '已停用'}}</t-tag>
               </view>
             </t-cell>
           </t-cell-group>

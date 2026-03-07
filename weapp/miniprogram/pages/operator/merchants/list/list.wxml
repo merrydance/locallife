@@ -26,7 +26,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
       </t-empty>
     </view>
 
@@ -63,7 +63,7 @@
                   <t-tag
                     theme="{{item.status === 'approved' ? 'success' : item.status === 'suspended' ? 'warning' : 'default'}}"
                     size="small"
-                    variant="light-outline"
+                    variant="dark"
                   >
                     {{formatStatus(item.status)}}
                   </t-tag>
@@ -109,7 +109,6 @@
                   wx:if="{{item.status === 'approved'}}"
                   theme="warning"
                   size="small"
-                  variant="outline"
                   bindtap="onSuspendTap"
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
@@ -121,7 +120,6 @@
                   wx:elif="{{item.status === 'suspended'}}"
                   theme="success"
                   size="small"
-                  variant="outline"
                   bindtap="onResumeTap"
                   data-id="{{item.id}}"
                   data-name="{{item.name}}"
@@ -132,7 +130,6 @@
                 <t-button
                   theme="primary"
                   size="small"
-                  variant="outline"
                   bindtap="onMerchantTap"
                   data-id="{{item.id}}"
                   catchtap="stopPropagation"

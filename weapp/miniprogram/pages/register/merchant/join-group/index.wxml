@@ -27,7 +27,6 @@
                 </view>
                 <t-button 
                 theme="primary" 
-                variant="outline" 
                 size="small" 
                 bindtap="onApply" 
                 data-id="{{item.id}}" 

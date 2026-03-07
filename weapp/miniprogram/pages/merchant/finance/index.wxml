@@ -133,7 +133,7 @@
             <view slot="note">
               <t-tag
                 theme="{{getApplymentStatusTheme(applymentStatus.status)}}"
-                variant="light"
+                variant="dark"
               >{{getApplymentStatusText(applymentStatus.status)}}</t-tag>
             </view>
           </t-cell>
@@ -260,7 +260,7 @@
             <view wx:for="{{withdrawals}}" wx:key="id" class="record-item">
               <view class="record-row">
                 <text class="record-amount">¥{{formatAmount(item.amount)}}</text>
-                <t-tag theme="{{getStatusTheme(item.status)}}" variant="light">{{getStatusText(item.status)}}</t-tag>
+                <t-tag theme="{{getStatusTheme(item.status)}}" variant="dark">{{getStatusText(item.status)}}</t-tag>
               </view>
               <view class="record-meta">创建时间：{{item.created_at}}</view>
               <view class="record-meta" wx:if="{{item.completed_at}}">完成时间：{{item.completed_at}}</view>

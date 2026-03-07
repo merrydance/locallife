@@ -11,7 +11,7 @@
           <text class="score-value">{{score}}</text>
           <text class="score-label">当前信用分</text>
         </view>
-        <t-tag size="small" variant="light" theme="default" shape="round" class="level-tag">{{level}}</t-tag>
+        <t-tag size="small" variant="dark" theme="default" shape="round" class="level-tag">{{level}}</t-tag>
       </view>
       <view class="progress-bar">
         <view class="progress" style="width: {{score}}%"></view>

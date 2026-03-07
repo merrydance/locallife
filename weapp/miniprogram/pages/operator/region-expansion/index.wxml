@@ -12,7 +12,7 @@
 
     <view wx:elif="{{listError}}" class="error-wrap">
       <t-empty icon="info-circle" description="{{listError}}">
-        <t-button slot="action" size="small" theme="primary" variant="outline" shape="round" bindtap="onRetry">重试</t-button>
+        <t-button slot="action" size="small" theme="primary" shape="round" bindtap="onRetry">重试</t-button>
       </t-empty>
     </view>
 

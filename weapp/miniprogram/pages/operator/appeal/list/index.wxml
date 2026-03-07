@@ -11,7 +11,7 @@
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
       </t-empty>
     </view>
 
@@ -30,7 +30,7 @@
             </view>
             <view class="card-footer">
               <text class="user">申诉人ID: {{item.appellant_id}}</text>
-              <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="light-outline">
+              <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="dark">
                 {{item.status === 'pending' ? '待处理' : (item.status === 'approved' ? '已通过' : '已驳回')}}
               </t-tag>
             </view>

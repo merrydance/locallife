@@ -5,7 +5,7 @@
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" variant="outline" size="medium" bindtap="onRetry" shape="round">重新加载</t-button>
+    <t-button theme="primary" size="medium" bindtap="onRetry" shape="round">重新加载</t-button>
   </view>
 
   <!-- 2. 骨架屏 (App Shell + Skeleton) -->
@@ -79,7 +79,6 @@
             class="spec-btn"
             size="small" 
             theme="primary"
-            variant="outline"
             shape="round"
             data-id="{{item.id}}"
             bindtap="onShowDishDetail"

@@ -53,14 +53,14 @@
         <view class="claim-header">
           <t-tag
             size="small"
-            variant="light"
+            variant="dark"
             theme="{{item.statusTheme}}"
           >{{item.statusText}}</t-tag>
           <text class="claim-time">{{item.createTimeDisplay}}</text>
         </view>
         <view class="claim-body">
           <view class="claim-type-row">
-            <t-tag size="small" variant="outline">{{item.claimTypeText}}</t-tag>
+            <t-tag size="small" variant="dark">{{item.claimTypeText}}</t-tag>
             <text class="claim-amount">¥{{item.claimAmountDisplay}}</text>
           </view>
           <text wx:if="{{item.description}}" class="claim-desc">{{item.description}}</text>

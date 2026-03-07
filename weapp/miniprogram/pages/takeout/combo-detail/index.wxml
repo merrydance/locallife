@@ -5,7 +5,7 @@
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" variant="outline" size="small" bindtap="loadComboDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
+    <t-button theme="primary" size="small" bindtap="loadComboDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
   </view>
 
   <!-- 2. 骨架屏状态 (App Shell with Skeleton) -->
@@ -78,7 +78,7 @@
               <text class="price">{{combo.comboPriceDisplay}}</text>
               <text class="original-price" wx:if="{{combo.original_price > combo.combo_price}}">¥{{combo.originalPriceDisplay}}</text>
             </view>
-            <t-tag wx:if="{{combo.savings_percent > 0}}" variant="light-outline" theme="danger" class="savings-tag">
+            <t-tag wx:if="{{combo.savings_percent > 0}}" variant="dark" theme="danger" class="savings-tag">
               立省{{combo.savings_percent}}%
             </t-tag>
           </view>

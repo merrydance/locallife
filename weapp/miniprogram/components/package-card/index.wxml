@@ -36,7 +36,7 @@
     </view>
     
     <view wx:if="{{package.tags.length > 0}}" class="row-5">
-      <t-tag wx:for="{{package.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light-outline" theme="primary">{{tag}}</t-tag>
+      <t-tag wx:for="{{package.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="dark" theme="primary">{{tag}}</t-tag>
     </view>
   </view>
   

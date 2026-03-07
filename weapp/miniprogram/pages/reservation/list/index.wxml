@@ -17,7 +17,7 @@
 
       <view wx:elif="{{isError && reservations.length === 0}}" class="error-container" style="padding: 100rpx 0; text-align: center;">
          <t-empty icon="error-circle" description="{{errorMessage}}" />
-         <t-button theme="primary" bindtap="onRetry" style="margin-top: 24rpx;" shape="round" variant="outline">重试</t-button>
+         <t-button theme="primary" bindtap="onRetry" style="margin-top: 24rpx;" shape="round">重试</t-button>
       </view>
 
       <view wx:elif="{{reservations.length === 0 && !loading}}" class="empty-state">
@@ -34,7 +34,7 @@
         >
           <view class="card-header">
             <text class="merchant-name">{{item.merchant_name}}</text>
-            <t-tag theme="{{item._statusTheme}}" variant="light">{{item._statusText}}</t-tag>
+            <t-tag theme="{{item._statusTheme}}" variant="dark">{{item._statusText}}</t-tag>
           </view>
           
           <view class="card-body">

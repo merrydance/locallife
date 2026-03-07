@@ -10,7 +10,7 @@
     <view class="promo-header">
       <t-icon name="discount" size="36rpx" color="#FF6B00" />
       <text class="promo-title">储值有礼</text>
-      <t-tag theme="warning" variant="light" size="small">限时优惠</t-tag>
+      <t-tag theme="warning" variant="dark" size="small">限时优惠</t-tag>
     </view>
     
     <view class="promo-list">

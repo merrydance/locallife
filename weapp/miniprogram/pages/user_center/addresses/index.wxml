@@ -6,7 +6,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
     </t-empty>
   </view>
 
@@ -37,7 +37,7 @@
                  <text class="name">{{item.contact_name}}</text>
                  <text class="phone">{{item.contact_phone}}</text>
                </view>
-               <t-tag wx:if="{{item.is_default}}" size="small" variant="light" theme="primary">默认</t-tag>
+               <t-tag wx:if="{{item.is_default}}" size="small" variant="dark" theme="primary">默认</t-tag>
             </view>
             
             <view class="region-row" wx:if="{{item.region_name}}">

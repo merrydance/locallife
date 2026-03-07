@@ -4,7 +4,7 @@
       <view class="responsive-title" style="font-size: 48rpx;">平台业务实时监控大屏 (全屏模式)</view>
       <view class="responsive-body" style="color: #999;">最后更新: {{realtimeData.timestamp}}</view>
     </view>
-    <t-tag variant="light-outline" theme="primary">数据自动刷新中</t-tag>
+    <t-tag variant="dark" theme="primary">数据自动刷新中</t-tag>
   </view>
 
   <view style="display: grid; grid-template-columns: 2fr 1fr; gap: 40px;">

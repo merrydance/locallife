@@ -9,7 +9,7 @@
 
       <view wx:elif="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
@@ -21,7 +21,7 @@
         <view class="section-card">
           <view class="title-row">
             <text class="title">{{application.group_name || ('申请#' + application.id)}}</text>
-            <t-tag theme="{{statusTheme}}" variant="light-outline">{{statusLabel}}</t-tag>
+            <t-tag theme="{{statusTheme}}" variant="dark">{{statusLabel}}</t-tag>
           </view>
           <view class="meta-row">
             <text class="meta-label">申请编号</text>
@@ -85,7 +85,6 @@
           <view class="actions">
             <t-button
               theme="danger"
-              variant="outline"
               shape="round"
               size="small"
               loading="{{submittingAction === 'reject'}}"

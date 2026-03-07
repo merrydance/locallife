@@ -27,14 +27,14 @@
     
     <!-- 第4行: 代取费 + 满返信息 -->
     <view class="row-4" wx:if="{{dish.deliveryFeeDisplay || dish.discountRule}}">
-      <t-tag wx:if="{{dish.deliveryFeeDisplay}}" size="small" variant="light" theme="default">{{dish.deliveryFeeDisplay}}</t-tag>
-      <t-tag wx:if="{{dish.discountRule}}" size="small" variant="light-outline" theme="warning">{{dish.discountRule}}</t-tag>
+      <t-tag wx:if="{{dish.deliveryFeeDisplay}}" size="small" variant="dark" theme="default">{{dish.deliveryFeeDisplay}}</t-tag>
+      <t-tag wx:if="{{dish.discountRule}}" size="small" variant="dark" theme="warning">{{dish.discountRule}}</t-tag>
     </view>
     
     <!-- 第5行: 标签（条件显示）-->
     <view class="row-5" wx:if="{{dish.isPremade || (dish.attributes && dish.attributes.length > 0)}}">
-      <t-tag wx:if="{{dish.isPremade}}" theme="warning" size="small" variant="light-outline">预制菜</t-tag>
-      <t-tag wx:for="{{dish.attributes}}" wx:key="*this" size="small" variant="light-outline" theme="primary">{{item}}</t-tag>
+      <t-tag wx:if="{{dish.isPremade}}" theme="warning" size="small" variant="dark">预制菜</t-tag>
+      <t-tag wx:for="{{dish.attributes}}" wx:key="*this" size="small" variant="dark" theme="primary">{{item}}</t-tag>
     </view>
   </view>
   

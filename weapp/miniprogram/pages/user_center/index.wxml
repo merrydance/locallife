@@ -27,7 +27,7 @@
     <!-- 异常状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-state">
       <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+        <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
       </t-empty>
     </view>
 
@@ -50,7 +50,7 @@
           <view class="nickname-row">
             <input type="nickname" class="nickname-input" placeholder="点击设置昵称" value="{{userInfo.nickName}}" bind:change="onNicknameChange" bind:blur="onNicknameChange" />
             <block wx:for="{{userRoles}}" wx:key="key">
-              <t-tag theme="primary" variant="light-outline" size="small" shape="round" class="role-tag">
+              <t-tag theme="primary" variant="dark" size="small" shape="round" class="role-tag">
                 {{item.label}}
               </t-tag>
             </block>

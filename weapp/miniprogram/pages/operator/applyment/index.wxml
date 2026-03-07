@@ -14,7 +14,7 @@
         <view class="status-item">子商户号：{{statusView.subMchId}}</view>
         <view class="status-item">驳回原因：{{statusView.rejectReason}}</view>
         <view wx:if="{{statusView.signURL}}" class="status-item">
-          <t-button theme="primary" variant="outline" size="small" bindtap="onOpenSignUrl" shape="round">复制签约链接</t-button>
+          <t-button theme="primary" size="small" bindtap="onOpenSignUrl" shape="round">复制签约链接</t-button>
         </view>
       </block>
     </view>

@@ -45,7 +45,7 @@
   <view class="card-header">
     <view class="header-left">
       <text class="task-id">#{{task.id}}</text>
-      <t-tag size="small" variant="light" theme="default" shape="round" class="tag {{utils.getStatusClass(task.status)}}">
+      <t-tag size="small" variant="dark" theme="default" shape="round" class="tag {{utils.getStatusClass(task.status)}}">
         {{utils.getStatusText(task.status)}}
       </t-tag>
     </view>

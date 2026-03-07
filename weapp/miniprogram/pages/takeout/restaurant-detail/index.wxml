@@ -53,7 +53,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" variant="outline" size="small" bindtap="loadRestaurantDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
+    <t-button theme="primary" size="small" bindtap="loadRestaurantDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
   </view>
 
   <!-- 菜品列表 Tab -->
@@ -95,7 +95,7 @@
                     wx:for-item="tag" 
                     wx:key="*this" 
                     size="extra-small" 
-                    variant="light-outline" 
+                    variant="dark" 
                     theme="primary"
                   >{{tag}}</t-tag>
                 </view>
@@ -111,7 +111,6 @@
                 wx:if="{{item.hasCustomizations}}"
                 size="extra-small" 
                 theme="primary"
-                variant="outline"
                 shape="round"
                 data-id="{{item.id}}"
                 catchtap="onDishTap"
@@ -195,7 +194,7 @@
         <view class="room-info">
           <view class="room-name">{{item.name}}</view>
           <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
-            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="extra-small" variant="light-outline" theme="primary">{{tag}}</t-tag>
+            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="extra-small" variant="dark" theme="primary">{{tag}}</t-tag>
           </view>
           <view class="room-meta">
             <text>可容纳 {{item.capacity}} 人</text>

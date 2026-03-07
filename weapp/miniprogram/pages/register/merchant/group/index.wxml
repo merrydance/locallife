@@ -164,13 +164,13 @@
     </block>
     <block wx:elif="{{currentStep === 3}}">
       <view class="btn-group">
-        <t-button variant="outline" size="large" bindtap="onPrev" shape="round">返回修改</t-button>
+        <t-button size="large" bindtap="onPrev" shape="round">返回修改</t-button>
         <t-button theme="primary" size="large" bindtap="onSubmit" loading="{{submitting}}" shape="round">确认提交</t-button>
       </view>
     </block>
     <block wx:elif="{{currentStep < 3}}">
       <view class="btn-group">
-        <t-button variant="outline" size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button size="large" bindtap="onPrev" shape="round">上一步</t-button>
         <t-button theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
       </view>
     </block>

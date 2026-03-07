@@ -13,7 +13,7 @@
       <view class="section-card">
         <view class="section-head">
           <text class="section-title">基础统计</text>
-          <t-tag theme="primary" variant="light-outline">近30天</t-tag>
+          <t-tag theme="primary" variant="dark">近30天</t-tag>
         </view>
 
         <view wx:if="{{loading}}" class="skeleton-grid">
@@ -31,7 +31,7 @@
       <view class="section-card">
         <view class="section-head">
           <text class="section-title">实时状态</text>
-          <t-tag theme="success" variant="light-outline">自动刷新</t-tag>
+          <t-tag theme="success" variant="dark">自动刷新</t-tag>
         </view>
 
         <view wx:if="{{loading}}" class="state-list">
@@ -52,7 +52,7 @@
       <view class="section-card">
         <view class="section-head">
           <text class="section-title">管理入口</text>
-          <t-tag theme="warning" variant="light-outline">按角色开放</t-tag>
+          <t-tag theme="warning" variant="dark">按角色开放</t-tag>
         </view>
 
         <t-grid border="{{false}}" column="{{2}}" class="actions-grid">
@@ -71,7 +71,7 @@
 
       <view wx:if="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 

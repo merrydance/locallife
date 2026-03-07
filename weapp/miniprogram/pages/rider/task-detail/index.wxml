@@ -24,7 +24,7 @@
     <!-- 2. 异常状态展示 (Only shows if not loading AND no data) -->
     <view class="error-placeholder" wx:if="{{!loading && !delivery}}">
       <t-empty icon="info-circle" description="订单不存在或已被接走" />
-      <t-button theme="primary" variant="outline" shape="round" block size="large" bindtap="onBack" style="margin-top: 40rpx;">
+      <t-button theme="primary" shape="round" block size="large" bindtap="onBack" style="margin-top: 40rpx;">
         返回大厅
       </t-button>
     </view>

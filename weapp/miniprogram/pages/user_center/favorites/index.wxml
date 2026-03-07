@@ -10,7 +10,7 @@
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
-      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round" variant="outline">重试</t-button>
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
     </t-empty>
   </view>
 
@@ -36,7 +36,7 @@
             <view class="card-content">
                <view class="card-header">
                   <view class="title">{{item.title}}</view>
-                  <t-tag size="small" variant="light" theme="primary">{{item.typeText}}</t-tag>
+                  <t-tag size="small" variant="dark" theme="primary">{{item.typeText}}</t-tag>
                </view>
 
                <view class="card-middle">

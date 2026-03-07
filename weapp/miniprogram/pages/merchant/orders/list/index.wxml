@@ -22,7 +22,7 @@
         <!-- 头部：订单号 + 类型标签 -->
         <view class="card-header">
           <view class="order-no-row">
-            <t-tag size="extra-small" variant="light" theme="default" shape="round" class="type-tag {{item.order_type}}">{{item.order_type_label}}</t-tag>
+            <t-tag size="extra-small" variant="dark" theme="default" shape="round" class="type-tag {{item.order_type}}">{{item.order_type_label}}</t-tag>
             <text class="order-no">#{{item.order_no_short}}</text>
           </view>
           <view class="status-label" style="color: {{item.status_color}}">{{item.status_label}}</view>
@@ -51,7 +51,7 @@
 
           <view class="order-total-row">
              <view class="notes" wx:if="{{item.notes}}">
-               <t-tag theme="warning" variant="light" size="extra-small">备注</t-tag>
+               <t-tag theme="warning" variant="dark" size="extra-small">备注</t-tag>
                <text>{{item.notes}}</text>
              </view>
              <view class="total-info">
@@ -77,8 +77,7 @@
           <t-button 
             wx:if="{{item.status === 'preparing'}}" 
             block 
-            theme="primary" 
-            variant="outline"
+            theme="primary"
             size="small" 
             bind:tap="onMarkReady" 
             data-id="{{item.id}}"

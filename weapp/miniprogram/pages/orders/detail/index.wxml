@@ -4,7 +4,7 @@
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
-    <t-button theme="primary" variant="outline" size="small" bindtap="loadOrderDetail" style="margin-top: 24rpx;" shape="round">重试</t-button>
+    <t-button theme="primary" size="small" bindtap="loadOrderDetail" style="margin-top: 24rpx;" shape="round">重试</t-button>
   </view>
 
   <!-- 2. 骨架屏加载 (App Shell + Skeleton) -->
@@ -59,7 +59,7 @@
             <text wx:if="{{showTrackingButton}}">骑手正在为您配送中</text>
           </view>
           <t-button wx:if="{{showPayButton}}" theme="primary" size="small" shape="round" bindtap="onPayOrder">立即支付</t-button>
-          <t-button wx:if="{{showTrackingButton}}" variant="outline" size="small" shape="round" bindtap="onViewTracking">查看进度</t-button>
+          <t-button wx:if="{{showTrackingButton}}" size="small" shape="round" bindtap="onViewTracking">查看进度</t-button>
        </view>
     </view>
 
@@ -93,7 +93,7 @@
             </view>
             <view class="item-row-2">
               <view class="item-specs">
-                <t-tag wx:for="{{item.customizations}}" wx:key="*this" wx:for-item="cust" size="extra-small" variant="light" theme="default" shape="round">{{cust}}</t-tag>
+                <t-tag wx:for="{{item.customizations}}" wx:key="*this" wx:for-item="cust" size="extra-small" variant="dark" theme="default" shape="round">{{cust}}</t-tag>
               </view>
               <view class="item-qty">x{{item.quantity}}</view>
             </view>
@@ -167,17 +167,17 @@
    <view class="bottom-actions">
       <!-- 辅助按钮 -->
       <view class="secondary-actions">
-         <t-button wx:if="{{showCancelButton}}" size="medium" variant="outline" shape="round" bindtap="onCancelOrder">取消订单</t-button>
-         <t-button wx:if="{{showContactButton}}" size="medium" variant="outline" icon="chat" shape="round" bindtap="onContact">联系客服</t-button>
+         <t-button wx:if="{{showCancelButton}}" size="medium" shape="round" bindtap="onCancelOrder">取消订单</t-button>
+         <t-button wx:if="{{showContactButton}}" size="medium" icon="chat" shape="round" bindtap="onContact">联系客服</t-button>
       </view>
 
       <!-- 主要按钮 -->
       <view class="primary-actions">
          <t-button wx:if="{{showPayButton}}" theme="primary" size="medium" shape="round" bindtap="onPayOrder">去支付</t-button>
-         <t-button wx:if="{{showUrgeButton}}" theme="primary" variant="outline" size="medium" shape="round" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">{{urgeCountdown > 0 ? urgeCountdown + 's' : '催单'}}</t-button>
+         <t-button wx:if="{{showUrgeButton}}" theme="primary" size="medium" shape="round" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">{{urgeCountdown > 0 ? urgeCountdown + 's' : '催单'}}</t-button>
          <t-button wx:if="{{showConfirmButton}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">确认收货</t-button>
          <t-button wx:if="{{order.type === 'takeaway' && orderDTO.status === 'ready'}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">我已取餐</t-button>
-         <t-button wx:if="{{showReviewButton}}" theme="primary" variant="outline" size="medium" shape="round" bindtap="onReview">{{isReviewed ? '查看评价' : '发表评价'}}</t-button>
+         <t-button wx:if="{{showReviewButton}}" theme="primary" size="medium" shape="round" bindtap="onReview">{{isReviewed ? '查看评价' : '发表评价'}}</t-button>
          <t-button wx:if="{{order.status === 'completed'}}" theme="primary" size="medium" shape="round" bindtap="onReorder">再来一单</t-button>
       </view>
    </view>

@@ -32,7 +32,7 @@
 
       <view wx:if="{{error}}" class="section-card status-wrap">
         <t-empty icon="error-circle" description="{{error}}">
-          <t-button slot="action" theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+          <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
         </t-empty>
       </view>
 
@@ -46,7 +46,7 @@
             <view class="rule-info">
               <view class="rule-top">
                 <text class="name">{{item.name || ('规则#' + item.id)}}</text>
-                <t-tag theme="success" variant="light-outline" size="small">生效中</t-tag>
+                <t-tag theme="success" variant="dark" size="small">生效中</t-tag>
               </view>
 
               <view class="meta-row">
@@ -65,7 +65,6 @@
               <view class="actions" wx:if="{{item.editable}}">
                 <t-button
                   theme="primary"
-                  variant="outline"
                   shape="round"
                   size="small"
                   loading="{{submitting}}"
