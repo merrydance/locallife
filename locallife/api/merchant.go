@@ -1171,13 +1171,14 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	if merchant.ApplicationData != nil {
 		var appData map[string]interface{}
 		if err := json.Unmarshal(merchant.ApplicationData, &appData); err == nil {
-			if licenseURL, ok := appData["business_license_image_url"].(string); ok && licenseURL != "" {
-				normalized := normalizeUploadURLForClient(licenseURL)
-				resp.BusinessLicenseImageURL = &normalized
+				if licenseURL, ok := appData["business_license_image_url"].(string); ok && licenseURL != "" {
+				// 预签名：消费者没有凭证调用 /v1/uploads/sign，需在此处提前签发
+				signed := server.presignPublicUpload(ctx, licenseURL, merchant.OwnerUserID)
+				resp.BusinessLicenseImageURL = &signed
 			}
 			if permitURL, ok := appData["food_permit_url"].(string); ok && permitURL != "" {
-				normalized := normalizeUploadURLForClient(permitURL)
-				resp.FoodPermitURL = &normalized
+				signed := server.presignPublicUpload(ctx, permitURL, merchant.OwnerUserID)
+				resp.FoodPermitURL = &signed
 			}
 			// 门头照数组（取第一张作为封面图）
 			if storefrontImages, ok := appData["storefront_images"].([]interface{}); ok && len(storefrontImages) > 0 {

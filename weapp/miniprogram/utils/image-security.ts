@@ -66,6 +66,10 @@ export async function resolveImageURL(urlOrPath: string): Promise<string> {
 
     // 1. External URLs returned as is（同域 uploads 绝对 URL 会在 toStoredPath 中转成可签名路径）
     if (/^https?:\/\//.test(urlOrPath)) {
+        // 已经是服务端预签名的 URL（含 sig= 参数），直接使用，避免消费者无凭证二次签名失败
+        if (/[?&]sig=/.test(urlOrPath)) {
+            return urlOrPath
+        }
         const maybeStoredPath = toStoredPath(urlOrPath)
         if (!maybeStoredPath) {
             return urlOrPath
