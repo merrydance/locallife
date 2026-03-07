@@ -1366,6 +1366,17 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return false, "食品经营许可证信息解析失败，请重新上传"
 	}
 
+	// 旧OCR缓存可能因解析器bug导致字段为空；若 RawText 有值则尝试重新提取并写回DB
+	if foodPermitOCR.ValidTo == "" && foodPermitOCR.RawText != "" {
+		reparseFoodPermitMissingFields(&foodPermitOCR)
+		if reparsed, err := json.Marshal(foodPermitOCR); err == nil {
+			_, _ = server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
+				ID:            app.ID,
+				FoodPermitOcr: reparsed,
+			})
+		}
+	}
+
 	// 检查食品经营许可证有效期
 	if !isFoodPermitValid(foodPermitOCR.ValidTo) {
 		return false, "食品经营许可证已过期或有效期无法识别"
@@ -1848,6 +1859,49 @@ func extractAddressKeywords(addr string) []string {
 	roads := roadRegex.FindAllString(addr, -1)
 	keywords = append(keywords, roads...)
 	return keywords
+}
+
+// reparseFoodPermitMissingFields 从 RawText 补充因旧解析器bug漏掉的字段。
+// 用于修复存量OCR缓存数据（如 OCR输出"2027 年01月08日"在旧版未能正确提取的情况）。
+func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) {
+	raw := ocr.RawText
+	if raw == "" {
+		return
+	}
+
+	// 提取有效期至
+	if ocr.ValidTo == "" {
+		dateRe := regexp.MustCompile(`有效期至\s*[:：]?\s*(\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日)`)
+		if m := dateRe.FindStringSubmatch(raw); m != nil {
+			// 归一化：去除年月日前后空格
+			norm := strings.ReplaceAll(m[1], " 年", "年")
+			norm = strings.ReplaceAll(norm, "年 ", "年")
+			norm = strings.ReplaceAll(norm, " 月", "月")
+			norm = strings.ReplaceAll(norm, "月 ", "月")
+			norm = strings.ReplaceAll(norm, " 日", "日")
+			ocr.ValidTo = norm
+		}
+	}
+
+	// 提取许可证/登记证编号
+	if ocr.PermitNo == "" {
+		permitRe := regexp.MustCompile(`(?:JY[0-9]{12,}|(?:登记证编号|证书编号|食品经营许可证编号)\s*[:：]\s*([0-9A-Za-z]{6,}))`)
+		if m := permitRe.FindStringSubmatch(raw); m != nil {
+			if m[1] != "" {
+				ocr.PermitNo = m[1]
+			} else {
+				ocr.PermitNo = m[0]
+			}
+		}
+	}
+
+	// 提取企业/商号名称
+	if ocr.CompanyName == "" {
+		nameRe := regexp.MustCompile(`(?:经营者名称|单位名称|名\s*称|主体名称|商号名称)\s*[:：]?\s*([^\n\r]{2,30})`)
+		if m := nameRe.FindStringSubmatch(raw); m != nil {
+			ocr.CompanyName = strings.TrimSpace(m[1])
+		}
+	}
 }
 
 // isFoodPermitValid 检查食品经营许可证是否有效
