@@ -67,16 +67,17 @@ type BusinessLicenseOCRData struct {
 
 // FoodPermitOCRData 食品经营许可证OCR识别数据（通用印刷体识别后解析）
 type FoodPermitOCRData struct {
-	Status      string `json:"status,omitempty"`       // pending/processing/done/failed
-	Error       string `json:"error,omitempty"`        // failure reason (if any)
-	QueuedAt    string `json:"queued_at,omitempty"`    // task enqueued time
-	StartedAt   string `json:"started_at,omitempty"`   // task started processing time
-	RawText     string `json:"raw_text,omitempty"`     // 原始OCR文本
-	PermitNo    string `json:"permit_no,omitempty"`    // 许可证编号
-	CompanyName string `json:"company_name,omitempty"` // 企业名称
-	ValidFrom   string `json:"valid_from,omitempty"`   // 有效期起
-	ValidTo     string `json:"valid_to,omitempty"`     // 有效期止（如：2025年12月31日 或 长期）
-	OCRAt       string `json:"ocr_at,omitempty"`       // OCR识别时间
+	Status       string `json:"status,omitempty"`        // pending/processing/done/failed
+	Error        string `json:"error,omitempty"`         // failure reason (if any)
+	QueuedAt     string `json:"queued_at,omitempty"`     // task enqueued time
+	StartedAt    string `json:"started_at,omitempty"`    // task started processing time
+	RawText      string `json:"raw_text,omitempty"`      // 原始OCR文本
+	PermitNo     string `json:"permit_no,omitempty"`     // 许可证编号
+	CompanyName  string `json:"company_name,omitempty"`  // 企业名称
+	OperatorName string `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
+	ValidFrom    string `json:"valid_from,omitempty"`    // 有效期起
+	ValidTo      string `json:"valid_to,omitempty"`      // 有效期止（如：2025年12月31日 或 长期）
+	OCRAt        string `json:"ocr_at,omitempty"`        // OCR识别时间
 }
 
 // MerchantIDCardOCRData 商户法人身份证OCR识别数据
@@ -1367,7 +1368,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	}
 
 	// 旧OCR缓存可能因解析器bug导致字段为空；若 RawText 有值则尝试重新提取并写回DB
-	if foodPermitOCR.ValidTo == "" && foodPermitOCR.RawText != "" {
+	if (foodPermitOCR.ValidTo == "" || foodPermitOCR.OperatorName == "") && foodPermitOCR.RawText != "" {
 		reparseFoodPermitMissingFields(&foodPermitOCR)
 		if reparsed, err := json.Marshal(foodPermitOCR); err == nil {
 			_, _ = server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
@@ -1391,8 +1392,16 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	if permitName == "" {
 		return false, "食品经营许可证企业名称未识别，请重新上传清晰的食品经营许可证照片"
 	}
+	if !companyNamesMatch(licenseName, permitName) {
+		return false, fmt.Sprintf("食品经营许可证企业名称（%s）与营业执照企业名称（%s）不一致", permitName, licenseName)
+	}
+	// 仅前缀宽松匹配通过（非完全一致）时，额外要求经营者姓名与营业执照法人一致
 	if licenseName != permitName {
-		return false, "食品经营许可证企业名称与营业执照企业名称不一致"
+		permitOperator := strings.TrimSpace(foodPermitOCR.OperatorName)
+		licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
+		if licenseLegalPerson != "" && permitOperator != "" && licenseLegalPerson != permitOperator {
+			return false, fmt.Sprintf("食品经营许可证企业名称（%s）与营业执照（%s）不完全一致，且经营者（%s）与营业执照法人（%s）不符", permitName, licenseName, permitOperator, licenseLegalPerson)
+		}
 	}
 
 	// 新增规则：食品经营许可证有效期需超过提交当日30天
@@ -1468,6 +1477,32 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	}
 
 	return true, ""
+}
+
+// companyNamesMatch 比较两个企业名称是否实质相同。
+// 允许一方是另一方的前缀且差异 ≤ 2 个 Unicode 字符，以容忍 OCR 漏识末尾
+// 「馆」「店」「厅」「坊」等一两个字的情况。
+func companyNamesMatch(a, b string) bool {
+	if a == b {
+		return true
+	}
+	ra := []rune(a)
+	rb := []rune(b)
+	// 确保 ra 是较短的那个
+	if len(ra) > len(rb) {
+		ra, rb = rb, ra
+	}
+	diff := len(rb) - len(ra)
+	// 差异超过 2 个字或短的不是长的前缀，视为不一致
+	if diff > 2 {
+		return false
+	}
+	for i, c := range ra {
+		if rb[i] != c {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeCompanyName(name string) string {
@@ -1900,6 +1935,14 @@ func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) {
 		nameRe := regexp.MustCompile(`(?:经营者名称|单位名称|名\s*称|主体名称|商号名称)\s*[:：]?\s*([^\n\r]{2,30})`)
 		if m := nameRe.FindStringSubmatch(raw); m != nil {
 			ocr.CompanyName = strings.TrimSpace(m[1])
+		}
+	}
+
+	// 提取经营者姓名
+	if ocr.OperatorName == "" {
+		operatorRe := regexp.MustCompile(`经营者姓名\s*[:：]?\s*([^\s\n\r,，。]{2,10})`)
+		if m := operatorRe.FindStringSubmatch(raw); m != nil {
+			ocr.OperatorName = strings.TrimSpace(m[1])
 		}
 	}
 }

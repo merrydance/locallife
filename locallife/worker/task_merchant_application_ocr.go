@@ -444,16 +444,17 @@ func (processor *RedisTaskProcessor) parseMerchantApplicationOCRPayload(task *as
 // foodPermitOCRData is a minimal copy of the API response struct for storage.
 // Kept in worker package to avoid import cycles.
 type foodPermitOCRData struct {
-	Status      string `json:"status,omitempty"`
-	Error       string `json:"error,omitempty"`
-	QueuedAt    string `json:"queued_at,omitempty"`
-	StartedAt   string `json:"started_at,omitempty"`
-	RawText     string `json:"raw_text,omitempty"`
-	PermitNo    string `json:"permit_no,omitempty"`
-	CompanyName string `json:"company_name,omitempty"`
-	ValidFrom   string `json:"valid_from,omitempty"`
-	ValidTo     string `json:"valid_to,omitempty"`
-	OCRAt       string `json:"ocr_at,omitempty"`
+	Status       string `json:"status,omitempty"`
+	Error        string `json:"error,omitempty"`
+	QueuedAt     string `json:"queued_at,omitempty"`
+	StartedAt    string `json:"started_at,omitempty"`
+	RawText      string `json:"raw_text,omitempty"`
+	PermitNo     string `json:"permit_no,omitempty"`
+	CompanyName  string `json:"company_name,omitempty"`
+	OperatorName string `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
+	ValidFrom    string `json:"valid_from,omitempty"`
+	ValidTo      string `json:"valid_to,omitempty"`
+	OCRAt        string `json:"ocr_at,omitempty"`
 }
 
 func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
@@ -491,6 +492,12 @@ func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
 		log.Warn().
 			Str("raw_text_preview", truncateString(text, 200)).
 			Msg("food permit company name extraction failed")
+	}
+
+	// 经营者姓名（个体工商户/小餐饮登记证格式）
+	operatorRegex := regexp.MustCompile(`经营者姓名\s*[:：]?\s*([^\s\n\r,，。]{2,10})`)
+	if m := operatorRegex.FindStringSubmatch(text); len(m) > 1 {
+		data.OperatorName = strings.TrimSpace(m[1])
 	}
 
 	// 许可证编号 - 支持食品经营许可证(JY开头)和小餐饮/小作坊登记证(纯数字)
