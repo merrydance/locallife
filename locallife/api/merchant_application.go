@@ -1584,8 +1584,13 @@ func isAddressMatch(licenseAddr, businessAddr string) bool {
 	if parsed1.City != "" && parsed2.City != "" && parsed1.City != parsed2.City {
 		return false
 	}
-	if parsed1.District != "" && parsed2.District != "" && parsed1.District != parsed2.District {
-		return false
+	// District 解析时若地址缺少省/市前缀，正则可能把上级地名吞入 district（如"邢台宁晋县"）
+	// 因此使用后缀匹配：只要一方是另一方的后缀即视为同一区县
+	if parsed1.District != "" && parsed2.District != "" {
+		d1, d2 := parsed1.District, parsed2.District
+		if d1 != d2 && !strings.HasSuffix(d1, d2) && !strings.HasSuffix(d2, d1) {
+			return false
+		}
 	}
 
 	// 比较详细地址部分（街道、路、门牌号等）
@@ -1614,6 +1619,19 @@ func isAddressMatch(licenseAddr, businessAddr string) bool {
 
 	// 路名必须相同（这是核心匹配条件）
 	if road1 == "" || road2 == "" || road1 != road2 {
+		// 检查路名后缀匹配：营业执照地址可能带区域前缀（如"经济开发区吉祥路" vs "吉祥路"）
+		if road1 != "" && road2 != "" && (strings.HasSuffix(road1, road2) || strings.HasSuffix(road2, road1)) {
+			// 路名后缀匹配，继续比较门牌号
+			if isFuzzy1 || isFuzzy2 {
+				return true
+			}
+			if normalizeNumber(number1) == normalizeNumber(number2) {
+				return true
+			}
+			if (number1 != "" && number2 == "") || (number1 == "" && number2 != "") {
+				return true
+			}
+		}
 		// 路名不同或无法提取，降级到简单匹配
 		return simpleAddressMatch(licenseAddr, businessAddr)
 	}
@@ -1744,11 +1762,17 @@ func isFuzzyLocation(location string) bool {
 	return false
 }
 
-// normalizeNumber 标准化门牌号（去除"号"字等）
+// normalizeNumber 标准化门牌号（提取前缀数字，忽略楼栋/单元等附加描述）
+// 如 "133号 弘启名城(吉祥路)" 和 "133号" 均标准化为 "133"
 func normalizeNumber(num string) string {
-	num = strings.TrimSuffix(num, "号")
 	num = strings.TrimSpace(num)
-	return num
+	// 优先提取前缀数字部分（门牌号后可能跟空格+楼栋名）
+	numRegex := regexp.MustCompile(`^(\d+)`)
+	if m := numRegex.FindString(num); m != "" {
+		return m
+	}
+	// 无前缀数字，则仅去除尾部"号"
+	return strings.TrimSpace(strings.TrimSuffix(num, "号"))
 }
 
 // simpleAddressMatch 简单地址匹配（降级方案）
