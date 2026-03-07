@@ -5,6 +5,7 @@ import { getUserInfo } from '../../../api/auth'
 import { logger } from '../../../utils/logger'
 import dayjs from 'dayjs'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
+import { playNewOrderAlert, destroyAudioAlert } from '../../../utils/audio-alert'
 
 type WsUnsubscribe = () => void
 type OrderStatusTab = 'paid' | 'preparing' | 'ready' | 'completed'
@@ -104,6 +105,7 @@ Page({
       // 检查是否是订单通知 (后端 params.Type = "order")
       if (notification.type === 'order') {
         wx.vibrateLong()
+        playNewOrderAlert()
         wx.showModal({
           title: '新订单提醒',
           content: '您有新的订单需要处理',
@@ -218,5 +220,10 @@ Page({
 
   onGoToSettings() {
     wx.navigateTo({ url: '/pages/merchant/config/index' })
+  },
+
+  onUnload() {
+    this.cleanupWebSocket()
+    destroyAudioAlert()
   }
 })
