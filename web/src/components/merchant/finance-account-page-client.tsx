@@ -369,7 +369,7 @@ export function FinanceAccountPageClient() {
                 <Skeleton className="h-5 w-40" />
                 <Skeleton className="h-4 w-64" />
               </div>
-            ) : applymentStatus === null ? (
+            ) : applymentStatus == null ? (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Clock className="h-4 w-4 shrink-0" />
