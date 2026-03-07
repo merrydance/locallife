@@ -1,0 +1,72 @@
+<custom-navbar title="店铺图片管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+
+  <!-- 加载中 -->
+  <view class="loading-container" wx:if="{{loading}}">
+    <t-loading theme="circular" size="60rpx" text="加载中..." layout="vertical" />
+  </view>
+
+  <block wx:else>
+
+    <!-- Logo -->
+    <view class="section">
+      <view class="section-header">
+        <text class="section-title">店铺 Logo</text>
+        <text class="section-desc">建议使用正方形图片</text>
+      </view>
+      <view class="logo-upload-wrap">
+        <t-upload
+          mediaType="{{['image']}}"
+          max="{{1}}"
+          files="{{logoImage ? [logoImage] : []}}"
+          bind:add="onLogoUpload"
+          bind:remove="onLogoRemove"
+        />
+        <view class="upload-tip">Logo 会展示在顾客搜索结果和详情页</view>
+      </view>
+    </view>
+
+    <t-divider />
+
+    <!-- 门头照 -->
+    <view class="section">
+      <view class="section-header">
+        <text class="section-title">门头照</text>
+        <text class="section-count">{{storefrontImages.length}}/3</text>
+      </view>
+      <view class="upload-wrap">
+        <t-upload
+          mediaType="{{['image']}}"
+          max="{{3}}"
+          files="{{storefrontImages}}"
+          bind:add="onStorefrontUpload"
+          bind:remove="onStorefrontRemove"
+        />
+        <view class="upload-tip">请上传店铺门头清晰照片，最多3张</view>
+      </view>
+    </view>
+
+    <t-divider />
+
+    <!-- 环境照 -->
+    <view class="section">
+      <view class="section-header">
+        <text class="section-title">店内环境照</text>
+        <text class="section-count">{{environmentImages.length}}/5</text>
+      </view>
+      <view class="upload-wrap">
+        <t-upload
+          mediaType="{{['image']}}"
+          max="{{5}}"
+          files="{{environmentImages}}"
+          bind:add="onEnvironmentUpload"
+          bind:remove="onEnvironmentRemove"
+        />
+        <view class="upload-tip">请上传店内环境照片，最多5张</view>
+      </view>
+    </view>
+
+  </block>
+
+</view>

@@ -15794,6 +15794,21 @@ func (mr *MockStoreMockRecorder) UpdateMerchantApplicationImages(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantApplicationImages", reflect.TypeOf((*MockStore)(nil).UpdateMerchantApplicationImages), ctx, arg)
 }
 
+// UpdateMerchantApplicationShopImages mocks base method.
+func (m *MockStore) UpdateMerchantApplicationShopImages(ctx context.Context, arg db.UpdateMerchantApplicationShopImagesParams) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantApplicationShopImages", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantApplicationShopImages indicates an expected call of UpdateMerchantApplicationShopImages.
+func (mr *MockStoreMockRecorder) UpdateMerchantApplicationShopImages(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantApplicationShopImages", reflect.TypeOf((*MockStore)(nil).UpdateMerchantApplicationShopImages), ctx, arg)
+}
+
 // UpdateMerchantApplicationStatus mocks base method.
 func (m *MockStore) UpdateMerchantApplicationStatus(ctx context.Context, arg db.UpdateMerchantApplicationStatusParams) (db.MerchantApplication, error) {
 	m.ctrl.T.Helper()

@@ -333,3 +333,51 @@ export class MerchantManagementAdapter {
 
 export const getMerchantDishes = getPublicMerchantDishes
 export const getMerchants = searchMerchants
+
+// ==================== 商户工作台接口（商户自身管理用） ====================
+
+/**
+ * 商户详情响应（商户工作台使用，包含 version）
+ */
+export interface MerchantOperatorResponse {
+  id: number
+  owner_user_id: number
+  region_id: number
+  name: string
+  description?: string
+  logo_url?: string
+  phone: string
+  address: string
+  latitude?: string
+  longitude?: string
+  status: string
+  is_open: boolean
+  version: number
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * 获取当前登录商户信息（商户工作台）
+ * GET /v1/merchants/me
+ */
+export function getMyMerchantProfile() {
+  return request<MerchantOperatorResponse>({
+    url: '/v1/merchants/me',
+    method: 'GET'
+  })
+}
+
+/**
+ * 更新当前商户 Logo（商户工作台）
+ * PATCH /v1/merchants/me
+ * @param logoUrl 图片相对路径（rawUrl）
+ * @param version 乐观锁版本号，必须从 GET /v1/merchants/me 获取
+ */
+export function updateMyMerchantLogo(logoUrl: string, version: number) {
+  return request<MerchantOperatorResponse>({
+    url: '/v1/merchants/me',
+    method: 'PATCH',
+    data: { logo_url: logoUrl, version }
+  })
+}

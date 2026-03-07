@@ -15,7 +15,8 @@ Page({
       { id: 'dish-categories', title: '菜品分类管理', desc: '维护分类与排序', path: '/pages/merchant/dishes/categories/index' },
       { id: 'combos', title: '套餐管理', desc: '维护套餐组合与上架状态', path: '/pages/merchant/combos/index' },
       { id: 'inventory', title: '当日库存设置', desc: '按日调整菜品库存', path: '/pages/merchant/inventory/index' },
-      { id: 'tables', title: '桌台管理', desc: '桌台信息与二维码维护', path: '/pages/merchant/tables/index' }
+      { id: 'tables', title: '桌台管理', desc: '桌台信息与二维码维护', path: '/pages/merchant/tables/index' },
+      { id: 'profile-images', title: '店铺图片管理', desc: '更新 Logo、门头照、环境照', path: '/pages/merchant/profile-images/index' }
     ] as ConfigItem[]
   },
 

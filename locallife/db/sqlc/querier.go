@@ -1498,6 +1498,8 @@ type Querier interface {
 	UpdateMerchantApplicationIDCardFront(ctx context.Context, arg UpdateMerchantApplicationIDCardFrontParams) (MerchantApplication, error)
 	// 更新门头照和环境照（jsonb数组）
 	UpdateMerchantApplicationImages(ctx context.Context, arg UpdateMerchantApplicationImagesParams) (MerchantApplication, error)
+	// 更新门头照和环境照（商户已审核通过后也可以更新）
+	UpdateMerchantApplicationShopImages(ctx context.Context, arg UpdateMerchantApplicationShopImagesParams) (MerchantApplication, error)
 	UpdateMerchantApplicationStatus(ctx context.Context, arg UpdateMerchantApplicationStatusParams) (MerchantApplication, error)
 	// 更新商户邀请码
 	UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchantBindCodeParams) (Merchant, error)

@@ -233,12 +233,12 @@ export function resetMerchantApplication() {
 }
 
 /**
- * 上传门头照/环境照图片文件
+ * 上传商户图片文件（Logo、门头照、环境照）
  * POST /v1/merchants/images/upload
  * @param filePath 本地文件路径
- * @param category 'storefront' 或 'environment'
+ * @param category 'logo' | 'storefront' | 'environment'
  */
-export function uploadMerchantImage(filePath: string, category: 'storefront' | 'environment') {
+export function uploadMerchantImage(filePath: string, category: 'logo' | 'storefront' | 'environment') {
   return uploadFile<UploadImageResponse>(
     filePath,
     '/v1/merchants/images/upload',
@@ -255,6 +255,30 @@ export function updateMerchantImages(data: UpdateMerchantImagesRequest) {
   return request<MerchantApplicationDraftResponse>({
     url: '/v1/merchant/application/images',
     method: 'PUT',
+    data
+  })
+}
+
+// 更新商户店铺图片请求（已入驻商户使用）
+export interface UpdateShopImagesRequest {
+  storefront_images?: string[]
+  environment_images?: string[]
+}
+
+// 更新商户店铺图片响应
+export interface UpdateShopImagesResponse {
+  storefront_images: string[] | null
+  environment_images: string[] | null
+}
+
+/**
+ * 更新已入驻商户的门头照/环境照
+ * PATCH /v1/merchants/me/shop-images
+ */
+export function updateShopImages(data: UpdateShopImagesRequest) {
+  return request<UpdateShopImagesResponse>({
+    url: '/v1/merchants/me/shop-images',
+    method: 'PATCH',
     data
   })
 }

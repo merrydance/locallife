@@ -159,6 +159,7 @@ p, merchant_owner, /v1/merchants/me/business-hours, PUT
 p, merchant_owner, /v1/merchants/me/membership-settings, GET
 p, merchant_owner, /v1/merchants/me/membership-settings, PUT
 p, merchant_owner, /v1/merchants/images/upload, POST
+p, merchant_owner, /v1/merchants/me/shop-images, PATCH
 
 # Dish Management
 p, merchant_owner, /v1/dishes/categories, POST

@@ -1216,10 +1216,15 @@ Page({
           const app = getApp<IAppOption>()
           app.globalData.userRole = 'merchant'
 
-          wx.showToast({ title: '审核通过', icon: 'success' })
-          setTimeout(() => {
-            wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
-          }, 1500)
+          wx.showModal({
+            title: '入驻成功 🎉',
+            content: '恭喜您入驻成功！您的店铺现已开通。默认状态为「打烊」，请在商户工作台手动开店。',
+            showCancel: false,
+            confirmText: '进入工作台',
+            success: () => {
+              wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
+            }
+          })
         } else if (res.status === 'rejected') {
           clearInterval(intervalId)
           this.setData({

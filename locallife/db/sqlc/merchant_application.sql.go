@@ -743,3 +743,56 @@ func (q *Queries) UpdateMerchantApplicationImages(ctx context.Context, arg Updat
 	)
 	return i, err
 }
+
+const updateMerchantApplicationShopImages = `-- name: UpdateMerchantApplicationShopImages :one
+UPDATE merchant_applications
+SET
+  storefront_images = COALESCE($2, storefront_images),
+  environment_images = COALESCE($3, environment_images),
+  updated_at = now()
+WHERE user_id = $1
+RETURNING id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images
+`
+
+type UpdateMerchantApplicationShopImagesParams struct {
+	UserID            int64  `json:"user_id"`
+	StorefrontImages  []byte `json:"storefront_images"`
+	EnvironmentImages []byte `json:"environment_images"`
+}
+
+// 更新门头照和环境照（商户已审核通过后也可以更新）
+func (q *Queries) UpdateMerchantApplicationShopImages(ctx context.Context, arg UpdateMerchantApplicationShopImagesParams) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, updateMerchantApplicationShopImages, arg.UserID, arg.StorefrontImages, arg.EnvironmentImages)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseImageUrl,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.LegalPersonIDFrontUrl,
+		&i.LegalPersonIDBackUrl,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitUrl,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+	)
+	return i, err
+}

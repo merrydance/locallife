@@ -166,7 +166,8 @@
         "reservations/index",
         "orders/list/index",
         "orders/detail/index",
-        "tables/index"
+        "tables/index",
+        "profile-images/index"
       ],
       "independent": false
     }

@@ -94,6 +94,15 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 			return fmt.Errorf("create/update merchant: %w", err)
 		}
 
+		// Step 2.5: 入驻后默认设为打烊状态，商户需手动开店
+		result.Merchant, err = q.UpdateMerchantIsOpen(ctx, UpdateMerchantIsOpenParams{
+			ID:     result.Merchant.ID,
+			IsOpen: false,
+		})
+		if err != nil {
+			return fmt.Errorf("set merchant closed: %w", err)
+		}
+
 		// Step 3: 创建或更新用户商户角色
 		// 检查是否已有该角色
 		roles, err := q.ListUserRoles(ctx, arg.UserID)

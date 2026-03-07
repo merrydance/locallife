@@ -155,6 +155,16 @@ SET
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
+-- name: UpdateMerchantApplicationShopImages :one
+-- 更新门头照和环境照（商户已审核通过后也可以更新）
+UPDATE merchant_applications
+SET
+  storefront_images = COALESCE(sqlc.narg(storefront_images), storefront_images),
+  environment_images = COALESCE(sqlc.narg(environment_images), environment_images),
+  updated_at = now()
+WHERE user_id = $1
+RETURNING *;
+
 -- name: ResetStaleMerchantOCRStatus :exec
 UPDATE merchant_applications
 SET 

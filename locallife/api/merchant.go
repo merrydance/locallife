@@ -415,6 +415,100 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newMerchantResponse(updatedMerchant))
 }
 
+// ==================== 商户门头照/环境照更新（已通过审核后） ====================
+
+type updateCurrentMerchantShopImagesRequest struct {
+	StorefrontImages  []string `json:"storefront_images"`
+	EnvironmentImages []string `json:"environment_images"`
+}
+
+type updateCurrentMerchantShopImagesResponse struct {
+	StorefrontImages  []string `json:"storefront_images"`
+	EnvironmentImages []string `json:"environment_images"`
+}
+
+// updateCurrentMerchantShopImages godoc
+// @Summary 更新商户门头照和环境照
+// @Description 允许已审核通过的商户更新店铺外观图片（门头照最多3张，环境照最多5张）
+// @Tags 商户
+// @Accept json
+// @Produce json
+// @Param request body updateCurrentMerchantShopImagesRequest true "图片URL数组"
+// @Success 200 {object} updateCurrentMerchantShopImagesResponse "更新成功"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 404 {object} ErrorResponse "申请记录不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchants/me/shop-images [patch]
+// @Security BearerAuth
+func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	var req updateCurrentMerchantShopImagesRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if len(req.StorefrontImages) > 3 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("门头照最多3张")))
+		return
+	}
+	if len(req.EnvironmentImages) > 5 {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("环境照最多5张")))
+		return
+	}
+
+	arg := db.UpdateMerchantApplicationShopImagesParams{
+		UserID: authPayload.UserID,
+	}
+	if req.StorefrontImages != nil {
+		for i, img := range req.StorefrontImages {
+			req.StorefrontImages[i] = normalizeImageURLForStorage(img)
+		}
+		jsonData, _ := json.Marshal(req.StorefrontImages)
+		arg.StorefrontImages = jsonData
+	}
+	if req.EnvironmentImages != nil {
+		for i, img := range req.EnvironmentImages {
+			req.EnvironmentImages[i] = normalizeImageURLForStorage(img)
+		}
+		jsonData, _ := json.Marshal(req.EnvironmentImages)
+		arg.EnvironmentImages = jsonData
+	}
+
+	updatedApp, err := server.store.UpdateMerchantApplicationShopImages(ctx, arg)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请记录不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp := updateCurrentMerchantShopImagesResponse{}
+	if len(updatedApp.StorefrontImages) > 0 {
+		var images []string
+		if json.Unmarshal(updatedApp.StorefrontImages, &images) == nil {
+			for i, img := range images {
+				images[i] = normalizeUploadURLForClient(img)
+			}
+			resp.StorefrontImages = images
+		}
+	}
+	if len(updatedApp.EnvironmentImages) > 0 {
+		var images []string
+		if json.Unmarshal(updatedApp.EnvironmentImages, &images) == nil {
+			for i, img := range images {
+				images[i] = normalizeUploadURLForClient(img)
+			}
+			resp.EnvironmentImages = images
+		}
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
 // ==================== 商户营业状态管理 ====================
 
 type updateMerchantStatusRequest struct {

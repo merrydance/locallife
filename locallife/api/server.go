@@ -474,6 +474,7 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/merchants/me", server.getCurrentMerchant)
 	authGroup.GET("/merchants/my", server.listMyMerchants) // 获取用户所有商户（多店铺切换）
 	authGroup.PATCH("/merchants/me", server.updateCurrentMerchant)
+	authGroup.PATCH("/merchants/me/shop-images", server.updateCurrentMerchantShopImages)
 	authGroup.GET("/merchants/me/status", server.getMerchantOpenStatus)
 	authGroup.PATCH("/merchants/me/status", server.updateMerchantOpenStatus)
 	authGroup.GET("/merchants/me/business-hours", server.getMerchantBusinessHours)
