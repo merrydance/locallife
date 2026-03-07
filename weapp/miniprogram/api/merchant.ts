@@ -35,10 +35,12 @@ export interface SearchMerchantItem {
   phone?: string
   logo_url: string
   status: string
+  is_open?: boolean
   region_id: number
   total_orders?: number
   distance?: number
   estimated_delivery_fee?: number
+  tags?: string[]
 }
 
 export interface SearchMerchantsResponse {

@@ -148,6 +148,13 @@
   color: var(--td-warning-color);
 }
 
+.delivery-time {
+  display: flex;
+  align-items: center;
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}
+
 .restaurant-tags {
   display: flex;
   gap: var(--spacer-xs);

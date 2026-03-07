@@ -131,8 +131,11 @@
         >
           <t-image class="merchant-logo" src="{{item.logo_url}}" mode="aspectFill" width="100rpx" height="100rpx" shape="round" />
           <view class="merchant-info">
-            <view class="merchant-name">{{item.name}}</view>
-            <view class="merchant-meta">{{item.is_open ? '营业中' : '休息中'}} · {{item.address}}</view>
+            <view class="merchant-name-row">
+              <text class="merchant-name">{{item.name}}</text>
+              <t-tag wx:if="{{item.is_open === false}}" size="small" variant="light" theme="warning" shape="round">休息中</t-tag>
+            </view>
+            <view class="merchant-meta">{{item.address}}</view>
             <view class="tag-row">
               <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="light" theme="default" shape="round">{{tag}}</t-tag>
             </view>
