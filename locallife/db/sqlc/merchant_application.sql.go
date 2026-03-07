@@ -219,6 +219,44 @@ func (q *Queries) ListMerchantAddressesByRegion(ctx context.Context, regionID in
 	return items, nil
 }
 
+const listMerchantLocationsInRegion = `-- name: ListMerchantLocationsInRegion :many
+SELECT owner_user_id, address, latitude, longitude FROM merchants
+WHERE region_id = $1 AND deleted_at IS NULL
+`
+
+type ListMerchantLocationsInRegionRow struct {
+	OwnerUserID int64          `json:"owner_user_id"`
+	Address     string         `json:"address"`
+	Latitude    pgtype.Numeric `json:"latitude"`
+	Longitude   pgtype.Numeric `json:"longitude"`
+}
+
+// 获取区域内所有在营商户的坐标和地址，用于 GPS 距离去重检测
+func (q *Queries) ListMerchantLocationsInRegion(ctx context.Context, regionID int64) ([]ListMerchantLocationsInRegionRow, error) {
+	rows, err := q.db.Query(ctx, listMerchantLocationsInRegion, regionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListMerchantLocationsInRegionRow{}
+	for rows.Next() {
+		var i ListMerchantLocationsInRegionRow
+		if err := rows.Scan(
+			&i.OwnerUserID,
+			&i.Address,
+			&i.Latitude,
+			&i.Longitude,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const rejectMerchantApplication = `-- name: RejectMerchantApplication :one
 UPDATE merchant_applications
 SET

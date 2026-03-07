@@ -1141,6 +1141,8 @@ type Querier interface {
 	// 获取商户未来预订列表（用于熔断后退款处理）
 	ListMerchantFutureReservationsForRefund(ctx context.Context, merchantID int64) ([]TableReservation, error)
 	ListMerchantGroups(ctx context.Context, arg ListMerchantGroupsParams) ([]MerchantGroup, error)
+	// 获取区域内所有在营商户的坐标和地址，用于 GPS 距离去重检测
+	ListMerchantLocationsInRegion(ctx context.Context, regionID int64) ([]ListMerchantLocationsInRegionRow, error)
 	ListMerchantMembers(ctx context.Context, arg ListMerchantMembersParams) ([]ListMerchantMembersRow, error)
 	// ==================== KDS 厨房显示系统查询 ====================
 	// 根据商户ID和状态查询订单（用于厨房显示）

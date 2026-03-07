@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
@@ -1318,30 +1319,38 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return false, "营业执照地址与商户地址不匹配"
 	}
 
-	// 6. 检查地址是否已被占用 (严格匹配 + 模糊匹配 P1-039)
-	addressExists, err := server.store.CheckMerchantAddressExists(ctx, db.CheckMerchantAddressExistsParams{
-		Address:     app.BusinessAddress,
-		OwnerUserID: app.UserID,
-	})
-	if err != nil {
-		log.Error().Err(err).Msg("检查地址唯一性失败")
-		return false, "系统错误，请稍后重试"
+	// 6. 检查地址是否已被占用（GPS 距离去重）
+	// 五家店同写"希望路北段路东"但各自打了不同坐标 → 各 GPS 距离 > 20m，均可入驻。
+	// 同一商户重复申请或两家店坐标几乎完全相同 → 距离 ≤ 20m，拒绝。
+	// 字符串比较在模糊地址（无门牌号）场景下天生有歧义，GPS 是唯一可靠手段。
+	if !app.Longitude.Valid || !app.Latitude.Valid {
+		return false, "请选择商户地理位置"
 	}
-	if addressExists {
-		return false, "该地址已被其他商户注册"
-	}
-
-	// 模糊匹配增强 (P1-039)
 	if app.RegionID.Valid {
-		regionAddrs, err := server.store.ListMerchantAddressesByRegion(ctx, app.RegionID.Int64)
+		appLat := pgNumericToFloat64(app.Latitude)
+		appLng := pgNumericToFloat64(app.Longitude)
+		appLoc := algorithm.Location{Latitude: appLat, Longitude: appLng}
+
+		locations, err := server.store.ListMerchantLocationsInRegion(ctx, app.RegionID.Int64)
 		if err != nil {
-			log.Warn().Err(err).Int64("region_id", app.RegionID.Int64).Msg("failed to list region addresses for fuzzy check, skipping")
+			log.Warn().Err(err).Int64("region_id", app.RegionID.Int64).Msg("GPS 去重查询失败，跳过")
 		} else {
-			normalizedInput := normalizeAddress(app.BusinessAddress)
-			for _, existingAddr := range regionAddrs {
-				if normalizeAddress(existingAddr) == normalizedInput {
-					log.Warn().Str("input", app.BusinessAddress).Str("existing", existingAddr).Msg("fuzzy address match found")
-					return false, "该地址已被其他商户注册 (模糊匹配)"
+			const duplicateThresholdMeters = 20
+			for _, loc := range locations {
+				if loc.OwnerUserID == app.UserID {
+					continue // 排除申请人自己
+				}
+				existLat := pgNumericToFloat64(loc.Latitude)
+				existLng := pgNumericToFloat64(loc.Longitude)
+				existLoc := algorithm.Location{Latitude: existLat, Longitude: existLng}
+				dist := algorithm.HaversineDistance(appLoc, existLoc)
+				if dist <= duplicateThresholdMeters {
+					log.Warn().
+						Str("app_addr", app.BusinessAddress).
+						Str("exist_addr", loc.Address).
+						Int("dist_m", dist).
+						Msg("GPS 地址重复检测命中")
+					return false, "该位置已有其他商户注册（坐标距离过近）"
 				}
 			}
 		}
@@ -1621,10 +1630,13 @@ func isAddressMatch(licenseAddr, businessAddr string) bool {
 	if road1 == "" || road2 == "" || road1 != road2 {
 		// 检查路名后缀匹配：营业执照地址可能带区域前缀（如"经济开发区吉祥路" vs "吉祥路"）
 		if road1 != "" && road2 != "" && (strings.HasSuffix(road1, road2) || strings.HasSuffix(road2, road1)) {
-			// 路名后缀匹配，继续比较门牌号
+			// 任一方为模糊描述（无数字门牌，如"北段路东"、"晶龙集团"）：
+			// 字符串层面无法判断是否同一地点（营业执照常带行政区前缀+模糊位置），
+			// 接受此匹配，由 GPS 坐标去重兜底防止真正重复注册。
 			if isFuzzy1 || isFuzzy2 {
 				return true
 			}
+			// 双方均有数字门牌号：要求门牌号一致
 			if normalizeNumber(number1) == normalizeNumber(number2) {
 				return true
 			}
@@ -1716,10 +1728,12 @@ func parseChineseAddress(addr string) parsedAddress {
 
 // extractRoadAndNumberWithFuzzy 从详细地址中提取路名和门牌号，同时识别模糊位置描述
 // 返回值：road（路名）, number（门牌号或位置描述）, isFuzzy（是否为模糊位置描述）
+// 正则前缀字符集排除路名后缀字符（路/街/道/巷/弄），确保在第一个路名后缀处截止，
+// 避免"希望路北段路东"被贪婪匹配为"希望路北段路"。多字后缀（大街/大道/胡同）使用优先候选。
 func extractRoadAndNumberWithFuzzy(detail string) (road, number string, isFuzzy bool) {
 	// 匹配 "XX路/街/巷/弄 + 门牌号或位置描述"
 	// 路名后可能跟随：数字门牌号（如"100号"）或模糊描述（如"中段东侧"）
-	roadRegex := regexp.MustCompile(`([^0-9]+(?:路|街|道|巷|弄|大街|大道|胡同))(.+)?`)
+	roadRegex := regexp.MustCompile(`([^0-9路街道巷弄胡同]+(?:大街|大道|胡同|路|街|道|巷|弄))(.+)?`)
 	if match := roadRegex.FindStringSubmatch(detail); len(match) > 1 {
 		road = match[1]
 		if len(match) > 2 && match[2] != "" {
@@ -1776,16 +1790,17 @@ func normalizeNumber(num string) string {
 }
 
 // simpleAddressMatch 简单地址匹配（降级方案）
-// 注意：此函数已加强安全性，必须路名相同才能匹配，防止仅靠数字相同就通过
+// 必须：路名相同 + 门牌号相同，两者缺一不可。
+// 纯模糊描述（如"希望路北段路东"）没有门牌号，不应在此通过——
+// 此类情况应由 isAddressMatch 顶层的 Detail 包含检查处理。
 func simpleAddressMatch(addr1, addr2 string) bool {
-	// 1. 首先提取路名进行比较
+	// 1. 提取路名关键词，必须有共同路名
 	keywords1 := extractAddressKeywords(addr1)
 	keywords2 := extractAddressKeywords(addr2)
 
-	// 检查是否有共同的路名关键词
 	hasCommonRoad := false
 	for _, kw1 := range keywords1 {
-		if len(kw1) < 2 {
+		if len([]rune(kw1)) < 2 {
 			continue
 		}
 		for _, kw2 := range keywords2 {
@@ -1798,57 +1813,32 @@ func simpleAddressMatch(addr1, addr2 string) bool {
 			break
 		}
 	}
-
-	// 如果没有共同的路名，直接返回失败
 	if !hasCommonRoad {
 		return false
 	}
 
-	// 2. 有共同路名的情况下，再检查是否有共同的门牌号特征
+	// 2. 有共同路名 + 有共同门牌号数字 → 匹配
 	numRegex := regexp.MustCompile(`\d+`)
 	nums1 := numRegex.FindAllString(addr1, -1)
 	nums2 := numRegex.FindAllString(addr2, -1)
-
-	// 如果有共同的数字特征（至少3位数字，避免年份等干扰）
 	for _, n1 := range nums1 {
 		for _, n2 := range nums2 {
-			if n1 == n2 && len(n1) >= 1 { // 至少1位数字
+			if n1 == n2 {
 				return true
 			}
 		}
 	}
 
-	// 3. 有共同路名但没有共同数字，检查是否存在模糊位置描述
-	// 如果任一地址使用模糊描述，视为匹配
-	if containsFuzzyLocation(addr1) || containsFuzzyLocation(addr2) {
-		return true
-	}
-
-	return false
-}
-
-// containsFuzzyLocation 检查地址中是否包含模糊位置描述
-func containsFuzzyLocation(addr string) bool {
-	fuzzyKeywords := []string{
-		"中段", "东段", "西段", "南段", "北段",
-		"东侧", "西侧", "南侧", "北侧",
-		"路口", "交叉口",
-		"对面", "旁边", "附近",
-	}
-
-	for _, keyword := range fuzzyKeywords {
-		if strings.Contains(addr, keyword) {
-			return true
-		}
-	}
+	// 3. 有共同路名但双方均无门牌号（纯模糊地址）→ 不在此判断
+	// 例：一方"希望路北段路东"，另一方"希望路 晶龙集团"，描述不同，拒绝
 	return false
 }
 
 // extractAddressKeywords 提取地址关键词
 func extractAddressKeywords(addr string) []string {
 	var keywords []string
-	// 提取路名
-	roadRegex := regexp.MustCompile(`[^省市区县镇乡村街道]+(?:路|街|道|巷|弄|大街|大道|胡同)`)
+	// 提取路名：前缀字符集排除路名后缀字符，确保在第一个路名后缀处截止
+	roadRegex := regexp.MustCompile(`[^省市区县镇乡村街道路巷弄]+(?:大街|大道|胡同|路|街|道|巷|弄)`)
 	roads := roadRegex.FindAllString(addr, -1)
 	keywords = append(keywords, roads...)
 	return keywords

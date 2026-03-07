@@ -145,6 +145,11 @@ SELECT EXISTS(
 SELECT address FROM merchants
 WHERE region_id = $1 AND deleted_at IS NULL;
 
+-- name: ListMerchantLocationsInRegion :many
+-- 获取区域内所有在营商户的坐标和地址，用于 GPS 距离去重检测
+SELECT owner_user_id, address, latitude, longitude FROM merchants
+WHERE region_id = $1 AND deleted_at IS NULL;
+
 -- name: UpdateMerchantApplicationImages :one
 -- 更新门头照和环境照（jsonb数组）
 UPDATE merchant_applications
