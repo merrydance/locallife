@@ -1481,6 +1481,12 @@ func isChineseDateAtLeastDaysAfterNow(dateStr string, days int) bool {
 	if strings.Contains(dateStr, "长期") || strings.Contains(dateStr, "永久") {
 		return true
 	}
+	// 归一化：去除OCR在年月日前后插入的空格
+	dateStr = strings.ReplaceAll(dateStr, " 年", "年")
+	dateStr = strings.ReplaceAll(dateStr, "年 ", "年")
+	dateStr = strings.ReplaceAll(dateStr, " 月", "月")
+	dateStr = strings.ReplaceAll(dateStr, "月 ", "月")
+	dateStr = strings.ReplaceAll(dateStr, " 日", "日")
 	dateRegex := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
 	match := dateRegex.FindStringSubmatch(dateStr)
 	if len(match) < 4 {
@@ -1854,6 +1860,13 @@ func isFoodPermitValid(validTo string) bool {
 	if strings.Contains(validTo, "长期") || strings.Contains(validTo, "永久") {
 		return true
 	}
+
+	// 归一化：去除OCR在年月日前后插入的空格，如 "2027 年01月08日" → "2027年01月08日"
+	validTo = strings.ReplaceAll(validTo, " 年", "年")
+	validTo = strings.ReplaceAll(validTo, "年 ", "年")
+	validTo = strings.ReplaceAll(validTo, " 月", "月")
+	validTo = strings.ReplaceAll(validTo, "月 ", "月")
+	validTo = strings.ReplaceAll(validTo, " 日", "日")
 
 	// 解析日期
 	dateRegex := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)

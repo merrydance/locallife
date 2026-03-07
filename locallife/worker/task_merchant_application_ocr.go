@@ -463,9 +463,11 @@ func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
 		regexp.MustCompile(`(?m)(?:经营者名称|单位名称|名\s*称)\s*[:：]?\s*([^\n\r]{2,50})`),
 		// 模式2: "主体名称：XXX"
 		regexp.MustCompile(`(?m)主体名称\s*[:：]?\s*([^\n\r]{2,50})`),
-		// 模式3: "社会信用代码"后面的企业名称行
+		// 模式3: "商号名称：XXX"（小餐饮/小作坊登记证格式）
+		regexp.MustCompile(`(?m)商号名称\s*[:：]?\s*([^\n\r]{2,50})`),
+		// 模式4: "社会信用代码"后面的企业名称行
 		regexp.MustCompile(`(?m)统一社会信用代码[^\n]*\n\s*([^\n\r]{2,50})`),
-		// 模式4: 包含餐饮/食品关键词的行（可能直接是企业名）
+		// 模式5: 包含餐饮/食品关键词的行（可能直接是企业名）
 		regexp.MustCompile(`(?m)^([^\n\r]{0,20}(?:餐饮|食品|饮品|酒店|饭店|餐厅)[^\n\r]{0,30})$`),
 	}
 
@@ -491,10 +493,17 @@ func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
 			Msg("food permit company name extraction failed")
 	}
 
-	// 许可证编号
+	// 许可证编号 - 支持食品经营许可证(JY开头)和小餐饮/小作坊登记证(纯数字)
 	permitNoRegex := regexp.MustCompile(`JY[0-9]{12,}`)
 	if match := permitNoRegex.FindString(text); match != "" {
 		data.PermitNo = match
+	}
+	if data.PermitNo == "" {
+		// 小餐饮/小作坊登记证编号格式，如 "登记证编号:2130528020946"
+		regNoRegex := regexp.MustCompile(`(?:登记证编号|证书编号|编号)\s*[:：]\s*([0-9]{8,})`)
+		if match := regNoRegex.FindStringSubmatch(text); len(match) > 1 {
+			data.PermitNo = match[1]
+		}
 	}
 
 	// 有效期 - 长期
@@ -503,24 +512,36 @@ func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
 		return
 	}
 
-	// 有效期至
+	// normalizeDate 去除OCR在年月日汉字前后插入的空格，如 "2027 年01月08日" → "2027年01月08日"
+	normalizeDate := func(s string) string {
+		s = strings.ReplaceAll(s, " 年", "年")
+		s = strings.ReplaceAll(s, "年 ", "年")
+		s = strings.ReplaceAll(s, " 月", "月")
+		s = strings.ReplaceAll(s, "月 ", "月")
+		s = strings.ReplaceAll(s, " 日", "日")
+		s = strings.ReplaceAll(s, "日 ", "日")
+		return strings.TrimSpace(s)
+	}
+
+	// 有效期至 - 允许年月日前后有空格（OCR常见问题）
+	datePattern := `\d{4}\s*年\s*\d{1,2}\s*月\s*\d{1,2}\s*日`
 	validToPatterns := []*regexp.Regexp{
-		regexp.MustCompile(`(?:有效期至|至|有效期限至)\s*[:：]?\s*(\d{4}年\d{1,2}月\d{1,2}日)`),
-		regexp.MustCompile(`(?:有效日期|有效期)\s*[:：]?\s*\d{4}年\d{1,2}月\d{1,2}日\s*[至到-]\s*(\d{4}年\d{1,2}月\d{1,2}日)`),
+		regexp.MustCompile(`(?:有效期至|有效期限至)\s*[:：]?\s*(` + datePattern + `)`),
+		regexp.MustCompile(`(?:有效日期|有效期)\s*[:：]?\s*` + datePattern + `\s*[至到-]\s*(` + datePattern + `)`),
 	}
 
 	for _, validToRegex := range validToPatterns {
 		if match := validToRegex.FindStringSubmatch(text); len(match) > 1 {
-			data.ValidTo = match[1]
+			data.ValidTo = normalizeDate(match[1])
 			break
 		}
 	}
 
-	// 有效期范围
-	validRangeRegex := regexp.MustCompile(`(\d{4}年\d{1,2}月\d{1,2}日)\s*[至到-]\s*(\d{4}年\d{1,2}月\d{1,2}日)`)
+	// 有效期范围（如 "2021年01月08日至2027年01月08日"）- 允许年月日前后有空格
+	validRangeRegex := regexp.MustCompile(`(` + datePattern + `)\s*[至到-]\s*(` + datePattern + `)`)
 	if match := validRangeRegex.FindStringSubmatch(text); len(match) > 2 {
-		data.ValidFrom = match[1]
-		data.ValidTo = match[2]
+		data.ValidFrom = normalizeDate(match[1])
+		data.ValidTo = normalizeDate(match[2])
 	}
 }
 
