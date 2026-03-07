@@ -21,6 +21,7 @@ interface DishResult {
   merchant_name: string
   imageUrl: string
   priceDisplay: string
+  merchant_is_open: boolean
 }
 
 interface MerchantResult {
@@ -139,7 +140,8 @@ Page({
         merchant_id: d.merchant_id,
         merchant_name: d.merchant_name || '',
         imageUrl: getPublicImageUrl(d.image_url || ''),
-        priceDisplay: formatPriceNoSymbol(d.price || 0)
+        priceDisplay: formatPriceNoSymbol(d.price || 0),
+        merchant_is_open: d.merchant_is_open ?? true
       }))
 
       const merchants: MerchantResult[] = (result.merchants || []).map((m) => ({

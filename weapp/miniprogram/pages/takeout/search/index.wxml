@@ -113,7 +113,10 @@
         >
           <t-image class="dish-img" src="{{item.imageUrl}}" mode="aspectFill" width="120rpx" height="120rpx" shape="round" />
           <view class="dish-info">
-            <view class="dish-name">{{item.name}}</view>
+            <view class="dish-name-row">
+              <text class="dish-name">{{item.name}}</text>
+              <t-tag wx:if="{{item.merchant_is_open === false}}" size="small" variant="light" theme="warning" shape="round">休息中</t-tag>
+            </view>
             <view class="dish-shop">{{item.merchant_name}}</view>
             <view class="dish-price">¥{{item.priceDisplay}}</view>
           </view>
