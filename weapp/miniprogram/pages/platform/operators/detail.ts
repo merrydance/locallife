@@ -47,7 +47,7 @@ Page({
     navBarHeight: 0,
     loading: true,
     requesting: false,
-    submitting: false,
+    submittingAction: '' as '' | 'approve' | 'reject',
     error: null as string | null,
     applicationID: 0,
     application: null as AdminOperatorApplicationDetail | null,
@@ -112,7 +112,7 @@ Page({
 
   async onApproveTap(e: TapEvent) {
     const id = Number(e.currentTarget.dataset.id || this.data.applicationID || 0)
-    if (!id || this.data.submitting) return
+    if (!id || this.data.submittingAction) return
 
     const confirm = await new Promise<boolean>((resolve) => {
       wx.showModal({
@@ -125,7 +125,7 @@ Page({
     if (!confirm) return
 
     try {
-      this.setData({ submitting: true })
+      this.setData({ submittingAction: 'approve' })
       await platformManagementService.approveOperatorApplication(id)
       wx.showToast({ title: '审核通过', icon: 'success' })
       await this.loadDetail()
@@ -133,7 +133,7 @@ Page({
       const message = error instanceof Error ? error.message : '审核失败'
       wx.showToast({ title: message, icon: 'none' })
     } finally {
-      this.setData({ submitting: false })
+      this.setData({ submittingAction: '' })
     }
   },
 
@@ -144,7 +144,7 @@ Page({
   async onRejectTap() {
     const id = this.data.applicationID
     const reason = this.data.rejectReason.trim()
-    if (!id || this.data.submitting) return
+    if (!id || this.data.submittingAction) return
     if (!reason) {
       wx.showToast({ title: '请输入驳回原因', icon: 'none' })
       return
@@ -161,7 +161,7 @@ Page({
     if (!confirm) return
 
     try {
-      this.setData({ submitting: true })
+      this.setData({ submittingAction: 'reject' })
       await platformManagementService.rejectOperatorApplication(id, { reject_reason: reason })
       wx.showToast({ title: '已驳回', icon: 'success' })
       this.setData({ rejectReason: '' })
@@ -170,7 +170,7 @@ Page({
       const message = error instanceof Error ? error.message : '驳回失败'
       wx.showToast({ title: message, icon: 'none' })
     } finally {
-      this.setData({ submitting: false })
+      this.setData({ submittingAction: '' })
     }
   },
 

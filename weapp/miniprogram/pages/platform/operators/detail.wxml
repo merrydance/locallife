@@ -131,14 +131,16 @@
               variant="outline"
               shape="round"
               size="small"
-              loading="{{submitting}}"
+              loading="{{submittingAction === 'reject'}}"
+              disabled="{{submittingAction !== ''}}"
               bind:tap="onRejectTap"
             >驳回</t-button>
             <t-button
               theme="primary"
               shape="round"
               size="small"
-              loading="{{submitting}}"
+              loading="{{submittingAction === 'approve'}}"
+              disabled="{{submittingAction !== ''}}"
               bind:tap="onApproveTap"
               data-id="{{application.id}}"
             >通过</t-button>
