@@ -24,11 +24,12 @@ import { toast } from "sonner";
 import { 
   apiGet, 
   apiPost, 
-  apiPatch, 
+  apiPatch,
   apiPut, 
   apiDelete, 
   getMediaUrl
 } from "@/lib/api";
+import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -73,6 +74,8 @@ export function MerchantSettingsPageClient() {
   const [printers, setPrinters] = useState<CloudPrinter[]>([]);
   const [displayConfig, setDisplayConfig] = useState<DisplayConfig | null>(null);
   
+  const session = useMerchantSession();
+
   // Loading States
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -161,7 +164,11 @@ export function MerchantSettingsPageClient() {
   const handleToggleOpen = async (isOpen: boolean) => {
     if (!profile) return;
     try {
-      await apiPatch("/merchants/me/status", { is_open: isOpen });
+      if (session) {
+        await session.setOpen(isOpen);
+      } else {
+        await apiPatch("/merchants/me/status", { is_open: isOpen });
+      }
       setProfile({ ...profile, is_open: isOpen });
       toast.success(isOpen ? "店铺已营业" : "店铺已打烊");
     } catch (error: unknown) {
@@ -372,23 +379,23 @@ export function MerchantSettingsPageClient() {
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between bg-card p-2 rounded-xl border border-muted/50 shadow-sm">
             <TabsList className="bg-transparent border-none">
-              <TabsTrigger value="profile" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <TabsTrigger value="profile" className="data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 <Building2 className="h-4 w-4 mr-2" />
                 店铺详情
               </TabsTrigger>
-              <TabsTrigger value="business" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <TabsTrigger value="business" className="data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 <Clock className="h-4 w-4 mr-2" />
                 营业管理
               </TabsTrigger>
-              <TabsTrigger value="devices" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <TabsTrigger value="devices" className="data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 <Printer className="h-4 w-4 mr-2" />
                 设备连接
               </TabsTrigger>
-              <TabsTrigger value="display" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <TabsTrigger value="display" className="data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 <Settings2 className="h-4 w-4 mr-2" />
                 展示设置
               </TabsTrigger>
-              <TabsTrigger value="group" className="data-[state=active]:bg-white data-[state=active]:shadow-sm">
+              <TabsTrigger value="group" className="data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 <Building2 className="h-4 w-4 mr-2" />
                 加入集团
               </TabsTrigger>
