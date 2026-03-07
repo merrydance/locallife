@@ -115,7 +115,7 @@
           <view class="dish-info">
             <view class="dish-name-row">
               <text class="dish-name">{{item.name}}</text>
-              <t-tag wx:if="{{item.merchant_is_open === false}}" size="small" variant="light" theme="warning" shape="round">休息中</t-tag>
+              <t-tag wx:if="{{item.merchant_is_open === false}}" size="small" variant="dark" theme="warning" shape="round">休息中</t-tag>
             </view>
             <view class="dish-shop">{{item.merchant_name}}</view>
             <view class="dish-price">¥{{item.priceDisplay}}</view>
@@ -136,7 +136,7 @@
           <view class="merchant-info">
             <view class="merchant-name-row">
               <text class="merchant-name">{{item.name}}</text>
-              <t-tag wx:if="{{item.is_open === false}}" size="small" variant="light" theme="warning" shape="round">休息中</t-tag>
+              <t-tag wx:if="{{item.is_open === false}}" size="small" variant="dark" theme="warning" shape="round">休息中</t-tag>
             </view>
             <view class="merchant-meta">{{item.address}}</view>
             <view class="tag-row">

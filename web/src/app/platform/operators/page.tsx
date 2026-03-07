@@ -7,6 +7,7 @@ import {
   ExternalLink,
   FileText,
   Eye,
+  Loader2,
   RefreshCw,
   XCircle,
 } from "lucide-react";
@@ -69,7 +70,8 @@ function formatDateTime(value?: string) {
 
 export default function PlatformOperatorApplicationsPage() {
   const [loading, setLoading] = useState(true);
-  const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [isApproving, setIsApproving] = useState(false);
+  const [isRejecting, setIsRejecting] = useState(false);
   const [rows, setRows] = useState<AdminOperatorApplicationItem[]>([]);
   const [detail, setDetail] = useState<OperatorApplicationDetail | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
@@ -185,7 +187,7 @@ export default function PlatformOperatorApplicationsPage() {
   }, [detail, detailOpen]);
 
   const approve = async (id: number) => {
-    setSubmittingId(id);
+    setIsApproving(true);
     try {
       await apiPost(`/admin/operators/applications/${id}/approve`);
       toast.success("申请已通过");
@@ -194,7 +196,7 @@ export default function PlatformOperatorApplicationsPage() {
       const message = error instanceof Error ? error.message : "审核通过失败";
       toast.error(message);
     } finally {
-      setSubmittingId(null);
+      setIsApproving(false);
     }
   };
 
@@ -203,7 +205,7 @@ export default function PlatformOperatorApplicationsPage() {
       toast.warning("请填写至少2个字的驳回原因");
       return;
     }
-    setSubmittingId(id);
+    setIsRejecting(true);
     try {
       await apiPost(`/admin/operators/applications/${id}/reject`, {
         reject_reason: rejectReason.trim(),
@@ -218,7 +220,7 @@ export default function PlatformOperatorApplicationsPage() {
       const message = error instanceof Error ? error.message : "驳回失败";
       toast.error(message);
     } finally {
-      setSubmittingId(null);
+      setIsRejecting(false);
     }
   };
 
@@ -612,12 +614,18 @@ export default function PlatformOperatorApplicationsPage() {
                   <Button
                     variant="destructive"
                     onClick={() => reviewInDetail("reject")}
-                    disabled={submittingId === detail.id}
+                    disabled={isApproving || isRejecting}
                   >
-                    <XCircle className="mr-1 h-4 w-4" /> 驳回申请
+                    {isRejecting
+                      ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      : <XCircle className="mr-1 h-4 w-4" />}
+                    驳回申请
                   </Button>
-                  <Button onClick={() => reviewInDetail("approve")} disabled={submittingId === detail.id}>
-                    <CheckCircle2 className="mr-1 h-4 w-4" /> 审核通过
+                  <Button onClick={() => reviewInDetail("approve")} disabled={isApproving || isRejecting}>
+                    {isApproving
+                      ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                      : <CheckCircle2 className="mr-1 h-4 w-4" />}
+                    审核通过
                   </Button>
                 </>
               )}

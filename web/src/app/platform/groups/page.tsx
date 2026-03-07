@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { CheckCircle2, RefreshCw, XCircle } from "lucide-react";
+import { CheckCircle2, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { toast } from "sonner";
 import {
   PageContent,
@@ -53,7 +53,8 @@ function statusTag(status: string) {
 
 export default function PlatformGroupApplicationsPage() {
   const [loading, setLoading] = useState(true);
-  const [submittingId, setSubmittingId] = useState<number | null>(null);
+  const [approvingId, setApprovingId] = useState<number | null>(null);
+  const [rejectingId, setRejectingId] = useState<number | null>(null);
   const [applications, setApplications] = useState<AdminGroupApplication[]>([]);
   const [status, setStatus] = useState<string>("submitted");
   const [rejectReasonMap, setRejectReasonMap] = useState<Record<number, string>>({});
@@ -87,7 +88,11 @@ export default function PlatformGroupApplicationsPage() {
       }
     }
 
-    setSubmittingId(id);
+    if (nextStatus === "approved") {
+      setApprovingId(id);
+    } else {
+      setRejectingId(id);
+    }
     try {
       await apiPost(`/admin/groups/applications/${id}/review`, {
         status: nextStatus,
@@ -99,7 +104,8 @@ export default function PlatformGroupApplicationsPage() {
       const message = error instanceof Error ? error.message : "审核失败";
       toast.error(message);
     } finally {
-      setSubmittingId(null);
+      setApprovingId(null);
+      setRejectingId(null);
     }
   };
 
@@ -189,19 +195,23 @@ export default function PlatformGroupApplicationsPage() {
                         {item.status === "submitted" ? (
                           <div className="flex justify-end gap-2">
                             <Button
-                              size="sm"
                               onClick={() => review(item.id, "approved")}
-                              disabled={submittingId === item.id}
+                              disabled={approvingId === item.id || rejectingId === item.id}
                             >
-                              <CheckCircle2 className="mr-1 h-4 w-4" /> 通过
+                              {approvingId === item.id
+                                ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                : <CheckCircle2 className="mr-1 h-4 w-4" />}
+                              通过
                             </Button>
                             <Button
-                              size="sm"
                               variant="destructive"
                               onClick={() => review(item.id, "rejected")}
-                              disabled={submittingId === item.id}
+                              disabled={approvingId === item.id || rejectingId === item.id}
                             >
-                              <XCircle className="mr-1 h-4 w-4" /> 驳回
+                              {rejectingId === item.id
+                                ? <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                : <XCircle className="mr-1 h-4 w-4" />}
+                              驳回
                             </Button>
                           </div>
                         ) : (

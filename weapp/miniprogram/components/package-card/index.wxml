@@ -17,7 +17,7 @@
   <view class="package-info">
     <view class="row-1">
       <text class="shop-dish-name">{{package.merchantName}}·{{package.name}}</text>
-      <t-tag wx:if="{{package.merchantIsOpen === false}}" theme="danger" size="small" variant="light">休息中</t-tag>
+      <t-tag wx:if="{{package.merchantIsOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
     </view>
 
     <view class="row-2">
