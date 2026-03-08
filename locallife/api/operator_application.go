@@ -519,6 +519,12 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 		return
 	}
 
+	// 记录旧图片路径，上传成功后删除
+	oldImageURL := ""
+	if app.BusinessLicenseUrl.Valid {
+		oldImageURL = app.BusinessLicenseUrl.String
+	}
+
 	// 保存图片
 	uploader := util.NewFileUploader("uploads")
 	imageURL, err := uploader.UploadOperatorImage(authPayload.UserID, "license", file, fileHeader)
@@ -579,6 +585,7 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	deleteStoredImageAsync(oldImageURL)
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
@@ -650,6 +657,18 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 	if _, err := file.Seek(0, 0); err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 记录旧图片路径，上传成功后删除
+	var oldIDCardURL string
+	if side == "Front" {
+		if app.IDCardFrontUrl.Valid {
+			oldIDCardURL = app.IDCardFrontUrl.String
+		}
+	} else {
+		if app.IDCardBackUrl.Valid {
+			oldIDCardURL = app.IDCardBackUrl.String
+		}
 	}
 
 	// 保存图片
@@ -724,6 +743,7 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	deleteStoredImageAsync(oldIDCardURL)
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))

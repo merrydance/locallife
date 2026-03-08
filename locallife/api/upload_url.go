@@ -1,6 +1,11 @@
 package api
 
-import "strings"
+import (
+	"os"
+	"strings"
+
+	"github.com/rs/zerolog/log"
+)
 
 // normalizeUploadURLForClient converts stored upload paths (e.g. "uploads/..." or "/uploads/...")
 // into a URL path that can be used directly by browsers.
@@ -57,4 +62,25 @@ func normalizeImageURLForStorage(p string) string {
 	}
 
 	return p
+}
+
+// deleteStoredImageAsync 异步删除本地存储的旧图片文件。
+// 对空路径、外部 URL 或 uploads/ 路径以外的路径为空操作。
+func deleteStoredImageAsync(storedURL string) {
+	if storedURL == "" {
+		return
+	}
+	if strings.HasPrefix(storedURL, "http://") || strings.HasPrefix(storedURL, "https://") {
+		return
+	}
+	// 规范化为相对路径 "uploads/..."
+	path := strings.TrimPrefix(storedURL, "/")
+	if !strings.HasPrefix(path, "uploads/") {
+		return
+	}
+	go func() {
+		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+			log.Warn().Str("stored_url", storedURL).Err(err).Msg("delete old image file")
+		}
+	}()
 }

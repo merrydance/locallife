@@ -530,6 +530,11 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 		ID: app.ID,
 	}
 
+	// 记录更新前的旧图片列表，用于稍后删除被移除的图片
+	var oldStorefront, oldEnvironment []string
+	json.Unmarshal(app.StorefrontImages, &oldStorefront)
+	json.Unmarshal(app.EnvironmentImages, &oldEnvironment)
+
 	// 注意：用 != nil 而非 len > 0，使得前端传空数组 [] 时能正确清空图片
 	if req.StorefrontImages != nil {
 		for i, img := range req.StorefrontImages {
@@ -550,6 +555,36 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	// 删除被移除的旧图片文件
+	if req.StorefrontImages != nil {
+		for _, old := range oldStorefront {
+			found := false
+			for _, cur := range req.StorefrontImages {
+				if old == cur {
+					found = true
+					break
+				}
+			}
+			if !found {
+				deleteStoredImageAsync(old)
+			}
+		}
+	}
+	if req.EnvironmentImages != nil {
+		for _, old := range oldEnvironment {
+			found := false
+			for _, cur := range req.EnvironmentImages {
+				if old == cur {
+					found = true
+					break
+				}
+			}
+			if !found {
+				deleteStoredImageAsync(old)
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(updatedApp))
@@ -680,6 +715,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 	}
 
 	updatedApp := app
+	oldImageURL := app.BusinessLicenseImageUrl
 	localPath := ""
 
 	if fromUpload {
@@ -714,6 +750,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		}
 		log.Info().Str("request_id", requestID).Msg("merchant OCR: DB updated with new image URL")
 		updatedApp = updated
+		deleteStoredImageAsync(oldImageURL)
 	} else {
 		if app.BusinessLicenseImageUrl == "" {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上传营业执照图片")))
@@ -842,6 +879,10 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 	}
 
 	updatedApp := app
+	oldFoodPermitURL := ""
+	if app.FoodPermitUrl.Valid {
+		oldFoodPermitURL = app.FoodPermitUrl.String
+	}
 	localPath := ""
 
 	if fromUpload {
@@ -872,6 +913,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 			return
 		}
 		updatedApp = updated
+		deleteStoredImageAsync(oldFoodPermitURL)
 	} else {
 		if !app.FoodPermitUrl.Valid || app.FoodPermitUrl.String == "" {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上传食品经营许可证图片")))
@@ -1014,6 +1056,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 	}
 
 	updatedApp := app
+	oldIDCardURL := storedPath
 	localPath := ""
 
 	if fromUpload {
@@ -1062,6 +1105,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 			}
 			updatedApp = updated
 		}
+		deleteStoredImageAsync(oldIDCardURL)
 	} else {
 		if storedPath == "" {
 			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上传身份证图片")))

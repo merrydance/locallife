@@ -341,6 +341,18 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
+	// 记录旧图片路径，上传成功后删除
+	var oldIDCardURL string
+	if side == "Front" {
+		if app.IDCardFrontUrl.Valid {
+			oldIDCardURL = app.IDCardFrontUrl.String
+		}
+	} else {
+		if app.IDCardBackUrl.Valid {
+			oldIDCardURL = app.IDCardBackUrl.String
+		}
+	}
+
 	// 保存图片到本地
 	uploader := util.NewFileUploader("uploads")
 	imageURL, err := uploader.UploadRiderImage(authPayload.UserID, "idcard", file, fileHeader)
@@ -413,6 +425,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update rider application idcard: %w", err)))
 		return
 	}
+	deleteStoredImageAsync(oldIDCardURL)
 
 	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
 }
@@ -476,6 +489,12 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 		return
 	}
 
+	// 记录旧健康证路径，上传成功后删除
+	oldHealthCertURL := ""
+	if app.HealthCertUrl.Valid {
+		oldHealthCertURL = app.HealthCertUrl.String
+	}
+
 	uploader := util.NewFileUploader("uploads")
 	imageURL, err := uploader.UploadRiderImage(authPayload.UserID, "healthcert", file, fileHeader)
 	if err != nil {
@@ -513,6 +532,7 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update rider application health cert: %w", err)))
 		return
 	}
+	deleteStoredImageAsync(oldHealthCertURL)
 
 	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
 }
