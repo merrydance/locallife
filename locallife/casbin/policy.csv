@@ -52,6 +52,11 @@ p, admin, /v1/admin/operators/applications/:id, GET
 p, admin, /v1/admin/operators/applications/:id/approve, POST
 p, admin, /v1/admin/operators/applications/:id/reject, POST
 
+# Operator Region Expansion Application Review
+p, admin, /v1/admin/operators/region-applications, GET
+p, admin, /v1/admin/operators/region-applications/:id/approve, POST
+p, admin, /v1/admin/operators/region-applications/:id/reject, POST
+
 # Tag Management
 p, admin, /v1/tags, POST
 
@@ -70,6 +75,10 @@ p, admin, /v1/admin/groups/applications/:id/review, POST
 # =============================================================================
 # Operator Policies - Regional management
 # =============================================================================
+# Region Expansion Applications
+p, operator, /v1/operator/region-expansion, POST
+p, operator, /v1/operator/region-expansion, GET
+
 # Regional Statistics
 p, operator, /v1/operator/regions, GET
 p, operator, /v1/operator/regions/:region_id/stats, GET

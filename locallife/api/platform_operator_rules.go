@@ -304,6 +304,16 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+		// 同步 commission_rate 到 region_rule_configs 和 operators（DB 以小数存储，如 3% → 0.03）
+		rateDecimal := numericFromFloat(value / 100)
+		if err := server.store.UpdateAllRegionRuleConfigCommissionRate(ctx, rateDecimal); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if err := server.store.UpdateAllOperatorsCommissionRate(ctx, rateDecimal); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 
 	case "MERCHANT_DEPOSIT":
 		if value < 0 {

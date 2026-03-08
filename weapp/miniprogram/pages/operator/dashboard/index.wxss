@@ -223,6 +223,7 @@
   color: #666;
 }
 
+.color-primary { background: rgba(255, 107, 0, 0.1); color: #FF6B00; }
 .color-info { background: rgba(0, 82, 217, 0.1); color: #0052D9; }
 .color-warning { background: rgba(237, 123, 47, 0.1); color: #ED7B2F; }
 .color-error { background: rgba(227, 77, 89, 0.1); color: #E34D59; }
