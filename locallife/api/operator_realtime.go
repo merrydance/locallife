@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -27,11 +28,25 @@ type operatorRealtimeStatsResponse struct {
 // @Security BearerAuth
 // @Router /v1/operator/stats/realtime [get]
 func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
-	// 获取运营商管理的区域ID
-	regionID, err := server.getOperatorRegionID(ctx)
-	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(err))
-		return
+	// 优先使用前端传入的 region_id（区域切换场景），无则取默认区域
+	var regionID int64
+	if qRegionID := ctx.Query("region_id"); qRegionID != "" {
+		var parsed int64
+		if _, err := fmt.Sscanf(qRegionID, "%d", &parsed); err == nil && parsed > 0 {
+			if _, err := server.checkOperatorManagesRegion(ctx, parsed); err != nil {
+				ctx.JSON(http.StatusForbidden, errorResponse(err))
+				return
+			}
+			regionID = parsed
+		}
+	}
+	if regionID == 0 {
+		var err error
+		regionID, err = server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
 	}
 
 	// 并发获取各项数据

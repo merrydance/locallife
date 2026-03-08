@@ -123,8 +123,8 @@ Page({
         dailyTrends,
         appeals
       ] = await Promise.all([
-        operatorBasicManagementService.getFinanceOverview().catch(() => null),
-        operatorAnalyticsService.getRealtimeStats(),
+        operatorBasicManagementService.getFinanceOverview(undefined, undefined, regionId).catch(() => null),
+        operatorAnalyticsService.getRealtimeStats(regionId),
         operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
           .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }> })),
         operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
@@ -135,7 +135,7 @@ Page({
           .catch(() => []),
         operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
           .catch(() => []),
-        appealService.getAppealList({ page: 1, limit: 5, status: 'pending' })
+        appealService.getAppealList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
           .catch(() => ({ appeals: [] as Array<{ id: number, reason: string, created_at: string }> }))
       ])
 

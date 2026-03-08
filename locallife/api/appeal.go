@@ -955,9 +955,10 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 // ========================= Operator Appeals ============================
 
 type listOperatorAppealsRequest struct {
-	Status *string `form:"status" binding:"omitempty,oneof=pending approved rejected"`
-	Page   int32   `form:"page" binding:"omitempty,min=1"`
-	Limit  int32   `form:"limit" binding:"omitempty,min=1,max=100"`
+	RegionID *int64  `form:"region_id" binding:"omitempty,min=1"`
+	Status   *string `form:"status" binding:"omitempty,oneof=pending approved rejected"`
+	Page     int32   `form:"page" binding:"omitempty,min=1"`
+	Limit    int32   `form:"limit" binding:"omitempty,min=1,max=100"`
 }
 
 // listOperatorAppeals 运营商查看区域内申诉列表
@@ -989,6 +990,16 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		return
 	}
 
+	// 区域隔离：优先使用请求中传入的 region_id，并验证权限；否则回退 operator.RegionID
+	regionID := operator.RegionID
+	if req.RegionID != nil && *req.RegionID > 0 {
+		if _, err := server.checkOperatorManagesRegion(ctx, *req.RegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		regionID = *req.RegionID
+	}
+
 	// 设置默认值
 	if req.Page == 0 {
 		req.Page = 1
@@ -1005,7 +1016,7 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 	}
 
 	appeals, err := server.store.ListOperatorAppeals(ctx, db.ListOperatorAppealsParams{
-		RegionID: operator.RegionID,
+		RegionID: regionID,
 		Column2:  status,
 		Limit:    req.Limit,
 		Offset:   offset,
@@ -1016,7 +1027,7 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 	}
 
 	total, err := server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
-		RegionID: operator.RegionID,
+		RegionID: regionID,
 		Column2:  status,
 	})
 	if err != nil {

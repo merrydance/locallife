@@ -282,10 +282,11 @@ export class OperatorAnalyticsService {
     /**
      * 获取实时统计数据
      */
-    async getRealtimeStats(): Promise<OperatorRealtimeStatsResponse> {
+    async getRealtimeStats(regionId?: number): Promise<OperatorRealtimeStatsResponse> {
         return request({
             url: '/v1/operator/stats/realtime',
-            method: 'GET'
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 }

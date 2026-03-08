@@ -238,10 +238,11 @@ export class OperatorBasicManagementService {
      * @param startDate 开始日期
      * @param endDate 结束日期
      */
-    async getFinanceOverview(startDate?: string, endDate?: string): Promise<OperatorFinanceOverviewResponse> {
-        const data: Record<string, string> = {}
+    async getFinanceOverview(startDate?: string, endDate?: string, regionId?: number): Promise<OperatorFinanceOverviewResponse> {
+        const data: Record<string, string | number> = {}
         if (startDate) data.start_date = startDate
         if (endDate) data.end_date = endDate
+        if (regionId) data.region_id = regionId
 
         return request({
             url: '/v1/operators/me/finance/overview',
