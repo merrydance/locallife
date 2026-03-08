@@ -45,6 +45,31 @@
   opacity: 0.9;
 }
 
+.region-pill {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6rpx;
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 100rpx;
+  padding: 6rpx 18rpx;
+  max-width: 240rpx;
+}
+
+.region-pill--static {
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.region-pill-name {
+  font-size: 24rpx;
+  color: rgba(255, 255, 255, 0.9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 150rpx;
+}
+
+
 .withdraw-btn {
   background: rgba(255, 255, 255, 0.2);
   padding: 8rpx 32rpx;

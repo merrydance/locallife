@@ -28,6 +28,18 @@
         <view class="finance-card">
           <view class="finance-header">
             <view class="balance-title">可提现余额 (元)</view>
+            <!-- 多区域时显示区域切换器 -->
+            <picker wx:if="{{regions.length > 1}}" mode="selector" range="{{regions}}" range-key="name" value="{{selectedRegionIdx}}" bindchange="onRegionChange">
+              <view class="region-pill">
+                <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.85)" />
+                <text class="region-pill-name">{{regions[selectedRegionIdx].name}}</text>
+                <t-icon name="chevron-down" size="22rpx" color="rgba(255,255,255,0.85)" />
+              </view>
+            </picker>
+            <view wx:elif="{{regions.length === 1}}" class="region-pill region-pill--static">
+              <t-icon name="map" size="26rpx" color="rgba(255,255,255,0.8)" />
+              <text class="region-pill-name">{{regions[0].name}}</text>
+            </view>
           </view>
           <view class="balance-value">{{finance.balance_display}}</view>
           <view class="income-row">

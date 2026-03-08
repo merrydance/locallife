@@ -1,6 +1,6 @@
 import { responsiveBehavior } from '@/utils/responsive'
 import { formatPriceNoSymbol } from '@/utils/util'
-import { operatorBasicManagementService } from '../../../api/operator-basic-management'
+import { operatorBasicManagementService, RegionResponse } from '../../../api/operator-basic-management'
 import { operatorAnalyticsService, OperatorAppealService } from '../../../api/operator-analytics'
 import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
 import { operatorRiderManagementService } from '../../../api/operator-rider-management'
@@ -52,6 +52,11 @@ Page({
     riderRankings: [] as RiderRankingDisplayItem[],
     rankingType: 'merchant', // merchant | rider
 
+    // 区域切换
+    regions: [] as RegionResponse[],
+    selectedRegionIdx: 0,
+    selectedRegionId: 0,
+
     loading: false,
     initialLoading: true,
     error: null as string | null,
@@ -75,6 +80,18 @@ Page({
 
   async initDashboard() {
     this.setData({ initialLoading: true, error: null })
+    // 先加载区域列表，再加载看板数据
+    try {
+      const regionsResult = await operatorBasicManagementService.getOperatorRegions({ limit: 100 })
+      const regions = regionsResult.regions || []
+      this.setData({
+        regions,
+        selectedRegionIdx: 0,
+        selectedRegionId: regions[0]?.id || 0
+      })
+    } catch {
+      // 区域加载失败不阻断页面
+    }
     await this.loadDashboardData()
     this.setData({ initialLoading: false })
   },
@@ -91,8 +108,9 @@ Page({
     this.setData({ loading: true })
     
     try {
-      const { timeDimension } = this.data
+      const { timeDimension, selectedRegionId } = this.data
       const { startDate, endDate } = this.getDateRange(timeDimension)
+      const regionId = selectedRegionId || undefined
       
       // 1. 并行获取各项数据（财务概览失败不阻断运营中心）
       const [
@@ -107,15 +125,15 @@ Page({
       ] = await Promise.all([
         operatorBasicManagementService.getFinanceOverview().catch(() => null),
         operatorAnalyticsService.getRealtimeStats(),
-        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending' })
+        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
           .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }> })),
-        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending' })
+        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
           .catch(() => ({ riders: [] as Array<{ id: number, name: string, created_at: string }> })),
-        operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5 })
+        operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
           .catch(() => []),
-        operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5 })
+        operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
           .catch(() => []),
-        operatorAnalyticsService.getDailyTrend(undefined, startDate, endDate)
+        operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
           .catch(() => []),
         appealService.getAppealList({ page: 1, limit: 5, status: 'pending' })
           .catch(() => ({ appeals: [] as Array<{ id: number, reason: string, created_at: string }> }))
@@ -209,6 +227,17 @@ Page({
       startDate: start.toISOString().split('T')[0],
       endDate: end.toISOString().split('T')[0]
     }
+  },
+
+  /**
+   * 切换区域
+   */
+  onRegionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    const idx = parseInt(e.detail.value)
+    const regionId = this.data.regions[idx]?.id || 0
+    this.setData({ selectedRegionIdx: idx, selectedRegionId: regionId }, () => {
+      this.loadDashboardData()
+    })
   },
 
   /**
