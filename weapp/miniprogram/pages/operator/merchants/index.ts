@@ -27,11 +27,13 @@ Page({
     initialLoading: true,
     error: null as string | null,
     page: 1,
-    hasMore: true
+    hasMore: true,
+    regionId: 0
   },
 
-  onLoad() {
-    this.setData({ isLargeScreen: isLargeScreen() })
+  onLoad(options: { region_id?: string }) {
+    const regionId = options.region_id ? parseInt(options.region_id) : 0
+    this.setData({ isLargeScreen: isLargeScreen(), regionId })
     this.loadMerchants()
   },
 
@@ -61,7 +63,8 @@ Page({
     try {
       const result = await operatorMerchantManagementService.getMerchantList({
         page: this.data.page,
-        limit: 20
+        limit: 20,
+        ...(this.data.regionId ? { region_id: this.data.regionId } : {})
       })
 
       // 直接使用后端返回的数据，不添加假数据

@@ -113,19 +113,19 @@
           <view class="section-title">业务管理</view>
         </view>
         <view class="menu-grid">
-          <navigator url="/pages/operator/merchants/index" class="menu-item">
+          <navigator url="/pages/operator/merchants/index?region_id={{selectedRegionId}}" class="menu-item">
             <view class="menu-icon-bg color-info">
               <t-icon name="shop" size="48rpx" />
             </view>
             <text>商户管理</text>
           </navigator>
-          <navigator url="/pages/operator/riders/index" class="menu-item">
+          <navigator url="/pages/operator/riders/index?region_id={{selectedRegionId}}" class="menu-item">
             <view class="menu-icon-bg color-warning">
               <t-icon name="user-circle" size="48rpx" />
             </view>
             <text>骑手管理</text>
           </navigator>
-          <navigator url="/pages/operator/appeal/list/index" class="menu-item">
+          <navigator url="/pages/operator/appeal/list/index?region_id={{selectedRegionId}}" class="menu-item">
             <view class="menu-icon-bg color-error">
               <t-icon name="chat" size="48rpx" />
             </view>

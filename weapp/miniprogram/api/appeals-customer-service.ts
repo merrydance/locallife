@@ -58,6 +58,7 @@ export interface AppealsQueryParams extends Record<string, unknown> {
     page_id?: number
     page_size?: number
     status?: AppealStatus
+    region_id?: number
 }
 
 // ==================== 索赔管理相关类型 ====================

@@ -7,10 +7,13 @@ Page({
         initialLoading: true,
         error: null as string | null,
         status: 'pending' as 'pending' | 'approved' | 'rejected',
-        navBarHeight: 88
+        navBarHeight: 88,
+        regionId: 0
     },
 
-    onLoad() {
+    onLoad(options: { region_id?: string }) {
+        const regionId = options.region_id ? parseInt(options.region_id) : 0
+        this.setData({ regionId })
         this.loadAppeals()
     },
 
@@ -37,7 +40,8 @@ Page({
             const res = await operatorAppealReviewService.getPendingAppeals({
                 status: this.data.status,
                 page: 1,
-                limit: 20
+                limit: 20,
+                ...(this.data.regionId ? { region_id: this.data.regionId } : {})
             })
             
             this.setData({

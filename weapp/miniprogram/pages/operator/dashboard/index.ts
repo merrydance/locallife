@@ -275,7 +275,9 @@ Page({
   },
 
   onPendingViewAll() {
-    wx.navigateTo({ url: '/pages/operator/appeal/list/index' })
+    const { selectedRegionId } = this.data
+    const query = selectedRegionId ? `?region_id=${selectedRegionId}` : ''
+    wx.navigateTo({ url: `/pages/operator/appeal/list/index${query}` })
   },
 
   onOpenApplyment() {

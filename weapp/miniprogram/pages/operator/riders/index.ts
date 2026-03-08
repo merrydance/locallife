@@ -34,10 +34,13 @@ Page({
     page: 1,
     limit: 20,
     hasMore: true,
-    riders: [] as RiderItemView[]
+    riders: [] as RiderItemView[],
+    regionId: 0
   },
 
-  onLoad() {
+  onLoad(options: { region_id?: string }) {
+    const regionId = options.region_id ? parseInt(options.region_id) : 0
+    this.setData({ regionId })
     this.loadRiders(true)
   },
 
@@ -60,7 +63,11 @@ Page({
       const res = await request<RiderListResponse>({
         url: '/v1/operator/riders',
         method: 'GET',
-        data: { page, limit: this.data.limit }
+        data: {
+          page,
+          limit: this.data.limit,
+          ...(this.data.regionId ? { region_id: this.data.regionId } : {})
+        }
       })
 
       const incoming = (res.riders || []).map((item) => ({
