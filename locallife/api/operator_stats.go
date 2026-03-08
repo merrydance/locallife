@@ -589,8 +589,9 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 		response.CurrentMonth.PendingCommission = 0
 	}
 
-	monthOperatorStats, monthOperatorErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
+	monthOperatorStats, monthOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
 		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+		RegionID:   regionID,
 		StartAt:    monthStart,
 		EndAt:      monthEnd,
 	})
@@ -614,8 +615,9 @@ func (server *Server) getOperatorFinanceOverview(ctx *gin.Context) {
 		response.Total.SettledCommission = totalStats.TotalCommission // 全部是已分账的
 	}
 
-	totalOperatorStats, totalOperatorErr := server.store.GetOperatorProfitSharingStats(ctx, db.GetOperatorProfitSharingStatsParams{
+	totalOperatorStats, totalOperatorErr := server.store.GetOperatorProfitSharingStatsByRegion(ctx, db.GetOperatorProfitSharingStatsByRegionParams{
 		OperatorID: pgtype.Int8{Int64: operatorID, Valid: true},
+		RegionID:   regionID,
 		StartAt:    allTimeStart,
 		EndAt:      allTimeEnd,
 	})

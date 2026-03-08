@@ -7605,6 +7605,21 @@ func (mr *MockStoreMockRecorder) GetOperatorProfitSharingStats(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorProfitSharingStats", reflect.TypeOf((*MockStore)(nil).GetOperatorProfitSharingStats), ctx, arg)
 }
 
+// GetOperatorProfitSharingStatsByRegion mocks base method.
+func (m *MockStore) GetOperatorProfitSharingStatsByRegion(ctx context.Context, arg db.GetOperatorProfitSharingStatsByRegionParams) (db.GetOperatorProfitSharingStatsByRegionRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorProfitSharingStatsByRegion", ctx, arg)
+	ret0, _ := ret[0].(db.GetOperatorProfitSharingStatsByRegionRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOperatorProfitSharingStatsByRegion indicates an expected call of GetOperatorProfitSharingStatsByRegion.
+func (mr *MockStoreMockRecorder) GetOperatorProfitSharingStatsByRegion(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorProfitSharingStatsByRegion", reflect.TypeOf((*MockStore)(nil).GetOperatorProfitSharingStatsByRegion), ctx, arg)
+}
+
 // GetOperatorRegion mocks base method.
 func (m *MockStore) GetOperatorRegion(ctx context.Context, arg db.GetOperatorRegionParams) (db.OperatorRegion, error) {
 	m.ctrl.T.Helper()

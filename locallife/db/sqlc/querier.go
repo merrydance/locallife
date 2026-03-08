@@ -771,6 +771,8 @@ type Querier interface {
 	// 运营商区域内商户排行（基于实际分账数据）
 	GetOperatorMerchantRanking(ctx context.Context, arg GetOperatorMerchantRankingParams) ([]GetOperatorMerchantRankingRow, error)
 	GetOperatorProfitSharingStats(ctx context.Context, arg GetOperatorProfitSharingStatsParams) (GetOperatorProfitSharingStatsRow, error)
+	// 按区域过滤的运营商分账统计（多区域运营商区域维度财务概览）
+	GetOperatorProfitSharingStatsByRegion(ctx context.Context, arg GetOperatorProfitSharingStatsByRegionParams) (GetOperatorProfitSharingStatsByRegionRow, error)
 	GetOperatorRegion(ctx context.Context, arg GetOperatorRegionParams) (OperatorRegion, error)
 	GetOperatorRegionApplication(ctx context.Context, id int64) (OperatorRegionApplication, error)
 	GetOperatorRegionApplicationByOperatorAndRegion(ctx context.Context, arg GetOperatorRegionApplicationByOperatorAndRegionParams) (OperatorRegionApplication, error)

@@ -473,6 +473,44 @@ func (q *Queries) GetOperatorProfitSharingStats(ctx context.Context, arg GetOper
 	return i, err
 }
 
+const getOperatorProfitSharingStatsByRegion = `-- name: GetOperatorProfitSharingStatsByRegion :one
+SELECT 
+    COUNT(*) as total_orders,
+    COALESCE(SUM(ps.total_amount), 0)::bigint as total_amount,
+    COALESCE(SUM(ps.operator_commission), 0)::bigint as total_operator_commission
+FROM profit_sharing_orders ps
+JOIN merchants m ON m.id = ps.merchant_id
+WHERE ps.operator_id = $1 AND ps.status = 'finished'
+  AND m.region_id = $2
+  AND ps.created_at >= $3 AND ps.created_at <= $4
+`
+
+type GetOperatorProfitSharingStatsByRegionParams struct {
+	OperatorID pgtype.Int8 `json:"operator_id"`
+	RegionID   int64       `json:"region_id"`
+	StartAt    time.Time   `json:"start_at"`
+	EndAt      time.Time   `json:"end_at"`
+}
+
+type GetOperatorProfitSharingStatsByRegionRow struct {
+	TotalOrders             int64 `json:"total_orders"`
+	TotalAmount             int64 `json:"total_amount"`
+	TotalOperatorCommission int64 `json:"total_operator_commission"`
+}
+
+// 按区域过滤的运营商分账统计（多区域运营商区域维度财务概览）
+func (q *Queries) GetOperatorProfitSharingStatsByRegion(ctx context.Context, arg GetOperatorProfitSharingStatsByRegionParams) (GetOperatorProfitSharingStatsByRegionRow, error) {
+	row := q.db.QueryRow(ctx, getOperatorProfitSharingStatsByRegion,
+		arg.OperatorID,
+		arg.RegionID,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	var i GetOperatorProfitSharingStatsByRegionRow
+	err := row.Scan(&i.TotalOrders, &i.TotalAmount, &i.TotalOperatorCommission)
+	return i, err
+}
+
 const getProfitSharingOrder = `-- name: GetProfitSharingOrder :one
 SELECT id, payment_order_id, merchant_id, operator_id, order_source, total_amount, platform_commission, operator_commission, merchant_amount, out_order_no, sharing_order_id, status, finished_at, created_at, delivery_fee, rider_id, rider_amount, distributable_amount, platform_rate, operator_rate FROM profit_sharing_orders
 WHERE id = $1 LIMIT 1
