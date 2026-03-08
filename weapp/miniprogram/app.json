@@ -168,7 +168,8 @@
         "orders/list/index",
         "orders/detail/index",
         "tables/index",
-        "profile-images/index"
+        "profile-images/index",
+        "delivery-promotions/index"
       ],
       "independent": false
     }

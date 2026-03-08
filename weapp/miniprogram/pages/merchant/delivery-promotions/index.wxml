@@ -1,0 +1,123 @@
+<custom-navbar title="配送优惠管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+
+  <!-- 加载中 -->
+  <view wx:if="{{loading && !promotions.length}}" class="center-state">
+    <t-loading theme="circular" size="48rpx" text="加载中..." vertical />
+  </view>
+
+  <!-- 空状态 -->
+  <view wx:elif="{{!loading && !promotions.length}}" class="center-state">
+    <t-empty icon="discount" description="暂无配送优惠活动" />
+    <t-button theme="primary" shape="round" size="medium" bind:tap="onAddPromotion" style="margin-top: 32rpx;">新建优惠</t-button>
+  </view>
+
+  <!-- 优惠列表 -->
+  <view wx:else class="list-section">
+    <t-swipe-cell wx:for="{{promotions}}" wx:key="id">
+      <view class="promo-card">
+        <view class="promo-header">
+          <view class="promo-name-row">
+            <text class="promo-name">{{item.name}}</text>
+            <t-tag size="extra-small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
+          </view>
+          <t-switch size="small" value="{{item.is_active}}" catchtap="onTogglePromoStatus" data-id="{{item.id}}" data-active="{{item.is_active}}" />
+        </view>
+
+        <view class="promo-body">
+          <view class="promo-rule">
+            <t-icon name="cart" size="28rpx" color="var(--td-brand-color)" />
+            <text class="rule-text">满 <text class="rule-amount">¥{{item.min_order_yuan}}</text> 减 <text class="rule-amount">¥{{item.discount_yuan}}</text></text>
+          </view>
+          <view class="promo-date">
+            <t-icon name="time" size="24rpx" color="var(--td-text-color-placeholder)" />
+            <text class="date-text">{{item.valid_from_date}} ~ {{item.valid_until_date}}</text>
+          </view>
+        </view>
+
+        <view class="promo-footer">
+          <t-button size="extra-small" theme="primary" variant="outline" shape="round" catchtap="onEditPromotion" data-id="{{item.id}}">编辑</t-button>
+        </view>
+      </view>
+
+      <view slot="right" class="swipe-delete" catchtap="onDeletePromotion" data-id="{{item.id}}" data-name="{{item.name}}">删除</view>
+    </t-swipe-cell>
+  </view>
+
+  <!-- 悬浮添加按钮（列表非空时显示） -->
+  <t-fab wx:if="{{promotions.length}}" icon="add" bind:click="onAddPromotion" />
+</view>
+
+<!-- 新建/编辑弹窗 -->
+<t-popup visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
+  <view class="form-popup">
+    <view class="form-title">{{isEdit ? '编辑配送优惠' : '新建配送优惠'}}</view>
+
+    <view class="form-item">
+      <text class="form-label required">优惠名称</text>
+      <input
+        class="form-input"
+        value="{{form.name}}"
+        placeholder="例如：满30减5"
+        maxlength="50"
+        data-field="name"
+        bindinput="onFormInput"
+      />
+    </view>
+
+    <view class="form-row">
+      <view class="form-item half">
+        <text class="form-label required">最低订单金额（元）</text>
+        <input
+          class="form-input"
+          type="digit"
+          value="{{form.min_order_yuan}}"
+          placeholder="如 30.00"
+          data-field="min_order_yuan"
+          bindinput="onFormInput"
+        />
+      </view>
+      <view class="form-item half">
+        <text class="form-label required">优惠金额（元）</text>
+        <input
+          class="form-input"
+          type="digit"
+          value="{{form.discount_yuan}}"
+          placeholder="如 5.00"
+          data-field="discount_yuan"
+          bindinput="onFormInput"
+        />
+      </view>
+    </view>
+
+    <view class="form-row">
+      <view class="form-item half">
+        <text class="form-label required">开始日期</text>
+        <picker mode="date" value="{{form.valid_from}}" bindchange="onFormInput" data-field="valid_from">
+          <view class="form-picker {{form.valid_from ? '' : 'placeholder'}}">
+            {{form.valid_from || '请选择'}}
+          </view>
+        </picker>
+      </view>
+      <view class="form-item half">
+        <text class="form-label required">结束日期</text>
+        <picker mode="date" value="{{form.valid_until}}" bindchange="onFormInput" data-field="valid_until">
+          <view class="form-picker {{form.valid_until ? '' : 'placeholder'}}">
+            {{form.valid_until || '请选择'}}
+          </view>
+        </picker>
+      </view>
+    </view>
+
+    <view wx:if="{{isEdit}}" class="form-item form-item-row">
+      <text class="form-label">启用状态</text>
+      <t-switch value="{{form.is_active}}" bind:change="onToggleActive" />
+    </view>
+
+    <view class="form-actions">
+      <t-button theme="default" variant="outline" size="medium" bind:tap="onCloseForm" style="flex: 1;">取消</t-button>
+      <t-button theme="primary" size="medium" loading="{{submitting}}" bind:tap="onSubmitForm" style="flex: 2;">保存</t-button>
+    </view>
+  </view>
+</t-popup>

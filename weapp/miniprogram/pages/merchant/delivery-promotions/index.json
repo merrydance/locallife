@@ -1,0 +1,16 @@
+{
+  "usingComponents": {
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-popup": "tdesign-miniprogram/popup/popup",
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-swipe-cell": "tdesign-miniprogram/swipe-cell/swipe-cell",
+    "t-icon": "tdesign-miniprogram/icon/icon",
+    "custom-navbar": "/components/custom-navbar/index"
+  },
+  "enablePullDownRefresh": true,
+  "navigationStyle": "custom"
+}
