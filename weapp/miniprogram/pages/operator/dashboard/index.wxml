@@ -149,7 +149,7 @@
             </view>
             <text>微信开户</text>
           </navigator>
-          <navigator url="/pages/operator/region/index?target=rules" class="menu-item">
+          <navigator url="/pages/operator/rules/index?region_id={{selectedRegionId}}&region_name={{regions[selectedRegionIdx].name}}" class="menu-item">
             <view class="menu-icon-bg color-default">
               <t-icon name="setting" size="48rpx" />
             </view>
