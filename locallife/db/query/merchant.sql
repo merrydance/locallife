@@ -163,9 +163,11 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
-    ), '[]'::json) AS tags
+    ), '[]'::json) AS tags,
+  ma.storefront_images
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
   AND m.region_id = sqlc.narg('region_id')
@@ -477,9 +479,11 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
-    ), '[]'::json) AS tags
+    ), '[]'::json) AS tags,
+  ma.storefront_images
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
   INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL

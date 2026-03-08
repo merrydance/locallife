@@ -1831,9 +1831,11 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.addr
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
-    ), '[]'::json) AS tags
+    ), '[]'::json) AS tags,
+  ma.storefront_images
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
   AND m.region_id = $6
@@ -1884,6 +1886,7 @@ type SearchMerchantsRow struct {
 	BrandID           pgtype.Int8        `json:"brand_id"`
 	TotalOrders       int32              `json:"total_orders"`
 	Tags              interface{}        `json:"tags"`
+	StorefrontImages  []byte             `json:"storefront_images"`
 }
 
 func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]SearchMerchantsRow, error) {
@@ -1928,6 +1931,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.BrandID,
 			&i.TotalOrders,
 			&i.Tags,
+			&i.StorefrontImages,
 		); err != nil {
 			return nil, err
 		}
@@ -1946,9 +1950,11 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.addr
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
-    ), '[]'::json) AS tags
+    ), '[]'::json) AS tags,
+  ma.storefront_images
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
   INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
@@ -1997,6 +2003,7 @@ type SearchMerchantsByTagRow struct {
 	BrandID           pgtype.Int8        `json:"brand_id"`
 	TotalOrders       int32              `json:"total_orders"`
 	Tags              interface{}        `json:"tags"`
+	StorefrontImages  []byte             `json:"storefront_images"`
 }
 
 // 按标签（菜系）过滤商户，支持区域和位置排序
@@ -2042,6 +2049,7 @@ func (q *Queries) SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsB
 			&i.BrandID,
 			&i.TotalOrders,
 			&i.Tags,
+			&i.StorefrontImages,
 		); err != nil {
 			return nil, err
 		}

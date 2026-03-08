@@ -705,7 +705,7 @@ func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) se
 		RegionID:    merchant.RegionID,
 		TotalOrders: merchant.TotalOrders,
 	}
-	if cover := extractCoverImageFromAppData(merchant.ApplicationData); cover != "" {
+	if cover := extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover
 	}
 	if merchant.Tags != nil {
@@ -744,7 +744,7 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
 		TotalOrders: merchant.TotalOrders,
 	}
-	if cover := extractCoverImageFromAppData(merchant.ApplicationData); cover != "" {
+	if cover := extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover
 	}
 
@@ -1482,20 +1482,14 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 	})
 }
 
-// extractCoverImageFromAppData 从商户 application_data 快照中提取第一张门头照 URL。
-// 同时检查 application_data 中的快照字段和 merchant_applications 活数据格式。
-func extractCoverImageFromAppData(data []byte) string {
+// extractCoverImageFromStorefrontImages 从 merchant_applications.storefront_images JSONB 字段提取第一张门头照 URL。
+func extractCoverImageFromStorefrontImages(data []byte) string {
 	if len(data) == 0 {
 		return ""
 	}
-	var appData map[string]interface{}
-	if err := json.Unmarshal(data, &appData); err != nil {
+	var images []string
+	if err := json.Unmarshal(data, &images); err != nil || len(images) == 0 {
 		return ""
 	}
-	if storefrontImages, ok := appData["storefront_images"].([]interface{}); ok && len(storefrontImages) > 0 {
-		if firstImage, ok := storefrontImages[0].(string); ok && firstImage != "" {
-			return normalizeUploadURLForClient(firstImage)
-		}
-	}
-	return ""
+	return normalizeUploadURLForClient(images[0])
 }
