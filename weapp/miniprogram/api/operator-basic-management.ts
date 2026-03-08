@@ -721,11 +721,12 @@ export async function getOperatorDashboard(): Promise<{
         operatorBasicManagementService.getOperatorRegions({ limit: 100 })
     ])
 
-    // 获取各区域统计数据
+    // 获取各区域统计数据（单个区域失败不影响整体，兼容 ES2018）
     const regionStatsPromises = regions.regions.map((region) =>
-        operatorBasicManagementService.getRegionStats(region.id)
+        operatorBasicManagementService.getRegionStats(region.id).catch(() => null)
     )
-    const regionStats = await Promise.all(regionStatsPromises)
+    const regionStatsRaw = await Promise.all(regionStatsPromises)
+    const regionStats = regionStatsRaw.filter((s): s is RegionStatsResponse => s !== null)
 
     // 分析区域绩效
     const regionPerformance = regionAnalyticsService.compareRegionPerformance(regionStats)

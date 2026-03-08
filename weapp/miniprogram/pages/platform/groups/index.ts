@@ -70,8 +70,9 @@ Page({
         limit: this.data.limit
       })
 
+      const tagged = response.applications.map(a => ({ ...a, statusLabel: getGroupStatusLabel(a.status) }))
       this.setData({
-        applications: reset ? response.applications : this.data.applications.concat(response.applications),
+        applications: reset ? tagged : this.data.applications.concat(tagged),
         total: response.total,
         page: response.page,
         hasMore: response.has_more
@@ -87,10 +88,6 @@ Page({
 
   onRetry() {
     this.loadApplications(true)
-  },
-
-  getStatusLabel(status: string) {
-    return getGroupStatusLabel(status)
   },
 
   onDetailTap(e: TapEvent) {

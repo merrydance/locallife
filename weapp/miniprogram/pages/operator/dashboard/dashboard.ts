@@ -33,7 +33,8 @@ Page({
 
         // 区域统计
         regionStats: [] as RegionStatsResponse[],
-        selectedRegionId: 0,
+        selectedRegionIdx: 0,   // picker 用 index
+        selectedRegionId: 0,    // 实际 region_id，传给 API
 
         // 商户摘要
         merchantSummary: {
@@ -110,6 +111,7 @@ Page({
                 operatorInfo: dashboardData.operatorInfo,
                 financeOverview: dashboardData.financeOverview,
                 regionStats: dashboardData.regionStats,
+                selectedRegionIdx: 0,
                 selectedRegionId: dashboardData.regionStats[0]?.region_id || 0,
                 merchantSummary: merchantData.merchantSummary,
                 riderSummary: riderData.riderSummary,
@@ -132,12 +134,13 @@ Page({
     },
 
     /**
-     * 切换区域
+     * 切换区域（e.detail.value 是 picker 选中的数组下标）
      */
     onRegionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-        const regionId = parseInt(e.detail.value)
-        this.setData({ selectedRegionId: regionId })
-        this.loadRegionData(regionId)
+        const idx = parseInt(e.detail.value)
+        const regionId = this.data.regionStats[idx]?.region_id || 0
+        this.setData({ selectedRegionIdx: idx, selectedRegionId: regionId })
+        if (regionId) this.loadRegionData(regionId)
     },
 
     /**

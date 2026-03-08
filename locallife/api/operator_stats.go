@@ -143,7 +143,10 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 		}
 
 		if len(regionRelations) > 0 {
+			// 先收集已在 operator_regions 中的区域 ID（用于去重）
+			seenRegionIDs := make(map[int64]bool)
 			for _, rel := range regionRelations {
+				seenRegionIDs[rel.RegionID] = true
 				region, regionErr := server.store.GetRegion(ctx, rel.RegionID)
 				if regionErr != nil {
 					ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
@@ -151,8 +154,16 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 				}
 				response = append(response, newRegionResponse(region))
 			}
+			// 兼容旧模型：如果 operator.region_id 不在 operator_regions 中（入驻审批早于多区域支持），
+			// 仍需将其包含进来，避免旧运营商的初始区域丢失
+			if op.RegionID > 0 && !seenRegionIDs[op.RegionID] {
+				region, regionErr := server.store.GetRegion(ctx, op.RegionID)
+				if regionErr == nil {
+					response = append([]regionResponse{newRegionResponse(region)}, response...)
+				}
+			}
 		} else if op.RegionID > 0 {
-			// 兼容旧模型：operator.region_id
+			// 兼容旧模型：operator.region_id（无任何 operator_regions 记录时）
 			region, regionErr := server.store.GetRegion(ctx, op.RegionID)
 			if regionErr != nil {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, regionErr))
