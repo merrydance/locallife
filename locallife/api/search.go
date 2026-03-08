@@ -81,6 +81,7 @@ type searchMerchantResponse struct {
 	Longitude            float64  `json:"-"`
 	Phone                string   `json:"phone,omitempty"`
 	LogoURL              string   `json:"logo_url"`
+	CoverImage           string   `json:"cover_image,omitempty"` // 门头照（首张），作为列表卡片封面
 	Status               string   `json:"status"`
 	IsOpen               bool     `json:"is_open"`
 	RegionID             int64    `json:"region_id"`                        // 区域ID，用于运费计算
@@ -704,6 +705,9 @@ func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) se
 		RegionID:    merchant.RegionID,
 		TotalOrders: merchant.TotalOrders,
 	}
+	if cover := extractCoverImageFromAppData(merchant.ApplicationData); cover != "" {
+		resp.CoverImage = cover
+	}
 	if merchant.Tags != nil {
 		if tagsBytes, ok := merchant.Tags.([]byte); ok {
 			var tags []string
@@ -739,6 +743,9 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 		IsOpen:      merchant.IsOpen,
 		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
 		TotalOrders: merchant.TotalOrders,
+	}
+	if cover := extractCoverImageFromAppData(merchant.ApplicationData); cover != "" {
+		resp.CoverImage = cover
 	}
 
 	// 处理标签
@@ -1473,4 +1480,22 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, gin.H{
 		"categories": result,
 	})
+}
+
+// extractCoverImageFromAppData 从商户 application_data 快照中提取第一张门头照 URL。
+// 同时检查 application_data 中的快照字段和 merchant_applications 活数据格式。
+func extractCoverImageFromAppData(data []byte) string {
+	if len(data) == 0 {
+		return ""
+	}
+	var appData map[string]interface{}
+	if err := json.Unmarshal(data, &appData); err != nil {
+		return ""
+	}
+	if storefrontImages, ok := appData["storefront_images"].([]interface{}); ok && len(storefrontImages) > 0 {
+		if firstImage, ok := storefrontImages[0].(string); ok && firstImage != "" {
+			return normalizeUploadURLForClient(firstImage)
+		}
+	}
+	return ""
 }

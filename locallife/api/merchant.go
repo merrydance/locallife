@@ -1167,7 +1167,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.Longitude = lng
 	}
 
-	// 解析 application_data 获取证照信息和门头照
+	// 解析 application_data 获取证照信息（快照数据）
 	if merchant.ApplicationData != nil {
 		var appData map[string]interface{}
 		if err := json.Unmarshal(merchant.ApplicationData, &appData); err == nil {
@@ -1180,12 +1180,17 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 				signed := server.presignPublicUpload(ctx, permitURL, merchant.OwnerUserID)
 				resp.FoodPermitURL = &signed
 			}
-			// 门头照数组（取第一张作为封面图）
-			if storefrontImages, ok := appData["storefront_images"].([]interface{}); ok && len(storefrontImages) > 0 {
-				if firstImage, ok := storefrontImages[0].(string); ok && firstImage != "" {
-					normalized := normalizeUploadURLForClient(firstImage)
-					resp.CoverImage = &normalized
-				}
+		}
+	}
+
+	// 门头照从 merchant_applications 活数据读取，保证商户更新后立即生效
+	application, appErr := server.store.GetMerchantApplicationDraft(ctx, merchant.OwnerUserID)
+	if appErr == nil && len(application.StorefrontImages) > 0 {
+		var storefrontImages []string
+		if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil && len(storefrontImages) > 0 {
+			normalized := normalizeUploadURLForClient(storefrontImages[0])
+			if normalized != "" {
+				resp.CoverImage = &normalized
 			}
 		}
 	}

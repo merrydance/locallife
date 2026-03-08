@@ -16,6 +16,7 @@ export interface MerchantSummary {
   address?: string                             // 商户地址
   description?: string                         // 商户描述
   logo_url?: string                            // Logo URL
+  cover_image?: string                         // 门头照（列表卡片封面）
   distance?: number                            // 距离（米）
   estimated_delivery_fee?: number              // 预估配送费（分）
   total_orders?: number                        // 总销量（搜索返回）
@@ -34,6 +35,7 @@ export interface SearchMerchantItem {
   address?: string
   phone?: string
   logo_url: string
+  cover_image?: string
   status: string
   is_open?: boolean
   region_id: number
@@ -100,6 +102,7 @@ export async function searchMerchants(params: {
     address: item.address || '',
     description: item.description || '',
     logo_url: item.logo_url || '',
+    cover_image: item.cover_image || '',
     distance: item.distance,
     estimated_delivery_fee: item.estimated_delivery_fee,
     total_orders: item.total_orders,

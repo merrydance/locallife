@@ -1236,6 +1236,14 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 
 	if approved {
 		// 审核通过 - 使用事务确保原子性
+		var storefrontImages []string
+		if len(submittedApp.StorefrontImages) > 0 {
+			json.Unmarshal(submittedApp.StorefrontImages, &storefrontImages) //nolint:errcheck
+		}
+		var environmentImages []string
+		if len(submittedApp.EnvironmentImages) > 0 {
+			json.Unmarshal(submittedApp.EnvironmentImages, &environmentImages) //nolint:errcheck
+		}
 		appData, _ := json.Marshal(map[string]interface{}{
 			"business_license_number":    submittedApp.BusinessLicenseNumber,
 			"legal_person_name":          submittedApp.LegalPersonName,
@@ -1244,6 +1252,8 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 			"legal_person_id_front_url":  submittedApp.LegalPersonIDFrontUrl,
 			"legal_person_id_back_url":   submittedApp.LegalPersonIDBackUrl,
 			"food_permit_url":            submittedApp.FoodPermitUrl.String,
+			"storefront_images":          storefrontImages,
+			"environment_images":         environmentImages,
 		})
 
 		var regionID int64

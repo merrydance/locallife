@@ -223,7 +223,7 @@ Page({
         newList = merchantResults.map((m: MerchantSummary) => ({
           id: m.id,
           name: m.name,
-          imageUrl: getPublicImageUrl(m.logo_url) || '',
+          imageUrl: getPublicImageUrl(m.cover_image || m.logo_url) || '',
           cuisineType: m.tags ? m.tags.slice(0, 2) : [],
           distance: m.distance !== undefined ? DishAdapter.formatDistance(m.distance) : '',
           address: m.address || '',
