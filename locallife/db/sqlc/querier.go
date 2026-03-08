@@ -209,6 +209,8 @@ type Querier interface {
 	// 统计全局菜品搜索结果总数
 	CountSearchDishesGlobal(ctx context.Context, arg CountSearchDishesGlobalParams) (int64, error)
 	CountSearchMerchants(ctx context.Context, arg CountSearchMerchantsParams) (int64, error)
+	// 统计指定标签在区域内的商户数量（用于分页）
+	CountSearchMerchantsByTag(ctx context.Context, arg CountSearchMerchantsByTagParams) (int64, error)
 	// 统计搜索包间结果数量
 	CountSearchRooms(ctx context.Context, arg CountSearchRoomsParams) (int64, error)
 	CountTablesByMerchant(ctx context.Context, merchantID int64) (int64, error)
@@ -508,6 +510,8 @@ type Querier interface {
 	GetActiveAgreementByType(ctx context.Context, type_ string) (Agreement, error)
 	GetActiveBehaviorBlocklist(ctx context.Context, arg GetActiveBehaviorBlocklistParams) (BehaviorBlocklist, error)
 	GetActiveBillingGroupMember(ctx context.Context, arg GetActiveBillingGroupMemberParams) (BillingGroupMember, error)
+	// 返回指定区域内有商户覆盖的品类标签，按商户数量降序
+	GetActiveCategoriesByRegion(ctx context.Context, regionID int64) ([]GetActiveCategoriesByRegionRow, error)
 	GetActiveDeliveryFeeConfigByRegion(ctx context.Context, regionID int64) (DeliveryFeeConfig, error)
 	GetActiveDiningSessionByReservation(ctx context.Context, reservationID pgtype.Int8) (DiningSession, error)
 	GetActiveDiningSessionByTable(ctx context.Context, tableID int64) (DiningSession, error)
@@ -1399,6 +1403,8 @@ type Querier interface {
 	SearchDishesGlobal(ctx context.Context, arg SearchDishesGlobalParams) ([]SearchDishesGlobalRow, error)
 	SearchIngredients(ctx context.Context, arg SearchIngredientsParams) ([]Ingredient, error)
 	SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]SearchMerchantsRow, error)
+	// 按标签（菜系）过滤商户，支持区域和位置排序
+	SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsByTagParams) ([]SearchMerchantsByTagRow, error)
 	SearchRegionsByName(ctx context.Context, arg SearchRegionsByNameParams) ([]Region, error)
 	// ============ Room Search ============
 	// 搜索包间：按日期、时段、人数、菜系（商户标签）等条件过滤

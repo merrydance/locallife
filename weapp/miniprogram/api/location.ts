@@ -42,3 +42,32 @@ export function getBicyclingDirection(params: { from: string, to: string }): Pro
         data: params
     })
 }
+
+export interface ActiveCategory {
+    id: number
+    name: string
+    merchant_count: number
+}
+
+/**
+ * 获取当前区域内有商户覆盖的菜系品类，按商户数量降序。用于首页品类网格。
+ */
+export async function getActiveCategories(params: {
+    user_latitude?: number
+    user_longitude?: number
+    region_id?: number
+}): Promise<ActiveCategory[]> {
+    const data: Record<string, unknown> = {}
+    if (params.user_latitude !== undefined) data.user_latitude = params.user_latitude
+    if (params.user_longitude !== undefined) data.user_longitude = params.user_longitude
+    if (params.region_id !== undefined) data.region_id = params.region_id
+
+    const response = await request<{ categories: ActiveCategory[] }>({
+        url: '/v1/search/categories',
+        method: 'GET',
+        data,
+        useCache: true,
+        cacheTTL: 5 * 60 * 1000 // 5分钟缓存，品类变化不频繁
+    })
+    return response.categories || []
+}

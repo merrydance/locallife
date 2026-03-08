@@ -469,4 +469,36 @@ WHERE legal_person_id_number = $1
   AND status = 'approved'
   AND id != $2;
 
+-- name: SearchMerchantsByTag :many
+-- 按标签（菜系）过滤商户，支持区域和位置排序
+SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM tags t
+     INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+     WHERE mt.merchant_id = m.id
+    ), '[]'::json) AS tags
+FROM merchants m
+  LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND m.region_id = sqlc.narg('region_id')
+  AND mt_filter.tag_id = sqlc.arg('tag_id')
+ORDER BY
+    m.is_open DESC,
+    COALESCE(mp.total_orders, 0) DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8)) ASC
+LIMIT sqlc.arg('limit')
+OFFSET sqlc.arg('offset');
+
+-- name: CountSearchMerchantsByTag :one
+-- 统计指定标签在区域内的商户数量（用于分页）
+SELECT COUNT(*) FROM merchants m
+INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND m.region_id = sqlc.narg('region_id')
+  AND mt.tag_id = sqlc.arg('tag_id');
+
 

@@ -59,6 +59,7 @@ export interface SearchMerchantsResponse {
 export async function searchMerchants(params: {
   keyword?: string
   region_id?: number
+  tag_id?: number
   page_id?: number
   page_size?: number
   user_latitude?: number
@@ -79,6 +80,10 @@ export async function searchMerchants(params: {
 
   if (params.region_id !== undefined && params.region_id !== null) {
     requestParams.region_id = params.region_id
+  }
+
+  if (params.tag_id !== undefined && params.tag_id !== null) {
+    requestParams.tag_id = params.tag_id
   }
 
   const response = await request<SearchMerchantsResponse>({

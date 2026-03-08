@@ -2119,6 +2119,21 @@ func (mr *MockStoreMockRecorder) CountSearchMerchants(ctx, arg any) *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountSearchMerchants", reflect.TypeOf((*MockStore)(nil).CountSearchMerchants), ctx, arg)
 }
 
+// CountSearchMerchantsByTag mocks base method.
+func (m *MockStore) CountSearchMerchantsByTag(ctx context.Context, arg db.CountSearchMerchantsByTagParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountSearchMerchantsByTag", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountSearchMerchantsByTag indicates an expected call of CountSearchMerchantsByTag.
+func (mr *MockStoreMockRecorder) CountSearchMerchantsByTag(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountSearchMerchantsByTag", reflect.TypeOf((*MockStore)(nil).CountSearchMerchantsByTag), ctx, arg)
+}
+
 // CountSearchRooms mocks base method.
 func (m *MockStore) CountSearchRooms(ctx context.Context, arg db.CountSearchRoomsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -4963,6 +4978,21 @@ func (m *MockStore) GetActiveBillingGroupMember(ctx context.Context, arg db.GetA
 func (mr *MockStoreMockRecorder) GetActiveBillingGroupMember(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveBillingGroupMember", reflect.TypeOf((*MockStore)(nil).GetActiveBillingGroupMember), ctx, arg)
+}
+
+// GetActiveCategoriesByRegion mocks base method.
+func (m *MockStore) GetActiveCategoriesByRegion(ctx context.Context, regionID int64) ([]db.GetActiveCategoriesByRegionRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetActiveCategoriesByRegion", ctx, regionID)
+	ret0, _ := ret[0].([]db.GetActiveCategoriesByRegionRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetActiveCategoriesByRegion indicates an expected call of GetActiveCategoriesByRegion.
+func (mr *MockStoreMockRecorder) GetActiveCategoriesByRegion(ctx, regionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActiveCategoriesByRegion", reflect.TypeOf((*MockStore)(nil).GetActiveCategoriesByRegion), ctx, regionID)
 }
 
 // GetActiveDeliveryFeeConfigByRegion mocks base method.
@@ -14473,6 +14503,21 @@ func (m *MockStore) SearchMerchants(ctx context.Context, arg db.SearchMerchantsP
 func (mr *MockStoreMockRecorder) SearchMerchants(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchMerchants", reflect.TypeOf((*MockStore)(nil).SearchMerchants), ctx, arg)
+}
+
+// SearchMerchantsByTag mocks base method.
+func (m *MockStore) SearchMerchantsByTag(ctx context.Context, arg db.SearchMerchantsByTagParams) ([]db.SearchMerchantsByTagRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchMerchantsByTag", ctx, arg)
+	ret0, _ := ret[0].([]db.SearchMerchantsByTagRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchMerchantsByTag indicates an expected call of SearchMerchantsByTag.
+func (mr *MockStoreMockRecorder) SearchMerchantsByTag(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchMerchantsByTag", reflect.TypeOf((*MockStore)(nil).SearchMerchantsByTag), ctx, arg)
 }
 
 // SearchRegionsByName mocks base method.

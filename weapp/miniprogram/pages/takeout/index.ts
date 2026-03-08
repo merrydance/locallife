@@ -1,11 +1,11 @@
 import { DishAdapter } from '../../adapters/dish'
 import { Dish } from '../../models/dish'
-import { Category } from '../../models/category'
 import { searchDishes, DishSummary, DishSearchParams, ComboSummary, getRecommendedCombos } from '../../api/dish'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
 import { searchMerchants, MerchantSummary, getPublicMerchantCombos, getPublicMerchantDishes, PublicCombo } from '../../api/merchant'
 import { searchCombos, SearchComboItem } from '../../api/combo'
+import { getActiveCategories, ActiveCategory } from '../../api/location'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
 import { ErrorHandler } from '../../utils/error-handler'
@@ -109,7 +109,7 @@ Page({
     dishes: [] as Dish[],
     restaurants: [] as RestaurantViewModel[],
     packages: [] as PackageViewModel[],
-    categories: [] as Category[],
+    cuisineCategories: [] as Array<ActiveCategory & { emoji: string; bg: string }>,
     activeCategoryId: '',
     cartTotalCount: 0,
     cartTotalPrice: 0,
@@ -126,67 +126,6 @@ Page({
     refresherTriggered: false,
     isPrefetching: false,
     hasServiceProviders: true,
-    // 首页 Banner
-    banners: [
-      {
-        id: 1,
-        title: '代取市场',
-        subtitle: '骑手接受顾客委托到店代取，对顾客负责',
-        tag: '权责明确',
-        bg: 'linear-gradient(135deg, #FF6B00 0%, #FF9A3C 100%)',
-        icon: '/assets/icons/dish.svg',
-        url: ''
-      },
-      {
-        id: 2,
-        title: '店铺会员',
-        subtitle: '成为店铺专属会员，余额也可在线支付',
-        tag: '尊享权益',
-        bg: 'linear-gradient(135deg, #1A1A2E 0%, #16213E 100%)',
-        icon: '/assets/icons/wallet-safe.svg',
-        url: '/pages/user_center/wallet/index'
-      },
-      {
-        id: 3,
-        title: '包间预订',
-        subtitle: '到店前先预订，就餐更从容',
-        tag: '极致体验',
-        bg: 'linear-gradient(135deg, #0052D9 0%, #2979FF 100%)',
-        icon: '/assets/icons/plate.svg',
-        url: '/pages/reservation/index'
-      }
-    ],
-    // 4宫格快捷入口
-    quickEntries: [
-      {
-        id: 1,
-        label: '外卖',
-        icon: '/assets/icons/dish.svg',
-        bg: 'rgba(255, 107, 0, 0.1)',
-        url: ''
-      },
-      {
-        id: 2,
-        label: '预订',
-        icon: '/assets/icons/plate.svg',
-        bg: 'rgba(0, 82, 217, 0.1)',
-        url: '/pages/reservation/index'
-      },
-      {
-        id: 3,
-        label: '会员卡',
-        icon: '/assets/icons/wallet-safe.svg',
-        bg: 'rgba(0, 137, 123, 0.1)',
-        url: '/pages/user_center/wallet/index'
-      },
-      {
-        id: 4,
-        label: '优惠券',
-        icon: '/assets/icons/coupon-ticket.svg',
-        bg: 'rgba(255, 152, 0, 0.1)',
-        url: '/pages/user_center/coupons/index'
-      }
-    ]
   },
 
   // 预加载缓存 (不放在 data 中以免触发渲染)
@@ -292,45 +231,12 @@ Page({
     wx.navigateTo({ url: '/pages/takeout/search/index' })
   },
 
-  // Gap 7: Banner 点击跳转
-  onBannerTap(e: WechatMiniprogram.CustomEvent) {
-    const { item } = e.currentTarget.dataset as { item: { url: string } }
-    if (!item?.url) return
-
-    const TAB_PAGES = [
-      'pages/takeout/index',
-      'pages/reservation/index',
-      'pages/user_center/index',
-      'pages/dining/index'
-    ]
-    const isTab = TAB_PAGES.some((p) => item.url.includes(p))
-
-    if (isTab) {
-      wx.switchTab({ url: item.url })
-    } else {
-      wx.navigateTo({ url: item.url })
-    }
-  },
-
-  // Gap 7: 快捷入口点击跳转
-  // tabBar 页面（外卖/预订/我的）用 switchTab，普通页用 navigateTo
-  onQuickEntryTap(e: WechatMiniprogram.CustomEvent) {
-    const { url } = e.currentTarget.dataset as { url: string }
-    if (!url) return  // 外卖入口就在当前页，无需跳转
-
-    const TAB_PAGES = [
-      'pages/takeout/index',
-      'pages/reservation/index',
-      'pages/user_center/index',
-      'pages/dining/index'
-    ]
-    const isTab = TAB_PAGES.some((p) => url.includes(p))
-
-    if (isTab) {
-      wx.switchTab({ url })
-    } else {
-      wx.navigateTo({ url })
-    }
+  // 品类网格点击：跳转到品类专属列表页
+  onCategoryTap(e: WechatMiniprogram.CustomEvent) {
+    const { id, name } = e.currentTarget.dataset as { id: number; name: string }
+    wx.navigateTo({
+      url: `/pages/takeout/category/index?tag_id=${id}&name=${encodeURIComponent(name)}`
+    })
   },
 
   onShow() {
@@ -532,15 +438,58 @@ Page({
         page: 1
       },
       () => {
-        // 切换 Tab 时重新加载对应类型的标签
-        this.loadCategories()
         this.loadData()
       }
     )
   },
 
   async loadCategories() {
-    // 发现型首页不再需要分类，留空或移除
+    const app = getApp<IAppOption>()
+    if (!app.globalData.latitude || !app.globalData.longitude) return
+
+    try {
+      const rawList = await getActiveCategories({
+        user_latitude: app.globalData.latitude,
+        user_longitude: app.globalData.longitude
+      })
+
+      // 品类名到 emoji + 背景色的映射（前端静态装饰，后端不存储图标）
+      const CUISINE_META: Record<string, { emoji: string; bg: string }> = {
+        '川菜': { emoji: '🌶️', bg: 'rgba(255, 87, 34, 0.12)' },
+        '粤菜': { emoji: '🍱', bg: 'rgba(255, 193, 7, 0.12)' },
+        '湘菜': { emoji: '🥘', bg: 'rgba(244, 67, 54, 0.12)' },
+        '快餐': { emoji: '🍔', bg: 'rgba(255, 152, 0, 0.12)' },
+        '汉堡': { emoji: '🍔', bg: 'rgba(255, 152, 0, 0.12)' },
+        '披萨': { emoji: '🍕', bg: 'rgba(233, 30, 99, 0.12)' },
+        '火锅': { emoji: '🍲', bg: 'rgba(244, 67, 54, 0.12)' },
+        '日料': { emoji: '🍣', bg: 'rgba(33, 150, 243, 0.12)' },
+        '韩餐': { emoji: '🥗', bg: 'rgba(76, 175, 80, 0.12)' },
+        '西餐': { emoji: '🍝', bg: 'rgba(156, 39, 176, 0.12)' },
+        '早餐': { emoji: '🥐', bg: 'rgba(255, 235, 59, 0.12)' },
+        '包子': { emoji: '🥟', bg: 'rgba(121, 85, 72, 0.12)' },
+        '饺子': { emoji: '🥟', bg: 'rgba(96, 125, 139, 0.12)' },
+        '烧烤': { emoji: '🍢', bg: 'rgba(255, 87, 34, 0.12)' },
+        '炸鸡': { emoji: '🍗', bg: 'rgba(255, 193, 7, 0.12)' },
+        '甜品': { emoji: '🍰', bg: 'rgba(233, 30, 99, 0.12)' },
+        '奶茶': { emoji: '🧋', bg: 'rgba(121, 85, 72, 0.12)' },
+        '咖啡': { emoji: '☕', bg: 'rgba(121, 85, 72, 0.12)' },
+        '面食': { emoji: '🍜', bg: 'rgba(255, 152, 0, 0.12)' },
+        '米粉': { emoji: '🍜', bg: 'rgba(255, 193, 7, 0.12)' },
+        '素食': { emoji: '🥦', bg: 'rgba(76, 175, 80, 0.12)' },
+      }
+      const DEFAULT_META = { emoji: '🍽️', bg: 'rgba(158, 158, 158, 0.12)' }
+      const MAX_CATEGORIES = 8
+
+      const enriched = rawList.slice(0, MAX_CATEGORIES).map((c) => ({
+        ...c,
+        ...(CUISINE_META[c.name] ?? DEFAULT_META)
+      }))
+
+      this.setData({ cuisineCategories: enriched })
+    } catch (e) {
+      // 加载失败不影响主流程，品类网格不显示即可
+      logger.warn('[Takeout] 品类加载失败', e, 'Takeout.loadCategories')
+    }
   },
 
   async loadData() {

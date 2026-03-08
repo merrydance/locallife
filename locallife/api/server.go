@@ -395,6 +395,7 @@ func (server *Server) setupRouter() {
 		searchGroup.GET("/merchants", server.searchMerchants)
 		searchGroup.GET("/combos", server.searchCombos)                // 套餐搜索
 		searchGroup.GET("/rooms", server.searchRooms)                  // 包间搜索
+		searchGroup.GET("/categories", server.searchCategories)        // 区域活跃菜系品类（首页网格）
 		searchGroup.GET("/history", server.listSearchHistory)          // 搜索历史
 		searchGroup.DELETE("/history", server.clearSearchHistory)      // 清除全部历史
 		searchGroup.DELETE("/history/:id", server.deleteSearchHistory) // 删除单条

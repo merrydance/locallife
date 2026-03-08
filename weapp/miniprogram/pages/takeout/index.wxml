@@ -30,41 +30,22 @@
     />
   </view>
 
-  <!-- Banner 轮播 -->
-  <swiper
-    class="banner-swiper"
-    autoplay="{{true}}"
-    interval="{{3500}}"
-    circular="{{true}}"
-    indicator-dots="{{true}}"
-    indicator-color="rgba(255,255,255,0.5)"
-    indicator-active-color="#fff"
-  >
-    <swiper-item wx:for="{{banners}}" wx:key="id" bindtap="onBannerTap" data-item="{{item}}">
-      <view class="banner-item" style="background: {{item.bg}}">
-        <view class="banner-inner">
-          <t-tag wx:if="{{item.tag}}" size="small" variant="dark" theme="default" shape="round" class="banner-tag">{{item.tag}}</t-tag>
-          <view class="banner-title">{{item.title}}</view>
-          <view class="banner-subtitle">{{item.subtitle}}</view>
+  <!-- 菜系品类网格（动态，按区域） -->
+  <view wx:if="{{cuisineCategories.length > 0}}" class="cuisine-grid-section">
+    <view class="cuisine-grid">
+      <view
+        class="cuisine-item"
+        wx:for="{{cuisineCategories}}"
+        wx:key="id"
+        bindtap="onCategoryTap"
+        data-id="{{item.id}}"
+        data-name="{{item.name}}"
+      >
+        <view class="cuisine-icon-wrap" style="background: {{item.bg}}">
+          <text class="cuisine-emoji">{{item.emoji}}</text>
         </view>
-        <image class="banner-deco" src="{{item.icon}}" mode="aspectFit" />
+        <text class="cuisine-name">{{item.name}}</text>
       </view>
-    </swiper-item>
-  </swiper>
-
-  <!-- 4宫格快捷入口 -->
-  <view class="quick-entry-grid">
-    <view
-      class="entry-item"
-      wx:for="{{quickEntries}}"
-      wx:key="id"
-      bindtap="onQuickEntryTap"
-      data-url="{{item.url}}"
-    >
-      <view class="entry-icon-wrap" style="background: {{item.bg}}">
-        <image class="entry-icon" src="{{item.icon}}" mode="aspectFit" />
-      </view>
-      <text class="entry-label">{{item.label}}</text>
     </view>
   </view>
 

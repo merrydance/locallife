@@ -1,0 +1,12 @@
+{
+  "navigationStyle": "custom",
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "restaurant-card": "/components/restaurant-card/index",
+    "cart-bar": "/components/cart-bar/index",
+    "list-skeleton": "/components/list-skeleton/index",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-button": "tdesign-miniprogram/button/button"
+  }
+}

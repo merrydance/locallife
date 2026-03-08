@@ -1,0 +1,31 @@
+/* 品类商户列表页 */
+@import '../../../styles/customer.wxss';
+
+.page-scroll {
+  background: var(--td-bg-color-page);
+  box-sizing: border-box;
+}
+
+.content-section {
+  display: flex;
+  flex-direction: column;
+  padding: var(--spacer-sm) var(--spacer-md) var(--spacer-lg);
+  gap: var(--spacer-sm);
+}
+
+.loading-wrapper {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacer-lg) 0;
+}
+
+.no-more {
+  text-align: center;
+  padding: var(--spacer-lg) 0;
+  color: var(--td-text-color-placeholder);
+  font-size: var(--font-size-xs);
+}
+
+.empty-wrap {
+  padding: 80rpx 0 40rpx;
+}

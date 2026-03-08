@@ -123,6 +123,10 @@
       "root": "pages/takeout/merchant-info",
       "pages": ["index"]
     },
+    {
+      "root": "pages/takeout/category",
+      "pages": ["index"]
+    },
     { "root": "pages/reservation/confirm", "pages": ["index"] },
     { "root": "pages/reservation/detail", "pages": ["index"] },
     { "root": "pages/reservation/modify", "pages": ["index"] },

@@ -1,0 +1,52 @@
+<custom-navbar title="{{categoryName}}" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<scroll-view
+  scroll-y
+  class="page-scroll"
+  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
+  bindscrolltolower="onReachBottom"
+  lower-threshold="200"
+  refresher-enabled="{{true}}"
+  refresher-triggered="{{refresherTriggered}}"
+  bindrefresherrefresh="onRefresh"
+  enhanced="{{true}}"
+  show-scrollbar="{{false}}"
+>
+  <view class="content-section">
+
+    <!-- 加载骨架 -->
+    <block wx:if="{{loading && merchants.length === 0}}">
+      <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
+    </block>
+
+    <!-- 商户列表 -->
+    <block wx:elif="{{merchants.length > 0}}">
+      <restaurant-card
+        wx:for="{{merchants}}"
+        wx:key="id"
+        restaurant="{{item}}"
+      />
+      <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
+    </block>
+
+    <!-- 空状态 -->
+    <view wx:elif="{{!loading}}" class="empty-wrap">
+      <t-empty description="该品类附近暂无商家" />
+    </view>
+
+    <!-- 加载更多 -->
+    <view wx:if="{{loading && merchants.length > 0}}" class="loading-wrapper">
+      <t-loading theme="circular" size="40rpx" text="加载中..." />
+    </view>
+
+  </view>
+
+  <view wx:if="{{cartTotalCount > 0}}" style="height: 120rpx;"></view>
+</scroll-view>
+
+<cart-bar
+  wx:if="{{cartTotalCount > 0}}"
+  totalCount="{{cartTotalCount}}"
+  totalPrice="{{cartTotalPrice}}"
+  bind:tap="onCartTap"
+/>

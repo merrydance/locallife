@@ -170,6 +170,28 @@ func (q *Queries) CountSearchMerchants(ctx context.Context, arg CountSearchMerch
 	return count, err
 }
 
+const countSearchMerchantsByTag = `-- name: CountSearchMerchantsByTag :one
+SELECT COUNT(*) FROM merchants m
+INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND m.region_id = $1
+  AND mt.tag_id = $2
+`
+
+type CountSearchMerchantsByTagParams struct {
+	RegionID pgtype.Int8 `json:"region_id"`
+	TagID    int64       `json:"tag_id"`
+}
+
+// 统计指定标签在区域内的商户数量（用于分页）
+func (q *Queries) CountSearchMerchantsByTag(ctx context.Context, arg CountSearchMerchantsByTagParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countSearchMerchantsByTag, arg.RegionID, arg.TagID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createBusinessHour = `-- name: CreateBusinessHour :one
 
 INSERT INTO merchant_business_hours (
@@ -1880,6 +1902,120 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 	items := []SearchMerchantsRow{}
 	for rows.Next() {
 		var i SearchMerchantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OwnerUserID,
+			&i.Name,
+			&i.Description,
+			&i.LogoUrl,
+			&i.Phone,
+			&i.Address,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Status,
+			&i.ApplicationData,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Version,
+			&i.RegionID,
+			&i.IsOpen,
+			&i.AutoCloseAt,
+			&i.DeletedAt,
+			&i.PendingOwnerBind,
+			&i.BindCode,
+			&i.BindCodeExpiresAt,
+			&i.GroupID,
+			&i.BrandID,
+			&i.TotalOrders,
+			&i.Tags,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const searchMerchantsByTag = `-- name: SearchMerchantsByTag :many
+SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, COALESCE(mp.total_orders, 0)::int AS total_orders,
+  COALESCE(
+    (SELECT json_agg(t.name)
+     FROM tags t
+     INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+     WHERE mt.merchant_id = m.id
+    ), '[]'::json) AS tags
+FROM merchants m
+  LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+  INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND m.region_id = $1
+  AND mt_filter.tag_id = $2
+ORDER BY
+    m.is_open DESC,
+    COALESCE(mp.total_orders, 0) DESC,
+    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($3::float8, $4::float8)) ASC
+LIMIT $6
+OFFSET $5
+`
+
+type SearchMerchantsByTagParams struct {
+	RegionID pgtype.Int8 `json:"region_id"`
+	TagID    int64       `json:"tag_id"`
+	UserLat  float64     `json:"user_lat"`
+	UserLng  float64     `json:"user_lng"`
+	Offset   int32       `json:"offset"`
+	Limit    int32       `json:"limit"`
+}
+
+type SearchMerchantsByTagRow struct {
+	ID                int64              `json:"id"`
+	OwnerUserID       int64              `json:"owner_user_id"`
+	Name              string             `json:"name"`
+	Description       pgtype.Text        `json:"description"`
+	LogoUrl           pgtype.Text        `json:"logo_url"`
+	Phone             string             `json:"phone"`
+	Address           string             `json:"address"`
+	Latitude          pgtype.Numeric     `json:"latitude"`
+	Longitude         pgtype.Numeric     `json:"longitude"`
+	Status            string             `json:"status"`
+	ApplicationData   []byte             `json:"application_data"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	Version           int32              `json:"version"`
+	RegionID          int64              `json:"region_id"`
+	IsOpen            bool               `json:"is_open"`
+	AutoCloseAt       pgtype.Timestamptz `json:"auto_close_at"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+	PendingOwnerBind  pgtype.Bool        `json:"pending_owner_bind"`
+	BindCode          pgtype.Text        `json:"bind_code"`
+	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
+	GroupID           pgtype.Int8        `json:"group_id"`
+	BrandID           pgtype.Int8        `json:"brand_id"`
+	TotalOrders       int32              `json:"total_orders"`
+	Tags              interface{}        `json:"tags"`
+}
+
+// 按标签（菜系）过滤商户，支持区域和位置排序
+func (q *Queries) SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsByTagParams) ([]SearchMerchantsByTagRow, error) {
+	rows, err := q.db.Query(ctx, searchMerchantsByTag,
+		arg.RegionID,
+		arg.TagID,
+		arg.UserLat,
+		arg.UserLng,
+		arg.Offset,
+		arg.Limit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []SearchMerchantsByTagRow{}
+	for rows.Next() {
+		var i SearchMerchantsByTagRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.OwnerUserID,

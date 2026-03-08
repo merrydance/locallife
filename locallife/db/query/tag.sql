@@ -43,3 +43,18 @@ WHERE type = $1
   AND name ILIKE '%' || $2 || '%'
 ORDER BY name
 LIMIT $3 OFFSET $4;
+
+-- name: GetActiveCategoriesByRegion :many
+-- 返回指定区域内有商户覆盖的品类标签，按商户数量降序
+SELECT t.id, t.name, t.sort_order, COUNT(DISTINCT mt.merchant_id)::int AS merchant_count
+FROM tags t
+INNER JOIN merchant_tags mt ON t.id = mt.tag_id
+INNER JOIN merchants m ON mt.merchant_id = m.id
+WHERE m.region_id = sqlc.arg('region_id')
+  AND m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND t.type = 'merchant'
+  AND t.status = 'active'
+GROUP BY t.id, t.name, t.sort_order
+HAVING COUNT(DISTINCT mt.merchant_id) > 0
+ORDER BY COUNT(DISTINCT mt.merchant_id) DESC, t.sort_order ASC;

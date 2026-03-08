@@ -39,6 +39,7 @@ type searchDishesRequest struct {
 type searchMerchantsRequest struct {
 	Keyword       string   `form:"keyword" binding:"omitempty,max=100"` // 可选：为空时返回全部
 	RegionID      *int64   `form:"region_id" binding:"omitempty,min=1"` // 可选：区域过滤
+	TagID         *int64   `form:"tag_id" binding:"omitempty,min=1"`    // 可选：标签（菜系）ID 过滤
 	PageID        int32    `form:"page_id" binding:"required,min=1"`
 	PageSize      int32    `form:"page_size" binding:"required,min=1,max=50"`
 	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
@@ -359,31 +360,61 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		return
 	}
 
-	merchants, err := server.store.SearchMerchants(ctx, db.SearchMerchantsParams{
-		Offset:   int32(offset),
-		Limit:    req.PageSize,
-		Column3:  req.Keyword,
-		Column4:  userLat,
-		Column5:  userLng,
-		RegionID: merchantRegionID,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+	var response []searchMerchantResponse
+	var total int64
 
-	// 获取总数用于分页
-	total, err := server.store.CountSearchMerchants(ctx, db.CountSearchMerchantsParams{
-		Column1:  pgtype.Text{String: req.Keyword, Valid: true},
-		RegionID: merchantRegionID,
-	})
-	if err != nil {
-		total = int64(len(merchants))
-	}
-
-	response := make([]searchMerchantResponse, len(merchants))
-	for i, merchant := range merchants {
-		response[i] = newSearchMerchantResponseFromRow(merchant)
+	if req.TagID != nil {
+		// 按菜系品类过滤搜索
+		merchants, err := server.store.SearchMerchantsByTag(ctx, db.SearchMerchantsByTagParams{
+			TagID:    *req.TagID,
+			RegionID: merchantRegionID,
+			UserLat:  userLat,
+			UserLng:  userLng,
+			Offset:   int32(offset),
+			Limit:    req.PageSize,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		totalCount, err := server.store.CountSearchMerchantsByTag(ctx, db.CountSearchMerchantsByTagParams{
+			TagID:    *req.TagID,
+			RegionID: merchantRegionID,
+		})
+		if err != nil {
+			totalCount = int64(len(merchants))
+		}
+		total = totalCount
+		response = make([]searchMerchantResponse, len(merchants))
+		for i, m := range merchants {
+			response[i] = newSearchMerchantResponseFromTagRow(m)
+		}
+	} else {
+		// 普通关键词搜索
+		merchants, err := server.store.SearchMerchants(ctx, db.SearchMerchantsParams{
+			Offset:   int32(offset),
+			Limit:    req.PageSize,
+			Column3:  req.Keyword,
+			Column4:  userLat,
+			Column5:  userLng,
+			RegionID: merchantRegionID,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		totalCount, err := server.store.CountSearchMerchants(ctx, db.CountSearchMerchantsParams{
+			Column1:  pgtype.Text{String: req.Keyword, Valid: true},
+			RegionID: merchantRegionID,
+		})
+		if err != nil {
+			totalCount = int64(len(merchants))
+		}
+		total = totalCount
+		response = make([]searchMerchantResponse, len(merchants))
+		for i, merchant := range merchants {
+			response[i] = newSearchMerchantResponseFromRow(merchant)
+		}
 	}
 
 	// 如果用户提供了位置，计算精确距离（展示用）和运费
@@ -659,6 +690,42 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 		parseJSON(row.CustomizationGroups, &resp.CustomizationGroups)
 	}
 
+	return resp
+}
+
+func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) searchMerchantResponse {
+	resp := searchMerchantResponse{
+		ID:          merchant.ID,
+		Name:        merchant.Name,
+		Description: merchant.Description.String,
+		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
+		Status:      merchant.Status,
+		IsOpen:      merchant.IsOpen,
+		RegionID:    merchant.RegionID,
+		TotalOrders: merchant.TotalOrders,
+	}
+	if merchant.Tags != nil {
+		if tagsBytes, ok := merchant.Tags.([]byte); ok {
+			var tags []string
+			if err := json.Unmarshal(tagsBytes, &tags); err == nil {
+				resp.Tags = tags
+			}
+		} else if tagsStrs, ok := merchant.Tags.([]interface{}); ok {
+			for _, t := range tagsStrs {
+				if s, ok := t.(string); ok {
+					resp.Tags = append(resp.Tags, s)
+				}
+			}
+		}
+	}
+	if merchant.Latitude.Valid {
+		lat, _ := merchant.Latitude.Float64Value()
+		resp.Latitude = lat.Float64
+	}
+	if merchant.Longitude.Valid {
+		lng, _ := merchant.Longitude.Float64Value()
+		resp.Longitude = lng.Float64
+	}
 	return resp
 }
 
@@ -1340,4 +1407,70 @@ func (server *Server) recordSearchKeyword(userID int64, keyword, ktype string) {
 			Type:    ktype,
 		})
 	}()
+}
+
+// searchCategories godoc
+// @Summary 获取区域活跃菜系品类
+// @Description 按用户位置或区域ID，返回有商户覆盖的菜系品类列表及商户数量，用于首页品类网格动态渲染
+// @Tags Search
+// @Produce json
+// @Param region_id query int false "区域ID（可选，优先于坐标）"
+// @Param user_latitude query number false "用户当前纬度"
+// @Param user_longitude query number false "用户当前经度"
+// @Success 200 {object} map[string]interface{} "品类列表"
+// @Failure 400 {object} map[string]string "请求参数错误"
+// @Failure 500 {object} map[string]string "服务器内部错误"
+// @Security BearerAuth
+// @Router /v1/search/categories [get]
+func (server *Server) searchCategories(ctx *gin.Context) {
+	type searchCategoriesRequest struct {
+		RegionID      *int64   `form:"region_id" binding:"omitempty,min=1"`
+		UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`
+		UserLongitude *float64 `form:"user_longitude" binding:"omitempty"`
+	}
+
+	var req searchCategoriesRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	resolvedLat, resolvedLng := resolveUserLocation(ctx, req.UserLatitude, req.UserLongitude)
+	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
+	if err != nil {
+		if isRegionUnavailableError(err) {
+			ctx.JSON(http.StatusOK, gin.H{"categories": []interface{}{}})
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var id int64
+	id = regionID.Int64
+
+	categories, err := server.store.GetActiveCategoriesByRegion(ctx, id)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	type categoryItem struct {
+		ID            int64  `json:"id"`
+		Name          string `json:"name"`
+		MerchantCount int32  `json:"merchant_count"`
+	}
+
+	result := make([]categoryItem, len(categories))
+	for i, c := range categories {
+		result[i] = categoryItem{
+			ID:            c.ID,
+			Name:          c.Name,
+			MerchantCount: c.MerchantCount,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{
+		"categories": result,
+	})
 }
