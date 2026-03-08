@@ -61,7 +61,7 @@
                 <view class="merchant-info">
                   <text class="merchant-name">{{item.name}}</text>
                   <t-tag
-                    theme="{{item.status === 'approved' ? 'success' : item.status === 'suspended' ? 'warning' : 'default'}}"
+                    theme="{{(item.status === 'active' || item.status === 'approved') ? 'success' : item.status === 'suspended' ? 'warning' : 'default'}}"
                     size="small"
                     variant="dark"
                   >

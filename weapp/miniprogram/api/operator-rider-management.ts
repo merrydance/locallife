@@ -180,6 +180,17 @@ export interface ResumeOperatorRiderRequest extends Record<string, unknown> {
     reason: string                               // 恢复原因（5-500字符，必填）
 }
 
+/** 骑手配送统计响应 - 对齐 api.riderStatsResponse */
+export interface RiderStatsResponse {
+    days: number
+    total_deliveries: number
+    completed_deliveries: number
+    completion_rate_basis_points: number
+    avg_delivery_seconds: number
+    period_earnings: number
+    delayed_count: number
+}
+
 /** 骑手详情响应 - 对齐 api.riderDetailResponse */
 export interface RiderDetailResponse {
     id: number                                   // 骑手ID
@@ -312,6 +323,19 @@ export class OperatorRiderManagementService {
             url: `/v1/operator/riders/${riderId}/resume`,
             method: 'POST',
             data
+        })
+    }
+
+    /**
+     * 获取骑手配送统计
+     * @param riderId 骑手ID
+     * @param days 统计天数（默认30）
+     */
+    async getRiderStats(riderId: number, days = 30): Promise<RiderStatsResponse> {
+        return request({
+            url: `/v1/operator/riders/${riderId}/stats`,
+            method: 'GET',
+            data: { days }
         })
     }
 }

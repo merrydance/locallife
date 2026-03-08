@@ -778,6 +778,9 @@ type Querier interface {
 	GetOperatorRegionApplicationByOperatorAndRegion(ctx context.Context, arg GetOperatorRegionApplicationByOperatorAndRegionParams) (OperatorRegionApplication, error)
 	// 运营商区域内骑手绩效排行(通过配送订单关联区域)
 	GetOperatorRiderRanking(ctx context.Context, arg GetOperatorRiderRankingParams) ([]GetOperatorRiderRankingRow, error)
+	// M12: 运营商骑手统计查询（按指定时间段）
+	// 运营商视角：单个骑手在指定时间段内的配送统计
+	GetOperatorRiderStats(ctx context.Context, arg GetOperatorRiderStatsParams) (GetOperatorRiderStatsRow, error)
 	// 获取或创建用户余额账户（原子操作）
 	GetOrCreateUserBalance(ctx context.Context, userID int64) (UserBalance, error)
 	GetOrCreateUserNotificationPreferences(ctx context.Context, userID int64) (UserNotificationPreference, error)

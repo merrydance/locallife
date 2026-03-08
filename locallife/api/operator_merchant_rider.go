@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -260,6 +261,137 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 		Version:     merchant.Version,
 		CreatedAt:   merchant.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:   merchant.UpdatedAt.Format("2006-01-02 15:04:05"),
+	})
+}
+
+// ==================== 商户经营统计 ====================
+
+type getOperatorMerchantStatsRequest struct {
+	ID   int64 `uri:"id" binding:"required,min=1"`
+	Days int   `form:"days" binding:"omitempty,min=1,max=365"`
+}
+
+type merchantStatsDish struct {
+	DishName     string `json:"dish_name"`
+	TotalSold    int32  `json:"total_sold"`
+	TotalRevenue int64  `json:"total_revenue"`
+}
+
+type merchantStatsResponse struct {
+	Days                      int                 `json:"days"`
+	TotalOrders               int32               `json:"total_orders"`
+	TotalSales                int64               `json:"total_sales"`
+	TotalCommission           int64               `json:"total_commission"`
+	AvgDailySales             int32               `json:"avg_daily_sales"`
+	TotalCustomers            int32               `json:"total_customers"`
+	RepeatCustomers           int32               `json:"repeat_customers"`
+	RepurchaseRateBasisPoints int32               `json:"repurchase_rate_basis_points"`
+	AvgOrdersPerUserCents     int32               `json:"avg_orders_per_user_cents"`
+	TopDishes                 []merchantStatsDish `json:"top_dishes"`
+}
+
+// getOperatorMerchantStats 获取商户经营统计
+// @Summary 获取商户经营统计
+// @Description 运营商获取指定商户在指定天数范围内的经营统计数据
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Param days query int false "统计天数（1~365，默认30）"
+// @Success 200 {object} merchantStatsResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 404 {object} errorMessage "商户不存在"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/merchants/{id}/stats [get]
+func (server *Server) getOperatorMerchantStats(ctx *gin.Context) {
+	var req getOperatorMerchantStatsRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.Days == 0 {
+		req.Days = 30
+	}
+
+	// 验证商户存在并属于运营商管辖区域
+	merchant, err := server.store.GetMerchant(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
+	endAt := time.Now()
+	startAt := endAt.AddDate(0, 0, -req.Days)
+
+	// 概览统计
+	overview, err := server.store.GetMerchantOverview(ctx, db.GetMerchantOverviewParams{
+		MerchantID: req.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 复购率
+	repurchase, err := server.store.GetMerchantRepurchaseRate(ctx, db.GetMerchantRepurchaseRateParams{
+		MerchantID: req.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	// 热销菜品 Top 5
+	topDisheRows, err := server.store.GetTopSellingDishes(ctx, db.GetTopSellingDishesParams{
+		MerchantID: req.ID,
+		StartAt:    startAt,
+		EndAt:      endAt,
+		Limit:      5,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	topDishes := make([]merchantStatsDish, len(topDisheRows))
+	for i, d := range topDisheRows {
+		topDishes[i] = merchantStatsDish{
+			DishName:     d.DishName,
+			TotalSold:    d.TotalSold,
+			TotalRevenue: d.TotalRevenue,
+		}
+	}
+
+	ctx.JSON(http.StatusOK, merchantStatsResponse{
+		Days:                      req.Days,
+		TotalOrders:               overview.TotalOrders,
+		TotalSales:                overview.TotalSales,
+		TotalCommission:           overview.TotalCommission,
+		AvgDailySales:             overview.AvgDailySales,
+		TotalCustomers:            repurchase.TotalCustomers,
+		RepeatCustomers:           repurchase.RepeatCustomers,
+		RepurchaseRateBasisPoints: repurchase.RepurchaseRateBasisPoints,
+		AvgOrdersPerUserCents:     repurchase.AvgOrdersPerUserCents,
+		TopDishes:                 topDishes,
 	})
 }
 
@@ -544,4 +676,93 @@ func maskIDCard(idCard string) string {
 		return idCard
 	}
 	return idCard[:6] + "********" + idCard[len(idCard)-4:]
+}
+
+// ==================== 骑手经营统计 ====================
+
+type getOperatorRiderStatsRequest struct {
+	ID   int64 `uri:"id" binding:"required,min=1"`
+	Days int   `form:"days" binding:"omitempty,min=1,max=365"`
+}
+
+type riderStatsResponse struct {
+	Days                      int   `json:"days"`
+	TotalDeliveries           int32 `json:"total_deliveries"`
+	CompletedDeliveries       int32 `json:"completed_deliveries"`
+	CompletionRateBasisPoints int32 `json:"completion_rate_basis_points"`
+	AvgDeliverySeconds        int32 `json:"avg_delivery_seconds"`
+	PeriodEarnings            int64 `json:"period_earnings"`
+	DelayedCount              int32 `json:"delayed_count"`
+}
+
+// getOperatorRiderStats 获取骑手配送统计
+// @Summary 获取骑手配送统计
+// @Description 运营商获取指定骑手在指定天数范围内的配送绩效统计
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param id path int true "骑手ID"
+// @Param days query int false "统计天数（1~365，默认30）"
+// @Success 200 {object} riderStatsResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 404 {object} errorMessage "骑手不存在"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/riders/{id}/stats [get]
+func (server *Server) getOperatorRiderStats(ctx *gin.Context) {
+	var req getOperatorRiderStatsRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.Days == 0 {
+		req.Days = 30
+	}
+
+	// 验证骑手存在并属于运营商区域
+	rider, err := server.store.GetRider(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if !rider.RegionID.Valid {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
+		return
+	}
+	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
+	endAt := time.Now()
+	startAt := endAt.AddDate(0, 0, -req.Days)
+
+	stats, err := server.store.GetOperatorRiderStats(ctx, db.GetOperatorRiderStatsParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		StartAt: startAt,
+		EndAt:   endAt,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, riderStatsResponse{
+		Days:                      req.Days,
+		TotalDeliveries:           stats.TotalDeliveries,
+		CompletedDeliveries:       stats.CompletedDeliveries,
+		CompletionRateBasisPoints: stats.CompletionRateBasisPoints,
+		AvgDeliverySeconds:        stats.AvgDeliverySeconds,
+		PeriodEarnings:            stats.PeriodEarnings,
+		DelayedCount:              stats.DelayedCount,
+	})
 }

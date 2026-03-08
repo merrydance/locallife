@@ -170,6 +170,27 @@ export interface ResumeOperatorMerchantRequest extends Record<string, unknown> {
     reason: string                               // 恢复原因（5-500字符，必填）
 }
 
+/** 商户经营统计热销菜品 - 对齐 api.merchantStatsDish */
+export interface MerchantStatsDish {
+    dish_name: string
+    total_sold: number
+    total_revenue: number
+}
+
+/** 商户经营统计响应 - 对齐 api.merchantStatsResponse */
+export interface MerchantStatsResponse {
+    days: number
+    total_orders: number
+    total_sales: number
+    total_commission: number
+    avg_daily_sales: number
+    total_customers: number
+    repeat_customers: number
+    repurchase_rate_basis_points: number
+    avg_orders_per_user_cents: number
+    top_dishes: MerchantStatsDish[]
+}
+
 // ==================== 运营商商户管理服务类 ====================
 
 /**
@@ -235,6 +256,19 @@ export class OperatorMerchantManagementService {
             url: `/v1/operator/merchants/${merchantId}/resume`,
             method: 'POST',
             data
+        })
+    }
+
+    /**
+     * 获取商户经营统计
+     * @param merchantId 商户ID
+     * @param days 统计天数（默认30）
+     */
+    async getMerchantStats(merchantId: number, days = 30): Promise<MerchantStatsResponse> {
+        return request({
+            url: `/v1/operator/merchants/${merchantId}/stats`,
+            method: 'GET',
+            data: { days }
         })
     }
 }
@@ -881,7 +915,8 @@ export async function batchMerchantAction(
  * @param status 商户状态
  */
 export function formatMerchantStatus(status: MerchantStatus): string {
-    const statusMap: Record<MerchantStatus, string> = {
+    const statusMap: Record<string, string> = {
+        active: '正常营业',
         approved: '正常营业',
         suspended: '暂停营业',
         pending: '待审核',

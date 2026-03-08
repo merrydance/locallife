@@ -1019,11 +1019,13 @@ func (server *Server) setupRouter() {
 		// 商户管理（完整CRUD + 暂停/恢复）
 		operatorStatsGroup.GET("/merchants", server.listOperatorMerchants)
 		operatorStatsGroup.GET("/merchants/:id", server.getOperatorMerchant)
+		operatorStatsGroup.GET("/merchants/:id/stats", server.getOperatorMerchantStats)
 		operatorStatsGroup.POST("/merchants/:id/resume", server.ResumeMerchant)
 
 		// 骑手管理（完整CRUD + 暂停/恢复）
 		operatorStatsGroup.GET("/riders", server.listOperatorRiders)
 		operatorStatsGroup.GET("/riders/:id", server.getOperatorRider)
+		operatorStatsGroup.GET("/riders/:id/stats", server.getOperatorRiderStats)
 		// 规则驱动：运营商不提供暂停/恢复入口
 
 		// 申诉处理（运营商审核商户/骑手申诉）

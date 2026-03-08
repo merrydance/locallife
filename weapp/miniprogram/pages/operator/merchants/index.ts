@@ -6,11 +6,21 @@
 import { isLargeScreen } from '@/utils/responsive'
 import { operatorMerchantManagementService, OperatorMerchantItem } from '../../../api/operator-merchant-management'
 
+const MERCHANT_STATUS_LABEL: Record<string, string> = {
+  active: '正常营业',
+  approved: '正常营业',
+  suspended: '已暂停',
+  pending: '待审核',
+  rejected: '审核拒绝',
+  closed: '已关闭',
+}
+
 interface OperatorMerchantView {
   id: number
   name: string
   phone: string
   status: string
+  status_label: string
   region_id: number
   created_at: string
   is_open: boolean
@@ -74,6 +84,7 @@ Page({
         name: m.name,
         phone: m.phone,
         status: m.status || 'unknown',
+        status_label: MERCHANT_STATUS_LABEL[m.status] || m.status,
         region_id: m.region_id,
         created_at: m.created_at,
         is_open: m.is_open,

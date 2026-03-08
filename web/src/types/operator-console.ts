@@ -45,6 +45,25 @@ export interface OperatorMerchantDetail {
   updated_at: string;
 }
 
+export interface OperatorMerchantStatsDish {
+  dish_name: string;
+  total_sold: number;
+  total_revenue: number;
+}
+
+export interface OperatorMerchantStats {
+  days: number;
+  total_orders: number;
+  total_sales: number;
+  total_commission: number;
+  avg_daily_sales: number;
+  total_customers: number;
+  repeat_customers: number;
+  repurchase_rate_basis_points: number;
+  avg_orders_per_user_cents: number;
+  top_dishes: OperatorMerchantStatsDish[];
+}
+
 export interface OperatorRiderListItem {
   id: number;
   user_id: number;

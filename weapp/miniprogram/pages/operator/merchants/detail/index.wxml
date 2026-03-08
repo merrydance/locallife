@@ -15,21 +15,103 @@
     <t-empty description="未找到商户信息" />
   </view>
 
-  <view wx:else class="card">
-    <view class="title-row">
-      <text class="title">{{detail.name}}</text>
-      <t-tag theme="{{detail.status === 'approved' ? 'success' : (detail.status === 'pending' ? 'warning' : 'danger')}}" variant="dark">
-        {{detail.status}}
-      </t-tag>
+  <block wx:else>
+    <!-- 商户基本资料 -->
+    <view class="card">
+      <view class="merchant-header">
+        <image wx:if="{{detail.logo_url}}" class="logo" src="{{detail.logo_url}}" mode="aspectFill" />
+        <view wx:else class="logo-placeholder"><text>{{detail.name[0]}}</text></view>
+        <view class="header-info">
+          <text class="merchant-name">{{detail.name}}</text>
+          <view class="tag-row">
+            <t-tag theme="{{(detail.status === 'active' || detail.status === 'approved') ? 'success' : (detail.status === 'suspended' ? 'danger' : 'warning')}}" variant="dark" size="small">{{detail.status_label}}</t-tag>
+            <t-tag theme="{{detail.is_open ? 'success' : 'default'}}" variant="light" size="small">{{detail.is_open ? '营业中' : '已打烊'}}</t-tag>
+          </view>
+          <text wx:if="{{detail.description}}" class="desc">{{detail.description}}</text>
+        </view>
+      </view>
+
+      <view class="section-title">基本资料</view>
+      <view class="row"><text class="label">联系电话</text><text class="value">{{detail.phone}}</text></view>
+      <view class="row"><text class="label">所属区域</text><text class="value">{{detail.region_id}}</text></view>
+      <view class="row"><text class="label">入驻时间</text><text class="value">{{detail.created_at}}</text></view>
+      <view class="row"><text class="label">地址</text><text class="value">{{detail.address}}</text></view>
+      <view class="row"><text class="label">坐标</text><text class="value small-text">{{detail.latitude}}, {{detail.longitude}}</text></view>
     </view>
 
-    <view class="row"><text class="label">联系电话</text><text class="value">{{detail.phone}}</text></view>
-    <view class="row"><text class="label">地址</text><text class="value">{{detail.address}}</text></view>
-    <view class="row"><text class="label">店主用户ID</text><text class="value">{{detail.owner_user_id}}</text></view>
-    <view class="row"><text class="label">区域ID</text><text class="value">{{detail.region_id}}</text></view>
-    <view class="row"><text class="label">营业状态</text><text class="value">{{detail.is_open ? '营业中' : '休息中'}}</text></view>
-    <view class="row"><text class="label">经纬度</text><text class="value">{{detail.latitude}}, {{detail.longitude}}</text></view>
-    <view class="row"><text class="label">创建时间</text><text class="value">{{detail.created_at}}</text></view>
-    <view class="row"><text class="label">更新时间</text><text class="value">{{detail.updated_at}}</text></view>
-  </view>
+    <!-- 经营情况 -->
+    <view class="card">
+      <view class="section-header">
+        <text class="section-title">经营情况</text>
+        <t-tag wx:if="{{stats}}" variant="outline" size="small">近30天</t-tag>
+      </view>
+
+      <view wx:if="{{statsLoading}}" class="stats-loading">
+        <t-loading size="small" />
+        <text class="loading-text">加载中...</text>
+      </view>
+
+      <block wx:elif="{{stats}}">
+        <!-- 概览指标 -->
+        <view class="stat-grid">
+          <view class="stat-item">
+            <text class="stat-value">{{stats.total_orders}}</text>
+            <text class="stat-label">总订单数</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">¥{{stats.total_sales_display}}</text>
+            <text class="stat-label">GMV</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">¥{{stats.total_commission_display}}</text>
+            <text class="stat-label">平台佣金</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">¥{{stats.avg_daily_sales_display}}</text>
+            <text class="stat-label">日均销售额</text>
+          </view>
+        </view>
+
+        <!-- 复购分析 -->
+        <view class="divider" />
+        <view class="sub-title">用户复购</view>
+        <view class="stat-grid">
+          <view class="stat-item">
+            <text class="stat-value">{{stats.total_customers}}</text>
+            <text class="stat-label">下单用户</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">{{stats.repeat_customers}}</text>
+            <text class="stat-label">复购用户</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">{{stats.repurchase_rate_display}}%</text>
+            <text class="stat-label">复购率</text>
+          </view>
+          <view class="stat-item">
+            <text class="stat-value">{{stats.avg_orders_per_user_display}}次</text>
+            <text class="stat-label">人均下单</text>
+          </view>
+        </view>
+
+        <!-- 热销菜品 -->
+        <block wx:if="{{stats.top_dishes_with_revenue.length > 0}}">
+          <view class="divider" />
+          <view class="sub-title">热销菜品 Top 5</view>
+          <view class="dish-header">
+            <text class="dish-col dish-name">菜品</text>
+            <text class="dish-col dish-num">销量</text>
+            <text class="dish-col dish-num">营业额</text>
+          </view>
+          <view wx:for="{{stats.top_dishes_with_revenue}}" wx:key="dish_name" class="dish-row">
+            <text class="dish-col dish-name">{{item.dish_name}}</text>
+            <text class="dish-col dish-num">{{item.total_sold}}</text>
+            <text class="dish-col dish-num">¥{{item.total_revenue_display}}</text>
+          </view>
+        </block>
+
+        <view wx:if="{{stats.top_dishes_with_revenue.length === 0}}" class="empty-tip">近30天暂无订单数据</view>
+      </block>
+    </view>
+  </block>
 </view>

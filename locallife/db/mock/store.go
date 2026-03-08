@@ -7680,6 +7680,21 @@ func (mr *MockStoreMockRecorder) GetOperatorRiderRanking(ctx, arg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorRiderRanking", reflect.TypeOf((*MockStore)(nil).GetOperatorRiderRanking), ctx, arg)
 }
 
+// GetOperatorRiderStats mocks base method.
+func (m *MockStore) GetOperatorRiderStats(ctx context.Context, arg db.GetOperatorRiderStatsParams) (db.GetOperatorRiderStatsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOperatorRiderStats", ctx, arg)
+	ret0, _ := ret[0].(db.GetOperatorRiderStatsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOperatorRiderStats indicates an expected call of GetOperatorRiderStats.
+func (mr *MockStoreMockRecorder) GetOperatorRiderStats(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorRiderStats", reflect.TypeOf((*MockStore)(nil).GetOperatorRiderStats), ctx, arg)
+}
+
 // GetOrCreateUserBalance mocks base method.
 func (m *MockStore) GetOrCreateUserBalance(ctx context.Context, userID int64) (db.UserBalance, error) {
 	m.ctrl.T.Helper()
