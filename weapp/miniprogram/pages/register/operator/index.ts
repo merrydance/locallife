@@ -185,8 +185,15 @@ Page({
         }
       }
     } catch (e: unknown) {
-      // 404/40400 + "您还没有申请记录" 表示新用户无申请记录，留在介绍页
-      if (!isNoOperatorApplicationError(e)) {
+      if (isNoOperatorApplicationError(e)) {
+        // 无申请记录 — 若当前用户已是运营商，直接跳转申请更多区域页
+        const globalApp = getApp<IAppOption>()
+        if (globalApp.globalData.userRole === 'operator') {
+          wx.redirectTo({ url: '/pages/operator/region-expansion/index' })
+          return
+        }
+        // 否则是新用户，留在介绍页（正常注册流程）
+      } else {
         logger.error('Init operator application failed', e)
       }
     }

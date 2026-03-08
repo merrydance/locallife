@@ -354,6 +354,11 @@ Page({
 
   onRegisterTap(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset
+    // 已有运营商点击「运营商入驻」应跳转「申请更多区域」而非重新走注册流程
+    if (id === 'operator' && app.globalData.userRole === 'operator') {
+      wx.navigateTo({ url: '/pages/operator/region-expansion/index' })
+      return
+    }
     const pathMap: Record<string, string> = {
       merchant: '/pages/register/merchant/index',
       rider: '/pages/register/rider/index',

@@ -1,7 +1,6 @@
 import {
   applyRegionExpansion,
   listRegionExpansionApplications,
-  listAvailableRegions,
   listRegions,
   type RegionExpansionApplication
 } from '../../../api/operator-application'
@@ -99,22 +98,23 @@ Page({
       const districts: RegionOption[] = []
       let pageID = 1
       for (;;) {
-        const res = await listAvailableRegions({
+        const items = await listRegions({
           page_id: pageID,
           page_size: 100,
           level: 3,
-          parent_id: cityID,
-          ...(keyword ? { keyword } : {})
+          parent_id: cityID
         })
-        const regions = res?.regions || []
-        if (regions.length === 0) break
-        regions.forEach((r) => districts.push({ label: r.name, secondary: r.parent_name || '', value: r.id }))
-        if (regions.length < 100) break
+        if (!items || items.length === 0) break
+        items.forEach((r) => districts.push({ label: r.name, secondary: this.data.selectedCityName, value: r.id }))
+        if (items.length < 100) break
         pageID++
       }
+      const filtered = keyword
+        ? districts.filter((r) => r.label.includes(keyword))
+        : districts
       this.setData({
         regionOptions:   districts,
-        filteredRegions: districts,
+        filteredRegions: filtered,
         selectedRegionId:   0,
         selectedRegionName: '',
         regionKeyword:   ''
