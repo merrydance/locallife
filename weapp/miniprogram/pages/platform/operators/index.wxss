@@ -146,3 +146,30 @@
   font-size: var(--font-size-xs);
   padding: var(--spacer-sm) 0 var(--spacer-lg);
 }
+
+.tab-wrap {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.action-row {
+  display: flex;
+  gap: var(--spacer-sm);
+  justify-content: flex-end;
+  margin-top: var(--spacer-sm);
+  padding-top: var(--spacer-sm);
+  border-top: 1rpx solid var(--td-bg-color-secondarycontainer);
+}
+
+.meta-danger {
+  color: var(--td-error-color);
+}
+
+.dialog-desc {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  margin-bottom: var(--spacer-sm);
+}

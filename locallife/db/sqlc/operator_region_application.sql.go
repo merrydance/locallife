@@ -35,6 +35,19 @@ func (q *Queries) ApproveOperatorRegionApplication(ctx context.Context, id int64
 	return i, err
 }
 
+const countAllRegionApplicationsAdmin = `-- name: CountAllRegionApplicationsAdmin :one
+SELECT COUNT(*) FROM operator_region_applications
+WHERE ($1::text IS NULL OR status = $1)
+`
+
+// 管理后台：统计区域扩展申请数量（支持状态过滤，NULL 表示不过滤）
+func (q *Queries) CountAllRegionApplicationsAdmin(ctx context.Context, status pgtype.Text) (int64, error) {
+	row := q.db.QueryRow(ctx, countAllRegionApplicationsAdmin, status)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countPendingRegionApplications = `-- name: CountPendingRegionApplications :one
 SELECT COUNT(*) FROM operator_region_applications WHERE status = 'pending'
 `
@@ -128,6 +141,72 @@ func (q *Queries) GetOperatorRegionApplicationByOperatorAndRegion(ctx context.Co
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const listAllRegionApplicationsAdmin = `-- name: ListAllRegionApplicationsAdmin :many
+SELECT ora.id, ora.operator_id, ora.region_id, ora.status, ora.reject_reason, ora.created_at, ora.updated_at, r.name AS region_name, r.code AS region_code,
+       o.name AS operator_name, o.contact_name, o.contact_phone
+FROM operator_region_applications ora
+JOIN regions r ON ora.region_id = r.id
+JOIN operators o ON ora.operator_id = o.id
+WHERE ($3::text IS NULL OR ora.status = $3)
+ORDER BY ora.created_at DESC
+LIMIT $1 OFFSET $2
+`
+
+type ListAllRegionApplicationsAdminParams struct {
+	Limit  int32       `json:"limit"`
+	Offset int32       `json:"offset"`
+	Status pgtype.Text `json:"status"`
+}
+
+type ListAllRegionApplicationsAdminRow struct {
+	ID           int64              `json:"id"`
+	OperatorID   int64              `json:"operator_id"`
+	RegionID     int64              `json:"region_id"`
+	Status       string             `json:"status"`
+	RejectReason pgtype.Text        `json:"reject_reason"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	RegionName   string             `json:"region_name"`
+	RegionCode   string             `json:"region_code"`
+	OperatorName string             `json:"operator_name"`
+	ContactName  string             `json:"contact_name"`
+	ContactPhone string             `json:"contact_phone"`
+}
+
+// 管理后台：列出所有区域扩展申请（支持状态过滤，NULL 表示不过滤）
+func (q *Queries) ListAllRegionApplicationsAdmin(ctx context.Context, arg ListAllRegionApplicationsAdminParams) ([]ListAllRegionApplicationsAdminRow, error) {
+	rows, err := q.db.Query(ctx, listAllRegionApplicationsAdmin, arg.Limit, arg.Offset, arg.Status)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListAllRegionApplicationsAdminRow{}
+	for rows.Next() {
+		var i ListAllRegionApplicationsAdminRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OperatorID,
+			&i.RegionID,
+			&i.Status,
+			&i.RejectReason,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.RegionName,
+			&i.RegionCode,
+			&i.OperatorName,
+			&i.ContactName,
+			&i.ContactPhone,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listOperatorRegionApplicationsByOperator = `-- name: ListOperatorRegionApplicationsByOperator :many

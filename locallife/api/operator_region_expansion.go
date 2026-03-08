@@ -223,9 +223,10 @@ type adminRegionExpansionApplicationResponse struct {
 }
 
 // listPendingRegionApplicationsAdmin godoc
-// @Summary [管理] 列出待审核区域扩展申请
+// @Summary [管理] 列出区域扩展申请（支持状态过滤）
 // @Tags 管理-运营商
 // @Produce json
+// @Param status query string false "状态过滤：pending/approved/rejected，不传返回全部"
 // @Success 200 {object} map[string]interface{}
 // @Security BearerAuth
 // @Router /v1/admin/operators/region-applications [get]
@@ -236,17 +237,20 @@ func (server *Server) listPendingRegionApplicationsAdmin(ctx *gin.Context) {
 		return
 	}
 
+	statusFilter := ctx.Query("status") // "" 表示不过滤
+
 	offset := (query.Page - 1) * query.Limit
-	rows, err := server.store.ListPendingRegionApplications(ctx, db.ListPendingRegionApplicationsParams{
+	rows, err := server.store.ListAllRegionApplicationsAdmin(ctx, db.ListAllRegionApplicationsAdminParams{
 		Limit:  query.Limit,
 		Offset: offset,
+		Status: pgtype.Text{String: statusFilter, Valid: statusFilter != ""},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	total, err := server.store.CountPendingRegionApplications(ctx)
+	total, err := server.store.CountAllRegionApplicationsAdmin(ctx, pgtype.Text{String: statusFilter, Valid: statusFilter != ""})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -363,7 +367,7 @@ func (server *Server) rejectRegionApplicationAdmin(ctx *gin.Context) {
 	}
 
 	type rejectReq struct {
-		Reason string `json:"reason" binding:"required"`
+		Reason string `json:"reject_reason" binding:"required"`
 	}
 	var body rejectReq
 	if err := ctx.ShouldBindJSON(&body); err != nil {

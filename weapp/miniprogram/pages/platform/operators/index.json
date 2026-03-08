@@ -8,6 +8,8 @@
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-button": "tdesign-miniprogram/button/button",
     "t-tag": "tdesign-miniprogram/tag/tag",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
     "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-textarea": "tdesign-miniprogram/textarea/textarea"
   }

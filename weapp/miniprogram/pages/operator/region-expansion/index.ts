@@ -9,6 +9,16 @@ import { logger } from '../../../utils/logger'
 type CityOption = { label: string, value: number }
 type RegionOption = { label: string, secondary: string, value: number }
 
+function formatDate(iso: string): string {
+  try {
+    const d = new Date(iso)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  } catch {
+    return iso
+  }
+}
+
 const STATUS_MAP: Record<string, { label: string, theme: 'primary' | 'warning' | 'danger' | 'default' }> = {
   pending:  { label: '审核中', theme: 'warning' },
   approved: { label: '已通过', theme: 'primary' },
@@ -54,7 +64,8 @@ Page({
     this.setData({ listLoading: true, listError: '' })
     try {
       const res = await listRegionExpansionApplications()
-      this.setData({ applications: res.applications || [] })
+      const apps = (res.applications || []).map(a => ({ ...a, created_at: formatDate(a.created_at) }))
+      this.setData({ applications: apps })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '加载失败'
       this.setData({ listError: msg })

@@ -1054,6 +1054,21 @@ func (mr *MockStoreMockRecorder) CountActiveDiscountRules(ctx, merchantID any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountActiveDiscountRules", reflect.TypeOf((*MockStore)(nil).CountActiveDiscountRules), ctx, merchantID)
 }
 
+// CountAllRegionApplicationsAdmin mocks base method.
+func (m *MockStore) CountAllRegionApplicationsAdmin(ctx context.Context, status pgtype.Text) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountAllRegionApplicationsAdmin", ctx, status)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountAllRegionApplicationsAdmin indicates an expected call of CountAllRegionApplicationsAdmin.
+func (mr *MockStoreMockRecorder) CountAllRegionApplicationsAdmin(ctx, status any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountAllRegionApplicationsAdmin", reflect.TypeOf((*MockStore)(nil).CountAllRegionApplicationsAdmin), ctx, status)
+}
+
 // CountAllReviewsByMerchant mocks base method.
 func (m *MockStore) CountAllReviewsByMerchant(ctx context.Context, merchantID int64) (int64, error) {
 	m.ctrl.T.Helper()
@@ -10343,6 +10358,21 @@ func (m *MockStore) ListAllOperatorRegions(ctx context.Context, arg db.ListAllOp
 func (mr *MockStoreMockRecorder) ListAllOperatorRegions(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAllOperatorRegions", reflect.TypeOf((*MockStore)(nil).ListAllOperatorRegions), ctx, arg)
+}
+
+// ListAllRegionApplicationsAdmin mocks base method.
+func (m *MockStore) ListAllRegionApplicationsAdmin(ctx context.Context, arg db.ListAllRegionApplicationsAdminParams) ([]db.ListAllRegionApplicationsAdminRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListAllRegionApplicationsAdmin", ctx, arg)
+	ret0, _ := ret[0].([]db.ListAllRegionApplicationsAdminRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListAllRegionApplicationsAdmin indicates an expected call of ListAllRegionApplicationsAdmin.
+func (mr *MockStoreMockRecorder) ListAllRegionApplicationsAdmin(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListAllRegionApplicationsAdmin", reflect.TypeOf((*MockStore)(nil).ListAllRegionApplicationsAdmin), ctx, arg)
 }
 
 // ListAllReviewsByMerchant mocks base method.

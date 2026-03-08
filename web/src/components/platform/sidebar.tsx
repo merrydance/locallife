@@ -68,6 +68,13 @@ const navGroups: Array<{
         requiredRoles: ["admin"],
       },
       {
+        label: "区域扩展申请",
+        href: "/platform/operators/region-applications",
+        activePrefix: "/platform/operators/region-applications",
+        icon: PanelsTopLeft,
+        requiredRoles: ["admin"],
+      },
+      {
         label: "集团申请",
         href: "/platform/groups",
         activePrefix: "/platform/groups",

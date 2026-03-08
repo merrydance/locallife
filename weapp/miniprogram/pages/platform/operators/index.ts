@@ -1,5 +1,9 @@
 import { responsiveBehavior } from '@/utils/responsive'
-import { platformManagementService, type AdminOperatorApplicationItem } from '@/api/platform-management'
+import {
+  platformManagementService,
+  type AdminOperatorApplicationItem,
+  type AdminRegionExpansionApplicationItem
+} from '@/api/platform-management'
 
 type OperatorApplicationStatus = 'all' | 'submitted' | 'approved' | 'rejected'
 type SortBy =
@@ -49,17 +53,41 @@ Page({
       submitted: 0,
       approved: 0,
       rejected: 0
-    }
+    },
+
+    // ── 区域扩展申请 tab ──────────────────────────────────────
+    activeTab: 'onboarding',
+    regionApps:        [] as AdminRegionExpansionApplicationItem[],
+    regionDisplayApps: [] as AdminRegionExpansionApplicationItem[],
+    regionStatusFilter: 'all' as 'all' | 'pending' | 'approved' | 'rejected',
+    regionFilterStats: { all: 0, pending: 0, approved: 0, rejected: 0 },
+    regionPage: 1,
+    regionTotal: 0,
+    regionHasMore: false,
+    regionLoading: false,
+    regionError: null as string | null,
+
+    // 驳回弹窗
+    rejectDialogVisible: false,
+    rejectReason: '',
+    rejectTargetId: 0,
+    rejectTargetDesc: '',
+    submittingReject: false
   },
 
   onLoad() {
     this.loadApplications(true)
+    this.loadRegionApplications(true)
   },
 
   onShow() {
     if (this.data.requesting) return
-    if (this.data.rawApplications.length === 0) return
-    this.loadApplications(true)
+    if (this.data.rawApplications.length === 0 && this.data.regionApps.length === 0) return
+    if (this.data.activeTab === 'onboarding') {
+      this.loadApplications(true)
+    } else {
+      this.loadRegionApplications(true)
+    }
   },
 
   onNavHeight(e: NavHeightEvent) {
@@ -69,17 +97,24 @@ Page({
   async onRefresh() {
     this.setData({ refreshing: true })
     try {
-      await this.loadApplications(true)
+      if (this.data.activeTab === 'onboarding') {
+        await this.loadApplications(true)
+      } else {
+        await this.loadRegionApplications(true)
+      }
     } finally {
       this.setData({ refreshing: false })
     }
   },
 
   async onLoadMore() {
-    if (!this.data.hasMore || this.data.loading) {
-      return
+    if (this.data.activeTab === 'onboarding') {
+      if (!this.data.hasMore || this.data.loading) return
+      await this.loadApplications(false)
+    } else {
+      if (!this.data.regionHasMore || this.data.regionLoading) return
+      await this.loadRegionApplications(false)
     }
-    await this.loadApplications(false)
   },
 
   async loadApplications(reset: boolean) {
@@ -121,6 +156,127 @@ Page({
 
   onRetry() {
     this.loadApplications(true)
+  },
+
+  onRegionRetry() {
+    this.loadRegionApplications(true)
+  },
+
+  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ activeTab: e.detail.value })
+  },
+
+  // ── 区域扩展申请加载 ──────────────────────────────────────────────────────
+
+  async loadRegionApplications(reset: boolean) {
+    if (this.data.regionLoading) return
+    const page = reset ? 1 : this.data.regionPage + 1
+    this.setData({ regionLoading: true, regionError: null })
+    try {
+      const res = await platformManagementService.getAdminRegionExpansionApplications({ page, limit: 20 })
+      const incoming = res.applications || []
+      const merged = reset ? incoming : this._mergeRegion(this.data.regionApps, incoming)
+      const regionFilterStats = {
+        all:      merged.length,
+        pending:  merged.filter(i => i.status === 'pending').length,
+        approved: merged.filter(i => i.status === 'approved').length,
+        rejected: merged.filter(i => i.status === 'rejected').length
+      }
+      const regionDisplayApps = this._filterRegion(merged, this.data.regionStatusFilter)
+      this.setData({
+        regionApps: merged,
+        regionDisplayApps,
+        regionTotal: res.total ?? 0,
+        regionPage: page,
+        regionHasMore: merged.length < (res.total ?? 0),
+        regionFilterStats
+      })
+    } catch (e: unknown) {
+      this.setData({ regionError: e instanceof Error ? e.message : '加载失败' })
+    } finally {
+      this.setData({ regionLoading: false })
+    }
+  },
+
+  onRegionFilterChange(e: WechatMiniprogram.CustomEvent & { currentTarget: { dataset: { name: string } } }) {
+    const f = (e.currentTarget.dataset.name || 'all') as 'all' | 'pending' | 'approved' | 'rejected'
+    this.setData({
+      regionStatusFilter: f,
+      regionDisplayApps: this._filterRegion(this.data.regionApps, f)
+    })
+  },
+
+  _mergeRegion(
+    existing: AdminRegionExpansionApplicationItem[],
+    incoming: AdminRegionExpansionApplicationItem[]
+  ): AdminRegionExpansionApplicationItem[] {
+    const map = new Map<number, AdminRegionExpansionApplicationItem>()
+    existing.forEach(i => map.set(i.id, i))
+    incoming.forEach(i => map.set(i.id, i))
+    return Array.from(map.values())
+  },
+
+  _filterRegion(list: AdminRegionExpansionApplicationItem[], status: string) {
+    return status === 'all' ? list : list.filter(i => i.status === status)
+  },
+
+  // ── 区域扩展审批 ──────────────────────────────────────────────────────────
+
+  onApproveRegion(e: WechatMiniprogram.TouchEvent) {
+    const { id, name, region } = e.currentTarget.dataset as { id: number, name: string, region: string }
+    wx.showModal({
+      title: '确认通过',
+      content: `通过「${name}」申请管理「${region}」？通过后将自动关联区域。`,
+      confirmText: '通过',
+      success: (res) => { if (res.confirm) this._doApprove(id) }
+    })
+  },
+
+  async _doApprove(id: number) {
+    try {
+      await platformManagementService.approveRegionExpansionApplication(id)
+      wx.showToast({ title: '已通过', icon: 'success' })
+      await this.loadRegionApplications(true)
+    } catch (e: unknown) {
+      wx.showToast({ title: e instanceof Error ? e.message : '操作失败', icon: 'none' })
+    }
+  },
+
+  onRejectRegion(e: WechatMiniprogram.TouchEvent) {
+    const { id, name, region } = e.currentTarget.dataset as { id: number, name: string, region: string }
+    this.setData({
+      rejectDialogVisible: true,
+      rejectTargetId: id,
+      rejectTargetDesc: `驳回「${name}」申请管理「${region}」`,
+      rejectReason: ''
+    })
+  },
+
+  onRejectReasonInput(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ rejectReason: e.detail.value || '' })
+  },
+
+  onRejectCancel() {
+    this.setData({ rejectDialogVisible: false })
+  },
+
+  async onRejectConfirm() {
+    const { rejectTargetId, rejectReason } = this.data
+    if (!rejectReason.trim() || rejectReason.trim().length < 2) {
+      wx.showToast({ title: '请填写驳回原因（至少2字）', icon: 'none' })
+      return
+    }
+    this.setData({ submittingReject: true })
+    try {
+      await platformManagementService.rejectRegionExpansionApplication(rejectTargetId, { reject_reason: rejectReason.trim() })
+      wx.showToast({ title: '已驳回', icon: 'success' })
+      this.setData({ rejectDialogVisible: false })
+      await this.loadRegionApplications(true)
+    } catch (e: unknown) {
+      wx.showToast({ title: e instanceof Error ? e.message : '操作失败', icon: 'none' })
+    } finally {
+      this.setData({ submittingReject: false })
+    }
   },
 
   mergeApplications(

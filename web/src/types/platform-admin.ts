@@ -72,3 +72,24 @@ export type AdminGroupApplicationsResponse = {
   limit: number;
   has_more: boolean;
 };
+
+export type AdminRegionExpansionApplication = {
+  id: number;
+  operator_id: number;
+  operator_name: string;
+  contact_name: string;
+  contact_phone: string;
+  region_id: number;
+  region_name: string;
+  region_code: string;
+  status: "pending" | "approved" | "rejected" | string;
+  reject_reason?: string;
+  created_at: string;
+};
+
+export type AdminRegionExpansionApplicationsResponse = {
+  applications: AdminRegionExpansionApplication[];
+  total: number;
+  page: number;
+  limit: number;
+};

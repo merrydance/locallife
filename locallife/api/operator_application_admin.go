@@ -265,6 +265,15 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		return
 	}
 
+	// 同步写入 operator_regions，使多区域查询（GetActiveOperatorByRegion / CheckOperatorManagesRegion）能找到初始区域
+	if _, err := server.store.AddOperatorRegion(ctx, db.AddOperatorRegionParams{
+		OperatorID: operator.ID,
+		RegionID:   approved.RegionID,
+	}); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	if _, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{UserID: approved.UserID, Role: RoleOperator}); err != nil {
 		if isNotFoundError(err) {
 			_, createErr := server.store.CreateUserRole(ctx, db.CreateUserRoleParams{

@@ -36,6 +36,22 @@ LIMIT $1 OFFSET $2;
 -- name: CountPendingRegionApplications :one
 SELECT COUNT(*) FROM operator_region_applications WHERE status = 'pending';
 
+-- name: ListAllRegionApplicationsAdmin :many
+-- 管理后台：列出所有区域扩展申请（支持状态过滤，NULL 表示不过滤）
+SELECT ora.*, r.name AS region_name, r.code AS region_code,
+       o.name AS operator_name, o.contact_name, o.contact_phone
+FROM operator_region_applications ora
+JOIN regions r ON ora.region_id = r.id
+JOIN operators o ON ora.operator_id = o.id
+WHERE (sqlc.narg(status)::text IS NULL OR ora.status = sqlc.narg(status))
+ORDER BY ora.created_at DESC
+LIMIT $1 OFFSET $2;
+
+-- name: CountAllRegionApplicationsAdmin :one
+-- 管理后台：统计区域扩展申请数量（支持状态过滤，NULL 表示不过滤）
+SELECT COUNT(*) FROM operator_region_applications
+WHERE (sqlc.narg(status)::text IS NULL OR status = sqlc.narg(status));
+
 -- name: ApproveOperatorRegionApplication :one
 -- 审批通过区域扩展申请
 UPDATE operator_region_applications

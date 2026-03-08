@@ -103,6 +103,8 @@ type Querier interface {
 	ConfirmWebLoginSession(ctx context.Context, arg ConfirmWebLoginSessionParams) (WebLoginSession, error)
 	ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	CountActiveDiscountRules(ctx context.Context, merchantID int64) (int64, error)
+	// 管理后台：统计区域扩展申请数量（支持状态过滤，NULL 表示不过滤）
+	CountAllRegionApplicationsAdmin(ctx context.Context, status pgtype.Text) (int64, error)
 	// 商户查看所有评价数量（包含不可见的）
 	CountAllReviewsByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountAvailableTablesByMerchant(ctx context.Context, merchantID int64) (int64, error)
@@ -1037,6 +1039,8 @@ type Querier interface {
 	ListAllMerchants(ctx context.Context, arg ListAllMerchantsParams) ([]Merchant, error)
 	// 列出所有运营商区域关系（管理后台用）
 	ListAllOperatorRegions(ctx context.Context, arg ListAllOperatorRegionsParams) ([]ListAllOperatorRegionsRow, error)
+	// 管理后台：列出所有区域扩展申请（支持状态过滤，NULL 表示不过滤）
+	ListAllRegionApplicationsAdmin(ctx context.Context, arg ListAllRegionApplicationsAdminParams) ([]ListAllRegionApplicationsAdminRow, error)
 	// 商户查看所有评价（包含不可见的）
 	ListAllReviewsByMerchant(ctx context.Context, arg ListAllReviewsByMerchantParams) ([]Review, error)
 	ListAllTagsByType(ctx context.Context, type_ string) ([]Tag, error)

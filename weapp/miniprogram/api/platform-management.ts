@@ -194,6 +194,29 @@ export interface ReviewGroupApplicationRequest extends Record<string, unknown> {
     reject_reason?: string
 }
 
+// ==================== 区域扩展申请（管理后台）====================
+
+export interface AdminRegionExpansionApplicationItem {
+    id: number
+    operator_id: number
+    operator_name: string
+    contact_name: string
+    contact_phone: string
+    region_id: number
+    region_name: string
+    region_code: string
+    status: 'pending' | 'approved' | 'rejected' | string
+    reject_reason?: string
+    created_at: string
+}
+
+export interface AdminRegionExpansionApplicationsResponse {
+    applications: AdminRegionExpansionApplicationItem[]
+    total: number
+    page: number
+    limit: number
+}
+
 // ==================== 平台规则管理相关类型 ====================
 
 export interface PlatformRuleItem {
@@ -550,6 +573,42 @@ export class PlatformManagementService {
     async reviewAdminGroupApplication(applicationID: number, data: ReviewGroupApplicationRequest): Promise<AdminGroupApplicationItem> {
         return request({
             url: `/v1/admin/groups/applications/${applicationID}/review`,
+            method: 'POST',
+            data,
+            strictEnvelope: true
+        })
+    }
+
+    // ── 区域扩展申请（管理后台）──────────────────────────────────
+
+    /**
+     * 分页获取区域扩展申请列表（仅限 pending）
+     */
+    async getAdminRegionExpansionApplications(params: { page?: number; limit?: number }): Promise<AdminRegionExpansionApplicationsResponse> {
+        return request({
+            url: '/v1/admin/operators/region-applications',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    /**
+     * 审批通过区域扩展申请
+     */
+    async approveRegionExpansionApplication(id: number): Promise<AdminRegionExpansionApplicationItem> {
+        return request({
+            url: `/v1/admin/operators/region-applications/${id}/approve`,
+            method: 'POST',
+            strictEnvelope: true
+        })
+    }
+
+    /**
+     * 驳回区域扩展申请
+     */
+    async rejectRegionExpansionApplication(id: number, data: { reject_reason: string }): Promise<AdminRegionExpansionApplicationItem> {
+        return request({
+            url: `/v1/admin/operators/region-applications/${id}/reject`,
             method: 'POST',
             data,
             strictEnvelope: true
