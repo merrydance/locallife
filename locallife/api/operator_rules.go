@@ -139,7 +139,6 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 
 	rules := []RuleItem{}
 
-	commissionRateNumeric := operator.CommissionRate
 	merchantDepositValue := operator.MerchantDeposit
 	riderDepositValue := operator.RiderDeposit
 	weatherCoeffExtreme := operator.WeatherCoeffExtreme
@@ -153,13 +152,26 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		return
 	}
 	if configErr == nil {
-		commissionRateNumeric = regionRuleConfig.CommissionRate
 		merchantDepositValue = regionRuleConfig.MerchantDeposit
 		riderDepositValue = regionRuleConfig.RiderDeposit
 		weatherCoeffExtreme = regionRuleConfig.WeatherCoeffExtreme
 		weatherCoeffHeavy = regionRuleConfig.WeatherCoeffHeavy
 		weatherCoeffModerate = regionRuleConfig.WeatherCoeffModerate
 		weatherCoeffLight = regionRuleConfig.WeatherCoeffLight
+	}
+
+	// 运营商抽成比例直接从 profit_sharing_configs 读取，与平台侧保持同源
+	operatorRateInt := int32(0)
+	profitConfig, profitErr := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
+		OrderSource: "takeout",
+		MerchantID:  pgtype.Int8{Valid: false},
+		RegionID:    pgtype.Int8{Int64: targetRegionID, Valid: targetRegionID > 0},
+	})
+	if profitErr == nil {
+		operatorRateInt = profitConfig.OperatorRate
+	} else if !isNotFoundError(profitErr) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, profitErr))
+		return
 	}
 
 	if configuredMerchantDeposit, ok, cfgErr := server.getOperatorGlobalDepositFen(ctx, operatorMerchantDepositConfigKey); cfgErr != nil {
@@ -203,12 +215,11 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	})
 
 	// 3. 平台抽成比例 (只读展示，平台维护)
-	commissionRate := pgNumericToFloat64(commissionRateNumeric) * 100
 	rules = append(rules, RuleItem{
 		ID:       "rule_3",
 		Name:     "运营商抽成比例",
 		Key:      "PLATFORM_COMMISSION",
-		Value:    fmt.Sprintf("%.1f", commissionRate),
+		Value:    fmt.Sprintf("%.1f", float64(operatorRateInt)),
 		Unit:     "%",
 		Desc:     "平台统一维护，运营商仅可查看",
 		Category: "delivery",

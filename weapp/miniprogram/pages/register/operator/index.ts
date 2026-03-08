@@ -820,6 +820,17 @@ Page({
     }
   },
 
+  /**
+   * 「下一步 / 确认提交」统一入口
+   * 微信 WXML 的 bindtap 不支持三元表达式，必须绑定静态函数名
+   */
+  async onNextOrSubmit() {
+    if (this.data.currentStep === 3) {
+      return this.onSubmit()
+    }
+    return this.onNext()
+  },
+
   onBackHome() {
     wx.switchTab({ url: '/pages/user_center/index' })
   }

@@ -201,7 +201,7 @@
     <block wx:else>
       <view class="btn-group">
         <t-button size="large" bindtap="onPrev" shape="round">上一步</t-button>
-        <t-button theme="primary" size="large" bindtap="{{currentStep === 3 ? 'onSubmit' : 'onNext'}}" loading="{{isSubmitting}}" shape="round">
+        <t-button theme="primary" size="large" bindtap="onNextOrSubmit" loading="{{isSubmitting}}" shape="round">
           {{currentStep === 3 ? '确认提交申请' : '下一步'}}
         </t-button>
       </view>
