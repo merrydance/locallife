@@ -149,6 +149,18 @@ FROM profit_sharing_orders
 WHERE operator_id = sqlc.arg('operator_id') AND status = 'finished'
   AND created_at >= sqlc.arg('start_at') AND created_at <= sqlc.arg('end_at');
 
+-- name: GetOperatorProfitSharingStatsByRegion :one
+-- 按区域过滤的运营商分账统计（多区域运营商区域维度财务概览）
+SELECT 
+    COUNT(*) as total_orders,
+    COALESCE(SUM(ps.total_amount), 0)::bigint as total_amount,
+    COALESCE(SUM(ps.operator_commission), 0)::bigint as total_operator_commission
+FROM profit_sharing_orders ps
+JOIN merchants m ON m.id = ps.merchant_id
+WHERE ps.operator_id = sqlc.arg('operator_id') AND ps.status = 'finished'
+  AND m.region_id = sqlc.arg('region_id')
+  AND ps.created_at >= sqlc.arg('start_at') AND ps.created_at <= sqlc.arg('end_at');
+
 -- name: ListMerchantFinanceOrders :many
 -- 商户财务订单明细（带分账信息）
 SELECT 
