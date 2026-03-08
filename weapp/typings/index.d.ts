@@ -47,6 +47,10 @@ interface IAppOption {
     bootstrapDemoUser(): void
     reportErrorToMonitor(error: any, type: string): void
     clearApiCache(): void
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    _applyUserInfo(user: any): void
+    _refreshThenLoadUser(refreshToken: string, max: number, delays: number[]): void
+    _doWxLogin(attempt: number, max: number, delays: number[]): void
 
 }
 

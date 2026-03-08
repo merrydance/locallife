@@ -1,5 +1,5 @@
 import { tracker, EventType } from './utils/tracker'
-import { wechatLogin, getDeviceId } from './api/auth'
+import { wechatLogin, getUserInfo, getDeviceId } from './api/auth'
 import { setToken } from './utils/auth'
 import { logger } from './utils/logger'
 import { ErrorHandler } from './utils/error-handler'
@@ -40,7 +40,26 @@ App<IAppOption>({
   onLaunch() {
     logger.info('🚀 小程序启动', undefined, 'App.onLaunch')
 
-
+    // 检查小程序版本更新
+    if (wx.canIUse('getUpdateManager')) {
+      const updateManager = wx.getUpdateManager()
+      updateManager.onUpdateReady(() => {
+        wx.showModal({
+          title: '更新提示',
+          content: '新版本已准备好，重启后生效，是否立即重启？',
+          confirmText: '立即重启',
+          cancelText: '稍后',
+          success(res) {
+            if (res.confirm) {
+              updateManager.applyUpdate()
+            }
+          }
+        })
+      })
+      updateManager.onUpdateFailed(() => {
+        logger.warn('小程序新版本下载失败', undefined, 'App.onLaunch')
+      })
+    }
 
     // 预初始化全局布局数据 (Phase 1)
     const { getGlobalLayoutData } = require('./utils/responsive')
@@ -176,107 +195,162 @@ App<IAppOption>({
     if (attempt === 0) {
       logger.info('开始静默登录流程', undefined, 'App.silentLogin')
 
-      // 清除旧 token，避免旧 token 导致的刷新循环
-      const { clearToken } = require('./utils/auth')
+      const { getToken, isTokenNearExpiry, getRefreshToken, clearToken } = require('./utils/auth')
+      const existingToken = getToken() as string
+
+      // 快速路径：access token 仍有效，直接拉取用户信息，无需 wx.login
+      if (existingToken && !isTokenNearExpiry(0)) {
+        logger.info('Token 仍有效，跳过 wx.login', undefined, 'App.silentLogin')
+        getUserInfo()
+          .then((user) => {
+            this._applyUserInfo(user)
+            logger.info('✅ 静默登录成功 (复用 token)', { userId: user.id }, 'App.silentLogin')
+            if (this.globalData.latitude && this.globalData.longitude) {
+              this.reverseGeocodeWhenReady()
+            }
+          })
+          .catch((_err: unknown) => {
+            logger.warn('复用 token 拉取用户信息失败，降级到完整登录', _err, 'App.silentLogin')
+            clearToken()
+            this._doWxLogin(0, MAX_LOGIN_RETRIES, RETRY_DELAYS)
+          })
+        return
+      }
+
+      // 中速路径：access token 已过期但 refresh_token 仍有效 → 静默续期
+      const refreshToken = getRefreshToken() as string
+      if (refreshToken) {
+        logger.info('Token 已过期，尝试 refresh_token 静默续期', undefined, 'App.silentLogin')
+        this._refreshThenLoadUser(refreshToken, MAX_LOGIN_RETRIES, RETRY_DELAYS)
+        return
+      }
+
+      // 慢速路径：无任何可用凭证，走完整 wx.login
+      logger.debug('无有效 token，开始完整 wx.login 流程', undefined, 'App.silentLogin')
       clearToken()
-      logger.debug('已清除旧 token，准备重新登录', undefined, 'silentLogin')
     } else {
       logger.info(`静默登录重试 (${attempt}/${MAX_LOGIN_RETRIES})`, undefined, 'App.silentLogin')
     }
 
+    this._doWxLogin(attempt, MAX_LOGIN_RETRIES, RETRY_DELAYS)
+  },
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  _applyUserInfo(user: any) {
+    this.globalData.userId = user.id
+    this.globalData.userInfo = {
+      nickName: user.full_name || `User ${String(user.id).slice(-4)}`,
+      avatarUrl: user.avatar_url || 'https://tdesign.gtimg.com/mobile/demos/avatar1.png',
+      gender: 0,
+      country: '',
+      province: '',
+      city: '',
+      language: 'zh_CN'
+    }
+    if (user.roles.includes('MERCHANT')) {
+      this.globalData.userRole = 'merchant'
+    } else if (user.roles.includes('RIDER')) {
+      this.globalData.userRole = 'rider'
+    } else if (user.roles.includes('OPERATOR')) {
+      this.globalData.userRole = 'operator'
+    } else if (user.roles.includes('CUSTOMER')) {
+      this.globalData.userRole = 'customer'
+    }
+  },
+
+  /** 使用 refresh_token 静默续期，成功后拉取用户信息；失败则降级到 wx.login */
+  _refreshThenLoadUser(refreshToken: string, max: number, delays: number[]) {
+    const { API_BASE } = require('./utils/request')
+    const { clearToken } = require('./utils/auth')
+
+    wx.request({
+      url: `${API_BASE}/v1/auth/refresh`,
+      method: 'POST',
+      data: { refresh_token: refreshToken },
+      header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
+      timeout: 10000,
+      success: (res) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const body = res.data as any
+        if (res.statusCode === 200 && body?.code === 0 && body?.data?.access_token) {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const d = body.data as any
+          const expiresAt = d.access_token_expires_at
+            ? new Date(d.access_token_expires_at).getTime()
+            : undefined
+          setToken(d.access_token, expiresAt, d.refresh_token)
+          logger.info('refresh_token 续期成功，拉取用户信息', undefined, 'App._refreshThenLoadUser')
+          getUserInfo()
+            .then((user) => {
+              this._applyUserInfo(user)
+              logger.info('✅ 静默登录成功 (refresh_token)', { userId: user.id }, 'App._refreshThenLoadUser')
+              if (this.globalData.latitude && this.globalData.longitude) {
+                this.reverseGeocodeWhenReady()
+              }
+            })
+            .catch((_err: unknown) => {
+              logger.warn('refresh_token 续期后 getUserInfo 失败，降级到 wx.login', _err, 'App._refreshThenLoadUser')
+              clearToken()
+              this._doWxLogin(0, max, delays)
+            })
+        } else {
+          logger.warn('refresh_token 已失效，降级到 wx.login', { statusCode: res.statusCode, code: body?.code }, 'App._refreshThenLoadUser')
+          clearToken()
+          this._doWxLogin(0, max, delays)
+        }
+      },
+      fail: (err) => {
+        logger.warn('refresh_token 请求失败，降级到 wx.login', err, 'App._refreshThenLoadUser')
+        clearToken()
+        this._doWxLogin(0, max, delays)
+      }
+    })
+  },
+
+  /** 完整的 wx.login → 后端 wechatLogin 流程（慢速路径及重试） */
+  _doWxLogin(attempt: number, max: number, delays: number[]) {
     wx.login({
       success: async (res) => {
         if (res.code) {
           try {
-            logger.debug('微信登录成功,code获取成功', { code: res.code.substring(0, 10) + '...' }, 'silentLogin')
+            logger.debug('微信登录成功,code获取成功', { code: res.code.substring(0, 10) + '...' }, '_doWxLogin')
 
-            // 获取设备ID
             const deviceId = getDeviceId()
-            logger.debug('设备ID已生成', { deviceId: deviceId.substring(0, 15) + '...' }, 'silentLogin')
+            logger.debug('设备ID已生成', { deviceId: deviceId.substring(0, 15) + '...' }, '_doWxLogin')
 
-            // 调用登录接口
-            logger.debug('开始调用后端登录接口', undefined, 'silentLogin')
+            logger.debug('开始调用后端登录接口', undefined, '_doWxLogin')
             const loginData = await wechatLogin({
               code: res.code,
               device_id: deviceId,
               device_type: 'miniprogram'
             })
 
-            logger.debug('后端登录接口调用成功', {
-              userId: loginData.user.id,
-              hasToken: !!loginData.access_token
-            }, 'silentLogin')
-
-            // 保存token
             const expiresAt = loginData.access_token_expires_at
               ? new Date(loginData.access_token_expires_at).getTime()
               : undefined
-            setToken(
-              loginData.access_token,
-              expiresAt,
-              loginData.refresh_token
-            )
+            setToken(loginData.access_token, expiresAt, loginData.refresh_token)
 
-            logger.info('Token已保存', {
-              tokenLength: loginData.access_token.length,
-              expiresAt: loginData.access_token_expires_at
-            }, 'silentLogin')
-
-            // 验证token是否真的保存成功
             const { getToken } = require('./utils/auth')
             const savedToken = getToken()
             if (!savedToken) {
-              logger.error('Token保存失败！getToken()返回空', undefined, 'silentLogin')
-            } else {
-              logger.debug('Token保存验证成功', { tokenLength: savedToken.length }, 'silentLogin')
+              logger.error('Token保存失败！getToken()返回空', undefined, '_doWxLogin')
             }
 
-            // 保存用户信息
-            const user = loginData.user
-            this.globalData.userId = user.id
-            this.globalData.userInfo = {
-              nickName: user.full_name || `User ${user.id.toString().slice(-4)}`,
-              avatarUrl: user.avatar_url || 'https://tdesign.gtimg.com/mobile/demos/avatar1.png',
-              gender: 0,
-              country: '',
-              province: '',
-              city: '',
-              language: 'zh_CN'
-            }
-
-            // 确定用户角色
-            if (user.roles.includes('MERCHANT')) {
-              this.globalData.userRole = 'merchant'
-              logger.info('用户角色: 商户', undefined, 'silentLogin')
-            } else if (user.roles.includes('RIDER')) {
-              this.globalData.userRole = 'rider'
-              logger.info('用户角色: 骑手', undefined, 'silentLogin')
-            } else if (user.roles.includes('OPERATOR')) {
-              this.globalData.userRole = 'operator'
-              logger.info('用户角色: 运营商', undefined, 'silentLogin')
-            } else if (user.roles.includes('CUSTOMER')) {
-              this.globalData.userRole = 'customer'
-              logger.info('用户角色: 顾客', undefined, 'silentLogin')
-            }
-
-            logger.info('✅ 静默登录完全成功', {
-              userId: user.id,
+            this._applyUserInfo(loginData.user)
+            logger.info('✅ 静默登录完全成功 (wx.login)', {
+              userId: loginData.user.id,
               userRole: this.globalData.userRole,
               hasToken: !!savedToken
-            }, 'silentLogin')
+            }, '_doWxLogin')
 
-            // 登录成功后，如果已有坐标，立即进行逆地理编码
             if (this.globalData.latitude && this.globalData.longitude) {
-              logger.debug('登录成功，立即进行逆地理编码', undefined, 'silentLogin')
               this.reverseGeocodeWhenReady()
             }
 
           } catch (error) {
-            // 静默登录失败：仅记录日志，不弹 Toast（页面层的 tryLoadData 会处理超时引导）
             const appError = error as { message?: string }
             const errorMsg = appError.message || ''
 
-            // 判断是否可重试的错误（网络/后端不可用）
             const isRetryable = errorMsg.includes('502') ||
               errorMsg.includes('503') ||
               errorMsg.includes('504') ||
@@ -284,25 +358,23 @@ App<IAppOption>({
               errorMsg.includes('request:fail') ||
               errorMsg.includes('网络请求失败')
 
-            if (isRetryable && attempt < MAX_LOGIN_RETRIES - 1) {
-              const delay = RETRY_DELAYS[attempt + 1] || 4000
-              logger.warn(`静默登录失败,${delay / 1000}秒后重试 (${attempt + 1}/${MAX_LOGIN_RETRIES})`, { error: errorMsg }, 'App.silentLogin')
-              setTimeout(() => this.silentLogin(attempt + 1), delay)
+            if (isRetryable && attempt < max - 1) {
+              const delay = delays[attempt + 1] || 4000
+              logger.warn(`静默登录失败,${delay / 1000}秒后重试 (${attempt + 1}/${max})`, { error: errorMsg }, 'App._doWxLogin')
+              setTimeout(() => this._doWxLogin(attempt + 1, max, delays), delay)
             } else {
-              // 已达最大重试次数或不可重试的错误，仅记录日志
               logger.warn('静默登录最终失败,用户可继续浏览', {
                 error: errorMsg,
                 attempts: attempt + 1
-              }, 'App.silentLogin')
+              }, 'App._doWxLogin')
             }
           }
         } else {
-          logger.error('wx.login成功但未返回code', res, 'App.silentLogin')
+          logger.error('wx.login成功但未返回code', res, '_doWxLogin')
         }
       },
       fail: (err) => {
-        // wx.login 本身失败（极罕见），仅记录日志
-        logger.error('wx.login调用失败', err, 'App.wx.login')
+        logger.error('wx.login调用失败', err, 'App._doWxLogin')
       }
     })
   },

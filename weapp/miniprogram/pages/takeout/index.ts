@@ -266,7 +266,7 @@ Page({
 
   // 尝试加载数据，等待 token 准备好，位置未授权则直接引导
   async tryLoadData(retryCount = 0) {
-    const MAX_TOKEN_RETRIES = 10 // Token 最多等待 5 秒
+    const MAX_TOKEN_RETRIES = 20 // Token 最多等待 10 秒
     const RETRY_INTERVAL = 500
     const { getToken } = require('../../utils/auth')
     const app = getApp<IAppOption>()
