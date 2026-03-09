@@ -156,7 +156,6 @@ Page({
                 } catch (error: unknown) {
                     const wxError = error as { errMsg?: string }
                     if (wxError?.errMsg?.includes('cancel')) {
-                        closePayment(latestPayment.id).catch(() => {})
                         wx.showToast({ title: '已取消支付', icon: 'none' })
                         return
                     }

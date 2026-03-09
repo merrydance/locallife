@@ -12,7 +12,7 @@ import { OrderCardAdapter } from '../../../adapters/order-card'
 import type { OrderCardViewModel } from '../../../adapters/order-card'
 import CartService from '../../../services/cart'
 import { OrderAdapter } from '../../../adapters/order'
-import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay, closePayment, PaymentCancelledError } from '../../../api/payment'
+import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 
 // 简化后的状态筛选选项，更符合主流外卖APP习惯
@@ -397,7 +397,6 @@ Page({
         } catch (error: unknown) {
           const wxError = error as { errMsg?: string }
           if (wxError?.errMsg?.includes('cancel')) {
-            closePayment(payment.id).catch(() => {})
             wx.showToast({ title: '已取消支付', icon: 'none' })
             return
           }

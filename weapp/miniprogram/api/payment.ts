@@ -288,8 +288,6 @@ export async function processPayment(orderId: number, businessType: BusinessType
     } catch (error: unknown) {
         const wxError = error as { errMsg?: string }
         if (wxError?.errMsg?.includes('cancel')) {
-            // 用户主动取消：关闭 pending 支付记录（最大努力，不阻塞流程）
-            closePayment(payment.id).catch(() => {})
             throw new PaymentCancelledError()
         }
         throw error
