@@ -184,12 +184,6 @@
       "packages": [
         "__APP__"
       ]
-    },
-    "pages/user_center/index": {
-      "network": "all",
-      "packages": [
-        "rider"
-      ]
     }
   },
   "window": {

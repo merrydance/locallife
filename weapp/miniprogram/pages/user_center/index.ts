@@ -166,14 +166,17 @@ Page({
     if (_refreshUserInfoPromise) {
       return _refreshUserInfoPromise
     }
-    if (now - _lastRefreshUserInfoAt < 1000) {
+    // 同一会话内最多每 60 秒请求一次，避免频繁 tab 切换触发大量请求
+    if (now - _lastRefreshUserInfoAt < 60000) {
       return
     }
 
     _refreshUserInfoPromise = (async () => {
-      if (this.data.loading) return
-
-      this.setData({ loading: true, error: null })
+      // 如果已有用户数据（非首次加载），不设置 loading 状态，避免 UI 闪烁
+      const isInitial = this.data.initialLoading
+      if (isInitial) {
+        this.setData({ loading: true, error: null })
+      }
       try {
         const user = await getUserInfo()
         if (user) {
@@ -271,7 +274,8 @@ Page({
     if (_fetchUnreadPromise) {
       return _fetchUnreadPromise
     }
-    if (now - _lastFetchUnreadAt < 1000) {
+    // 30 秒内不重复请求
+    if (now - _lastFetchUnreadAt < 30000) {
       return
     }
 

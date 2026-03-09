@@ -68,6 +68,27 @@ App<IAppOption>({
     globalStore.set('navBarHeight', layout.navBarHeight)
     globalStore.set('isLargeScreen', layout.isLargeScreen)
 
+    // 恢复上次已知位置，避免首屏等待 GPS（reduce startup blocking）
+    const LOCATION_CACHE_MAX_AGE = 24 * 60 * 60 * 1000 // 24小时内的缓存视为有效
+    try {
+      const lastKnown = wx.getStorageSync('last_known_location') as {
+        lat: number; lng: number; name: string; address?: string; time: number
+      } | null
+      if (lastKnown?.lat && lastKnown?.lng && (Date.now() - lastKnown.time) < LOCATION_CACHE_MAX_AGE) {
+        this.globalData.latitude = lastKnown.lat
+        this.globalData.longitude = lastKnown.lng
+        this.globalData.location = { name: lastKnown.name, address: lastKnown.address }
+        this.globalData._lastLocationContext = {
+          lat: lastKnown.lat,
+          lng: lastKnown.lng,
+          time: lastKnown.time,
+          name: lastKnown.name,
+          address: lastKnown.address
+        }
+        logger.info('已从缓存恢复位置', { name: lastKnown.name }, 'App.onLaunch')
+      }
+    } catch (_e) { /* storage 读取失败不影响主流程 */ }
+
     // 清除旧的 API 缓存（响应格式已更新为统一信封格式）
     this.clearApiCache()
 
@@ -402,18 +423,11 @@ App<IAppOption>({
   /**
    * 获取位置坐标（不需要 token，本地调用）
    * 获取成功后，等待 token 准备好再调用逆地理编码
+   * 注意：即使 globalData 中已有缓存坐标（来自 Storage 恢复），也始终刷新 GPS，
+   * 成功后覆盖旧坐标，保证跨城场景下数据最终一致。
    */
   getLocationCoordinates() {
     logger.info('📍 开始获取位置坐标', undefined, 'getLocationCoordinates')
-
-    // 检查是否已有缓存的坐标
-    if (this.globalData.latitude && this.globalData.longitude) {
-      logger.info('使用缓存的坐标', {
-        latitude: this.globalData.latitude,
-        longitude: this.globalData.longitude
-      }, 'getLocationCoordinates')
-      return
-    }
 
     // 获取当前位置坐标（本地调用，不需要网络请求）
     logger.debug('调用 wx.getLocation', undefined, 'getLocationCoordinates')
@@ -521,6 +535,10 @@ App<IAppOption>({
         name: lastLoc.name,
         address: lastLoc.address || lastLoc.name
       }
+      // 刷新缓存时间戳（坐标小幅移动，延长有效期）
+      const _refreshedCtx = { lat: this.globalData.latitude, lng: this.globalData.longitude, time: now, name: lastLoc.name, address: lastLoc.address }
+      this.globalData._lastLocationContext = _refreshedCtx
+      try { wx.setStorageSync('last_known_location', _refreshedCtx) } catch (_e) { /* ignore */ }
 
       // 同步到 globalStore
       const { globalStore } = require('./utils/global-store')
@@ -578,13 +596,16 @@ App<IAppOption>({
       }
 
       // === 更新缓存上下文 ===
-      this.globalData._lastLocationContext = {
+      const _locCtx = {
         lat: this.globalData.latitude,
         lng: this.globalData.longitude,
         time: Date.now(),
         name: locationName,
         address: fullAddress
       }
+      this.globalData._lastLocationContext = _locCtx
+      // 持久化到 storage，供下次启动时立即恢复（避免等待 GPS）
+      try { wx.setStorageSync('last_known_location', _locCtx) } catch (_e) { /* ignore */ }
       // ====================
 
       // 同步到 globalStore（导航栏等组件使用）

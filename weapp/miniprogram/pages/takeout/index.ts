@@ -134,6 +134,9 @@ Page({
   _prefetchedPackages: [] as PackageViewModel[],
   _prefetchHasMore: true,
   _unsubscribeLocation: undefined as undefined | (() => void),
+  // 当前列表数据是使用哪套坐标加载的（用于跨城检测）
+  _dataLoadedLat: null as number | null,
+  _dataLoadedLng: null as number | null,
 
   onLoad() {
     wx.showShareMenu({
@@ -177,10 +180,25 @@ Page({
           needLocation: false
         })
 
-        // 如果还没有数据，位置更新后自动加载
+        // 用 app.globalData 取新坐标：getLocationCoordinates 成功时最先写入
+        // globalData，早于所有 globalStore 操作，此处读值一定是最新的。
+        const _appRef = getApp<IAppOption>()
+        const newLat = _appRef.globalData.latitude
+        const newLng = _appRef.globalData.longitude
+
         if (this.data.dishes.length === 0 && !this.data.loading) {
+          // 还没有数据，直接加载
           logger.info('[Takeout] 位置已更新，开始加载数据', undefined, 'Takeout.onLoad')
           this.loadData()
+        } else if (newLat && newLng && this._dataLoadedLat !== null && this._dataLoadedLng !== null) {
+          // 已有数据，检查是否跨城（距离 > 1km）
+          const { haversineDistance } = require('../../utils/geo')
+          const dist = haversineDistance(this._dataLoadedLat, this._dataLoadedLng, newLat, newLng)
+          if (dist > 1.0) {
+            logger.info('[Takeout] 位置变化超过 1km，重新加载数据', { dist: `${dist.toFixed(2)}km` }, 'Takeout.onLoad')
+            this.setData({ page: 1 })
+            this.loadData()
+          }
         }
       }
     })
@@ -246,6 +264,11 @@ Page({
     }, 'Takeout.onShow')
 
     // 从购物车返回时更新购物车数据
+    // 先用 globalStore 缓存立即同步显示（避免每次切 tab 都等待网络），再后台静默刷新
+    const cachedCart = globalStore.get('cart')
+    if (cachedCart) {
+      this.setData({ cartTotalCount: cachedCart.totalCount, cartTotalPrice: cachedCart.totalPrice })
+    }
     this.updateCartDisplay()
 
     // 更新位置显示
@@ -497,6 +520,11 @@ Page({
 
     this._isLoading = true
     this.setData({ loading: true, isError: false })
+
+    // 记录本次加载时使用的坐标，供跨城检测对比
+    const _app = getApp<IAppOption>()
+    this._dataLoadedLat = _app.globalData.latitude
+    this._dataLoadedLng = _app.globalData.longitude
 
     try {
       const { activeTab, page } = this.data
