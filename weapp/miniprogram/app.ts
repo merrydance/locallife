@@ -68,26 +68,35 @@ App<IAppOption>({
     globalStore.set('navBarHeight', layout.navBarHeight)
     globalStore.set('isLargeScreen', layout.isLargeScreen)
 
-    // 恢复上次已知位置，避免首屏等待 GPS（reduce startup blocking）
-    const LOCATION_CACHE_MAX_AGE = 24 * 60 * 60 * 1000 // 24小时内的缓存视为有效
-    try {
-      const lastKnown = wx.getStorageSync('last_known_location') as {
-        lat: number; lng: number; name: string; address?: string; time: number
-      } | null
-      if (lastKnown?.lat && lastKnown?.lng && (Date.now() - lastKnown.time) < LOCATION_CACHE_MAX_AGE) {
-        this.globalData.latitude = lastKnown.lat
-        this.globalData.longitude = lastKnown.lng
-        this.globalData.location = { name: lastKnown.name, address: lastKnown.address }
-        this.globalData._lastLocationContext = {
-          lat: lastKnown.lat,
-          lng: lastKnown.lng,
-          time: lastKnown.time,
-          name: lastKnown.name,
-          address: lastKnown.address
+    // 恢复上次已知位置，避免首屏等待 GPS
+    // 用 setTimeout(0) 推迟到首帧渲染后再读 Storage，不阻塞 onLoad
+    setTimeout(() => {
+      const LOCATION_CACHE_MAX_AGE = 24 * 60 * 60 * 1000
+      try {
+        const lastKnown = wx.getStorageSync('last_known_location') as {
+          lat: number; lng: number; name: string; address?: string; time: number
+        } | null
+        if (lastKnown?.lat && lastKnown?.lng && (Date.now() - lastKnown.time) < LOCATION_CACHE_MAX_AGE) {
+          // 只在 globalData 还没被真实 GPS 覆盖的情况下才应用缓存
+          if (!this.globalData.latitude || !this.globalData.longitude) {
+            this.globalData.latitude = lastKnown.lat
+            this.globalData.longitude = lastKnown.lng
+            this.globalData.location = { name: lastKnown.name, address: lastKnown.address }
+            this.globalData._lastLocationContext = {
+              lat: lastKnown.lat,
+              lng: lastKnown.lng,
+              time: lastKnown.time,
+              name: lastKnown.name,
+              address: lastKnown.address
+            }
+            // 通知 globalStore，使地址栏等订阅者立即收到位置
+            const { globalStore } = require('./utils/global-store')
+            globalStore.updateLocation(lastKnown.lat, lastKnown.lng, lastKnown.name, lastKnown.address)
+            logger.info('已从缓存恢复位置', { name: lastKnown.name }, 'App.onLaunch')
+          }
         }
-        logger.info('已从缓存恢复位置', { name: lastKnown.name }, 'App.onLaunch')
-      }
-    } catch (_e) { /* storage 读取失败不影响主流程 */ }
+      } catch (_e) { /* storage 读取失败不影响主流程 */ }
+    }, 0)
 
     // 清除旧的 API 缓存（响应格式已更新为统一信封格式）
     this.clearApiCache()

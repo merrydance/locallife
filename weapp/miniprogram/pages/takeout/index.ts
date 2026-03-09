@@ -470,6 +470,10 @@ Page({
     const app = getApp<IAppOption>()
     if (!app.globalData.latitude || !app.globalData.longitude) return
 
+    // 需要 token 才能请求，token 未就绪时跳过，待 loadData 时自然会再次调用
+    const { getToken } = require('../../utils/auth')
+    if (!getToken()) return
+
     try {
       const rawList = await getActiveCategories({
         user_latitude: app.globalData.latitude,
@@ -532,6 +536,11 @@ Page({
 
       if (reset) {
         await this.refreshServiceProviderState()
+        // onLoad 时若 token 尚未就绪，loadCategories 会被跳过；
+        // 在此补充调用，确保品类数据在 token 就绪后一定能加载
+        if (this.data.cuisineCategories.length === 0) {
+          this.loadCategories()
+        }
       }
 
       if (activeTab === 'dishes') {

@@ -137,7 +137,8 @@ Page({
 
     const nonCustomerRoleList = roleList.filter((r) => {
       const normalized = String(r || '').toLowerCase()
-      return normalized !== 'customer'
+      // 过滤掉纯消费者角色和默认游客占位值，不应显示为标签
+      return normalized !== 'customer' && normalized !== 'guest'
     })
 
     const userRoles = nonCustomerRoleList.map((r) => ({ key: r, label: roleMap[r] || r }))
@@ -197,6 +198,9 @@ Page({
           this.updateUser(app.globalData.userInfo, user.roles || [])
         }
         this.setData({ initialLoading: false, loading: false })
+        // 只有成功才更新时间戳：失败（如 token 尚未就绪）不应占用 60s 节流窗口，
+        // 否则下次 onShow 进来会被跳过，导致角色信息长期停留在错误状态
+        _lastRefreshUserInfoAt = Date.now()
       } catch (err) {
         logger.error('Failed to refresh user info', err)
         this.setData({
@@ -204,10 +208,10 @@ Page({
           loading: false,
           initialLoading: false
         })
+        // 失败时不更新时间戳，下次 onShow 可以立即重试
       }
     })().finally(() => {
       _refreshUserInfoPromise = null
-      _lastRefreshUserInfoAt = Date.now()
     })
 
     return _refreshUserInfoPromise
