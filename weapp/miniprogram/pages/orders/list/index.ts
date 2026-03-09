@@ -12,7 +12,7 @@ import { OrderCardAdapter } from '../../../adapters/order-card'
 import type { OrderCardViewModel } from '../../../adapters/order-card'
 import CartService from '../../../services/cart'
 import { OrderAdapter } from '../../../adapters/order'
-import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay } from '../../../api/payment'
+import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay, closePayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 
 // 简化后的状态筛选选项，更符合主流外卖APP习惯
@@ -392,7 +392,17 @@ Page({
     try {
       const payment = await createOrderPayment(orderId)
       if (payment.pay_params) {
-        await invokeWechatPay(payment.pay_params)
+        try {
+          await invokeWechatPay(payment.pay_params)
+        } catch (error: unknown) {
+          const wxError = error as { errMsg?: string }
+          if (wxError?.errMsg?.includes('cancel')) {
+            closePayment(payment.id).catch(() => {})
+            wx.showToast({ title: '已取消支付', icon: 'none' })
+            return
+          }
+          throw error
+        }
       }
 
       this.setData({ selectedPayMap: {}, selectedPayCount: 0 })
@@ -403,7 +413,7 @@ Page({
       })
     } catch (error) {
       logger.error('单笔支付失败', error, 'List.paySingleOrder')
-      wx.showToast({ title: '支付未完成', icon: 'none' })
+      wx.showToast({ title: '支付失败', icon: 'none' })
     } finally {
       wx.hideLoading()
       this.setData({ paying: false })

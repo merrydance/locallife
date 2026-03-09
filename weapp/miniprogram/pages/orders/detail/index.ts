@@ -2,7 +2,7 @@ import Navigation from '../../../utils/navigation'
 import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
 import { getOrderDetail, confirmOrder, cancelOrder, urgeOrder, OrderResponse, OrderType } from '../../../api/order'
-import { processPayment } from '../../../api/payment'
+import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
@@ -339,8 +339,12 @@ Page({
         this.loadOrderDetail()
       }
     } catch (error) {
-      logger.error('支付失败', error, 'Detail.onPayOrder')
-      wx.showToast({ title: '支付未完成', icon: 'none' })
+      if (error instanceof PaymentCancelledError) {
+        wx.showToast({ title: '已取消支付', icon: 'none' })
+      } else {
+        logger.error('支付失败', error, 'Detail.onPayOrder')
+        wx.showToast({ title: '支付失败', icon: 'none' })
+      }
     } finally {
       wx.hideLoading()
     }

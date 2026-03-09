@@ -267,28 +267,44 @@ export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Prom
  * 完整的支付流程
  * @param orderId 订单ID
  * @param businessType 业务类型
+ * @throws {PaymentCancelledError} 用户主动取消时
+ * @throws {Error} 其他支付失败时
  */
 export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<void> {
-    try {
-        // 1. 创建支付订单
-        const payment = await createPayment({
-            order_id: orderId,
-            payment_type: 'miniprogram',
-            business_type: businessType
-        })
+    // 1. 创建支付订单
+    const payment = await createPayment({
+        order_id: orderId,
+        payment_type: 'miniprogram',
+        business_type: businessType
+    })
 
-        // 2. 调起微信支付
-        if (payment.pay_params) {
-            await invokeWechatPay(payment.pay_params)
-            
-            // 3. 轮询支付状态，确保后端已接收到回调并更新
-            // 微信回调通常在秒级，这里轮询最大等待 10s 左右
-            await pollPaymentStatus(payment.id, 5, 2000)
-        } else {
-            throw new Error('支付参数缺失')
+    if (!payment.pay_params) {
+        throw new Error('支付参数缺失')
+    }
+
+    // 2. 调起微信支付，单独捕获以区分"用户取消"和"真实失败"
+    try {
+        await invokeWechatPay(payment.pay_params)
+    } catch (error: unknown) {
+        const wxError = error as { errMsg?: string }
+        if (wxError?.errMsg?.includes('cancel')) {
+            // 用户主动取消：关闭 pending 支付记录（最大努力，不阻塞流程）
+            closePayment(payment.id).catch(() => {})
+            throw new PaymentCancelledError()
         }
-    } catch (error) {
-        console.error('支付失败:', error)
+        throw error
+    }
+
+    // 3. 轮询支付状态，确保后端已接收到回调并更新
+    // 微信回调通常在秒级，这里轮询最大等待 10s 左右
+    // 若超时说明 webhook 延迟，但用户侧已付款，视为乐观成功继续流程
+    try {
+        await pollPaymentStatus(payment.id, 5, 2000)
+    } catch (error: unknown) {
+        if (error instanceof Error && error.message === '支付状态检查超时') {
+            console.warn('[payment] 支付状态轮询超时，后端 webhook 可能延迟，继续跳转成功页')
+            return
+        }
         throw error
     }
 }
@@ -326,6 +342,14 @@ export async function pollPaymentStatus(
     }
 
     throw new Error('支付状态检查超时')
+}
+
+/** 用户主动取消支付时抛出的错误，区别于真正的支付失败 */
+export class PaymentCancelledError extends Error {
+    constructor() {
+        super('用户取消支付')
+        this.name = 'PaymentCancelledError'
+    }
 }
 
 // ==================== 兼容性别名 ====================

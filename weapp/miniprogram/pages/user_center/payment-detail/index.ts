@@ -151,7 +151,17 @@ Page({
             })
 
             if (latestPayment.pay_params) {
-                await invokeWechatPay(latestPayment.pay_params)
+                try {
+                    await invokeWechatPay(latestPayment.pay_params)
+                } catch (error: unknown) {
+                    const wxError = error as { errMsg?: string }
+                    if (wxError?.errMsg?.includes('cancel')) {
+                        closePayment(latestPayment.id).catch(() => {})
+                        wx.showToast({ title: '已取消支付', icon: 'none' })
+                        return
+                    }
+                    throw error
+                }
             } else if (latestPayment.status !== 'paid') {
                 throw new Error('支付参数缺失')
             }
@@ -172,7 +182,7 @@ Page({
             setTimeout(() => this.loadPaymentDetail(), 1200)
         } catch (error) {
             logger.error('继续支付失败', error, 'payment-detail.onContinuePay')
-            wx.showToast({ title: '支付未完成', icon: 'none' })
+            wx.showToast({ title: '支付失败', icon: 'none' })
         } finally {
             wx.hideLoading()
             this.setData({ paying: false })

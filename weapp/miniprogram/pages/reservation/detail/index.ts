@@ -1,5 +1,5 @@
 import { ReservationService } from '../../../api/reservation'
-import { processPayment } from '../../../api/payment'
+import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 import { ReservationCardAdapter, ReservationDetailViewModel } from '../../../adapters/reservation-card'
 import { logger } from '../../../utils/logger'
@@ -166,8 +166,12 @@ Page({
                 amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00'
             })
         } catch (e) {
-            logger.error('Pay failed', e)
-            wx.showToast({ title: '支付未完成', icon: 'none' })
+            if (e instanceof PaymentCancelledError) {
+                wx.showToast({ title: '已取消支付', icon: 'none' })
+            } else {
+                logger.error('Pay failed', e)
+                wx.showToast({ title: '支付失败', icon: 'none' })
+            }
         } finally {
             wx.hideLoading()
         }

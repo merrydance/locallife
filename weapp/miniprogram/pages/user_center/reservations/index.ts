@@ -6,7 +6,7 @@
 import { ReservationService, ReservationStatus, ReservationListParams } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
 import { ReservationCardAdapter, ReservationCardViewModel } from '../../../adapters/reservation-card'
-import { processPayment } from '../../../api/payment'
+import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 
 // 状态筛选选项
@@ -176,8 +176,12 @@ Page({
                 amount: res?.depositDisplay?.replace('¥', '') || '0.00'
             })
         } catch (error) {
-            logger.error('支付失败', error, 'Reservations.onPay')
-            wx.showToast({ title: '支付未完成', icon: 'none' })
+            if (error instanceof PaymentCancelledError) {
+                wx.showToast({ title: '已取消支付', icon: 'none' })
+            } else {
+                logger.error('支付失败', error, 'Reservations.onPay')
+                wx.showToast({ title: '支付失败', icon: 'none' })
+            }
         } finally {
             wx.hideLoading()
         }
