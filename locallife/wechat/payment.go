@@ -290,6 +290,11 @@ func (c *PaymentClient) CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderReq
 	return &resp, payParams, nil
 }
 
+// GenerateJSAPIPayParams 生成小程序调起支付的参数（公开方法，实现 PaymentClientInterface）
+func (c *PaymentClient) GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
+	return c.generateJSAPIPayParams(prepayID)
+}
+
 // generateJSAPIPayParams 生成小程序调起支付的参数
 func (c *PaymentClient) generateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
 	nonceStr := generateNonceStr()

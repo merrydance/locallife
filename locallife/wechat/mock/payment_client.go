@@ -176,6 +176,21 @@ func (mr *MockPaymentClientInterfaceMockRecorder) QueryRefund(ctx, outRefundNo a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRefund", reflect.TypeOf((*MockPaymentClientInterface)(nil).QueryRefund), ctx, outRefundNo)
 }
 
+// GenerateJSAPIPayParams mocks base method.
+func (m *MockPaymentClientInterface) GenerateJSAPIPayParams(prepayID string) (*wechat.JSAPIPayParams, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateJSAPIPayParams", prepayID)
+	ret0, _ := ret[0].(*wechat.JSAPIPayParams)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateJSAPIPayParams indicates an expected call of GenerateJSAPIPayParams.
+func (mr *MockPaymentClientInterfaceMockRecorder) GenerateJSAPIPayParams(prepayID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateJSAPIPayParams", reflect.TypeOf((*MockPaymentClientInterface)(nil).GenerateJSAPIPayParams), prepayID)
+}
+
 // VerifyNotificationSignature mocks base method.
 func (m *MockPaymentClientInterface) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
 	m.ctrl.T.Helper()

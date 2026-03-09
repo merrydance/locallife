@@ -64,6 +64,9 @@ type PaymentClientInterface interface {
 
 	// VerifyNotificationSignature 验证微信支付回调签名
 	VerifyNotificationSignature(signature, timestamp, nonce, body string) error
+
+	// GenerateJSAPIPayParams 根据 prepay_id 重新生成小程序调起支付所需参数（用于幂等返回旧 pending 记录时重新签名）
+	GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error)
 }
 
 // EcommerceClientInterface 平台收付通客户端接口

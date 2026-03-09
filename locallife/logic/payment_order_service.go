@@ -168,6 +168,13 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	}
 	if err == nil && existingPayment.Status == paymentStatusPending {
 		result.PaymentOrder = existingPayment
+		// 干等返回时，若已有 prepay_id 则重新签名生成 pay_params，
+		// 避免前端因收到 null pay_params 而无法调起支付。
+		if svc.paymentClient != nil && existingPayment.PrepayID.Valid {
+			if payParams, signErr := svc.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+				result.PayParams = payParams
+			}
+		}
 		return result, nil
 	}
 
