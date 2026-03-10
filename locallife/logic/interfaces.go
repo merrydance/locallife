@@ -229,6 +229,7 @@ type GetUserOrderQueryResult struct {
 	Items               []db.ListOrderItemsWithDishByOrderRow
 	DeliveryEtaMinutes  *int32
 	EstimatedDeliveryAt *time.Time
+	WechatTransactionID *string
 }
 
 type ListUserOrdersQueryInput struct {

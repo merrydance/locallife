@@ -230,6 +230,8 @@ type orderResponse struct {
 	DeliveryContactName  *string             `json:"delivery_contact_name,omitempty" example:"张三"`
 	DeliveryContactPhone *string             `json:"delivery_contact_phone,omitempty" example:"13800138000"`
 	DeliveryAddress      *string             `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
+	// 微信支付交易号，用于拉起小程序确认收货组件
+	WechatTransactionID *string `json:"wechat_transaction_id,omitempty"`
 }
 
 func newOrderResponse(o db.Order) orderResponse {
@@ -668,6 +670,7 @@ func (server *Server) getOrder(ctx *gin.Context) {
 	}
 	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
 	resp.EstimatedDeliveryAt = result.EstimatedDeliveryAt
+	resp.WechatTransactionID = result.WechatTransactionID
 
 	ctx.JSON(http.StatusOK, resp)
 }

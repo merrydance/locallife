@@ -2,7 +2,7 @@ import DeliveryService, {
   DeliveryResponse
 } from '../../../api/delivery'
 import { getBicyclingDirection } from '../../../api/location'
-import { confirmOrder } from '../../../api/order'
+import { confirmOrder, getOrderDetail } from '../../../api/order'
 import { logger } from '../../../utils/logger'
 
 interface MapPoint {
@@ -119,27 +119,58 @@ Page({
   },
 
   async onConfirmReceipt() {
-    wx.showModal({
-      title: '确认收货',
-      content: '确认已收到包裹？',
-      success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
-          try {
-            await confirmOrder(this.data.orderId)
-            wx.hideLoading()
-            wx.showToast({ title: '确认成功', icon: 'success' })
-            setTimeout(() => {
-              wx.navigateBack({ delta: 1 })
-            }, 1000)
-          } catch (error) {
-            wx.hideLoading()
-            logger.error('确认收货失败', error, 'Tracking.onConfirmReceipt')
-            wx.showToast({ title: '确认失败', icon: 'error' })
+    try {
+      wx.showLoading({ title: '加载中...' })
+      const order = await getOrderDetail(this.data.orderId)
+      wx.hideLoading()
+
+      const transactionId = order.wechat_transaction_id
+      if (!transactionId) {
+        // 无微信支付交易号（如余额支付），直接走本地确认
+        wx.showModal({
+          title: '确认收货',
+          content: '确认已收到包裹？',
+          success: async (res) => {
+            if (res.confirm) {
+              wx.showLoading({ title: '处理中...' })
+              try {
+                await confirmOrder(this.data.orderId)
+                wx.hideLoading()
+                wx.showToast({ title: '确认成功', icon: 'success' })
+                setTimeout(() => { wx.navigateBack({ delta: 1 }) }, 1000)
+              } catch (error) {
+                wx.hideLoading()
+                logger.error('确认收货失败', error, 'Tracking.onConfirmReceipt')
+                wx.showToast({ title: '确认失败', icon: 'error' })
+              }
+            }
           }
-        }
+        })
+        return
       }
-    })
+
+      // 有微信支付交易号：通过微信官方确认收货组件
+      const app = getApp<IAppOption>()
+      app.globalData.pendingConfirmOrderId = this.data.orderId
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      if ((wx as any).openBusinessView) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        ;(wx as any).openBusinessView({
+          businessType: 'weappOrderConfirm',
+          extraData: { transaction_id: transactionId },
+          fail() {
+            logger.error('打开确认收货组件失败', undefined, 'Tracking.onConfirmReceipt')
+            wx.showToast({ title: '打开失败，请重试', icon: 'none' })
+          }
+        })
+      } else {
+        wx.showToast({ title: '请升级微信后重试', icon: 'none' })
+      }
+    } catch (error) {
+      wx.hideLoading()
+      logger.error('确认收货失败', error, 'Tracking.onConfirmReceipt')
+      wx.showToast({ title: '操作失败，请重试', icon: 'none' })
+    }
   },
 
   async loadDeliveryData() {

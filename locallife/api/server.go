@@ -363,6 +363,8 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ecommerce/refund-notify", server.handleEcommerceRefundNotify)
 		webhooksGroup.POST("/wechat-ecommerce/applyment-notify", server.handleApplymentStateNotify)
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
+		// 小程序「发货信息管理」结算事件（trade_manage_order_settlement）
+		webhooksGroup.POST("/wechat-miniprogram/settlement-notify", server.handleOrderSettlementNotify)
 	}
 
 	// 需要认证的路由

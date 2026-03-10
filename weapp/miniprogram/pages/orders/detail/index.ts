@@ -351,25 +351,51 @@ Page({
   },
 
   async onConfirmReceipt() {
-    wx.showModal({
-      title: '确认收货',
-      content: '确认已收到订单？',
-      success: async (res) => {
-        if (res.confirm) {
-          wx.showLoading({ title: '处理中...' })
-          try {
-            await confirmOrder(parseInt(this.data.orderId))
-            wx.hideLoading()
-            wx.showToast({ title: '确认成功', icon: 'success' })
-            this.loadOrderDetail()
-          } catch (error) {
-            wx.hideLoading()
-            logger.error('确认收货失败', error, 'Detail.onConfirmReceipt')
-            wx.showToast({ title: '确认失败', icon: 'error' })
+    const { orderDTO } = this.data
+    if (!orderDTO) return
+
+    const transactionId = orderDTO.wechat_transaction_id
+    if (!transactionId) {
+      // 无微信支付交易号（如余额支付），直接走本地确认
+      wx.showModal({
+        title: '确认收货',
+        content: '确认已收到订单？',
+        success: async (res) => {
+          if (res.confirm) {
+            wx.showLoading({ title: '处理中...' })
+            try {
+              await confirmOrder(parseInt(this.data.orderId))
+              wx.hideLoading()
+              wx.showToast({ title: '确认成功', icon: 'success' })
+              this.loadOrderDetail()
+            } catch (error) {
+              wx.hideLoading()
+              logger.error('确认收货失败', error, 'Detail.onConfirmReceipt')
+              wx.showToast({ title: '确认失败', icon: 'error' })
+            }
           }
         }
-      }
-    })
+      })
+      return
+    }
+
+    // 有微信支付交易号：通过微信官方确认收货组件
+    const app = getApp<IAppOption>()
+    app.globalData.pendingConfirmOrderId = parseInt(this.data.orderId)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    if ((wx as any).openBusinessView) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ;(wx as any).openBusinessView({
+        businessType: 'weappOrderConfirm',
+        extraData: { transaction_id: transactionId },
+        fail() {
+          logger.error('打开确认收货组件失败', undefined, 'Detail.onConfirmReceipt')
+          wx.showToast({ title: '打开失败，请重试', icon: 'none' })
+        }
+      })
+    } else {
+      wx.showToast({ title: '请升级微信后重试', icon: 'none' })
+    }
   },
   
   async checkReviewStatus() {

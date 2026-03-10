@@ -1301,3 +1301,196 @@ func mapApplymentStateToDBStatus(wechatState string) string {
 		return wechatState
 	}
 }
+
+// handleOrderSettlementNotify 处理微信订单结算事件通知
+// POST /v1/webhooks/wechat-miniprogram/settlement-notify
+//
+// 微信在用户确认收货（或 T+2 自动确认）后推送 trade_manage_order_settlement 事件。
+// settlement_time 字段非空代表资金已实际结算，此时触发分账。
+func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "ecommerce client not configured",
+		})
+		return
+	}
+
+	// 读取请求体用于验签
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "read_body").Inc()
+		log.Error().Err(err).Msg("read settlement notification body")
+		ctx.JSON(status, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "read body failed",
+		})
+		return
+	}
+
+	// 🔒 验证微信支付签名
+	signature := ctx.GetHeader("Wechatpay-Signature")
+	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
+	nonce := ctx.GetHeader("Wechatpay-Nonce")
+
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "signature").Inc()
+		log.Error().
+			Err(err).
+			Str("signature", signature).
+			Msg("⚠️ invalid signature for settlement notification")
+		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "signature verification failed",
+		})
+		return
+	}
+
+	// 解析通知外层
+	var notification wechat.PaymentNotification
+	if err := json.Unmarshal(body, &notification); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "parse").Inc()
+		log.Error().Err(err).Msg("parse settlement notification")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "parse notification failed",
+		})
+		return
+	}
+
+	if notification.EventType != "trade_manage_order_settlement" {
+		log.Info().Str("event_type", notification.EventType).Msg("ignore non-settlement notification")
+		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		return
+	}
+
+	// 🔐 幂等性检查
+	exists, err := server.store.CheckNotificationExists(ctx, notification.ID)
+	if err != nil {
+		log.Error().Err(err).Str("notification_id", notification.ID).Msg("check notification existence")
+	} else if exists {
+		log.Info().Str("notification_id", notification.ID).Msg("settlement notification already processed")
+		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		return
+	}
+
+	// 解密通知体
+	resource, err := server.ecommerceClient.DecryptSettlementNotification(&notification)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "decrypt").Inc()
+		log.Error().Err(err).Msg("decrypt settlement notification")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "decrypt failed",
+		})
+		return
+	}
+
+	log.Info().
+		Str("transaction_id", resource.TransactionID).
+		Str("merchant_trade_no", resource.MerchantTradeNo).
+		Str("settlement_time", resource.SettlementTime).
+		Int("confirm_method", resource.ConfirmReceiveMethod).
+		Msg("received settlement notification")
+
+	// settlement_time 为空，说明仅是状态通知，资金未实际结算，跳过分账
+	if resource.SettlementTime == "" {
+		log.Info().Str("merchant_trade_no", resource.MerchantTradeNo).Msg("settlement_time empty, no actual settlement yet")
+		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		return
+	}
+
+	// 通过子单 out_trade_no 找到对应的业务订单
+	subOrder, err := server.store.GetCombinedPaymentSubOrderByOutTradeNo(ctx, resource.MerchantTradeNo)
+	if err != nil {
+		if isNotFoundError(err) {
+			// 未知子单，可能是非 profit_sharing 订单或旧数据，忽略
+			log.Warn().Str("merchant_trade_no", resource.MerchantTradeNo).Msg("combined sub order not found, skip settlement")
+			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+			return
+		}
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "query_sub_order").Inc()
+		log.Error().Err(err).Str("merchant_trade_no", resource.MerchantTradeNo).Msg("get combined sub order")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "internal error",
+		})
+		return
+	}
+
+	// 查找关联的支付订单
+	po, err := server.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: subOrder.OrderID, Valid: true},
+		BusinessType: "order",
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			log.Warn().Int64("order_id", subOrder.OrderID).Msg("payment order not found for settlement, skip")
+			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+			return
+		}
+		paymentCallbackFailuresTotal.WithLabelValues("settlement", "query_payment_order").Inc()
+		log.Error().Err(err).Int64("order_id", subOrder.OrderID).Msg("get payment order for settlement")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "internal error",
+		})
+		return
+	}
+
+	if po.Status != "paid" || po.PaymentType != "profit_sharing" {
+		log.Info().
+			Int64("payment_order_id", po.ID).
+			Str("status", po.Status).
+			Str("type", po.PaymentType).
+			Msg("settlement: payment order not eligible for profit sharing, skip")
+		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		return
+	}
+
+	// 🔐 记录通知 ID（在派发任务前，防止重复触发）
+	_, err = server.store.CreateWechatNotification(ctx, db.CreateWechatNotificationParams{
+		ID:            notification.ID,
+		EventType:     notification.EventType,
+		ResourceType:  pgtype.Text{String: notification.ResourceType, Valid: true},
+		Summary:       pgtype.Text{String: notification.Summary, Valid: true},
+		OutTradeNo:    pgtype.Text{String: resource.MerchantTradeNo, Valid: true},
+		TransactionID: pgtype.Text{String: resource.TransactionID, Valid: true},
+	})
+	if err != nil {
+		log.Warn().Err(err).Str("notification_id", notification.ID).Msg("failed to record settlement notification")
+	}
+
+	// 📤 派发分账任务
+	if server.taskDistributor != nil {
+		err = server.taskDistributor.DistributeTaskProcessProfitSharing(
+			ctx,
+			&worker.ProfitSharingPayload{
+				PaymentOrderID: po.ID,
+				OrderID:        subOrder.OrderID,
+			},
+			asynq.MaxRetry(5),
+			asynq.ProcessIn(2*time.Second), // 短暂延迟确保数据库一致性
+			asynq.Queue(worker.QueueCritical),
+		)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", po.ID).
+				Str("merchant_trade_no", resource.MerchantTradeNo).
+				Msg("⚠️ ALERT: settlement profit sharing task enqueue failed")
+		} else {
+			log.Info().
+				Int64("payment_order_id", po.ID).
+				Int64("order_id", subOrder.OrderID).
+				Str("confirm_method", func() string {
+					if resource.ConfirmReceiveMethod == 2 {
+						return "T+2 auto"
+					}
+					return "user"
+				}()).
+				Msg("profit sharing task dispatched via settlement event")
+		}
+	}
+
+	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+}

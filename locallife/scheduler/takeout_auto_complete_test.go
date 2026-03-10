@@ -5,11 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hibiken/asynq"
-	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/worker"
 	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -60,20 +57,7 @@ func TestTakeoutAutoCompleteScheduler_AutoCompletesWithoutClaim(t *testing.T) {
 		},
 	)
 
-	po := db.PaymentOrder{ID: 9001, Status: "paid", PaymentType: "profit_sharing"}
-	store.EXPECT().GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
-		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-		BusinessType: "order",
-	}).Return(po, nil)
-
-	distributor.EXPECT().DistributeTaskProcessProfitSharing(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, payload *worker.ProfitSharingPayload, opts ...asynq.Option) error {
-			require.Equal(t, po.ID, payload.PaymentOrderID)
-			require.Equal(t, order.ID, payload.OrderID)
-			return nil
-		},
-	)
-
+	// 分账不再由自动完成调度器触发 —— 由微信结算事件驱动 (trade_manage_order_settlement)
 	s := NewTakeoutAutoCompleteScheduler(store, distributor)
 	s.autoCompleteTakeoutOrders()
 }

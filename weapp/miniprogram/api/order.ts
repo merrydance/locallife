@@ -115,6 +115,8 @@ export interface OrderResponse {
   // 预定相关
   reservation_id?: number
   replaced_by_order_id?: number
+  // 微信支付交易号，用于拉起小程序确认收货组件
+  wechat_transaction_id?: string
 }
 
 /** 计算后的应付金额（便捷属性，total_amount - discount_amount） */

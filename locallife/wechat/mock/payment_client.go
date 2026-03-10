@@ -146,6 +146,21 @@ func (mr *MockPaymentClientInterfaceMockRecorder) DecryptRefundNotification(noti
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptRefundNotification", reflect.TypeOf((*MockPaymentClientInterface)(nil).DecryptRefundNotification), notification)
 }
 
+// GenerateJSAPIPayParams mocks base method.
+func (m *MockPaymentClientInterface) GenerateJSAPIPayParams(prepayID string) (*wechat.JSAPIPayParams, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateJSAPIPayParams", prepayID)
+	ret0, _ := ret[0].(*wechat.JSAPIPayParams)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateJSAPIPayParams indicates an expected call of GenerateJSAPIPayParams.
+func (mr *MockPaymentClientInterfaceMockRecorder) GenerateJSAPIPayParams(prepayID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateJSAPIPayParams", reflect.TypeOf((*MockPaymentClientInterface)(nil).GenerateJSAPIPayParams), prepayID)
+}
+
 // QueryOrderByOutTradeNo mocks base method.
 func (m *MockPaymentClientInterface) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*wechat.OrderQueryResponse, error) {
 	m.ctrl.T.Helper()
@@ -174,21 +189,6 @@ func (m *MockPaymentClientInterface) QueryRefund(ctx context.Context, outRefundN
 func (mr *MockPaymentClientInterfaceMockRecorder) QueryRefund(ctx, outRefundNo any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRefund", reflect.TypeOf((*MockPaymentClientInterface)(nil).QueryRefund), ctx, outRefundNo)
-}
-
-// GenerateJSAPIPayParams mocks base method.
-func (m *MockPaymentClientInterface) GenerateJSAPIPayParams(prepayID string) (*wechat.JSAPIPayParams, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateJSAPIPayParams", prepayID)
-	ret0, _ := ret[0].(*wechat.JSAPIPayParams)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GenerateJSAPIPayParams indicates an expected call of GenerateJSAPIPayParams.
-func (mr *MockPaymentClientInterfaceMockRecorder) GenerateJSAPIPayParams(prepayID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateJSAPIPayParams", reflect.TypeOf((*MockPaymentClientInterface)(nil).GenerateJSAPIPayParams), prepayID)
 }
 
 // VerifyNotificationSignature mocks base method.
@@ -392,6 +392,21 @@ func (m *MockEcommerceClientInterface) DecryptProfitSharingNotification(notifica
 func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptProfitSharingNotification(notification any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptProfitSharingNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptProfitSharingNotification), notification)
+}
+
+// DecryptSettlementNotification mocks base method.
+func (m *MockEcommerceClientInterface) DecryptSettlementNotification(notification *wechat.PaymentNotification) (*wechat.SettlementNotificationResource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecryptSettlementNotification", notification)
+	ret0, _ := ret[0].(*wechat.SettlementNotificationResource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DecryptSettlementNotification indicates an expected call of DecryptSettlementNotification.
+func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptSettlementNotification(notification any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptSettlementNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptSettlementNotification), notification)
 }
 
 // DeleteProfitSharingReceiver mocks base method.

@@ -144,3 +144,31 @@ func (mr *MockWechatClientMockRecorder) OCRPrintedText(ctx, imgFile any) *gomock
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "OCRPrintedText", reflect.TypeOf((*MockWechatClient)(nil).OCRPrintedText), ctx, imgFile)
 }
+
+// UploadCombinedShippingInfo mocks base method.
+func (m *MockWechatClient) UploadCombinedShippingInfo(ctx context.Context, req *wechat.UploadCombinedShippingInfoRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UploadCombinedShippingInfo", ctx, req)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UploadCombinedShippingInfo indicates an expected call of UploadCombinedShippingInfo.
+func (mr *MockWechatClientMockRecorder) UploadCombinedShippingInfo(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadCombinedShippingInfo", reflect.TypeOf((*MockWechatClient)(nil).UploadCombinedShippingInfo), ctx, req)
+}
+
+// UploadShippingInfo mocks base method.
+func (m *MockWechatClient) UploadShippingInfo(ctx context.Context, req *wechat.UploadShippingInfoRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UploadShippingInfo", ctx, req)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UploadShippingInfo indicates an expected call of UploadShippingInfo.
+func (mr *MockWechatClientMockRecorder) UploadShippingInfo(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UploadShippingInfo", reflect.TypeOf((*MockWechatClient)(nil).UploadShippingInfo), ctx, req)
+}

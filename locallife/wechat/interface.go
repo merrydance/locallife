@@ -30,6 +30,13 @@ type WechatClient interface {
 	// scene: 场景参数，page: 跳转页面路径
 	// 返回PNG图片数据
 	GetWXACodeUnlimited(ctx context.Context, req *WXACodeRequest) ([]byte, error)
+
+	// UploadShippingInfo 上传单商户支付发货信息（同城配送）
+	// 在骑手取货后调用，logistics_type=2（同城配送）
+	UploadShippingInfo(ctx context.Context, req *UploadShippingInfoRequest) error
+
+	// UploadCombinedShippingInfo 上传合单支付发货信息（同城配送）
+	UploadCombinedShippingInfo(ctx context.Context, req *UploadCombinedShippingInfoRequest) error
 }
 
 // PaymentClientInterface 微信支付客户端接口（小程序直连支付）
@@ -157,6 +164,9 @@ type EcommerceClientInterface interface {
 
 	// DecryptEcommerceRefundNotification 解密电商退款通知
 	DecryptEcommerceRefundNotification(notification *PaymentNotification) (*EcommerceRefundNotification, error)
+
+	// DecryptSettlementNotification 解密结算事件通知（trade_manage_order_settlement）
+	DecryptSettlementNotification(notification *PaymentNotification) (*SettlementNotificationResource, error)
 
 	// VerifyNotificationSignature 验证微信支付回调签名
 	VerifyNotificationSignature(signature, timestamp, nonce, body string) error

@@ -21,16 +21,14 @@ const (
 // TakeoutAutoCompleteScheduler 外卖订单自动完成调度器
 // 规则：骑手送达后，用户未手动完成且无索赔的情况下，1小时后自动完成
 type TakeoutAutoCompleteScheduler struct {
-	cron            *cron.Cron
-	store           db.Store
-	taskDistributor worker.TaskDistributor
+	cron  *cron.Cron
+	store db.Store
 }
 
-func NewTakeoutAutoCompleteScheduler(store db.Store, taskDistributor worker.TaskDistributor) *TakeoutAutoCompleteScheduler {
+func NewTakeoutAutoCompleteScheduler(store db.Store, _ worker.TaskDistributor) *TakeoutAutoCompleteScheduler {
 	return &TakeoutAutoCompleteScheduler{
-		cron:            cron.New(cron.WithSeconds()),
-		store:           store,
-		taskDistributor: taskDistributor,
+		cron:  cron.New(cron.WithSeconds()),
+		store: store,
 	}
 }
 
@@ -101,20 +99,6 @@ func (s *TakeoutAutoCompleteScheduler) autoCompleteTakeoutOrders() {
 			OperatorType: pgtype.Text{String: "system", Valid: true},
 			Notes:        pgtype.Text{String: "送达后1小时无操作自动完成", Valid: true},
 		})
-
-		// 完成触发分账（若是 profit_sharing）
-		if s.taskDistributor != nil {
-			po, err := s.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-				OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
-				BusinessType: "order",
-			})
-			if err == nil && po.Status == "paid" && po.PaymentType == "profit_sharing" {
-				_ = s.taskDistributor.DistributeTaskProcessProfitSharing(ctx, &worker.ProfitSharingPayload{
-					PaymentOrderID: po.ID,
-					OrderID:        order.ID,
-				})
-			}
-		}
 
 		completedCount++
 	}

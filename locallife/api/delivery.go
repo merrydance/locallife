@@ -12,6 +12,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
 
@@ -39,6 +40,106 @@ func (server *Server) sendDeliveryStatusNotification(
 		},
 		ExpiresAt: &expiresAt,
 	})
+}
+
+// uploadShippingInfoAsync 骑手取货后异步上报发货信息给微信平台
+// 满足「发货信息管理」合规要求，触发后续结算事件推送。
+// 仅对已支付的 profit_sharing 订单上报（堂食/自取无需上报）。
+func (server *Server) uploadShippingInfoAsync(_ context.Context, orderID int64, userID int64) {
+	if server.wechatClient == nil {
+		return
+	}
+	go func() {
+		bgCtx := context.Background()
+		notifyURL := server.config.WechatShippingSettleNotifyURL
+
+		// 1. 查询支付订单
+		po, err := server.store.GetLatestPaymentOrderByOrder(bgCtx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
+			BusinessType: "order",
+		})
+		if err != nil {
+			log.Warn().Err(err).Int64("order_id", orderID).Msg("shipping upload: get payment order failed, skip")
+			return
+		}
+		if po.Status != "paid" {
+			log.Debug().Int64("order_id", orderID).Str("status", po.Status).Msg("shipping upload: payment order not paid, skip")
+			return
+		}
+
+		// 2. 获取用户 openid
+		user, err := server.store.GetUser(bgCtx, userID)
+		if err != nil || user.WechatOpenid == "" {
+			log.Warn().Err(err).Int64("user_id", userID).Msg("shipping upload: get user openid failed, skip")
+			return
+		}
+
+		now := time.Now()
+
+		switch po.PaymentType {
+		case "profit_sharing":
+			// 合单支付 —— 使用 upload_combined_shipping_info
+			if !po.CombinedPaymentID.Valid {
+				log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: profit_sharing order missing combined_payment_id, skip")
+				return
+			}
+
+			subOrders, err := server.store.GetCombinedPaymentSubOrdersByOrder(bgCtx, orderID)
+			if err != nil || len(subOrders) == 0 {
+				log.Warn().Err(err).Int64("order_id", orderID).Msg("shipping upload: get combined sub orders failed, skip")
+				return
+			}
+
+			// 取合单号：从第一个子单的 combined_payment_id 关联回合单表
+			// combined_payment.combine_out_trade_no = PaymentOrder.out_trade_no（合单层）
+			// 这里使用 PaymentOrder.out_trade_no 即为合单商户订单号
+			var shippingSubs []wechat.ShippingSubOrder
+			for _, sub := range subOrders {
+				shippingSubs = append(shippingSubs, wechat.ShippingSubOrder{
+					MchID:      sub.SubMchid,
+					OutTradeNo: sub.OutTradeNo,
+				})
+			}
+
+			if err := server.wechatClient.UploadCombinedShippingInfo(bgCtx, &wechat.UploadCombinedShippingInfoRequest{
+				CombineOutTradeNo: po.OutTradeNo,
+				PayerOpenID:       user.WechatOpenid,
+				NotifyURL:         notifyURL,
+				UploadTime:        now,
+				SubOrders:         shippingSubs,
+			}); err != nil {
+				log.Error().Err(err).Int64("order_id", orderID).Msg("⚠️ upload_combined_shipping_info failed")
+			} else {
+				log.Info().Int64("order_id", orderID).Msg("upload_combined_shipping_info ok")
+			}
+
+		case "miniprogram":
+			// 单商户直连支付 —— 使用 upload_shipping_info
+			transactionID := ""
+			if po.TransactionID.Valid {
+				transactionID = po.TransactionID.String
+			}
+			if transactionID == "" && po.OutTradeNo == "" {
+				log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: no transaction_id or out_trade_no, skip")
+				return
+			}
+
+			if err := server.wechatClient.UploadShippingInfo(bgCtx, &wechat.UploadShippingInfoRequest{
+				TransactionID: transactionID,
+				OutTradeNo:    po.OutTradeNo,
+				PayerOpenID:   user.WechatOpenid,
+				NotifyURL:     notifyURL,
+				UploadTime:    now,
+			}); err != nil {
+				log.Error().Err(err).Int64("order_id", orderID).Msg("⚠️ upload_shipping_info failed")
+			} else {
+				log.Info().Int64("order_id", orderID).Msg("upload_shipping_info ok")
+			}
+
+		default:
+			// 余额支付等无需上报
+		}
+	}()
 }
 
 // ==================== 推荐订单 ====================
@@ -541,6 +642,9 @@ func (server *Server) confirmPickup(ctx *gin.Context) {
 		"骑手已取餐",
 		fmt.Sprintf("订单%s骑手已取到餐品，即将配送", order.OrderNo),
 	)
+
+	// 📦 合规：骑手取货即视为「货已发出」，异步上报微信发货信息
+	server.uploadShippingInfoAsync(ctx, order.ID, order.UserID)
 
 	ctx.JSON(http.StatusOK, server.newDeliveryResponse(ctx, updated))
 }

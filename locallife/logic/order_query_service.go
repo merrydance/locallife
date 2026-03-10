@@ -32,11 +32,20 @@ func (s *OrderService) GetUserOrder(ctx context.Context, input GetUserOrderQuery
 
 	etaMinutes, estimatedDeliveryAt := s.buildGetUserOrderDeliveryETA(ctx, order)
 
+	var wechatTransactionID *string
+	if po, err := s.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		BusinessType: "order",
+	}); err == nil && po.TransactionID.Valid {
+		wechatTransactionID = &po.TransactionID.String
+	}
+
 	return GetUserOrderQueryResult{
 		Order:               order,
 		Items:               items,
 		DeliveryEtaMinutes:  etaMinutes,
 		EstimatedDeliveryAt: estimatedDeliveryAt,
+		WechatTransactionID: wechatTransactionID,
 	}, nil
 }
 

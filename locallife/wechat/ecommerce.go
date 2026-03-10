@@ -1111,6 +1111,37 @@ func (c *EcommerceClient) DecryptEcommerceRefundNotification(notification *Payme
 	return &result, nil
 }
 
+// SettlementNotificationResource 微信结算事件通知解密后的资源数据
+// 事件类型：trade_manage_order_settlement
+// 该事件由平台在用户确认收货或 T+2 自动确认后推送，settlement_time 非空代表资金已实际结算。
+type SettlementNotificationResource struct {
+	AppID                string `json:"appid"`
+	TransactionID        string `json:"transaction_id"`         // 微信支付订单号（子单）
+	MerchantTradeNo      string `json:"merchant_trade_no"`      // 商户子单号（我方 out_trade_no）
+	ConfirmReceiveMethod int    `json:"confirm_receive_method"` // 1=用户手动确收, 2=T+2自动确收
+	SettlementTime       string `json:"settlement_time"`        // 非空表示资金已结算
+	SuccessTime          string `json:"success_time"`
+}
+
+// DecryptSettlementNotification 解密结算事件通知（trade_manage_order_settlement）
+func (c *EcommerceClient) DecryptSettlementNotification(notification *PaymentNotification) (*SettlementNotificationResource, error) {
+	plaintext, err := c.decryptAESGCM(
+		notification.Resource.Nonce,
+		notification.Resource.Ciphertext,
+		notification.Resource.AssociatedData,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt notification: %w", err)
+	}
+
+	var result SettlementNotificationResource
+	if err := json.Unmarshal(plaintext, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal notification: %w", err)
+	}
+
+	return &result, nil
+}
+
 // ==================== 工具方法 ====================
 
 // doRequest 执行 HTTP 请求（复用基础客户端）

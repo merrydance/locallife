@@ -41,6 +41,7 @@ type Config struct {
 	WechatPayAPIV3Key                string        `mapstructure:"WECHAT_PAY_API_V3_KEY"`                // APIv3密钥
 	WechatPayNotifyURL               string        `mapstructure:"WECHAT_PAY_NOTIFY_URL"`                // 支付回调URL
 	WechatPayRefundNotifyURL         string        `mapstructure:"WECHAT_PAY_REFUND_NOTIFY_URL"`         // 退款回调URL
+	WechatShippingSettleNotifyURL    string        `mapstructure:"WECHAT_SHIPPING_SETTLE_NOTIFY_URL"`    // 发货结算事件回调URL（trade_manage_order_settlement）
 	WechatPayPlatformCertificatePath string        `mapstructure:"WECHAT_PAY_PLATFORM_CERTIFICATE_PATH"` // 微信支付平台证书路径（已弃用，建议使用公钥）
 	WechatPayPlatformPublicKeyPath   string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`  // 微信支付平台公钥路径（推荐）
 	WechatPayPlatformPublicKeyID     string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`    // 微信支付平台公钥ID

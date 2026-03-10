@@ -138,7 +138,7 @@ func (processor *RedisTaskProcessor) ensurePersonalProfitSharingReceiver(ctx con
 		AppID:        processor.ecommerceClient.GetSpAppID(),
 		Type:         wechat.ReceiverTypePersonal,
 		Account:      openid,
-		RelationType: wechat.RelationStaff,
+		RelationType: wechat.RelationPartner, // 骑手为平台合作伙伴（非雇员），消费者委托代取模式
 	}
 	if realName != "" {
 		encryptedName, err := processor.ecommerceClient.EncryptSensitiveData(realName)
