@@ -172,6 +172,7 @@
         "orders/list/index",
         "orders/detail/index",
         "tables/index",
+        "printers/index",
         "profile-images/index",
         "delivery-promotions/index"
       ],

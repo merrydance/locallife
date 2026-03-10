@@ -1,0 +1,175 @@
+.page-container {
+  background-color: var(--td-bg-color-page);
+  min-height: 100vh;
+  padding-bottom: 120rpx;
+}
+
+.loading-state {
+  padding: 200rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+/* ==================== 打印机列表 ==================== */
+
+.printer-list {
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.printer-card {
+  background-color: #fff;
+  border-radius: 16rpx;
+  padding: 28rpx 24rpx;
+  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.printer-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.printer-name-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.printer-name {
+  font-size: 32rpx;
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+}
+
+.printer-info {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.info-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.info-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+  width: 100rpx;
+  flex-shrink: 0;
+}
+
+.info-value {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.info-value.sn {
+  font-family: 'Courier New', monospace;
+  font-size: 24rpx;
+  letter-spacing: 1px;
+}
+
+.scene-tags {
+  display: flex;
+  gap: 8rpx;
+  flex-wrap: wrap;
+}
+
+.no-scene {
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.printer-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  padding-top: 8rpx;
+  border-top: 1rpx solid var(--td-component-stroke);
+}
+
+/* ==================== 表单弹窗 ==================== */
+
+.form-popup {
+  background: var(--td-bg-color-container);
+  padding: 32rpx 24rpx;
+  border-top-left-radius: 20rpx;
+  border-top-right-radius: 20rpx;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.form-title {
+  font-size: 34rpx;
+  font-weight: bold;
+  color: var(--td-text-color-primary);
+  text-align: center;
+  margin-bottom: 32rpx;
+}
+
+.form-item {
+  margin-bottom: 28rpx;
+}
+
+.form-item-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.form-label {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+  margin-bottom: 10rpx;
+  display: block;
+}
+
+.required {
+  color: var(--td-error-color);
+}
+
+.form-input {
+  width: 100%;
+  height: 80rpx;
+  padding: 0 20rpx;
+  box-sizing: border-box;
+  border: 1rpx solid var(--td-component-stroke);
+  border-radius: 8rpx;
+  font-size: 28rpx;
+  color: var(--td-text-color-primary);
+  background-color: var(--td-bg-color-secondarycontainer);
+}
+
+.inline-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24rpx;
+  padding-top: 4rpx;
+}
+
+.inline-option {
+  display: flex;
+  align-items: center;
+  gap: 8rpx;
+  font-size: 28rpx;
+  color: var(--td-text-color-primary);
+}
+
+.form-actions {
+  display: flex;
+  gap: 20rpx;
+  margin-top: 36rpx;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.form-actions t-button {
+  flex: 1;
+}
