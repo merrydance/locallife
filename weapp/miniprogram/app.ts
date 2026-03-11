@@ -19,6 +19,7 @@ App<IAppOption>({
     latitude: null,
     longitude: null,
     userRole: 'guest',
+    userRoles: [] as string[],
     userId: undefined as number | undefined,
     merchantId: undefined,
     merchantName: '',
@@ -307,13 +308,17 @@ App<IAppOption>({
       city: '',
       language: 'zh_CN'
     }
-    if (user.roles.includes('MERCHANT')) {
+    // 缓存完整角色列表（小写），供 user_center onShow 快速恢复工作台
+    this.globalData.userRoles = (user.roles || []).map((r: string) => String(r).toLowerCase())
+    if (user.roles.includes('merchant')) {
       this.globalData.userRole = 'merchant'
-    } else if (user.roles.includes('RIDER')) {
+    } else if (user.roles.includes('rider')) {
       this.globalData.userRole = 'rider'
-    } else if (user.roles.includes('OPERATOR')) {
+    } else if (user.roles.includes('operator')) {
       this.globalData.userRole = 'operator'
-    } else if (user.roles.includes('CUSTOMER')) {
+    } else if (user.roles.includes('admin')) {
+      this.globalData.userRole = 'operator' // admin 降级到 operator 以满足类型约束
+    } else if (user.roles.includes('customer')) {
       this.globalData.userRole = 'customer'
     }
   },

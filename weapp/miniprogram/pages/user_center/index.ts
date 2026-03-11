@@ -100,7 +100,10 @@ Page({
   onShow() {
     // Refresh role in case it changed
     if (app.globalData.userInfo) {
-      this.updateUser(app.globalData.userInfo, app.globalData.userRole)
+      // 优先使用缓存的完整角色数组，避免 onShow 用 userRole 单值（可能是 'guest'）清空工作台
+      const cachedRoles = app.globalData.userRoles
+      const roles = cachedRoles && cachedRoles.length > 0 ? cachedRoles : app.globalData.userRole
+      this.updateUser(app.globalData.userInfo, roles)
     }
     // Always try to fetch fresh data on show to ensure persistence check
     this.refreshUserInfo()
@@ -193,6 +196,8 @@ Page({
             nickName: user.full_name || '微信用户',
             avatarUrl: finalAvatar
           } as WechatMiniprogram.UserInfo
+          // 缓存完整角色列表，供 onShow 快速恢复工作台
+          app.globalData.userRoles = (user.roles || []).map((r) => String(r).toLowerCase())
 
           // Update Local Data
           this.updateUser(app.globalData.userInfo, user.roles || [])

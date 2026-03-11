@@ -16,6 +16,8 @@ interface IAppOption {
         latitude: number | null
         longitude: number | null
         userRole: 'guest' | 'customer' | 'merchant' | 'rider' | 'operator'
+        // 完整角色列表（小写），由 user_center 首次拉取后缓存，用于 onShow 快速恢复工作台
+        userRoles?: string[]
         userId?: number
         merchantId?: string
         merchantName?: string
