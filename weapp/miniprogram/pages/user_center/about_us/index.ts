@@ -1,12 +1,14 @@
+import { APP_VERSION } from '../../../config/index'
+
 Page({
   data: {
     navBarHeight: 0,
-    scrollViewHeight: 0
+    scrollViewHeight: 0,
+    version: APP_VERSION
   },
 
-  onLoad() {
-    // Initialization logic if needed
-  },
+  onLoad() {},
+
 
   onNavHeight(e: any) {
     const { navBarHeight } = e.detail

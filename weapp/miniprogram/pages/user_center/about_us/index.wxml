@@ -14,7 +14,7 @@
           <t-icon name="app" size="80rpx" color="#fff" />
         </view>
         <view class="brand-name">乐客来福</view>
-        <view class="version">Version 0.9.16</view>
+        <view class="version">Version {{version}}</view>
       </view>
 
       <view class="intro-section">

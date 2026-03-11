@@ -1,6 +1,6 @@
 {
   "name": "ll-miniapp",
-  "version": "1.0.0",
+  "version": "0.9.17",
   "description": "LocalLife Mini Program",
   "main": "miniprogram/app.ts",
   "scripts": {
