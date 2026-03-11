@@ -48,49 +48,18 @@
           <t-tag size="small" variant="dark" theme="default" shape="round" class="status-tag {{item.statusClass}}">{{item.statusLabel}}</t-tag>
         </view>
 
-        <!-- 内容区：商品预览 -->
-        <view class="card-content">
-          <!-- 单商品展示 -->
-          <view wx:if="{{item.previewItems.length === 1}}" class="single-item">
-            <t-image src="{{item.previewItems[0].imageUrl}}" mode="aspectFill" width="140rpx" height="140rpx" shape="round" class="item-img" />
-            <view class="item-details">
-              <view class="item-name">{{item.previewItems[0].dishName}}</view>
-              <!-- 预留规格展示 -->
-              <!-- <view class="item-specs">具体规格</view> -->
-            </view>
-            <view class="item-qty">x{{item.previewItems[0].quantity}}</view>
+        <!-- 内容区：紧凑元信息 -->
+        <view class="card-meta">
+          <view class="meta-info">
+            <text wx:if="{{item.highlight}}" class="meta-highlight">{{item.highlight}}</text>
+            <text class="meta-time">{{item.createTimeDisplay}}</text>
           </view>
-
-          <!-- 多商品展示 -->
-          <view wx:else class="multi-items">
-            <scroll-view scroll-x class="item-scroll" enable-flex catchtap="preventBubble">
-              <view class="scroll-inner">
-                <view wx:for="{{item.previewItems}}" wx:for-item="dish" wx:key="dishId" class="scroll-item">
-                  <t-image src="{{dish.imageUrl}}" mode="aspectFill" width="140rpx" height="140rpx" shape="round" />
-                  <view class="item-sub-name">{{dish.dishName}}</view>
-                </view>
-              </view>
-            </scroll-view>
-            <view class="item-summary">
-              <view class="summary-price">
-                 <text class="price-num">{{item.totalDisplay}}</text>
-              </view>
-              <view class="summary-count">共{{item.itemCount}}件</view>
-            </view>
-          </view>
+          <text class="meta-total">{{item.totalDisplay}}</text>
         </view>
 
-        <!-- 底部：结算信息 & 操作按钮 -->
-        <view class="card-footer">
-          <!-- 单商品的结算信息因为布局不同，在这里统一补齐总价显示 -->
-          <view wx:if="{{item.previewItems.length === 1}}" class="footer-price">
-             <text class="count-label">共{{item.itemCount}}件</text>
-             <text class="total-label">合计</text>
-             <text class="total-val">{{item.totalDisplay}}</text>
-          </view>
-          <view wx:else></view> <!-- 占位撑开 -->
-
-          <view class="footer-actions" catchtap="preventBubble">
+        <!-- 底部：操作按钮 -->
+        <view class="card-footer" catchtap="preventBubble">
+          <view class="footer-actions">
             <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelOrder" data-id="{{item.id}}" t-class="action-btn">取消订单</t-button>
 
             <t-button wx:if="{{orderType === 'dine_in' || orderType === 'reservation'}}" size="small" icon="call" shape="round" catchtap="onCallMerchant" data-phone="{{item.merchantPhone}}" t-class="action-btn">联系商家</t-button>
