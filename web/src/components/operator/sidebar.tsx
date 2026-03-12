@@ -104,9 +104,16 @@ const navGroups: Array<{
     description: "GMV 与订单走势",
     items: [
       {
-        label: "日趋势",
+        label: "区域管理",
         href: "/operator/regions",
         activePrefix: "/operator/regions",
+        exact: true,
+        icon: BarChart3,
+      },
+      {
+        label: "日趋势",
+        href: "/operator/regions/stats",
+        activePrefix: "/operator/regions/stats",
         exact: true,
         icon: BarChart3,
       },
