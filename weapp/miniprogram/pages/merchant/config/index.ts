@@ -18,7 +18,8 @@ Page({
       { id: 'tables', title: '桌台管理', desc: '桌台信息与二维码维护', path: '/pages/merchant/tables/index' },
       { id: 'profile-images', title: '店铺图片管理', desc: '更新 Logo、门头照、环境照', path: '/pages/merchant/profile-images/index' },
       { id: 'delivery-promotions', title: '配送优惠管理', desc: '配置满减免运费等配送优惠活动', path: '/pages/merchant/delivery-promotions/index' },
-      { id: 'printers', title: '打印机管理', desc: '添加、配置云打印机设备', path: '/pages/merchant/printers/index' }
+      { id: 'printers', title: '打印机管理', desc: '添加、配置云打印机设备', path: '/pages/merchant/printers/index' },
+      { id: 'finance', title: '银行账户 / 收款设置', desc: '绑定银行账户，用于分账收款与提现', path: '/pages/merchant/finance/index' }
     ] as ConfigItem[]
   },
 

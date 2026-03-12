@@ -204,5 +204,23 @@ Page({
       const url = `/pages/reservation/confirm/index?roomId=${room.id}&merchantId=${room.merchant_id}&roomName=${encodeURIComponent(room.name)}&capacity=${room.capacity}&deposit=${room.deposit}&date=${selectedDate}&time=${time}`
       wx.navigateTo({ url })
     }
+  },
+
+  onShareAppMessage(): WechatMiniprogram.Page.ICustomShareContent {
+    const { room, roomId } = this.data
+    return {
+      title: room ? `${room.name} — 一起来预订包间！` : '发现一个好包间，快来看看！',
+      path: `/pages/reservation/room-detail/index?id=${roomId}`,
+      imageUrl: room?.images?.[0] || ''
+    }
+  },
+
+  onShareTimeline(): WechatMiniprogram.Page.ICustomTimelineContent {
+    const { room, roomId } = this.data
+    return {
+      title: room ? `${room.name} — 包间推荐` : '包间推荐',
+      query: `id=${roomId}`,
+      imageUrl: room?.images?.[0] || ''
+    }
   }
 })

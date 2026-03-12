@@ -44,7 +44,14 @@
 
     <!-- 基本信息 -->
     <view class="info-section card">
-      <view class="shop-dish-name">{{dish.name}}</view>
+      <view class="dish-name-row">
+        <view class="shop-dish-name">{{dish.name}}</view>
+        <button class="share-btn-reset" open-type="share">
+          <view class="share-icon-box">
+            <t-icon name="share" size="40rpx" color="var(--td-brand-color)" />
+          </view>
+        </button>
+      </view>
       <view class="price-row">
         <text class="price">¥{{dish.priceDisplay}}</text>
         <text wx:if="{{dish.originalPriceDisplay && dish.originalPriceDisplay !== dish.priceDisplay}}" class="original-price">¥{{dish.originalPriceDisplay}}</text>

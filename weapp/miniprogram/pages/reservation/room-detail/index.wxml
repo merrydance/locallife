@@ -30,7 +30,14 @@
     <view class="info-section card">
       <view class="header-row">
         <text class="room-name">{{room.name}}</text>
-        <t-tag theme="success" variant="dark" shape="round">可预订</t-tag>
+        <view class="header-row-right">
+          <t-tag theme="success" variant="dark" shape="round">可预订</t-tag>
+          <button class="share-btn-reset" open-type="share">
+            <view class="share-icon-box">
+              <t-icon name="share" size="36rpx" color="var(--td-brand-color)" />
+            </view>
+          </button>
+        </view>
       </view>
       <view class="detail-row">
         <text class="label">最高容纳</text>

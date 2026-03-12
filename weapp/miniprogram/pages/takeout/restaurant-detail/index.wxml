@@ -34,6 +34,12 @@
         <text>约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</text>
       </view>
     </view>
+    <view class="header-share-row">
+      <button class="share-btn-reset header-share-btn" open-type="share">
+        <t-icon name="share" size="28rpx" color="rgba(255,255,255,0.85)" />
+        <text class="header-share-text">分享</text>
+      </button>
+    </view>
   </view>
 </view>
 <!-- header-section closing handled below -->
