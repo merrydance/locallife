@@ -20,6 +20,8 @@ export type AdminOperatorApplicationItem = {
 export type OperatorApplicationDetail = {
   id: number;
   user_id: number;
+  /** 申请已通过且运营商实体存在时由后端返回 */
+  operator_id?: number;
   region_id: number;
   region_name?: string;
   name?: string;
@@ -38,6 +40,19 @@ export type OperatorApplicationDetail = {
   reviewed_at?: string;
   created_at: string;
   updated_at: string;
+};
+
+export type AdminOperatorRegionItem = {
+  id: number;
+  region_id: number;
+  region_name: string;
+  region_code: string;
+  status: string;
+};
+
+export type AdminOperatorRegionsResponse = {
+  regions: AdminOperatorRegionItem[];
+  total: number;
 };
 
 export type AdminOperatorApplicationsResponse = {

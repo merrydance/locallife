@@ -136,13 +136,13 @@ export function ReviewsPageClient() {
           <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
             <Tabs defaultValue="all" className="w-full md:w-auto" onValueChange={setCurrentTab}>
               <TabsList className="bg-slate-100 p-1 rounded-xl h-11">
-                <TabsTrigger value="all" className="rounded-lg px-6 font-bold transition-all data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                <TabsTrigger value="all" className="rounded-lg px-6 font-bold transition-all data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                   全部评价
                 </TabsTrigger>
-                <TabsTrigger value="unreplied" className="rounded-lg px-6 font-bold transition-all data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                <TabsTrigger value="unreplied" className="rounded-lg px-6 font-bold transition-all data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                   待回复
                 </TabsTrigger>
-                <TabsTrigger value="replied" className="rounded-lg px-6 font-bold transition-all data-[state=active]:bg-white data-[state=active]:shadow-sm">
+                <TabsTrigger value="replied" className="rounded-lg px-6 font-bold transition-all data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                   已回复
                 </TabsTrigger>
               </TabsList>

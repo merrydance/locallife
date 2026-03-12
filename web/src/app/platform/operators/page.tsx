@@ -52,6 +52,8 @@ import { apiGet, apiPost, resolveProtectedMediaCandidates } from "@/lib/api";
 import type {
   AdminOperatorApplicationItem,
   AdminOperatorApplicationsResponse,
+  AdminOperatorRegionItem,
+  AdminOperatorRegionsResponse,
   OperatorApplicationDetail,
 } from "@/types/platform-admin";
 
@@ -91,6 +93,10 @@ export default function PlatformOperatorApplicationsPage() {
   const [approveConfirmOpen, setApproveConfirmOpen] = useState(false);
   const [rejectConfirmOpen, setRejectConfirmOpen] = useState(false);
 
+  // 已通过运营商的多区域列表
+  const [operatorRegions, setOperatorRegions] = useState<AdminOperatorRegionItem[]>([]);
+  const [regionsLoading, setRegionsLoading] = useState(false);
+
   const loadList = useCallback(async () => {
     setLoading(true);
     try {
@@ -118,7 +124,17 @@ export default function PlatformOperatorApplicationsPage() {
       setDetail(response);
       setDetailRejectReason(response.reject_reason || "");
       setSignedAssetUrls({});
+      setOperatorRegions([]);
       setDetailOpen(true);
+
+      // 如果已通过且后端返回了 operator_id，加载多区域
+      if (response.status === "approved" && response.operator_id) {
+        setRegionsLoading(true);
+        apiGet<AdminOperatorRegionsResponse>(`/admin/operators/${response.operator_id}/regions`)
+          .then((res) => setOperatorRegions(res.regions ?? []))
+          .catch(() => setOperatorRegions([]))
+          .finally(() => setRegionsLoading(false));
+      }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "加载申请详情失败";
       toast.error(message);
@@ -386,7 +402,7 @@ export default function PlatformOperatorApplicationsPage() {
                           <div className="mt-1">{statusBadge(detail.status)}</div>
                         </div>
                         <div className="rounded-md border bg-muted/30 px-3 py-2">
-                          <div className="text-xs text-muted-foreground">申请区域</div>
+                          <div className="text-xs text-muted-foreground">入驻区域</div>
                           <div className="mt-1 text-sm font-medium">
                             {detail.region_name || detail.region_id || "-"}
                           </div>
@@ -400,6 +416,35 @@ export default function PlatformOperatorApplicationsPage() {
                           <div className="mt-1 text-sm">{formatDateTime(detail.reviewed_at)}</div>
                         </div>
                       </div>
+
+                      {/* 已通过运营商：展示当前管理的所有区域 */}
+                      {detail.status === "approved" && (
+                        <div className="rounded-md border bg-muted/10 p-4 space-y-2">
+                          <div className="text-xs font-semibold tracking-wide text-muted-foreground border-b pb-2">
+                            当前管理区域
+                            {!regionsLoading && operatorRegions.length > 0 && (
+                              <span className="ml-1 text-primary">（共 {operatorRegions.length} 个）</span>
+                            )}
+                          </div>
+                          {regionsLoading ? (
+                            <div className="flex gap-2 flex-wrap">
+                              {Array.from({ length: 3 }).map((_, i) => (
+                                <Skeleton key={i} className="h-7 w-20 rounded-full" />
+                              ))}
+                            </div>
+                          ) : operatorRegions.length > 0 ? (
+                            <div className="flex gap-2 flex-wrap">
+                              {operatorRegions.map((r) => (
+                                <Badge key={r.id} variant="secondary" className="text-xs">
+                                  {r.region_name}
+                                </Badge>
+                              ))}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">仅管理入驻区域（{detail.region_name || "-"}）</p>
+                          )}
+                        </div>
+                      )}
 
                       <div className="grid gap-4 lg:grid-cols-2">
                         <div className="space-y-3 rounded-md border bg-muted/10 p-4">

@@ -318,13 +318,13 @@ export function MembersPageClient() {
       <PageContent>
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="bg-slate-100 p-1 rounded-xl h-12">
-            <TabsTrigger value="members" className="rounded-lg px-8 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="members" className="rounded-lg px-8 font-bold data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 会员查询
             </TabsTrigger>
-            <TabsTrigger value="rules" className="rounded-lg px-8 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="rules" className="rounded-lg px-8 font-bold data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 充值规则
             </TabsTrigger>
-            <TabsTrigger value="settings" className="rounded-lg px-8 font-bold data-[state=active]:bg-white data-[state=active]:shadow-sm">
+            <TabsTrigger value="settings" className="rounded-lg px-8 font-bold data-[state=active]:bg-white data-[state=active]:text-foreground data-[state=active]:shadow-sm">
                 储值使用设置
             </TabsTrigger>
           </TabsList>

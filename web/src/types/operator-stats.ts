@@ -49,6 +49,28 @@ export interface OperatorRiderRankingRow {
   completion_rate: number;
 }
 
+export interface OperatorRegionExpansionApplication {
+  id: number;
+  operator_id: number;
+  region_id: number;
+  region_name: string;
+  status: "pending" | "approved" | "rejected" | string;
+  reject_reason?: string;
+  created_at: string;
+}
+
+export interface OperatorRegionExpansionResponse {
+  applications: OperatorRegionExpansionApplication[];
+}
+
+export interface RegionItem {
+  id: number;
+  code: string;
+  name: string;
+  level: number;
+  parent_id?: number;
+}
+
 export interface OperatorFinanceOverviewResponse {
   current_month: {
     total_gmv: number;

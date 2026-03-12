@@ -904,6 +904,13 @@ func (server *Server) setupRouter() {
 		adminOperatorGroup.POST("/:id/reject", server.rejectOperatorApplicationAdmin)
 	}
 
+	// 平台管理员查询运营商（实体）的管理区域列表
+	adminOperatorEntityGroup := authGroup.Group("/admin/operators")
+	adminOperatorEntityGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		adminOperatorEntityGroup.GET("/:operator_id/regions", server.getOperatorRegionsAdmin)
+	}
+
 	// 平台管理员审核运营商区域扩展申请
 	adminRegionExpansionGroup := authGroup.Group("/admin/operators/region-applications")
 	adminRegionExpansionGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))

@@ -163,7 +163,77 @@ func (server *Server) getOperatorApplicationDetailAdmin(ctx *gin.Context) {
 	}
 
 	regionName := server.getRegionName(ctx, app.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(app, regionName))
+	resp := newOperatorApplicationResponse(app, regionName)
+
+	// 若申请已通过，附带运营商实体 ID 以便前端查询多区域
+	if app.Status == "approved" {
+		if op, opErr := server.store.GetOperatorByUser(ctx, app.UserID); opErr == nil {
+			type detailWithOperatorID struct {
+				operatorApplicationResponse
+				OperatorEntityID int64 `json:"operator_id,omitempty"`
+			}
+			ctx.JSON(http.StatusOK, detailWithOperatorID{
+				operatorApplicationResponse: resp,
+				OperatorEntityID:            op.ID,
+			})
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// getOperatorRegionsAdmin godoc
+// @Summary [管理] 获取运营商管理的区域列表
+// @Tags 管理-运营商
+// @Produce json
+// @Param operator_id path int true "运营商实体 ID"
+// @Success 200 {object} map[string]interface{}
+// @Security BearerAuth
+// @Router /v1/admin/operators/{operator_id}/regions [get]
+func (server *Server) getOperatorRegionsAdmin(ctx *gin.Context) {
+	type uriReq struct {
+		OperatorID int64 `uri:"operator_id" binding:"required,min=1"`
+	}
+	var uri uriReq
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if _, err := server.store.GetOperator(ctx, uri.OperatorID); err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("运营商不存在")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	rows, err := server.store.ListOperatorRegions(ctx, uri.OperatorID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	type regionItem struct {
+		ID         int64  `json:"id"`
+		RegionID   int64  `json:"region_id"`
+		RegionName string `json:"region_name"`
+		RegionCode string `json:"region_code"`
+		Status     string `json:"status"`
+	}
+	resp := make([]regionItem, 0, len(rows))
+	for _, r := range rows {
+		resp = append(resp, regionItem{
+			ID:         r.ID,
+			RegionID:   r.RegionID,
+			RegionName: r.RegionName,
+			RegionCode: r.RegionCode,
+			Status:     r.Status,
+		})
+	}
+	ctx.JSON(http.StatusOK, gin.H{"regions": resp, "total": len(resp)})
 }
 
 func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
