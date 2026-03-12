@@ -1027,9 +1027,9 @@ type listBillReconciliationReportsRequest struct {
 
 type billReconciliationReportResponse struct {
 	ID             int64           `json:"id"`
-	BillDate       string          `json:"bill_date"`       // "2006-01-02"
-	BillType       string          `json:"bill_type"`       // trade | ecommerce_trade | refund
-	Status         string          `json:"status"`          // pending | running | completed | failed
+	BillDate       string          `json:"bill_date"` // "2006-01-02"
+	BillType       string          `json:"bill_type"` // trade | ecommerce_trade | refund
+	Status         string          `json:"status"`    // pending | running | completed | failed
 	WxpayCount     int32           `json:"wxpay_count"`
 	LocalCount     int32           `json:"local_count"`
 	MismatchCount  int32           `json:"mismatch_count"`

@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"time"
 
-	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/wechat"
-	"github.com/merrydance/locallife/websocket"
 	"github.com/jackc/pgx/v5/pgtype"
+	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/websocket"
+	"github.com/merrydance/locallife/wechat"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
@@ -38,10 +38,10 @@ type amountMismatchRecord struct {
 // 每天 10:00 拉取昨天微信支付账单与本地数据库比对，将差异写入 reconciliation_reports
 // 发现差异时同时通过 Redis Pub/Sub 推送告警（AlertChannel）
 type BillReconciliationScheduler struct {
-	cron      *cron.Cron
-	store     db.Store
-	billClient wechat.BillClientInterface  // nil 时调度器注册但不执行
-	publisher  websocket.PubSubPublisher   // nil 时降级为只写日志
+	cron       *cron.Cron
+	store      db.Store
+	billClient wechat.BillClientInterface // nil 时调度器注册但不执行
+	publisher  websocket.PubSubPublisher  // nil 时降级为只写日志
 }
 
 // NewBillReconciliationScheduler 创建每日对账调度器
