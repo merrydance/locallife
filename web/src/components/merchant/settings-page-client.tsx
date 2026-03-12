@@ -18,7 +18,9 @@ import {
   RefreshCw,
   CheckCircle2,
   AlertCircle,
-  XCircle
+  XCircle,
+  Tag,
+  Info
 } from "lucide-react";
 import { toast } from "sonner";
 import { 
@@ -85,6 +87,11 @@ export function MerchantSettingsPageClient() {
   const [editingPrinter, setEditingPrinter] = useState<Partial<CloudPrinter> | null>(null);
   const [deletePrinterConfirm, setDeletePrinterConfirm] = useState<number | null>(null);
 
+  // Category Tag States
+  const [availableMerchantTags, setAvailableMerchantTags] = useState<{ id: number; name: string }[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [savingTags, setSavingTags] = useState(false);
+
   // Group States
   const [groupKeyword, setGroupKeyword] = useState("");
   const [groupResults, setGroupResults] = useState<Group[]>([]);
@@ -96,16 +103,20 @@ export function MerchantSettingsPageClient() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [profileData, hoursData, printersData, configData] = await Promise.all([
+      const [profileData, hoursData, printersData, configData, currentTagsData, allTagsData] = await Promise.all([
         apiGet<MerchantProfile>("/merchants/me"),
         apiGet<{ hours: BusinessHour[] }>("/merchants/me/business-hours"),
         apiGet<{ printers: CloudPrinter[] }>("/merchant/devices"),
-        apiGet<DisplayConfig>("/merchant/display-config").catch(() => null)
+        apiGet<DisplayConfig>("/merchant/display-config").catch(() => null),
+        apiGet<{ tags: { id: number; name: string }[] }>("/merchants/me/tags").catch(() => ({ tags: [] })),
+        apiGet<{ tags: { id: number; name: string }[] }>("/tags", { type: "merchant" }).catch(() => ({ tags: [] }))
       ]);
       
       setProfile(profileData);
       setBusinessHours(hoursData.hours || []);
       setPrinters(printersData.printers || []);
+      setSelectedTagIds((currentTagsData.tags || []).map(t => t.id));
+      setAvailableMerchantTags(allTagsData.tags || []);
       setDisplayConfig(configData || {
         enable_print: true,
         print_takeout: true,
@@ -311,6 +322,22 @@ export function MerchantSettingsPageClient() {
     }
   };
 
+  const handleSaveMerchantTags = async () => {
+    setSavingTags(true);
+    try {
+      const updated = await apiPut<{ tags: { id: number; name: string }[] }>("/merchants/me/tags", {
+        tag_ids: selectedTagIds
+      });
+      setSelectedTagIds((updated.tags || []).map(t => t.id));
+      toast.success("经营类目已保存");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "保存失败";
+      toast.error(message);
+    } finally {
+      setSavingTags(false);
+    }
+  };
+
   const handleSearchGroups = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!groupKeyword.trim()) return;
@@ -403,6 +430,16 @@ export function MerchantSettingsPageClient() {
           </div>
 
           <TabsContent value="profile" className="space-y-6 m-0">
+            {/* 经营类目提示横幅（未选时警示，已选时正常） */}
+            {availableMerchantTags.length > 0 && selectedTagIds.length === 0 && (
+              <div className="flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 px-5 py-4">
+                <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm font-semibold text-amber-800">您还未选择经营类目</p>
+                  <p className="text-xs text-amber-700 mt-0.5">经营类目决定您的店铺出现在首页哪些分类筛选标签下，直接影响顾客发现您的概率。请在下方完成设置。</p>
+                </div>
+              </div>
+            )}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 space-y-6">
                 <div className="bg-white rounded-xl border shadow-sm">
@@ -484,6 +521,73 @@ export function MerchantSettingsPageClient() {
               </div>
 
               <div className="space-y-6">
+                {/* ====== 经营类目 ====== */}
+                <div className="bg-white rounded-xl border shadow-sm">
+                  <div className="p-4 border-b flex items-center gap-2">
+                    <h3 className="text-sm font-semibold text-slate-900 border-l-4 border-primary pl-3">
+                      经营类目
+                    </h3>
+                    {selectedTagIds.length > 0 && (
+                      <span className="ml-auto text-[10px] bg-emerald-100 text-emerald-700 font-medium px-2 py-0.5 rounded-full">已设置</span>
+                    )}
+                  </div>
+                  <div className="p-5 space-y-4">
+                    <div className="flex items-start gap-2 rounded-lg bg-blue-50 border border-blue-200 px-3 py-2.5">
+                      <Info className="h-3.5 w-3.5 text-blue-600 mt-0.5 shrink-0" />
+                      <p className="text-[11px] text-blue-700 leading-relaxed">
+                        类目标签决定您的店铺出现在首页「餐厅」频道哪些筛选分类下，<strong>直接影响曝光量和排名</strong>。建议选择 1-3 个最能代表您店铺的类目。
+                      </p>
+                    </div>
+                    {availableMerchantTags.length === 0 ? (
+                      <p className="text-xs text-muted-foreground text-center py-4">暂无可选类目，请联系平台添加</p>
+                    ) : (
+                      <div className="flex flex-wrap gap-2">
+                        {availableMerchantTags.map(tag => {
+                          const selected = selectedTagIds.includes(tag.id);
+                          return (
+                            <button
+                              key={tag.id}
+                              type="button"
+                              onClick={() => {
+                                if (selected) {
+                                  setSelectedTagIds(selectedTagIds.filter(id => id !== tag.id));
+                                } else {
+                                  if (selectedTagIds.length >= 5) {
+                                    toast.warning("最多选 5 个类目");
+                                    return;
+                                  }
+                                  setSelectedTagIds([...selectedTagIds, tag.id]);
+                                }
+                              }}
+                              className={cn(
+                                "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all",
+                                selected
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "bg-white text-slate-600 border-slate-200 hover:border-primary/60 hover:text-primary"
+                              )}
+                            >
+                              <Tag className="h-3 w-3" />
+                              {tag.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    <div className="pt-1 flex justify-between items-center">
+                      <span className="text-[11px] text-muted-foreground">已选 {selectedTagIds.length}/5</span>
+                      <button
+                        type="button"
+                        onClick={handleSaveMerchantTags}
+                        disabled={savingTags}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                      >
+                        {savingTags ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
+                        保存类目
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
                 <div className="bg-white rounded-xl border shadow-sm">
                   <div className="p-4 border-b">
                     <h3 className="text-sm font-semibold text-slate-900 border-l-4 border-primary pl-3">

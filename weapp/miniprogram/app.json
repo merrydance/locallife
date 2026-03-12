@@ -174,7 +174,8 @@
         "tables/index",
         "printers/index",
         "profile-images/index",
-        "delivery-promotions/index"
+        "delivery-promotions/index",
+        "merchant-categories/index"
       ],
       "independent": false
     }

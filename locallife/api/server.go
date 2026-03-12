@@ -482,6 +482,8 @@ func (server *Server) setupRouter() {
 	authGroup.PATCH("/merchants/me/status", server.updateMerchantOpenStatus)
 	authGroup.GET("/merchants/me/business-hours", server.getMerchantBusinessHours)
 	authGroup.PUT("/merchants/me/business-hours", server.setMerchantBusinessHours)
+	authGroup.GET("/merchants/me/tags", server.getMerchantTags) // 获取商户经营类目
+	authGroup.PUT("/merchants/me/tags", server.setMerchantTags) // 设置商户经营类目
 	authGroup.GET("/merchants/me/membership-settings", server.getMerchantMembershipSettings)
 	authGroup.PUT("/merchants/me/membership-settings", server.updateMerchantMembershipSettings)
 

@@ -392,3 +392,47 @@ export function updateMyMerchantLogo(logoUrl: string, version: number) {
     data: { logo_url: logoUrl, version }
   })
 }
+
+// ==================== 商户经营类目 ====================
+
+export interface MerchantCategoryTag {
+  id: number
+  name: string
+  type: string
+  sort_order: number
+}
+
+/**
+ * 获取当前商户已选的经营类目标签
+ * GET /v1/merchants/me/tags
+ */
+export function getMyMerchantTags() {
+  return request<{ tags: MerchantCategoryTag[] }>({
+    url: '/v1/merchants/me/tags',
+    method: 'GET'
+  })
+}
+
+/**
+ * 获取平台所有可选的商户类目标签
+ * GET /v1/tags?type=merchant
+ */
+export function getAvailableMerchantTags() {
+  return request<{ tags: MerchantCategoryTag[] }>({
+    url: '/v1/tags',
+    method: 'GET',
+    data: { type: 'merchant' }
+  })
+}
+
+/**
+ * 替换当前商户的经营类目标签（最多5个）
+ * PUT /v1/merchants/me/tags
+ */
+export function setMyMerchantTags(tagIds: number[]) {
+  return request<{ tags: MerchantCategoryTag[] }>({
+    url: '/v1/merchants/me/tags',
+    method: 'PUT',
+    data: { tag_ids: tagIds }
+  })
+}
