@@ -29,6 +29,7 @@ const (
 	AlertTypeProfitSharingFailed AlertType = "PROFIT_SHARING_FAILED"
 	AlertTypeRefundFailed        AlertType = "REFUND_FAILED"
 	AlertTypeSystemError         AlertType = "SYSTEM_ERROR"
+	AlertTypeBillMismatch        AlertType = "BILL_MISMATCH"
 )
 
 // AlertLevel 告警级别

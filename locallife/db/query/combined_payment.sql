@@ -152,3 +152,11 @@ LEFT JOIN merchants m ON m.id = s.merchant_id
 LEFT JOIN orders o ON o.id = s.order_id
 WHERE c.id = $1
 GROUP BY c.id;
+
+-- name: ListCombinedPaymentOrdersForReconciliation :many
+-- 获取指定日期范围内所有合单（收付通）支付订单（用于每日对账）
+SELECT id, combine_out_trade_no, transaction_id, total_amount, status
+FROM combined_payment_orders
+WHERE status IN ('paid', 'refunded')
+  AND paid_at >= $1
+  AND paid_at < $2;

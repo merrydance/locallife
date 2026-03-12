@@ -75,3 +75,11 @@ RETURNING *;
 SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
 WHERE payment_order_id = $1 AND status = 'success';
+
+-- name: ListRefundOrdersForReconciliation :many
+-- 获取指定日期范围内所有成功退款订单（用于每日对账）
+SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
+FROM refund_orders r
+WHERE r.status = 'success'
+  AND r.refunded_at >= $1
+  AND r.refunded_at < $2;

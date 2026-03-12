@@ -275,6 +275,54 @@ func (q *Queries) ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOr
 	return items, nil
 }
 
+const listRefundOrdersForReconciliation = `-- name: ListRefundOrdersForReconciliation :many
+SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
+FROM refund_orders r
+WHERE r.status = 'success'
+  AND r.refunded_at >= $1
+  AND r.refunded_at < $2
+`
+
+type ListRefundOrdersForReconciliationParams struct {
+	RefundedAt   pgtype.Timestamptz `json:"refunded_at"`
+	RefundedAt_2 pgtype.Timestamptz `json:"refunded_at_2"`
+}
+
+type ListRefundOrdersForReconciliationRow struct {
+	ID           int64       `json:"id"`
+	OutRefundNo  string      `json:"out_refund_no"`
+	RefundID     pgtype.Text `json:"refund_id"`
+	RefundAmount int64       `json:"refund_amount"`
+	Status       string      `json:"status"`
+}
+
+// 获取指定日期范围内所有成功退款订单（用于每日对账）
+func (q *Queries) ListRefundOrdersForReconciliation(ctx context.Context, arg ListRefundOrdersForReconciliationParams) ([]ListRefundOrdersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listRefundOrdersForReconciliation, arg.RefundedAt, arg.RefundedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListRefundOrdersForReconciliationRow{}
+	for rows.Next() {
+		var i ListRefundOrdersForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutRefundNo,
+			&i.RefundID,
+			&i.RefundAmount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateRefundOrderToClosed = `-- name: UpdateRefundOrderToClosed :one
 UPDATE refund_orders
 SET

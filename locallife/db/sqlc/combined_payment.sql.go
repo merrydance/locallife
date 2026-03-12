@@ -340,6 +340,54 @@ func (q *Queries) GetCombinedPaymentSubOrdersByOrder(ctx context.Context, orderI
 	return items, nil
 }
 
+const listCombinedPaymentOrdersForReconciliation = `-- name: ListCombinedPaymentOrdersForReconciliation :many
+SELECT id, combine_out_trade_no, transaction_id, total_amount, status
+FROM combined_payment_orders
+WHERE status IN ('paid', 'refunded')
+  AND paid_at >= $1
+  AND paid_at < $2
+`
+
+type ListCombinedPaymentOrdersForReconciliationParams struct {
+	PaidAt   pgtype.Timestamptz `json:"paid_at"`
+	PaidAt_2 pgtype.Timestamptz `json:"paid_at_2"`
+}
+
+type ListCombinedPaymentOrdersForReconciliationRow struct {
+	ID                int64       `json:"id"`
+	CombineOutTradeNo string      `json:"combine_out_trade_no"`
+	TransactionID     pgtype.Text `json:"transaction_id"`
+	TotalAmount       int64       `json:"total_amount"`
+	Status            string      `json:"status"`
+}
+
+// 获取指定日期范围内所有合单（收付通）支付订单（用于每日对账）
+func (q *Queries) ListCombinedPaymentOrdersForReconciliation(ctx context.Context, arg ListCombinedPaymentOrdersForReconciliationParams) ([]ListCombinedPaymentOrdersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listCombinedPaymentOrdersForReconciliation, arg.PaidAt, arg.PaidAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListCombinedPaymentOrdersForReconciliationRow{}
+	for rows.Next() {
+		var i ListCombinedPaymentOrdersForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.CombineOutTradeNo,
+			&i.TransactionID,
+			&i.TotalAmount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCombinedPaymentSubOrders = `-- name: ListCombinedPaymentSubOrders :many
 SELECT id, combined_payment_id, order_id, merchant_id, sub_mchid, amount, out_trade_no, description, profit_sharing_status, created_at FROM combined_payment_sub_orders
 WHERE combined_payment_id = $1

@@ -1375,6 +1375,23 @@ type RecommendConfig struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 每日微信支付对账报告，由 bill-reconciliation 调度器自动生成
+type ReconciliationReport struct {
+	ID             int64              `json:"id"`
+	BillDate       pgtype.Date        `json:"bill_date"`
+	BillType       string             `json:"bill_type"`
+	Status         string             `json:"status"`
+	WxpayCount     int32              `json:"wxpay_count"`
+	LocalCount     int32              `json:"local_count"`
+	MismatchCount  int32              `json:"mismatch_count"`
+	MissingLocal   []byte             `json:"missing_local"`
+	MissingWxpay   []byte             `json:"missing_wxpay"`
+	AmountMismatch []byte             `json:"amount_mismatch"`
+	ErrorMessage   pgtype.Text        `json:"error_message"`
+	CreatedAt      time.Time          `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
 type RefundOrder struct {
 	ID             int64              `json:"id"`
 	PaymentOrderID int64              `json:"payment_order_id"`

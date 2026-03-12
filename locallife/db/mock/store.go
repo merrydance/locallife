@@ -3499,6 +3499,21 @@ func (mr *MockStoreMockRecorder) CreateRecommendConfig(ctx, arg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRecommendConfig", reflect.TypeOf((*MockStore)(nil).CreateRecommendConfig), ctx, arg)
 }
 
+// CreateReconciliationReport mocks base method.
+func (m *MockStore) CreateReconciliationReport(ctx context.Context, arg db.CreateReconciliationReportParams) (db.ReconciliationReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateReconciliationReport", ctx, arg)
+	ret0, _ := ret[0].(db.ReconciliationReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateReconciliationReport indicates an expected call of CreateReconciliationReport.
+func (mr *MockStoreMockRecorder) CreateReconciliationReport(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateReconciliationReport", reflect.TypeOf((*MockStore)(nil).CreateReconciliationReport), ctx, arg)
+}
+
 // CreateRefundOrder mocks base method.
 func (m *MockStore) CreateRefundOrder(ctx context.Context, arg db.CreateRefundOrderParams) (db.RefundOrder, error) {
 	m.ctrl.T.Helper()
@@ -8355,6 +8370,36 @@ func (mr *MockStoreMockRecorder) GetRecommendConfig(ctx, name any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRecommendConfig", reflect.TypeOf((*MockStore)(nil).GetRecommendConfig), ctx, name)
 }
 
+// GetReconciliationReport mocks base method.
+func (m *MockStore) GetReconciliationReport(ctx context.Context, id int64) (db.ReconciliationReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReconciliationReport", ctx, id)
+	ret0, _ := ret[0].(db.ReconciliationReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReconciliationReport indicates an expected call of GetReconciliationReport.
+func (mr *MockStoreMockRecorder) GetReconciliationReport(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReconciliationReport", reflect.TypeOf((*MockStore)(nil).GetReconciliationReport), ctx, id)
+}
+
+// GetReconciliationReportByDateAndType mocks base method.
+func (m *MockStore) GetReconciliationReportByDateAndType(ctx context.Context, arg db.GetReconciliationReportByDateAndTypeParams) (db.ReconciliationReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReconciliationReportByDateAndType", ctx, arg)
+	ret0, _ := ret[0].(db.ReconciliationReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReconciliationReportByDateAndType indicates an expected call of GetReconciliationReportByDateAndType.
+func (mr *MockStoreMockRecorder) GetReconciliationReportByDateAndType(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReconciliationReportByDateAndType", reflect.TypeOf((*MockStore)(nil).GetReconciliationReportByDateAndType), ctx, arg)
+}
+
 // GetRefundOrder mocks base method.
 func (m *MockStore) GetRefundOrder(ctx context.Context, id int64) (db.RefundOrder, error) {
 	m.ctrl.T.Helper()
@@ -10675,6 +10720,21 @@ func (mr *MockStoreMockRecorder) ListCloudPrintersByMerchant(ctx, merchantID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCloudPrintersByMerchant", reflect.TypeOf((*MockStore)(nil).ListCloudPrintersByMerchant), ctx, merchantID)
 }
 
+// ListCombinedPaymentOrdersForReconciliation mocks base method.
+func (m *MockStore) ListCombinedPaymentOrdersForReconciliation(ctx context.Context, arg db.ListCombinedPaymentOrdersForReconciliationParams) ([]db.ListCombinedPaymentOrdersForReconciliationRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCombinedPaymentOrdersForReconciliation", ctx, arg)
+	ret0, _ := ret[0].([]db.ListCombinedPaymentOrdersForReconciliationRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCombinedPaymentOrdersForReconciliation indicates an expected call of ListCombinedPaymentOrdersForReconciliation.
+func (mr *MockStoreMockRecorder) ListCombinedPaymentOrdersForReconciliation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCombinedPaymentOrdersForReconciliation", reflect.TypeOf((*MockStore)(nil).ListCombinedPaymentOrdersForReconciliation), ctx, arg)
+}
+
 // ListCombinedPaymentSubOrders mocks base method.
 func (m *MockStore) ListCombinedPaymentSubOrders(ctx context.Context, combinedPaymentID int64) ([]db.CombinedPaymentSubOrder, error) {
 	m.ctrl.T.Helper()
@@ -11890,6 +11950,21 @@ func (mr *MockStoreMockRecorder) ListMerchantsWithTagCount(ctx, arg any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantsWithTagCount", reflect.TypeOf((*MockStore)(nil).ListMerchantsWithTagCount), ctx, arg)
 }
 
+// ListMiniprogramPaymentOrdersForReconciliation mocks base method.
+func (m *MockStore) ListMiniprogramPaymentOrdersForReconciliation(ctx context.Context, arg db.ListMiniprogramPaymentOrdersForReconciliationParams) ([]db.ListMiniprogramPaymentOrdersForReconciliationRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMiniprogramPaymentOrdersForReconciliation", ctx, arg)
+	ret0, _ := ret[0].([]db.ListMiniprogramPaymentOrdersForReconciliationRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMiniprogramPaymentOrdersForReconciliation indicates an expected call of ListMiniprogramPaymentOrdersForReconciliation.
+func (mr *MockStoreMockRecorder) ListMiniprogramPaymentOrdersForReconciliation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMiniprogramPaymentOrdersForReconciliation", reflect.TypeOf((*MockStore)(nil).ListMiniprogramPaymentOrdersForReconciliation), ctx, arg)
+}
+
 // ListNearbyRiders mocks base method.
 func (m *MockStore) ListNearbyRiders(ctx context.Context, arg db.ListNearbyRidersParams) ([]db.ListNearbyRidersRow, error) {
 	m.ctrl.T.Helper()
@@ -12610,6 +12685,21 @@ func (mr *MockStoreMockRecorder) ListRecommendConfigs(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRecommendConfigs", reflect.TypeOf((*MockStore)(nil).ListRecommendConfigs), ctx)
 }
 
+// ListReconciliationReports mocks base method.
+func (m *MockStore) ListReconciliationReports(ctx context.Context, arg db.ListReconciliationReportsParams) ([]db.ReconciliationReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListReconciliationReports", ctx, arg)
+	ret0, _ := ret[0].([]db.ReconciliationReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListReconciliationReports indicates an expected call of ListReconciliationReports.
+func (mr *MockStoreMockRecorder) ListReconciliationReports(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReconciliationReports", reflect.TypeOf((*MockStore)(nil).ListReconciliationReports), ctx, arg)
+}
+
 // ListRefundOrdersByPaymentOrder mocks base method.
 func (m *MockStore) ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]db.RefundOrder, error) {
 	m.ctrl.T.Helper()
@@ -12638,6 +12728,21 @@ func (m *MockStore) ListRefundOrdersByStatus(ctx context.Context, arg db.ListRef
 func (mr *MockStoreMockRecorder) ListRefundOrdersByStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRefundOrdersByStatus", reflect.TypeOf((*MockStore)(nil).ListRefundOrdersByStatus), ctx, arg)
+}
+
+// ListRefundOrdersForReconciliation mocks base method.
+func (m *MockStore) ListRefundOrdersForReconciliation(ctx context.Context, arg db.ListRefundOrdersForReconciliationParams) ([]db.ListRefundOrdersForReconciliationRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRefundOrdersForReconciliation", ctx, arg)
+	ret0, _ := ret[0].([]db.ListRefundOrdersForReconciliationRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRefundOrdersForReconciliation indicates an expected call of ListRefundOrdersForReconciliation.
+func (mr *MockStoreMockRecorder) ListRefundOrdersForReconciliation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRefundOrdersForReconciliation", reflect.TypeOf((*MockStore)(nil).ListRefundOrdersForReconciliation), ctx, arg)
 }
 
 // ListRegionChildren mocks base method.
@@ -16944,6 +17049,21 @@ func (m *MockStore) UpdateRecommendConfig(ctx context.Context, arg db.UpdateReco
 func (mr *MockStoreMockRecorder) UpdateRecommendConfig(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRecommendConfig", reflect.TypeOf((*MockStore)(nil).UpdateRecommendConfig), ctx, arg)
+}
+
+// UpdateReconciliationReport mocks base method.
+func (m *MockStore) UpdateReconciliationReport(ctx context.Context, arg db.UpdateReconciliationReportParams) (db.ReconciliationReport, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateReconciliationReport", ctx, arg)
+	ret0, _ := ret[0].(db.ReconciliationReport)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateReconciliationReport indicates an expected call of UpdateReconciliationReport.
+func (mr *MockStoreMockRecorder) UpdateReconciliationReport(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReconciliationReport", reflect.TypeOf((*MockStore)(nil).UpdateReconciliationReport), ctx, arg)
 }
 
 // UpdateRefundOrderToClosed mocks base method.

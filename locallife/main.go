@@ -24,6 +24,7 @@ import (
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/weather"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -148,6 +149,8 @@ func main() {
 
 	runDBMetricsCollector(ctx, waitGroup, connPool)
 
+	var billClient wechat.BillClientInterface
+	var reconciliationPublisher websocket.PubSubPublisher
 	if config.RedisAddress != "" {
 		// 初始化逻辑层
 		redisClient := redis.NewClient(&redis.Options{
@@ -155,7 +158,8 @@ func main() {
 			Password: config.RedisPassword,
 		})
 		deliveryBroadcast := logic.NewDeliveryBroadcastLogic(store, redisClient)
-		taskDistributor = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, deliveryBroadcast)
+		taskDistributor, billClient = runTaskProcessor(ctx, waitGroup, config, redisOpt, store, deliveryBroadcast)
+		reconciliationPublisher = websocket.NewRedisPublisher(redisClient)
 	}
 
 	schedulerManager := scheduler.NewManager()
@@ -178,6 +182,7 @@ func main() {
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
 	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor))
+	schedulerManager.Register("bill-reconciliation", worker.NewBillReconciliationScheduler(store, billClient, reconciliationPublisher))
 	schedulerManager.StartAll(ctx, waitGroup)
 
 	runGinServer(ctx, waitGroup, config, store, weatherCache, taskDistributor)
@@ -208,7 +213,7 @@ func runTaskProcessor(
 	redisOpt asynq.RedisClientOpt,
 	store db.Store,
 	deliveryBroadcast *logic.DeliveryBroadcastLogic,
-) worker.TaskDistributor {
+) (worker.TaskDistributor, wechat.BillClientInterface) {
 	// 创建任务分发器
 	taskDistributor := worker.NewRedisTaskDistributor(redisOpt)
 
@@ -240,6 +245,14 @@ func runTaskProcessor(
 		}
 	}
 
+	// billClient 用于每日对账调度器；*EcommerceClient 同时满足 BillClientInterface
+	var billClient wechat.BillClientInterface
+	if ecommerceClient != nil {
+		if bc, ok := ecommerceClient.(wechat.BillClientInterface); ok {
+			billClient = bc
+		}
+	}
+
 	// 创建并启动任务处理器（传入 distributor 以支持任务链）
 	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, config)
 	log.Info().Msg("start task processor")
@@ -256,7 +269,7 @@ func runTaskProcessor(
 		return nil
 	})
 
-	return taskDistributor
+	return taskDistributor, billClient
 }
 
 func runDBMetricsCollector(ctx context.Context, waitGroup *errgroup.Group, pool *pgxpool.Pool) {

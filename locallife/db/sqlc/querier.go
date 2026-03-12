@@ -384,6 +384,7 @@ type Querier interface {
 	// Recharge Rules
 	CreateRechargeRule(ctx context.Context, arg CreateRechargeRuleParams) (RechargeRule, error)
 	CreateRecommendConfig(ctx context.Context, arg CreateRecommendConfigParams) (RecommendConfig, error)
+	CreateReconciliationReport(ctx context.Context, arg CreateReconciliationReportParams) (ReconciliationReport, error)
 	CreateRefundOrder(ctx context.Context, arg CreateRefundOrderParams) (RefundOrder, error)
 	CreateRegion(ctx context.Context, arg CreateRegionParams) (Region, error)
 	CreateReservationItem(ctx context.Context, arg CreateReservationItemParams) (ReservationItem, error)
@@ -850,6 +851,8 @@ type Querier interface {
 	GetRealtimeDashboard(ctx context.Context) (GetRealtimeDashboardRow, error)
 	GetRechargeRule(ctx context.Context, id int64) (RechargeRule, error)
 	GetRecommendConfig(ctx context.Context, name string) (RecommendConfig, error)
+	GetReconciliationReport(ctx context.Context, id int64) (ReconciliationReport, error)
+	GetReconciliationReportByDateAndType(ctx context.Context, arg GetReconciliationReportByDateAndTypeParams) (ReconciliationReport, error)
 	GetRefundOrder(ctx context.Context, id int64) (RefundOrder, error)
 	GetRefundOrderByOutRefundNo(ctx context.Context, outRefundNo string) (RefundOrder, error)
 	GetRefundOrderByRefundId(ctx context.Context, refundID pgtype.Text) (RefundOrder, error)
@@ -1073,6 +1076,8 @@ type Querier interface {
 	// 查询指定时间窗口内的索赔（用于协同欺诈检测）
 	ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTimeWindowParams) ([]ListClaimsByTimeWindowRow, error)
 	ListCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]CloudPrinter, error)
+	// 获取指定日期范围内所有合单（收付通）支付订单（用于每日对账）
+	ListCombinedPaymentOrdersForReconciliation(ctx context.Context, arg ListCombinedPaymentOrdersForReconciliationParams) ([]ListCombinedPaymentOrdersForReconciliationRow, error)
 	ListCombinedPaymentSubOrders(ctx context.Context, combinedPaymentID int64) ([]CombinedPaymentSubOrder, error)
 	ListCombinedPaymentSubOrdersWithMerchant(ctx context.Context, combinedPaymentID int64) ([]ListCombinedPaymentSubOrdersWithMerchantRow, error)
 	ListComboDishes(ctx context.Context, comboID int64) ([]ListComboDishesRow, error)
@@ -1189,6 +1194,8 @@ type Querier interface {
 	ListMerchantsByStaff(ctx context.Context, userID int64) ([]Merchant, error)
 	ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTagParams) ([]Merchant, error)
 	ListMerchantsWithTagCount(ctx context.Context, arg ListMerchantsWithTagCountParams) ([]ListMerchantsWithTagCountRow, error)
+	// 获取指定日期范围内所有小程序直连支付订单（用于每日对账）
+	ListMiniprogramPaymentOrdersForReconciliation(ctx context.Context, arg ListMiniprogramPaymentOrdersForReconciliationParams) ([]ListMiniprogramPaymentOrdersForReconciliationRow, error)
 	ListNearbyRiders(ctx context.Context, arg ListNearbyRidersParams) ([]ListNearbyRidersRow, error)
 	// 获取商户上架套餐（用于扫码点餐菜单展示）
 	ListOnlineCombosByMerchant(ctx context.Context, merchantID int64) ([]ListOnlineCombosByMerchantRow, error)
@@ -1252,8 +1259,11 @@ type Querier interface {
 	ListProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) ([]ProfitSharingReturn, error)
 	ListRecentWeatherCoefficients(ctx context.Context, arg ListRecentWeatherCoefficientsParams) ([]WeatherCoefficient, error)
 	ListRecommendConfigs(ctx context.Context) ([]RecommendConfig, error)
+	ListReconciliationReports(ctx context.Context, arg ListReconciliationReportsParams) ([]ReconciliationReport, error)
 	ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]RefundOrder, error)
 	ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOrdersByStatusParams) ([]RefundOrder, error)
+	// 获取指定日期范围内所有成功退款订单（用于每日对账）
+	ListRefundOrdersForReconciliation(ctx context.Context, arg ListRefundOrdersForReconciliationParams) ([]ListRefundOrdersForReconciliationRow, error)
 	ListRegionChildren(ctx context.Context, parentID pgtype.Int8) ([]Region, error)
 	// 列出管理某区域的所有运营商
 	ListRegionOperators(ctx context.Context, regionID int64) ([]ListRegionOperatorsRow, error)
@@ -1602,6 +1612,7 @@ type Querier interface {
 	UpdateProfitSharingReturnToSuccess(ctx context.Context, id int64) (ProfitSharingReturn, error)
 	UpdateRechargeRule(ctx context.Context, arg UpdateRechargeRuleParams) (RechargeRule, error)
 	UpdateRecommendConfig(ctx context.Context, arg UpdateRecommendConfigParams) (RecommendConfig, error)
+	UpdateReconciliationReport(ctx context.Context, arg UpdateReconciliationReportParams) (ReconciliationReport, error)
 	UpdateRefundOrderToClosed(ctx context.Context, id int64) (RefundOrder, error)
 	UpdateRefundOrderToFailed(ctx context.Context, id int64) (RefundOrder, error)
 	UpdateRefundOrderToProcessing(ctx context.Context, arg UpdateRefundOrderToProcessingParams) (RefundOrder, error)

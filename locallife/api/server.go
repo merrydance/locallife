@@ -1099,6 +1099,7 @@ func (server *Server) setupRouter() {
 		platformStatsGroup.GET("/riders/ranking", server.getRiderRanking)
 		platformStatsGroup.GET("/hourly", server.getHourlyDistribution)
 		platformStatsGroup.GET("/realtime", server.getRealtimeDashboard)
+		platformStatsGroup.GET("/bill-reconciliation", server.getBillReconciliationReports)
 	}
 
 	// 平台分账规则配置（管理）

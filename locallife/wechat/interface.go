@@ -180,3 +180,7 @@ var _ PaymentClientInterface = (*PaymentClient)(nil)
 
 // 确保 *EcommerceClient 实现了 EcommerceClientInterface 接口
 var _ EcommerceClientInterface = (*EcommerceClient)(nil)
+
+// 确保 *EcommerceClient 实现了 BillClientInterface 接口
+// （DownloadTradeBill / DownloadRefundBill 通过内嵌 *PaymentClient 自动满足）
+var _ BillClientInterface = (*EcommerceClient)(nil)

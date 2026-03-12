@@ -146,3 +146,12 @@ SET combined_payment_id = $2
 WHERE id = $1
 RETURNING *;
 
+-- name: ListMiniprogramPaymentOrdersForReconciliation :many
+-- 获取指定日期范围内所有小程序直连支付订单（用于每日对账）
+SELECT id, out_trade_no, transaction_id, amount, status
+FROM payment_orders
+WHERE payment_type = 'miniprogram'
+  AND status IN ('paid', 'refunded')
+  AND paid_at >= $1
+  AND paid_at < $2;
+
