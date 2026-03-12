@@ -40,6 +40,7 @@ const navGroups: Array<{
     label: string;
     href: string;
     activePrefix: string;
+    exact?: boolean;
     icon: LucideIcon;
     requiredRoles?: string[];
   }>;
@@ -52,6 +53,7 @@ const navGroups: Array<{
         label: "总览",
         href: "/platform",
         activePrefix: "/platform",
+        exact: true,
         icon: LayoutDashboard,
         requiredRoles: ["admin", "operator"],
       },
@@ -65,6 +67,7 @@ const navGroups: Array<{
         label: "运营商申请",
         href: "/platform/operators",
         activePrefix: "/platform/operators",
+        exact: true,
         icon: Users,
         requiredRoles: ["admin"],
       },
@@ -119,6 +122,7 @@ const navGroups: Array<{
         label: "分账复核",
         href: "/platform/reconciliation",
         activePrefix: "/platform/reconciliation",
+        exact: true,
         icon: ClipboardList,
         requiredRoles: ["admin", "operator"],
       },
@@ -270,6 +274,8 @@ export function PlatformSidebar() {
                   ? (item.label === "命中趋势"
                     ? pathname?.startsWith("/platform/rules") && view === "hits"
                     : pathname?.startsWith("/platform/rules") && view !== "hits")
+                  : item.exact
+                  ? pathname === item.activePrefix
                   : pathname?.startsWith(item.activePrefix);
                 const Icon = item.icon;
                 return (

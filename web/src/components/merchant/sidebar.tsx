@@ -89,6 +89,7 @@ const navGroups: NavGroup[] = [
         label: "预订管理",
         href: "/merchant/reservations",
         activePrefix: "/merchant/reservations",
+        exact: true,
         icon: CalendarCheck,
       },
       {
