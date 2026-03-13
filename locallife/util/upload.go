@@ -137,8 +137,8 @@ func (u *FileUploader) UploadMerchantImage(userID int64, category string, file m
 	}
 	dst.Close() // 关闭文件以便 WebP 转换可以读取
 
-	// 门头照/环境照对外公开展示，转换为 WebP 格式节省带宽
-	if (category == "storefront" || category == "environment") && CanConvertToWebP(ext) && IsWebPSupported() {
+	// 对外展示的图片（门头照/环境照/Logo）转换为 WebP 格式节省带宽
+	if (category == "storefront" || category == "environment" || category == "logo") && CanConvertToWebP(ext) && IsWebPSupported() {
 		converter := NewWebPConverter()
 		webpPath, webpErr := converter.ConvertToWebP(filePath, "")
 		if webpErr != nil {

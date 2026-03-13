@@ -182,8 +182,55 @@
 }
 
 .dish-price {
-  font-size: var(--font-size-sm);
+  font-size: 30rpx;
   font-weight: 700;
+  color: var(--td-brand-color);
+  line-height: 1;
+}
+
+/* 加购按钮通过 size=extra-small 控制 */
+
+/* 自定义加购/规格按钮，避免 Skyline 组件隔离导致尺寸变量失效 */
+.add-btn {
+  width: 40rpx;
+  height: 40rpx;
+  border-radius: 50%;
+  background: var(--td-brand-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.add-btn:active {
+  opacity: 0.7;
+}
+
+.add-btn-icon {
+  color: #fff;
+  font-size: 28rpx;
+  font-weight: 400;
+  line-height: 1;
+  margin-top: -2rpx;
+}
+
+.spec-btn {
+  height: 40rpx;
+  padding: 0 10rpx;
+  border-radius: 20rpx;
+  border: 1rpx solid var(--td-brand-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.spec-btn:active {
+  opacity: 0.7;
+}
+
+.spec-btn-text {
+  font-size: 22rpx;
   color: var(--td-brand-color);
   line-height: 1;
 }

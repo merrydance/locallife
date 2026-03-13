@@ -7,6 +7,8 @@ RUN go build -o locallife-rest main.go
 # Run stage
 FROM alpine:3.20
 WORKDIR /app
+# libwebp-tools provides cwebp for server-side WebP conversion
+RUN apk add --no-cache libwebp-tools
 COPY --from=builder /app/locallife-rest .
 COPY app.env .
 COPY start.sh .
