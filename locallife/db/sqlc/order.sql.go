@@ -906,6 +906,26 @@ func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWi
 	return i, err
 }
 
+const hasUserOrderedFromMerchant = `-- name: HasUserOrderedFromMerchant :one
+SELECT EXISTS(
+    SELECT 1 FROM orders
+    WHERE user_id = $1 AND merchant_id = $2
+        AND status NOT IN ('cancelled')
+) AS has_ordered
+`
+
+type HasUserOrderedFromMerchantParams struct {
+	UserID     int64 `json:"user_id"`
+	MerchantID int64 `json:"merchant_id"`
+}
+
+func (q *Queries) HasUserOrderedFromMerchant(ctx context.Context, arg HasUserOrderedFromMerchantParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasUserOrderedFromMerchant, arg.UserID, arg.MerchantID)
+	var has_ordered bool
+	err := row.Scan(&has_ordered)
+	return has_ordered, err
+}
+
 const listMerchantOrdersByStatus = `-- name: ListMerchantOrdersByStatus :many
 
 SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders

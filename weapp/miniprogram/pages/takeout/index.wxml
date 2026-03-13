@@ -49,16 +49,7 @@
     </view>
   </view>
 
-  <!-- 三标签切换 -->
-  <view class="tabs-section">
-    <t-tabs value="{{activeTab}}" bind:change="onTabChange">
-      <t-tab-panel value="dishes" label="菜品" />
-      <t-tab-panel value="packages" label="套餐" />
-      <t-tab-panel value="restaurants" label="餐厅" />
-    </t-tabs>
-  </view>
-
-  <!-- 内容区域 (发现型排版) -->
+  <!-- 内容区域 (统一 Feed) -->
   <view class="content-section">
     <!-- 0. 位置引导提示 (Persistent state) -->
     <view wx:if="{{needLocation}}" class="location-guide">
@@ -78,20 +69,20 @@
     </view>
 
     <block wx:else>
-      <!-- 菜品列表 -->
-      <view wx:if="{{activeTab === 'dishes'}}" class="nearby-merchants-section">
-        <view class="section-title">推荐菜品</view>
+      <!-- 商户 Feed 列表 -->
+      <view class="feed-section">
 
-        <block wx:if="{{loading && dishes.length === 0}}">
+        <block wx:if="{{loading && merchantFeed.length === 0}}">
           <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
         </block>
 
-        <block wx:elif="{{dishes.length > 0}}">
-          <dish-card
-            wx:for="{{dishes}}"
+        <block wx:elif="{{merchantFeed.length > 0}}">
+          <merchant-feed-card
+            wx:for="{{merchantFeed}}"
             wx:key="id"
-            dish="{{item}}"
-            bind:add="onAddCart"
+            merchant="{{item}}"
+            bind:dishadd="onDishAddFromFeed"
+            bind:merchanttap="onMerchantTapFromFeed"
           />
           <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
         </block>
@@ -100,74 +91,13 @@
           <block wx:if="{{!hasServiceProviders}}">
             <template is="provider-onboarding-empty" />
           </block>
-          <t-empty wx:else description="暂未找到菜品" />
+          <t-empty wx:else description="附近暂无商家" />
         </view>
 
-        <view wx:if="{{loading && dishes.length > 0}}" class="loading-wrapper">
+        <view wx:if="{{loading && merchantFeed.length > 0}}" class="loading-wrapper">
           <t-loading theme="circular" size="40rpx" text="加载中..." />
         </view>
-      </view>
 
-      <!-- 套餐列表 -->
-      <view wx:elif="{{activeTab === 'packages'}}" class="nearby-merchants-section">
-        <view class="section-title">精选套餐</view>
-
-        <block wx:if="{{loading && packages.length === 0}}">
-          <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
-        </block>
-
-        <block wx:elif="{{packages.length > 0}}">
-          <view class="package-list">
-            <package-card
-              wx:for="{{packages}}"
-              wx:key="id"
-              package="{{item}}"
-              class="package-list-item"
-              data-id="{{item.id}}"
-              data-merchant-id="{{item.merchantId}}"
-              bind:click="onPackageTap"
-              bind:add="onAddComboToCart"
-            />
-          </view>
-          <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
-        </block>
-
-        <view wx:elif="{{!loading}}" class="empty-entry">
-          <block wx:if="{{!hasServiceProviders}}">
-            <template is="provider-onboarding-empty" />
-          </block>
-          <t-empty wx:else description="暂未找到套餐" />
-        </view>
-
-        <view wx:if="{{loading && packages.length > 0}}" class="loading-wrapper">
-          <t-loading theme="circular" size="40rpx" text="加载中..." />
-        </view>
-      </view>
-
-      <!-- 商户列表 -->
-      <view wx:else class="nearby-merchants-section">
-        <view class="section-title">附近商家</view>
-
-        <block wx:if="{{loading && restaurants.length === 0}}">
-          <list-skeleton wx:for="{{[1,2,3,4,5]}}" wx:key="*this" showAvatar="{{true}}" />
-        </block>
-
-        <block wx:elif="{{restaurants.length > 0}}">
-          <restaurant-card
-            wx:for="{{restaurants}}"
-            wx:key="id"
-            restaurant="{{item}}"
-          />
-          <view wx:if="{{!hasMore}}" class="no-more">没有更多了</view>
-        </block>
-
-        <view wx:elif="{{!loading}}" class="empty-entry">
-          <template is="provider-onboarding-empty" />
-        </view>
-
-        <view wx:if="{{loading && restaurants.length > 0}}" class="loading-wrapper">
-          <t-loading theme="circular" size="40rpx" text="加载中..." />
-        </view>
       </view>
     </block>
   </view>

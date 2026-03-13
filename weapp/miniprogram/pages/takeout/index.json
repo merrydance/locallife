@@ -5,16 +5,12 @@
         "t-button": "tdesign-miniprogram/button/button",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "custom-navbar": "/components/custom-navbar/index",
-        "restaurant-card": "../../components/restaurant-card/index",
+        "merchant-feed-card": "../../components/merchant-feed-card/index",
         "cart-bar": "../../components/cart-bar/index",
         "t-search": "tdesign-miniprogram/search/search",
-        "t-tabs": "tdesign-miniprogram/tabs/tabs",
-        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-image": "tdesign-miniprogram/image/image",
-        "package-card": "../../components/package-card/index",
-        "dish-card": "../../components/dish-card/index",
         "list-skeleton": "../../components/list-skeleton/index"
     }
 }

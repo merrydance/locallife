@@ -1,10 +1,7 @@
 import { DishAdapter } from '../../adapters/dish'
-import { Dish } from '../../models/dish'
-import { searchDishes, DishSummary, DishSearchParams, ComboSummary, getRecommendedCombos } from '../../api/dish'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
-import { searchMerchants, MerchantSummary, getPublicMerchantCombos, getPublicMerchantDishes, PublicCombo } from '../../api/merchant'
-import { searchCombos, SearchComboItem } from '../../api/combo'
+import { searchMerchants, MerchantSummary, getPublicMerchantDishes, getPublicMerchantDetail, getHasUserOrderedFromMerchant, PublicDiscountRule, PublicVoucher, PublicDeliveryPromotion } from '../../api/merchant'
 import { getActiveCategories, ActiveCategory } from '../../api/location'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
@@ -18,47 +15,37 @@ import { formatPrice } from '../../utils/util'
 const PAGE_CONTEXT = 'takeout_index'
 const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
 
-interface RestaurantViewModel {
+interface FeaturedDish {
   id: number
   name: string
-  imageUrl?: string
-  cuisineType: string[]
-  avgPrice: number
-  avgPriceDisplay: string
-  distance: string
-  address: string
-  businessHoursDisplay: string
+  imageUrl: string
+  priceDisplay: string
+  price: number
+  merchantId: number
+  customization_groups?: unknown[]
+}
+
+interface MerchantFeedViewModel {
+  id: number
+  name: string
+  imageUrl: string
   isOpen: boolean
-  availableRooms: number
-  availableRoomsBadge: string
-  tags: string[]
+  distance: string
   monthlySales: number
-  deliveryFee?: number
   deliveryFeeDisplay: string
   promoText: string
   subsidyText: string
-}
-
-interface PackageViewModel {
-  id: number
-  name: string
-  merchantId: number
-  merchantName: string
-  imageUrl: string
-  price: number
-  priceDisplay: string
-  originalPrice: number
-  originalPriceDisplay: string
-  savingsPercent: number
-  monthlySales: number
-  salesBadge: string
-  distance: string
-  deliveryFee?: number
-  deliveryFeeDisplay: string
   tags: string[]
-  merchantIsOpen: boolean
-  estimatedDeliveryTime?: number
-  dishImages?: string[]
+  featuredDishes: FeaturedDish[]
+  dishesLoading: boolean
+  // 详情接口补充字段（异步填充）
+  avgPrepMinutes: number        // 平均出餐时间（0=未知）
+  discountPromoText: string     // 满减文案，e.g. "满30减5"
+  voucherText: string           // 券文案，e.g. "领券减5元"
+  deliveryPromoText: string     // 运费优惠文案，e.g. "满30免运费"
+  isNewStore: boolean           // 入驻30天内
+  hasOrdered: boolean           // 当前用户曾成功下单
+  detailLoading: boolean        // 详情是否仍在加载
 }
 
 interface UserMessageError {
@@ -66,28 +53,6 @@ interface UserMessageError {
 }
 
 type SearchTimer = ReturnType<typeof setTimeout>
-type TakeoutTab = 'dishes' | 'restaurants' | 'packages'
-
-function resolveTakeoutTab(eventDetail: Record<string, unknown> | string): TakeoutTab {
-  const tabs: TakeoutTab[] = ['dishes', 'packages', 'restaurants']
-
-  if (typeof eventDetail === 'string' && (tabs as string[]).includes(eventDetail)) {
-    return eventDetail as TakeoutTab
-  }
-
-  const detail = (eventDetail || {}) as Record<string, unknown>
-  const rawValue = detail.value
-  if (typeof rawValue === 'string' && (tabs as string[]).includes(rawValue)) {
-    return rawValue as TakeoutTab
-  }
-
-  const rawIndex = detail.index
-  if (typeof rawIndex === 'number' && rawIndex >= 0 && rawIndex < tabs.length) {
-    return tabs[rawIndex]
-  }
-
-  return 'dishes'
-}
 
 function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
   const promoTag = tags.find((tag) => /促销|满减|折扣|优惠|券/.test(tag)) || ''
@@ -105,10 +70,7 @@ function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
 
 Page({
   data: {
-    activeTab: 'dishes' as 'dishes' | 'restaurants' | 'packages',
-    dishes: [] as Dish[],
-    restaurants: [] as RestaurantViewModel[],
-    packages: [] as PackageViewModel[],
+    merchantFeed: [] as MerchantFeedViewModel[],
     cuisineCategories: [] as Array<ActiveCategory & { emoji: string, bg: string }>,
     activeCategoryId: '',
     cartTotalCount: 0,
@@ -124,15 +86,9 @@ Page({
     errorMsg: '',
     needLocation: false,
     refresherTriggered: false,
-    isPrefetching: false,
     hasServiceProviders: true
   },
 
-  // 预加载缓存 (不放在 data 中以免触发渲染)
-  _prefetchedDishes: [] as Dish[],
-  _prefetchedRestaurants: [] as RestaurantViewModel[],
-  _prefetchedPackages: [] as PackageViewModel[],
-  _prefetchHasMore: true,
   _unsubscribeLocation: undefined as undefined | (() => void),
   // 当前列表数据是使用哪套坐标加载的（用于跨城检测）
   _dataLoadedLat: null as number | null,
@@ -186,7 +142,7 @@ Page({
         const newLat = _appRef.globalData.latitude
         const newLng = _appRef.globalData.longitude
 
-        if (this.data.dishes.length === 0 && !this.data.loading) {
+        if (this.data.merchantFeed.length === 0 && !this.data.loading) {
           // 还没有数据，直接加载
           logger.info('[Takeout] 位置已更新，开始加载数据', undefined, 'Takeout.onLoad')
           this.loadData()
@@ -259,7 +215,7 @@ Page({
 
   onShow() {
     logger.debug('[Takeout.onShow] 页面显示', {
-      dishesCount: this.data.dishes.length,
+      feedCount: this.data.merchantFeed.length,
       loading: this.data.loading
     }, 'Takeout.onShow')
 
@@ -279,7 +235,7 @@ Page({
     }
 
     // 检查是否需要加载数据
-    if (this.data.dishes.length === 0) {
+    if (this.data.merchantFeed.length === 0) {
       logger.info('[Takeout.onShow] 开始 tryLoadData', undefined, 'Takeout.onShow')
       this.tryLoadData()
     } else {
@@ -453,19 +409,6 @@ Page({
     this.loadData()
   },
 
-  onTabChange(e: WechatMiniprogram.CustomEvent) {
-    const nextTab = resolveTakeoutTab((e.detail || {}) as Record<string, unknown>)
-    this.setData(
-      {
-        activeTab: nextTab,
-        page: 1
-      },
-      () => {
-        this.loadData()
-      }
-    )
-  },
-
   async loadCategories() {
     const app = getApp<IAppOption>()
     if (!app.globalData.latitude || !app.globalData.longitude) return
@@ -531,7 +474,7 @@ Page({
     this._dataLoadedLng = _app.globalData.longitude
 
     try {
-      const { activeTab, page } = this.data
+      const { page } = this.data
       const reset = page === 1
 
       if (reset) {
@@ -543,22 +486,16 @@ Page({
         }
       }
 
-      if (activeTab === 'dishes') {
-        await this.loadDishes(reset)
-      } else if (activeTab === 'packages') {
-        await this.loadPackages(reset)
-      } else {
-        await this.loadRestaurants(reset)
-      }
+      await this.loadFeed(reset)
     } catch (error: unknown) {
       ErrorHandler.handle(error, 'Takeout.loadData')
       const userMessage = (error as UserMessageError).userMessage
       // 如果是第一页重置加载失败，显示错误状态
       if (this.data.page === 1) {
-        this.setData({ 
-          isError: true, 
+        this.setData({
+          isError: true,
           errorMsg: (typeof userMessage === 'string' && userMessage) ? userMessage : '数据加载失败',
-          hasMore: false 
+          hasMore: false
         })
       }
     } finally {
@@ -567,82 +504,147 @@ Page({
     }
   },
 
-  async loadDishes(reset = false) {
+  async loadFeed(reset = false) {
     if (reset) {
-      // 重置时清空缓存和数据
-      this._prefetchedDishes = []
-      this._prefetchHasMore = true
-      this.setData({
-        page: 1,
-        dishes: [],
-        hasMore: true
-      })
+      this.setData({ page: 1, merchantFeed: [], hasMore: true })
     }
 
     try {
       const app = getApp<IAppOption>()
       const currentPage = reset ? 1 : this.data.page
-      let newDishes: Dish[] = []
-      let hasMore = true
 
-      // 1. 优先使用预加载的缓存数据（无延迟）
-      if (!reset && this._prefetchedDishes.length > 0) {
-        newDishes = this._prefetchedDishes
-        hasMore = this._prefetchHasMore
-        this._prefetchedDishes = [] // 清空缓存
-      } else {
-        // 2. 没有缓存则请求当前页
-        // 获取选中的标签ID用于过滤（空字符串表示"全部"，不传 tag_id）
-        const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null
-        const params: DishSearchParams = {
-          user_latitude: app.globalData.latitude || undefined,
-          user_longitude: app.globalData.longitude || undefined,
-          limit: PAGE_SIZE,
-          page: currentPage
+      const merchants = await searchMerchants({
+        keyword: this.data.searchKeyword,
+        page_id: currentPage,
+        page_size: PAGE_SIZE,
+        user_latitude: app.globalData.latitude || undefined,
+        user_longitude: app.globalData.longitude || undefined
+      })
+
+      const hasMore = merchants.length === PAGE_SIZE
+
+      const feedItems: MerchantFeedViewModel[] = merchants.map((m: MerchantSummary) => {
+        // 计算"新店"：入驻30天内
+        const isNewStore = m.created_at
+          ? (Date.now() - new Date(m.created_at).getTime()) < 30 * 24 * 60 * 60 * 1000
+          : false
+
+        return {
+          ...deriveMerchantPromotions(m.tags || [], m.estimated_delivery_fee),
+          id: m.id,
+          name: m.name,
+          imageUrl: getPublicImageUrl(m.cover_image || m.logo_url || ''),
+          isOpen: m.is_open ?? true,
+          distance: DishAdapter.formatDistance(m.distance ?? 0),
+          monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
+          deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
+            ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
+            : '',
+          tags: m.tags ? m.tags.slice(0, 3) : [],
+          featuredDishes: [],
+          dishesLoading: true,
+          avgPrepMinutes: 0,
+          discountPromoText: '',
+          voucherText: '',
+          deliveryPromoText: '',
+          isNewStore,
+          hasOrdered: false,
+          detailLoading: true
         }
-        // 只有选择了具体标签时才传 tag_id
-        if (tagId && !isNaN(tagId)) {
-          params.tag_id = tagId
-        }
-        let result = await searchDishes(params)
+      })
 
-        // 生产级兜底1：若带标签过滤导致空列表，自动重试一次无标签过滤
-        if (currentPage === 1 && result.dishes.length === 0 && params.tag_id) {
-          const { tag_id: _removedTag, ...retryParams } = params
-          result = await searchDishes(retryParams)
-        }
-
-        newDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
-        hasMore = result.has_more
-      }
-
-      // 更新视图
+      // 记录已有 feed 长度，异步加载菜品时用于按 ID 定位
       if (reset) {
-        this.setData({
-          dishes: newDishes,
-          hasMore
-        })
+        this.setData({ merchantFeed: feedItems, hasMore })
       } else {
-        this.setData({
-          dishes: [...this.data.dishes, ...newDishes],
-          hasMore
-        })
+        this.setData({ merchantFeed: [...this.data.merchantFeed, ...feedItems], hasMore })
       }
 
-      // 3. 异步预加载下一页（不阻塞当前渲染）
-      if (hasMore) {
-        this.prefetchNextDishes(currentPage + 1)
-      }
+      // 异步填充各商户的精选菜品（不阻塞页面渲染）
+      const merchantIds = merchants.map((m) => m.id)
+      this.loadFeaturedDishesForAll(merchantIds)
 
-      // 预加载图片
+      // 预加载商户封面图
       const { preloadImages } = require('../../utils/image')
-      const imageUrls = newDishes.map((dish: Dish) => dish.imageUrl).filter(Boolean)
-      setTimeout(() => {
-        preloadImages(imageUrls, false)
-      }, 100)
+      const imageUrls = feedItems.map((f) => f.imageUrl).filter(Boolean)
+      setTimeout(() => preloadImages(imageUrls, false), 100)
     } catch (error) {
-      logger.error('加载菜品失败', error, 'Takeout.loadDishes')
+      logger.error('加载商家 Feed 失败', error, 'Takeout.loadFeed')
       throw error
+    }
+  },
+
+  /**
+   * 批量获取商户精选菜品 + 详情（促销/出餐时间）+ 是否老顾客
+   * 使用 Promise.allSettled 并行请求，任一失败不影响其他
+   */
+  async loadFeaturedDishesForAll(merchantIds: number[]) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const results: Array<{ status: string, value?: [import('../../api/merchant').PublicMerchantDishesResponse, import('../../api/merchant').PublicMerchantDetail, boolean], reason?: unknown }> = await (Promise as any).allSettled(
+      merchantIds.map((id) => Promise.all([
+        getPublicMerchantDishes(id),
+        getPublicMerchantDetail(id),
+        getHasUserOrderedFromMerchant(id)
+      ]))
+    )
+
+    const updates: Record<string, unknown> = {}
+    results.forEach((result: { status: string, value?: [import('../../api/merchant').PublicMerchantDishesResponse, import('../../api/merchant').PublicMerchantDetail, boolean], reason?: unknown }, i: number) => {
+      const merchantId = merchantIds[i]
+      const feedIndex = this.data.merchantFeed.findIndex((item) => item.id === merchantId)
+      if (feedIndex === -1) return
+
+      if (result.status === 'fulfilled' && result.value) {
+        const [dishesResp, detail, hasOrdered] = result.value
+
+        // 精选菜品
+        const featuredDishes: FeaturedDish[] = dishesResp.dishes.slice(0, 4).map((d: import('../../api/merchant').PublicDish) => ({
+          id: d.id,
+          name: d.name,
+          imageUrl: getPublicImageUrl(d.image_url || '') || '/assets/placeholder_food.png',
+          priceDisplay: formatPrice(d.price),
+          price: d.price,
+          merchantId,
+          customization_groups: d.customization_groups || []
+        }))
+        updates[`merchantFeed[${feedIndex}].featuredDishes`] = featuredDishes
+
+        // 出餐时间
+        updates[`merchantFeed[${feedIndex}].avgPrepMinutes`] = detail.avg_prep_minutes ?? 0
+
+        // 满减文案：取门槛最低的一条
+        if (detail.discount_rules && detail.discount_rules.length > 0) {
+          const best = detail.discount_rules.reduce((a: PublicDiscountRule, b: PublicDiscountRule) => a.min_order_amount <= b.min_order_amount ? a : b)
+          updates[`merchantFeed[${feedIndex}].discountPromoText`] =
+            `满${(best.min_order_amount / 100).toFixed(0)}减${(best.discount_amount / 100).toFixed(0)}`
+        }
+
+        // 券文案：取面额最大的一张
+        if (detail.vouchers && detail.vouchers.length > 0) {
+          const best = detail.vouchers.reduce((a: PublicVoucher, b: PublicVoucher) => a.amount >= b.amount ? a : b)
+          updates[`merchantFeed[${feedIndex}].voucherText`] =
+            `领券减${(best.amount / 100).toFixed(0)}元`
+        }
+
+        // 运费优惠文案
+        if (detail.delivery_promotions && detail.delivery_promotions.length > 0) {
+          const best = detail.delivery_promotions.reduce((a: PublicDeliveryPromotion, b: PublicDeliveryPromotion) => a.min_order_amount <= b.min_order_amount ? a : b)
+          const threshold = best.min_order_amount
+          updates[`merchantFeed[${feedIndex}].deliveryPromoText`] = threshold === 0
+            ? '免运费'
+            : `满${(threshold / 100).toFixed(0)}免运费`
+        }
+
+        // 老顾客标识
+        updates[`merchantFeed[${feedIndex}].hasOrdered`] = hasOrdered
+      }
+
+      updates[`merchantFeed[${feedIndex}].dishesLoading`] = false
+      updates[`merchantFeed[${feedIndex}].detailLoading`] = false
+    })
+
+    if (Object.keys(updates).length > 0) {
+      this.setData(updates)
     }
   },
 
@@ -665,226 +667,29 @@ Page({
   },
 
   /**
-   * 预加载下一页菜品（后台静默执行）
+   * Feed 卡片中的菜品加购事件
    */
-  async prefetchNextDishes(nextPage: number) {
-    if (this.data.isPrefetching || this._prefetchedDishes.length > 0) return
-
-    this.setData({ isPrefetching: true })
-    try {
-      const app = getApp<IAppOption>()
-      const tagId = this.data.activeCategoryId ? parseInt(this.data.activeCategoryId) : null
-      const params: DishSearchParams = {
-        user_latitude: app.globalData.latitude || undefined,
-        user_longitude: app.globalData.longitude || undefined,
-        limit: PAGE_SIZE,
-        page: nextPage
-      }
-
-      if (tagId && !isNaN(tagId)) {
-        params.tag_id = tagId
-      }
-
-      const result = await searchDishes(params)
-      this._prefetchedDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
-      this._prefetchHasMore = result.has_more
-    } catch (error) {
-      logger.debug('预加载下一页失败', error, 'Takeout.prefetchNextDishes')
-    } finally {
-      this.setData({ isPrefetching: false })
-    }
-  },
-
-  async loadRestaurants(reset = false) {
-    if (reset) {
-      this.setData({ page: 1, restaurants: [], hasMore: true })
-    }
-
-    try {
-      // 使用搜索商户接口
-      const app = getApp<IAppOption>()
-      const currentPage = reset ? 1 : this.data.page
-      const merchants = await searchMerchants({
-        keyword: this.data.searchKeyword, // 使用当前搜索词，如果是空字符串则返回默认列表
-        page_id: currentPage,
-        page_size: PAGE_SIZE,
-        user_latitude: app.globalData.latitude || undefined,
-        user_longitude: app.globalData.longitude || undefined
-      })
-
-      // Backend returns array directly for searchMerchants in some versions, 
-      // but wrapper in api/merchant.ts returns MerchantSummary[]
-      // We need to handle total/hasMore if possible, but searchMerchants wrapper currently swallows it?
-      // Checking api/merchant.ts, it returns response.merchants || []. 
-      // Logic for hasMore might be missing in client wrapper if total isn't returned.
-      // Assuming hasMore = length === PAGE_SIZE for now or update wrapper later.
-      const hasMore = merchants.length === PAGE_SIZE
-
-      const restaurantViewModels: RestaurantViewModel[] = merchants.map((m: MerchantSummary) => ({
-        ...(deriveMerchantPromotions(m.tags || [], m.estimated_delivery_fee)),
-        id: m.id,
-        name: m.name,
-        imageUrl: m.cover_image || m.logo_url,
-        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
-        avgPrice: 0,
-        avgPriceDisplay: '人均未知',
-        distance: DishAdapter.formatDistance(m.distance ?? 0),
-        address: m.address || '',
-        businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
-        isOpen: m.is_open ?? true, // 商户营业状态（搜索接口未返回时默认营业）
-        availableRooms: 0,
-        availableRoomsBadge: '',
-        tags: m.tags ? m.tags.slice(0, 3) : [],
-        // New fields
-        monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
-        deliveryFee: m.estimated_delivery_fee,
-        deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
-          ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
-          : ''
-      }))
-
-
-      if (reset) {
-        this.setData({
-          restaurants: restaurantViewModels,
-          hasMore
-        })
-      } else {
-        this.setData({
-          restaurants: [...this.data.restaurants, ...restaurantViewModels],
-          hasMore
-        })
-      }
-
-      // 预加载图片
-      const { preloadImages } = require('../../utils/image')
-      const imageUrls = restaurantViewModels.map((r) => r.imageUrl).filter(Boolean)
-      setTimeout(() => {
-        preloadImages(imageUrls, false)
-      }, 100)
-
-    } catch (error) {
-      logger.error('加载商户失败', error, 'Takeout.loadRestaurants')
-      throw error
-    }
-  },
-
-  async loadPackages(reset = false) {
-    if (reset) {
-      this.setData({ page: 1, packages: [], hasMore: true })
-    }
-
-    try {
-      // 使用搜索套餐接口
-      const app = getApp<IAppOption>()
-      const currentPage = reset ? 1 : this.data.page
-      // 构造搜索参数
-      // 注意：getTags 返回的 id 是数字转字符串，searchCombos 可能需要数字？
-      // 当前 backend searchCombos 只接受 keyword。Category 过滤暂不支持？
-      // 如果 activeCategoryId 存在，可能需要作为 keyword 或者后续支持 category_id
-      // 目前主要支持 keyword 搜索。
-
-      const result = await searchCombos({
-        keyword: this.data.searchKeyword,
-        page_id: currentPage,
-        page_size: PAGE_SIZE,
-        user_latitude: app.globalData.latitude || undefined,
-        user_longitude: app.globalData.longitude || undefined
-      })
-
-      const hasMore = result.combos.length === PAGE_SIZE // 简单分页逻辑，或使用 result.total
-
-      const packageViewModels: PackageViewModel[] = result.combos.map((combo: SearchComboItem) => ({
-        id: combo.id,
-        name: combo.name,
-        merchantId: combo.merchant_id,
-        merchantName: combo.merchant_name || '',
-        imageUrl: getPublicImageUrl(combo.image_url) || '/assets/placeholder_food.png',
-        price: combo.combo_price,
-
-        priceDisplay: formatPrice(combo.combo_price),
-        originalPrice: combo.original_price,
-        originalPriceDisplay: formatPrice(combo.original_price),
-        savingsPercent: combo.savings_percent || 0,
-        monthlySales: combo.monthly_sales || 0,
-        salesBadge: `月售${combo.monthly_sales || 0}`,
-        distance: DishAdapter.formatDistance(combo.distance),
-        deliveryFee: combo.estimated_delivery_fee,
-        deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
-          ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
-          : '',
-        tags: combo.tags || [],
-        merchantIsOpen: combo.merchant_is_open ?? true,
-        estimatedDeliveryTime: combo.estimated_delivery_time
-      }))
-
-
-      if (reset) {
-        this.setData({
-          packages: packageViewModels,
-          hasMore
-        })
-      } else {
-        this.setData({
-          packages: [...this.data.packages, ...packageViewModels],
-          hasMore
-        })
-      }
-
-      // 异步解析套餐组合图
-      this.resolveComboImages()
-
-    } catch (error) {
-      logger.error('加载套餐失败', error, 'Takeout.loadPackages')
-      throw error
-    }
-  },
-
-  onTabCategoryChange(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.detail
-    this.setData({
-      activeCategoryId: id,
-      page: 1  // 重置页码
-    })
-    // 切换标签时重新加载数据（带标签过滤）
-    this.loadData()
-  },
-
-  async onAddCart(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.detail
-    const dish = this.data.dishes.find((d) => d.id === id)
-    if (dish) {
-      const success = await CartService.addItem({
-        merchantId: String(dish.merchantId),
-        dishId: String(dish.id)
-      })
-
-      if (success) {
-        await this.updateCartDisplay()
-        wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 })
-      }
-    }
-  },
-
-  /**
-   * 套餐加购物车
-   */
-  async onAddComboToCart(e: WechatMiniprogram.TouchEvent) {
-    const { id, merchantId } = e.currentTarget.dataset
-    if (!id || !merchantId) {
-      wx.showToast({ title: '套餐信息错误', icon: 'error' })
-      return
-    }
+  async onDishAddFromFeed(e: WechatMiniprogram.CustomEvent) {
+    const { dishId, merchantId } = e.detail as { dishId: number, merchantId: number }
+    if (!dishId || !merchantId) return
 
     const success = await CartService.addItem({
       merchantId: String(merchantId),
-      comboId: String(id)
+      dishId: String(dishId)
     })
 
     if (success) {
       await this.updateCartDisplay()
       wx.showToast({ title: '已加入购物车', icon: 'success', duration: 500 })
     }
+  },
+
+  /**
+   * Feed 卡片中的商户点击事件
+   */
+  onMerchantTapFromFeed(e: WechatMiniprogram.CustomEvent) {
+    const { id } = e.detail as { id: number }
+    Navigation.toRestaurantDetail(String(id))
   },
 
   async updateCartDisplay() {
@@ -898,7 +703,7 @@ Page({
       const totalCount = userCarts.summary?.total_items || 0
       const totalPrice = userCarts.summary?.total_amount || 0
 
-      console.log('[updateCartDisplay] 设置数据:', { totalCount, totalPrice, activeTab: this.data.activeTab })
+      console.log('[updateCartDisplay] 设置数据:', { totalCount, totalPrice })
 
       this.setData({
         cartTotalCount: totalCount,
@@ -926,59 +731,8 @@ Page({
   // ==================== 导航方法 ====================
 
   /**
-     * 点击菜品卡片 - 跳转到菜品详情
-     */
-  onDishClick(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.detail
-    // 查找对应菜品
-    const dish = this.data.dishes.find((d) => String(d.id) === String(id))
-
-    if (dish) {
-      const monthSales = dish.salesBadge
-        ? Number(dish.salesBadge.replace(/[^0-9]/g, ''))
-        : undefined
-      const distanceMeters = dish.distance_meters
-      Navigation.toDishDetail(id, {
-        shopName: dish.shopName,
-        monthSales,
-        distance: distanceMeters,
-        estimatedDeliveryTime: Math.ceil((dish.estimated_delivery_time || 0) / 60) // 转换为分钟传递
-      })
-    } else {
-      Navigation.toDishDetail(id)
-    }
-  },
-
-  /**
-     * 点击商户名称 - 跳转到商户详情
-     */
-  onMerchantClick(e: WechatMiniprogram.CustomEvent) {
-    const { id } = e.detail
-    Navigation.toRestaurantDetail(id)
-  },
-
-  /**
-     * 点击套餐卡片 - 跳转到套餐详情
-     */
-  onPackageTap(e: WechatMiniprogram.TouchEvent) {
-    const id = e.currentTarget.dataset.id
-    const combo = this.data.packages.find((p) => String(p.id) === String(id))
-
-    if (combo) {
-      Navigation.toComboDetail(String(id), {
-        shopName: combo.merchantName,
-        monthSales: combo.monthlySales,
-        distance: Number(combo.distance.replace(/[^0-9.]/g, '')) * 1000, // 转换回米
-        estimatedDeliveryTime: combo.estimatedDeliveryTime
-      })
-    } else {
-      Navigation.toComboDetail(String(id))
-    }
-  },
-
-  /**
-     * 点击购物车 - 跳转到购物车页
-     */
+   * 点击购物车 - 跳转到购物车页
+   */
   onCheckout() {
     if (this.data.cartTotalCount === 0) {
       wx.showToast({ title: '购物车是空的', icon: 'none' })
@@ -987,159 +741,7 @@ Page({
     Navigation.toCart()
   },
 
-  /**
-     * 搜索功能 - 内联搜索，带防抖处理
-     */
-  onSearch(e: WechatMiniprogram.CustomEvent) {
-    const keyword = e.detail.value?.trim() || ''
-
-    if (this._searchTimer) {
-      clearTimeout(this._searchTimer)
-    }
-
-    // 如果关键词为空，立即执行恢复逻辑
-    if (!keyword) {
-      this.setData({ searchKeyword: '' })
-      this.loadData()
-      return
-    }
-
-    this._searchTimer = setTimeout(async () => {
-      this.setData({
-        searchKeyword: keyword,
-        loading: true
-      })
-
-      try {
-        await this.searchInline(keyword)
-      } catch (error) {
-        console.error('搜索失败:', error)
-        wx.showToast({ title: '搜索失败', icon: 'error' })
-      } finally {
-        this.setData({ loading: false })
-      }
-    }, 500)
-  },
-
   _searchTimer: null as SearchTimer | null,
-
-  /**
-   * 内联搜索 - 根据当前 Tab 搜索对应内容
-   */
-  async searchInline(keyword: string) {
-    const { activeTab } = this.data
-    const app = getApp<IAppOption>()
-
-    if (activeTab === 'dishes') {
-      // 搜索菜品 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
-      const result = await searchDishes({
-        keyword,
-        page: 1,
-        limit: 20,
-        user_latitude: app.globalData.latitude ?? undefined,
-        user_longitude: app.globalData.longitude ?? undefined
-      })
-
-      // 使用 DishAdapter 转换为卡片展示格式（与列表加载保持一致）
-      const adaptedDishes = result.dishes.map((dish: DishSummary) => DishAdapter.fromSummaryDTO(dish))
-
-      this.setData({
-        dishes: adaptedDishes,
-        hasMore: result.has_more,
-        page: 1
-      })
-
-      if (result.dishes.length === 0) {
-        wx.showToast({ title: '未找到相关菜品', icon: 'none' })
-      }
-
-    } else if (activeTab === 'restaurants') {
-      // 搜索餐厅 - 复用现有 searchMerchants API
-      const result = await searchMerchants({
-        keyword,
-        page_id: 1,
-        page_size: 20,
-        user_latitude: app.globalData.latitude || undefined,
-        user_longitude: app.globalData.longitude || undefined
-      })
-
-      // 转换为与列表一致的展示格式（与 loadRestaurants 保持一致）
-      const restaurants: RestaurantViewModel[] = (result || []).map((m: MerchantSummary) => ({
-        ...(deriveMerchantPromotions(m.tags || [], m.estimated_delivery_fee)),
-        id: m.id,
-        name: m.name,
-        imageUrl: m.cover_image || m.logo_url,
-        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
-        avgPrice: 0,
-        avgPriceDisplay: '人均未知',
-        distance: DishAdapter.formatDistance(m.distance),
-        address: m.address || '',
-        businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
-        isOpen: m.is_open ?? true,
-        availableRooms: 0,
-        availableRoomsBadge: '',
-        tags: m.tags ? m.tags.slice(0, 3) : [],
-        monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
-        deliveryFee: m.estimated_delivery_fee,
-        deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
-          ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
-          : ''
-      }))
-
-      this.setData({
-        restaurants,
-        hasMore: false,
-        page: 1
-      })
-
-      if (restaurants.length === 0) {
-        wx.showToast({ title: '未找到相关餐厅', icon: 'none' })
-      }
-
-    } else if (activeTab === 'packages') {
-      // 搜索套餐 - 使用推荐接口的 keyword 参数，返回格式与列表完全一致
-      const result = await getRecommendedCombos({
-        keyword,
-        page: 1,
-        limit: 20
-      })
-
-      // 转换为与列表一致的展示格式（与 loadPackages 保持一致）
-      const combos = result.combos || []
-      const packageViewModels: PackageViewModel[] = combos.map((combo: ComboSummary) => ({
-        id: combo.id,
-        name: combo.name,
-        merchantId: combo.merchant_id,
-        merchantName: combo.merchant_name || '',
-        price: combo.combo_price,
-        priceDisplay: formatPrice(combo.combo_price),
-        originalPrice: combo.original_price || combo.combo_price,
-        originalPriceDisplay: formatPrice(combo.original_price || combo.combo_price),
-        imageUrl: getPublicImageUrl(combo.image_url) || '/assets/placeholder_food.png',
-        savingsPercent: combo.savings_percent || 0,
-        monthlySales: combo.monthly_sales || 0,
-        salesBadge: `月售${combo.monthly_sales || 0}`,
-        distance: DishAdapter.formatDistance(combo.distance),
-        deliveryFee: combo.estimated_delivery_fee,
-        deliveryFeeDisplay: combo.estimated_delivery_fee !== undefined
-          ? `配送费¥${(combo.estimated_delivery_fee / 100).toFixed(0)}起`
-          : '',
-        tags: combo.tags || [],
-        merchantIsOpen: combo.merchant_is_open ?? true,
-        estimatedDeliveryTime: combo.estimated_delivery_time
-      }))
-
-      this.setData({
-        packages: packageViewModels,
-        hasMore: result.has_more || false,
-        page: 1
-      })
-
-      if (combos.length === 0) {
-        wx.showToast({ title: '未找到相关套餐', icon: 'none' })
-      }
-    }
-  },
 
   onReachBottom() {
     // 增加防抖和状态检查 (增加 _isLoading 私有变量锁)
@@ -1209,89 +811,6 @@ Page({
     this.loadData().then(() => {
       wx.stopPullDownRefresh()
     })
-  },
-
-  /**
-   * 异步解析套餐组合图 (针对套餐列表)
-   */
-  async resolveComboImages() {
-    const { packages, activeTab } = this.data
-    if (activeTab !== 'packages' || packages.length === 0) return
-
-    const merchantIdsForCombos = new Set<number>()
-    const comboIdsToMap = new Set<number>()
-
-    // 1. 收集需要解析的 ID
-    packages.forEach((pkg) => {
-      if (!pkg.dishImages) {
-        merchantIdsForCombos.add(pkg.merchantId)
-        comboIdsToMap.add(pkg.id)
-      }
-    })
-
-    if (merchantIdsForCombos.size === 0) return
-
-    // 2. 并行获取商户详情以提取菜品图
-    const comboCache = new Map<number, { dishImages: string[] }>()
-    const fetchPromises: Promise<void>[] = []
-    
-    Array.from(merchantIdsForCombos).forEach((mid) => {
-      fetchPromises.push(Promise.all([
-        getPublicMerchantCombos(mid),
-        getPublicMerchantDishes(mid)
-      ]).then(([combosRes, dishesRes]) => {
-        const merchantDishes = dishesRes.dishes || []
-        if (combosRes.combos) {
-          combosRes.combos.forEach((c: PublicCombo) => {
-            if (comboIdsToMap.has(c.id)) {
-              // 注入菜品图片
-              const dishImages = (c.dishes || [])
-                .map((cd) => {
-                  const dish = merchantDishes.find((d) => d.id === cd.dish_id)
-                  return dish?.image_url
-                })
-                .filter((url): url is string => Boolean(url))
-                .map((url: string) => getPublicImageUrl(url))
-              
-              comboCache.set(c.id, { dishImages })
-            }
-          })
-        }
-      }).catch((err: unknown) => {
-        logger.warn('Resolve packages failed for merchant', { mid, err })
-      }))
-    })
-
-    await Promise.all(fetchPromises)
-
-    // 3. 应用结果
-    let hasUpdates = false
-    const updatedPackages = packages.map((pkg) => {
-      // 只有在还没有解析过或者是重新加载时才更新
-      if (comboCache.has(pkg.id)) {
-        const combo = comboCache.get(pkg.id)
-        if (!combo) return pkg
-        let resolvedImages = (combo.dishImages || []) as string[]
-        
-        // 如果解析出来的菜品图太少，或者为了美观，把封面的套餐图也加进去
-        if (resolvedImages.length > 0 && resolvedImages.length < 4) {
-             // 检查封面图是否有效且不在列表中
-             if (pkg.imageUrl && !pkg.imageUrl.includes('placeholder') && !resolvedImages.includes(pkg.imageUrl)) {
-                 resolvedImages = [pkg.imageUrl, ...resolvedImages].slice(0, 4)
-             }
-        }
-
-        if (resolvedImages.length > 0) {
-          hasUpdates = true
-          return { ...pkg, dishImages: resolvedImages }
-        }
-      }
-      return pkg
-    })
-
-    if (hasUpdates) {
-      this.setData({ packages: updatedPackages })
-    }
   },
 
   onShareAppMessage() {

@@ -1,0 +1,118 @@
+<!-- 商户 Feed 卡片 = 商户摘要头部 + 菜品预览横滑行 -->
+<view class="feed-card">
+
+  <!-- ① 商户信息头部（可点击 → 进入商户详情） -->
+  <view class="merchant-header" bindtap="onMerchantHeaderTap">
+    <t-image class="merchant-image" src="{{merchant.imageUrl}}" mode="aspectFill" lazy />
+
+    <view class="merchant-info">
+      <!-- 第1行: 商户名 + 角标 -->
+      <view class="row-1">
+        <text class="merchant-name">{{merchant.name}}</text>
+        <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
+        <t-tag wx:if="{{merchant.hasOrdered}}" theme="success" size="small" variant="light">再来一单</t-tag>
+        <t-tag wx:if="{{merchant.isOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
+      </view>
+
+      <!-- 第2行: 月售 | 距离 | 配送费 | 出餐时间 -->
+      <view class="row-2">
+        <block wx:if="{{merchant.monthlySales > 0}}">
+          <text class="meta">月售{{merchant.monthlySales}}</text>
+          <text class="meta-sep">|</text>
+        </block>
+        <text class="meta">{{merchant.distance}}</text>
+        <block wx:if="{{merchant.deliveryFeeDisplay}}">
+          <text class="meta-sep">|</text>
+          <text class="meta">{{merchant.deliveryFeeDisplay}}</text>
+        </block>
+        <block wx:if="{{merchant.avgPrepMinutes > 0}}">
+          <text class="meta-sep">|</text>
+          <text class="meta">约{{merchant.avgPrepMinutes}}分出餐</text>
+        </block>
+      </view>
+
+      <!-- 第3行: 促销标签（满减、券、免运费、活动标签） -->
+      <view class="row-3" wx:if="{{merchant.discountPromoText || merchant.voucherText || merchant.deliveryPromoText || merchant.promoText || merchant.subsidyText || (merchant.tags && merchant.tags.length > 0)}}">
+        <t-tag wx:if="{{merchant.discountPromoText}}" size="small" variant="dark" theme="warning">{{merchant.discountPromoText}}</t-tag>
+        <t-tag wx:if="{{merchant.voucherText}}" size="small" variant="light" theme="warning">{{merchant.voucherText}}</t-tag>
+        <t-tag wx:if="{{merchant.deliveryPromoText}}" size="small" variant="dark" theme="default">{{merchant.deliveryPromoText}}</t-tag>
+        <t-tag wx:if="{{merchant.promoText}}" size="small" variant="dark" theme="warning">{{merchant.promoText}}</t-tag>
+        <t-tag wx:if="{{merchant.subsidyText}}" size="small" variant="dark" theme="default">{{merchant.subsidyText}}</t-tag>
+        <t-tag
+          wx:for="{{merchant.tags}}"
+          wx:for-index="ti"
+          wx:key="ti"
+          size="small"
+          variant="outline"
+          theme="default"
+        >{{item}}</t-tag>
+      </view>
+    </view>
+  </view>
+
+  <!-- ② 菜品预览横滑行 -->
+  <view class="dish-preview-section">
+
+    <!-- 骨架屏（菜品加载中） -->
+    <block wx:if="{{merchant.dishesLoading}}">
+      <view class="dish-preview-skeleton">
+        <view class="skeleton-item" wx:for="{{[1,2,3]}}" wx:key="*this">
+          <view class="skeleton-img" />
+          <view class="skeleton-name" />
+          <view class="skeleton-price" />
+        </view>
+      </view>
+    </block>
+
+    <!-- 菜品列表 -->
+    <block wx:elif="{{merchant.featuredDishes && merchant.featuredDishes.length > 0}}">
+      <scroll-view scroll-x class="dish-scroll" enhanced show-scrollbar="{{false}}">
+        <view class="dish-list">
+
+          <!-- 菜品卡片 -->
+          <view
+            class="dish-item"
+            wx:for="{{merchant.featuredDishes}}"
+            wx:key="id"
+            bindtap="onDishTap"
+            data-index="{{index}}"
+          >
+            <t-image class="dish-img" src="{{item.imageUrl}}" mode="aspectFill" lazy />
+            <text class="dish-name">{{item.name}}</text>
+            <view class="dish-bottom">
+              <text class="dish-price">{{item.priceDisplay}}</text>
+              <!-- 有规格选项 -->
+              <t-button
+                wx:if="{{item.customization_groups && item.customization_groups.length > 0}}"
+                theme="primary"
+                size="small"
+                variant="outline"
+                shape="round"
+                catchtap="onSelectSpec"
+                data-index="{{index}}"
+              >选规格</t-button>
+              <!-- 直接加购 -->
+              <t-button
+                wx:else
+                theme="primary"
+                size="small"
+                icon="add"
+                shape="circle"
+                catchtap="onDishAdd"
+                data-index="{{index}}"
+              />
+            </view>
+          </view>
+
+          <!-- 进入商户详情 -->
+          <view class="dish-more" bindtap="onMerchantHeaderTap">
+            <text class="dish-more-icon">›</text>
+            <text class="dish-more-text">更多</text>
+          </view>
+
+        </view>
+      </scroll-view>
+    </block>
+
+  </view>
+</view>

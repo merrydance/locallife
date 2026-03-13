@@ -25,6 +25,7 @@ export interface MerchantSummary {
   status?: string                              // 商户状态
   is_open?: boolean                            // 是否营业（仅部分接口）
   tags?: string[]                              // 商户标签（仅部分接口）
+  created_at?: string                          // 入驻时间（用于判断新店）
 }
 
 /** 搜索商户返回项 - 对齐后端 searchMerchantResponse */
@@ -43,6 +44,7 @@ export interface SearchMerchantItem {
   distance?: number
   estimated_delivery_fee?: number
   tags?: string[]
+  created_at?: string  // 入驻时间，用于前端判断"新店"
 }
 
 export interface SearchMerchantsResponse {
@@ -108,7 +110,9 @@ export async function searchMerchants(params: {
     total_orders: item.total_orders,
     region_id: item.region_id,
     status: item.status,
-    is_open: item.is_open
+    is_open: item.is_open,
+    tags: item.tags || [],
+    created_at: item.created_at
   }))
 }
 
@@ -317,6 +321,23 @@ export async function getPublicMerchantCombos(merchantId: number): Promise<Publi
     useCache: true,
     cacheTTL: 5 * 60 * 1000
   })
+}
+
+/**
+ * 查询当前用户是否曾在该商户成功下单（用于展示"再来一单"标识）
+ */
+export async function getHasUserOrderedFromMerchant(merchantId: number): Promise<boolean> {
+  try {
+    const result = await request<{ has_ordered: boolean }>({
+      url: `/v1/public/merchants/${merchantId}/has-ordered`,
+      method: 'GET',
+      useCache: true,
+      cacheTTL: 10 * 60 * 1000
+    })
+    return result.has_ordered ?? false
+  } catch {
+    return false
+  }
 }
 
 // ==================== 数据适配器 (仅保留顾客端相关) ====================

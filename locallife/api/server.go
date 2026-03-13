@@ -460,6 +460,7 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/public/merchants/:id/combos", server.getPublicMerchantCombos)
 	authGroup.GET("/public/merchants/:id/rooms", server.getPublicMerchantRooms)
 	authGroup.GET("/public/merchants/:id/recharge-rules", server.getPublicRechargeRules)
+	authGroup.GET("/public/merchants/:id/has-ordered", server.getPublicMerchantHasOrdered)
 
 	// 分享功能由小程序前端 share 属性实现，无需后端API
 

@@ -1016,6 +1016,7 @@ type Querier interface {
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
 	GetWithdrawalRecord(ctx context.Context, id int64) (WithdrawalRecord, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
+	HasUserOrderedFromMerchant(ctx context.Context, arg HasUserOrderedFromMerchantParams) (bool, error)
 	IncrementMembershipBalance(ctx context.Context, arg IncrementMembershipBalanceParams) (MerchantMembership, error)
 	IncrementMerchantForeignObjectClaim(ctx context.Context, merchantID int64) error
 	IncrementPopularKeyword(ctx context.Context, arg IncrementPopularKeywordParams) error

@@ -73,22 +73,23 @@ type searchDishResponse struct {
 }
 
 type searchMerchantResponse struct {
-	ID                   int64    `json:"id"`
-	Name                 string   `json:"name"`
-	Description          string   `json:"description"`
-	Address              string   `json:"address,omitempty"`
-	Latitude             float64  `json:"-"`
-	Longitude            float64  `json:"-"`
-	Phone                string   `json:"phone,omitempty"`
-	LogoURL              string   `json:"logo_url"`
-	CoverImage           string   `json:"cover_image,omitempty"` // 门头照（首张），作为列表卡片封面
-	Status               string   `json:"status"`
-	IsOpen               bool     `json:"is_open"`
-	RegionID             int64    `json:"region_id"`                        // 区域ID，用于运费计算
-	TotalOrders          int32    `json:"total_orders,omitempty"`           // 总销量
-	Distance             *int     `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
-	EstimatedDeliveryFee *int64   `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
-	Tags                 []string `json:"tags,omitempty"`
+	ID                   int64     `json:"id"`
+	Name                 string    `json:"name"`
+	Description          string    `json:"description"`
+	Address              string    `json:"address,omitempty"`
+	Latitude             float64   `json:"-"`
+	Longitude            float64   `json:"-"`
+	Phone                string    `json:"phone,omitempty"`
+	LogoURL              string    `json:"logo_url"`
+	CoverImage           string    `json:"cover_image,omitempty"` // 门头照（首张），作为列表卡片封面
+	Status               string    `json:"status"`
+	IsOpen               bool      `json:"is_open"`
+	RegionID             int64     `json:"region_id"`                        // 区域ID，用于运费计算
+	TotalOrders          int32     `json:"total_orders,omitempty"`           // 总销量
+	Distance             *int      `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
+	EstimatedDeliveryFee *int64    `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
+	Tags                 []string  `json:"tags,omitempty"`
+	CreatedAt            time.Time `json:"created_at"` // 入驻时间，前端用于判断新店
 }
 
 type searchComboResponse struct {
@@ -704,6 +705,7 @@ func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) se
 		IsOpen:      merchant.IsOpen,
 		RegionID:    merchant.RegionID,
 		TotalOrders: merchant.TotalOrders,
+		CreatedAt:   merchant.CreatedAt,
 	}
 	if cover := extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover
@@ -743,6 +745,7 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 		IsOpen:      merchant.IsOpen,
 		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
 		TotalOrders: merchant.TotalOrders,
+		CreatedAt:   merchant.CreatedAt,
 	}
 	if cover := extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover

@@ -10005,6 +10005,21 @@ func (mr *MockStoreMockRecorder) HasRole(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasRole", reflect.TypeOf((*MockStore)(nil).HasRole), ctx, arg)
 }
 
+// HasUserOrderedFromMerchant mocks base method.
+func (m *MockStore) HasUserOrderedFromMerchant(ctx context.Context, arg db.HasUserOrderedFromMerchantParams) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasUserOrderedFromMerchant", ctx, arg)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// HasUserOrderedFromMerchant indicates an expected call of HasUserOrderedFromMerchant.
+func (mr *MockStoreMockRecorder) HasUserOrderedFromMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasUserOrderedFromMerchant", reflect.TypeOf((*MockStore)(nil).HasUserOrderedFromMerchant), ctx, arg)
+}
+
 // IncrementMembershipBalance mocks base method.
 func (m *MockStore) IncrementMembershipBalance(ctx context.Context, arg db.IncrementMembershipBalanceParams) (db.MerchantMembership, error) {
 	m.ctrl.T.Helper()

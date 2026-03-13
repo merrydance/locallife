@@ -87,6 +87,13 @@ WHERE o.user_id = $1 AND o.status = $2
 ORDER BY o.created_at DESC
 LIMIT $3 OFFSET $4;
 
+-- name: HasUserOrderedFromMerchant :one
+SELECT EXISTS(
+    SELECT 1 FROM orders
+    WHERE user_id = $1 AND merchant_id = $2
+        AND status NOT IN ('cancelled')
+) AS has_ordered;
+
 -- name: ListOrdersByMerchant :many
 SELECT * FROM orders
 WHERE merchant_id = $1

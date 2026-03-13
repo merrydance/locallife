@@ -1,0 +1,214 @@
+/* 商户 Feed 卡片 - 适配 Design System */
+@import '../../styles/customer.wxss';
+
+/* ========== 外层卡片 ========== */
+
+.feed-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+/* ========== 商户头部 ========== */
+
+.merchant-header {
+  display: flex;
+  gap: var(--spacer-md);
+  padding: var(--customer-card-padding);
+  align-items: flex-start;
+  transition: background 0.15s ease;
+}
+
+.merchant-header:active {
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.merchant-image {
+  width: var(--customer-image-size);
+  height: var(--customer-image-size);
+  border-radius: var(--radius-md);
+  flex-shrink: 0;
+  background-color: var(--td-bg-color-secondarycontainer);
+}
+
+.merchant-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xs);
+  min-width: 0;
+  justify-content: space-between;
+}
+
+.row-1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.merchant-name {
+  flex: 1;
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row-2 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacer-xs);
+}
+
+.meta {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.meta-sep {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.row-3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--spacer-xs);
+}
+
+/* ========== 菜品预览区 ========== */
+
+.dish-preview-section {
+  padding: var(--spacer-sm) var(--spacer-sm) var(--spacer-sm);
+  border-top: 1rpx solid var(--td-component-stroke);
+}
+
+/* 骨架屏 */
+
+.dish-preview-skeleton {
+  display: flex;
+  gap: var(--spacer-sm);
+  overflow: hidden;
+}
+
+.skeleton-item {
+  width: 180rpx;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.skeleton-img {
+  width: 180rpx;
+  height: 130rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--radius-sm);
+}
+
+.skeleton-name {
+  height: 24rpx;
+  width: 130rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: 4rpx;
+}
+
+.skeleton-price {
+  height: 22rpx;
+  width: 80rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: 4rpx;
+}
+
+/* 横向滚动容器 */
+
+.dish-scroll {
+  width: 100%;
+}
+
+.dish-list {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  gap: var(--spacer-sm);
+  padding: 4rpx 0 4rpx;
+}
+
+/* 单个菜品单元格 */
+
+.dish-item {
+  width: 180rpx;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.dish-item:active {
+  opacity: 0.8;
+}
+
+.dish-img {
+  width: 180rpx;
+  height: 130rpx;
+  border-radius: var(--radius-sm);
+  background-color: var(--td-bg-color-secondarycontainer);
+  flex-shrink: 0;
+}
+
+.dish-name {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-primary);
+  line-height: 1.4;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  width: 180rpx;
+}
+
+.dish-bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dish-price {
+  font-size: var(--font-size-sm);
+  font-weight: 700;
+  color: var(--td-brand-color);
+  line-height: 1;
+}
+
+/* 更多按钮单元格 */
+
+.dish-more {
+  width: 72rpx;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4rpx;
+  padding-bottom: 28rpx;
+}
+
+.dish-more:active {
+  opacity: 0.5;
+}
+
+.dish-more-icon {
+  font-size: 56rpx;
+  color: var(--td-text-color-secondary);
+  line-height: 1;
+}
+
+.dish-more-text {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}

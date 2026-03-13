@@ -1596,6 +1596,36 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 	})
 }
 
+// getPublicMerchantHasOrdered godoc
+// @Summary 查询当前用户是否曾在该商户成功下单
+// @Tags Merchant
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} map[string]bool "has_ordered"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Security BearerAuth
+// @Router /v1/public/merchants/{id}/has-ordered [get]
+func (server *Server) getPublicMerchantHasOrdered(ctx *gin.Context) {
+	var req publicMerchantDetailRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	hasOrdered, err := server.store.HasUserOrderedFromMerchant(ctx, db.HasUserOrderedFromMerchantParams{
+		UserID:     authPayload.UserID,
+		MerchantID: req.ID,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"has_ordered": hasOrdered})
+}
+
 // enrichPublicComboListImages godoc
 func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []publicComboItem) {
 	if len(combos) == 0 {

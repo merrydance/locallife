@@ -16,22 +16,7 @@
   z-index: var(--z-index-sticky);
 }
 
-/* ========== Tabs区域 ========== */
-.tabs-section {
-  background: var(--td-bg-color-container);
-  margin-bottom: var(--spacer-sm);
-  box-shadow: var(--shadow-sm); /* 轻微阴影区分内容 */
-  z-index: var(--z-index-sticky);
-}
-
-/* ========== 分类导航 ========== */
-.category-section {
-  background: var(--td-bg-color-container);
-  margin-bottom: var(--spacer-sm);
-  padding-bottom: var(--spacer-xs);
-}
-
-/* ========== 内容区域 ========== */
+/* ========== 内容区域 ==========*/
 .content-section {
   display: flex;
   flex-direction: column;
@@ -69,20 +54,10 @@
   flex-shrink: 0;
 }
 
-.nearby-merchants-section {
+.feed-section {
   display: flex;
   flex-direction: column;
   gap: var(--spacer-sm);
-}
-
-.package-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-sm);
-}
-
-.package-list-item {
-  width: 100%;
 }
 
 .loading-wrapper {
