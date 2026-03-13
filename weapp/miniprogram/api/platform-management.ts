@@ -584,7 +584,7 @@ export class PlatformManagementService {
     /**
      * 分页获取区域扩展申请列表（仅限 pending）
      */
-    async getAdminRegionExpansionApplications(params: { page?: number; limit?: number }): Promise<AdminRegionExpansionApplicationsResponse> {
+    async getAdminRegionExpansionApplications(params: { page?: number, limit?: number }): Promise<AdminRegionExpansionApplicationsResponse> {
         return request({
             url: '/v1/admin/operators/region-applications',
             method: 'GET',

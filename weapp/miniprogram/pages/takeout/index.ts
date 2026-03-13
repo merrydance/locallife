@@ -109,7 +109,7 @@ Page({
     dishes: [] as Dish[],
     restaurants: [] as RestaurantViewModel[],
     packages: [] as PackageViewModel[],
-    cuisineCategories: [] as Array<ActiveCategory & { emoji: string; bg: string }>,
+    cuisineCategories: [] as Array<ActiveCategory & { emoji: string, bg: string }>,
     activeCategoryId: '',
     cartTotalCount: 0,
     cartTotalPrice: 0,
@@ -125,7 +125,7 @@ Page({
     needLocation: false,
     refresherTriggered: false,
     isPrefetching: false,
-    hasServiceProviders: true,
+    hasServiceProviders: true
   },
 
   // 预加载缓存 (不放在 data 中以免触发渲染)
@@ -251,7 +251,7 @@ Page({
 
   // 品类网格点击：跳转到品类专属列表页
   onCategoryTap(e: WechatMiniprogram.CustomEvent) {
-    const { id, name } = e.currentTarget.dataset as { id: number; name: string }
+    const { id, name } = e.currentTarget.dataset as { id: number, name: string }
     wx.navigateTo({
       url: `/pages/takeout/category/index?tag_id=${id}&name=${encodeURIComponent(name)}`
     })
@@ -481,7 +481,7 @@ Page({
       })
 
       // 品类名到 emoji + 背景色的映射（前端静态装饰，后端不存储图标）
-      const CUISINE_META: Record<string, { emoji: string; bg: string }> = {
+      const CUISINE_META: Record<string, { emoji: string, bg: string }> = {
         '川菜': { emoji: '🌶️', bg: 'rgba(255, 87, 34, 0.12)' },
         '粤菜': { emoji: '🍱', bg: 'rgba(255, 193, 7, 0.12)' },
         '湘菜': { emoji: '🥘', bg: 'rgba(244, 67, 54, 0.12)' },
@@ -502,7 +502,7 @@ Page({
         '咖啡': { emoji: '☕', bg: 'rgba(121, 85, 72, 0.12)' },
         '面食': { emoji: '🍜', bg: 'rgba(255, 152, 0, 0.12)' },
         '米粉': { emoji: '🍜', bg: 'rgba(255, 193, 7, 0.12)' },
-        '素食': { emoji: '🥦', bg: 'rgba(76, 175, 80, 0.12)' },
+        '素食': { emoji: '🥦', bg: 'rgba(76, 175, 80, 0.12)' }
       }
       const DEFAULT_META = { emoji: '🍽️', bg: 'rgba(158, 158, 158, 0.12)' }
       const MAX_CATEGORIES = 8

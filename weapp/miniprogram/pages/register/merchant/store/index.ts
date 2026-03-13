@@ -350,7 +350,7 @@ Page({
         business_address: formData.addressDetail || formData.address,
         longitude: formData.longitude ? String(formData.longitude) : undefined,
         latitude: formData.latitude ? String(formData.latitude) : undefined,
-        region_id: formData.regionId,
+        region_id: formData.regionId
       }
 
       console.log('[MerchantRegister] syncToBackend payload:', JSON.stringify(payload, null, 2))

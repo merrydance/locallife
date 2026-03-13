@@ -43,6 +43,15 @@ export interface AppealResponse {
     created_at: string
     reviewed_at?: string
     compensated_at?: string
+
+    // 商户端异议记录扩展字段
+    claim_type?: ClaimType
+    claim_amount?: number
+    claim_description?: string
+    claim_approved_amount?: number
+    order_no?: string
+    order_amount?: number
+    user_phone?: string
 }
 
 /** 创建申诉请求 */
@@ -79,6 +88,30 @@ export interface ClaimResponse {
     reviewer_id?: number
     created_at: string
     reviewed_at?: string
+
+    // 商户/骑手索赔列表的扩展字段
+    order_no?: string
+    order_amount?: number
+    user_phone?: string
+    user_name?: string
+    appeal_id?: number
+    appeal_status?: AppealStatus
+    appeal_reason?: string
+    appeal_review_notes?: string
+}
+
+/** 商户索赔判定依据响应 */
+export interface MerchantClaimDecisionResponse {
+    decision: {
+        decision_id: number
+        responsible_party: string
+        compensation_source: string
+        decision_status: string
+        reason_codes: string[]
+        trace_summary?: string
+        created_at: string
+        updated_at: string
+    } | null
 }
 
 /** 追偿单响应 */
@@ -187,6 +220,17 @@ export class AppealManagementService {
      * @param appealId 申诉ID
      */
     async getAppealDetail(appealId: number): Promise<AppealResponse> {
+        return request({
+            url: `/v1/merchant/appeals/${appealId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取商户异议详情
+     * @param appealId 异议ID
+     */
+    async getMerchantAppealDetail(appealId: number): Promise<AppealResponse> {
         return request({
             url: `/v1/merchant/appeals/${appealId}`,
             method: 'GET'
@@ -379,6 +423,17 @@ export class ClaimManagementService {
     async getMerchantClaimDetail(claimId: number): Promise<ClaimResponse> {
         return request({
             url: `/v1/merchant/claims/${claimId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取商户索赔责任判定依据
+     * @param claimId 索赔ID
+     */
+    async getMerchantClaimDecision(claimId: number): Promise<MerchantClaimDecisionResponse> {
+        return request({
+            url: `/v1/merchant/claims/${claimId}/decision`,
             method: 'GET'
         })
     }

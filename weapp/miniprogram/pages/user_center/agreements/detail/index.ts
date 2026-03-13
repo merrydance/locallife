@@ -34,7 +34,7 @@ Page({
     }
   },
 
-  onNavHeight(e: any) {
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
     const { navBarHeight } = e.detail
     const windowInfo = wx.getWindowInfo()
     this.setData({

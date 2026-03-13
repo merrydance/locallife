@@ -11,6 +11,7 @@ Page({
   data: {
     navBarHeight: 88,
     configItems: [
+      { id: 'claims', title: '索赔与追偿', desc: '查看责任判定、提交异议、支付平台垫付款', path: '/pages/merchant/claims/index' },
       { id: 'dishes', title: '菜品管理', desc: '新增、编辑、上下架菜品', path: '/pages/merchant/dishes/index' },
       { id: 'dish-categories', title: '菜品分类管理', desc: '维护分类与排序', path: '/pages/merchant/dishes/categories/index' },
       { id: 'combos', title: '套餐管理', desc: '维护套餐组合与上架状态', path: '/pages/merchant/combos/index' },

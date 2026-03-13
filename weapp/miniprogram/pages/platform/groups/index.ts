@@ -70,7 +70,7 @@ Page({
         limit: this.data.limit
       })
 
-      const tagged = response.applications.map(a => ({ ...a, statusLabel: getGroupStatusLabel(a.status) }))
+      const tagged = response.applications.map((a) => ({ ...a, statusLabel: getGroupStatusLabel(a.status) }))
       this.setData({
         applications: reset ? tagged : this.data.applications.concat(tagged),
         total: response.total,

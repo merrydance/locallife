@@ -72,6 +72,7 @@ Page({
 
   onUnload() {
     this.cleanupWebSocket()
+    destroyAudioAlert()
   },
 
   async ensureMerchantAccess() {
@@ -223,10 +224,5 @@ Page({
 
   onGoToSettings() {
     wx.navigateTo({ url: '/pages/merchant/config/index' })
-  },
-
-  onUnload() {
-    this.cleanupWebSocket()
-    destroyAudioAlert()
   }
 })

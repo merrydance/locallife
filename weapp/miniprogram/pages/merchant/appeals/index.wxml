@@ -1,0 +1,70 @@
+<custom-navbar title="异议记录" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+  <view class="tips">查看商户已提交的异议记录、平台审核结论和复核备注。</view>
+
+  <view class="summary-grid">
+    <view class="summary-card accent-total">
+      <text class="summary-label">全部异议</text>
+      <text class="summary-value">{{summary.total}}</text>
+    </view>
+    <view class="summary-card accent-pending">
+      <text class="summary-label">待审核</text>
+      <text class="summary-value">{{summary.pending}}</text>
+    </view>
+    <view class="summary-card accent-approved">
+      <text class="summary-label">已通过</text>
+      <text class="summary-value">{{summary.approved}}</text>
+    </view>
+    <view class="summary-card accent-rejected">
+      <text class="summary-label">已驳回</text>
+      <text class="summary-value">{{summary.rejected}}</text>
+    </view>
+  </view>
+
+  <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="appeal-tabs">
+    <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
+    <t-tab-panel label="待审核" value="pending"><view /></t-tab-panel>
+    <t-tab-panel label="已通过" value="approved"><view /></t-tab-panel>
+    <t-tab-panel label="已驳回" value="rejected"><view /></t-tab-panel>
+  </t-tabs>
+
+  <t-loading wx:if="{{loading}}" theme="circular" text="加载中..." class="loading" />
+
+  <view wx:if="{{!loading && filteredAppeals.length === 0}}" class="empty-wrap">
+    <t-empty description="暂无异议记录" />
+  </view>
+
+  <view wx:if="{{!loading && filteredAppeals.length > 0}}" class="appeal-list">
+    <view wx:for="{{filteredAppeals}}" wx:key="id" class="appeal-card" data-claim-id="{{item.claimId}}" bindtap="onViewClaimDetail">
+      <view class="card-header">
+        <text class="order-no">订单 {{item.orderNo}}</text>
+        <text class="status">{{item.statusLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">索赔类型</text>
+        <text class="value">{{item.claimTypeLabel}}</text>
+      </view>
+      <view class="row">
+        <text class="label">关联金额</text>
+        <text class="value">{{item.claimAmountText}}</text>
+      </view>
+      <view class="row" wx:if="{{item.compensationAmountText}}">
+        <text class="label">复核补偿</text>
+        <text class="value">{{item.compensationAmountText}}</text>
+      </view>
+      <view class="desc">
+        <text class="desc-label">异议理由</text>
+        <text class="desc-value">{{item.reason}}</text>
+      </view>
+      <view class="desc" wx:if="{{item.reviewNotes}}">
+        <text class="desc-label">平台备注</text>
+        <text class="desc-value">{{item.reviewNotes}}</text>
+      </view>
+      <view class="card-footer">
+        <text class="time">提交于 {{item.createdAt}}</text>
+        <text class="time" wx:if="{{item.reviewedAt}}">复核于 {{item.reviewedAt}}</text>
+      </view>
+    </view>
+  </view>
+</view>

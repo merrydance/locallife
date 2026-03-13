@@ -64,7 +64,7 @@ Page({
     this.setData({ listLoading: true, listError: '' })
     try {
       const res = await listRegionExpansionApplications()
-      const apps = (res.applications || []).map(a => ({ ...a, created_at: formatDate(a.created_at) }))
+      const apps = (res.applications || []).map((a) => ({ ...a, created_at: formatDate(a.created_at) }))
       this.setData({ applications: apps })
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : '加载失败'

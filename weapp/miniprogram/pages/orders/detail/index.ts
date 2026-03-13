@@ -385,7 +385,7 @@ Page({
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((wx as any).openBusinessView) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      ;(wx as any).openBusinessView({
+      (wx as any).openBusinessView({
         businessType: 'weappOrderConfirm',
         extraData: { transaction_id: transactionId },
         fail() {

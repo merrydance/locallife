@@ -55,7 +55,7 @@ Component({
     'totalCount'(count: number) {
       if (count > 0) {
         this.setData({ isBouncing: true })
-        const that = this as any
+        const that = this as unknown as { _bounceTimer?: ReturnType<typeof setTimeout> }
         if (that._bounceTimer) clearTimeout(that._bounceTimer)
         that._bounceTimer = setTimeout(() => {
           this.setData({ isBouncing: false })

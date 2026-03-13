@@ -49,7 +49,9 @@ export function destroyAudioAlert(): void {
   if (_ctx) {
     try {
       _ctx.destroy()
-    } catch (_) {}
+    } catch (_) {
+      // ignore destroy errors
+    }
     _ctx = null
   }
 }

@@ -161,6 +161,9 @@
       "pages": [
         "dashboard/index",
         "config/index",
+        "claims/index",
+        "claims/detail/index",
+        "appeals/index",
         "finance/index",
         "dishes/index",
         "dishes/categories/index",

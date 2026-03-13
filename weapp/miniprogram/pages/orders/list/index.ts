@@ -12,7 +12,7 @@ import { OrderCardAdapter } from '../../../adapters/order-card'
 import type { OrderCardViewModel } from '../../../adapters/order-card'
 import CartService from '../../../services/cart'
 import { OrderAdapter } from '../../../adapters/order'
-import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay, PaymentCancelledError } from '../../../api/payment'
+import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 
 // 简化后的状态筛选选项，更符合主流外卖APP习惯

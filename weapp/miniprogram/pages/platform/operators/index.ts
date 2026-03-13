@@ -178,9 +178,9 @@ Page({
       const merged = reset ? incoming : this._mergeRegion(this.data.regionApps, incoming)
       const regionFilterStats = {
         all:      merged.length,
-        pending:  merged.filter(i => i.status === 'pending').length,
-        approved: merged.filter(i => i.status === 'approved').length,
-        rejected: merged.filter(i => i.status === 'rejected').length
+        pending:  merged.filter((i) => i.status === 'pending').length,
+        approved: merged.filter((i) => i.status === 'approved').length,
+        rejected: merged.filter((i) => i.status === 'rejected').length
       }
       const regionDisplayApps = this._filterRegion(merged, this.data.regionStatusFilter)
       this.setData({
@@ -211,13 +211,13 @@ Page({
     incoming: AdminRegionExpansionApplicationItem[]
   ): AdminRegionExpansionApplicationItem[] {
     const map = new Map<number, AdminRegionExpansionApplicationItem>()
-    existing.forEach(i => map.set(i.id, i))
-    incoming.forEach(i => map.set(i.id, i))
+    existing.forEach((i) => map.set(i.id, i))
+    incoming.forEach((i) => map.set(i.id, i))
     return Array.from(map.values())
   },
 
   _filterRegion(list: AdminRegionExpansionApplicationItem[], status: string) {
-    return status === 'all' ? list : list.filter(i => i.status === status)
+    return status === 'all' ? list : list.filter((i) => i.status === status)
   },
 
   // ── 区域扩展审批 ──────────────────────────────────────────────────────────

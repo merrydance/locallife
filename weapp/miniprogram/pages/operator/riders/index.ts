@@ -18,7 +18,7 @@ const RIDER_STATUS_LABEL: Record<string, string> = {
   active: '已审核',
   pending: '待审核',
   suspended: '已暂停',
-  deactivated: '已注销',
+  deactivated: '已注销'
 }
 
 type RiderItemView = RiderItem & {
@@ -81,7 +81,7 @@ Page({
       const incoming = (res.riders || []).map((item) => ({
         ...item,
         total_earnings_display: (Number(item.total_earnings || 0) / 100).toFixed(2),
-        status_label: RIDER_STATUS_LABEL[item.status] || item.status,
+        status_label: RIDER_STATUS_LABEL[item.status] || item.status
       }))
       const riders = reset ? incoming : [...this.data.riders, ...incoming]
       this.setData({

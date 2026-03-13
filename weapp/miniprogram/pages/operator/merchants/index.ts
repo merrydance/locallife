@@ -12,7 +12,7 @@ const MERCHANT_STATUS_LABEL: Record<string, string> = {
   suspended: '已暂停',
   pending: '待审核',
   rejected: '审核拒绝',
-  closed: '已关闭',
+  closed: '已关闭'
 }
 
 interface OperatorMerchantView {

@@ -79,7 +79,11 @@ App<IAppOption>({
       const LOCATION_CACHE_MAX_AGE = 24 * 60 * 60 * 1000
       try {
         const lastKnown = wx.getStorageSync('last_known_location') as {
-          lat: number; lng: number; name: string; address?: string; time: number
+          lat: number
+          lng: number
+          name: string
+          address?: string
+          time: number
         } | null
         if (lastKnown?.lat && lastKnown?.lng && (Date.now() - lastKnown.time) < LOCATION_CACHE_MAX_AGE) {
           // 只在 globalData 还没被真实 GPS 覆盖的情况下才应用缓存
@@ -146,7 +150,7 @@ App<IAppOption>({
           // 刷新当前页面订单状态
           const pages = getCurrentPages()
           const currentPage = pages[pages.length - 1]
-          if (currentPage && typeof (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadOrderDetail?: () => void; loadDeliveryData?: () => void }).loadOrderDetail === 'function') {
+          if (currentPage && typeof (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadOrderDetail?: () => void, loadDeliveryData?: () => void }).loadOrderDetail === 'function') {
             (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadOrderDetail?: () => void }).loadOrderDetail!()
           } else if (currentPage && typeof (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadDeliveryData?: () => void }).loadDeliveryData === 'function') {
             (currentPage as WechatMiniprogram.Page.Instance<Record<string, unknown>, Record<string, unknown>> & { loadDeliveryData?: () => void }).loadDeliveryData!()

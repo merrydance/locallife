@@ -1,0 +1,11 @@
+{
+  "usingComponents": {
+    "custom-navbar": "/components/custom-navbar/index",
+    "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-loading": "tdesign-miniprogram/loading/loading",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel"
+  },
+  "navigationStyle": "custom",
+  "enablePullDownRefresh": true
+}

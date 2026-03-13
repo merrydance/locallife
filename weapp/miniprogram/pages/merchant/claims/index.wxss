@@ -1,0 +1,165 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+  padding: var(--spacer-sm);
+  box-sizing: border-box;
+}
+
+.page-head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-sm);
+}
+
+.tips {
+  flex: 1;
+  background: var(--td-brand-color-light);
+  color: var(--td-text-color-primary);
+  border: 1px solid var(--td-brand-color-2);
+  border-radius: var(--radius-lg);
+  padding: var(--spacer-sm);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.loading {
+  margin-top: 120rpx;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-sm);
+}
+
+.summary-card {
+  border-radius: var(--radius-lg);
+  padding: var(--spacer-sm);
+  color: var(--td-text-color-primary);
+}
+
+.accent-total {
+  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-brand-color-2));
+}
+
+.accent-pending {
+  background: var(--td-warning-color-1);
+}
+
+.accent-appealed {
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.accent-closed {
+  background: var(--td-success-color-1);
+}
+
+.summary-label {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.summary-value {
+  display: block;
+  margin-top: var(--spacer-xs);
+  font-size: var(--font-size-title);
+  font-weight: 700;
+}
+
+.claims-tabs {
+  margin-bottom: var(--spacer-xs);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background: var(--td-bg-color-container);
+}
+
+.empty-wrap {
+  margin-top: 120rpx;
+}
+
+.claims-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.claim-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-card);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-card);
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--spacer-sm);
+}
+
+.card-header .left {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+}
+
+.order-no {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+}
+
+.status {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.card-tip {
+  margin-bottom: 10rpx;
+  font-size: var(--font-size-xxs);
+  color: var(--td-brand-color-9);
+}
+
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+  margin: var(--spacer-xs) 0;
+}
+
+.label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  white-space: nowrap;
+}
+
+.value {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-primary);
+  text-align: right;
+  line-height: 1.5;
+}
+
+.desc {
+  margin-top: var(--spacer-xs);
+  padding: var(--spacer-sm);
+  background: var(--td-bg-color-secondarycontainer);
+  border-radius: var(--radius-md);
+}
+
+.desc-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.desc-value {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-primary);
+  line-height: 1.6;
+}
+
+

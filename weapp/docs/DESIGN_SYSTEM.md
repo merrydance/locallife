@@ -80,11 +80,10 @@
   - **场景**: "预制菜"、"推荐"、"休息中"、"已完成"
 
 - **一般属性/信息 (Attribute/Info)**
-  - **样式**: 淡色背景 + 深色文字 (配合 `.tag-outline` 样式或标准变量)
-  - **代码**: `<t-tag variant="light-outline" theme="primary">`
+  - **样式**: 深色背景 + 白色文字（与强调场景统一）
+  - **代码**: `<t-tag variant="dark" theme="primary">`
   - **场景**: "微辣"、"免配送费"、"川菜"
-  - **注意**: `variant="light-outline"`
-    现在的背景色已通过全局变量调整为极淡色，确保了清晰度。
+  - **注意**: 项目中统一使用 `variant="dark"`，禁止使用 `light-outline` 或 `light`，保持全局视觉一致性。
 
 ### 3.2 卡片 (Card)
 
@@ -127,7 +126,7 @@
 | :------------------- | :----------------------- | :----------------------------------------------------- |
 | `<view class="btn">` | **`<t-button>`**         | `<t-button theme="primary" shape="round">`             |
 | `<image>`            | **`<t-image>`**          | `<t-image mode="aspectFill" lazy />` (自带加载/失败态) |
-| `<view class="tag">` | **`<t-tag>`**            | `<t-tag variant="light-outline">`                      |
+| `<view class="tag">` | **`<t-tag>`**            | `<t-tag variant="dark" theme="primary">`               |
 | `<input>`            | **`<t-input>`**          | `<t-input label="标题" placeholder="..." />`           |
 | 弹窗/Dialog          | **`<t-dialog>`**         | 使用 `Dialog.confirm({...})` API 调用                  |
 | 加载中               | **`<t-loading>`**        | `<t-loading theme="circular" />`                       |

@@ -14,7 +14,7 @@ Page({
     this.fetchAgreements()
   },
 
-  onNavHeight(e: any) {
+  onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
     const { navBarHeight } = e.detail
     const windowInfo = wx.getWindowInfo()
     this.setData({
@@ -51,7 +51,7 @@ Page({
     Navigation.toAboutUs()
   },
 
-  onAgreementTap(e: any) {
+  onAgreementTap(e: WechatMiniprogram.TouchEvent) {
     const { type, title } = e.currentTarget.dataset
     Navigation.toAgreementDetail(type, title)
   },

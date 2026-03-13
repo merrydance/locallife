@@ -28,7 +28,7 @@ type StatsView = MerchantStatsResponse & {
   avg_daily_sales_display: string
   repurchase_rate_display: string
   avg_orders_per_user_display: string
-  top_dishes_with_revenue: Array<{ dish_name: string; total_sold: number; total_revenue_display: string }>
+  top_dishes_with_revenue: Array<{ dish_name: string, total_sold: number, total_revenue_display: string }>
 }
 
 function statusLabel(s: string): string {
@@ -38,7 +38,7 @@ function statusLabel(s: string): string {
     pending: '待审核',
     rejected: '已拒绝',
     suspended: '已暂停',
-    closed: '已关闭',
+    closed: '已关闭'
   }
   return map[s] ?? s
 }
@@ -55,7 +55,7 @@ Page({
     error: '',
     navBarHeight: 88,
     detail: null as MerchantDetailView | null,
-    stats: null as StatsView | null,
+    stats: null as StatsView | null
   },
 
   onLoad(options: Record<string, string>) {
@@ -95,11 +95,11 @@ Page({
         avg_daily_sales_display: fen2yuan(s.avg_daily_sales),
         repurchase_rate_display: (s.repurchase_rate_basis_points / 100).toFixed(1),
         avg_orders_per_user_display: (s.avg_orders_per_user_cents / 100).toFixed(2),
-        top_dishes_with_revenue: (s.top_dishes ?? []).map(d => ({
+        top_dishes_with_revenue: (s.top_dishes ?? []).map((d) => ({
           dish_name: d.dish_name,
           total_sold: d.total_sold,
-          total_revenue_display: fen2yuan(d.total_revenue),
-        })),
+          total_revenue_display: fen2yuan(d.total_revenue)
+        }))
       }
       this.setData({ stats: statsView })
     } catch {

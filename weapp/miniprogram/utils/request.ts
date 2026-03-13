@@ -717,7 +717,7 @@ async function retryRequest<T>(options: RequestOptions, retryCount: number, curr
 /**
  * 显示重试对话框
  */
-function showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
+function _showRetryDialog(error: AppError, retryFn: () => Promise<unknown>) {
   wx.showModal({
     title: '网络异常',
     content: error.userMessage || '网络连接失败',
