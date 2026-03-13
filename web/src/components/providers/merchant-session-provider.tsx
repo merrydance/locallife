@@ -90,6 +90,7 @@ export function MerchantSessionProvider({
   const [wsConnected, setWsConnected] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
   const isConnectingRef = useRef(false);
+  const intentionalCloseRef = useRef(false);
   const reconnectTimerRef = useRef<NodeJS.Timeout | null>(null);
   const reconnectDelayRef = useRef(1000);
   const connectWebSocketRef = useRef<() => void>(() => {});
@@ -119,7 +120,14 @@ export function MerchantSessionProvider({
   }, []);
 
   const closeWebSocket = useCallback(() => {
+    // Cancel any pending auto-reconnect timer first
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = null;
+    }
     if (wsRef.current) {
+      // Mark as intentional so onclose does not schedule a reconnect
+      intentionalCloseRef.current = true;
       wsRef.current.close();
       wsRef.current = null;
     }
@@ -132,6 +140,7 @@ export function MerchantSessionProvider({
     const wsUrl = buildWebSocketUrl();
     if (!wsUrl) return;
 
+    intentionalCloseRef.current = false;
     isConnectingRef.current = true;
     const socket = new WebSocket(wsUrl);
     wsRef.current = socket;
@@ -152,15 +161,18 @@ export function MerchantSessionProvider({
       setWsConnected(false);
       wsRef.current = null;
       isConnectingRef.current = false;
-      
-      // Automatic reconnection logic
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
-      reconnectTimerRef.current = setTimeout(() => {
-        console.log(`Attempting reconnect in ${reconnectDelayRef.current}ms...`);
-        connectWebSocketRef.current();
-        // Exponential backoff
-        reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 1.5, 30000);
-      }, reconnectDelayRef.current);
+
+      // Only auto-reconnect for unexpected disconnections.
+      // Intentional closes (打烊/logout) set intentionalCloseRef=true to suppress this.
+      if (!intentionalCloseRef.current) {
+        if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = setTimeout(() => {
+          console.log(`Attempting reconnect in ${reconnectDelayRef.current}ms...`);
+          reconnectDelayRef.current = Math.min(reconnectDelayRef.current * 1.5, 30000);
+          connectWebSocketRef.current();
+        }, reconnectDelayRef.current);
+      }
+      intentionalCloseRef.current = false;
     };
 
     socket.onerror = () => {
