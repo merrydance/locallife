@@ -10,7 +10,7 @@
   overflow: hidden;
 }
 
-/* ========== 商户头部 ========== */
+/* ========== 商户头部（左图右文） ========== */
 
 .merchant-header {
   display: flex;
@@ -24,13 +24,16 @@
   background: var(--td-bg-color-secondarycontainer);
 }
 
+/* 4:3 横向图片，门牌/招牌不会被裁成正方形 */
 .merchant-image {
-  width: var(--customer-image-size);
-  height: var(--customer-image-size);
+  width: 220rpx;
+  height: 160rpx;
   --td-image-round-radius: 16rpx;
   flex-shrink: 0;
   background-color: var(--td-bg-color-secondarycontainer);
 }
+
+/* ========== 商户文字信息区 ========== */
 
 .merchant-info {
   flex: 1;

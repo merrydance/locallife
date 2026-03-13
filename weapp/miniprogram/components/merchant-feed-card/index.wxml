@@ -6,47 +6,47 @@
     <t-image class="merchant-image" src="{{merchant.imageUrl}}" mode="aspectFill" shape="round" lazy />
 
     <view class="merchant-info">
-      <!-- 第1行: 商户名 + 角标 -->
-      <view class="row-1">
-        <text class="merchant-name">{{merchant.name}}</text>
-        <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
-        <t-tag wx:if="{{merchant.hasOrdered}}" theme="success" size="small" variant="light">再来一单</t-tag>
-        <t-tag wx:if="{{merchant.isOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
-      </view>
+    <!-- 第1行: 商户名 + 角标 -->
+    <view class="row-1">
+      <text class="merchant-name">{{merchant.name}}</text>
+      <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
+      <t-tag wx:if="{{merchant.hasOrdered}}" theme="success" size="small" variant="light">再来一单</t-tag>
+      <t-tag wx:if="{{merchant.isOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>
+    </view>
 
-      <!-- 第2行: 月售 | 距离 | 配送费 | 出餐时间 -->
-      <view class="row-2">
-        <block wx:if="{{merchant.monthlySales > 0}}">
-          <text class="meta">月售{{merchant.monthlySales}}</text>
-          <text class="meta-sep">|</text>
-        </block>
-        <text class="meta">{{merchant.distance}}</text>
-        <block wx:if="{{merchant.deliveryFeeDisplay}}">
-          <text class="meta-sep">|</text>
-          <text class="meta">{{merchant.deliveryFeeDisplay}}</text>
-        </block>
-        <block wx:if="{{merchant.avgPrepMinutes > 0}}">
-          <text class="meta-sep">|</text>
-          <text class="meta">约{{merchant.avgPrepMinutes}}分出餐</text>
-        </block>
-      </view>
+    <!-- 第2行: 月售 | 距离 | 配送费 | 出餐时间 -->
+    <view class="row-2">
+      <block wx:if="{{merchant.monthlySales > 0}}">
+        <text class="meta">月售{{merchant.monthlySales}}</text>
+        <text class="meta-sep">|</text>
+      </block>
+      <text class="meta">{{merchant.distance}}</text>
+      <block wx:if="{{merchant.deliveryFeeDisplay}}">
+        <text class="meta-sep">|</text>
+        <text class="meta">{{merchant.deliveryFeeDisplay}}</text>
+      </block>
+      <block wx:if="{{merchant.avgPrepMinutes > 0}}">
+        <text class="meta-sep">|</text>
+        <text class="meta">约{{merchant.avgPrepMinutes}}分出餐</text>
+      </block>
+    </view>
 
-      <!-- 第3行: 促销标签（满减、券、免运费、活动标签） -->
-      <view class="row-3" wx:if="{{merchant.discountPromoText || merchant.voucherText || merchant.deliveryPromoText || merchant.promoText || merchant.subsidyText || (merchant.tags && merchant.tags.length > 0)}}">
-        <t-tag wx:if="{{merchant.discountPromoText}}" size="small" variant="dark" theme="warning">{{merchant.discountPromoText}}</t-tag>
-        <t-tag wx:if="{{merchant.voucherText}}" size="small" variant="light" theme="warning">{{merchant.voucherText}}</t-tag>
-        <t-tag wx:if="{{merchant.deliveryPromoText}}" size="small" variant="dark" theme="default">{{merchant.deliveryPromoText}}</t-tag>
-        <t-tag wx:if="{{merchant.promoText}}" size="small" variant="dark" theme="warning">{{merchant.promoText}}</t-tag>
-        <t-tag wx:if="{{merchant.subsidyText}}" size="small" variant="dark" theme="default">{{merchant.subsidyText}}</t-tag>
-        <t-tag
-          wx:for="{{merchant.tags}}"
-          wx:for-index="ti"
-          wx:key="ti"
-          size="small"
-          variant="outline"
-          theme="default"
-        >{{item}}</t-tag>
-      </view>
+    <!-- 第3行: 促销标签（满减、券、免运费、活动标签） -->
+    <view class="row-3" wx:if="{{merchant.discountPromoText || merchant.voucherText || merchant.deliveryPromoText || merchant.promoText || merchant.subsidyText || (merchant.tags && merchant.tags.length > 0)}}">
+      <t-tag wx:if="{{merchant.discountPromoText}}" size="small" variant="dark" theme="warning">{{merchant.discountPromoText}}</t-tag>
+      <t-tag wx:if="{{merchant.voucherText}}" size="small" variant="light" theme="warning">{{merchant.voucherText}}</t-tag>
+      <t-tag wx:if="{{merchant.deliveryPromoText}}" size="small" variant="dark" theme="default">{{merchant.deliveryPromoText}}</t-tag>
+      <t-tag wx:if="{{merchant.promoText}}" size="small" variant="dark" theme="warning">{{merchant.promoText}}</t-tag>
+      <t-tag wx:if="{{merchant.subsidyText}}" size="small" variant="dark" theme="default">{{merchant.subsidyText}}</t-tag>
+      <t-tag
+        wx:for="{{merchant.tags}}"
+        wx:for-index="ti"
+        wx:key="ti"
+        size="small"
+        variant="outline"
+        theme="default"
+      >{{item}}</t-tag>
+    </view>
     </view>
   </view>
 
