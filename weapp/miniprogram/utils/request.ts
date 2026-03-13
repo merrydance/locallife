@@ -356,6 +356,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
           await performTokenRefresh(true)
           logger.info('Token自动刷新成功,重试请求', undefined, 'request')
           if (loading) wx.hideLoading()
+          // 清除 singleFlight 登记，避免递归 request() 拿到自身 Promise 造成循环死锁
+          if (singleFlightKey) _inflightGetRequests.delete(singleFlightKey)
           return request<T>(options)
         } catch (refreshError) {
           logger.error('Token刷新失败(HTTP 401)', refreshError, 'request')
@@ -599,6 +601,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         logger.info('Token自动刷新成功,重试请求', undefined, 'request')
         // 关闭loading后再重试
         if (loading) wx.hideLoading()
+        // 清除 singleFlight 登记，避免递归 request() 拿到自身 Promise 造成循环死锁
+        if (singleFlightKey) _inflightGetRequests.delete(singleFlightKey)
         return request<T>(options)
       } catch (refreshError) {
         // 刷新失败
