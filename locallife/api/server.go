@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"hash/fnv"
 	"net/http"
@@ -155,15 +156,41 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		websocket.WithReliableGate(wsReliableGate(config.WebSocketReliableEnabled, config.WebSocketReliablePercent)),
 	}
 	if config.RedisAddress != "" {
-		queueClient := redis.NewClient(&redis.Options{
+		wsRedisClient := redis.NewClient(&redis.Options{
 			Addr:     config.RedisAddress,
 			Password: config.RedisPassword,
 		})
-		queueStore := websocket.NewRedisQueueStore(queueClient, 30*time.Minute, 200)
-		hubOptions = append(hubOptions, websocket.WithQueueStore(queueStore))
+		// 背压队列、消息回放、ACK 去重均使用 Redis，跨进程/重启均有效。
+		hubOptions = append(hubOptions,
+			websocket.WithQueueStore(websocket.NewRedisQueueStore(wsRedisClient, 30*time.Minute, 200)),
+			websocket.WithMessageStore(websocket.NewRedisMessageStore(wsRedisClient, 30*time.Minute, 200)),
+			websocket.WithAckStore(websocket.NewRedisAckStore(wsRedisClient, 30*time.Minute)),
+		)
 	} else {
 		hubOptions = append(hubOptions, websocket.WithQueueStore(websocket.NewMemoryQueueStore(30*time.Minute, 200, time.Now)))
 	}
+
+	// 骑手回放过滤器：delivery_pool_new 类消息仅当订单仍在配送池（未被抢）时才回放。
+	hubOptions = append(hubOptions, websocket.WithReplayFilter(
+		func(ctx context.Context, info websocket.ClientInfo, msg websocket.Message) bool {
+			if info.ClientType != websocket.ClientTypeRider {
+				return true // 非骑手客户端不做业务过滤
+			}
+			if msg.Type != websocket.MessageTypeDeliveryPoolNew {
+				return true // 只过滤配送池新单通知，其他消息正常回放
+			}
+			// 解析消息中的 order_id
+			var payload struct {
+				OrderID int64 `json:"order_id"`
+			}
+			if err := json.Unmarshal(msg.Data, &payload); err != nil || payload.OrderID == 0 {
+				return false // 无法解析则丢弃，避免推送无效单
+			}
+			// 查询配送池：若记录已被删除则说明订单已被抢或已取消，跳过回放
+			_, err := store.GetDeliveryPoolByOrderID(ctx, payload.OrderID)
+			return err == nil
+		},
+	))
 	wsHub := websocket.NewHub(context.Background(), hubOptions...)
 
 	// 创建Redis Pub/Sub管理器（用于跨进程推送通知）

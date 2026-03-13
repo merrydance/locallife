@@ -70,6 +70,9 @@ type Hub struct {
 	idGenerator  func() string
 	metrics      MetricsRecorder
 	reliableGate func(ClientInfo) bool
+	// replayFilter 是可选的断线重连消息回放过滤器。
+	// 返回 false 表示该消息不应回放给此客户端（例如骑手场景中订单已被他人接走）。
+	replayFilter ReplayFilter
 
 	retryQueue  chan retryItem
 	retryConfig RetryConfig
@@ -94,6 +97,11 @@ type BroadcastMessage struct {
 	EntityID   int64      // 目标实体ID，0表示广播给所有该类型客户端
 	Message    Message    // 消息内容
 }
+
+// ReplayFilter 是断线重连消息回放的可选过滤函数。
+// 返回 true 表示该消息应当回放；返回 false 跳过此消息。
+// 典型用途：骑手回放时过滤掉已被他人接走的配送池订单。
+type ReplayFilter func(ctx context.Context, info ClientInfo, msg Message) bool
 
 type RetryConfig struct {
 	Timeout    time.Duration
@@ -206,6 +214,15 @@ func WithReliableGate(gate func(ClientInfo) bool) HubOption {
 		if gate != nil {
 			h.reliableGate = gate
 		}
+	}
+}
+
+// WithReplayFilter injects an optional per-message filter applied during
+// disconnect-reconnect replay. If the filter returns false the message is
+// skipped. Pass nil to disable filtering (default: replay everything).
+func WithReplayFilter(f ReplayFilter) HubOption {
+	return func(h *Hub) {
+		h.replayFilter = f
 	}
 }
 
@@ -618,6 +635,10 @@ func (h *Hub) ReplayToClient(info ClientInfo, afterSequence uint64, limit int) {
 	}
 
 	for _, msg := range messages {
+		// 若注入了业务过滤器（如骑手场景剔除已被抢走的订单），先过滤再投递
+		if h.replayFilter != nil && !h.replayFilter(h.ctx, info, msg) {
+			continue
+		}
 		h.sendStoredToClient(client, msg, label)
 	}
 }
