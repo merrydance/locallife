@@ -22,7 +22,8 @@ class WebSocketManager {
   private socket: WechatMiniprogram.SocketTask | null = null
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
   private reconnectAttempts = 0
-  private maxReconnectAttempts = 5
+  // 不设上限：只要 forcedClose=false 就持续重连（指数退避最大 30s）
+  private readonly maxReconnectAttempts = Infinity
   private isConnected = false
   private forcedClose = false
   private isConnecting = false
@@ -144,11 +145,6 @@ class WebSocketManager {
   }
 
   private scheduleReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      logger.error('WebSocket: Max reconnect attempts reached', undefined, 'WS')
-      return
-    }
-
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000)
     this.reconnectAttempts++
 

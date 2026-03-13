@@ -384,11 +384,10 @@ Page({
    */
   initWebSocket() {
     if (!this.data.isOnline) return
-    
-    wsManager.connect()
-    
-    // 清除旧监听
+
+    // 先清除旧监听，再发起连接（保证不重复注册）
     this.cleanupWebSocket()
+    wsManager.connect()
 
     // 1. 监听订单消失事件 (已被别人抢走)
     const goneSub = wsManager.on(WSMessageType.DELIVERY_POOL_GONE, (data) => {

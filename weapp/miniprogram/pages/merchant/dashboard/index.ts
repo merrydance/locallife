@@ -62,6 +62,8 @@ Page({
   onShow() {
     if (this.data.accessDenied) return
     this.refreshData()
+    // 页面重新可见时重新注册 WS 监听（onHide 已清除旧监听，底层连接仍在）
+    this.initWebSocket()
   },
 
   onHide() {
@@ -93,8 +95,9 @@ Page({
   },
 
   initWebSocket() {
-    wsManager.connect()
+    // 先清除旧监听，再发起连接（保证不重复注册）
     this.cleanupWebSocket()
+    wsManager.connect()
 
     const sub = wsManager.on(WSMessageType.NOTIFICATION, (data) => {
       logger.info('Merchant received notification', data)
