@@ -27,6 +27,7 @@ class WebSocketManager {
   private isConnected = false
   private forcedClose = false
   private isConnecting = false
+  private lastSequence = 0 // 记录最后收到的消息序号，断线重连时带给服务端以触发消息回放
   private readonly eventBus = new EventBus()
 
   /**
@@ -51,7 +52,7 @@ class WebSocketManager {
 
     this.isConnecting = true
     this.forcedClose = false
-    const wsUrl = url || this.getDefaultUrl(token)
+    const wsUrl = url || this.getDefaultUrl(token, this.lastSequence)
 
     logger.info(`WebSocket: Connecting to ${wsUrl.split('?')[0]}...`, undefined, 'WS')
 
@@ -120,6 +121,11 @@ class WebSocketManager {
           return
         }
 
+        // 追踪序号，断线重连时传给服务端触发消息回放
+        if (typeof msg.sequence === 'number' && msg.sequence > this.lastSequence) {
+          this.lastSequence = msg.sequence
+        }
+
         // 分发业务消息
         this.eventBus.emit(msg.type, msg.data)
       } catch (err) {
@@ -163,14 +169,16 @@ class WebSocketManager {
     }
   }
 
-  private getDefaultUrl(token: string): string {
+  private getDefaultUrl(token: string, lastSequence = 0): string {
     const { API_CONFIG } = require('../config/index')
     const baseUrl = API_CONFIG.BASE_URL
     
     // 将 https:// 转换为 wss://, http:// 转换为 ws://
     const wsBase = baseUrl.replace(/^http/, 'ws')
     
-    return `${wsBase}/v1/ws?token=${token}`
+    // 若有上次收到的序号，带上让服务端在重连后回放断线期间的消息
+    const seq = lastSequence > 0 ? `&last_sequence=${lastSequence}` : ''
+    return `${wsBase}/v1/ws?token=${encodeURIComponent(token)}${seq}`
   }
 }
 

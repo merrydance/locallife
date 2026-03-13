@@ -775,9 +775,8 @@ func (h *Hub) flushQueue(client *Client, label string) {
 				log.Warn().Err(err).Msg("flush queue failed")
 				return
 			}
-			if len(messages) == 0 {
-				return
-			}
+			// 队列暂时为空时继续等待下次 tick，不退出 goroutine。
+			// 背压场景下新消息可能在任意时刻再次入队。
 			for _, msg := range messages {
 				h.sendStoredToClient(client, msg, label)
 			}
