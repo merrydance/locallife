@@ -27,7 +27,7 @@
 .merchant-image {
   width: var(--customer-image-size);
   height: var(--customer-image-size);
-  border-radius: var(--radius-md);
+  --td-image-round-radius: 16rpx;
   flex-shrink: 0;
   background-color: var(--td-bg-color-secondarycontainer);
 }
@@ -157,7 +157,7 @@
 .dish-img {
   width: 180rpx;
   height: 130rpx;
-  border-radius: var(--radius-sm);
+  --td-image-round-radius: 10rpx;
   background-color: var(--td-bg-color-secondarycontainer);
   flex-shrink: 0;
 }

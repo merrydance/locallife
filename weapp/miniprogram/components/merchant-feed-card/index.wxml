@@ -3,7 +3,7 @@
 
   <!-- ① 商户信息头部（可点击 → 进入商户详情） -->
   <view class="merchant-header" bindtap="onMerchantHeaderTap">
-    <t-image class="merchant-image" src="{{merchant.imageUrl}}" mode="aspectFill" lazy />
+    <t-image class="merchant-image" src="{{merchant.imageUrl}}" mode="aspectFill" shape="round" lazy />
 
     <view class="merchant-info">
       <!-- 第1行: 商户名 + 角标 -->
@@ -77,7 +77,7 @@
             bindtap="onDishTap"
             data-index="{{index}}"
           >
-            <t-image class="dish-img" src="{{item.imageUrl}}" mode="aspectFill" lazy />
+            <t-image class="dish-img" src="{{item.imageUrl}}" mode="aspectFill" shape="round" lazy />
             <text class="dish-name">{{item.name}}</text>
             <view class="dish-bottom">
               <text class="dish-price">{{item.priceDisplay}}</text>
