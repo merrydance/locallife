@@ -583,7 +583,7 @@ Page({
     const results: Array<{ status: string, value?: [import('../../api/merchant').PublicMerchantDishesResponse, import('../../api/merchant').PublicMerchantDetail, boolean], reason?: unknown }> = await (Promise as any).allSettled(
       merchantIds.map((id) => Promise.all([
         getPublicMerchantDishes(id),
-        getPublicMerchantDetail(id),
+        getPublicMerchantDetail(id, true),
         getHasUserOrderedFromMerchant(id)
       ]))
     )

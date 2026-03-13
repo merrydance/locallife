@@ -1122,6 +1122,10 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		return
 	}
 
+	// lite=true：Feed 卡片专用，跳过资质图片 presign 和 GetMerchantApplicationDraft，
+	// 只返回促销/出餐时间等首页需要展示的字段，减少不必要的 DB 查询和签名运算。
+	liteMode := ctx.Query("lite") == "true"
+
 	// 获取商户基本信息
 	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
@@ -1167,8 +1171,8 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.Longitude = lng
 	}
 
-	// 解析 application_data 获取证照信息（快照数据）
-	if merchant.ApplicationData != nil {
+	// 解析 application_data 获取证照信息（慢操作：presign+DB，lite 模式跳过）
+	if !liteMode && merchant.ApplicationData != nil {
 		var appData map[string]interface{}
 		if err := json.Unmarshal(merchant.ApplicationData, &appData); err == nil {
 			if licenseURL, ok := appData["business_license_image_url"].(string); ok && licenseURL != "" {
@@ -1183,14 +1187,16 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		}
 	}
 
-	// 门头照从 merchant_applications 活数据读取，保证商户更新后立即生效
-	application, appErr := server.store.GetMerchantApplicationDraft(ctx, merchant.OwnerUserID)
-	if appErr == nil && len(application.StorefrontImages) > 0 {
-		var storefrontImages []string
-		if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil && len(storefrontImages) > 0 {
-			normalized := normalizeUploadURLForClient(storefrontImages[0])
-			if normalized != "" {
-				resp.CoverImage = &normalized
+	// 门头照从 merchant_applications 活数据读取（lite 模式跳过额外的 DB 查询）
+	if !liteMode {
+		application, appErr := server.store.GetMerchantApplicationDraft(ctx, merchant.OwnerUserID)
+		if appErr == nil && len(application.StorefrontImages) > 0 {
+			var storefrontImages []string
+			if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil && len(storefrontImages) > 0 {
+				normalized := normalizeUploadURLForClient(storefrontImages[0])
+				if normalized != "" {
+					resp.CoverImage = &normalized
+				}
 			}
 		}
 	}
@@ -1220,16 +1226,18 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.AvgPrepMinutes = 15 // 默认 15 分钟
 	}
 
-	// 获取营业时间
-	hours, err := server.store.ListMerchantBusinessHours(ctx, merchant.ID)
-	if err == nil && len(hours) > 0 {
-		resp.BusinessHours = make([]businessHourItem, len(hours))
-		for i, h := range hours {
-			resp.BusinessHours[i] = businessHourItem{
-				DayOfWeek: int32(h.DayOfWeek),
-				OpenTime:  formatTimeForResponse(h.OpenTime),
-				CloseTime: formatTimeForResponse(h.CloseTime),
-				IsClosed:  h.IsClosed,
+	// 获取营业时间（Feed 卡片用不到，lite 模式跳过）
+	if !liteMode {
+		hours, err := server.store.ListMerchantBusinessHours(ctx, merchant.ID)
+		if err == nil && len(hours) > 0 {
+			resp.BusinessHours = make([]businessHourItem, len(hours))
+			for i, h := range hours {
+				resp.BusinessHours[i] = businessHourItem{
+					DayOfWeek: int32(h.DayOfWeek),
+					OpenTime:  formatTimeForResponse(h.OpenTime),
+					CloseTime: formatTimeForResponse(h.CloseTime),
+					IsClosed:  h.IsClosed,
+				}
 			}
 		}
 	}

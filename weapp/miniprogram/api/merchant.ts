@@ -221,9 +221,9 @@ export interface PublicMerchantDetail {
 /**
  * 获取商户详情（消费者端）
  */
-export async function getPublicMerchantDetail(merchantId: number): Promise<PublicMerchantDetail> {
+export async function getPublicMerchantDetail(merchantId: number, lite = false): Promise<PublicMerchantDetail> {
   return await request({
-    url: `/v1/public/merchants/${merchantId}`,
+    url: `/v1/public/merchants/${merchantId}${lite ? '?lite=true' : ''}`,
     method: 'GET',
     useCache: true,
     cacheTTL: 5 * 60 * 1000
