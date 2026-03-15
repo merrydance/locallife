@@ -285,7 +285,15 @@ WHERE d.merchant_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
-ORDER BY COALESCE(mdc.sort_order, 999), d.sort_order, d.id;
+ORDER BY
+  COALESCE(mdc.sort_order, 999),
+  CASE
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '推荐') THEN 0
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '热卖') THEN 1
+    ELSE 2
+  END,
+  d.sort_order,
+  d.id;
 
 -- name: GetMerchantOnlineCombos :many
 -- 获取商户所有在线套餐 - 消费者端使用

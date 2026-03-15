@@ -623,6 +623,7 @@ func (server *Server) setupRouter() {
 		dishesGroup.GET("/:id/customizations", server.getDishCustomizations) // 获取定制选项
 		dishesGroup.PUT("/:id/customizations", server.setDishCustomizations) // 设置定制选项
 		dishesGroup.PUT("/:id/specs", server.setDishCustomizations)          // 设置菜品规格（customizations别名）
+		dishesGroup.PUT("/:id/featured-tags", server.setDishFeaturedTags)    // 设置推荐/热卖标签
 	}
 
 	// M4: 套餐管理路由

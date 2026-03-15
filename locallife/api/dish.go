@@ -1835,3 +1835,122 @@ func (server *Server) getDishCustomizations(ctx *gin.Context) {
 		Groups: resultGroups,
 	})
 }
+
+// =============================================================================
+// setDishFeaturedTags - 设置菜品推荐/热卖标签（商户手动）
+// =============================================================================
+
+type setDishFeaturedTagsRequest struct {
+	Tags []string `json:"tags"` // 期望设置的标签名列表，如 ["推荐"] 或 ["热卖"] 或 []
+}
+
+// setDishFeaturedTags godoc
+// @Summary 设置菜品推荐/热卖标签
+// @Description 商户手动为菜品打上或取消"推荐"/"热卖"标签，影响店内菜单排序
+// @Tags 菜品管理
+// @Accept json
+// @Produce json
+// @Param id path int true "菜品ID"
+// @Param request body setDishFeaturedTagsRequest true "标签列表"
+// @Success 200 {object} map[string]interface{} "更新后的标签"
+// @Security BearerAuth
+// @Router /v1/dishes/{id}/featured-tags [put]
+func (server *Server) setDishFeaturedTags(ctx *gin.Context) {
+	var uri getDishRequest
+	if err := ctx.ShouldBindUri(&uri); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var req setDishFeaturedTagsRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	// 获取认证信息
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	// 获取商户
+	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	if err != nil {
+		if isNoRows(err) {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant by owner: %w", err)))
+		return
+	}
+
+	// 获取菜品
+	dish, err := server.store.GetDish(ctx, uri.ID)
+	if err != nil {
+		if isNoRows(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get dish: %w", err)))
+		return
+	}
+
+	// 验证菜品所有权
+	if dish.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
+		return
+	}
+
+	// 只允许推荐/热卖两个标签
+	allowed := map[string]bool{"推荐": true, "热卖": true}
+	wantSet := map[string]bool{}
+	for _, name := range req.Tags {
+		if allowed[name] {
+			wantSet[name] = true
+		}
+	}
+
+	// 获取当前菜品的推荐/热卖标签状态
+	currentTags, err := server.store.ListDishTags(ctx, uri.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list dish tags: %w", err)))
+		return
+	}
+
+	// 删除不再需要的推荐/热卖标签
+	for _, tag := range currentTags {
+		if allowed[tag.Name] && !wantSet[tag.Name] {
+			_ = server.store.RemoveDishTag(ctx, db.RemoveDishTagParams{
+				DishID: uri.ID,
+				TagID:  tag.ID,
+			})
+		}
+	}
+
+	// 构建当前已有标签集合
+	currentTagNames := map[string]bool{}
+	for _, tag := range currentTags {
+		currentTagNames[tag.Name] = true
+	}
+
+	// 添加新需要的标签
+	for name := range wantSet {
+		if currentTagNames[name] {
+			continue // 已存在，跳过
+		}
+		sysTag, err := server.store.GetSystemTagByName(ctx, name)
+		if err != nil {
+			continue // 标签不存在则跳过
+		}
+		_ = server.store.UpsertDishTag(ctx, db.UpsertDishTagParams{
+			DishID: uri.ID,
+			TagID:  sysTag.ID,
+		})
+	}
+
+	// 返回更新后的标签
+	updatedTags, _ := server.store.ListDishTags(ctx, uri.ID)
+	tagNames := make([]string, 0, len(updatedTags))
+	for _, t := range updatedTags {
+		tagNames = append(tagNames, t.Name)
+	}
+	ctx.JSON(http.StatusOK, gin.H{"tags": tagNames})
+}

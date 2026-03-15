@@ -95,6 +95,29 @@
         />
       </t-cell-group>
     </view>
+
+    <!-- 排序标签（仅编辑模式可用） -->
+    <view class="card" wx:if="{{isEdit}}">
+      <view class="section-title">排序标签</view>
+      <t-cell-group theme="card">
+        <t-cell title="推荐" note="优先显示在菜单前列">
+          <t-switch
+            slot="note"
+            value="{{isFeatured}}"
+            bind:change="onFeaturedTagToggle"
+            data-tag="推荐"
+          />
+        </t-cell>
+        <t-cell title="热卖" note="次优先显示">
+          <t-switch
+            slot="note"
+            value="{{isHotSelling}}"
+            bind:change="onFeaturedTagToggle"
+            data-tag="热卖"
+          />
+        </t-cell>
+      </t-cell-group>
+    </view>
   </view>
 
   <!-- 底部操作栏 -->

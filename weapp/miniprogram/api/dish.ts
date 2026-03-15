@@ -682,6 +682,18 @@ export class DishManagementService {
     }
 
     /**
+     * 设置菜品推荐/热卖标签（影响店内菜单排序）
+     * PUT /v1/dishes/{id}/featured-tags
+     */
+    static async setDishFeaturedTags(dishId: number, tags: string[]): Promise<{ tags: string[] }> {
+        return await request({
+            url: `/v1/dishes/${dishId}/featured-tags`,
+            method: 'PUT',
+            data: { tags }
+        })
+    }
+
+    /**
      * 删除菜品
      * DELETE /v1/dishes/{id}
      */

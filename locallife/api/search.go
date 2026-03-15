@@ -89,8 +89,8 @@ type searchMerchantResponse struct {
 	Distance             *int      `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
 	EstimatedDeliveryFee *int64    `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
 	Tags                 []string  `json:"tags,omitempty"`
-	CreatedAt            time.Time `json:"created_at"` // 入驻时间，前端用于判断新店
-	Label                string    `json:"label,omitempty"`  // 推荐 或 热销
+	CreatedAt            time.Time `json:"created_at"`      // 入驻时间，前端用于判断新店
+	Label                string    `json:"label,omitempty"` // 推荐 或 热销
 }
 
 type searchComboResponse struct {

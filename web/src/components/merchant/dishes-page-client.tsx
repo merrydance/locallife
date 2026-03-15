@@ -70,6 +70,7 @@ export function DishesPageClient() {
   // Tags & Customizations
   const [availableTags, setAvailableTags] = useState<TagInfo[]>([]);
   const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [featuredTags, setFeaturedTags] = useState<string[]>([]); // 推荐/热卖
   const [customizationGroups, setCustomizationGroups] = useState<Partial<CustomizationGroup>[]>([]);
   const [availableCustomizationTags, setAvailableCustomizationTags] = useState<TagInfo[]>([]);
 
@@ -143,15 +144,20 @@ export function DishesPageClient() {
       image_url: ""
     });
     setSelectedTagIds([]);
+    setFeaturedTags([]);
     setCustomizationGroups([]);
     setIsEditing(true);
   };
+
+  const FEATURED_TAG_NAMES = ['推荐', '热卖'];
 
   const handleEditDish = async (dish: DishResponse) => {
     try {
       const detail = await apiGet<DishResponse>(`/dishes/${dish.id}`);
       setEditDish(detail);
-      setSelectedTagIds(detail.tags?.map(t => t.id) || []);
+      // 系统标签（推荐/热卖）单独管理，不进入属性标签选择器
+      setSelectedTagIds(detail.tags?.filter(t => !FEATURED_TAG_NAMES.includes(t.name)).map(t => t.id) || []);
+      setFeaturedTags(detail.tags?.filter(t => FEATURED_TAG_NAMES.includes(t.name)).map(t => t.name) || []);
       setCustomizationGroups(detail.customization_groups || []);
       setIsEditing(true);
     } catch (err) {
@@ -159,6 +165,7 @@ export function DishesPageClient() {
       // Fallback
       setEditDish(dish);
       setSelectedTagIds([]);
+      setFeaturedTags([]);
       setCustomizationGroups([]);
       setIsEditing(true);
     }
@@ -198,6 +205,8 @@ export function DishesPageClient() {
         await apiPut(`/dishes/${editDish.id}/customizations`, { 
           groups: payload.customization_groups 
         });
+        // 保存推荐/热卖标签（独立于属性标签）
+        await apiPut(`/dishes/${editDish.id}/featured-tags`, { tags: featuredTags });
       } else {
         await apiPost("/dishes", payload);
       }
@@ -596,6 +605,35 @@ export function DishesPageClient() {
                     rows={4} 
                     className="border-slate-200 resize-none transition-all focus:bg-slate-50/50"
                   />
+                </div>
+              </div>
+
+              <Separator className="bg-slate-100" />
+
+              {/* Featured Tags: 推荐 / 热卖 */}
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold text-slate-700 uppercase tracking-wider">排序标签</Label>
+                <div className="flex gap-3">
+                  {FEATURED_TAG_NAMES.map(name => {
+                    const active = featuredTags.includes(name);
+                    return (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => setFeaturedTags(prev =>
+                          prev.includes(name) ? prev.filter(n => n !== name) : [...prev, name]
+                        )}
+                        className={cn(
+                          "flex items-center gap-1.5 rounded-full px-4 h-8 text-sm font-medium border transition-all",
+                          active
+                            ? "bg-amber-500 text-white border-amber-500 shadow-md shadow-amber-200"
+                            : "bg-white text-slate-500 border-slate-200 hover:border-amber-300 hover:text-amber-600"
+                        )}
+                      >
+                        {name}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

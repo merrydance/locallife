@@ -31,6 +31,8 @@ Page({
     submitting: false,
     imageUploading: false,
     isIPhoneX: false,
+    isFeatured: false,  // 推荐
+    isHotSelling: false, // 热卖
     formData: {
       name: '',
       description: '',
@@ -116,7 +118,9 @@ Page({
         displayMemberPrice: res.member_price ? (res.member_price / 100).toFixed(2) : '',
         fileList: res.image_url ? [{ url: this.buildPreviewUrl(res.image_url), remotePath: res.image_url, status: 'done' }] : [],
         selectedCategoryName: res.category_name || '',
-        selectedCategoryValue: res.category_id ? String(res.category_id) : ''
+        selectedCategoryValue: res.category_id ? String(res.category_id) : '',
+        isFeatured: res.tags?.some((t: { name: string }) => t.name === '推荐') ?? false,
+        isHotSelling: res.tags?.some((t: { name: string }) => t.name === '热卖') ?? false,
       })
     } catch (err) {
       logger.error('Load dish detail failed', err)
@@ -145,6 +149,14 @@ Page({
     if (!field) return
     const { value } = e.detail
     this.setData({ [`formData.${field}`]: value })
+  },
+
+  onFeaturedTagToggle(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const { tag } = e.currentTarget.dataset as { tag?: string }
+    if (!tag) return
+    const { value } = e.detail
+    if (tag === '推荐') this.setData({ isFeatured: value })
+    else if (tag === '热卖') this.setData({ isHotSelling: value })
   },
 
   onPriceChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
@@ -350,6 +362,11 @@ Page({
 
       if (this.data.isEdit) {
         await DishManagementService.updateDish(this.data.dishId, payload as UpdateDishRequest)
+        // 更新推荐/热卖标签
+        const featuredTags: string[] = []
+        if (this.data.isFeatured) featuredTags.push('推荐')
+        if (this.data.isHotSelling) featuredTags.push('热卖')
+        await DishManagementService.setDishFeaturedTags(this.data.dishId, featuredTags)
       } else {
         await DishManagementService.createDish(payload as CreateDishRequest)
       }

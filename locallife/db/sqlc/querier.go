@@ -461,8 +461,6 @@ type Querier interface {
 	DeleteDish(ctx context.Context, id int64) error
 	DeleteDishCustomizationGroup(ctx context.Context, id int64) error
 	DeleteDishCustomizationOption(ctx context.Context, id int64) error
-	// 删除指定标签的所有菜品关联（用于清理过期的自动标签）
-	DeleteDishTagByTagID(ctx context.Context, tagID int64) error
 	DeleteExpiredNotifications(ctx context.Context) error
 	DeleteExpiredSessions(ctx context.Context) error
 	DeleteIngredient(ctx context.Context, id int64) error
@@ -625,8 +623,6 @@ type Querier interface {
 	GetDishIDsByCuisines(ctx context.Context, arg GetDishIDsByCuisinesParams) ([]int64, error)
 	// 获取带有指定标签的菜品ID列表（用于推荐过滤）
 	GetDishIDsByTagID(ctx context.Context, tagID int64) ([]int64, error)
-	// 获取有指定标签的所有菜品ID
-	GetDishIDsWithTag(ctx context.Context, tagID int64) ([]int64, error)
 	// 获取单个菜品的复购率（用于过滤）
 	GetDishRepurchaseRate(ctx context.Context, dishID pgtype.Int8) (GetDishRepurchaseRateRow, error)
 	// 获取单个菜品近30天销量
@@ -654,8 +650,6 @@ type Querier interface {
 	GetGroupJoinRequest(ctx context.Context, id int64) (MerchantGroupJoinRequest, error)
 	GetGroupMemberRole(ctx context.Context, arg GetGroupMemberRoleParams) (string, error)
 	GetGroupPolicies(ctx context.Context, groupID int64) (GroupPolicy, error)
-	// 获取热卖菜品ID列表（近7天销量 >= 指定阈值）
-	GetHotSellingDishIDs(ctx context.Context, quantity int16) ([]int64, error)
 	// 订单时段分布
 	GetHourlyDistribution(ctx context.Context, arg GetHourlyDistributionParams) ([]GetHourlyDistributionRow, error)
 	GetIngredient(ctx context.Context, id int64) (Ingredient, error)
@@ -842,9 +836,6 @@ type Querier interface {
 	GetProfitSharingReturn(ctx context.Context, id int64) (ProfitSharingReturn, error)
 	GetProfitSharingReturnByOutReturnNo(ctx context.Context, outReturnNo string) (ProfitSharingReturn, error)
 	GetProfitSharingSlaSummary(ctx context.Context, arg GetProfitSharingSlaSummaryParams) (GetProfitSharingSlaSummaryRow, error)
-	// 获取无投诉的高质量菜品ID列表
-	// 条件: 销量>=指定阈值, 近30天无投诉, 商户无食品安全事故
-	GetQualityDishIDs(ctx context.Context, quantity int16) ([]int64, error)
 	// 获取随机菜品（用于推荐探索）
 	GetRandomDishes(ctx context.Context, limit int32) ([]int64, error)
 	// 实时大盘数据(最近24小时)
