@@ -197,7 +197,7 @@ SELECT
     dc.id AS category_id,
     dc.name AS category_name,
   COUNT(DISTINCT o.id)::int AS order_count,
-    SUM(oi.quantity)::int AS total_quantity,
+    COALESCE(SUM(oi.quantity), 0)::int AS total_quantity,
     COALESCE(SUM(oi.subtotal), 0)::bigint AS total_revenue
 FROM dish_categories dc
 JOIN merchant_dish_categories mdc ON dc.id = mdc.category_id

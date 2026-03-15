@@ -146,7 +146,7 @@ SELECT
     dc.id AS category_id,
     dc.name AS category_name,
   COUNT(DISTINCT o.id)::int AS order_count,
-    SUM(oi.quantity)::int AS total_quantity,
+    COALESCE(SUM(oi.quantity), 0)::int AS total_quantity,
     COALESCE(SUM(oi.subtotal), 0)::bigint AS total_revenue
 FROM dish_categories dc
 JOIN merchant_dish_categories mdc ON dc.id = mdc.category_id
@@ -429,7 +429,15 @@ WHERE d.merchant_id = $1
   AND d.is_online = true
   AND d.is_available = true
   AND d.deleted_at IS NULL
-ORDER BY COALESCE(mdc.sort_order, 999), d.sort_order, d.id
+ORDER BY
+  COALESCE(mdc.sort_order, 999),
+  CASE
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '推荐') THEN 0
+    WHEN EXISTS (SELECT 1 FROM dish_tags dt JOIN tags t ON t.id = dt.tag_id WHERE dt.dish_id = d.id AND t.name = '热卖') THEN 1
+    ELSE 2
+  END,
+  d.sort_order,
+  d.id
 `
 
 type GetMerchantDishesWithCategoryRow struct {
