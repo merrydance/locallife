@@ -1004,6 +1004,8 @@ type merchantAccountBalanceResponse struct {
 	AvailableAmount    int64  `json:"available_amount"`
 	PendingAmount      int64  `json:"pending_amount"`
 	WithdrawableAmount int64  `json:"withdrawable_amount"`
+	AccountStatus      string `json:"account_status"`
+	StatusDesc         string `json:"status_desc"`
 }
 
 type createMerchantWithdrawRequest struct {
@@ -1028,6 +1030,17 @@ type merchantWithdrawItem struct {
 type listMerchantWithdrawalsRequest struct {
 	Page  int32 `form:"page" binding:"omitempty,min=1"`
 	Limit int32 `form:"limit" binding:"omitempty,min=1,max=100"`
+}
+
+type merchantWithdrawalsResponse struct {
+	Withdrawals   []merchantWithdrawItem `json:"withdrawals"`
+	Total         int64                  `json:"total"`
+	TotalCount    int64                  `json:"total_count"`
+	Page          int32                  `json:"page"`
+	Limit         int32                  `json:"limit"`
+	TotalPages    int64                  `json:"total_pages"`
+	AccountStatus string                 `json:"account_status"`
+	StatusDesc    string                 `json:"status_desc"`
 }
 
 type merchantWithdrawAccountInfo struct {
@@ -1099,6 +1112,35 @@ func (server *Server) getMerchantAndPaymentConfigByOwner(ctx *gin.Context, owner
 	return merchant, paymentConfig, nil
 }
 
+func getMerchantFinanceAccountStatus(paymentConfig *db.MerchantPaymentConfig) (string, string) {
+	if paymentConfig == nil {
+		return "not_configured", "尚未开通收付通账户"
+	}
+	if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
+		return "inactive", "收付通账户未激活，完成进件签约后可查看余额并提现"
+	}
+	return "active", "收付通账户已激活"
+}
+
+func (server *Server) getMerchantPaymentConfigState(ctx *gin.Context, ownerUserID int64) (db.Merchant, *db.MerchantPaymentConfig, string, string, error) {
+	merchant, err := server.store.GetMerchantByOwner(ctx, ownerUserID)
+	if err != nil {
+		return db.Merchant{}, nil, "", "", err
+	}
+
+	paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, merchant.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			status, desc := getMerchantFinanceAccountStatus(nil)
+			return merchant, nil, status, desc, nil
+		}
+		return db.Merchant{}, nil, "", "", err
+	}
+
+	status, desc := getMerchantFinanceAccountStatus(&paymentConfig)
+	return merchant, &paymentConfig, status, desc, nil
+}
+
 // getMerchantAccountBalance 查询商户收付通账户余额
 func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
@@ -1107,17 +1149,25 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	_, paymentConfig, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID)
+	_, paymentConfig, accountStatus, statusDesc, err := server.getMerchantPaymentConfigState(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
-			return
-		}
-		if err.Error() == "merchant payment config is not active" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if paymentConfig == nil || accountStatus != "active" {
+		ctx.JSON(http.StatusOK, merchantAccountBalanceResponse{
+			SubMchID:           "",
+			AvailableAmount:    0,
+			PendingAmount:      0,
+			WithdrawableAmount: 0,
+			AccountStatus:      accountStatus,
+			StatusDesc:         statusDesc,
+		})
 		return
 	}
 
@@ -1132,6 +1182,8 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 		AvailableAmount:    balance.AvailableAmount,
 		PendingAmount:      balance.PendingAmount,
 		WithdrawableAmount: balance.WithdrawableAmount,
+		AccountStatus:      "active",
+		StatusDesc:         "收付通账户已激活",
 	})
 }
 
@@ -1243,16 +1295,27 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	if _, _, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID); err != nil {
+	_, _, accountStatus, statusDesc, err := server.getMerchantPaymentConfigState(ctx, authPayload.UserID)
+	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
-			return
-		}
-		if err.Error() == "merchant payment config is not active" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if accountStatus != "active" {
+		ctx.JSON(http.StatusOK, merchantWithdrawalsResponse{
+			Withdrawals:   []merchantWithdrawItem{},
+			Total:         0,
+			TotalCount:    0,
+			Page:          req.Page,
+			Limit:         req.Limit,
+			TotalPages:    0,
+			AccountStatus: accountStatus,
+			StatusDesc:    statusDesc,
+		})
 		return
 	}
 
@@ -1281,13 +1344,15 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 		items = append(items, toMerchantWithdrawItem(row))
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"withdrawals": items,
-		"total":       totalCount,
-		"total_count": totalCount,
-		"page":        req.Page,
-		"limit":       req.Limit,
-		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+	ctx.JSON(http.StatusOK, merchantWithdrawalsResponse{
+		Withdrawals:   items,
+		Total:         totalCount,
+		TotalCount:    totalCount,
+		Page:          req.Page,
+		Limit:         req.Limit,
+		TotalPages:    (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+		AccountStatus: "active",
+		StatusDesc:    "收付通账户已激活",
 	})
 }
 

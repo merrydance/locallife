@@ -56,6 +56,8 @@ interface MerchantAccountBalance {
   available_amount: number;
   pending_amount: number;
   withdrawable_amount: number;
+  account_status?: string;
+  status_desc?: string;
 }
 
 interface MerchantWithdrawalItem {
@@ -74,6 +76,8 @@ interface MerchantWithdrawalItem {
 interface MerchantWithdrawalListResponse {
   withdrawals: MerchantWithdrawalItem[];
   total_count: number;
+  account_status?: string;
+  status_desc?: string;
 }
 
 interface ApplymentStatusResponse {
@@ -151,10 +155,6 @@ const applymentStatusMeta: Record<
   },
 };
 
-function is404(error: unknown): boolean {
-  return error instanceof Error && error.message.includes("404");
-}
-
 const emptyForm: BindBankFormData = {
   account_type: "ACCOUNT_TYPE_BUSINESS",
   account_bank: "",
@@ -201,15 +201,11 @@ export function FinanceAccountPageClient() {
         "/merchant/finance/account/balance"
       );
       setBalance(data);
-      setNotConfigured(false);
+      setNotConfigured((data.account_status ?? "active") !== "active");
     } catch (error: unknown) {
-      if (is404(error)) {
-        setNotConfigured(true);
-      } else {
-        toast.error(
-          error instanceof Error ? error.message : "加载账户余额失败"
-        );
-      }
+      toast.error(
+        error instanceof Error ? error.message : "加载账户余额失败"
+      );
     } finally {
       setLoadingBalance(false);
     }
@@ -224,11 +220,9 @@ export function FinanceAccountPageClient() {
       );
       setWithdrawals(data.withdrawals || []);
     } catch (error: unknown) {
-      if (!is404(error)) {
-        toast.error(
-          error instanceof Error ? error.message : "加载提现记录失败"
-        );
-      }
+      toast.error(
+        error instanceof Error ? error.message : "加载提现记录失败"
+      );
     } finally {
       setLoadingList(false);
     }
@@ -240,17 +234,17 @@ export function FinanceAccountPageClient() {
       const data = await apiGet<ApplymentStatusResponse>(
         "/merchant/applyment/status"
       );
-      setApplymentStatus(data);
-      setShowBindForm(false);
-    } catch (error: unknown) {
-      if (is404(error)) {
+      if (data.status === "not_applied") {
         setApplymentStatus(null);
       } else {
-        toast.error(
-          error instanceof Error ? error.message : "查询进件状态失败"
-        );
-        setApplymentStatus(null);
+        setApplymentStatus(data);
+        setShowBindForm(false);
       }
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : "查询进件状态失败"
+      );
+      setApplymentStatus(null);
     } finally {
       setLoadingApplyment(false);
     }

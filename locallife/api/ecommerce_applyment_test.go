@@ -504,7 +504,10 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response merchantApplymentStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "not_applied", response.Status)
 			},
 		},
 		{

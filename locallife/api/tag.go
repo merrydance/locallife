@@ -92,6 +92,10 @@ type createTagRequest struct {
 	SortOrder int16  `json:"sort_order" binding:"min=0,max=999"`                                    // 排序
 }
 
+type deleteTagRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
 func (server *Server) createTag(ctx *gin.Context) {
 	var req createTagRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -120,6 +124,45 @@ func (server *Server) createTag(ctx *gin.Context) {
 		Type:      tag.Type,
 		SortOrder: tag.SortOrder,
 	})
+}
+
+// deleteTag godoc
+// @Summary 删除标签（管理员）
+// @Description 删除标签并级联删除关联关系
+// @Tags 标签管理
+// @Accept json
+// @Produce json
+// @Param id path int true "标签ID"
+// @Success 200 {object} map[string]any "删除成功"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "权限不足"
+// @Failure 404 {object} ErrorResponse "标签不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/tags/{id} [delete]
+// @Security BearerAuth
+func (server *Server) deleteTag(ctx *gin.Context) {
+	var req deleteTagRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	if _, err := server.store.GetTag(ctx, req.ID); err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("tag not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if err := server.store.DeleteTag(ctx, req.ID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, gin.H{"deleted": true})
 }
 
 // ==================== 商户自助经营类目 ====================

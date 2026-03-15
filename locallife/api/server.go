@@ -597,6 +597,7 @@ func (server *Server) setupRouter() {
 	{
 		tagsGroup.GET("", server.listTags)                                           // 获取标签列表（按类型）
 		tagsGroup.POST("", server.CasbinRoleMiddleware(RoleAdmin), server.createTag) // 创建标签
+		tagsGroup.DELETE("/:id", server.CasbinRoleMiddleware(RoleAdmin), server.deleteTag)
 	}
 
 	// M4: 菜品管理路由

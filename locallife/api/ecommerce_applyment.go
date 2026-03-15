@@ -414,7 +414,11 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("未找到开户申请记录")))
+			status := mapMerchantStatusToApplymentStatus(merchant.Status)
+			ctx.JSON(http.StatusOK, merchantApplymentStatusResponse{
+				Status:     status,
+				StatusDesc: getApplymentStatusDesc(status),
+			})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -470,9 +474,10 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 		}
 	}
 
+	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
 	resp := merchantApplymentStatusResponse{
-		Status:     applyment.Status,
-		StatusDesc: getApplymentStatusDesc(applyment.Status),
+		Status:     normalizedStatus,
+		StatusDesc: getApplymentStatusDesc(normalizedStatus),
 	}
 
 	if applyment.SignUrl.Valid && applyment.SignUrl.String != "" {
@@ -761,6 +766,8 @@ func mapWechatApplymentStatus(wxStatus string) string {
 // getApplymentStatusDesc 获取进件状态描述
 func getApplymentStatusDesc(status string) string {
 	switch status {
+	case "not_applied":
+		return "尚未提交开户申请"
 	case "pending":
 		return "待提交"
 	case "submitted":
@@ -779,6 +786,8 @@ func getApplymentStatusDesc(status string) string {
 		return "签约失败"
 	case "finish":
 		return "开户成功"
+	case "active":
+		return "账户已开通"
 	default:
 		return "未知状态"
 	}
@@ -1317,6 +1326,17 @@ func normalizeApplymentStatus(status string, hasSubMchID bool) string {
 		return "submitted"
 	}
 	return status
+}
+
+func mapMerchantStatusToApplymentStatus(merchantStatus string) string {
+	switch merchantStatus {
+	case "bindbank_submitted":
+		return "submitted"
+	case "active":
+		return "active"
+	default:
+		return "not_applied"
+	}
 }
 
 func mapOperatorStatusToApplymentStatus(operatorStatus string) string {
