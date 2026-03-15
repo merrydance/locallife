@@ -1218,12 +1218,13 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.MonthlySales = 0
 	}
 
-	// 获取平均出餐时间
+	// 获取平均出餐时间。
+	// 查询成功但结果为 0 时同样回退默认值，避免前端拿到 0 后不展示。
 	avgPrepMinutes, err := server.store.GetMerchantAvgPrepMinutes(ctx, merchant.ID)
-	if err == nil {
-		resp.AvgPrepMinutes = avgPrepMinutes
+	if err != nil || avgPrepMinutes <= 0 {
+		resp.AvgPrepMinutes = DefaultAvgPrepareTimeMinutes
 	} else {
-		resp.AvgPrepMinutes = 15 // 默认 15 分钟
+		resp.AvgPrepMinutes = avgPrepMinutes
 	}
 
 	// 获取营业时间（Feed 卡片用不到，lite 模式跳过）

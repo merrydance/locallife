@@ -14,6 +14,7 @@ import { formatPrice } from '../../utils/util'
 
 const PAGE_CONTEXT = 'takeout_index'
 const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
+const DEFAULT_AVG_PREP_MINUTES = 15
 
 interface FeaturedDish {
   id: number
@@ -39,7 +40,7 @@ interface MerchantFeedViewModel {
   featuredDishes: FeaturedDish[]
   dishesLoading: boolean
   // 详情接口补充字段（异步填充）
-  avgPrepMinutes: number        // 平均出餐时间（0=未知）
+  avgPrepMinutes: number        // 平均出餐时间（分钟）
   discountPromoText: string     // 满减文案，e.g. "满30减5"
   voucherText: string           // 券文案，e.g. "领券减5元"
   deliveryPromoText: string     // 运费优惠文案，e.g. "满30免运费"
@@ -544,7 +545,7 @@ Page({
           tags: m.tags ? m.tags.slice(0, 3) : [],
           featuredDishes: [],
           dishesLoading: true,
-          avgPrepMinutes: 0,
+          avgPrepMinutes: DEFAULT_AVG_PREP_MINUTES,
           discountPromoText: '',
           voucherText: '',
           deliveryPromoText: '',
@@ -612,7 +613,10 @@ Page({
         updates[`merchantFeed[${feedIndex}].featuredDishes`] = featuredDishes
 
         // 出餐时间
-        updates[`merchantFeed[${feedIndex}].avgPrepMinutes`] = detail.avg_prep_minutes ?? 0
+        updates[`merchantFeed[${feedIndex}].avgPrepMinutes`] =
+          (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
+            ? detail.avg_prep_minutes
+            : DEFAULT_AVG_PREP_MINUTES
 
         // 满减文案：取门槛最低的一条
         if (detail.discount_rules && detail.discount_rules.length > 0) {
