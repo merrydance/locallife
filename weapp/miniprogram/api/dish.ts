@@ -1239,7 +1239,7 @@ export interface RecommendCombosResult {
 export async function getRecommendedCombos(params?: RecommendCombosParams): Promise<RecommendCombosResult> {
     const page = params?.page ?? 1
     const pageSize = params?.limit ?? 20
-    const response = await request<{ combos: ComboSummary[], total?: number, page_id?: number, page_size?: number }>(({
+    const response = await request<{ combos: ComboSummary[], total?: number, page_id?: number, page_size?: number }>({
         url: '/v1/search/combos',
         method: 'GET',
         data: {

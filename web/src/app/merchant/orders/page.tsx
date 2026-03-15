@@ -39,7 +39,7 @@ export default async function OrdersPage({
       page_id: page,
       page_size: pageSize,
       status: status || undefined,
-    ).catch(() => ({ orders: [], total: 0 })),
+    }).catch(() => ({ orders: [], total: 0 })),
     apiGet<{ total_sales: number; total_orders: number }>("/merchant/stats/overview", {
       start_date: today,
       end_date: today,
