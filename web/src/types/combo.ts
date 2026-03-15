@@ -32,7 +32,7 @@ export interface ComboSetResponse {
 
 export interface ListCombosResponse {
   combo_sets: ComboSetResponse[];
-  total_count: number;
+  total: number;
 }
 
 // 创建/更新套餐时的请求体

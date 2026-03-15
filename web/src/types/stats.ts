@@ -128,7 +128,6 @@ export interface CustomerDetailResponse extends CustomerStatRow {
  */
 export interface CustomerListResponse {
   data: CustomerStatRow[];
-  total_count: number;
   total: number;
   page_id: number;
   page_size: number;

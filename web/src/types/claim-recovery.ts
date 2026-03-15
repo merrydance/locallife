@@ -45,7 +45,6 @@ export interface MerchantClaimItem {
 export interface MerchantClaimsResponse {
   claims: MerchantClaimItem[];
   total: number;
-  total_count: number;
   page_id: number;
   page_size: number;
 }

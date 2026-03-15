@@ -14,7 +14,7 @@ export interface ReviewResponse {
 
 export interface ReviewListResponse {
   reviews: ReviewResponse[];
-  total_count: number;
+  total: number;
   page_id: number;
   page_size: number;
 }

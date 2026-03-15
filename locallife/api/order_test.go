@@ -951,6 +951,11 @@ func TestGetOrderAPI(t *testing.T) {
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
 					Times(1).
 					Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

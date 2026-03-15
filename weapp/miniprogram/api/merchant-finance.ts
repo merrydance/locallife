@@ -28,7 +28,6 @@ export interface MerchantWithdrawItem {
 
 export interface ListMerchantWithdrawalsResponse {
   withdrawals: MerchantWithdrawItem[]
-  total_count: number
   total: number
   page: number
   limit: number

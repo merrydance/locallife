@@ -281,8 +281,7 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"orders":      result,
-		"total":       totalCount,
-		"total_count": totalCount,
+		"total": totalCount,
 		"page_id":     req.Page,
 		"page_size":   req.Limit,
 		"page":        req.Page,
@@ -525,8 +524,7 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"orders":             result,
-		"total":              totalCount,
-		"total_count":        totalCount,
+		"total":        totalCount,
 		"page_id":            req.Page,
 		"page_size":          req.Limit,
 		"page":               req.Page,
@@ -849,8 +847,7 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 	}
 	ctx.JSON(http.StatusOK, gin.H{
 		"settlements":           result,
-		"total":                 totalCount,
-		"total_count":           totalCount,
+		"total":           totalCount,
 		"page_id":               req.Page,
 		"page_size":             req.Limit,
 		"page":                  req.Page,
@@ -989,8 +986,7 @@ func (server *Server) listMerchantSettlementTimeline(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"timeline":    result,
-		"total":       totalCount,
-		"total_count": totalCount,
+		"total": totalCount,
 		"page_id":     req.Page,
 		"page_size":   req.Limit,
 		"page":        req.Page,
@@ -1035,7 +1031,6 @@ type listMerchantWithdrawalsRequest struct {
 type merchantWithdrawalsResponse struct {
 	Withdrawals   []merchantWithdrawItem `json:"withdrawals"`
 	Total         int64                  `json:"total"`
-	TotalCount    int64                  `json:"total_count"`
 	Page          int32                  `json:"page"`
 	Limit         int32                  `json:"limit"`
 	TotalPages    int64                  `json:"total_pages"`
@@ -1309,7 +1304,6 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 		ctx.JSON(http.StatusOK, merchantWithdrawalsResponse{
 			Withdrawals:   []merchantWithdrawItem{},
 			Total:         0,
-			TotalCount:    0,
 			Page:          req.Page,
 			Limit:         req.Limit,
 			TotalPages:    0,
@@ -1347,7 +1341,6 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, merchantWithdrawalsResponse{
 		Withdrawals:   items,
 		Total:         totalCount,
-		TotalCount:    totalCount,
 		Page:          req.Page,
 		Limit:         req.Limit,
 		TotalPages:    (totalCount + int64(req.Limit) - 1) / int64(req.Limit),

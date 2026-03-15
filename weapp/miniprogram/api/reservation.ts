@@ -194,7 +194,6 @@ export interface ReservationListParams {
 export interface ReservationListResponse {
   reservations: ReservationResponse[]
   total: number
-  total_count: number
   page_id: number
   page_size: number
 }

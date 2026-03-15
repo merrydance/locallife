@@ -226,7 +226,7 @@ Page({
         ? sortedOrders
         : [...this.data.orders, ...sortedOrders]
 
-      const totalCount = typeof result.total_count === 'number' ? result.total_count : orders.length
+      const totalCount = result.total ?? orders.length
 
       this.setData({
         orders,

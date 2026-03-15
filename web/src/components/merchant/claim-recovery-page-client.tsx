@@ -140,7 +140,7 @@ export function ClaimRecoveryPageClient() {
       const data = await apiGet<MerchantClaimsResponse>("/merchant/claims", pagination);
       const items = data.claims || [];
       setClaims(items);
-      const total = data.total_count || data.total || items.length;
+      const total = data.total || items.length;
       setTotalPages(Math.max(1, Math.ceil(total / (data.page_size || 10))));
 
       const recoveryEntries = await Promise.all(

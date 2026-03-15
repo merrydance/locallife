@@ -198,8 +198,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 		ctx.JSON(http.StatusOK, gin.H{
 			"dishes":      response,
-			"total":       total,
-			"total_count": total,
+			"total": total,
 			"page_id":     req.PageID,
 			"page_size":   req.PageSize,
 		})
@@ -226,8 +225,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
 				"dishes":      []searchDishResponse{},
-				"total":       0,
-				"total_count": 0,
+				"total": 0,
 				"page_id":     req.PageID,
 				"page_size":   req.PageSize,
 			})
@@ -306,8 +304,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"dishes":      response,
-		"total":       total,
-		"total_count": total,
+		"total": total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -352,8 +349,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
 				"merchants":   []searchMerchantResponse{},
-				"total":       0,
-				"total_count": 0,
+				"total": 0,
 				"page_id":     req.PageID,
 				"page_size":   req.PageSize,
 			})
@@ -447,8 +443,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"merchants":   response,
-		"total":       total,
-		"total_count": total,
+		"total": total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -494,8 +489,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
 				"combos":      []searchComboResponse{},
-				"total":       0,
-				"total_count": 0,
+				"total": 0,
 				"page_id":     req.PageID,
 				"page_size":   req.PageSize,
 			})
@@ -609,8 +603,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"combos":      response,
-		"total":       total,
-		"total_count": total,
+		"total": total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -911,8 +904,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
 				"rooms":       []searchRoomResponse{},
-				"total":       0,
-				"total_count": 0,
+				"total": 0,
 				"page_id":     req.PageID,
 				"page_size":   req.PageSize,
 			})
@@ -1005,8 +997,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"rooms":       rooms,
-		"total":       total,
-		"total_count": total,
+		"total": total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})

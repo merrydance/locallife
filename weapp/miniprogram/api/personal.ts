@@ -35,7 +35,6 @@ export interface FavoriteMerchantResponse {
 export interface ListFavoriteDishesResponse {
     dishes: FavoriteDishResponse[]
     total: number
-    total_count?: number
     page?: number
     page_id?: number
     page_size: number
@@ -46,7 +45,6 @@ export interface ListFavoriteDishesResponse {
 export interface ListFavoriteMerchantsResponse {
     merchants: FavoriteMerchantResponse[]
     total: number
-    total_count?: number
     page?: number
     page_id?: number
     page_size: number
@@ -147,7 +145,6 @@ export interface RechargeRequest extends Record<string, unknown> {
 export interface ListMembershipsResponse {
     memberships: MembershipResponse[]
     total: number
-    total_count?: number
     page_id?: number
     page_size?: number
 }
@@ -202,8 +199,7 @@ export interface UpdateNotificationPreferencesRequest extends Record<string, unk
 /** 通知列表响应 - 对齐 api.listNotificationsResponse */
 export interface ListNotificationsResponse {
     notifications: NotificationResponse[]
-    total_count: number                          // 总数
-    total?: number
+    total: number                                // 总数
     page_id?: number
     page_size?: number
 }
@@ -240,7 +236,6 @@ export interface CreateClaimRequest extends Record<string, unknown> {
 export interface ListClaimsResponse {
     claims: ClaimResponse[]
     total: number
-    total_count?: number
     page: number
     page_id?: number
     page_size: number
@@ -287,7 +282,6 @@ export interface UserVoucherResponse {
 export interface ListMyVouchersResponse {
     vouchers: UserVoucherResponse[]  // 用户优惠券
     total: number
-    total_count?: number
     page_id?: number
     page_size?: number
 }
@@ -295,7 +289,6 @@ export interface ListMyVouchersResponse {
 export interface ListAvailableVouchersResponse {
     vouchers: VoucherResponse[]      // 可领取的优惠券
     total: number
-    total_count?: number
     page_id?: number
     page_size?: number
 }

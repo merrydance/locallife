@@ -73,7 +73,7 @@ func TestListNotificationsAPI(t *testing.T) {
 
 				var response listNotificationsResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, int64(1), response.TotalCount)
+				require.Equal(t, int64(1), response.Total)
 				require.Len(t, response.Notifications, 1)
 				require.Equal(t, "order", response.Notifications[0].Type)
 			},

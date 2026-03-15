@@ -304,7 +304,7 @@ func TestListMerchantReviewsAPI(t *testing.T) {
 
 				var response map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, float64(2), response["total_count"])
+				require.Equal(t, float64(2), response["total"])
 				require.Equal(t, float64(1), response["page_id"])
 
 				reviewsList := response["reviews"].([]interface{})

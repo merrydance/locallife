@@ -93,7 +93,6 @@ export interface OperatorCommissionResponse {
         total_orders: number
     }
     total: number
-    total_count: number
     id?: number
     operator_id?: number
     order_id?: number

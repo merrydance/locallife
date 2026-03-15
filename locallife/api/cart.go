@@ -776,7 +776,6 @@ type listBrowseHistoryResponse struct {
 	Items []browseHistoryItem `json:"items"`
 	// 总数
 	Total      int64 `json:"total"`
-	TotalCount int64 `json:"total_count"`
 	PageID     int   `json:"page_id"`
 	PageSize   int   `json:"page_size"`
 }
@@ -884,7 +883,6 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listBrowseHistoryResponse{
 		Items:      result,
 		Total:      total,
-		TotalCount: total,
 		PageID:     page,
 		PageSize:   pageSize,
 	})

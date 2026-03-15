@@ -222,8 +222,7 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"claims":      response,
-		"total":       total,
-		"total_count": total,
+		"total": total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -501,8 +500,7 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":     response,
-		"total":       result.Total,
-		"total_count": result.Total,
+		"total": result.Total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -662,8 +660,7 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"claims":      response,
-		"total":       total,
-		"total_count": total,
+		"total": total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -869,8 +866,7 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":     response,
-		"total":       result.Total,
-		"total_count": result.Total,
+		"total": result.Total,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})
@@ -1059,8 +1055,7 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"appeals":     response,
-		"total":       total,
-		"total_count": total,
+		"total": total,
 		"page":        req.Page,
 		"limit":       req.Limit,
 	})

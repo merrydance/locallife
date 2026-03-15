@@ -612,8 +612,7 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"reservations": resp,
-		"total":        totalCount,
-		"total_count":  totalCount,
+		"total":  totalCount,
 		"page_id":      req.PageID,
 		"page_size":    req.PageSize,
 	})
@@ -1043,8 +1042,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"reservations": resp,
-		"total":        totalCount,
-		"total_count":  totalCount,
+		"total":  totalCount,
 		"page_id":      req.PageID,
 		"page_size":    req.PageSize,
 	})

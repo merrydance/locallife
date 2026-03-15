@@ -14,7 +14,6 @@ export interface Membership {
 
 export interface ListMembershipsResponse {
     memberships: Membership[]
-    total_count: number
     total: number // Backend also sends this
     page_id: number
     page_size: number

@@ -396,8 +396,7 @@ func (server *Server) listAvailableRegions(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"regions":     availableRegions,
-		"total":       len(availableRegions),
-		"total_count": len(availableRegions),
+		"total": len(availableRegions),
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	})

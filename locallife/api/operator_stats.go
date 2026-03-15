@@ -192,8 +192,7 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"regions":     response,
-		"total":       len(response),
-		"total_count": len(response),
+		"total": len(response),
 		"page":        req.Page,
 		"limit":       req.Limit,
 	})

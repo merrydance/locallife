@@ -111,7 +111,6 @@ export interface ListPaymentsParams {
 
 export interface ListPaymentsResponse {
     payment_orders: PaymentOrderResponse[]
-    total_count: number
     total: number
     page_id: number
     page_size: number

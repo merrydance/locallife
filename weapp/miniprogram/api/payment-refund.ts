@@ -164,7 +164,6 @@ export interface ListPaymentOrdersParams {
 
 export interface ListPaymentOrdersResponse {
     payment_orders: PaymentOrder[]
-    total_count: number
     total: number
     page_id: number
     page_size: number
@@ -172,7 +171,6 @@ export interface ListPaymentOrdersResponse {
 
 export interface ListRefundOrdersByPaymentResponse {
     refund_orders: RefundOrder[]
-    total_count: number
     total: number
 }
 

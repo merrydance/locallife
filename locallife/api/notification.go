@@ -85,7 +85,6 @@ type listNotificationsRequest struct {
 
 type listNotificationsResponse struct {
 	Notifications []notificationResponse `json:"notifications"`
-	TotalCount    int64                  `json:"total_count"`
 	Total         int64                  `json:"total"`
 	PageID        int32                  `json:"page_id"`
 	PageSize      int32                  `json:"page_size"`
@@ -164,7 +163,6 @@ func (server *Server) listNotifications(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listNotificationsResponse{
 		Notifications: responseList,
-		TotalCount:    totalCount,
 		Total:         totalCount,
 		PageID:        pageID,
 		PageSize:      req.Limit,

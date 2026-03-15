@@ -578,7 +578,7 @@ func TestListMerchantCustomersAPI(t *testing.T) {
 
 				var resp map[string]interface{}
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, float64(1), resp["total_count"])
+				require.Equal(t, float64(1), resp["total"])
 				require.Len(t, resp["data"], 1)
 			},
 		},

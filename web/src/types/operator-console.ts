@@ -22,7 +22,6 @@ export interface OperatorMerchantListItem {
 export interface OperatorMerchantListResponse {
   merchants: OperatorMerchantListItem[];
   total: number;
-  total_count: number;
   page: number;
   limit: number;
 }
@@ -81,7 +80,6 @@ export interface OperatorRiderListItem {
 export interface OperatorRiderListResponse {
   riders: OperatorRiderListItem[];
   total: number;
-  total_count: number;
   page: number;
   limit: number;
 }
@@ -129,7 +127,6 @@ export interface OperatorAppealListItem {
 export interface OperatorAppealListResponse {
   appeals: OperatorAppealListItem[];
   total: number;
-  total_count: number;
   page: number;
   limit: number;
 }
@@ -223,7 +220,6 @@ export interface OperatorCommissionItem {
 export interface OperatorCommissionResponse {
   items: OperatorCommissionItem[];
   total: number;
-  total_count: number;
   page: number;
   limit: number;
   summary: {
@@ -256,7 +252,6 @@ export interface OperatorWithdrawalItem {
 export interface OperatorWithdrawalsResponse {
   withdrawals: OperatorWithdrawalItem[];
   total: number;
-  total_count: number;
   page: number;
   limit: number;
   total_pages: number;

@@ -165,8 +165,7 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"merchants":  response,
-		"total":      count,
-		"total_count": count,
+		"total": count,
 		"page_id":    req.Page,
 		"page":       req.Page,
 		"page_size":  req.PageSize,
@@ -341,8 +340,7 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"dishes":     response,
-		"total":      count,
-		"total_count": count,
+		"total": count,
 		"page_id":    req.Page,
 		"page":       req.Page,
 		"page_size":  req.PageSize,

@@ -1265,8 +1265,7 @@ func (server *Server) ListUserClaims(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"claims":      response,
-		"total":       totalCount,
-		"total_count": totalCount,
+		"total": totalCount,
 		"page_id":     page,
 		"page_size":   pageSize,
 		"page":        page,

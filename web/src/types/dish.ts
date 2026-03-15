@@ -47,7 +47,7 @@ export interface DishResponse {
 
 export interface ListDishesResponse {
   dishes: DishResponse[];
-  total_count: number;
+  total: number;
 }
 
 export interface DishCategory {

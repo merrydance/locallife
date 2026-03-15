@@ -30,14 +30,13 @@ type operatorAccountBalanceResponse struct {
 }
 
 type operatorWithdrawalsResponse struct {
-	Withdrawals []operatorWithdrawItem `json:"withdrawals"`
-	Total       int64                  `json:"total"`
-	TotalCount  int64                  `json:"total_count"`
-	Page        int32                  `json:"page"`
-	Limit       int32                  `json:"limit"`
-	TotalPages  int64                  `json:"total_pages"`
-	AccountStatus string              `json:"account_status,omitempty"`
-	StatusDesc    string              `json:"status_desc,omitempty"`
+	Withdrawals   []operatorWithdrawItem `json:"withdrawals"`
+	Total         int64                  `json:"total"`
+	Page          int32                  `json:"page"`
+	Limit         int32                  `json:"limit"`
+	TotalPages    int64                  `json:"total_pages"`
+	AccountStatus string                 `json:"account_status,omitempty"`
+	StatusDesc    string                 `json:"status_desc,omitempty"`
 }
 
 type withdrawOperatorRequest struct {
@@ -346,7 +345,6 @@ func (server *Server) listOperatorWithdrawals(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, operatorWithdrawalsResponse{
 		Withdrawals: items,
 		Total:       totalCount,
-		TotalCount:  totalCount,
 		Page:        req.Page,
 		Limit:       req.Limit,
 		TotalPages:  (totalCount + int64(req.Limit) - 1) / int64(req.Limit),

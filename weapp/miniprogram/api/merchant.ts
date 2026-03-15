@@ -52,7 +52,6 @@ export interface SearchMerchantItem {
 export interface SearchMerchantsResponse {
   merchants: SearchMerchantItem[]
   total?: number
-  total_count?: number
   page_id?: number
   page_size?: number
 }
@@ -137,7 +136,7 @@ export interface RecommendMerchantsResult {
   merchants: MerchantSummary[]
   has_more: boolean
   page: number
-  total_count: number
+  total: number
 }
 
 /**
@@ -146,7 +145,7 @@ export interface RecommendMerchantsResult {
 export async function getRecommendedMerchants(params?: RecommendMerchantsParams): Promise<RecommendMerchantsResult> {
   const page = params?.page ?? 1
   const pageSize = params?.limit ?? 20
-  const response = await request<{ merchants: MerchantSummary[], total?: number, total_count?: number, page_id?: number, page_size?: number }>({
+  const response = await request<{ merchants: MerchantSummary[], total?: number, page_id?: number, page_size?: number }>({
     url: '/v1/search/merchants',
     method: 'GET',
     data: {
@@ -160,12 +159,12 @@ export async function getRecommendedMerchants(params?: RecommendMerchantsParams)
     useCache: page === 1,
     cacheTTL: 3 * 60 * 1000
   })
-  const total = response.total_count ?? response.total ?? response.merchants?.length ?? 0
+  const total = response.total ?? response.merchants?.length ?? 0
   return {
     merchants: response.merchants || [],
     has_more: page * pageSize < total,
     page,
-    total_count: total
+    total: total
   }
 }
 

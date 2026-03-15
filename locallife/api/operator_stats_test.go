@@ -602,16 +602,16 @@ func TestGetOperatorFinanceOverviewAPI(t *testing.T) {
 					}, nil)
 
 				store.EXPECT().
-					GetOperatorProfitSharingStats(gomock.Any(), gomock.Any()).
-					Return(db.GetOperatorProfitSharingStatsRow{
+					GetOperatorProfitSharingStatsByRegion(gomock.Any(), gomock.Any()).
+					Return(db.GetOperatorProfitSharingStatsByRegionRow{
 						TotalOrders:             100,
 						TotalAmount:             100000,
 						TotalOperatorCommission: 1800,
 					}, nil)
 
 				store.EXPECT().
-					GetOperatorProfitSharingStats(gomock.Any(), gomock.Any()).
-					Return(db.GetOperatorProfitSharingStatsRow{
+					GetOperatorProfitSharingStatsByRegion(gomock.Any(), gomock.Any()).
+					Return(db.GetOperatorProfitSharingStatsByRegionRow{
 						TotalOrders:             500,
 						TotalAmount:             500000,
 						TotalOperatorCommission: 9000,

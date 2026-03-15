@@ -54,7 +54,6 @@ export interface FinanceOrderItem {
 export interface FinanceOrdersResponse {
   orders: FinanceOrderItem[];
   total: number;
-  total_count: number;
   page: number;
   page_id: number;
   page_size: number;
@@ -110,7 +109,6 @@ export interface PromotionExpenseItem {
 export interface PromotionExpensesResponse {
   orders: PromotionExpenseItem[];
   total: number;
-  total_count: number;
   page: number;
   page_id: number;
   page_size: number;
@@ -171,7 +169,6 @@ export interface SettlementItem {
 export interface SettlementsResponse {
   settlements: SettlementItem[];
   total: number;
-  total_count: number;
   page: number;
   page_id: number;
   page_size: number;

@@ -179,8 +179,7 @@ func (server *Server) listPrinters(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"printers": result,
-		"total":    len(result),
-		"total_count": len(result),
+		"total": len(result),
 	})
 }
 

@@ -25,7 +25,6 @@ type listBillingGroupsRequest struct {
 type billingGroupListResponse struct {
 	BillingGroups []billingGroupResponse `json:"billing_groups"`
 	Total         int64                  `json:"total"`
-	TotalCount    int64                  `json:"total_count"`
 }
 
 type billingGroupOrderResponse struct {
@@ -41,7 +40,6 @@ type billingGroupOrderResponse struct {
 type billingGroupOrderListResponse struct {
 	Orders []billingGroupOrderResponse `json:"orders"`
 	Total  int64                       `json:"total"`
-	TotalCount int64                   `json:"total_count"`
 }
 
 func newBillingGroupOrderResponse(o db.BillingGroupOrder) billingGroupOrderResponse {
@@ -270,7 +268,6 @@ func (server *Server) listBillingGroups(ctx *gin.Context) {
 		resp.BillingGroups = append(resp.BillingGroups, newBillingGroupResponse(g))
 	}
 	resp.Total = int64(len(resp.BillingGroups))
-	resp.TotalCount = resp.Total
 
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -340,7 +337,6 @@ func (server *Server) listBillingGroupOrders(ctx *gin.Context) {
 		resp.Orders = append(resp.Orders, newBillingGroupOrderResponse(o))
 	}
 	resp.Total = int64(len(resp.Orders))
-	resp.TotalCount = resp.Total
 
 	ctx.JSON(http.StatusOK, resp)
 }

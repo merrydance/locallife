@@ -279,7 +279,7 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 
 	response := gin.H{
 		"reviews":     newReviewListResponse(reviews),
-		"total_count": count,
+		"total": count,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	}
@@ -349,7 +349,7 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 
 	response := gin.H{
 		"reviews":     newReviewListResponse(reviews),
-		"total_count": count,
+		"total": count,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	}
@@ -399,7 +399,7 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 
 	response := gin.H{
 		"reviews":     newListReviewByUserResponse(reviews),
-		"total_count": count,
+		"total": count,
 		"page_id":     req.PageID,
 		"page_size":   req.PageSize,
 	}

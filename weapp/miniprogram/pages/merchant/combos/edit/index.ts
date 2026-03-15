@@ -75,7 +75,7 @@ Page({
 
       const pageDishes = Array.isArray(response?.dishes) ? response.dishes.filter((dish) => !!dish) : []
       allDishes = [...allDishes, ...pageDishes]
-      totalCount = Number(response?.total_count || 0)
+      totalCount = Number(response?.total || 0)
       pageId += 1
 
       if (!pageDishes.length) {

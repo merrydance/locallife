@@ -695,7 +695,6 @@ type listOrdersRequest struct {
 
 type listOrdersResponse struct {
 	Orders     []orderResponse `json:"orders"`
-	TotalCount int64           `json:"total_count"`
 	Total      int64           `json:"total"`
 	PageID     int32           `json:"page_id"`
 	PageSize   int32           `json:"page_size"`
@@ -774,7 +773,6 @@ func (server *Server) listOrders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listOrdersResponse{
 		Orders:     resp,
-		TotalCount: int64(len(resp)),
 		Total:      int64(len(resp)),
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,
@@ -1006,7 +1004,6 @@ type listMerchantOrdersRequest struct {
 
 type listMerchantOrdersResponse struct {
 	Orders     []orderResponse `json:"orders"`
-	TotalCount int64           `json:"total_count"`
 	Total      int64           `json:"total"`
 	PageID     int32           `json:"page_id"`
 	PageSize   int32           `json:"page_size"`
@@ -1085,7 +1082,6 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
 		Orders:     resp,
-		TotalCount: result.TotalCount,
 		Total:      result.TotalCount,
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,

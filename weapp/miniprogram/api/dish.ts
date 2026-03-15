@@ -121,7 +121,7 @@ export interface CreateDishCategoryRequest {
  */
 export interface ListDishesResponse {
     dishes: DishResponse[]                       // 菜品列表
-    total_count: number                          // 总数
+    total: number                                // 总数
 }
 
 /**
@@ -1099,7 +1099,6 @@ export interface SearchDishItem {
 export interface SearchDishesResponse {
     dishes: SearchDishItem[]
     total?: number
-    total_count?: number
     page_id?: number
     page_size?: number
     has_more?: boolean
@@ -1136,7 +1135,7 @@ export interface DishSearchResult {
     dishes: DishSummary[]
     has_more: boolean
     page: number
-    total_count: number
+    total: number
 }
 
 /**
@@ -1173,7 +1172,7 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
     // 转换响应格式以匹配 DishSearchResult
     const page = response.page_id ?? 1
     const pageSize = response.page_size ?? params?.limit ?? 20
-    const totalCount = response.total_count ?? response.total ?? 0
+    const totalCount = response.total ?? 0
     const hasMore = response.has_more ?? (page * pageSize < totalCount)
 
     return {
@@ -1196,7 +1195,7 @@ export async function searchDishes(params?: DishSearchParams): Promise<DishSearc
 
         has_more: hasMore,
         page,
-        total_count: totalCount
+        total: totalCount
     }
 }
 
@@ -1230,7 +1229,7 @@ export interface RecommendCombosResult {
     combos: ComboSummary[]  // 使用 ComboSummary（包含完整信息：图片、销量、距离等）
     has_more: boolean
     page: number
-    total_count: number
+    total: number
 }
 
 /**
@@ -1240,7 +1239,7 @@ export interface RecommendCombosResult {
 export async function getRecommendedCombos(params?: RecommendCombosParams): Promise<RecommendCombosResult> {
     const page = params?.page ?? 1
     const pageSize = params?.limit ?? 20
-    const response = await request<{ combos: ComboSummary[], total?: number, total_count?: number, page_id?: number, page_size?: number }>({
+    const response = await request<{ combos: ComboSummary[], total?: number, page_id?: number, page_size?: number }>(({
         url: '/v1/search/combos',
         method: 'GET',
         data: {
@@ -1254,12 +1253,12 @@ export async function getRecommendedCombos(params?: RecommendCombosParams): Prom
         useCache: page === 1,
         cacheTTL: 3 * 60 * 1000 // 3分钟缓存
     })
-    const total = response.total_count ?? response.total ?? response.combos?.length ?? 0
+    const total = response.total ?? response.combos?.length ?? 0
     return {
         combos: response.combos || [],
         has_more: page * pageSize < total,
         page,
-        total_count: total
+        total: total
     }
 }
 

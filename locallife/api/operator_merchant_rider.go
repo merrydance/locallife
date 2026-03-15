@@ -49,7 +49,6 @@ type merchantListItem struct {
 type listOperatorMerchantsResponse struct {
 	Merchants  []merchantListItem `json:"merchants"`
 	Total      int64              `json:"total"`
-	TotalCount int64              `json:"total_count"`
 	PageID     int32              `json:"page_id"`
 	PageSize   int32              `json:"page_size"`
 	Page       int32              `json:"page"`
@@ -174,7 +173,6 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listOperatorMerchantsResponse{
 		Merchants:  result,
 		Total:      total,
-		TotalCount: total,
 		PageID:     req.Page,
 		PageSize:   req.Limit,
 		Page:       req.Page,
@@ -421,7 +419,6 @@ type riderListItem struct {
 type listOperatorRidersResponse struct {
 	Riders     []riderListItem `json:"riders"`
 	Total      int64           `json:"total"`
-	TotalCount int64           `json:"total_count"`
 	PageID     int32           `json:"page_id"`
 	PageSize   int32           `json:"page_size"`
 	Page       int32           `json:"page"`
@@ -552,7 +549,6 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listOperatorRidersResponse{
 		Riders:     result,
 		Total:      total,
-		TotalCount: total,
 		PageID:     req.Page,
 		PageSize:   req.Limit,
 		Page:       req.Page,

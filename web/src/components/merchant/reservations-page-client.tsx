@@ -177,13 +177,13 @@ export function ReservationsPageClient({
 
   const loadScheduleReservations = useCallback(async () => {
     try {
-      const data = await apiGet<{ reservations: ReservationResponse[], total_count?: number }>("/reservations/merchant", { 
+      const data = await apiGet<{ reservations: ReservationResponse[], total?: number }>("/reservations/merchant", {
         page_id: 1,
         page_size: 200 
       });
       setScheduleReservations(data.reservations || []);
-      if (data.total_count !== undefined) {
-        setTotalCountState(data.total_count);
+      if (data.total !== undefined) {
+        setTotalCountState(data.total);
       }
     } catch (error) {
       console.error("Failed to load schedule reservations:", error);

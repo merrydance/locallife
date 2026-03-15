@@ -42,7 +42,6 @@ export interface UpdateVoucherRequest {
 
 export interface ListVouchersResponse {
   vouchers: VoucherResponse[];
-  total_count: number;
   total: number;
   page_id: number;
   page_size: number;

@@ -660,7 +660,6 @@ type listDishesRequest struct {
 
 type listDishesResponse struct {
 	Dishes     []dishResponse `json:"dishes"`
-	TotalCount int64          `json:"total_count"`
 	Total      int64          `json:"total"`
 	PageID     int32          `json:"page_id"`
 	PageSize   int32          `json:"page_size"`
@@ -766,7 +765,6 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listDishesResponse{
 		Dishes:     result,
-		TotalCount: count,
 		Total:      count,
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,

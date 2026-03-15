@@ -12,7 +12,6 @@ export interface MemberResponse {
 
 export interface ListMerchantMembersResponse {
   members: MemberResponse[];
-  total_count: number;
   total: number;
   page_id: number;
   page_size: number;

@@ -579,7 +579,6 @@ type listPaymentOrdersRequest struct {
 
 type listPaymentOrdersResponse struct {
 	PaymentOrders []paymentOrderResponse `json:"payment_orders"`
-	TotalCount    int64                  `json:"total_count"`
 	Total         int64                  `json:"total"`
 	PageID        int32                  `json:"page_id"`
 	PageSize      int32                  `json:"page_size"`
@@ -646,7 +645,6 @@ func (server *Server) listPaymentOrders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listPaymentOrdersResponse{
 		PaymentOrders: resp,
-		TotalCount:    result.TotalCount,
 		Total:         result.TotalCount,
 		PageID:        pageID,
 		PageSize:      pageSize,
@@ -939,7 +937,6 @@ type listRefundOrdersByPaymentRequest struct {
 
 type listRefundOrdersByPaymentResponse struct {
 	RefundOrders []refundOrderResponse `json:"refund_orders"`
-	TotalCount   int64                 `json:"total_count"`
 	Total        int64                 `json:"total"`
 }
 
@@ -990,7 +987,6 @@ func (server *Server) listRefundOrdersByPayment(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listRefundOrdersByPaymentResponse{
 		RefundOrders: resp,
-		TotalCount:   int64(len(resp)),
 		Total:        int64(len(resp)),
 	})
 }

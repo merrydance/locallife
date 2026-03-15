@@ -276,7 +276,6 @@ type listTablesResponse struct {
 	Tables     []tableResponse `json:"tables"`
 	Count      int64           `json:"count"`
 	Total      int64           `json:"total"`
-	TotalCount int64           `json:"total_count"`
 }
 
 // listTables godoc
@@ -331,7 +330,6 @@ func (server *Server) listTables(ctx *gin.Context) {
 		Tables:     make([]tableResponse, len(tables)),
 		Count:      int64(len(tables)),
 		Total:      int64(len(tables)),
-		TotalCount: int64(len(tables)),
 	}
 	for i, t := range tables {
 		resp.Tables[i] = newTableResponse(t)

@@ -104,7 +104,6 @@ type listUserMembershipsRequest struct {
 
 type listUserMembershipsResponse struct {
 	Memberships []membershipResponse `json:"memberships"`
-	TotalCount  int64                `json:"total_count"`
 	Total       int64                `json:"total"`
 	PageID      int32                `json:"page_id"`
 	PageSize    int32                `json:"page_size"`
@@ -149,7 +148,6 @@ func (server *Server) listUserMemberships(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listUserMembershipsResponse{
 		Memberships: rsp,
-		TotalCount:  int64(len(rsp)),
 		Total:       int64(len(rsp)),
 		PageID:      req.PageID,
 		PageSize:    req.PageSize,
@@ -753,7 +751,6 @@ type listTransactionsRequest struct {
 
 type listMembershipTransactionsResponse struct {
 	Transactions []transactionResponse `json:"transactions"`
-	TotalCount   int64                 `json:"total_count"`
 	Total        int64                 `json:"total"`
 	PageID       int32                 `json:"page_id"`
 	PageSize     int32                 `json:"page_size"`
@@ -810,7 +807,6 @@ func (server *Server) listMembershipTransactions(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMembershipTransactionsResponse{
 		Transactions: rsp,
-		TotalCount:   int64(len(rsp)),
 		Total:        int64(len(rsp)),
 		PageID:       req.PageID,
 		PageSize:     req.PageSize,
@@ -959,7 +955,6 @@ type listMerchantMembersQueryRequest struct {
 
 type listMerchantMembersResponse struct {
 	Members    []merchantMemberResponse `json:"members"`
-	TotalCount int64                    `json:"total_count"`
 	Total      int64                    `json:"total"`
 	PageID     int32                    `json:"page_id"`
 	PageSize   int32                    `json:"page_size"`
@@ -1050,7 +1045,6 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantMembersResponse{
 		Members:    rsp,
-		TotalCount: int64(len(rsp)),
 		Total:      int64(len(rsp)),
 		PageID:     queryReq.PageID,
 		PageSize:   queryReq.PageSize,

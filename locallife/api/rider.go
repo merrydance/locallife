@@ -536,7 +536,6 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 
 type listRiderDepositsResponse struct {
 	Deposits   []depositResponse `json:"deposits"`
-	TotalCount int64             `json:"total_count"`
 	Total      int64             `json:"total"`
 	PageID     int32             `json:"page_id"`
 	PageSize   int32             `json:"page_size"`
@@ -602,7 +601,6 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listRiderDepositsResponse{
 		Deposits:   response,
-		TotalCount: int64(len(response)),
 		Total:      int64(len(response)),
 		PageID:     req.Page,
 		PageSize:   req.Limit,
@@ -972,7 +970,6 @@ type listRidersRequest struct {
 
 type listRidersResponse struct {
 	Riders     []riderResponse `json:"riders"`
-	TotalCount int64           `json:"total_count"`
 	Total      int64           `json:"total"`
 	PageID     int32           `json:"page_id"`
 	PageSize   int32           `json:"page_size"`
@@ -1035,7 +1032,6 @@ func (server *Server) listRiders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listRidersResponse{
 		Riders:     response,
-		TotalCount: totalCount,
 		Total:      totalCount,
 		PageID:     req.Page,
 		PageSize:   req.Limit,
@@ -1470,7 +1466,6 @@ type premiumScoreLogItem struct {
 type listRiderPremiumScoreHistoryResponse struct {
 	CurrentScore int16                 `json:"current_score"` // 当前积分
 	Total        int64                 `json:"total"`         // 总记录数
-	TotalCount   int64                 `json:"total_count"`
 	PageID       int32                 `json:"page_id"`
 	PageSize     int32                 `json:"page_size"`
 	Logs         []premiumScoreLogItem `json:"logs"` // 历史记录
@@ -1586,7 +1581,6 @@ func (server *Server) listRiderPremiumScoreHistory(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, listRiderPremiumScoreHistoryResponse{
 		CurrentScore: currentScore,
 		Total:        total,
-		TotalCount:   total,
 		PageID:       req.PageID,
 		PageSize:     req.PageSize,
 		Logs:         items,

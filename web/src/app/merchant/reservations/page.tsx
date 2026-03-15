@@ -15,7 +15,6 @@ const fallbackStats: ReservationStatsResponse = {
 interface MerchantReservationsResponse {
   reservations: ReservationResponse[];
   total: number;
-  total_count: number;
 }
 
 export default async function ReservationsPage(props: {
@@ -30,12 +29,12 @@ export default async function ReservationsPage(props: {
     ),
     apiGet<MerchantReservationsResponse>("/reservations/merchant", {
       page_id: 1,
-      page_size: 1, // We only need total_count for the stats, the list is not used
+      page_size: 1, // We only need total for the stats, the list is not used
       date: date || undefined,
-    }).catch(() => ({ reservations: [], total: 0, total_count: 0 })),
+    }).catch(() => ({ reservations: [], total: 0 })),
   ]);
 
-  const totalCount = reservationsRes.total_count || 0;
+  const totalCount = reservationsRes.total || 0;
 
   return (
     <ReservationsPageClient

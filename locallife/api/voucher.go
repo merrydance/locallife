@@ -148,7 +148,6 @@ type listMerchantVouchersQueryRequest struct {
 
 type listMerchantVouchersResponse struct {
 	Vouchers   []voucherResponse `json:"vouchers"`
-	TotalCount int64             `json:"total_count"`
 	Total      int64             `json:"total"`
 	PageID     int32             `json:"page_id"`
 	PageSize   int32             `json:"page_size"`
@@ -204,7 +203,6 @@ func (server *Server) listMerchantVouchers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantVouchersResponse{
 		Vouchers:   rsp,
-		TotalCount: int64(len(rsp)),
 		Total:      int64(len(rsp)),
 		PageID:     queryReq.PageID,
 		PageSize:   queryReq.PageSize,
@@ -220,7 +218,6 @@ type listActiveVouchersRequest struct {
 
 type listActiveVouchersResponse struct {
 	Vouchers   []voucherResponse `json:"vouchers"`
-	TotalCount int64             `json:"total_count"`
 	Total      int64             `json:"total"`
 	PageID     int32             `json:"page_id"`
 	PageSize   int32             `json:"page_size"`
@@ -275,7 +272,6 @@ func (server *Server) listActiveVouchers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listActiveVouchersResponse{
 		Vouchers:   rsp,
-		TotalCount: int64(len(rsp)),
 		Total:      int64(len(rsp)),
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,
@@ -591,7 +587,6 @@ type listUserVouchersRequest struct {
 
 type listUserVouchersResponse struct {
 	Vouchers   []userVoucherResponse `json:"vouchers"`
-	TotalCount int64                 `json:"total_count"`
 	Total      int64                 `json:"total"`
 	PageID     int32                 `json:"page_id"`
 	PageSize   int32                 `json:"page_size"`
@@ -637,7 +632,6 @@ func (server *Server) listUserVouchers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listUserVouchersResponse{
 		Vouchers:   rsp,
-		TotalCount: int64(len(rsp)),
 		Total:      int64(len(rsp)),
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,
@@ -652,7 +646,6 @@ type listUserAvailableVouchersRequest struct {
 
 type listUserAvailableVouchersResponse struct {
 	Vouchers   []userVoucherResponse `json:"vouchers"`
-	TotalCount int64                 `json:"total_count"`
 	Total      int64                 `json:"total"`
 	PageID     int32                 `json:"page_id"`
 	PageSize   int32                 `json:"page_size"`
@@ -698,7 +691,6 @@ func (server *Server) listUserAvailableVouchers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listUserAvailableVouchersResponse{
 		Vouchers:   rsp,
-		TotalCount: int64(len(rsp)),
 		Total:      int64(len(rsp)),
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,

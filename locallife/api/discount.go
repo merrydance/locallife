@@ -131,7 +131,6 @@ type listMerchantDiscountRulesQueryRequest struct {
 
 type listMerchantDiscountRulesResponse struct {
 	Rules      []discountRuleResponse `json:"rules"`
-	TotalCount int64                  `json:"total_count"`
 	Total      int64                  `json:"total"`
 	PageID     int32                  `json:"page_id"`
 	PageSize   int32                  `json:"page_size"`
@@ -178,7 +177,6 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMerchantDiscountRulesResponse{
 		Rules:      rsp,
-		TotalCount: int64(len(rsp)),
 		Total:      int64(len(rsp)),
 		PageID:     queryReq.PageID,
 		PageSize:   queryReq.PageSize,

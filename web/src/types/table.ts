@@ -36,7 +36,6 @@ export interface ListTablesResponse {
   tables: TableResponse[];
   count: number;
   total: number;
-  total_count: number;
 }
 
 export interface CreateTableRequest {

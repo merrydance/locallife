@@ -88,7 +88,7 @@ Page({
 
             const response = await ReservationService.getUserReservations(params)
             const result = response.reservations
-            const totalCount = typeof response.total_count === 'number' ? response.total_count : result.length
+            const totalCount = response.total ?? result.length
 
             const viewModels = result.map((r) => ReservationCardAdapter.toCardViewModel(r))
             

@@ -14,7 +14,6 @@ const fallbackStats: OrderStatsResponse = {
 
 interface MerchantOrdersResponse {
   orders: OrderResponse[];
-  total_count: number;
   total: number;
 }
 
@@ -40,7 +39,7 @@ export default async function OrdersPage({
       page_id: page,
       page_size: pageSize,
       status: status || undefined,
-    }).catch(() => ({ orders: [], total_count: 0, total: 0 })),
+    ).catch(() => ({ orders: [], total: 0 })),
     apiGet<{ total_sales: number; total_orders: number }>("/merchant/stats/overview", {
       start_date: today,
       end_date: today,
@@ -48,7 +47,7 @@ export default async function OrdersPage({
   ]);
 
   const orders = ordersRes.orders || [];
-  const totalCount = ordersRes.total_count || 0;
+  const totalCount = ordersRes.total || 0;
 
   return (
     <OrdersPageClient

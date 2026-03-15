@@ -39,7 +39,6 @@ export interface UpdateDiscountRequest {
 
 export interface ListDiscountsResponse {
   rules: DiscountResponse[];
-  total_count: number;
   total: number;
   page_id: number;
   page_size: number;

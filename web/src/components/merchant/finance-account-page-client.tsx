@@ -75,7 +75,7 @@ interface MerchantWithdrawalItem {
 
 interface MerchantWithdrawalListResponse {
   withdrawals: MerchantWithdrawalItem[];
-  total_count: number;
+  total: number;
   account_status?: string;
   status_desc?: string;
 }

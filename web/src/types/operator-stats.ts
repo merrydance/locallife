@@ -6,7 +6,6 @@ export interface OperatorRegionResponse {
 export interface OperatorRegionListResponse {
   regions: OperatorRegionResponse[];
   total: number;
-  total_count: number;
   page: number;
   limit: number;
 }

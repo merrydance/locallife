@@ -21,7 +21,6 @@ export interface Notification {
 
 export interface ListNotificationsResponse {
     notifications: Notification[]
-    total_count: number
     total: number
     page_id: number
     page_size: number

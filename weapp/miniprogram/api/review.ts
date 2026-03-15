@@ -19,7 +19,7 @@ export interface Review {
 
 export interface ListReviewsResponse {
     reviews: Review[]
-    total_count: number
+    total: number
     page_id: number
     page_size: number
 }

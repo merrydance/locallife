@@ -64,7 +64,7 @@ export function ReviewsPageClient() {
         page_size: pageSize
       });
       setReviews(data.reviews || []);
-      setTotalCount(data.total_count || 0);
+      setTotalCount(data.total || 0);
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : "加载评价列表失败";
         toast.error(message);

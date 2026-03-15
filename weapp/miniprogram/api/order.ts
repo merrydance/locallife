@@ -162,7 +162,6 @@ export interface ListOrdersParams extends Record<string, unknown> {
 /** 订单列表响应 - 对齐 api.listOrdersResponse */
 export interface ListOrdersResponse {
   orders: OrderResponse[]
-  total_count: number
   total: number
   page_id: number
   page_size: number

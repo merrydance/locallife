@@ -234,7 +234,6 @@ export function AnalyticsPageClient() {
 
       const emptyCustomerList: CustomerListResponse = {
         data: [],
-        total_count: 0,
         total: 0,
         page_id: 1,
         page_size: 10,

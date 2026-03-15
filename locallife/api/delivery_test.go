@@ -451,6 +451,13 @@ func TestConfirmPickupAPI(t *testing.T) {
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.OrderStatusLog{}, nil)
+
+				// uploadShippingInfoAsync runs in a goroutine after handler returns;
+				// timing is non-deterministic so use AnyTimes to avoid mock controller panics.
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					AnyTimes().
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

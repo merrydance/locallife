@@ -318,19 +318,10 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(submittedApp, nil)
 
-				// 检查地址唯一性
 				store.EXPECT().
-					CheckMerchantAddressExists(gomock.Any(), db.CheckMerchantAddressExistsParams{
-						Address:     submittedApp.BusinessAddress,
-						OwnerUserID: user.ID,
-					}).
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
 					Times(1).
-					Return(false, nil)
-
-				store.EXPECT().
-					ListMerchantAddressesByRegion(gomock.Any(), submittedApp.RegionID.Int64).
-					Times(1).
-					Return([]string{}, nil)
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
 
 				store.EXPECT().
 					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
@@ -465,19 +456,10 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(app, nil)
 
-				// 已经是 submitted，直接进入审核
 				store.EXPECT().
-					CheckMerchantAddressExists(gomock.Any(), db.CheckMerchantAddressExistsParams{
-						Address:     app.BusinessAddress,
-						OwnerUserID: user.ID,
-					}).
+					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
 					Times(1).
-					Return(false, nil)
-
-				store.EXPECT().
-					ListMerchantAddressesByRegion(gomock.Any(), app.RegionID.Int64).
-					Times(1).
-					Return([]string{}, nil)
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
 
 				store.EXPECT().
 					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
@@ -525,14 +507,18 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(submittedApp, nil)
 
-				// 地址已被占用
+				// GPS 坐标重复 → 拒绝
 				store.EXPECT().
-					CheckMerchantAddressExists(gomock.Any(), db.CheckMerchantAddressExistsParams{
-						Address:     submittedApp.BusinessAddress,
-						OwnerUserID: user.ID,
-					}).
+					ListMerchantLocationsInRegion(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(true, nil)
+					Return([]db.ListMerchantLocationsInRegionRow{
+						{
+							OwnerUserID: user.ID + 1,
+							Address:     "北京市朝阳区测试路100号",
+							Latitude:    pgtype.Numeric{Int: big.NewInt(399080000), Exp: -7, Valid: true},
+							Longitude:   pgtype.Numeric{Int: big.NewInt(1163210000), Exp: -7, Valid: true},
+						},
+					}, nil)
 
 				store.EXPECT().
 					RejectMerchantApplication(gomock.Any(), gomock.Any()).
@@ -540,7 +526,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Return(db.MerchantApplication{
 						ID:           app.ID,
 						Status:       "rejected",
-						RejectReason: pgtype.Text{String: "该地址已有商户入驻，同一地址不能注册两家餐厅", Valid: true},
+						RejectReason: pgtype.Text{String: "该位置已有其他商户注册（坐标距离过近）", Valid: true},
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -550,7 +536,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "rejected", resp.Status)
 				require.NotNil(t, resp.RejectReason)
-				require.Contains(t, *resp.RejectReason, "地址已有商户入驻")
+				require.Contains(t, *resp.RejectReason, "坐标距离过近")
 			},
 		},
 	}

@@ -394,7 +394,6 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"data":        result,
-		"total_count": totalCount,
 		"total":       totalCount,
 		"page_id":     req.Page,
 		"page_size":   req.Limit,

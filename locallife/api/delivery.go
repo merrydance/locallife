@@ -981,7 +981,6 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 
 type listMyDeliveriesResponse struct {
 	Deliveries []deliveryResponse `json:"deliveries"`
-	TotalCount int64              `json:"total_count"`
 	Total      int64              `json:"total"`
 	PageID     int32              `json:"page_id"`
 	PageSize   int32              `json:"page_size"`
@@ -1062,7 +1061,6 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listMyDeliveriesResponse{
 		Deliveries: response,
-		TotalCount: int64(len(response)),
 		Total:      int64(len(response)),
 		PageID:     req.Page,
 		PageSize:   req.Limit,
