@@ -226,6 +226,16 @@ export function AnalyticsPageClient() {
         return fallback;
       };
 
+      const emptyCustomerList: CustomerListResponse = {
+        data: [],
+        total_count: 0,
+        total: 0,
+        page_id: 1,
+        page_size: 10,
+        page: 1,
+        limit: 10,
+      };
+
       setOverview(unwrapSettled(overviewRes, null, "概览") as OverviewResponse | null);
       setPrevOverview(
         unwrapSettled(prevOverviewRes, null, "上一周期概览") as OverviewResponse | null
@@ -239,7 +249,7 @@ export function AnalyticsPageClient() {
       );
       setCategoryStats(unwrapSettled(categoryRes, [], "分类分析"));
       setCustomerStats(
-        unwrapSettled(customersRes, { data: [] } as CustomerListResponse, "客户分析").data || []
+        unwrapSettled(customersRes, emptyCustomerList, "客户分析").data || []
       );
       setFinanceOverview(
         unwrapSettled(financeRes, null, "财务分析") as FinanceOverviewResponse | null
