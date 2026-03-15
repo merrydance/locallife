@@ -110,7 +110,7 @@ type createProfitSharingConfigRequest struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/profit-sharing/configs [post]
+// @Router /v1/platform/profit-sharing/configs [post]
 func (server *Server) createProfitSharingConfig(ctx *gin.Context) {
 	var req createProfitSharingConfigRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -201,7 +201,7 @@ type listProfitSharingConfigsResponse struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/profit-sharing/configs [get]
+// @Router /v1/platform/profit-sharing/configs [get]
 func (server *Server) listProfitSharingConfigs(ctx *gin.Context) {
 	var req listProfitSharingConfigsRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -268,7 +268,7 @@ type updateProfitSharingConfigRequest struct {
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 404 {object} errorRes "配置不存在"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/profit-sharing/configs/{id} [patch]
+// @Router /v1/platform/profit-sharing/configs/{id} [patch]
 func (server *Server) updateProfitSharingConfig(ctx *gin.Context) {
 	configID, err := parseIDParam(ctx, "id")
 	if err != nil {
@@ -367,7 +367,7 @@ type disableProfitSharingConfigRequest struct {
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 404 {object} errorRes "配置不存在"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/profit-sharing/configs/{id}/disable [post]
+// @Router /v1/platform/profit-sharing/configs/{id}/disable [post]
 func (server *Server) disableProfitSharingConfig(ctx *gin.Context) {
 	configID, err := parseIDParam(ctx, "id")
 	if err != nil {

@@ -19,7 +19,7 @@ type listActiveAgreementsResponse struct {
 // @Accept json
 // @Produce json
 // @Success 200 {array} listActiveAgreementsResponse
-// @Router /agreements [get]
+// @Router /v1/agreements [get]
 func (server *Server) listAgreements(ctx *gin.Context) {
 	agreements, err := server.store.ListActiveAgreements(ctx)
 	if err != nil {
@@ -47,7 +47,7 @@ func (server *Server) listAgreements(ctx *gin.Context) {
 // @Produce json
 // @Param type path string true "Agreement Type"
 // @Success 200 {object} db.Agreement
-// @Router /agreements/{type} [get]
+// @Router /v1/agreements/{type} [get]
 func (server *Server) getAgreement(ctx *gin.Context) {
 	agreementType := ctx.Param("type")
 

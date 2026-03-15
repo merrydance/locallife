@@ -200,7 +200,7 @@ func newDeliveryFeeConfigResponse(config db.DeliveryFeeConfig) deliveryFeeConfig
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 409 {object} ErrorResponse "Config already exists for this region"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/regions/{region_id}/config [post]
+// @Router /v1/delivery-fee/regions/{region_id}/config [post]
 // @Security BearerAuth
 func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	var req createDeliveryFeeConfigRequest
@@ -287,7 +287,7 @@ type getDeliveryFeeConfigURI struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/config/{region_id} [get]
+// @Router /v1/delivery-fee/config/{region_id} [get]
 // @Security BearerAuth
 func (server *Server) getDeliveryFeeConfig(ctx *gin.Context) {
 	var uri getDeliveryFeeConfigURI
@@ -337,7 +337,7 @@ type updateDeliveryFeeConfigRequest struct {
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/regions/{region_id}/config [patch]
+// @Router /v1/delivery-fee/regions/{region_id}/config [patch]
 // @Security BearerAuth
 func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	var uri updateDeliveryFeeConfigURI
@@ -543,7 +543,7 @@ func parsePgTime(s string) (pgtype.Time, error) {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 500 {object} ErrorResponse
-// @Router /operator/regions/{region_id}/peak-hours [post]
+// @Router /v1/operator/regions/{region_id}/peak-hours [post]
 // @Security BearerAuth
 func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 	var req createPeakHourConfigRequest
@@ -623,7 +623,7 @@ type listPeakHourConfigsURI struct {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Operator role required"
 // @Failure 500 {object} ErrorResponse
-// @Router /operator/regions/{region_id}/peak-hours [get]
+// @Router /v1/operator/regions/{region_id}/peak-hours [get]
 // @Security BearerAuth
 func (server *Server) listPeakHourConfigs(ctx *gin.Context) {
 	var uri listPeakHourConfigsURI
@@ -663,7 +663,7 @@ type deletePeakHourConfigURI struct {
 // @Failure 403 {object} ErrorResponse "Operator role required or not authorized for this region"
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /operator/peak-hours/{id} [delete]
+// @Router /v1/operator/peak-hours/{id} [delete]
 // @Security BearerAuth
 func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 	var uri deletePeakHourConfigURI
@@ -779,7 +779,7 @@ func newDeliveryPromotionResponse(promo db.MerchantDeliveryPromotion) deliveryPr
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/merchants/{id}/promotions [post]
+// @Router /v1/delivery-fee/merchants/{id}/promotions [post]
 // @Security BearerAuth
 func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 	// 获取 URI 中的 merchant_id
@@ -884,7 +884,7 @@ type listDeliveryPromotionsURI struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/merchants/{merchant_id}/promotions [get]
+// @Router /v1/delivery-fee/merchants/{merchant_id}/promotions [get]
 // @Security BearerAuth
 func (server *Server) listDeliveryPromotions(ctx *gin.Context) {
 	var uri listDeliveryPromotionsURI
@@ -937,7 +937,7 @@ type deleteDeliveryPromotionURI struct {
 // @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
 // @Failure 404 {object} ErrorResponse "Promotion not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/merchants/{merchant_id}/promotions/{id} [delete]
+// @Router /v1/delivery-fee/merchants/{merchant_id}/promotions/{id} [delete]
 // @Security BearerAuth
 func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 	var uri deleteDeliveryPromotionURI
@@ -1013,7 +1013,7 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 // @Failure 403 {object} ErrorResponse "Merchant role required or not authorized for this merchant"
 // @Failure 404 {object} ErrorResponse "Promotion not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/merchants/{merchant_id}/promotions/{id} [patch]
+// @Router /v1/delivery-fee/merchants/{merchant_id}/promotions/{id} [patch]
 // @Security BearerAuth
 func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	var uri deleteDeliveryPromotionURI
@@ -1179,7 +1179,7 @@ type calculateDeliveryFeeResponse struct {
 // @Failure 400 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse "Config not found"
 // @Failure 500 {object} ErrorResponse
-// @Router /delivery-fee/calculate [post]
+// @Router /v1/delivery-fee/calculate [post]
 // @Security BearerAuth
 func (server *Server) calculateDeliveryFee(ctx *gin.Context) {
 	var req calculateDeliveryFeeRequest

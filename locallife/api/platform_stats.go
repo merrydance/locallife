@@ -39,7 +39,7 @@ type platformOverviewResponse struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/overview [get]
+// @Router /v1/platform/stats/overview [get]
 func (server *Server) getPlatformOverview(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -111,7 +111,7 @@ type platformDailyStatRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/daily [get]
+// @Router /v1/platform/stats/daily [get]
 func (server *Server) getPlatformDailyStats(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -188,7 +188,7 @@ type platformProfitSharingReconciliationRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/profit-sharing/reconciliation [get]
+// @Router /v1/platform/stats/profit-sharing/reconciliation [get]
 func (server *Server) getPlatformProfitSharingReconciliation(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -265,7 +265,7 @@ type platformProfitSharingSlaSummaryResponse struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/profit-sharing/sla [get]
+// @Router /v1/platform/stats/profit-sharing/sla [get]
 func (server *Server) getPlatformProfitSharingSlaSummary(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -352,7 +352,7 @@ type listProfitSharingConfigAuditsResponse struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/profit-sharing/config-audits [get]
+// @Router /v1/platform/stats/profit-sharing/config-audits [get]
 func (server *Server) getPlatformProfitSharingConfigAudits(ctx *gin.Context) {
 	var req listProfitSharingConfigAuditsRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -447,7 +447,7 @@ type regionComparisonRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/regions/compare [get]
+// @Router /v1/platform/stats/regions/compare [get]
 func (server *Server) getRegionComparison(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -536,7 +536,7 @@ type merchantRankingRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/merchants/ranking [get]
+// @Router /v1/platform/stats/merchants/ranking [get]
 func (server *Server) getMerchantRanking(ctx *gin.Context) {
 	var req getMerchantRankingRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -625,7 +625,7 @@ type categoryStatRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/categories [get]
+// @Router /v1/platform/stats/categories [get]
 func (server *Server) getCategoryStats(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -695,7 +695,7 @@ type growthStatRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/growth/users [get]
+// @Router /v1/platform/stats/growth/users [get]
 func (server *Server) getUserGrowthStats(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -756,7 +756,7 @@ func (server *Server) getUserGrowthStats(ctx *gin.Context) {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/growth/merchants [get]
+// @Router /v1/platform/stats/growth/merchants [get]
 func (server *Server) getMerchantGrowthStats(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -830,7 +830,7 @@ type riderRankingRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/riders/ranking [get]
+// @Router /v1/platform/stats/riders/ranking [get]
 func (server *Server) getRiderRanking(ctx *gin.Context) {
 	var req getMerchantRankingRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -916,7 +916,7 @@ type hourlyDistributionRow struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/hourly [get]
+// @Router /v1/platform/stats/hourly [get]
 func (server *Server) getHourlyDistribution(ctx *gin.Context) {
 	var req getPlatformOverviewRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -988,7 +988,7 @@ type realtimeDashboardResponse struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/realtime [get]
+// @Router /v1/platform/stats/realtime [get]
 func (server *Server) getRealtimeDashboard(ctx *gin.Context) {
 	dashboard, err := server.store.GetRealtimeDashboard(ctx)
 	if err != nil {
@@ -1055,7 +1055,7 @@ type billReconciliationReportResponse struct {
 // @Failure 401 {object} errorRes "未授权"
 // @Failure 403 {object} errorRes "权限不足"
 // @Failure 500 {object} errorRes "服务器内部错误"
-// @Router /platform/stats/bill-reconciliation [get]
+// @Router /v1/platform/stats/bill-reconciliation [get]
 func (server *Server) getBillReconciliationReports(ctx *gin.Context) {
 	var req listBillReconciliationReportsRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {

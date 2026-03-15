@@ -38,7 +38,7 @@ type listOperatorProfitSharingConfigsResponse struct {
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 403 {object} ErrorResponse "无权限"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
-// @Router /operators/me/profit-sharing/configs [get]
+// @Router /v1/operators/me/profit-sharing/configs [get]
 func (server *Server) listOperatorProfitSharingConfigs(ctx *gin.Context) {
 	var req listOperatorProfitSharingConfigsRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {

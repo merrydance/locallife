@@ -12,6 +12,42 @@
 	- 外部系统协议动作（如支付、签约、回调）
 	- 无法自然映射到 CRUD 的领域动作（需在注释中说明理由）
 4. Swagger 注释的 `@Router` 必须与实际注册路由完全一致（路径、method、前缀）。
+5. 以下为既存动作型路径白名单（冻结于 2026-03-15，新增须 PR 审批并注明理由）：
+
+   | 路径 | Method | 说明 |
+   |------|--------|------|
+   | `/v1/auth/refresh` | POST | token 续期 |
+   | `/v1/auth/web-login/confirm` | POST | Web 登录二次确认 |
+   | `/v1/bind-merchant` | POST | 账号绑定商户 |
+   | `/v1/merchant/application/submit` | POST | 提交商户入驻申请 |
+   | `/v1/merchant/application/reset` | POST | 重置商户申请 |
+   | `/v1/merchant/bindbank` | POST | 商户绑定银行卡 |
+   | `/v1/merchant/orders/{id}/accept` | POST | 商户接单 |
+   | `/v1/merchant/orders/{id}/reject` | POST | 商户拒单 |
+   | `/v1/merchant/orders/{id}/complete` | POST | 商户标记完成 |
+   | `/v1/operator/application/submit` | POST | 提交运营商申请 |
+   | `/v1/operator/application/reset` | POST | 重置运营商申请 |
+   | `/v1/operator/applyment/bindbank` | POST | 运营商绑定银行卡 |
+   | `/v1/operators/me/rules/{id}/disable` | POST | 禁用运营商规则 |
+   | `/v1/rider/application/submit` | POST | 提交骑手申请 |
+   | `/v1/rider/application/reset` | POST | 重置骑手申请 |
+   | `/v1/groups/applications/submit` | POST | 提交团购申请 |
+   | `/v1/groups/{id}/join-requests/{request_id}/approve` | POST | 审批加群请求 |
+   | `/v1/groups/{id}/join-requests/{request_id}/reject` | POST | 拒绝加群请求 |
+   | `/v1/groups/{id}/join-requests/{request_id}/cancel` | POST | 取消加群申请 |
+   | `/v1/orders/{id}/confirm` | POST | 用户确认订单 |
+   | `/v1/orders/{id}/cancel` | POST | 取消订单 |
+   | `/v1/reservations/{id}/confirm` | POST | 确认预订 |
+   | `/v1/reservations/{id}/cancel` | POST | 取消预订 |
+   | `/v1/reservations/{id}/complete` | POST | 标记预订完成 |
+   | `/v1/delivery/:delivery_id/confirm-pickup` | POST | 骑手确认取货 |
+   | `/v1/delivery/:delivery_id/confirm-delivery` | POST | 骑手确认送达 |
+   | `/v1/dining-sessions/{id}/transfer-table` | POST | 换桌 |
+   | `/v1/admin/riders/{rider_id}/approve` | POST | 管理员审批骑手 |
+   | `/v1/admin/riders/{rider_id}/reject` | POST | 管理员拒绝骑手 |
+   | `/v1/admin/operators/region-applications/{id}/approve` | POST | 审批运营商区域扩张 |
+   | `/v1/admin/operators/region-applications/{id}/reject` | POST | 拒绝运营商区域扩张 |
+   | `/v1/platform/profit-sharing/configs/{id}/disable` | POST | 禁用分润配置 |
 
 ### 2. Method 语义
 

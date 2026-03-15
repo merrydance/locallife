@@ -21,10 +21,23 @@ const (
 )
 
 type operatorAccountBalanceResponse struct {
-	SubMchID           string `json:"sub_mch_id"`
-	AvailableAmount    int64  `json:"available_amount"`
-	PendingAmount      int64  `json:"pending_amount"`
-	WithdrawableAmount int64  `json:"withdrawable_amount"`
+	SubMchID           string `json:"sub_mch_id,omitempty"`
+	AvailableAmount    int64  `json:"available_amount,omitempty"`
+	PendingAmount      int64  `json:"pending_amount,omitempty"`
+	WithdrawableAmount int64  `json:"withdrawable_amount,omitempty"`
+	AccountStatus      string `json:"account_status,omitempty"`
+	StatusDesc         string `json:"status_desc,omitempty"`
+}
+
+type operatorWithdrawalsResponse struct {
+	Withdrawals []operatorWithdrawItem `json:"withdrawals"`
+	Total       int64                  `json:"total"`
+	TotalCount  int64                  `json:"total_count"`
+	Page        int32                  `json:"page"`
+	Limit       int32                  `json:"limit"`
+	TotalPages  int64                  `json:"total_pages"`
+	AccountStatus string              `json:"account_status,omitempty"`
+	StatusDesc    string              `json:"status_desc,omitempty"`
 }
 
 type withdrawOperatorRequest struct {
@@ -119,6 +132,15 @@ func (server *Server) getActiveOperatorForFinance(ctx *gin.Context, userID int64
 	}
 
 	return operator, nil
+}
+
+// getOperatorFinanceAccountStatus 从运营商记录判断财务账户状态
+// 返回 (accountStatus, statusDesc)，不占用 HTTP 层。
+func getOperatorFinanceAccountStatus(operator db.Operator) (string, string) {
+	if !operator.SubMchID.Valid || operator.SubMchID.String == "" {
+		return "not_configured", "收付通账户尚未开通，请先完成进件流程"
+	}
+	return "active", ""
 }
 
 // getOperatorAccountBalance 查询运营商收付通账户余额
@@ -279,15 +301,20 @@ func (server *Server) listOperatorWithdrawals(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	if _, err := server.getActiveOperatorForFinance(ctx, authPayload.UserID); err != nil {
-		switch err.Error() {
-		case "operator is not active":
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-		case "operator payment config is not active":
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		default:
-			return
-		}
+	operator, err := server.getOperatorFromUserID(ctx, authPayload.UserID)
+	if err != nil {
+		return
+	}
+	if operator.Status != "active" {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator is not active")))
+		return
+	}
+	if accountStatus, statusDesc := getOperatorFinanceAccountStatus(operator); accountStatus != "active" {
+		ctx.JSON(http.StatusOK, operatorWithdrawalsResponse{
+			Withdrawals:   []operatorWithdrawItem{},
+			AccountStatus: accountStatus,
+			StatusDesc:    statusDesc,
+		})
 		return
 	}
 
@@ -316,13 +343,13 @@ func (server *Server) listOperatorWithdrawals(ctx *gin.Context) {
 		items = append(items, toOperatorWithdrawItem(row))
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"withdrawals": items,
-		"total":       totalCount,
-		"total_count": totalCount,
-		"page":        req.Page,
-		"limit":       req.Limit,
-		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+	ctx.JSON(http.StatusOK, operatorWithdrawalsResponse{
+		Withdrawals: items,
+		Total:       totalCount,
+		TotalCount:  totalCount,
+		Page:        req.Page,
+		Limit:       req.Limit,
+		TotalPages:  (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
 	})
 }
 

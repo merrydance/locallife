@@ -37,7 +37,7 @@ type signUploadURLResponse struct {
 // @Produce json
 // @Param request body signUploadURLRequest true "签名请求（path 为 uploads 相对路径，如 uploads/merchants/1/licenses/xxx.jpg 或 merchants/1/licenses/xxx.jpg）"
 // @Success 200 {object} signUploadURLResponse "签名URL与过期时间（Unix秒）"
-// @Router /uploads/sign [post]
+// @Router /v1/uploads/sign [post]
 func (server *Server) signUploadURL(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
