@@ -170,32 +170,32 @@ export function AnalyticsPageClient() {
       };
     }, [dateRange]);
 
-  // 加载所有数据
-  const loadAllData = useCallback(async () => {
-    const isRefresh = !loading;
-    if (isRefresh) setRefreshing(true);
-    else setLoading(true);
+  // 加载所有数据（允许部分接口失败，避免整页不可用）
+  const loadAllData = useCallback(async (manualRefresh = false) => {
+    if (manualRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
+    }
 
     const params = { start_date, end_date };
     const prevParams = { start_date: prev_start_date, end_date: prev_end_date };
 
     try {
       const [
-        overviewData,
-        prevOverviewData,
-        dailyData,
-        dishesData,
-        hourlyData,
-        sourceData,
-        repurchaseData,
-        categoryData,
+        overviewRes,
+        prevOverviewRes,
+        dailyRes,
+        dishesRes,
+        hourlyRes,
+        sourceRes,
+        repurchaseRes,
+        categoryRes,
         customersRes,
-        financeData,
-      ] = await Promise.all([
+        financeRes,
+      ] = await Promise.allSettled([
         apiGet<OverviewResponse>("/merchant/stats/overview", params),
-        apiGet<OverviewResponse>("/merchant/stats/overview", prevParams).catch(
-          () => null
-        ),
+        apiGet<OverviewResponse>("/merchant/stats/overview", prevParams),
         apiGet<DailyStatRow[]>("/merchant/stats/daily", params),
         apiGet<TopDishRow[]>("/merchant/stats/dishes/top", {
           ...params,
@@ -210,38 +210,64 @@ export function AnalyticsPageClient() {
           page: 1,
           limit: 10,
         }),
-        apiGet<FinanceOverviewResponse>(
-          "/merchant/finance/overview",
-          params
-        ).catch(() => null),
+        apiGet<FinanceOverviewResponse>("/merchant/finance/overview", params),
       ]);
 
-      setOverview(overviewData);
-      setPrevOverview(prevOverviewData);
-      setDailyStats(dailyData || []);
-      setTopDishes(dishesData || []);
-      setHourlyStats(hourlyData || []);
-      setSourceStats(sourceData || []);
-      setRepurchaseStats(repurchaseData);
-      setCategoryStats(categoryData || []);
-      setCustomerStats(customersRes?.data || []);
-      setFinanceOverview(financeData);
+      const failedModules: string[] = [];
+      const unwrapSettled = <T,>(
+        result: PromiseSettledResult<T>,
+        fallback: T,
+        moduleName: string
+      ): T => {
+        if (result.status === "fulfilled") {
+          return result.value;
+        }
+        failedModules.push(moduleName);
+        return fallback;
+      };
 
-      if (isRefresh) {
+      setOverview(unwrapSettled(overviewRes, null, "概览") as OverviewResponse | null);
+      setPrevOverview(
+        unwrapSettled(prevOverviewRes, null, "上一周期概览") as OverviewResponse | null
+      );
+      setDailyStats(unwrapSettled(dailyRes, [], "日报"));
+      setTopDishes(unwrapSettled(dishesRes, [], "热销菜品"));
+      setHourlyStats(unwrapSettled(hourlyRes, [], "时段分析"));
+      setSourceStats(unwrapSettled(sourceRes, [], "订单来源"));
+      setRepurchaseStats(
+        unwrapSettled(repurchaseRes, null, "复购分析") as RepurchaseRateResponse | null
+      );
+      setCategoryStats(unwrapSettled(categoryRes, [], "分类分析"));
+      setCustomerStats(
+        unwrapSettled(customersRes, { data: [] } as CustomerListResponse, "客户分析").data || []
+      );
+      setFinanceOverview(
+        unwrapSettled(financeRes, null, "财务分析") as FinanceOverviewResponse | null
+      );
+
+      if (manualRefresh && failedModules.length === 0) {
         toast.success("数据已刷新");
+      }
+
+      if (manualRefresh && failedModules.length > 0) {
+        toast.warning(`部分模块加载失败：${failedModules.join("、")}`);
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "数据加载失败";
-      toast.error(message);
+      if (manualRefresh) {
+        toast.error(message);
+      } else {
+        toast.error("经营分析暂时不可用，请稍后重试");
+      }
     } finally {
       setLoading(false);
       setRefreshing(false);
     }
-  }, [start_date, end_date, prev_start_date, prev_end_date, loading]);
+  }, [start_date, end_date, prev_start_date, prev_end_date]);
 
   useEffect(() => {
-    loadAllData();
-  }, [dateRange, loadAllData]);
+    void loadAllData();
+  }, [loadAllData]);
 
   // 计算环比增长
   const getGrowth = (current: number = 0, prev: number = 0) => {
@@ -374,7 +400,7 @@ export function AnalyticsPageClient() {
             <Button
               size="icon"
               variant="outline"
-              onClick={() => loadAllData()}
+              onClick={() => loadAllData(true)}
               disabled={refreshing}
             >
               <RefreshCw
