@@ -90,6 +90,7 @@ type searchMerchantResponse struct {
 	EstimatedDeliveryFee *int64    `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
 	Tags                 []string  `json:"tags,omitempty"`
 	CreatedAt            time.Time `json:"created_at"` // 入驻时间，前端用于判断新店
+	Label                string    `json:"label,omitempty"`  // 推荐 或 热销
 }
 
 type searchComboResponse struct {
@@ -388,9 +389,14 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		}
 		total = totalCount
 		response = make([]searchMerchantResponse, len(merchants))
+		repurchaseRates := make([]float64, len(merchants))
+		orderCounts := make([]int32, len(merchants))
 		for i, m := range merchants {
 			response[i] = newSearchMerchantResponseFromTagRow(m)
+			repurchaseRates[i] = m.AvgRepurchaseRate
+			orderCounts[i] = m.TotalOrders
 		}
+		assignMerchantLabels(response, repurchaseRates, orderCounts)
 	} else {
 		// 普通关键词搜索
 		merchants, err := server.store.SearchMerchants(ctx, db.SearchMerchantsParams{
@@ -414,9 +420,14 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		}
 		total = totalCount
 		response = make([]searchMerchantResponse, len(merchants))
+		repurchaseRates := make([]float64, len(merchants))
+		orderCounts := make([]int32, len(merchants))
 		for i, merchant := range merchants {
 			response[i] = newSearchMerchantResponseFromRow(merchant)
+			repurchaseRates[i] = merchant.AvgRepurchaseRate
+			orderCounts[i] = merchant.TotalOrders
 		}
+		assignMerchantLabels(response, repurchaseRates, orderCounts)
 	}
 
 	// 如果用户提供了位置，计算精确距离（展示用）和运费
@@ -693,6 +704,40 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 	}
 
 	return resp
+}
+
+// assignMerchantLabels 对商户列表中复购率最高的标注"推荐"，销量最高（非推荐）的标注"热销"
+func assignMerchantLabels(merchants []searchMerchantResponse, repurchaseRates []float64, totalOrders []int32) {
+	if len(merchants) == 0 {
+		return
+	}
+	// 找复购率最高的商户
+	recommendIdx := -1
+	maxRate := 0.0
+	for i, r := range repurchaseRates {
+		if r > maxRate {
+			maxRate = r
+			recommendIdx = i
+		}
+	}
+	if recommendIdx >= 0 && maxRate > 0 {
+		merchants[recommendIdx].Label = "推荐"
+	}
+	// 找销量最高的商户（排除推荐商户）
+	hotIdx := -1
+	maxOrders := int32(0)
+	for i, o := range totalOrders {
+		if i == recommendIdx {
+			continue
+		}
+		if o > maxOrders {
+			maxOrders = o
+			hotIdx = i
+		}
+	}
+	if hotIdx >= 0 && maxOrders > 0 {
+		merchants[hotIdx].Label = "热销"
+	}
 }
 
 func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) searchMerchantResponse {

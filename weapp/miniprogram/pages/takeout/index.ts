@@ -46,6 +46,7 @@ interface MerchantFeedViewModel {
   isNewStore: boolean           // 入驻30天内
   hasOrdered: boolean           // 当前用户曾成功下单
   detailLoading: boolean        // 详情是否仍在加载
+  label?: string                // 推荐 / 热销
 }
 
 interface UserMessageError {
@@ -549,7 +550,8 @@ Page({
           deliveryPromoText: '',
           isNewStore,
           hasOrdered: false,
-          detailLoading: true
+          detailLoading: true,
+          label: m.label || ''
         }
       })
 

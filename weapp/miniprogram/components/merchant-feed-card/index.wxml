@@ -9,6 +9,8 @@
     <!-- 第1行: 商户名 + 角标 -->
     <view class="row-1">
       <text class="merchant-name">{{merchant.name}}</text>
+      <t-tag wx:if="{{merchant.label === '推荐'}}" theme="success" size="small" variant="dark">推荐</t-tag>
+      <t-tag wx:elif="{{merchant.label === '热销'}}" theme="warning" size="small" variant="dark">热销</t-tag>
       <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
       <t-tag wx:if="{{merchant.hasOrdered}}" theme="success" size="small" variant="light">再来一单</t-tag>
       <t-tag wx:if="{{merchant.isOpen === false}}" theme="danger" size="small" variant="dark">休息中</t-tag>

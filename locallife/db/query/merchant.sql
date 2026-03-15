@@ -164,7 +164,12 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
     ), '[]'::json) AS tags,
-  ma.storefront_images
+  ma.storefront_images,
+  COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
@@ -177,6 +182,11 @@ WHERE m.status = 'active'
   )
 ORDER BY
     m.is_open DESC,
+    COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) DESC,
     COALESCE(mp.total_orders, 0) DESC,
     earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)) ASC
 LIMIT $2
@@ -480,7 +490,12 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
     ), '[]'::json) AS tags,
-  ma.storefront_images
+  ma.storefront_images,
+  COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
@@ -491,6 +506,11 @@ WHERE m.status = 'active'
   AND mt_filter.tag_id = sqlc.arg('tag_id')
 ORDER BY
     m.is_open DESC,
+    COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) DESC,
     COALESCE(mp.total_orders, 0) DESC,
     earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8)) ASC
 LIMIT sqlc.arg('limit')

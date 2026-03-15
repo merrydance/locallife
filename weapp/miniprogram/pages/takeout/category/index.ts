@@ -27,6 +27,7 @@ interface RestaurantViewModel {
   deliveryFeeDisplay: string
   promoText: string
   subsidyText: string
+  label?: string  // 推荐 / 热销
 }
 
 function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
@@ -140,7 +141,8 @@ Page({
         deliveryFee: m.estimated_delivery_fee,
         deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
           ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
-          : ''
+          : '',
+        label: m.label || ''
       }))
 
       if (reset) {

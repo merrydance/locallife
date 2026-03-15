@@ -26,6 +26,7 @@ export interface MerchantSummary {
   is_open?: boolean                            // 是否营业（仅部分接口）
   tags?: string[]                              // 商户标签（仅部分接口）
   created_at?: string                          // 入驻时间（用于判断新店）
+  label?: string                               // 推荐 / 热销
 }
 
 /** 搜索商户返回项 - 对齐后端 searchMerchantResponse */
@@ -45,6 +46,7 @@ export interface SearchMerchantItem {
   estimated_delivery_fee?: number
   tags?: string[]
   created_at?: string  // 入驻时间，用于前端判断"新店"
+  label?: string       // 推荐 / 热销
 }
 
 export interface SearchMerchantsResponse {
@@ -112,7 +114,8 @@ export async function searchMerchants(params: {
     status: item.status,
     is_open: item.is_open,
     tags: item.tags || [],
-    created_at: item.created_at
+    created_at: item.created_at,
+    label: item.label
   }))
 }
 
