@@ -665,7 +665,7 @@ func (server *Server) getOrder(ctx *gin.Context) {
 			resp.Items[i].ImageURL = &img
 		}
 		if item.Customizations != nil {
-			json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
+			_ = json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
 		}
 	}
 	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
@@ -694,10 +694,15 @@ type listOrdersRequest struct {
 }
 
 type listOrdersResponse struct {
-	Orders     []orderResponse `json:"orders"`
-	Total      int64           `json:"total"`
-	PageID     int32           `json:"page_id"`
-	PageSize   int32           `json:"page_size"`
+	Orders   []orderResponse `json:"orders"`
+	Total    int64           `json:"total"`
+	PageID   int32           `json:"page_id"`
+	PageSize int32           `json:"page_size"`
+}
+
+type urgeOrderResponse struct {
+	Message string `json:"message"`
+	OrderID int64  `json:"order_id"`
 }
 
 // listOrders godoc
@@ -772,10 +777,10 @@ func (server *Server) listOrders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listOrdersResponse{
-		Orders:     resp,
-		Total:      int64(len(resp)),
-		PageID:     req.PageID,
-		PageSize:   req.PageSize,
+		Orders:   resp,
+		Total:    int64(len(resp)),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -877,10 +882,7 @@ func (server *Server) urgeOrder(ctx *gin.Context) {
 
 	order := result.Order
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":  "urge notification sent",
-		"order_id": order.ID,
-	})
+	ctx.JSON(http.StatusOK, urgeOrderResponse{Message: "urge notification sent", OrderID: order.ID})
 }
 
 // replaceOrder godoc
@@ -1003,10 +1005,10 @@ type listMerchantOrdersRequest struct {
 }
 
 type listMerchantOrdersResponse struct {
-	Orders     []orderResponse `json:"orders"`
-	Total      int64           `json:"total"`
-	PageID     int32           `json:"page_id"`
-	PageSize   int32           `json:"page_size"`
+	Orders   []orderResponse `json:"orders"`
+	Total    int64           `json:"total"`
+	PageID   int32           `json:"page_id"`
+	PageSize int32           `json:"page_size"`
 }
 
 // listMerchantOrders godoc
@@ -1081,10 +1083,10 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantOrdersResponse{
-		Orders:     resp,
-		Total:      result.TotalCount,
-		PageID:     req.PageID,
-		PageSize:   req.PageSize,
+		Orders:   resp,
+		Total:    result.TotalCount,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -1181,7 +1183,7 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 			resp.Items[i].ImageURL = &img
 		}
 		if item.Customizations != nil {
-			json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
+			_ = json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
 		}
 	}
 

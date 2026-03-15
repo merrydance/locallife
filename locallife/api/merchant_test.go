@@ -75,15 +75,13 @@ func TestUploadMerchantImageAPI(t *testing.T) {
 
 			store := mockdb.NewMockStore(ctrl)
 			wechatClient := mockwechat.NewMockWechatClient(ctrl)
-			if tc.name == "OK" {
-				// business_license no longer goes through ImgSecCheck
-			}
+			// business_license no longer goes through ImgSecCheck
 			server := newTestServerWithWechat(t, store, wechatClient)
 
 			// Create multipart form
 			body := &bytes.Buffer{}
 			writer := multipart.NewWriter(body)
-			writer.WriteField("category", tc.category)
+			_ = writer.WriteField("category", tc.category)
 
 			// Add fake image file
 			part, err := writer.CreateFormFile("image", "test.jpg")

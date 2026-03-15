@@ -497,7 +497,7 @@ func (server *Server) deleteVoucher(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "voucher deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("voucher deleted successfully"))
 }
 
 // ==================== 用户代金券管理 ====================

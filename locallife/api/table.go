@@ -64,6 +64,14 @@ type tableTagInfo struct {
 	Type string `json:"type"`
 }
 
+type tableTagsListResponse struct {
+	Tags []tableTagInfo `json:"tags"`
+}
+
+type tableImagesListResponse struct {
+	Images []tableImageResponse `json:"images"`
+}
+
 func newTableResponse(t db.Table) tableResponse {
 	resp := tableResponse{
 		ID:         t.ID,
@@ -273,9 +281,9 @@ type listTablesRequest struct {
 }
 
 type listTablesResponse struct {
-	Tables     []tableResponse `json:"tables"`
-	Count      int64           `json:"count"`
-	Total      int64           `json:"total"`
+	Tables []tableResponse `json:"tables"`
+	Count  int64           `json:"count"`
+	Total  int64           `json:"total"`
 }
 
 // listTables godoc
@@ -327,9 +335,9 @@ func (server *Server) listTables(ctx *gin.Context) {
 	}
 
 	resp := listTablesResponse{
-		Tables:     make([]tableResponse, len(tables)),
-		Count:      int64(len(tables)),
-		Total:      int64(len(tables)),
+		Tables: make([]tableResponse, len(tables)),
+		Count:  int64(len(tables)),
+		Total:  int64(len(tables)),
 	}
 	for i, t := range tables {
 		resp.Tables[i] = newTableResponse(t)
@@ -830,7 +838,7 @@ func (server *Server) deleteTable(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "table deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("table deleted successfully"))
 }
 
 // ==================== 桌台图片管理 ====================
@@ -983,7 +991,7 @@ func (server *Server) listTableImages(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"images": resp})
+	ctx.JSON(http.StatusOK, tableImagesListResponse{Images: resp})
 }
 
 // setTablePrimaryImage godoc
@@ -1124,7 +1132,7 @@ func (server *Server) deleteTableImage(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "image deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("image deleted successfully"))
 }
 
 // ==================== 桌台标签管理 ====================
@@ -1222,7 +1230,7 @@ func (server *Server) addTableTag(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "tag added successfully"})
+	ctx.JSON(http.StatusOK, successMessage("tag added successfully"))
 }
 
 type removeTableTagRequest struct {
@@ -1289,7 +1297,7 @@ func (server *Server) removeTableTag(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "tag removed successfully"})
+	ctx.JSON(http.StatusOK, successMessage("tag removed successfully"))
 }
 
 // listTableTags godoc
@@ -1325,7 +1333,7 @@ func (server *Server) listTableTags(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"tags": resp})
+	ctx.JSON(http.StatusOK, tableTagsListResponse{Tags: resp})
 }
 
 // roomDetailResponse 包间详情响应（C端顾客使用）

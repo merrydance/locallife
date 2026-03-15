@@ -171,6 +171,14 @@ type financeOrderItem struct {
 	FinishedAt         string `json:"finished_at,omitempty"`
 }
 
+type financeOrdersResponse struct {
+	Orders     []financeOrderItem `json:"orders"`
+	Total      int64              `json:"total"`
+	Page       int32              `json:"page"`
+	Limit      int32              `json:"limit"`
+	TotalPages int64              `json:"total_pages"`
+}
+
 // listMerchantFinanceOrders 获取商户订单收入明细
 // @Summary 获取订单收入明细
 // @Description 商户查看指定时间范围内的订单收入明细，按分账订单维度展示
@@ -279,14 +287,12 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"orders":      result,
-		"total": totalCount,
-		"page_id":     req.Page,
-		"page_size":   req.Limit,
-		"page":        req.Page,
-		"limit":       req.Limit,
-		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+	ctx.JSON(http.StatusOK, financeOrdersResponse{
+		Orders:     result,
+		Total:      totalCount,
+		Page:       req.Page,
+		Limit:      req.Limit,
+		TotalPages: (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
 	})
 }
 
@@ -305,6 +311,13 @@ type serviceFeeItem struct {
 	PlatformFee int64  `json:"platform_fee"`
 	OperatorFee int64  `json:"operator_fee"`
 	TotalFee    int64  `json:"total_fee"`
+}
+
+type serviceFeeSummaryResponse struct {
+	Details          []serviceFeeItem `json:"details"`
+	TotalPlatformFee int64            `json:"total_platform_fee"`
+	TotalOperatorFee int64            `json:"total_operator_fee"`
+	TotalServiceFee  int64            `json:"total_service_fee"`
 }
 
 // listMerchantServiceFees 获取商户服务费明细
@@ -381,11 +394,11 @@ func (server *Server) listMerchantServiceFees(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"details":            result,
-		"total_platform_fee": totalPlatformFee,
-		"total_operator_fee": totalOperatorFee,
-		"total_service_fee":  totalPlatformFee + totalOperatorFee,
+	ctx.JSON(http.StatusOK, serviceFeeSummaryResponse{
+		Details:          result,
+		TotalPlatformFee: totalPlatformFee,
+		TotalOperatorFee: totalOperatorFee,
+		TotalServiceFee:  totalPlatformFee + totalOperatorFee,
 	})
 }
 
@@ -408,6 +421,16 @@ type promotionExpenseItem struct {
 	TotalAmount         int64  `json:"total_amount"`
 	CreatedAt           string `json:"created_at"`
 	CompletedAt         string `json:"completed_at,omitempty"`
+}
+
+type promotionExpensesResponse struct {
+	Orders           []promotionExpenseItem `json:"orders"`
+	Total            int64                  `json:"total"`
+	Page             int32                  `json:"page"`
+	Limit            int32                  `json:"limit"`
+	TotalPages       int64                  `json:"total_pages"`
+	TotalPromoOrders int64                  `json:"total_promo_orders"`
+	TotalPromoAmount int64                  `json:"total_promo_amount"`
 }
 
 // listMerchantPromotionExpenses 获取商户满返支出明细
@@ -522,16 +545,14 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"orders":             result,
-		"total":        totalCount,
-		"page_id":            req.Page,
-		"page_size":          req.Limit,
-		"page":               req.Page,
-		"limit":              req.Limit,
-		"total_pages":        (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
-		"total_promo_orders": stats.PromoOrderCount,
-		"total_promo_amount": stats.TotalDiscount,
+	ctx.JSON(http.StatusOK, promotionExpensesResponse{
+		Orders:           result,
+		Total:            totalCount,
+		Page:             req.Page,
+		Limit:            req.Limit,
+		TotalPages:       (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+		TotalPromoOrders: stats.PromoOrderCount,
+		TotalPromoAmount: stats.TotalDiscount,
 	})
 }
 
@@ -548,6 +569,10 @@ type dailyFinanceItem struct {
 	TotalGMV       int64  `json:"total_gmv"`
 	MerchantIncome int64  `json:"merchant_income"`
 	TotalFee       int64  `json:"total_fee"`
+}
+
+type dailyFinanceSummaryResponse struct {
+	DailyStats []dailyFinanceItem `json:"daily_stats"`
 }
 
 // listMerchantDailyFinance 获取商户每日财务汇总
@@ -646,8 +671,8 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 		return result[i].Date > result[j].Date
 	})
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"daily_stats": result,
+	ctx.JSON(http.StatusOK, dailyFinanceSummaryResponse{
+		DailyStats: result,
 	})
 }
 
@@ -700,6 +725,26 @@ type merchantSettlementTimelineItem struct {
 	AdjustmentType     string `json:"adjustment_type,omitempty"`
 	RelatedType        string `json:"related_type,omitempty"`
 	RelatedID          int64  `json:"related_id,omitempty"`
+}
+
+type merchantSettlementsResponse struct {
+	Settlements         []merchantSettlementItem `json:"settlements"`
+	Total               int64                    `json:"total"`
+	Page                int32                    `json:"page"`
+	Limit               int32                    `json:"limit"`
+	TotalPages          int64                    `json:"total_pages"`
+	TotalAmount         int64                    `json:"total_amount"`
+	TotalMerchantAmount int64                    `json:"total_merchant_amount"`
+	TotalPlatformFee    int64                    `json:"total_platform_fee"`
+	TotalOperatorFee    int64                    `json:"total_operator_fee"`
+}
+
+type merchantSettlementTimelineResponse struct {
+	Timeline   []merchantSettlementTimelineItem `json:"timeline"`
+	Total      int64                            `json:"total"`
+	Page       int32                            `json:"page"`
+	Limit      int32                            `json:"limit"`
+	TotalPages int64                            `json:"total_pages"`
 }
 
 // listMerchantSettlements 获取商户结算记录（分账订单列表）
@@ -845,18 +890,16 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 			FinishedAt:         finishedAt,
 		}
 	}
-	ctx.JSON(http.StatusOK, gin.H{
-		"settlements":           result,
-		"total":           totalCount,
-		"page_id":               req.Page,
-		"page_size":             req.Limit,
-		"page":                  req.Page,
-		"limit":                 req.Limit,
-		"total_pages":           (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
-		"total_amount":          stats.TotalAmount,
-		"total_merchant_amount": stats.TotalMerchantAmount,
-		"total_platform_fee":    stats.TotalPlatformCommission,
-		"total_operator_fee":    stats.TotalOperatorCommission,
+	ctx.JSON(http.StatusOK, merchantSettlementsResponse{
+		Settlements:         result,
+		Total:               totalCount,
+		Page:                req.Page,
+		Limit:               req.Limit,
+		TotalPages:          (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+		TotalAmount:         stats.TotalAmount,
+		TotalMerchantAmount: stats.TotalMerchantAmount,
+		TotalPlatformFee:    stats.TotalPlatformCommission,
+		TotalOperatorFee:    stats.TotalOperatorCommission,
 	})
 }
 
@@ -984,14 +1027,12 @@ func (server *Server) listMerchantSettlementTimeline(ctx *gin.Context) {
 		result[i] = item
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"timeline":    result,
-		"total": totalCount,
-		"page_id":     req.Page,
-		"page_size":   req.Limit,
-		"page":        req.Page,
-		"limit":       req.Limit,
-		"total_pages": (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
+	ctx.JSON(http.StatusOK, merchantSettlementTimelineResponse{
+		Timeline:   result,
+		Total:      totalCount,
+		Page:       req.Page,
+		Limit:      req.Limit,
+		TotalPages: (totalCount + int64(req.Limit) - 1) / int64(req.Limit),
 	})
 }
 
@@ -1044,6 +1085,11 @@ type merchantWithdrawAccountInfo struct {
 	OutRequestNo string `json:"out_request_no"`
 	WithdrawID   string `json:"withdraw_id,omitempty"`
 	Remark       string `json:"remark,omitempty"`
+}
+
+type merchantWithdrawCreateResponse struct {
+	Withdrawal merchantWithdrawItem `json:"withdrawal"`
+	Wechat     interface{}          `json:"wechat"`
 }
 
 func mapWechatWithdrawStatus(status string) string {
@@ -1268,9 +1314,9 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"withdrawal": toMerchantWithdrawItem(record),
-		"wechat":     withdrawResp,
+	ctx.JSON(http.StatusOK, merchantWithdrawCreateResponse{
+		Withdrawal: toMerchantWithdrawItem(record),
+		Wechat:     withdrawResp,
 	})
 }
 
@@ -1426,7 +1472,5 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"withdrawal": toMerchantWithdrawItem(record),
-	})
+	ctx.JSON(http.StatusOK, toMerchantWithdrawItem(record))
 }

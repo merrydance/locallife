@@ -58,6 +58,15 @@ type operatorWithdrawItem struct {
 	UpdatedAt    string `json:"updated_at"`
 }
 
+type operatorWithdrawCreateResponse struct {
+	Withdrawal operatorWithdrawItem `json:"withdrawal"`
+	Wechat     interface{}          `json:"wechat"`
+}
+
+type getOperatorWithdrawalResponse struct {
+	Withdrawal operatorWithdrawItem `json:"withdrawal"`
+}
+
 type listOperatorWithdrawalsRequest struct {
 	Page  int32 `form:"page" binding:"omitempty,min=1"`
 	Limit int32 `form:"limit" binding:"omitempty,min=1,max=100"`
@@ -279,10 +288,7 @@ func (server *Server) withdrawOperator(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"withdrawal": toOperatorWithdrawItem(record),
-		"wechat":     withdrawResp,
-	})
+	ctx.JSON(http.StatusOK, operatorWithdrawCreateResponse{Withdrawal: toOperatorWithdrawItem(record), Wechat: withdrawResp})
 }
 
 // listOperatorWithdrawals 查询运营商提现记录
@@ -422,7 +428,5 @@ func (server *Server) getOperatorWithdrawal(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"withdrawal": toOperatorWithdrawItem(record),
-	})
+	ctx.JSON(http.StatusOK, getOperatorWithdrawalResponse{Withdrawal: toOperatorWithdrawItem(record)})
 }

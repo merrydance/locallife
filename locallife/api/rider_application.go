@@ -386,7 +386,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 			// 构建OCR数据，合并已有数据
 			var existingOCR IDCardOCRData
 			if len(app.IDCardOcr) > 0 {
-				json.Unmarshal(app.IDCardOcr, &existingOCR)
+				_ = json.Unmarshal(app.IDCardOcr, &existingOCR)
 			}
 			existingOCR.Name = ocrResult.Name
 			existingOCR.IDNumber = ocrResult.ID
@@ -410,7 +410,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 			// 解析有效期，格式可能是 "20200101-20300101" 或 "20200101-长期"
 			var existingOCR IDCardOCRData
 			if len(app.IDCardOcr) > 0 {
-				json.Unmarshal(app.IDCardOcr, &existingOCR)
+				_ = json.Unmarshal(app.IDCardOcr, &existingOCR)
 			}
 			existingOCR.ValidEnd = ocrResult.ValidDate
 			existingOCR.OCRAt = time.Now().Format(time.RFC3339)

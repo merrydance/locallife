@@ -552,7 +552,7 @@ func (server *Server) deleteReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "review deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("review deleted successfully"))
 }
 
 // ==================== 辅助函数 ====================

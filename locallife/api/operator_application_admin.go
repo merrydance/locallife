@@ -45,6 +45,11 @@ type listPendingOperatorApplicationsResponse struct {
 	HasMore      bool                           `json:"has_more"`
 }
 
+type operatorApplicationRegionsResponse struct {
+	Regions interface{} `json:"regions"`
+	Total   int         `json:"total"`
+}
+
 type operatorApplicationIDRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1"`
 }
@@ -233,7 +238,7 @@ func (server *Server) getOperatorRegionsAdmin(ctx *gin.Context) {
 			Status:     r.Status,
 		})
 	}
-	ctx.JSON(http.StatusOK, gin.H{"regions": resp, "total": len(resp)})
+	ctx.JSON(http.StatusOK, operatorApplicationRegionsResponse{Regions: resp, Total: len(resp)})
 }
 
 func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {

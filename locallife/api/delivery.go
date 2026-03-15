@@ -855,7 +855,7 @@ func (server *Server) getDeliveryTrack(ctx *gin.Context) {
 	var queryReq struct {
 		Since time.Time `form:"since"`
 	}
-	ctx.ShouldBindQuery(&queryReq)
+	_ = ctx.ShouldBindQuery(&queryReq)
 
 	var locations []db.RiderLocation
 

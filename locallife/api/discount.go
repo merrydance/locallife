@@ -399,7 +399,7 @@ func (server *Server) deleteDiscountRule(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "discount rule deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("discount rule deleted successfully"))
 }
 
 // ==================== 辅助函数 ====================

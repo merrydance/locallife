@@ -97,6 +97,22 @@ type uploadImageResponse struct {
 	ImageURL string `json:"image_url"`
 }
 
+type merchantVersionConflictResponse struct {
+	Error          string `json:"error"`
+	CurrentVersion int32  `json:"current_version"`
+	YourVersion    int32  `json:"your_version"`
+}
+
+type merchantSuspendedResponse struct {
+	Error         string      `json:"error"`
+	SuspendReason string      `json:"suspend_reason"`
+	SuspendUntil  interface{} `json:"suspend_until"`
+}
+
+type merchantHasOrderedResponse struct {
+	HasOrdered bool `json:"has_ordered"`
+}
+
 // uploadMerchantImage godoc
 // @Summary 上传商户图片
 // @Description 上传商户入驻所需图片（营业执照、身份证、Logo、门头照、环境照）
@@ -341,10 +357,10 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 
 	// ✅ P1-2: 检查版本号，防止并发更新冲突
 	if merchant.Version != req.Version {
-		ctx.JSON(http.StatusConflict, gin.H{
-			"error":           "merchant has been modified by another request",
-			"current_version": merchant.Version,
-			"your_version":    req.Version,
+		ctx.JSON(http.StatusConflict, merchantVersionConflictResponse{
+			Error:          "merchant has been modified by another request",
+			CurrentVersion: merchant.Version,
+			YourVersion:    req.Version,
 		})
 		return
 	}
@@ -403,9 +419,7 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 	if err != nil {
 		// 检查是否是乐观锁冲突（没有返回结果 = version不匹配）
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusConflict, gin.H{
-				"error": "merchant has been modified, please refresh and try again",
-			})
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("merchant has been modified, please refresh and try again")))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -560,10 +574,10 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	// 检查商户是否被暂停（食安熔断）
 	merchantProfile, err := server.store.GetMerchantProfile(ctx, merchant.ID)
 	if err == nil && merchantProfile.IsSuspended {
-		ctx.JSON(http.StatusForbidden, gin.H{
-			"error":          "merchant is suspended due to food safety issues",
-			"suspend_reason": merchantProfile.SuspendReason.String,
-			"suspend_until":  merchantProfile.SuspendUntil.Time,
+		ctx.JSON(http.StatusForbidden, merchantSuspendedResponse{
+			Error:         "merchant is suspended due to food safety issues",
+			SuspendReason: merchantProfile.SuspendReason.String,
+			SuspendUntil:  merchantProfile.SuspendUntil.Time,
 		})
 		return
 	}
@@ -1367,7 +1381,7 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		// 解析标签
 		var tags []string
 		if d.Tags != nil {
-			parseJSON(d.Tags, &tags)
+			_ = parseJSON(d.Tags, &tags)
 		}
 		if tags == nil {
 			tags = []string{}
@@ -1399,7 +1413,7 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		}
 
 		if d.CustomizationGroups != nil {
-			parseJSON(d.CustomizationGroups, &dish.CustomizationGroups)
+			_ = parseJSON(d.CustomizationGroups, &dish.CustomizationGroups)
 		}
 		if dish.CustomizationGroups == nil {
 			dish.CustomizationGroups = []customizationGroup{}
@@ -1509,7 +1523,7 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 		if c.Tags != nil {
 			var tags []string
 			if tagBytes, ok := c.Tags.([]byte); ok {
-				json.Unmarshal(tagBytes, &tags)
+				_ = json.Unmarshal(tagBytes, &tags)
 				combo.Tags = tags
 			}
 		}
@@ -1632,7 +1646,7 @@ func (server *Server) getPublicMerchantHasOrdered(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"has_ordered": hasOrdered})
+	ctx.JSON(http.StatusOK, merchantHasOrderedResponse{HasOrdered: hasOrdered})
 }
 
 // enrichPublicComboListImages godoc

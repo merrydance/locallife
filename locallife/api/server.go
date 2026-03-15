@@ -32,6 +32,17 @@ type MessageResponse struct {
 	Message string `json:"message" example:"ok"`
 }
 
+type healthCheckResponse struct {
+	Status  string `json:"status"`
+	Service string `json:"service"`
+}
+
+type readinessCheckResponse struct {
+	Status   string `json:"status"`
+	Service  string `json:"service"`
+	Database string `json:"database"`
+}
+
 // Server serves HTTP requests for our banking service.
 type Server struct {
 	config             util.Config
@@ -1406,10 +1417,7 @@ func (server *Server) GetRouter() *gin.Engine {
 // healthCheck 健康检查 - 基础存活检查
 // GET /health
 func (server *Server) healthCheck(ctx *gin.Context) {
-	ctx.JSON(http.StatusOK, gin.H{
-		"status":  "ok",
-		"service": "locallife-api",
-	})
+	ctx.JSON(http.StatusOK, healthCheckResponse{Status: "ok", Service: "locallife-api"})
 }
 
 // readinessCheck 就绪检查 - 检查依赖服务
@@ -1424,11 +1432,7 @@ func (server *Server) readinessCheck(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"status":   "ready",
-		"service":  "locallife-api",
-		"database": "connected",
-	})
+	ctx.JSON(http.StatusOK, readinessCheckResponse{Status: "ready", Service: "locallife-api", Database: "connected"})
 }
 
 // ErrorResponse represents an API error response
@@ -1485,4 +1489,9 @@ func internalError(ctx *gin.Context, err error) gin.H {
 	evt.Msg("internal error")
 
 	return gin.H{"error": "internal server error"}
+}
+
+// successMessage creates a standard message response for simple ok/action-complete results.
+func successMessage(msg string) gin.H {
+	return gin.H{"message": msg}
 }

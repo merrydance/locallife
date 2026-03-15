@@ -67,10 +67,7 @@ func (server *Server) listOperatorRulesProxy(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"rules": filtered,
-		"count": len(filtered),
-	})
+	ctx.JSON(http.StatusOK, rulesListResponse{Rules: filtered, Count: len(filtered)})
 }
 
 // getOperatorRuleProxy 获取运营商规则详情（代理）
@@ -121,10 +118,7 @@ func (server *Server) getOperatorRuleProxy(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"rule":     rule,
-		"versions": filtered,
-	})
+	ctx.JSON(http.StatusOK, ruleDetailWithVersionsResponse{Rule: rule, Versions: filtered})
 }
 
 // createOperatorRuleProxy 创建运营商规则（代理）
@@ -596,10 +590,7 @@ func (server *Server) listOperatorRuleHitsProxy(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"hits":  hits,
-		"count": len(hits),
-	})
+	ctx.JSON(http.StatusOK, ruleHitsListResponse{Hits: hits, Count: len(hits)})
 }
 
 func ensureRegionConstraint(input map[string]interface{}, regionID int64) (map[string]interface{}, error) {

@@ -9,6 +9,16 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
+type rulesListResponse struct {
+	Rules interface{} `json:"rules"`
+	Count int         `json:"count"`
+}
+
+type ruleDetailWithVersionsResponse struct {
+	Rule     interface{} `json:"rule"`
+	Versions interface{} `json:"versions"`
+}
+
 // listRules 列出规则
 // @Summary 列出规则
 // @Tags 规则引擎
@@ -45,10 +55,7 @@ func (server *Server) listRules(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"rules": rulesList,
-		"count": len(rulesList),
-	})
+	ctx.JSON(http.StatusOK, rulesListResponse{Rules: rulesList, Count: len(rulesList)})
 }
 
 // getRule 获取规则详情
@@ -87,8 +94,5 @@ func (server *Server) getRule(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"rule":     rule,
-		"versions": versions,
-	})
+	ctx.JSON(http.StatusOK, ruleDetailWithVersionsResponse{Rule: rule, Versions: versions})
 }

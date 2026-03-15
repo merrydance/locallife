@@ -13,12 +13,6 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// NotificationHelper 通知发送辅助函数集合
-type NotificationHelper struct {
-	store db.Store
-	wsHub *websocket.Hub
-}
-
 // SendNotificationParams 发送通知的参数
 type SendNotificationParams struct {
 	UserID      int64

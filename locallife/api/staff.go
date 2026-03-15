@@ -26,6 +26,18 @@ type staffResponse struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+type staffListResponse struct {
+	Staff interface{} `json:"staff"`
+	Count int         `json:"count"`
+}
+
+type staffBindResponse struct {
+	Message      string `json:"message"`
+	MerchantID   int64  `json:"merchant_id"`
+	MerchantName string `json:"merchant_name"`
+	Role         string `json:"role"`
+}
+
 // listMerchantStaff 列出商户员工
 // @Summary 列出商户员工
 // @Description 商户老板或店长列出所有员工
@@ -66,10 +78,7 @@ func (server *Server) listMerchantStaff(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"staff": resp,
-		"count": len(resp),
-	})
+	ctx.JSON(http.StatusOK, staffListResponse{Staff: resp, Count: len(resp)})
 }
 
 type addStaffRequest struct {
@@ -304,7 +313,7 @@ func (server *Server) deleteMerchantStaff(ctx *gin.Context) {
 	// 注意：不删除 user_roles 中的 merchant_staff 角色
 	// 因为用户可能还关联其他商户，或者将来可能重新入职
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "staff removed successfully"})
+	ctx.JSON(http.StatusOK, successMessage("staff removed successfully"))
 }
 
 // ==================== 邀请码绑定 ====================
@@ -455,11 +464,11 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":       "successfully bound to merchant",
-		"merchant_id":   merchant.ID,
-		"merchant_name": merchant.Name,
-		"role":          staff.Role,
+	ctx.JSON(http.StatusOK, staffBindResponse{
+		Message:      "successfully bound to merchant",
+		MerchantID:   merchant.ID,
+		MerchantName: merchant.Name,
+		Role:         staff.Role,
 	})
 }
 

@@ -12,11 +12,15 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// contextKeyType is a private type for context keys to avoid collisions
+type contextKeyType string
+
 const (
 	// RequestIDHeader HTTP 请求头中的 request_id 键
 	RequestIDHeader = "X-Request-ID"
 	// RequestIDKey Gin Context 中的 request_id 键
-	RequestIDKey = "request_id"
+	RequestIDKey    = "request_id"
+	requestIDCtxKey = contextKeyType("request_id")
 )
 
 // RequestTracingMiddleware 请求追踪中间件
@@ -31,7 +35,7 @@ func RequestTracingMiddleware() gin.HandlerFunc {
 
 		// 存储到 Context 中供后续使用
 		ctx.Set(RequestIDKey, requestID)
-		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), RequestIDKey, requestID))
+		ctx.Request = ctx.Request.WithContext(context.WithValue(ctx.Request.Context(), requestIDCtxKey, requestID))
 
 		// 设置响应头
 		ctx.Header(RequestIDHeader, requestID)

@@ -37,6 +37,12 @@ type membershipResponse struct {
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
+type membershipPaymentResponse struct {
+	PaymentOrderID int64       `json:"payment_order_id"`
+	OutTradeNo     string      `json:"out_trade_no"`
+	PayParams      interface{} `json:"pay_params"`
+}
+
 // joinMembership godoc
 // @Summary 加入会员
 // @Description 加入商户的会员计划
@@ -580,7 +586,7 @@ func (server *Server) deleteRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "rule deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("rule deleted successfully"))
 }
 
 // ==================== 会员充值 ====================
@@ -733,10 +739,10 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 
 	// 返回支付参数给前端，前端调用wx.requestPayment进行支付
-	ctx.JSON(http.StatusOK, gin.H{
-		"payment_order_id": paymentOrder.ID,
-		"out_trade_no":     outTradeNo,
-		"pay_params":       payParams,
+	ctx.JSON(http.StatusOK, membershipPaymentResponse{
+		PaymentOrderID: paymentOrder.ID,
+		OutTradeNo:     outTradeNo,
+		PayParams:      payParams,
 	})
 }
 
@@ -954,10 +960,10 @@ type listMerchantMembersQueryRequest struct {
 }
 
 type listMerchantMembersResponse struct {
-	Members    []merchantMemberResponse `json:"members"`
-	Total      int64                    `json:"total"`
-	PageID     int32                    `json:"page_id"`
-	PageSize   int32                    `json:"page_size"`
+	Members  []merchantMemberResponse `json:"members"`
+	Total    int64                    `json:"total"`
+	PageID   int32                    `json:"page_id"`
+	PageSize int32                    `json:"page_size"`
 }
 
 // merchantMemberResponse 商户会员响应
@@ -1044,10 +1050,10 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantMembersResponse{
-		Members:    rsp,
-		Total:      int64(len(rsp)),
-		PageID:     queryReq.PageID,
-		PageSize:   queryReq.PageSize,
+		Members:  rsp,
+		Total:    int64(len(rsp)),
+		PageID:   queryReq.PageID,
+		PageSize: queryReq.PageSize,
 	})
 }
 

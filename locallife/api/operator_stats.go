@@ -32,6 +32,13 @@ type regionStatsResponse struct {
 	TotalCommission int64  `json:"total_commission"`
 }
 
+type operatorRegionListResponse struct {
+	Regions []regionResponse `json:"regions"`
+	Total   int              `json:"total"`
+	Page    int32            `json:"page"`
+	Limit   int32            `json:"limit"`
+}
+
 // getRegionStats 获取区域统计
 // @Summary 获取区域统计
 // @Description 获取指定区域在指定日期范围内的统计数据，包括商户数量、订单总数、GMV和佣金
@@ -190,11 +197,11 @@ func (server *Server) listOperatorRegions(ctx *gin.Context) {
 		response = append(response, newRegionResponse(region))
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"regions":     response,
-		"total": len(response),
-		"page":        req.Page,
-		"limit":       req.Limit,
+	ctx.JSON(http.StatusOK, operatorRegionListResponse{
+		Regions: response,
+		Total:   len(response),
+		Page:    req.Page,
+		Limit:   req.Limit,
 	})
 }
 

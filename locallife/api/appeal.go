@@ -118,21 +118,23 @@ type listMerchantClaimsRequest struct {
 }
 
 type merchantClaimResponse struct {
-	ID             int64      `json:"id"`
-	OrderID        int64      `json:"order_id"`
-	OrderNo        string     `json:"order_no"`
-	OrderAmount    int64      `json:"order_amount"`
-	UserPhone      string     `json:"user_phone"`
-	UserName       string     `json:"user_name"`
-	ClaimType      string     `json:"claim_type"`
-	ClaimAmount    int64      `json:"claim_amount"`
-	ApprovedAmount *int64     `json:"approved_amount,omitempty"`
-	Description    string     `json:"description"`
-	Status         string     `json:"status"`
-	CreatedAt      time.Time  `json:"created_at"`
-	ReviewedAt     *time.Time `json:"reviewed_at,omitempty"`
-	AppealID       *int64     `json:"appeal_id,omitempty"`
-	AppealStatus   *string    `json:"appeal_status,omitempty"`
+	ID                int64      `json:"id"`
+	OrderID           int64      `json:"order_id"`
+	OrderNo           string     `json:"order_no"`
+	OrderAmount       int64      `json:"order_amount"`
+	UserPhone         string     `json:"user_phone"`
+	UserName          string     `json:"user_name"`
+	ClaimType         string     `json:"claim_type"`
+	ClaimAmount       int64      `json:"claim_amount"`
+	ApprovedAmount    *int64     `json:"approved_amount,omitempty"`
+	Description       string     `json:"description"`
+	Status            string     `json:"status"`
+	CreatedAt         time.Time  `json:"created_at"`
+	ReviewedAt        *time.Time `json:"reviewed_at,omitempty"`
+	AppealID          *int64     `json:"appeal_id,omitempty"`
+	AppealStatus      *string    `json:"appeal_status,omitempty"`
+	AppealReason      *string    `json:"appeal_reason,omitempty"`
+	AppealReviewNotes *string    `json:"appeal_review_notes,omitempty"`
 }
 
 type merchantClaimDecisionResponse struct {
@@ -144,6 +146,119 @@ type merchantClaimDecisionResponse struct {
 	TraceSummary       *string  `json:"trace_summary,omitempty"`
 	CreatedAt          string   `json:"created_at"`
 	UpdatedAt          string   `json:"updated_at"`
+}
+
+type appealDetailResponse struct {
+	ID                  int64      `json:"id"`
+	ClaimID             int64      `json:"claim_id"`
+	ClaimType           string     `json:"claim_type"`
+	ClaimAmount         int64      `json:"claim_amount"`
+	ClaimDescription    string     `json:"claim_description"`
+	OrderNo             string     `json:"order_no"`
+	OrderAmount         int64      `json:"order_amount"`
+	UserPhone           string     `json:"user_phone"`
+	AppellantType       string     `json:"appellant_type"`
+	Reason              string     `json:"reason"`
+	Status              string     `json:"status"`
+	CreatedAt           time.Time  `json:"created_at"`
+	ClaimApprovedAmount *int64     `json:"claim_approved_amount,omitempty"`
+	ReviewerID          *int64     `json:"reviewer_id,omitempty"`
+	ReviewNotes         *string    `json:"review_notes,omitempty"`
+	ReviewedAt          *time.Time `json:"reviewed_at,omitempty"`
+	CompensationAmount  *int64     `json:"compensation_amount,omitempty"`
+	CompensatedAt       *time.Time `json:"compensated_at,omitempty"`
+}
+
+type appealListItem struct {
+	ID                 int64      `json:"id"`
+	ClaimID            int64      `json:"claim_id"`
+	ClaimType          string     `json:"claim_type"`
+	ClaimAmount        int64      `json:"claim_amount"`
+	ClaimDescription   string     `json:"claim_description"`
+	OrderNo            string     `json:"order_no"`
+	Reason             string     `json:"reason"`
+	Status             string     `json:"status"`
+	CreatedAt          time.Time  `json:"created_at"`
+	ReviewerID         *int64     `json:"reviewer_id,omitempty"`
+	ReviewNotes        *string    `json:"review_notes,omitempty"`
+	ReviewedAt         *time.Time `json:"reviewed_at,omitempty"`
+	CompensationAmount *int64     `json:"compensation_amount,omitempty"`
+}
+
+type operatorAppealListItem struct {
+	ID               int64       `json:"id"`
+	ClaimID          int64       `json:"claim_id"`
+	ClaimType        string      `json:"claim_type"`
+	ClaimAmount      int64       `json:"claim_amount"`
+	ClaimDescription string      `json:"claim_description"`
+	OrderNo          string      `json:"order_no"`
+	MerchantID       int64       `json:"merchant_id"`
+	MerchantName     string      `json:"merchant_name"`
+	AppellantType    string      `json:"appellant_type"`
+	AppellantID      int64       `json:"appellant_id"`
+	AppellantName    interface{} `json:"appellant_name"`
+	Reason           string      `json:"reason"`
+	Status           string      `json:"status"`
+	CreatedAt        time.Time   `json:"created_at"`
+	ReviewedAt       *time.Time  `json:"reviewed_at,omitempty"`
+}
+
+type merchantClaimsListResponse struct {
+	Claims   []merchantClaimResponse `json:"claims"`
+	Total    int64                   `json:"total"`
+	PageID   int32                   `json:"page_id"`
+	PageSize int32                   `json:"page_size"`
+}
+
+type merchantAppealsListResponse struct {
+	Appeals  []appealListItem `json:"appeals"`
+	Total    int64            `json:"total"`
+	PageID   int32            `json:"page_id"`
+	PageSize int32            `json:"page_size"`
+}
+
+type operatorAppealsListResponse struct {
+	Appeals []operatorAppealListItem `json:"appeals"`
+	Total   int64                    `json:"total"`
+	Page    int32                    `json:"page"`
+	Limit   int32                    `json:"limit"`
+}
+
+type merchantClaimDecisionResult struct {
+	Decision *merchantClaimDecisionResponse `json:"decision"`
+}
+
+type operatorAppealDetailResponse struct {
+	ID                  int64      `json:"id"`
+	ClaimID             int64      `json:"claim_id"`
+	ClaimType           string     `json:"claim_type"`
+	ClaimAmount         int64      `json:"claim_amount"`
+	ClaimDescription    string     `json:"claim_description"`
+	ClaimStatus         string     `json:"claim_status"`
+	ClaimCreatedAt      time.Time  `json:"claim_created_at"`
+	OrderNo             string     `json:"order_no"`
+	OrderAmount         int64      `json:"order_amount"`
+	OrderStatus         string     `json:"order_status"`
+	OrderCreatedAt      time.Time  `json:"order_created_at"`
+	MerchantID          int64      `json:"merchant_id"`
+	MerchantName        string     `json:"merchant_name"`
+	MerchantPhone       string     `json:"merchant_phone"`
+	UserPhone           string     `json:"user_phone"`
+	UserName            string     `json:"user_name"`
+	AppellantType       string     `json:"appellant_type"`
+	AppellantID         int64      `json:"appellant_id"`
+	Reason              string     `json:"reason"`
+	Status              string     `json:"status"`
+	RegionID            int64      `json:"region_id"`
+	CreatedAt           time.Time  `json:"created_at"`
+	ClaimApprovedAmount *int64     `json:"claim_approved_amount,omitempty"`
+	LookbackResult      *string    `json:"lookback_result,omitempty"`
+	RiderID             *int64     `json:"rider_id,omitempty"`
+	ReviewerID          *int64     `json:"reviewer_id,omitempty"`
+	ReviewNotes         *string    `json:"review_notes,omitempty"`
+	ReviewedAt          *time.Time `json:"reviewed_at,omitempty"`
+	CompensationAmount  *int64     `json:"compensation_amount,omitempty"`
+	CompensatedAt       *time.Time `json:"compensated_at,omitempty"`
 }
 
 // listMerchantClaims 商户查看收到的索赔列表
@@ -220,12 +335,7 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"claims":      response,
-		"total": total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
-	})
+	ctx.JSON(http.StatusOK, merchantClaimsListResponse{Claims: response, Total: total, PageID: req.PageID, PageSize: req.PageSize})
 }
 
 // getMerchantClaimDetail 商户查看索赔详情
@@ -269,33 +379,37 @@ func (server *Server) getMerchantClaimDetail(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"id":           claim.ID,
-		"order_id":     claim.OrderID,
-		"order_no":     claim.OrderNo,
-		"order_amount": claim.OrderAmount,
-		"user_phone":   claim.UserPhone.String,
-		"user_name":    claim.UserName,
-		"claim_type":   claim.ClaimType,
-		"claim_amount": claim.ClaimAmount,
-		"description":  claim.Description,
-		"status":       claim.Status,
-		"created_at":   claim.CreatedAt,
+	response := merchantClaimResponse{
+		ID:          claim.ID,
+		OrderID:     claim.OrderID,
+		OrderNo:     claim.OrderNo,
+		OrderAmount: claim.OrderAmount,
+		UserPhone:   claim.UserPhone.String,
+		UserName:    claim.UserName,
+		ClaimType:   claim.ClaimType,
+		ClaimAmount: claim.ClaimAmount,
+		Description: claim.Description,
+		Status:      claim.Status,
+		CreatedAt:   claim.CreatedAt,
 	}
 	if claim.ApprovedAmount.Valid {
-		response["approved_amount"] = claim.ApprovedAmount.Int64
+		response.ApprovedAmount = &claim.ApprovedAmount.Int64
 	}
 	if claim.ReviewedAt.Valid {
-		response["reviewed_at"] = claim.ReviewedAt.Time
+		v := claim.ReviewedAt.Time
+		response.ReviewedAt = &v
 	}
 	if claim.AppealID.Valid {
-		response["appeal_id"] = claim.AppealID.Int64
-		response["appeal_status"] = claim.AppealStatus.String
+		response.AppealID = &claim.AppealID.Int64
+		s := claim.AppealStatus.String
+		response.AppealStatus = &s
 		if claim.AppealReason.Valid {
-			response["appeal_reason"] = claim.AppealReason.String
+			r := claim.AppealReason.String
+			response.AppealReason = &r
 		}
 		if claim.AppealReviewNotes.Valid {
-			response["appeal_review_notes"] = claim.AppealReviewNotes.String
+			n := claim.AppealReviewNotes.String
+			response.AppealReviewNotes = &n
 		}
 	}
 
@@ -350,7 +464,7 @@ func (server *Server) getMerchantClaimDecision(ctx *gin.Context) {
 	}
 
 	if len(decisions) == 0 {
-		ctx.JSON(http.StatusOK, gin.H{"decision": nil})
+		ctx.JSON(http.StatusOK, merchantClaimDecisionResult{Decision: nil})
 		return
 	}
 
@@ -360,18 +474,17 @@ func (server *Server) getMerchantClaimDecision(ctx *gin.Context) {
 		traceSummary = &latest.TraceSummary.String
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"decision": merchantClaimDecisionResponse{
-			DecisionID:         latest.ID,
-			ResponsibleParty:   latest.ResponsibleParty,
-			CompensationSource: latest.CompensationSource,
-			DecisionStatus:     latest.DecisionStatus,
-			ReasonCodes:        latest.ReasonCodes,
-			TraceSummary:       traceSummary,
-			CreatedAt:          latest.CreatedAt.Format(time.RFC3339),
-			UpdatedAt:          latest.UpdatedAt.Format(time.RFC3339),
-		},
-	})
+	decisionValue := merchantClaimDecisionResponse{
+		DecisionID:         latest.ID,
+		ResponsibleParty:   latest.ResponsibleParty,
+		CompensationSource: latest.CompensationSource,
+		DecisionStatus:     latest.DecisionStatus,
+		ReasonCodes:        latest.ReasonCodes,
+		TraceSummary:       traceSummary,
+		CreatedAt:          latest.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          latest.UpdatedAt.Format(time.RFC3339),
+	}
+	ctx.JSON(http.StatusOK, merchantClaimDecisionResult{Decision: &decisionValue})
 }
 
 type createMerchantAppealRequest struct {
@@ -471,39 +584,36 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 		return
 	}
 
-	response := make([]gin.H, len(result.Appeals))
+	response := make([]appealListItem, len(result.Appeals))
 	for i, a := range result.Appeals {
-		response[i] = gin.H{
-			"id":                a.ID,
-			"claim_id":          a.ClaimID,
-			"claim_type":        a.ClaimType,
-			"claim_amount":      a.ClaimAmount,
-			"claim_description": a.ClaimDescription,
-			"order_no":          a.OrderNo,
-			"reason":            a.Reason,
-			"status":            a.Status,
-			"created_at":        a.CreatedAt,
+		response[i] = appealListItem{
+			ID:               a.ID,
+			ClaimID:          a.ClaimID,
+			ClaimType:        a.ClaimType,
+			ClaimAmount:      a.ClaimAmount,
+			ClaimDescription: a.ClaimDescription,
+			OrderNo:          a.OrderNo,
+			Reason:           a.Reason,
+			Status:           a.Status,
+			CreatedAt:        a.CreatedAt,
 		}
 		if a.ReviewerID.Valid {
-			response[i]["reviewer_id"] = a.ReviewerID.Int64
+			response[i].ReviewerID = &a.ReviewerID.Int64
 		}
 		if a.ReviewNotes.Valid {
-			response[i]["review_notes"] = a.ReviewNotes.String
+			s := a.ReviewNotes.String
+			response[i].ReviewNotes = &s
 		}
 		if a.ReviewedAt.Valid {
-			response[i]["reviewed_at"] = a.ReviewedAt.Time
+			t := a.ReviewedAt.Time
+			response[i].ReviewedAt = &t
 		}
 		if a.CompensationAmount.Valid {
-			response[i]["compensation_amount"] = a.CompensationAmount.Int64
+			response[i].CompensationAmount = &a.CompensationAmount.Int64
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"appeals":     response,
-		"total": result.Total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
-	})
+	ctx.JSON(http.StatusOK, merchantAppealsListResponse{Appeals: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize})
 }
 
 // getMerchantAppealDetail 商户查看申诉详情
@@ -546,40 +656,43 @@ func (server *Server) getMerchantAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"id":                appeal.ID,
-		"claim_id":          appeal.ClaimID,
-		"claim_type":        appeal.ClaimType,
-		"claim_amount":      appeal.ClaimAmount,
-		"claim_description": appeal.ClaimDescription,
-		"order_no":          appeal.OrderNo,
-		"order_amount":      appeal.OrderAmount,
-		"user_phone":        appeal.UserPhone.String,
-		"appellant_type":    appeal.AppellantType,
-		"reason":            appeal.Reason,
-		"status":            appeal.Status,
-		"created_at":        appeal.CreatedAt,
+	resp := appealDetailResponse{
+		ID:               appeal.ID,
+		ClaimID:          appeal.ClaimID,
+		ClaimType:        appeal.ClaimType,
+		ClaimAmount:      appeal.ClaimAmount,
+		ClaimDescription: appeal.ClaimDescription,
+		OrderNo:          appeal.OrderNo,
+		OrderAmount:      appeal.OrderAmount,
+		UserPhone:        appeal.UserPhone.String,
+		AppellantType:    appeal.AppellantType,
+		Reason:           appeal.Reason,
+		Status:           appeal.Status,
+		CreatedAt:        appeal.CreatedAt,
 	}
 	if appeal.ClaimApprovedAmount.Valid {
-		response["claim_approved_amount"] = appeal.ClaimApprovedAmount.Int64
+		resp.ClaimApprovedAmount = &appeal.ClaimApprovedAmount.Int64
 	}
 	if appeal.ReviewerID.Valid {
-		response["reviewer_id"] = appeal.ReviewerID.Int64
+		resp.ReviewerID = &appeal.ReviewerID.Int64
 	}
 	if appeal.ReviewNotes.Valid {
-		response["review_notes"] = appeal.ReviewNotes.String
+		s := appeal.ReviewNotes.String
+		resp.ReviewNotes = &s
 	}
 	if appeal.ReviewedAt.Valid {
-		response["reviewed_at"] = appeal.ReviewedAt.Time
+		t := appeal.ReviewedAt.Time
+		resp.ReviewedAt = &t
 	}
 	if appeal.CompensationAmount.Valid {
-		response["compensation_amount"] = appeal.CompensationAmount.Int64
+		resp.CompensationAmount = &appeal.CompensationAmount.Int64
 	}
 	if appeal.CompensatedAt.Valid {
-		response["compensated_at"] = appeal.CompensatedAt.Time
+		t := appeal.CompensatedAt.Time
+		resp.CompensatedAt = &t
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ========================= Rider Claims/Appeals ============================
@@ -658,12 +771,7 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"claims":      response,
-		"total": total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
-	})
+	ctx.JSON(http.StatusOK, merchantClaimsListResponse{Claims: response, Total: total, PageID: req.PageID, PageSize: req.PageSize})
 }
 
 // getRiderClaimDetail 骑手查看索赔详情
@@ -707,37 +815,41 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"id":           claim.ID,
-		"order_id":     claim.OrderID,
-		"order_no":     claim.OrderNo,
-		"order_amount": claim.OrderAmount,
-		"user_phone":   claim.UserPhone.String,
-		"user_name":    claim.UserName,
-		"claim_type":   claim.ClaimType,
-		"claim_amount": claim.ClaimAmount,
-		"description":  claim.Description,
-		"status":       claim.Status,
-		"created_at":   claim.CreatedAt,
+	rsp := merchantClaimResponse{
+		ID:          claim.ID,
+		OrderID:     claim.OrderID,
+		OrderNo:     claim.OrderNo,
+		OrderAmount: claim.OrderAmount,
+		UserPhone:   claim.UserPhone.String,
+		UserName:    claim.UserName,
+		ClaimType:   claim.ClaimType,
+		ClaimAmount: claim.ClaimAmount,
+		Description: claim.Description,
+		Status:      claim.Status,
+		CreatedAt:   claim.CreatedAt,
 	}
 	if claim.ApprovedAmount.Valid {
-		response["approved_amount"] = claim.ApprovedAmount.Int64
+		rsp.ApprovedAmount = &claim.ApprovedAmount.Int64
 	}
 	if claim.ReviewedAt.Valid {
-		response["reviewed_at"] = claim.ReviewedAt.Time
+		v := claim.ReviewedAt.Time
+		rsp.ReviewedAt = &v
 	}
 	if claim.AppealID.Valid {
-		response["appeal_id"] = claim.AppealID.Int64
-		response["appeal_status"] = claim.AppealStatus.String
+		rsp.AppealID = &claim.AppealID.Int64
+		s := claim.AppealStatus.String
+		rsp.AppealStatus = &s
 		if claim.AppealReason.Valid {
-			response["appeal_reason"] = claim.AppealReason.String
+			r := claim.AppealReason.String
+			rsp.AppealReason = &r
 		}
 		if claim.AppealReviewNotes.Valid {
-			response["appeal_review_notes"] = claim.AppealReviewNotes.String
+			n := claim.AppealReviewNotes.String
+			rsp.AppealReviewNotes = &n
 		}
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, rsp)
 }
 
 type createRiderAppealRequest struct {
@@ -837,39 +949,36 @@ func (server *Server) listRiderAppeals(ctx *gin.Context) {
 		return
 	}
 
-	response := make([]gin.H, len(result.Appeals))
+	response := make([]appealListItem, len(result.Appeals))
 	for i, a := range result.Appeals {
-		response[i] = gin.H{
-			"id":                a.ID,
-			"claim_id":          a.ClaimID,
-			"claim_type":        a.ClaimType,
-			"claim_amount":      a.ClaimAmount,
-			"claim_description": a.ClaimDescription,
-			"order_no":          a.OrderNo,
-			"reason":            a.Reason,
-			"status":            a.Status,
-			"created_at":        a.CreatedAt,
+		response[i] = appealListItem{
+			ID:               a.ID,
+			ClaimID:          a.ClaimID,
+			ClaimType:        a.ClaimType,
+			ClaimAmount:      a.ClaimAmount,
+			ClaimDescription: a.ClaimDescription,
+			OrderNo:          a.OrderNo,
+			Reason:           a.Reason,
+			Status:           a.Status,
+			CreatedAt:        a.CreatedAt,
 		}
 		if a.ReviewerID.Valid {
-			response[i]["reviewer_id"] = a.ReviewerID.Int64
+			response[i].ReviewerID = &a.ReviewerID.Int64
 		}
 		if a.ReviewNotes.Valid {
-			response[i]["review_notes"] = a.ReviewNotes.String
+			s := a.ReviewNotes.String
+			response[i].ReviewNotes = &s
 		}
 		if a.ReviewedAt.Valid {
-			response[i]["reviewed_at"] = a.ReviewedAt.Time
+			t := a.ReviewedAt.Time
+			response[i].ReviewedAt = &t
 		}
 		if a.CompensationAmount.Valid {
-			response[i]["compensation_amount"] = a.CompensationAmount.Int64
+			response[i].CompensationAmount = &a.CompensationAmount.Int64
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"appeals":     response,
-		"total": result.Total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
-	})
+	ctx.JSON(http.StatusOK, merchantAppealsListResponse{Appeals: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize})
 }
 
 // getRiderAppealDetail 骑手查看申诉详情
@@ -900,7 +1009,7 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	appeal, err := logic.GetRiderAppealDetail(ctx, server.store, logic.GetRiderAppealDetailInput{
+	result, err := logic.GetRiderAppealDetail(ctx, server.store, logic.GetRiderAppealDetailInput{
 		AppealID: appealID,
 		RiderID:  rider.ID,
 	})
@@ -912,40 +1021,43 @@ func (server *Server) getRiderAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"id":                appeal.ID,
-		"claim_id":          appeal.ClaimID,
-		"claim_type":        appeal.ClaimType,
-		"claim_amount":      appeal.ClaimAmount,
-		"claim_description": appeal.ClaimDescription,
-		"order_no":          appeal.OrderNo,
-		"order_amount":      appeal.OrderAmount,
-		"user_phone":        appeal.UserPhone.String,
-		"appellant_type":    appeal.AppellantType,
-		"reason":            appeal.Reason,
-		"status":            appeal.Status,
-		"created_at":        appeal.CreatedAt,
+	resp := appealDetailResponse{
+		ID:               result.ID,
+		ClaimID:          result.ClaimID,
+		ClaimType:        result.ClaimType,
+		ClaimAmount:      result.ClaimAmount,
+		ClaimDescription: result.ClaimDescription,
+		OrderNo:          result.OrderNo,
+		OrderAmount:      result.OrderAmount,
+		UserPhone:        result.UserPhone.String,
+		AppellantType:    result.AppellantType,
+		Reason:           result.Reason,
+		Status:           result.Status,
+		CreatedAt:        result.CreatedAt,
 	}
-	if appeal.ClaimApprovedAmount.Valid {
-		response["claim_approved_amount"] = appeal.ClaimApprovedAmount.Int64
+	if result.ClaimApprovedAmount.Valid {
+		resp.ClaimApprovedAmount = &result.ClaimApprovedAmount.Int64
 	}
-	if appeal.ReviewerID.Valid {
-		response["reviewer_id"] = appeal.ReviewerID.Int64
+	if result.ReviewerID.Valid {
+		resp.ReviewerID = &result.ReviewerID.Int64
 	}
-	if appeal.ReviewNotes.Valid {
-		response["review_notes"] = appeal.ReviewNotes.String
+	if result.ReviewNotes.Valid {
+		s := result.ReviewNotes.String
+		resp.ReviewNotes = &s
 	}
-	if appeal.ReviewedAt.Valid {
-		response["reviewed_at"] = appeal.ReviewedAt.Time
+	if result.ReviewedAt.Valid {
+		t := result.ReviewedAt.Time
+		resp.ReviewedAt = &t
 	}
-	if appeal.CompensationAmount.Valid {
-		response["compensation_amount"] = appeal.CompensationAmount.Int64
+	if result.CompensationAmount.Valid {
+		resp.CompensationAmount = &result.CompensationAmount.Int64
 	}
-	if appeal.CompensatedAt.Valid {
-		response["compensated_at"] = appeal.CompensatedAt.Time
+	if result.CompensatedAt.Valid {
+		t := result.CompensatedAt.Time
+		resp.CompensatedAt = &t
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ========================= Operator Appeals ============================
@@ -1030,35 +1142,31 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		total = int64(len(appeals))
 	}
 
-	response := make([]gin.H, len(appeals))
+	response := make([]operatorAppealListItem, len(appeals))
 	for i, a := range appeals {
-		response[i] = gin.H{
-			"id":                a.ID,
-			"claim_id":          a.ClaimID,
-			"claim_type":        a.ClaimType,
-			"claim_amount":      a.ClaimAmount,
-			"claim_description": a.ClaimDescription,
-			"order_no":          a.OrderNo,
-			"merchant_id":       a.MerchantID,
-			"merchant_name":     a.MerchantName,
-			"appellant_type":    a.AppellantType,
-			"appellant_id":      a.AppellantID,
-			"appellant_name":    a.AppellantName,
-			"reason":            a.Reason,
-			"status":            a.Status,
-			"created_at":        a.CreatedAt,
+		response[i] = operatorAppealListItem{
+			ID:               a.ID,
+			ClaimID:          a.ClaimID,
+			ClaimType:        a.ClaimType,
+			ClaimAmount:      a.ClaimAmount,
+			ClaimDescription: a.ClaimDescription,
+			OrderNo:          a.OrderNo,
+			MerchantID:       a.MerchantID,
+			MerchantName:     a.MerchantName,
+			AppellantType:    a.AppellantType,
+			AppellantID:      a.AppellantID,
+			AppellantName:    a.AppellantName,
+			Reason:           a.Reason,
+			Status:           a.Status,
+			CreatedAt:        a.CreatedAt,
 		}
 		if a.ReviewedAt.Valid {
-			response[i]["reviewed_at"] = a.ReviewedAt.Time
+			t := a.ReviewedAt.Time
+			response[i].ReviewedAt = &t
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"appeals":     response,
-		"total": total,
-		"page":        req.Page,
-		"limit":       req.Limit,
-	})
+	ctx.JSON(http.StatusOK, operatorAppealsListResponse{Appeals: response, Total: total, Page: req.Page, Limit: req.Limit})
 }
 
 // getOperatorAppealDetail 运营商查看申诉详情
@@ -1102,56 +1210,60 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"id":                appeal.ID,
-		"claim_id":          appeal.ClaimID,
-		"claim_type":        appeal.ClaimType,
-		"claim_amount":      appeal.ClaimAmount,
-		"claim_description": appeal.ClaimDescription,
-		"claim_status":      appeal.ClaimStatus,
-		"claim_created_at":  appeal.ClaimCreatedAt,
-		"order_no":          appeal.OrderNo,
-		"order_amount":      appeal.OrderAmount,
-		"order_status":      appeal.OrderStatus,
-		"order_created_at":  appeal.OrderCreatedAt,
-		"merchant_id":       appeal.MerchantID,
-		"merchant_name":     appeal.MerchantName,
-		"merchant_phone":    appeal.MerchantPhone,
-		"user_phone":        appeal.UserPhone.String,
-		"user_name":         appeal.UserName,
-		"appellant_type":    appeal.AppellantType,
-		"appellant_id":      appeal.AppellantID,
-		"reason":            appeal.Reason,
-		"status":            appeal.Status,
-		"region_id":         appeal.RegionID,
-		"created_at":        appeal.CreatedAt,
+	resp := operatorAppealDetailResponse{
+		ID:               appeal.ID,
+		ClaimID:          appeal.ClaimID,
+		ClaimType:        appeal.ClaimType,
+		ClaimAmount:      appeal.ClaimAmount,
+		ClaimDescription: appeal.ClaimDescription,
+		ClaimStatus:      appeal.ClaimStatus,
+		ClaimCreatedAt:   appeal.ClaimCreatedAt,
+		OrderNo:          appeal.OrderNo,
+		OrderAmount:      appeal.OrderAmount,
+		OrderStatus:      appeal.OrderStatus,
+		OrderCreatedAt:   appeal.OrderCreatedAt,
+		MerchantID:       appeal.MerchantID,
+		MerchantName:     appeal.MerchantName,
+		MerchantPhone:    appeal.MerchantPhone,
+		UserPhone:        appeal.UserPhone.String,
+		UserName:         appeal.UserName,
+		AppellantType:    appeal.AppellantType,
+		AppellantID:      appeal.AppellantID,
+		Reason:           appeal.Reason,
+		Status:           appeal.Status,
+		RegionID:         appeal.RegionID,
+		CreatedAt:        appeal.CreatedAt,
 	}
 	if appeal.ClaimApprovedAmount.Valid {
-		response["claim_approved_amount"] = appeal.ClaimApprovedAmount.Int64
+		resp.ClaimApprovedAmount = &appeal.ClaimApprovedAmount.Int64
 	}
 	if appeal.LookbackResult != nil {
-		response["lookback_result"] = string(appeal.LookbackResult)
+		s := string(appeal.LookbackResult)
+		resp.LookbackResult = &s
 	}
 	if appeal.RiderID.Valid {
-		response["rider_id"] = appeal.RiderID.Int64
+		resp.RiderID = &appeal.RiderID.Int64
 	}
 	if appeal.ReviewerID.Valid {
-		response["reviewer_id"] = appeal.ReviewerID.Int64
+		resp.ReviewerID = &appeal.ReviewerID.Int64
 	}
 	if appeal.ReviewNotes.Valid {
-		response["review_notes"] = appeal.ReviewNotes.String
+		s := appeal.ReviewNotes.String
+		resp.ReviewNotes = &s
 	}
 	if appeal.ReviewedAt.Valid {
-		response["reviewed_at"] = appeal.ReviewedAt.Time
+		t := appeal.ReviewedAt.Time
+		resp.ReviewedAt = &t
 	}
 	if appeal.CompensationAmount.Valid {
-		response["compensation_amount"] = appeal.CompensationAmount.Int64
+		resp.CompensationAmount = &appeal.CompensationAmount.Int64
 	}
 	if appeal.CompensatedAt.Valid {
-		response["compensated_at"] = appeal.CompensatedAt.Time
+		t := appeal.CompensatedAt.Time
+		resp.CompensatedAt = &t
 	}
 
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 type reviewAppealRequest struct {

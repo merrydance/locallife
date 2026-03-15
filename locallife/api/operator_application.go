@@ -267,7 +267,7 @@ func (server *Server) getOperatorApplication(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusOK, gin.H{})
+			ctx.JSON(http.StatusOK, struct{}{})
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

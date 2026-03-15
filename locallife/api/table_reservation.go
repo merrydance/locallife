@@ -380,6 +380,7 @@ func (server *Server) createReservation(ctx *gin.Context) {
 		if err != nil {
 			// 任务分发失败不影响主流程，记录日志
 			// 可以通过定时任务轮询处理超时预定作为兜底
+			_ = err
 		}
 	}
 
@@ -612,7 +613,7 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"reservations": resp,
-		"total":  totalCount,
+		"total":        totalCount,
 		"page_id":      req.PageID,
 		"page_size":    req.PageSize,
 	})
@@ -1042,7 +1043,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, gin.H{
 		"reservations": resp,
-		"total":  totalCount,
+		"total":        totalCount,
 		"page_id":      req.PageID,
 		"page_size":    req.PageSize,
 	})

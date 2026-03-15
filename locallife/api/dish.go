@@ -99,6 +99,10 @@ type listGlobalDishCategoriesResponse struct {
 	Categories []dishCategoryResponse `json:"categories"`
 }
 
+type dishTagsResponse struct {
+	Tags []string `json:"tags"`
+}
+
 // listDishCategories godoc
 // @Summary 获取菜品分类列表
 // @Description 获取当前商户的所有菜品分类
@@ -316,8 +320,8 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 		})
 		if err != nil {
 			// 即使取消失败也继续，因为新关联已经建立
+			_ = err
 		}
-
 		finalID = newCategory.ID
 		finalName = newCategory.Name
 	} else if req.SortOrder != nil {
@@ -396,7 +400,7 @@ func (server *Server) deleteDishCategory(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "category deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("category deleted successfully"))
 }
 
 // ==================== 菜品管理 ====================
@@ -659,10 +663,10 @@ type listDishesRequest struct {
 }
 
 type listDishesResponse struct {
-	Dishes     []dishResponse `json:"dishes"`
-	Total      int64          `json:"total"`
-	PageID     int32          `json:"page_id"`
-	PageSize   int32          `json:"page_size"`
+	Dishes   []dishResponse `json:"dishes"`
+	Total    int64          `json:"total"`
+	PageID   int32          `json:"page_id"`
+	PageSize int32          `json:"page_size"`
 }
 
 // listDishesByMerchant godoc
@@ -764,10 +768,10 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listDishesResponse{
-		Dishes:     result,
-		Total:      count,
-		PageID:     req.PageID,
-		PageSize:   req.PageSize,
+		Dishes:   result,
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -1296,7 +1300,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 		},
 	})
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "dish deleted successfully"})
+	ctx.JSON(http.StatusOK, successMessage("dish deleted successfully"))
 }
 
 // ==================== 辅助函数 ====================
@@ -1950,5 +1954,5 @@ func (server *Server) setDishFeaturedTags(ctx *gin.Context) {
 	for _, t := range updatedTags {
 		tagNames = append(tagNames, t.Name)
 	}
-	ctx.JSON(http.StatusOK, gin.H{"tags": tagNames})
+	ctx.JSON(http.StatusOK, dishTagsResponse{Tags: tagNames})
 }

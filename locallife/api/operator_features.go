@@ -38,6 +38,19 @@ type resolveSafetyReportRequest struct {
 	RecoverReason      string  `json:"recover_reason" binding:"omitempty,min=2,max=500"`
 }
 
+type safetyReportListResponse struct {
+	Items   interface{} `json:"items"`
+	Page    int32       `json:"page"`
+	Limit   int32       `json:"limit"`
+	HasMore bool        `json:"has_more"`
+	Total   int64       `json:"total"`
+}
+
+type safetyReportResolvedResponse struct {
+	Report               interface{} `json:"report"`
+	RecoveredMerchantIDs []int64     `json:"recovered_merchant_ids"`
+}
+
 // submitSafetyReport 提交食安熔断报告
 // @Summary 提交食安报告
 // @Description 运营商提交食品安全事件报告，可能触发熔断机制
@@ -158,13 +171,7 @@ func (server *Server) listSafetyReports(ctx *gin.Context) {
 
 		hasMore := int64(offset)+int64(len(reports)) < total
 
-		ctx.JSON(http.StatusOK, gin.H{
-			"items":    reports,
-			"page":     req.Page,
-			"limit":    req.Limit,
-			"has_more": hasMore,
-			"total":    total,
-		})
+		ctx.JSON(http.StatusOK, safetyReportListResponse{Items: reports, Page: req.Page, Limit: req.Limit, HasMore: hasMore, Total: total})
 		return
 	}
 
@@ -190,13 +197,7 @@ func (server *Server) listSafetyReports(ctx *gin.Context) {
 
 	hasMore := int64(offset)+int64(len(reports)) < total
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"items":    reports,
-		"page":     req.Page,
-		"limit":    req.Limit,
-		"has_more": hasMore,
-		"total":    total,
-	})
+	ctx.JSON(http.StatusOK, safetyReportListResponse{Items: reports, Page: req.Page, Limit: req.Limit, HasMore: hasMore, Total: total})
 }
 
 // getSafetyReportDetail 获取食安事件详情
@@ -333,8 +334,5 @@ func (server *Server) resolveSafetyReport(ctx *gin.Context) {
 		recoveredMerchantIDs = append(recoveredMerchantIDs, merchantID)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"report":                 updated,
-		"recovered_merchant_ids": recoveredMerchantIDs,
-	})
+	ctx.JSON(http.StatusOK, safetyReportResolvedResponse{Report: updated, RecoveredMerchantIDs: recoveredMerchantIDs})
 }

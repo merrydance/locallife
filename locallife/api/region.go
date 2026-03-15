@@ -300,6 +300,13 @@ type availableRegionResponse struct {
 	ParentName string `json:"parent_name,omitempty"`
 }
 
+type availableRegionsListResponse struct {
+	Regions  []availableRegionResponse `json:"regions"`
+	Total    int                       `json:"total"`
+	PageID   int32                     `json:"page_id"`
+	PageSize int32                     `json:"page_size"`
+}
+
 type regionAvailabilityResponse struct {
 	RegionID    int64  `json:"region_id"`
 	Code        string `json:"code"`
@@ -394,11 +401,11 @@ func (server *Server) listAvailableRegions(ctx *gin.Context) {
 		availableRegions[i] = resp
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"regions":     availableRegions,
-		"total": len(availableRegions),
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+	ctx.JSON(http.StatusOK, availableRegionsListResponse{
+		Regions:  availableRegions,
+		Total:    len(availableRegions),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 

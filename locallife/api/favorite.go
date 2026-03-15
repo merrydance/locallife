@@ -38,6 +38,32 @@ type favoriteDishResponse struct {
 	CreatedAt    string `json:"created_at"`
 }
 
+type favoriteActionResponse struct {
+	Message    string `json:"message"`
+	MerchantID *int64 `json:"merchant_id,omitempty"`
+	DishID     *int64 `json:"dish_id,omitempty"`
+}
+
+type listFavoriteMerchantsResponse struct {
+	Merchants  []favoriteMerchantResponse `json:"merchants"`
+	Total      int64                      `json:"total"`
+	Page       int32                      `json:"page"`
+	PageID     int32                      `json:"page_id"`
+	PageSize   int32                      `json:"page_size"`
+	TotalPages int                        `json:"total_pages"`
+	TotalPage  int                        `json:"total_page"`
+}
+
+type listFavoriteDishesResponse struct {
+	Dishes     []favoriteDishResponse `json:"dishes"`
+	Total      int64                  `json:"total"`
+	Page       int32                  `json:"page"`
+	PageID     int32                  `json:"page_id"`
+	PageSize   int32                  `json:"page_size"`
+	TotalPages int                    `json:"total_pages"`
+	TotalPage  int                    `json:"total_page"`
+}
+
 type addFavoriteMerchantRequest struct {
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
 }
@@ -91,9 +117,10 @@ func (server *Server) addFavoriteMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":     "merchant added to favorites",
-		"merchant_id": req.MerchantID,
+	merchantID64 := req.MerchantID
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message:    "merchant added to favorites",
+		MerchantID: &merchantID64,
 	})
 }
 
@@ -163,14 +190,15 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 		response = []favoriteMerchantResponse{}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"merchants":  response,
-		"total": count,
-		"page_id":    req.Page,
-		"page":       req.Page,
-		"page_size":  req.PageSize,
-		"total_pages": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
-		"total_page": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
+	totalPages := (int(count) + int(req.PageSize) - 1) / int(req.PageSize)
+	ctx.JSON(http.StatusOK, listFavoriteMerchantsResponse{
+		Merchants:  response,
+		Total:      count,
+		Page:       req.Page,
+		PageID:     req.Page,
+		PageSize:   req.PageSize,
+		TotalPages: totalPages,
+		TotalPage:  totalPages,
 	})
 }
 
@@ -206,9 +234,9 @@ func (server *Server) deleteFavoriteMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":     "merchant removed from favorites",
-		"merchant_id": merchantID,
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message:    "merchant removed from favorites",
+		MerchantID: &merchantID,
 	})
 }
 
@@ -259,9 +287,10 @@ func (server *Server) addFavoriteDish(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "dish added to favorites",
-		"dish_id": req.DishID,
+	dishID64 := req.DishID
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message: "dish added to favorites",
+		DishID:  &dishID64,
 	})
 }
 
@@ -338,14 +367,15 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 		response = []favoriteDishResponse{}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"dishes":     response,
-		"total": count,
-		"page_id":    req.Page,
-		"page":       req.Page,
-		"page_size":  req.PageSize,
-		"total_pages": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
-		"total_page": (int(count) + int(req.PageSize) - 1) / int(req.PageSize),
+	totalPages := (int(count) + int(req.PageSize) - 1) / int(req.PageSize)
+	ctx.JSON(http.StatusOK, listFavoriteDishesResponse{
+		Dishes:     response,
+		Total:      count,
+		Page:       req.Page,
+		PageID:     req.Page,
+		PageSize:   req.PageSize,
+		TotalPages: totalPages,
+		TotalPage:  totalPages,
 	})
 }
 
@@ -381,8 +411,8 @@ func (server *Server) deleteFavoriteDish(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "dish removed from favorites",
-		"dish_id": dishID,
+	ctx.JSON(http.StatusOK, favoriteActionResponse{
+		Message: "dish removed from favorites",
+		DishID:  &dishID,
 	})
 }

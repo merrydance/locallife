@@ -297,6 +297,13 @@ type customerStatRow struct {
 	LastOrderAt    string `json:"last_order_at"`
 }
 
+type customerStatsListResponse struct {
+	Data  []customerStatRow `json:"data"`
+	Total int32             `json:"total"`
+	Page  int32             `json:"page"`
+	Limit int32             `json:"limit"`
+}
+
 // listMerchantCustomers 获取商户的顾客列表
 // @Summary 获取商户顾客列表
 // @Description 商户获取所有曾在本店消费的顾客统计信息，支持按总订单数、总金额、最后下单时间排序
@@ -392,13 +399,11 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"data":        result,
-		"total":       totalCount,
-		"page_id":     req.Page,
-		"page_size":   req.Limit,
-		"page":        req.Page,
-		"limit":       req.Limit,
+	ctx.JSON(http.StatusOK, customerStatsListResponse{
+		Data:  result,
+		Total: totalCount,
+		Page:  req.Page,
+		Limit: req.Limit,
 	})
 }
 

@@ -532,8 +532,8 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 
 	// 记录更新前的旧图片列表，用于稍后删除被移除的图片
 	var oldStorefront, oldEnvironment []string
-	json.Unmarshal(app.StorefrontImages, &oldStorefront)
-	json.Unmarshal(app.EnvironmentImages, &oldEnvironment)
+	_ = json.Unmarshal(app.StorefrontImages, &oldStorefront)
+	_ = json.Unmarshal(app.EnvironmentImages, &oldEnvironment)
 
 	// 注意：用 != nil 而非 len > 0，使得前端传空数组 [] 时能正确清空图片
 	if req.StorefrontImages != nil {
@@ -714,7 +714,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		return
 	}
 
-	updatedApp := app
+	var updatedApp db.MerchantApplication
 	oldImageURL := app.BusinessLicenseImageUrl
 	localPath := ""
 
@@ -878,7 +878,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 		return
 	}
 
-	updatedApp := app
+	var updatedApp db.MerchantApplication
 	oldFoodPermitURL := ""
 	if app.FoodPermitUrl.Valid {
 		oldFoodPermitURL = app.FoodPermitUrl.String
@@ -1055,7 +1055,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	updatedApp := app
+	var updatedApp db.MerchantApplication
 	oldIDCardURL := storedPath
 	localPath := ""
 
@@ -1875,11 +1875,7 @@ func isFuzzyLocation(location string) bool {
 
 	// 检查是否不包含数字（没有精确门牌号）
 	numRegex := regexp.MustCompile(`\d+`)
-	if !numRegex.MatchString(location) {
-		return true
-	}
-
-	return false
+	return !numRegex.MatchString(location)
 }
 
 // normalizeNumber 标准化门牌号（提取前缀数字，忽略楼栋/单元等附加描述）

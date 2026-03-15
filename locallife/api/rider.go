@@ -358,13 +358,13 @@ func (server *Server) depositRider(ctx *gin.Context) {
 			PayerClientIP: ctx.ClientIP(),                                      // 用户终端IP
 		})
 		if err != nil {
-			server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
+			_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("wechat pay: %w", err)))
 			return
 		}
 
 		// 更新 prepay_id
-		server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		_, _ = server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
 			ID:       paymentOrder.ID,
 			PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
 		})
@@ -535,10 +535,10 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 }
 
 type listRiderDepositsResponse struct {
-	Deposits   []depositResponse `json:"deposits"`
-	Total      int64             `json:"total"`
-	PageID     int32             `json:"page_id"`
-	PageSize   int32             `json:"page_size"`
+	Deposits []depositResponse `json:"deposits"`
+	Total    int64             `json:"total"`
+	PageID   int32             `json:"page_id"`
+	PageSize int32             `json:"page_size"`
 }
 
 // listRiderDeposits godoc
@@ -600,10 +600,10 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listRiderDepositsResponse{
-		Deposits:   response,
-		Total:      int64(len(response)),
-		PageID:     req.Page,
-		PageSize:   req.Limit,
+		Deposits: response,
+		Total:    int64(len(response)),
+		PageID:   req.Page,
+		PageSize: req.Limit,
 	})
 }
 
@@ -815,6 +815,13 @@ type updateLocationRequest struct {
 	Locations []locationPoint `json:"locations" binding:"required,min=1,max=100,dive"`
 }
 
+type riderLocationUpdateResponse struct {
+	Message   string  `json:"message"`
+	Count     int     `json:"count"`
+	Longitude float64 `json:"longitude"`
+	Latitude  float64 `json:"latitude"`
+}
+
 type locationPoint struct {
 	DeliveryID *int64    `json:"delivery_id,omitempty" binding:"omitempty,min=1"`
 	Longitude  float64   `json:"longitude" binding:"required,gte=-180,lte=180"`
@@ -952,11 +959,11 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 		server.processDeliveryLocationEvents(ctx, rider, *activeDeliveryID, latestLocation)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":   "位置更新成功",
-		"count":     len(locations),
-		"longitude": latestLocation.Longitude,
-		"latitude":  latestLocation.Latitude,
+	ctx.JSON(http.StatusOK, riderLocationUpdateResponse{
+		Message:   "位置更新成功",
+		Count:     len(locations),
+		Longitude: latestLocation.Longitude,
+		Latitude:  latestLocation.Latitude,
 	})
 }
 
@@ -969,10 +976,10 @@ type listRidersRequest struct {
 }
 
 type listRidersResponse struct {
-	Riders     []riderResponse `json:"riders"`
-	Total      int64           `json:"total"`
-	PageID     int32           `json:"page_id"`
-	PageSize   int32           `json:"page_size"`
+	Riders   []riderResponse `json:"riders"`
+	Total    int64           `json:"total"`
+	PageID   int32           `json:"page_id"`
+	PageSize int32           `json:"page_size"`
 }
 
 // listRiders godoc
@@ -1031,10 +1038,10 @@ func (server *Server) listRiders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listRidersResponse{
-		Riders:     response,
-		Total:      totalCount,
-		PageID:     req.Page,
-		PageSize:   req.Limit,
+		Riders:   response,
+		Total:    totalCount,
+		PageID:   req.Page,
+		PageSize: req.Limit,
 	})
 }
 

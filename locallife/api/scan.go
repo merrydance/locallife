@@ -258,10 +258,10 @@ func (server *Server) scanTable(ctx *gin.Context) {
 
 		// 解析 Tags 和 CustomizationGroups
 		if dish.Tags != nil {
-			parseJSON(dish.Tags, &dishInfo.Tags)
+			_ = parseJSON(dish.Tags, &dishInfo.Tags)
 		}
 		if dish.CustomizationGroups != nil {
-			parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups)
+			_ = parseJSON(dish.CustomizationGroups, &dishInfo.CustomizationGroups)
 		}
 
 		if categoryName, ok := categoryNameMap[categoryID]; ok {
@@ -294,7 +294,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			IsAvailable: combo.IsOnline,
 		}
 		if combo.Tags != nil {
-			parseJSON(combo.Tags, &comboInfo.Tags)
+			_ = parseJSON(combo.Tags, &comboInfo.Tags)
 		}
 		if combo.Description.Valid {
 			comboInfo.Description = &combo.Description.String

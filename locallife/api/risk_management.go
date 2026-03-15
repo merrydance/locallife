@@ -798,7 +798,7 @@ func (server *Server) ReportFoodSafety(ctx *gin.Context) {
 
 	// 验证严重程度
 	if req.SeverityLevel < 1 || req.SeverityLevel > 5 {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "severity_level must be between 1 and 5"})
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("severity_level must be between 1 and 5")))
 		return
 	}
 
@@ -923,7 +923,7 @@ func (server *Server) TriggerFraudDetection(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusBadRequest, gin.H{"error": "must provide claim_id, device_fingerprint, or address_id"})
+	ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("must provide claim_id, device_fingerprint, or address_id")))
 }
 
 // SuspendMerchantRequest 熔断商户请求（管理员使用）
@@ -962,7 +962,7 @@ func (server *Server) SuspendMerchant(ctx *gin.Context) {
 	}
 
 	if merchantID != req.MerchantID {
-		ctx.JSON(http.StatusBadRequest, gin.H{"error": "merchant_id mismatch"})
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("merchant_id mismatch")))
 		return
 	}
 
@@ -973,9 +973,7 @@ func (server *Server) SuspendMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("商户 %d 已熔断 %d 小时", merchantID, req.DurationHours),
-	})
+	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("商户 %d 已熔断 %d 小时", merchantID, req.DurationHours)))
 }
 
 // ResumeMerchantRequest 恢复商户请求
@@ -1035,9 +1033,7 @@ func (server *Server) ResumeMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("商户 %d 已恢复上线", merchantID),
-	})
+	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("商户 %d 已恢复上线", merchantID)))
 }
 
 // SuspendRiderRequest 暂停骑手请求
@@ -1092,11 +1088,7 @@ func (server *Server) SuspendRider(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":        fmt.Sprintf("骑手 %d 已暂停 %d 小时", riderID, req.DurationHours),
-		"reason":         req.Reason,
-		"duration_hours": req.DurationHours,
-	})
+	ctx.JSON(http.StatusOK, riderSuspendResponse{Message: fmt.Sprintf("骑手 %d 已暂停 %d 小时", riderID, req.DurationHours), Reason: req.Reason, DurationHours: req.DurationHours})
 }
 
 // ResumeRiderRequest 恢复骑手请求
@@ -1150,9 +1142,7 @@ func (server *Server) ResumeRider(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": fmt.Sprintf("骑手 %d 已恢复上线", riderID),
-	})
+	ctx.JSON(http.StatusOK, successMessage(fmt.Sprintf("骑手 %d 已恢复上线", riderID)))
 }
 
 // ==================== 用户索赔查询 API ====================
@@ -1172,6 +1162,19 @@ type claimResponse struct {
 	IsMalicious    bool       `json:"is_malicious"`
 	CreatedAt      time.Time  `json:"created_at"`
 	ReviewedAt     *time.Time `json:"reviewed_at,omitempty"`
+}
+
+type riderSuspendResponse struct {
+	Message       string `json:"message"`
+	Reason        string `json:"reason"`
+	DurationHours int    `json:"duration_hours"`
+}
+
+type claimsListResponse struct {
+	Claims   []claimResponse `json:"claims"`
+	Total    int64           `json:"total"`
+	PageSize int             `json:"page_size"`
+	Page     int             `json:"page"`
 }
 
 func newClaimResponse(claim db.Claim) claimResponse {
@@ -1263,13 +1266,7 @@ func (server *Server) ListUserClaims(ctx *gin.Context) {
 		response = []claimResponse{}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"claims":      response,
-		"total": totalCount,
-		"page_id":     page,
-		"page_size":   pageSize,
-		"page":        page,
-	})
+	ctx.JSON(http.StatusOK, claimsListResponse{Claims: response, Total: totalCount, PageSize: pageSize, Page: page})
 }
 
 // GetClaimDetail 获取索赔详情

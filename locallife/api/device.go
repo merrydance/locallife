@@ -38,6 +38,18 @@ type printerResponse struct {
 	UpdatedAt        string `json:"updated_at,omitempty"`
 }
 
+type printerListResponse struct {
+	Printers interface{} `json:"printers"`
+	Total    int         `json:"total"`
+}
+
+type printerTestNotImplementedResponse struct {
+	Error       string `json:"error"`
+	PrinterName string `json:"printer_name"`
+	PrinterSN   string `json:"printer_sn"`
+	PrinterType string `json:"printer_type"`
+}
+
 // createPrinter 注册打印机设备
 // @Summary 注册打印机
 // @Description 商户注册新的云打印机设备，支持飞鹅云和易联云
@@ -177,10 +189,7 @@ func (server *Server) listPrinters(ctx *gin.Context) {
 		result[i] = toPrinterResponse(printer)
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"printers": result,
-		"total": len(result),
-	})
+	ctx.JSON(http.StatusOK, printerListResponse{Printers: result, Total: len(result)})
 }
 
 // ==================== 获取单个打印机 ====================
@@ -412,9 +421,7 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message": "printer deleted successfully",
-	})
+	ctx.JSON(http.StatusOK, successMessage("printer deleted successfully"))
 }
 
 // ==================== 测试打印机 ====================
@@ -480,11 +487,11 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 	// 生产环境需要根据 printer_type 调用对应的云打印服务 API:
 	// - feieyun: 飞鹅云打印 API
 	// - yilianyun: 易联云打印 API
-	ctx.JSON(http.StatusNotImplemented, gin.H{
-		"error":        "云打印测试功能尚未接入，请联系技术支持",
-		"printer_name": printer.PrinterName,
-		"printer_sn":   printer.PrinterSn,
-		"printer_type": printer.PrinterType,
+	ctx.JSON(http.StatusNotImplemented, printerTestNotImplementedResponse{
+		Error:       "云打印测试功能尚未接入，请联系技术支持",
+		PrinterName: printer.PrinterName,
+		PrinterSN:   printer.PrinterSn,
+		PrinterType: printer.PrinterType,
 	})
 }
 

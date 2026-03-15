@@ -368,15 +368,15 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		switch v := result.Dishes.(type) {
 		case []byte:
 			if len(v) > 2 {
-				json.Unmarshal(v, &dishes)
+				_ = json.Unmarshal(v, &dishes)
 			}
 		case string:
 			if len(v) > 2 {
-				json.Unmarshal([]byte(v), &dishes)
+				_ = json.Unmarshal([]byte(v), &dishes)
 			}
 		default:
 			if jsonBytes, err := json.Marshal(v); err == nil {
-				json.Unmarshal(jsonBytes, &dishes)
+				_ = json.Unmarshal(jsonBytes, &dishes)
 			}
 		}
 	}
@@ -385,15 +385,15 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		switch v := result.Tags.(type) {
 		case []byte:
 			if len(v) > 2 {
-				json.Unmarshal(v, &tags)
+				_ = json.Unmarshal(v, &tags)
 			}
 		case string:
 			if len(v) > 2 {
-				json.Unmarshal([]byte(v), &tags)
+				_ = json.Unmarshal([]byte(v), &tags)
 			}
 		default:
 			if jsonBytes, err := json.Marshal(v); err == nil {
-				json.Unmarshal(jsonBytes, &tags)
+				_ = json.Unmarshal(jsonBytes, &tags)
 			}
 		}
 	}
@@ -513,10 +513,10 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 	server.enrichComboSetImages(ctx, result)
 
 	ctx.JSON(http.StatusOK, listComboSetsResponse{
-		ComboSets:  result,
-		Total:      count,
-		PageID:     req.PageID,
-		PageSize:   req.PageSize,
+		ComboSets: result,
+		Total:     count,
+		PageID:    req.PageID,
+		PageSize:  req.PageSize,
 	})
 }
 
@@ -785,7 +785,7 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "combo set online status updated"})
+	ctx.JSON(http.StatusOK, successMessage("combo set online status updated"))
 }
 
 type deleteComboSetRequest struct {
@@ -845,7 +845,7 @@ func (server *Server) deleteComboSet(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "combo set deleted"})
+	ctx.JSON(http.StatusOK, successMessage("combo set deleted"))
 }
 
 // ==================== 套餐-菜品关联 ====================
@@ -937,7 +937,7 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "dish added to combo set"})
+	ctx.JSON(http.StatusOK, successMessage("dish added to combo set"))
 }
 
 type removeComboDishRequest struct {
@@ -1002,7 +1002,7 @@ func (server *Server) removeComboDish(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "dish removed from combo set"})
+	ctx.JSON(http.StatusOK, successMessage("dish removed from combo set"))
 }
 
 // ==================== 辅助函数 ====================
@@ -1027,6 +1027,7 @@ func (server *Server) enrichComboSetImages(ctx context.Context, combos []comboSe
 	}
 
 	if len(comboIDs) == 0 {
+		return
 	}
 
 	// 批量查询成员图片

@@ -140,7 +140,7 @@ func generateOutTradeNo() string {
 
 	// 生成8位随机数
 	b := make([]byte, 4)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
 
 	return "P" + dateStr + randomNum[:8]
@@ -151,7 +151,7 @@ func generateOutTradeNoWithPrefix(prefix string) string {
 	dateStr := now.Format("20060102150405")
 
 	b := make([]byte, 4)
-	rand.Read(b)
+	_, _ = rand.Read(b)
 	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
 
 	if prefix == "" {

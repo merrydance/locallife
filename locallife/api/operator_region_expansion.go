@@ -24,6 +24,17 @@ type regionExpansionApplicationResponse struct {
 	CreatedAt    string `json:"created_at"`
 }
 
+type regionExpansionApplicationsResponse struct {
+	Applications interface{} `json:"applications"`
+}
+
+type adminRegionExpansionListResponse struct {
+	Applications interface{} `json:"applications"`
+	Total        int64       `json:"total"`
+	Page         int32       `json:"page"`
+	Limit        int32       `json:"limit"`
+}
+
 func newRegionExpansionResponse(app db.OperatorRegionApplication, regionName string) regionExpansionApplicationResponse {
 	resp := regionExpansionApplicationResponse{
 		ID:         app.ID,
@@ -196,7 +207,7 @@ func (server *Server) listOperatorRegionApplications(ctx *gin.Context) {
 		}
 		resp = append(resp, newRegionExpansionResponse(app, row.RegionName))
 	}
-	ctx.JSON(http.StatusOK, gin.H{"applications": resp})
+	ctx.JSON(http.StatusOK, regionExpansionApplicationsResponse{Applications: resp})
 }
 
 // ─────────────────────────────────────────────
@@ -275,12 +286,7 @@ func (server *Server) listPendingRegionApplicationsAdmin(ctx *gin.Context) {
 		}
 		resp = append(resp, item)
 	}
-	ctx.JSON(http.StatusOK, gin.H{
-		"applications": resp,
-		"total":        total,
-		"page":         query.Page,
-		"limit":        query.Limit,
-	})
+	ctx.JSON(http.StatusOK, adminRegionExpansionListResponse{Applications: resp, Total: total, Page: query.Page, Limit: query.Limit})
 }
 
 // ─────────────────────────────────────────────

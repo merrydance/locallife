@@ -230,10 +230,10 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	// ValueRatio: 默认1%
 	valueRatio := req.ValueRatio
 	if valueRatio > 0 {
-		arg.ValueRatio.Scan(valueRatio)
+		_ = arg.ValueRatio.Scan(valueRatio)
 	} else {
 		valueRatio = 0.01
-		arg.ValueRatio.Scan(valueRatio)
+		_ = arg.ValueRatio.Scan(valueRatio)
 	}
 
 	if req.MaxFee != nil {
@@ -402,7 +402,7 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	}
 	if req.ValueRatio != nil {
 		arg.ValueRatio = pgtype.Numeric{}
-		arg.ValueRatio.Scan(*req.ValueRatio)
+		_ = arg.ValueRatio.Scan(*req.ValueRatio)
 	}
 	if req.MaxFee != nil {
 		arg.MaxFee = pgtype.Int8{Int64: *req.MaxFee, Valid: true}

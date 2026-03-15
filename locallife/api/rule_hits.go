@@ -9,6 +9,11 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
+type ruleHitsListResponse struct {
+	Hits  interface{} `json:"hits"`
+	Count int         `json:"count"`
+}
+
 // listRuleHits 查询规则命中记录（平台侧）
 // @Summary 查询规则命中记录
 // @Description 平台管理员查询规则命中记录
@@ -62,8 +67,5 @@ func (server *Server) listRuleHits(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"hits":  hits,
-		"count": len(hits),
-	})
+	ctx.JSON(http.StatusOK, ruleHitsListResponse{Hits: hits, Count: len(hits)})
 }

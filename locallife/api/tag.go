@@ -162,13 +162,17 @@ func (server *Server) deleteTag(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"deleted": true})
+	ctx.JSON(http.StatusOK, deleteTagResponse{Deleted: true})
 }
 
 // ==================== 商户自助经营类目 ====================
 
 type merchantTagsResponse struct {
 	Tags []tagDetailResponse `json:"tags"`
+}
+
+type deleteTagResponse struct {
+	Deleted bool `json:"deleted"`
 }
 
 type setMerchantTagsRequest struct {

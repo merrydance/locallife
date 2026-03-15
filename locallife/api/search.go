@@ -197,10 +197,10 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		}
 
 		ctx.JSON(http.StatusOK, gin.H{
-			"dishes":      response,
-			"total": total,
-			"page_id":     req.PageID,
-			"page_size":   req.PageSize,
+			"dishes":    response,
+			"total":     total,
+			"page_id":   req.PageID,
+			"page_size": req.PageSize,
 		})
 		return
 	}
@@ -224,10 +224,10 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	if err != nil {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
-				"dishes":      []searchDishResponse{},
-				"total": 0,
-				"page_id":     req.PageID,
-				"page_size":   req.PageSize,
+				"dishes":    []searchDishResponse{},
+				"total":     0,
+				"page_id":   req.PageID,
+				"page_size": req.PageSize,
 			})
 			return
 		}
@@ -303,10 +303,10 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"dishes":      response,
-		"total": total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+		"dishes":    response,
+		"total":     total,
+		"page_id":   req.PageID,
+		"page_size": req.PageSize,
 	})
 }
 
@@ -348,10 +348,10 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	if err != nil {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
-				"merchants":   []searchMerchantResponse{},
-				"total": 0,
-				"page_id":     req.PageID,
-				"page_size":   req.PageSize,
+				"merchants": []searchMerchantResponse{},
+				"total":     0,
+				"page_id":   req.PageID,
+				"page_size": req.PageSize,
 			})
 			return
 		}
@@ -442,10 +442,10 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"merchants":   response,
-		"total": total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+		"merchants": response,
+		"total":     total,
+		"page_id":   req.PageID,
+		"page_size": req.PageSize,
 	})
 }
 
@@ -488,10 +488,10 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 	if err != nil {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
-				"combos":      []searchComboResponse{},
-				"total": 0,
-				"page_id":     req.PageID,
-				"page_size":   req.PageSize,
+				"combos":    []searchComboResponse{},
+				"total":     0,
+				"page_id":   req.PageID,
+				"page_size": req.PageSize,
 			})
 			return
 		}
@@ -597,15 +597,15 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		}
 
 		if row.Tags != nil {
-			parseJSON(row.Tags, &response[i].Tags)
+			_ = parseJSON(row.Tags, &response[i].Tags)
 		}
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"combos":      response,
-		"total": total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+		"combos":    response,
+		"total":     total,
+		"page_id":   req.PageID,
+		"page_size": req.PageSize,
 	})
 }
 
@@ -690,10 +690,10 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 
 	// 解析 Tags 和 CustomizationGroups
 	if row.Tags != nil {
-		parseJSON(row.Tags, &resp.Attributes)
+		_ = parseJSON(row.Tags, &resp.Attributes)
 	}
 	if row.CustomizationGroups != nil {
-		parseJSON(row.CustomizationGroups, &resp.CustomizationGroups)
+		_ = parseJSON(row.CustomizationGroups, &resp.CustomizationGroups)
 	}
 
 	return resp
@@ -903,10 +903,10 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	if err != nil {
 		if isRegionUnavailableError(err) {
 			ctx.JSON(http.StatusOK, gin.H{
-				"rooms":       []searchRoomResponse{},
-				"total": 0,
-				"page_id":     req.PageID,
-				"page_size":   req.PageSize,
+				"rooms":     []searchRoomResponse{},
+				"total":     0,
+				"page_id":   req.PageID,
+				"page_size": req.PageSize,
 			})
 			return
 		}
@@ -996,10 +996,10 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, gin.H{
-		"rooms":       rooms,
-		"total": total,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+		"rooms":     rooms,
+		"total":     total,
+		"page_id":   req.PageID,
+		"page_size": req.PageSize,
 	})
 }
 
@@ -1292,7 +1292,7 @@ func (server *Server) deleteSearchHistory(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "ok"})
+	ctx.JSON(http.StatusOK, successMessage("ok"))
 }
 
 // clearSearchHistory godoc
@@ -1308,7 +1308,7 @@ func (server *Server) clearSearchHistory(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"message": "ok"})
+	ctx.JSON(http.StatusOK, successMessage("ok"))
 }
 
 // ── 热门搜索 ─────────────────────────────────────────────────────────────────
@@ -1492,8 +1492,7 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 		return
 	}
 
-	var id int64
-	id = regionID.Int64
+	id := regionID.Int64
 
 	categories, err := server.store.GetActiveCategoriesByRegion(ctx, id)
 	if err != nil {

@@ -48,6 +48,11 @@ type groupResponse struct {
 	UpdatedAt       time.Time `json:"updated_at"`
 }
 
+type groupApplicationReviewResponse struct {
+	Application groupApplicationResponse `json:"application"`
+	Group       groupResponse            `json:"group"`
+}
+
 type groupMerchantResponse struct {
 	ID      int64  `json:"id"`
 	Name    string `json:"name"`
@@ -587,9 +592,9 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusOK, gin.H{
-			"application": newGroupApplicationResponse(result.Application),
-			"group":       newGroupResponse(result.Group),
+		ctx.JSON(http.StatusOK, groupApplicationReviewResponse{
+			Application: newGroupApplicationResponse(result.Application),
+			Group:       newGroupResponse(result.Group),
 		})
 	case "rejected":
 		if req.RejectReason == nil || *req.RejectReason == "" {
