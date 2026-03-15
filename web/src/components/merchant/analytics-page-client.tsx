@@ -214,6 +214,7 @@ export function AnalyticsPageClient() {
       ]);
 
       const failedModules: string[] = [];
+      const failedReasons: string[] = [];
       const unwrapSettled = <T,>(
         result: PromiseSettledResult<T>,
         fallback: T,
@@ -223,6 +224,11 @@ export function AnalyticsPageClient() {
           return result.value;
         }
         failedModules.push(moduleName);
+        const reason =
+          result.reason instanceof Error
+            ? result.reason.message
+            : String(result.reason || "unknown error");
+        failedReasons.push(`${moduleName}: ${reason}`);
         return fallback;
       };
 
@@ -260,7 +266,16 @@ export function AnalyticsPageClient() {
       }
 
       if (manualRefresh && failedModules.length > 0) {
-        toast.warning(`部分模块加载失败：${failedModules.join("、")}`);
+        const modulesText = failedModules.join("、");
+        const reasonText = failedReasons
+          .slice(0, 2)
+          .map((item) => item.slice(0, 80))
+          .join("；");
+        toast.warning(
+          reasonText
+            ? `部分模块加载失败：${modulesText}（${reasonText}）`
+            : `部分模块加载失败：${modulesText}`
+        );
       }
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "数据加载失败";
