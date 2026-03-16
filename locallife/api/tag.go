@@ -118,7 +118,7 @@ func (server *Server) createTag(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, tagDetailResponse{
+	ctx.JSON(http.StatusCreated, tagDetailResponse{
 		ID:        tag.ID,
 		Name:      tag.Name,
 		Type:      tag.Type,
@@ -133,7 +133,7 @@ func (server *Server) createTag(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "标签ID"
-// @Success 200 {object} map[string]any "删除成功"
+// @Success 201 {object} map[string]any "删除成功"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "权限不足"

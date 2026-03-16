@@ -1314,7 +1314,7 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, merchantWithdrawCreateResponse{
+	ctx.JSON(http.StatusCreated, merchantWithdrawCreateResponse{
 		Withdrawal: toMerchantWithdrawItem(record),
 		Wechat:     withdrawResp,
 	})

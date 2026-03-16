@@ -269,7 +269,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusCreated, resp)
 }
 
 func writeLogicRequestError(ctx *gin.Context, err error) bool {
@@ -288,7 +288,7 @@ func writeLogicRequestError(ctx *gin.Context, err error) bool {
 // @Accept json
 // @Produce json
 // @Param request body createCombinedPaymentOrderRequest true "合单支付参数"
-// @Success 200 {object} combinedPaymentOrderResponse "合单支付订单(含小程序支付参数)"
+// @Success 201 {object} combinedPaymentOrderResponse "合单支付订单(含小程序支付参数)"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前用户"
@@ -369,7 +369,7 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 		)
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusCreated, resp)
 }
 
 // getCombinedPaymentOrder 获取合单支付订单详情
@@ -384,7 +384,7 @@ type getCombinedPaymentOrderRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path int true "合单支付订单ID"
-// @Success 200 {object} combinedPaymentOrderResponse "合单支付订单详情"
+// @Success 201 {object} combinedPaymentOrderResponse "合单支付订单详情"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
@@ -826,7 +826,7 @@ func (server *Server) createRefundOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newRefundOrderResponse(result.RefundOrder))
+	ctx.JSON(http.StatusCreated, newRefundOrderResponse(result.RefundOrder))
 }
 
 // listProfitSharingReturnsByRefund 获取退款关联的分账回退记录
@@ -841,7 +841,7 @@ type listProfitSharingReturnsByRefundRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path int true "退款订单ID"
-// @Success 200 {array} profitSharingReturnResponse "分账回退记录列表"
+// @Success 201 {array} profitSharingReturnResponse "分账回退记录列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非商户用户"

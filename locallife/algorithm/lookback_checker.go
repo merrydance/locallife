@@ -6,6 +6,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 // LookbackChecker 回溯检查器
@@ -104,7 +105,7 @@ func (lc *LookbackChecker) lookbackInPeriod(
 		orderInfo, err := lc.store.GetOrdersMerchantAndRider(ctx, orderIDs)
 		if err != nil {
 			// 查询失败不影响主流程，记录日志即可
-			fmt.Printf("Failed to get order merchant/rider info: %v\n", err)
+			log.Error().Err(err).Msg("lookback_checker: failed to get order merchant/rider info")
 		} else {
 			for _, info := range orderInfo {
 				merchants = append(merchants, info.MerchantID)

@@ -50,11 +50,11 @@ func (server *Server) uploadDishImage(ctx *gin.Context) {
 	// 上传前做图片内容安全检测：不通过则不落库/不落盘
 	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
 		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 			return
 		}
 		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片过大，请压缩后再上传")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
 			return
 		}
 

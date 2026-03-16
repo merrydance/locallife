@@ -95,7 +95,7 @@ func TestCreateDishCategoryAPI(t *testing.T) {
 					Return(db.MerchantDishCategory{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 				requireBodyMatchDishCategory(t, recorder.Body, category)
 			},
 		},
@@ -325,7 +325,7 @@ func TestCreateDishAPI(t *testing.T) {
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{

@@ -102,7 +102,7 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 		validTypes := map[string]bool{"takeout": true, "dine_in": true, "takeaway": true, "reservation": true}
 		for _, t := range allowedTypes {
 			if !validTypes[t] {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("无效的订单类型: %s，允许的类型: takeout, dine_in, takeaway, reservation", t)))
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid order type: %s; allowed: takeout, dine_in, takeaway, reservation", t)))
 				return
 			}
 		}
@@ -133,7 +133,7 @@ func (server *Server) createVoucher(ctx *gin.Context) {
 	}
 
 	rsp := convertVoucherResponse(voucher)
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusCreated, rsp)
 }
 
 // listMerchantVouchersRequest 获取商户代金券列表请求
@@ -162,7 +162,7 @@ type listMerchantVouchersResponse struct {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} listMerchantVouchersResponse "代金券列表"
+// @Success 201 {object} listMerchantVouchersResponse "代金券列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -390,7 +390,7 @@ func (server *Server) updateVoucher(ctx *gin.Context) {
 		validTypes := map[string]bool{"takeout": true, "dine_in": true, "takeaway": true, "reservation": true}
 		for _, t := range req.AllowedOrderTypes {
 			if !validTypes[t] {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("无效的订单类型: %s，允许的类型: takeout, dine_in, takeaway, reservation", t)))
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid order type: %s; allowed: takeout, dine_in, takeaway, reservation", t)))
 				return
 			}
 		}

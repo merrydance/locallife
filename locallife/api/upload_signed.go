@@ -4,7 +4,6 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -49,7 +48,7 @@ func (server *Server) signUploadURL(ctx *gin.Context) {
 
 	normalized := normalizeStoredUploadPath(req.Path)
 	if normalized == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("path参数必须是本地uploads相对路径")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidFilePath))
 		return
 	}
 	allowed, err := server.canSignUploadPath(ctx, authPayload.UserID, normalized)
@@ -58,7 +57,7 @@ func (server *Server) signUploadURL(ctx *gin.Context) {
 		return
 	}
 	if !allowed {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权访问该文件")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPermissionDenied))
 		return
 	}
 
@@ -73,7 +72,7 @@ func (server *Server) signUploadURL(ctx *gin.Context) {
 	// 对外访问路径保持为 /uploads/...（与历史一致）
 	publicPath := strings.TrimPrefix(normalized, "uploads/")
 	url := fmt.Sprintf("%s/uploads/%s?expires=%d&uid=%d&sig=%s",
-		externalBaseURL(ctx),
+		server.externalBaseURL(ctx),
 		strings.TrimPrefix(publicPath, "/"),
 		expires,
 		authPayload.UserID,
@@ -88,7 +87,7 @@ func (server *Server) getSignedUpload(ctx *gin.Context) {
 	trimmed := strings.TrimPrefix(filepathParam, "/")
 	trimmed = filepath.Clean(trimmed)
 	if trimmed == "." || strings.HasPrefix(trimmed, "..") || strings.Contains(trimmed, ".."+string(filepath.Separator)) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("非法路径")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrIllegalPath))
 		return
 	}
 
@@ -103,22 +102,22 @@ func (server *Server) getSignedUpload(ctx *gin.Context) {
 	uidStr := ctx.Query("uid")
 	sig := ctx.Query("sig")
 	if expiresStr == "" || uidStr == "" || sig == "" {
-		ctx.JSON(http.StatusUnauthorized, errorResponse(errors.New("缺少签名参数")))
+		ctx.JSON(http.StatusUnauthorized, errorResponse(ErrMissingSignatureParam))
 		return
 	}
 
 	expires, err := strconv.ParseInt(expiresStr, 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("expires参数错误")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidExpiresParam))
 		return
 	}
 	uid, err := strconv.ParseInt(uidStr, 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("uid参数错误")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidUID))
 		return
 	}
 	if time.Now().Unix() > expires {
-		ctx.JSON(http.StatusUnauthorized, errorResponse(errors.New("签名已过期")))
+		ctx.JSON(http.StatusUnauthorized, errorResponse(ErrInvalidSignature))
 		return
 	}
 
@@ -128,13 +127,13 @@ func (server *Server) getSignedUpload(ctx *gin.Context) {
 		return
 	}
 	if !allowed {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("无权访问该文件")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPermissionDenied))
 		return
 	}
 
 	expected := server.signUploadAccess(uid, expires, normalized)
 	if !hmac.Equal([]byte(sig), []byte(expected)) {
-		ctx.JSON(http.StatusUnauthorized, errorResponse(errors.New("签名无效")))
+		ctx.JSON(http.StatusUnauthorized, errorResponse(ErrInvalidSignature))
 		return
 	}
 
@@ -378,7 +377,7 @@ func (server *Server) presignPublicUpload(ctx *gin.Context, rawPath string, owne
 	}
 	if isPubliclyAccessibleUploadPath(normalized) {
 		publicPath := strings.TrimPrefix(normalized, "uploads/")
-		return fmt.Sprintf("%s/uploads/%s", externalBaseURL(ctx), strings.TrimPrefix(publicPath, "/"))
+		return fmt.Sprintf("%s/uploads/%s", server.externalBaseURL(ctx), strings.TrimPrefix(publicPath, "/"))
 	}
 	// Use a generous 1-hour TTL so consumers can view the image without re-signing.
 	ttl := time.Hour
@@ -386,7 +385,7 @@ func (server *Server) presignPublicUpload(ctx *gin.Context, rawPath string, owne
 	sig := server.signUploadAccess(ownerUserID, expires, normalized)
 	publicPath := strings.TrimPrefix(normalized, "uploads/")
 	return fmt.Sprintf("%s/uploads/%s?expires=%d&uid=%d&sig=%s",
-		externalBaseURL(ctx),
+		server.externalBaseURL(ctx),
 		strings.TrimPrefix(publicPath, "/"),
 		expires,
 		ownerUserID,

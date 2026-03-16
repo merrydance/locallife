@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strconv"
 
@@ -246,7 +245,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 
 	value, err := strconv.ParseFloat(req.Value, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的数值格式")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidNumberFormat))
 		return
 	}
 
@@ -255,7 +254,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 	switch key {
 	case "PLATFORM_COMMISSION":
 		if value < 0 || value > 100 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("比例必须在 0-100 之间")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRatioOutOfRange))
 			return
 		}
 		current, currentErr := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
@@ -271,7 +270,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 			return
 		}
 		if value+float64(operatorRate) > 100 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("平台比例与运营商比例之和不能超过100")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrProfitShareExceedsLimit))
 			return
 		}
 		if err := server.upsertGlobalProfitSharingConfig(ctx, int32(value), operatorRate, authPayload.UserID); err != nil {
@@ -281,7 +280,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 
 	case "OPERATOR_COMMISSION":
 		if value < 0 || value > 100 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("比例必须在 0-100 之间")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRatioOutOfRange))
 			return
 		}
 		current, currentErr := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
@@ -297,7 +296,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 			return
 		}
 		if float64(platformRate)+value > 100 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("平台比例与运营商比例之和不能超过100")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrProfitShareExceedsLimit))
 			return
 		}
 		if err := server.upsertGlobalProfitSharingConfig(ctx, platformRate, int32(value), authPayload.UserID); err != nil {
@@ -317,7 +316,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 
 	case "MERCHANT_DEPOSIT":
 		if value < 0 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
 			return
 		}
 
@@ -337,7 +336,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 
 	case "RIDER_DEPOSIT":
 		if value < 0 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
 			return
 		}
 
@@ -356,7 +355,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 		}
 
 	default:
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("未知规则Key")))
+		ctx.JSON(http.StatusNotFound, errorResponse(ErrUnknownRuleKey))
 		return
 	}
 

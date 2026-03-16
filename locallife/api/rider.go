@@ -86,7 +86,7 @@ func (server *Server) getRiderMe(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -127,7 +127,7 @@ func (server *Server) approveRider(ctx *gin.Context) {
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -135,7 +135,7 @@ func (server *Server) approveRider(ctx *gin.Context) {
 	}
 
 	if rider.Status != "pending" && rider.Status != "pending_bindbank" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该骑手状态不允许审核通过")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderCannotApprove))
 		return
 	}
 
@@ -177,7 +177,7 @@ func (server *Server) rejectRider(ctx *gin.Context) {
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -185,7 +185,7 @@ func (server *Server) rejectRider(ctx *gin.Context) {
 	}
 
 	if rider.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该骑手不是待审核状态")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotPending))
 		return
 	}
 
@@ -290,7 +290,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -298,7 +298,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 	}
 
 	if rider.Status != "approved" && rider.Status != "active" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您的骑手账号尚未激活")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotActivated))
 		return
 	}
 
@@ -408,7 +408,7 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -417,14 +417,14 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 
 	// 检查骑手状态：只有 active 状态才能提现
 	if rider.Status != "active" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您的骑手账号尚未激活，无法提现")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotActivated))
 		return
 	}
 
 	// 检查可用余额
 	availableBalance := rider.DepositAmount - rider.FrozenDeposit
 	if req.Amount > availableBalance {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("可用余额不足")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderInsufficientBalance))
 		return
 	}
 
@@ -435,7 +435,7 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 		return
 	}
 	if len(activeDeliveries) > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您有进行中的配送订单，无法提现")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderHasActiveOrders))
 		return
 	}
 
@@ -518,7 +518,7 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -576,7 +576,7 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -641,7 +641,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -720,7 +720,7 @@ func (server *Server) goOnline(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -728,13 +728,13 @@ func (server *Server) goOnline(ctx *gin.Context) {
 	}
 
 	if rider.Status != "active" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您的骑手账号尚未激活")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotActivated))
 		return
 	}
 
 	// 检查押金余额
 	if rider.DepositAmount-rider.FrozenDeposit < MinOnlineDeposit {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("押金余额不足，请先充值")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderDepositInsufficient))
 		return
 	}
 
@@ -774,7 +774,7 @@ func (server *Server) goOffline(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -788,7 +788,7 @@ func (server *Server) goOffline(ctx *gin.Context) {
 		return
 	}
 	if len(activeDeliveries) > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您有进行中的配送订单，无法下线")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderHasActiveOrders))
 		return
 	}
 
@@ -860,11 +860,11 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	maxPast := now.Add(-1 * time.Hour)
 	for _, loc := range req.Locations {
 		if loc.RecordedAt.After(maxFuture) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("位置记录时间不能超过当前时间5分钟")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrLocationTimestampFuture))
 			return
 		}
 		if loc.RecordedAt.Before(maxPast) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("位置记录时间不能早于1小时前")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrLocationTimestampTooOld))
 			return
 		}
 	}
@@ -874,7 +874,7 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -882,7 +882,7 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	}
 
 	if !rider.IsOnline {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您当前不在线")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderOffline))
 		return
 	}
 
@@ -900,7 +900,7 @@ func (server *Server) updateRiderLocation(ctx *gin.Context) {
 	for _, loc := range req.Locations {
 		if loc.DeliveryID != nil {
 			if activeDeliveryID == nil || *loc.DeliveryID != *activeDeliveryID {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能上报当前进行中的配送单")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderActiveOrderOnly))
 				return
 			}
 		}
@@ -1111,7 +1111,7 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, errorResponse(fmt.Errorf("未找到骑手信息")))
+		ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 		return
 	}
 
@@ -1119,7 +1119,7 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 	delivery, err := server.store.GetDeliveryByOrderID(ctx, uriReq.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("配送记录不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryRecordNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1128,7 +1128,7 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 
 	// 验证是否是该骑手的订单
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("您不是该订单的配送骑手")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrRiderNotDeliverer))
 		return
 	}
 
@@ -1140,7 +1140,7 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 	}
 
 	if order.Status != "delivering" && order.Status != "picked_up" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("当前订单状态不允许延时申报")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOrderStateNotEligible))
 		return
 	}
 
@@ -1211,7 +1211,7 @@ func (server *Server) reportException(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		ctx.JSON(http.StatusUnauthorized, errorResponse(fmt.Errorf("未找到骑手信息")))
+		ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 		return
 	}
 
@@ -1219,7 +1219,7 @@ func (server *Server) reportException(ctx *gin.Context) {
 	delivery, err := server.store.GetDeliveryByOrderID(ctx, uriReq.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("配送记录不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryRecordNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1228,7 +1228,7 @@ func (server *Server) reportException(ctx *gin.Context) {
 
 	// 验证是否是该骑手的订单
 	if !delivery.RiderID.Valid || delivery.RiderID.Int64 != rider.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("您不是该订单的配送骑手")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrRiderNotDeliverer))
 		return
 	}
 
@@ -1424,7 +1424,7 @@ func (server *Server) getRiderPremiumScore(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1435,7 +1435,7 @@ func (server *Server) getRiderPremiumScore(ctx *gin.Context) {
 	scoreInfo, err := server.store.GetRiderPremiumScoreWithProfile(ctx, rider.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手档案不存在，请联系管理员")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1524,7 +1524,7 @@ func (server *Server) listRiderPremiumScoreHistory(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

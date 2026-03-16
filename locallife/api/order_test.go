@@ -311,7 +311,7 @@ func TestCreateOrderAPI(t *testing.T) {
 					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -380,7 +380,7 @@ func TestCreateOrderAPI(t *testing.T) {
 					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -754,7 +754,7 @@ func TestCreateOrderAPI(t *testing.T) {
 					}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -2968,7 +2968,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					})
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -3324,7 +3324,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					})
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -3506,7 +3506,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 					Return(nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 	}
@@ -3705,7 +3705,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -4092,7 +4092,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 					Return(db.Cart{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 	}
@@ -4316,6 +4316,6 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 
 		addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 		server.router.ServeHTTP(recorder, request)
-		require.Equal(t, http.StatusOK, recorder.Code)
+		require.Equal(t, http.StatusCreated, recorder.Code)
 	})
 }

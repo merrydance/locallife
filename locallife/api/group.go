@@ -236,7 +236,7 @@ func (server *Server) createGroupAuditLog(ctx *gin.Context, groupID pgtype.Int8,
 // @Description 创建集团入驻申请草稿（已有草稿则返回）
 // @Tags 集团申请
 // @Produce json
-// @Success 200 {object} groupApplicationResponse
+// @Success 201 {object} groupApplicationResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/groups/applications [post]
@@ -246,6 +246,7 @@ func (server *Server) createGroupApplicationDraft(ctx *gin.Context) {
 
 	existing, err := server.store.GetLatestGroupApplicationByApplicant(ctx, authPayload.UserID)
 	if err == nil && existing.Status == "draft" {
+		// 已存在草稿，直接返回 200（这是 get-or-create 的 found 分支，不是新建资源）
 		ctx.JSON(http.StatusOK, newGroupApplicationResponse(existing))
 		return
 	}
@@ -260,7 +261,7 @@ func (server *Server) createGroupApplicationDraft(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newGroupApplicationResponse(app))
+	ctx.JSON(http.StatusCreated, newGroupApplicationResponse(app))
 }
 
 // getOrCreateGroupApplicationDraft godoc
@@ -268,7 +269,7 @@ func (server *Server) createGroupApplicationDraft(ctx *gin.Context) {
 // @Description 获取当前用户的集团入驻草稿，不存在则创建
 // @Tags 集团申请
 // @Produce json
-// @Success 200 {object} groupApplicationResponse
+// @Success 201 {object} groupApplicationResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/groups/applications/me [get]
@@ -696,7 +697,7 @@ func (server *Server) createGroup(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newGroupResponse(group))
+	ctx.JSON(http.StatusCreated, newGroupResponse(group))
 }
 
 // searchGroups godoc
@@ -707,7 +708,7 @@ func (server *Server) createGroup(ctx *gin.Context) {
 // @Param keyword query string false "关键词"
 // @Param limit query int false "分页大小"
 // @Param offset query int false "偏移"
-// @Success 200 {array} groupResponse
+// @Success 201 {array} groupResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
 // @Router /v1/groups [get]
@@ -1001,7 +1002,7 @@ func (server *Server) createGroupBrand(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newBrandResponse(brand))
+	ctx.JSON(http.StatusCreated, newBrandResponse(brand))
 }
 
 // getBrand godoc
@@ -1010,7 +1011,7 @@ func (server *Server) createGroupBrand(ctx *gin.Context) {
 // @Tags 品牌管理
 // @Produce json
 // @Param id path int true "品牌ID"
-// @Success 200 {object} brandResponse
+// @Success 201 {object} brandResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse
@@ -1129,7 +1130,7 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newGroupJoinRequestResponse(joinReq))
+	ctx.JSON(http.StatusCreated, newGroupJoinRequestResponse(joinReq))
 }
 
 // listGroupJoinRequests godoc
@@ -1138,7 +1139,7 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 // @Tags 集团管理
 // @Produce json
 // @Param id path int true "集团ID"
-// @Success 200 {array} groupJoinRequestResponse
+// @Success 201 {array} groupJoinRequestResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
@@ -1565,7 +1566,7 @@ func (server *Server) createGroupMenuTemplate(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, groupTemplateResponse{
+	ctx.JSON(http.StatusCreated, groupTemplateResponse{
 		ID:        template.ID,
 		GroupID:   template.GroupID,
 		Version:   template.Version,
@@ -1589,7 +1590,7 @@ type createBrandMenuTemplateRequest struct {
 // @Produce json
 // @Param id path int true "品牌ID"
 // @Param request body createBrandMenuTemplateRequest true "模板信息"
-// @Success 200 {object} brandTemplateResponse
+// @Success 201 {object} brandTemplateResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
@@ -1649,7 +1650,7 @@ func (server *Server) createBrandMenuTemplate(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, brandTemplateResponse{
+	ctx.JSON(http.StatusCreated, brandTemplateResponse{
 		ID:        template.ID,
 		BrandID:   template.BrandID,
 		Version:   template.Version,

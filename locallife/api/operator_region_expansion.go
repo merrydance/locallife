@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -77,7 +76,7 @@ func (server *Server) applyOperatorRegionExpansion(ctx *gin.Context) {
 
 	var req applyRegionExpansionRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请提供目标区域ID")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrTargetRegionRequired))
 		return
 	}
 
@@ -88,7 +87,7 @@ func (server *Server) applyOperatorRegionExpansion(ctx *gin.Context) {
 		operator, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
 			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("您尚未入驻为运营商")))
+				ctx.JSON(http.StatusForbidden, errorResponse(ErrNotOperator))
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -100,7 +99,7 @@ func (server *Server) applyOperatorRegionExpansion(ctx *gin.Context) {
 	region, err := server.store.GetRegion(ctx, req.RegionID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("指定的区域不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -117,7 +116,7 @@ func (server *Server) applyOperatorRegionExpansion(ctx *gin.Context) {
 		return
 	}
 	if manages {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已在管理该区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionAlreadyManaged))
 		return
 	}
 
@@ -128,11 +127,11 @@ func (server *Server) applyOperatorRegionExpansion(ctx *gin.Context) {
 	})
 	if err == nil {
 		if existing.Status == "pending" {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已提交过对该区域的扩展申请，请等待审核结果")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrRegionExpansionPending))
 			return
 		}
 		if existing.Status == "approved" {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该申请已通过，您已具备管理该区域的权限")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrRegionAlreadyManaged))
 			return
 		}
 		// 已拒绝：允许删除旧记录后重新申请
@@ -180,7 +179,7 @@ func (server *Server) listOperatorRegionApplications(ctx *gin.Context) {
 		operator, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
 		if err != nil {
 			if isNotFoundError(err) {
-				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("您尚未入驻为运营商")))
+				ctx.JSON(http.StatusForbidden, errorResponse(ErrNotOperator))
 				return
 			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -315,21 +314,21 @@ func (server *Server) approveRegionApplicationAdmin(ctx *gin.Context) {
 	app, err := server.store.GetOperatorRegionApplication(ctx, uriReq.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if app.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("仅可审核 pending 状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotPending))
 		return
 	}
 
 	// 检查区域是否已被占满（已有其他运营商管理）
 	active, err := server.store.GetActiveOperatorByRegion(ctx, app.RegionID)
 	if err == nil && active.ID != app.OperatorID {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有其他运营商管理，无法通过")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	} else if err != nil && !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -377,21 +376,21 @@ func (server *Server) rejectRegionApplicationAdmin(ctx *gin.Context) {
 	}
 	var body rejectReq
 	if err := ctx.ShouldBindJSON(&body); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请提供拒绝原因")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRejectionReasonRequired))
 		return
 	}
 
 	app, err := server.store.GetOperatorRegionApplication(ctx, uriReq.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if app.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("仅可审核 pending 状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotPending))
 		return
 	}
 

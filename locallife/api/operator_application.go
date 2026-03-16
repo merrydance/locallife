@@ -170,11 +170,11 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	existingApp, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err == nil {
 		if existingApp.Status == "approved" {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已是运营商，无需重复申请")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrAlreadyOperator))
 			return
 		}
 		if existingApp.Status == "submitted" {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("您有待审核的申请，请等待审核结果")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrOperatorApplicationPending))
 			return
 		}
 		// 返回草稿或被拒绝的申请
@@ -190,7 +190,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 检查用户是否已经是运营商
 	_, err = server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("您已是运营商，无需重复申请")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrAlreadyOperator))
 		return
 	}
 	if !isNotFoundError(err) {
@@ -201,7 +201,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 需要创建新草稿，必须提供区域ID
 	var req createOperatorApplicationRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请选择要申请的区域")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRegionSelectionRequired))
 		return
 	}
 
@@ -209,7 +209,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	region, err := server.store.GetRegion(ctx, req.RegionID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("指定的区域不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -219,7 +219,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 检查区域是否已被其他运营商占用
 	_, err = server.store.GetOperatorByRegion(ctx, req.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	}
 	if !isNotFoundError(err) {
@@ -230,7 +230,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	// 检查是否有其他人正在申请该区域
 	_, err = server.store.GetPendingOperatorApplicationByRegion(ctx, req.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasPendingApplication))
 		return
 	}
 	if !isNotFoundError(err) {
@@ -318,7 +318,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -326,7 +326,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
@@ -341,7 +341,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	region, err := server.store.GetRegion(ctx, req.RegionID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("指定的区域不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -351,7 +351,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 检查新区域是否已被占用
 	_, err = server.store.GetOperatorByRegion(ctx, req.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	}
 	if !isNotFoundError(err) {
@@ -362,7 +362,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	// 检查是否有其他人正在申请该区域
 	pendingApp, err := server.store.GetPendingOperatorApplicationByRegion(ctx, req.RegionID)
 	if err == nil && pendingApp.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请选择其他区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasPendingApplication))
 		return
 	}
 	if err != nil && !isNotFoundError(err) {
@@ -419,7 +419,7 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -427,7 +427,7 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
@@ -481,7 +481,7 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -489,14 +489,14 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
 	// 获取上传的文件
 	file, fileHeader, err := ctx.Request.FormFile("image")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请上传营业执照图片")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrBusinessLicenseRequired))
 		return
 	}
 	defer file.Close()
@@ -504,11 +504,11 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 	// 上传前内容安全检测：不通过则不保存
 	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
 		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 			return
 		}
 		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片过大，请压缩后再上传")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
@@ -585,7 +585,7 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	deleteStoredImageAsync(oldImageURL)
+	server.deleteStoredImageAsync(oldImageURL)
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
@@ -615,7 +615,7 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -623,32 +623,32 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
 	// 获取上传的文件
 	file, fileHeader, err := ctx.Request.FormFile("image")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请上传身份证图片")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardImageRequired))
 		return
 	}
 	defer file.Close()
 
 	side := ctx.PostForm("side")
 	if side != "Front" && side != "Back" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("side参数必须是Front或Back")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidIDCardSide))
 		return
 	}
 
 	// 上传前内容安全检测：不通过则不保存
 	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
 		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 			return
 		}
 		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片过大，请压缩后再上传")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
@@ -743,7 +743,7 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	deleteStoredImageAsync(oldIDCardURL)
+	server.deleteStoredImageAsync(oldIDCardURL)
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
@@ -777,7 +777,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -785,7 +785,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能提交草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationSubmitDraft))
 		return
 	}
 
@@ -816,7 +816,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	// 再次检查区域是否已被占用（防止竞态条件）
 	_, err = server.store.GetOperatorByRegion(ctx, app.RegionID)
 	if err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商运营，请修改申请区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	}
 	if !isNotFoundError(err) {
@@ -827,7 +827,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	// 检查是否有其他已提交的申请
 	pendingApp, err := server.store.GetPendingOperatorApplicationByRegion(ctx, app.RegionID)
 	if err == nil && pendingApp.ID != app.ID {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有待审核的申请，请修改申请区域")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasPendingApplication))
 		return
 	}
 	if err != nil && !isNotFoundError(err) {
@@ -849,19 +849,19 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 // validateOperatorApplicationRequired 验证必填字段
 func validateOperatorApplicationRequired(app db.OperatorApplication) error {
 	if !app.Name.Valid || app.Name.String == "" {
-		return errors.New("运营商名称不能为空")
+		return ErrOperatorNameRequired
 	}
 	if !app.ContactName.Valid || app.ContactName.String == "" {
-		return errors.New("联系人姓名不能为空")
+		return ErrContactNameRequired
 	}
 	if !app.ContactPhone.Valid || app.ContactPhone.String == "" {
-		return errors.New("联系电话不能为空")
+		return ErrPhoneRequired
 	}
 	if !app.IDCardFrontUrl.Valid || app.IDCardFrontUrl.String == "" {
-		return errors.New("请上传法人身份证正面照")
+		return ErrLegalRepIDCardFrontRequired
 	}
 	if !app.IDCardBackUrl.Valid || app.IDCardBackUrl.String == "" {
-		return errors.New("请上传法人身份证背面照")
+		return ErrLegalRepIDCardBackRequired
 	}
 	return nil
 }
@@ -886,7 +886,7 @@ func (server *Server) resetOperatorApplicationToDraft(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("没有申请记录")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -894,7 +894,7 @@ func (server *Server) resetOperatorApplicationToDraft(ctx *gin.Context) {
 	}
 
 	if app.Status != "rejected" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能重置被拒绝的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationCannotReset))
 		return
 	}
 

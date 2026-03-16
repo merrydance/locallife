@@ -56,7 +56,7 @@ func TestCreateUserAddressAPI(t *testing.T) {
 					Return(db.CreateUserAddressTxResult{Address: address}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -113,7 +113,7 @@ func TestCreateUserAddressAPI(t *testing.T) {
 					Return(db.CreateUserAddressTxResult{Address: address}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{

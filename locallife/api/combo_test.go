@@ -73,7 +73,7 @@ func TestCreateComboSetAPI(t *testing.T) {
 					Return(db.CreateComboSetTxResult{ComboSet: combo}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 				var response comboSetResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, combo.Name, response.Name)

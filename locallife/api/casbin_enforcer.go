@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/casbin/casbin/v2"
 	"github.com/casbin/casbin/v2/model"
@@ -158,11 +159,16 @@ func (ce *CasbinEnforcer) GetEnforcer() *casbin.Enforcer {
 
 // ==================== Server 集成 ====================
 
-// casbinEnforcer 是 server 级别的 enforcer 实例
-var globalCasbinEnforcer *CasbinEnforcer
+// globalCasbinEnforcer holds the process-wide Casbin enforcer.
+// atomic.Pointer gives lock-free, race-free reads and writes so that
+// concurrent requests and the initialisation path do not require an
+// explicit mutex around the pointer itself.
+var globalCasbinEnforcer atomic.Pointer[CasbinEnforcer]
 
-// InitCasbin 初始化 Casbin enforcer
-// 应在 server 启动时调用
+// InitCasbin initialises the global Casbin enforcer.
+// It is safe to call from multiple goroutines; only the first successful
+// initialisation takes effect because NewServer calls this once at startup
+// before serving requests.
 func InitCasbin(casbinDir string) error {
 	modelPath := filepath.Join(casbinDir, "model.conf")
 	policyPath := filepath.Join(casbinDir, "policy.csv")
@@ -172,18 +178,21 @@ func InitCasbin(casbinDir string) error {
 		return err
 	}
 
-	globalCasbinEnforcer = enforcer
+	globalCasbinEnforcer.Store(enforcer)
 	return nil
 }
 
-// SetGlobalCasbinEnforcer 设置全局 enforcer（用于测试）
+// SetGlobalCasbinEnforcer replaces the global enforcer atomically.
+// Intended for use in tests only.
 func SetGlobalCasbinEnforcer(enforcer *CasbinEnforcer) {
-	globalCasbinEnforcer = enforcer
+	globalCasbinEnforcer.Store(enforcer)
 }
 
-// GetGlobalCasbinEnforcer 获取全局 enforcer
+// GetGlobalCasbinEnforcer returns the current global enforcer.
+// The returned pointer is valid for the lifetime of the process or until
+// the next SetGlobalCasbinEnforcer call.
 func GetGlobalCasbinEnforcer() *CasbinEnforcer {
-	return globalCasbinEnforcer
+	return globalCasbinEnforcer.Load()
 }
 
 // ==================== Casbin 中间件 ====================
@@ -197,7 +206,8 @@ func GetGlobalCasbinEnforcer() *CasbinEnforcer {
 // 注意：此中间件必须在 authMiddleware 之后使用
 func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if globalCasbinEnforcer == nil {
+		enforcer := globalCasbinEnforcer.Load()
+		if enforcer == nil {
 			log.Error().Msg("Casbin enforcer not initialized, denying request")
 			ctx.AbortWithStatusJSON(http.StatusServiceUnavailable, errorResponse(
 				errors.New("permission system unavailable"),
@@ -240,7 +250,7 @@ func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 		act := ctx.Request.Method
 
 		// 使用 Casbin 检查权限
-		allowed, matchedRole, err := globalCasbinEnforcer.EnforceWithRoles(activeRoles, obj, act)
+		allowed, matchedRole, err := enforcer.EnforceWithRoles(activeRoles, obj, act)
 		if err != nil {
 			log.Error().Err(err).
 				Str("path", obj).
@@ -279,7 +289,8 @@ func (server *Server) CasbinMiddleware() gin.HandlerFunc {
 // 适用于需要特定角色的路由组
 func (server *Server) CasbinRoleMiddleware(requiredRole string) gin.HandlerFunc {
 	return func(ctx *gin.Context) {
-		if globalCasbinEnforcer == nil {
+		enforcer := globalCasbinEnforcer.Load()
+		if enforcer == nil {
 			log.Error().Msg("Casbin enforcer not initialized, denying request")
 			ctx.AbortWithStatusJSON(http.StatusServiceUnavailable, errorResponse(
 				errors.New("permission system unavailable"),
@@ -321,7 +332,7 @@ func (server *Server) CasbinRoleMiddleware(requiredRole string) gin.HandlerFunc 
 		act := ctx.Request.Method
 
 		// 使用 Casbin 检查权限
-		allowed, err := globalCasbinEnforcer.Enforce(requiredRole, obj, act)
+		allowed, err := enforcer.Enforce(requiredRole, obj, act)
 		if err != nil {
 			log.Error().Err(err).
 				Str("path", obj).

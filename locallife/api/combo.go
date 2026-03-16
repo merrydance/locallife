@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -13,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 套餐管理 ====================
@@ -157,7 +157,7 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, comboSetResponse{
+	ctx.JSON(http.StatusCreated, comboSetResponse{
 		ID:          result.ComboSet.ID,
 		Name:        result.ComboSet.Name,
 		Description: stringPtrFromPgText(result.ComboSet.Description),
@@ -204,7 +204,7 @@ type tagResponse struct {
 // @Tags 套餐管理
 // @Produce json
 // @Param id path int true "套餐ID"
-// @Success 200 {object} comboSetWithDetailsResponse "套餐详情"
+// @Success 201 {object} comboSetWithDetailsResponse "套餐详情"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非套餐所有者"
@@ -405,7 +405,11 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		isOpen = merchant.IsOpen && merchant.Status == "active"
 	}
 
-	log.Printf("[getPublicComboDetail] ID: %d, MerchantID: %d, IsOpen: %v", result.ID, result.MerchantID, isOpen)
+	log.Debug().
+		Int64("id", result.ID).
+		Int64("merchant_id", result.MerchantID).
+		Bool("is_open", isOpen).
+		Msg("getPublicComboDetail")
 
 	resp := comboSetWithDetailsResponse{
 		ID:            result.ID,
@@ -1033,7 +1037,7 @@ func (server *Server) enrichComboSetImages(ctx context.Context, combos []comboSe
 	// 批量查询成员图片
 	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
 	if err != nil {
-		log.Printf("failed to get combo member images: %v", err)
+		log.Error().Err(err).Msg("enrichComboListImages: failed to get combo member images")
 		return
 	}
 
@@ -1059,7 +1063,7 @@ func (server *Server) enrichSingleComboImages(ctx context.Context, combo *comboS
 	// 批量查询成员图片
 	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, []int64{combo.ID})
 	if err != nil {
-		log.Printf("failed to get combo member images: %v", err)
+		log.Error().Err(err).Int64("combo_id", combo.ID).Msg("enrichSingleComboImages: failed to get combo member images")
 		return
 	}
 

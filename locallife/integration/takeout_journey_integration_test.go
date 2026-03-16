@@ -191,7 +191,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 		require.Equal(t, "takeout", created.OrderType)
@@ -207,7 +207,7 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 		require.Equal(t, "order", payment.BusinessType)
@@ -386,7 +386,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -401,7 +401,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -545,7 +545,7 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -600,7 +600,7 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 			"order_ids": []int64{orderID},
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments/combined", body, customer.ID)
-		require.Equalf(t, http.StatusOK, rec.Code, "create combined payment failed: %s", rec.Body.String())
+		require.Equalf(t, http.StatusCreated, rec.Code, "create combined payment failed: %s", rec.Body.String())
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &combined)
 		require.Greaterf(t, combined.ID, int64(0), "create combined payment returned empty id: %s", rec.Body.String())
 		require.Equal(t, "pending", combined.Status)
@@ -681,7 +681,7 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -696,7 +696,7 @@ func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -763,7 +763,7 @@ func TestTakeoutJourneyB0CartCalculateIntegration(t *testing.T) {
 	var cart cartResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/cart/items", addBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &cart)
 		require.Equal(t, merchant.ID, cart.MerchantID)
 		require.Equal(t, 2, cart.TotalCount)
@@ -833,7 +833,7 @@ func TestTakeoutJourneyB4PaymentOrderTimeoutIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -847,7 +847,7 @@ func TestTakeoutJourneyB4PaymentOrderTimeoutIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -912,7 +912,7 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -927,7 +927,7 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -1029,7 +1029,7 @@ func TestTakeoutJourneyB5PaymentRecoveryIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -1043,7 +1043,7 @@ func TestTakeoutJourneyB5PaymentRecoveryIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -1104,7 +1104,7 @@ func TestTakeoutJourneyB6OrderPaymentTimeoutIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -1208,7 +1208,7 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 		require.Equal(t, "dine_in", created.OrderType)
@@ -1224,7 +1224,7 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -1501,7 +1501,7 @@ func TestDineInJourneyA5OrderPaymentTimeoutIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 		require.Equal(t, "dine_in", created.OrderType)
@@ -1657,7 +1657,7 @@ func TestReservationJourneyCCheckInPendingIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -1706,7 +1706,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -1720,7 +1720,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -1888,7 +1888,7 @@ func TestReservationJourneyC2StartCookingIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2008,7 +2008,7 @@ func TestReservationJourneyCPaymentTimeoutIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2076,7 +2076,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2090,7 +2090,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -2233,7 +2233,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2247,7 +2247,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -2347,7 +2347,7 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2361,7 +2361,7 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -2438,7 +2438,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2452,7 +2452,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 			"business_type": "reservation",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		require.Equal(t, "pending", payment.Status)
 	}
@@ -2593,7 +2593,7 @@ func TestClaimJourneyD1Integration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2678,7 +2678,7 @@ func TestClaimJourneyD2MerchantAppealIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2789,7 +2789,7 @@ func TestClaimJourneyD3RiderAppealIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -2805,7 +2805,7 @@ func TestClaimJourneyD3RiderAppealIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -2960,7 +2960,7 @@ func TestClaimJourneyD4OperatorReviewIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -3101,7 +3101,7 @@ func TestClaimJourneyD5AppealReviewNotificationsIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -3249,7 +3249,7 @@ func TestClaimJourneyD6AppealRejectRecoveryResumeIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -3396,7 +3396,7 @@ func TestClaimJourneyD7AppealReviewEnqueueIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -3517,7 +3517,7 @@ func TestClaimJourneyD8AppealResultWorkerIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -3654,7 +3654,7 @@ func TestClaimJourneyD9AppealResultWorkerRejectIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -3787,7 +3787,7 @@ func TestClaimJourneyD10MerchantRecoveryPayIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -3914,7 +3914,7 @@ func TestClaimJourneyD11OperatorRecoveryWaiveIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4018,7 +4018,7 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4034,7 +4034,7 @@ func TestClaimJourneyD12RiderRecoveryPayIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -4183,7 +4183,7 @@ func TestClaimJourneyD13OperatorRecoveryViewIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4270,7 +4270,7 @@ func TestClaimJourneyD14MerchantRecoveryViewIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4368,7 +4368,7 @@ func TestClaimJourneyD15RiderRecoveryViewIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4384,7 +4384,7 @@ func TestClaimJourneyD15RiderRecoveryViewIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -4521,7 +4521,7 @@ func TestClaimJourneyD16MerchantRecoveryForbiddenIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4630,7 +4630,7 @@ func TestClaimJourneyD17RiderRecoveryForbiddenIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4646,7 +4646,7 @@ func TestClaimJourneyD17RiderRecoveryForbiddenIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -4781,7 +4781,7 @@ func TestClaimJourneyD18OperatorRecoveryCrossRegionForbiddenIntegration(t *testi
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -4948,7 +4948,7 @@ func TestClaimJourneyD22MerchantRecoveryViewAfterPayIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5051,7 +5051,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5067,7 +5067,7 @@ func TestClaimJourneyD23RiderRecoveryViewAfterPayIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -5213,7 +5213,7 @@ func TestClaimJourneyD24OperatorRecoveryViewAfterWaiveIntegration(t *testing.T) 
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5326,7 +5326,7 @@ func TestClaimJourneyD25MerchantAppealDetailNotFoundIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5448,7 +5448,7 @@ func TestClaimJourneyD26RiderAppealDetailNotFoundIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5464,7 +5464,7 @@ func TestClaimJourneyD26RiderAppealDetailNotFoundIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -5613,7 +5613,7 @@ func TestClaimJourneyD27OperatorAppealDetailNotFoundIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5732,7 +5732,7 @@ func TestClaimJourneyD28OperatorReviewCrossRegionForbiddenIntegration(t *testing
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5855,7 +5855,7 @@ func TestClaimJourneyD29OperatorReviewAlreadyReviewedIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -5961,7 +5961,7 @@ func TestClaimJourneyD30MerchantAppealDuplicateIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -6050,7 +6050,7 @@ func TestReservationJourneyCConfirmBeforePaidIntegration(t *testing.T) {
 			"payment_mode":  "deposit",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/reservations", body, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -6112,7 +6112,7 @@ func TestClaimJourneyD31RiderAppealDuplicateIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -6128,7 +6128,7 @@ func TestClaimJourneyD31RiderAppealDuplicateIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -6278,7 +6278,7 @@ func TestClaimJourneyD32RiderAppealDuplicateConflictIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -6294,7 +6294,7 @@ func TestClaimJourneyD32RiderAppealDuplicateConflictIntegration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -6440,7 +6440,7 @@ func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -6506,7 +6506,7 @@ func TestClaimJourneyD33OperatorAppealListByStatusIntegration(t *testing.T) {
 	{
 		// 新建订单用于 pending 申诉
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -6803,7 +6803,7 @@ func TestClaimJourneyD37OperatorAppealListPaginationIntegration(t *testing.T) {
 
 		var created takeoutOrderResponse
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 
@@ -6899,7 +6899,7 @@ func TestClaimJourneyD38MerchantAppealListPaginationIntegration(t *testing.T) {
 
 		var created takeoutOrderResponse
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 
@@ -7035,7 +7035,7 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 
 		var created takeoutOrderResponse
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 
@@ -7047,7 +7047,7 @@ func TestClaimJourneyD39RiderAppealListPaginationIntegration(t *testing.T) {
 				"business_type": "order",
 			}
 			rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-			require.Equal(t, http.StatusOK, rec.Code)
+			require.Equal(t, http.StatusCreated, rec.Code)
 			requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 		}
 
@@ -7486,7 +7486,7 @@ func TestTakeoutJourneyB2Integration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}
@@ -7501,7 +7501,7 @@ func TestTakeoutJourneyB2Integration(t *testing.T) {
 			"business_type": "order",
 		}
 		rec := doJSON(t, server, http.MethodPost, "/v1/payments", payBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &payment)
 	}
 
@@ -7762,7 +7762,7 @@ func TestTakeoutJourneyB3Integration(t *testing.T) {
 	var created takeoutOrderResponse
 	{
 		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
-		require.Equal(t, http.StatusOK, rec.Code)
+		require.Equal(t, http.StatusCreated, rec.Code)
 		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
 		require.Equal(t, "pending", created.Status)
 	}

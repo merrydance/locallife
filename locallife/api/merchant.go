@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"math/big"
 	"net/http"
 	"strconv"
@@ -20,6 +19,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
 
 // 中国经纬度范围常量
@@ -150,7 +150,7 @@ func (server *Server) uploadMerchantImage(ctx *gin.Context) {
 	if req.Category == "logo" {
 		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
 			if errors.Is(err, wechat.ErrRiskyContent) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 				return
 			}
 
@@ -391,7 +391,7 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 		if lat, err := parseNumericString(*req.Latitude); err == nil {
 			latFloat, _ := strconv.ParseFloat(*req.Latitude, 64)
 			if latFloat < minLatitude || latFloat > maxLatitude {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("纬度必须在 %.1f 到 %.1f 之间", minLatitude, maxLatitude)))
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("latitude must be between %.1f and %.1f", minLatitude, maxLatitude)))
 				return
 			}
 			arg.Latitude = lat
@@ -405,7 +405,7 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 		if lng, err := parseNumericString(*req.Longitude); err == nil {
 			lngFloat, _ := strconv.ParseFloat(*req.Longitude, 64)
 			if lngFloat < minLongitude || lngFloat > maxLongitude {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("经度必须在 %.1f 到 %.1f 之间", minLongitude, maxLongitude)))
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("longitude must be between %.1f and %.1f", minLongitude, maxLongitude)))
 				return
 			}
 			arg.Longitude = lng
@@ -464,11 +464,11 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 		return
 	}
 	if len(req.StorefrontImages) > 3 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("门头照最多3张")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrTooManyStorefrontPhotos))
 		return
 	}
 	if len(req.EnvironmentImages) > 5 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("环境照最多5张")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrTooManyAmbientPhotos))
 		return
 	}
 
@@ -493,7 +493,7 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 	updatedApp, err := server.store.UpdateMerchantApplicationShopImages(ctx, arg)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请记录不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1667,7 +1667,7 @@ func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []
 	// 批量查询成员图片
 	memberImages, err := server.store.GetComboMemberImagesByCombos(ctx, comboIDs)
 	if err != nil {
-		log.Printf("[enrichPublicComboListImages] failed to get images: %v", err)
+		log.Error().Err(err).Msg("enrichPublicComboListImages: failed to get images")
 		return
 	}
 

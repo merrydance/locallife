@@ -294,7 +294,7 @@ func (server *Server) createRechargeRule(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, convertRechargeRuleResponse(rule))
+	ctx.JSON(http.StatusCreated, convertRechargeRuleResponse(rule))
 }
 
 // listRechargeRulesRequest 获取充值规则列表请求
@@ -308,7 +308,7 @@ type listRechargeRulesRequest struct {
 // @Tags 会员管理
 // @Produce json
 // @Param id path int true "商户ID"
-// @Success 200 {array} rechargeRuleResponse "规则列表"
+// @Success 201 {array} rechargeRuleResponse "规则列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 500 {object} ErrorResponse "服务器错误"
 // @Router /v1/merchants/{id}/recharge-rules [get]

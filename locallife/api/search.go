@@ -46,6 +46,56 @@ type searchMerchantsRequest struct {
 	UserLongitude *float64 `form:"user_longitude" binding:"omitempty"` // 用户当前经度
 }
 
+type searchDishListResponse struct {
+	Dishes   []searchDishResponse `json:"dishes"`
+	Total    int64                `json:"total"`
+	PageID   int32                `json:"page_id"`
+	PageSize int32                `json:"page_size"`
+}
+
+type searchMerchantListResponse struct {
+	Merchants []searchMerchantResponse `json:"merchants"`
+	Total     int64                    `json:"total"`
+	PageID    int32                    `json:"page_id"`
+	PageSize  int32                    `json:"page_size"`
+}
+
+type searchComboListResponse struct {
+	Combos   []searchComboResponse `json:"combos"`
+	Total    int64                 `json:"total"`
+	PageID   int32                 `json:"page_id"`
+	PageSize int32                 `json:"page_size"`
+}
+
+type searchRoomListResponse struct {
+	Rooms    []searchRoomResponse `json:"rooms"`
+	Total    int64                `json:"total"`
+	PageID   int32                `json:"page_id"`
+	PageSize int32                `json:"page_size"`
+}
+
+type searchHistoryListResponse struct {
+	History []db.ListSearchHistoryRow `json:"history"`
+}
+
+type searchKeywordsListResponse struct {
+	Keywords []db.GetPopularKeywordsRow `json:"keywords"`
+}
+
+type searchSuggestionsListResponse struct {
+	Suggestions []searchSuggestionItem `json:"suggestions"`
+}
+
+type searchCategoryItem struct {
+	ID            int64  `json:"id"`
+	Name          string `json:"name"`
+	MerchantCount int32  `json:"merchant_count"`
+}
+
+type searchCategoriesListResponse struct {
+	Categories []searchCategoryItem `json:"categories"`
+}
+
 type searchDishResponse struct {
 	ID             int64   `json:"id"`
 	MerchantID     int64   `json:"merchant_id"`
@@ -196,11 +246,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 			response[i] = newSearchDishResponseFromDish(dish)
 		}
 
-		ctx.JSON(http.StatusOK, gin.H{
-			"dishes":    response,
-			"total":     total,
-			"page_id":   req.PageID,
-			"page_size": req.PageSize,
+		ctx.JSON(http.StatusOK, searchDishListResponse{
+			Dishes:   response,
+			Total:    total,
+			PageID:   req.PageID,
+			PageSize: req.PageSize,
 		})
 		return
 	}
@@ -223,11 +273,10 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
 		if isRegionUnavailableError(err) {
-			ctx.JSON(http.StatusOK, gin.H{
-				"dishes":    []searchDishResponse{},
-				"total":     0,
-				"page_id":   req.PageID,
-				"page_size": req.PageSize,
+			ctx.JSON(http.StatusOK, searchDishListResponse{
+				Dishes:   []searchDishResponse{},
+				PageID:   req.PageID,
+				PageSize: req.PageSize,
 			})
 			return
 		}
@@ -302,11 +351,11 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"dishes":    response,
-		"total":     total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+	ctx.JSON(http.StatusOK, searchDishListResponse{
+		Dishes:   response,
+		Total:    total,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -322,9 +371,9 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
 // @Param user_latitude query number false "用户当前纬度（用于计算距离和运费）"
 // @Param user_longitude query number false "用户当前经度（用于计算距离和运费）"
-// @Success 200 {object} map[string]interface{} "搜索结果"
-// @Failure 400 {object} map[string]string "请求参数错误"
-// @Failure 500 {object} map[string]string "服务器内部错误"
+// @Success 200 {object} searchMerchantListResponse "搜索结果"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/merchants [get]
 func (server *Server) searchMerchants(ctx *gin.Context) {
@@ -347,11 +396,10 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 	merchantRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
 		if isRegionUnavailableError(err) {
-			ctx.JSON(http.StatusOK, gin.H{
-				"merchants": []searchMerchantResponse{},
-				"total":     0,
-				"page_id":   req.PageID,
-				"page_size": req.PageSize,
+			ctx.JSON(http.StatusOK, searchMerchantListResponse{
+				Merchants: []searchMerchantResponse{},
+				PageID:    req.PageID,
+				PageSize:  req.PageSize,
 			})
 			return
 		}
@@ -441,11 +489,11 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"merchants": response,
-		"total":     total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+	ctx.JSON(http.StatusOK, searchMerchantListResponse{
+		Merchants: response,
+		Total:     total,
+		PageID:    req.PageID,
+		PageSize:  req.PageSize,
 	})
 }
 
@@ -461,9 +509,9 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
 // @Param user_latitude query number false "用户当前纬度"
 // @Param user_longitude query number false "用户当前经度"
-// @Success 200 {object} map[string]interface{} "搜索结果"
-// @Failure 400 {object} map[string]string "请求参数错误"
-// @Failure 500 {object} map[string]string "服务器内部错误"
+// @Success 200 {object} searchComboListResponse "搜索结果"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/combos [get]
 func (server *Server) searchCombos(ctx *gin.Context) {
@@ -487,11 +535,10 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 	comboRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
 		if isRegionUnavailableError(err) {
-			ctx.JSON(http.StatusOK, gin.H{
-				"combos":    []searchComboResponse{},
-				"total":     0,
-				"page_id":   req.PageID,
-				"page_size": req.PageSize,
+			ctx.JSON(http.StatusOK, searchComboListResponse{
+				Combos:   []searchComboResponse{},
+				PageID:   req.PageID,
+				PageSize: req.PageSize,
 			})
 			return
 		}
@@ -601,11 +648,11 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"combos":    response,
-		"total":     total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+	ctx.JSON(http.StatusOK, searchComboListResponse{
+		Combos:   response,
+		Total:    total,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -870,9 +917,9 @@ type searchRoomResponse struct {
 // @Param tag_id query int false "菜系/标签ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
-// @Success 200 {object} map[string]interface{} "搜索结果"
-// @Failure 400 {object} map[string]string "请求参数错误"
-// @Failure 500 {object} map[string]string "服务器内部错误"
+// @Success 200 {object} searchRoomListResponse "搜索结果"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/rooms [get]
 func (server *Server) searchRooms(ctx *gin.Context) {
@@ -902,11 +949,10 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
 		if isRegionUnavailableError(err) {
-			ctx.JSON(http.StatusOK, gin.H{
-				"rooms":     []searchRoomResponse{},
-				"total":     0,
-				"page_id":   req.PageID,
-				"page_size": req.PageSize,
+			ctx.JSON(http.StatusOK, searchRoomListResponse{
+				Rooms:    []searchRoomResponse{},
+				PageID:   req.PageID,
+				PageSize: req.PageSize,
 			})
 			return
 		}
@@ -995,11 +1041,11 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"rooms":     rooms,
-		"total":     total,
-		"page_id":   req.PageID,
-		"page_size": req.PageSize,
+	ctx.JSON(http.StatusOK, searchRoomListResponse{
+		Rooms:    rooms,
+		Total:    total,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -1238,6 +1284,9 @@ type listSearchHistoryRequest struct {
 // listSearchHistory godoc
 // @Summary 获取搜索历史
 // @Tags Search
+// @Success 200 {object} searchHistoryListResponse "搜索历史列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/history [get]
 func (server *Server) listSearchHistory(ctx *gin.Context) {
@@ -1263,7 +1312,7 @@ func (server *Server) listSearchHistory(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"history": history})
+	ctx.JSON(http.StatusOK, searchHistoryListResponse{History: history})
 }
 
 type deleteSearchHistoryRequest struct {
@@ -1273,6 +1322,9 @@ type deleteSearchHistoryRequest struct {
 // deleteSearchHistory godoc
 // @Summary 删除单条搜索历史
 // @Tags Search
+// @Success 200 {object} successMessageResponse "删除成功"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/history/{id} [delete]
 func (server *Server) deleteSearchHistory(ctx *gin.Context) {
@@ -1298,6 +1350,8 @@ func (server *Server) deleteSearchHistory(ctx *gin.Context) {
 // clearSearchHistory godoc
 // @Summary 清除全部搜索历史
 // @Tags Search
+// @Success 200 {object} successMessageResponse "清除成功"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/history [delete]
 func (server *Server) clearSearchHistory(ctx *gin.Context) {
@@ -1321,6 +1375,9 @@ type getPopularKeywordsRequest struct {
 // getPopularKeywords godoc
 // @Summary 获取热门搜索关键词
 // @Tags Search
+// @Success 200 {object} searchKeywordsListResponse "热门关键词列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/popular [get]
 func (server *Server) getPopularKeywords(ctx *gin.Context) {
@@ -1348,7 +1405,7 @@ func (server *Server) getPopularKeywords(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"keywords": keywords})
+	ctx.JSON(http.StatusOK, searchKeywordsListResponse{Keywords: keywords})
 }
 
 // ── 搜索建议 ─────────────────────────────────────────────────────────────────
@@ -1367,6 +1424,8 @@ type searchSuggestionItem struct {
 // getSearchSuggestions godoc
 // @Summary 实时搜索建议（前缀匹配）
 // @Tags Search
+// @Success 200 {object} searchSuggestionsListResponse "搜索建议列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Security BearerAuth
 // @Router /v1/search/suggestions [get]
 func (server *Server) getSearchSuggestions(ctx *gin.Context) {
@@ -1426,7 +1485,7 @@ func (server *Server) getSearchSuggestions(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"suggestions": suggestions})
+	ctx.JSON(http.StatusOK, searchSuggestionsListResponse{Suggestions: suggestions})
 }
 
 // ── 辅助：统一搜索入口（记录历史 + 热词）────────────────────────────────────
@@ -1463,9 +1522,9 @@ func (server *Server) recordSearchKeyword(userID int64, keyword, ktype string) {
 // @Param region_id query int false "区域ID（可选，优先于坐标）"
 // @Param user_latitude query number false "用户当前纬度"
 // @Param user_longitude query number false "用户当前经度"
-// @Success 200 {object} map[string]interface{} "品类列表"
-// @Failure 400 {object} map[string]string "请求参数错误"
-// @Failure 500 {object} map[string]string "服务器内部错误"
+// @Success 200 {object} searchCategoriesListResponse "品类列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Security BearerAuth
 // @Router /v1/search/categories [get]
 func (server *Server) searchCategories(ctx *gin.Context) {
@@ -1485,7 +1544,7 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 	regionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
 		if isRegionUnavailableError(err) {
-			ctx.JSON(http.StatusOK, gin.H{"categories": []interface{}{}})
+			ctx.JSON(http.StatusOK, searchCategoriesListResponse{Categories: []searchCategoryItem{}})
 			return
 		}
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -1500,23 +1559,17 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 		return
 	}
 
-	type categoryItem struct {
-		ID            int64  `json:"id"`
-		Name          string `json:"name"`
-		MerchantCount int32  `json:"merchant_count"`
-	}
-
-	result := make([]categoryItem, len(categories))
+	result := make([]searchCategoryItem, len(categories))
 	for i, c := range categories {
-		result[i] = categoryItem{
+		result[i] = searchCategoryItem{
 			ID:            c.ID,
 			Name:          c.Name,
 			MerchantCount: c.MerchantCount,
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"categories": result,
+	ctx.JSON(http.StatusOK, searchCategoriesListResponse{
+		Categories: result,
 	})
 }
 

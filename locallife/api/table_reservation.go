@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 预定管理 ====================
@@ -97,6 +98,66 @@ type reservationItemResponse struct {
 	UnitPrice  int64  `json:"unit_price"`
 	TotalPrice int64  `json:"total_price"`
 	Type       string `json:"type,omitempty"`
+}
+
+type reservationListResponse struct {
+	Reservations []reservationResponse `json:"reservations"`
+	Total        int64                 `json:"total"`
+	PageID       int32                 `json:"page_id"`
+	PageSize     int32                 `json:"page_size"`
+}
+
+type reservationDishSummaryDateResponse struct {
+	Date  string                       `json:"date"`
+	Items []reservationDishSummaryItem `json:"items"`
+}
+
+type addDishesPaymentResponse struct {
+	Message        string `json:"message"`
+	PaymentOrderID int64  `json:"payment_order_id"`
+	Amount         int64  `json:"amount"`
+	ItemsCount     int    `json:"items_count"`
+}
+
+type addDishesSuccessResponse struct {
+	Message    string `json:"message"`
+	Amount     int64  `json:"amount"`
+	ItemsCount int    `json:"items_count"`
+	Note       string `json:"note"`
+}
+
+type modifyDishesPaymentResponse struct {
+	Message        string `json:"message"`
+	PaymentOrderID int64  `json:"payment_order_id"`
+	Amount         int64  `json:"amount"`
+	ItemsCount     int    `json:"items_count"`
+}
+
+type modifyDishesRefundResponse struct {
+	Message      string `json:"message"`
+	RefundAmount int64  `json:"refund_amount"`
+	ItemsCount   int    `json:"items_count"`
+}
+
+type modifyDishesSuccessResponse struct {
+	Message    string `json:"message"`
+	ItemsCount int    `json:"items_count"`
+	Delta      int64  `json:"delta"`
+}
+
+type reservationSliceResponse struct {
+	Reservations []reservationResponse `json:"reservations"`
+}
+
+type reservationStatsResponse struct {
+	PendingCount   int64 `json:"pending_count"`
+	PaidCount      int64 `json:"paid_count"`
+	ConfirmedCount int64 `json:"confirmed_count"`
+	CheckedInCount int64 `json:"checked_in_count"`
+	CompletedCount int64 `json:"completed_count"`
+	CancelledCount int64 `json:"cancelled_count"`
+	ExpiredCount   int64 `json:"expired_count"`
+	NoShowCount    int64 `json:"no_show_count"`
 }
 
 func newReservationResponse(r db.TableReservation) reservationResponse {
@@ -378,13 +439,12 @@ func (server *Server) createReservation(ctx *gin.Context) {
 			asynq.ProcessAt(result.Reservation.PaymentDeadline),
 		)
 		if err != nil {
-			// 任务分发失败不影响主流程，记录日志
-			// 可以通过定时任务轮询处理超时预定作为兜底
-			_ = err
+			// 任务分发失败不影响主流程，定时任务轮询超时预定作为兜底
+			log.Warn().Err(err).Int64("reservation_id", result.Reservation.ID).Msg("failed to distribute reservation timeout task, non-fatal")
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newReservationResponse(result.Reservation))
+	ctx.JSON(http.StatusCreated, newReservationResponse(result.Reservation))
 }
 
 type getReservationRequest struct {
@@ -398,7 +458,7 @@ type getReservationRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path int64 true "预定ID"
-// @Success 200 {object} reservationResponse
+// @Success 201 {object} reservationResponse
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "无权访问该预定"
@@ -611,11 +671,11 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"reservations": resp,
-		"total":        totalCount,
-		"page_id":      req.PageID,
-		"page_size":    req.PageSize,
+	ctx.JSON(http.StatusOK, reservationListResponse{
+		Reservations: resp,
+		Total:        totalCount,
+		PageID:       req.PageID,
+		PageSize:     req.PageSize,
 	})
 }
 
@@ -800,9 +860,9 @@ func (server *Server) listMerchantReservationDishes(ctx *gin.Context) {
 		return result[i].TotalQuantity > result[j].TotalQuantity
 	})
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"date":  req.Date,
-		"items": result,
+	ctx.JSON(http.StatusOK, reservationDishSummaryDateResponse{
+		Date:  req.Date,
+		Items: result,
 	})
 }
 
@@ -816,7 +876,7 @@ func (server *Server) listMerchantReservationDishes(ctx *gin.Context) {
 // @Param status query string false "筛选状态" Enums(pending, paid, confirmed, completed, cancelled, expired, no_show)
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} object{reservations=[]reservationResponse}
+// @Success 200 {object} reservationListResponse
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非商户"
@@ -1041,11 +1101,11 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 		totalCount = count
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"reservations": resp,
-		"total":        totalCount,
-		"page_id":      req.PageID,
-		"page_size":    req.PageSize,
+	ctx.JSON(http.StatusOK, reservationListResponse{
+		Reservations: resp,
+		Total:        totalCount,
+		PageID:       req.PageID,
+		PageSize:     req.PageSize,
 	})
 }
 
@@ -1249,7 +1309,7 @@ type getReservationStatsRequest struct {
 // @Tags 预定管理-商户
 // @Accept json
 // @Produce json
-// @Success 200 {object} object{pending_count=int64,paid_count=int64,confirmed_count=int64,completed_count=int64,cancelled_count=int64,expired_count=int64,no_show_count=int64}
+// @Success 200 {object} reservationStatsResponse
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "非商户"
 // @Failure 500 {object} ErrorResponse "服务器错误"
@@ -1281,15 +1341,15 @@ func (server *Server) getReservationStats(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"pending_count":    stats.PendingCount,
-		"paid_count":       stats.PaidCount,
-		"confirmed_count":  stats.ConfirmedCount,
-		"checked_in_count": stats.CheckedInCount,
-		"completed_count":  stats.CompletedCount,
-		"cancelled_count":  stats.CancelledCount,
-		"expired_count":    stats.ExpiredCount,
-		"no_show_count":    stats.NoShowCount,
+	ctx.JSON(http.StatusOK, reservationStatsResponse{
+		PendingCount:   stats.PendingCount,
+		PaidCount:      stats.PaidCount,
+		ConfirmedCount: stats.ConfirmedCount,
+		CheckedInCount: stats.CheckedInCount,
+		CompletedCount: stats.CompletedCount,
+		CancelledCount: stats.CancelledCount,
+		ExpiredCount:   stats.ExpiredCount,
+		NoShowCount:    stats.NoShowCount,
 	})
 }
 
@@ -1358,20 +1418,20 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	}
 
 	if result.Payment != nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"message":          "additional dishes added, payment required",
-			"payment_order_id": result.Payment.ID,
-			"amount":           result.AddedAmount,
-			"items_count":      len(req.Items),
+		ctx.JSON(http.StatusOK, addDishesPaymentResponse{
+			Message:        "additional dishes added, payment required",
+			PaymentOrderID: result.Payment.ID,
+			Amount:         result.AddedAmount,
+			ItemsCount:     len(req.Items),
 		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":     "additional dishes added successfully",
-		"amount":      result.AddedAmount,
-		"items_count": len(req.Items),
-		"note":        "payment will be settled on site",
+	ctx.JSON(http.StatusOK, addDishesSuccessResponse{
+		Message:    "additional dishes added successfully",
+		Amount:     result.AddedAmount,
+		ItemsCount: len(req.Items),
+		Note:       "payment will be settled on site",
 	})
 }
 
@@ -1437,28 +1497,28 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 	}
 
 	if result.Payment != nil {
-		ctx.JSON(http.StatusOK, gin.H{
-			"message":          "reservation modified, payment required",
-			"payment_order_id": result.Payment.ID,
-			"amount":           result.Delta,
-			"items_count":      len(req.Items),
+		ctx.JSON(http.StatusOK, modifyDishesPaymentResponse{
+			Message:        "reservation modified, payment required",
+			PaymentOrderID: result.Payment.ID,
+			Amount:         result.Delta,
+			ItemsCount:     len(req.Items),
 		})
 		return
 	}
 
 	if result.RefundInitiated {
-		ctx.JSON(http.StatusOK, gin.H{
-			"message":       "reservation modified, refund initiated",
-			"refund_amount": result.RefundAmount,
-			"items_count":   len(req.Items),
+		ctx.JSON(http.StatusOK, modifyDishesRefundResponse{
+			Message:      "reservation modified, refund initiated",
+			RefundAmount: result.RefundAmount,
+			ItemsCount:   len(req.Items),
 		})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{
-		"message":     "reservation modified successfully",
-		"items_count": len(req.Items),
-		"delta":       result.Delta,
+	ctx.JSON(http.StatusOK, modifyDishesSuccessResponse{
+		Message:    "reservation modified successfully",
+		ItemsCount: len(req.Items),
+		Delta:      result.Delta,
 	})
 }
 
@@ -1860,5 +1920,5 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, gin.H{"reservations": resp})
+	ctx.JSON(http.StatusOK, reservationSliceResponse{Reservations: resp})
 }

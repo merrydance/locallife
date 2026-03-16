@@ -262,7 +262,7 @@ func TestAddCartItemAPI(t *testing.T) {
 					Return([]db.ListCartItemsRow{listRow}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -853,6 +853,7 @@ func TestCalculateCartAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	merchant.Status = "active"
+	merchant.IsOpen = true
 	cart := randomCart(user.ID, merchant.ID)
 	dish := randomDish(merchant.ID, nil)
 	cartItem := randomCartItem(cart.ID, dish)

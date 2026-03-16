@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -160,7 +159,7 @@ func (server *Server) getOperatorApplicationDetailAdmin(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationByID(ctx, uriReq.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -208,7 +207,7 @@ func (server *Server) getOperatorRegionsAdmin(ctx *gin.Context) {
 
 	if _, err := server.store.GetOperator(ctx, uri.OperatorID); err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("运营商不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrOperatorNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -253,7 +252,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	app, err := server.store.GetOperatorApplicationByID(ctx, uriReq.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -261,12 +260,12 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	}
 
 	if app.Status != "submitted" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("仅可审核 submitted 状态申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotSubmitted))
 		return
 	}
 
 	if _, err := server.store.GetOperatorByUser(ctx, app.UserID); err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该用户已是运营商")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrAlreadyOperator))
 		return
 	} else if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -274,7 +273,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	}
 
 	if _, err := server.store.GetOperatorByRegion(ctx, app.RegionID); err == nil {
-		ctx.JSON(http.StatusConflict, errorResponse(errors.New("该区域已有运营商")))
+		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	} else if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -290,7 +289,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("申请状态已变化，无法审核通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationStateChanged))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -299,7 +298,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 
 	operatorName := operatorNameFromApprovedApplication(approved)
 	if operatorName == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("运营商名称不能为空，请补全申请资料后再审核")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOperatorNameRequired))
 		return
 	}
 	contactName := strings.TrimSpace(approved.ContactName.String)
@@ -402,7 +401,7 @@ func (server *Server) rejectOperatorApplicationAdmin(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("申请状态已变化，无法驳回")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationStateChanged))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

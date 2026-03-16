@@ -157,8 +157,8 @@ export interface CalculateCartResponse {
     buffer_minutes?: number       // 缓冲时间（分钟）
     discount_amount: number       // 优惠券减免金额（分）
     discount_info: string         // 优惠说明
-    meets_min_order: boolean      // 是否满足起送金额
-    min_order_amount: number      // 最小起送金额（分），0表示无限制
+    meets_min_order?: boolean     // 是否满足起送金额；字段缺失即无起送限制
+    min_order_amount?: number     // 最小起送金额（分）；字段缺失即无起送限制
     total_amount: number          // 实付金额（分）
     applied_promotions?: Array<{  // 已应用的优惠明细
         title: string

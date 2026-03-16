@@ -243,7 +243,7 @@ func (server *Server) createDeliveryFeeConfig(ctx *gin.Context) {
 	config, err := server.store.CreateDeliveryFeeConfig(ctx, arg)
 	if err != nil {
 		if db.ErrorCode(err) == db.UniqueViolation {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("delivery fee config already exists for this region")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrDeliveryFeeConfigExists))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -299,7 +299,7 @@ func (server *Server) getDeliveryFeeConfig(ctx *gin.Context) {
 	config, err := server.store.GetDeliveryFeeConfigByRegion(ctx, uri.RegionID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery fee config not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryFeeConfigNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -360,7 +360,7 @@ func (server *Server) updateDeliveryFeeConfig(ctx *gin.Context) {
 	existingConfig, err := server.store.GetDeliveryFeeConfigByRegion(ctx, uri.RegionID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery fee config not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryFeeConfigNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -562,13 +562,13 @@ func (server *Server) createPeakHourConfig(ctx *gin.Context) {
 
 	startTime, err := parsePgTime(req.StartTime)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid start_time format, expected HH:MM")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidStartTimeFormat))
 		return
 	}
 
 	endTime, err := parsePgTime(req.EndTime)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid end_time format, expected HH:MM")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidEndTimeFormat))
 		return
 	}
 
@@ -678,7 +678,7 @@ func (server *Server) deletePeakHourConfig(ctx *gin.Context) {
 	config, err := server.store.GetPeakHourConfig(ctx, uri.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("peak hour config not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrPeakHourConfigNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -794,12 +794,12 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
 		return
 	}
 
 	if merchant.ID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only manage your own merchant's promotions")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionManageMerchantOnly))
 		return
 	}
 
@@ -811,24 +811,24 @@ func (server *Server) createDeliveryPromotion(ctx *gin.Context) {
 
 	validFrom, err := time.Parse(time.RFC3339, req.ValidFrom)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_from format, expected RFC3339")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidFromFormat))
 		return
 	}
 
 	validUntil, err := time.Parse(time.RFC3339, req.ValidUntil)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_until format, expected RFC3339")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidUntilFormat))
 		return
 	}
 
 	if validUntil.Before(validFrom) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("valid_until must be after valid_from")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrValidUntilBeforeValidFrom))
 		return
 	}
 
 	// 业务规则：折扣金额不能超过最低订单金额
 	if req.DiscountAmount > req.MinOrderAmount && req.MinOrderAmount > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("discount_amount cannot exceed min_order_amount")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrDiscountExceedsMinOrder))
 		return
 	}
 
@@ -896,12 +896,12 @@ func (server *Server) listDeliveryPromotions(ctx *gin.Context) {
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
 		return
 	}
 
 	if merchant.ID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only view your own merchant's promotions")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionViewMerchantOnly))
 		return
 	}
 
@@ -951,12 +951,12 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 	// 验证商户权限：当前用户必须是该商户的所有者
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
 		return
 	}
 
 	if merchant.ID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only delete your own merchant's promotions")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionDeleteMerchantOnly))
 		return
 	}
 
@@ -964,7 +964,7 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 	promo, err := server.store.GetDeliveryPromotion(ctx, uri.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery promotion not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryPromotionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -973,7 +973,7 @@ func (server *Server) deleteDeliveryPromotion(ctx *gin.Context) {
 
 	// 验证促销属于该商户
 	if promo.MerchantID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("promotion does not belong to this merchant")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionNotOwnedByMerchant))
 		return
 	}
 
@@ -1027,12 +1027,12 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	// 验证商户权限
 	merchant, exists := GetMerchantFromContext(ctx)
 	if !exists {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("merchant information not found")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrDeliveryMerchantInfoNotFound))
 		return
 	}
 
 	if merchant.ID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you can only update your own merchant's promotions")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionUpdateMerchantOnly))
 		return
 	}
 
@@ -1046,7 +1046,7 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	existingPromo, err := server.store.GetDeliveryPromotion(ctx, uri.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("delivery promotion not found")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrDeliveryPromotionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1054,7 +1054,7 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	}
 
 	if existingPromo.MerchantID != uri.MerchantID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("promotion does not belong to this merchant")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrPromotionNotOwnedByMerchant))
 		return
 	}
 
@@ -1074,7 +1074,7 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	if req.ValidFrom != nil {
 		t, err := time.Parse(time.RFC3339, *req.ValidFrom)
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_from format")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidFromFormat))
 			return
 		}
 		arg.ValidFrom = pgtype.Timestamptz{Time: t, Valid: true}
@@ -1082,7 +1082,7 @@ func (server *Server) updateDeliveryPromotion(ctx *gin.Context) {
 	if req.ValidUntil != nil {
 		t, err := time.Parse(time.RFC3339, *req.ValidUntil)
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid valid_until format")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidValidUntilFormat))
 			return
 		}
 		arg.ValidUntil = pgtype.Timestamptz{Time: t, Valid: true}
@@ -1239,11 +1239,7 @@ type DeliveryFeeResult struct {
 	SuspendReason       string
 }
 
-// 运费计算相关错误
-var (
-	ErrDeliveryFeeConfigNotFound = errors.New("delivery fee config not found for this region")
-	ErrDeliveryServiceDisabled   = errors.New("delivery service is disabled for this region")
-)
+// ErrDeliveryFeeConfigNotFound 和 ErrDeliveryServiceDisabled 已迁移至 api/apierrors.go
 
 // calculateDeliveryFeeInternal 内部运费计算方法，供其他模块调用
 // 此方法会自动获取配置，如果配置不存在则使用默认值

@@ -242,7 +242,7 @@ func (server *Server) updateRiderApplicationBasic(ctx *gin.Context) {
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
@@ -250,7 +250,7 @@ func (server *Server) updateRiderApplicationBasic(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
@@ -297,7 +297,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
@@ -305,32 +305,32 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
 	// 获取上传的文件
 	file, fileHeader, err := ctx.Request.FormFile("image")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请上传身份证图片")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardImageRequired))
 		return
 	}
 	defer file.Close()
 
 	side := ctx.PostForm("side")
 	if side != "Front" && side != "Back" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("side参数必须是Front或Back")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidIDCardSide))
 		return
 	}
 
 	// 上传前内容安全检测：不通过则不保存
 	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
 		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 			return
 		}
 		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片过大，请压缩后再上传")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat img sec check: %w", err)))
@@ -425,7 +425,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update rider application idcard: %w", err)))
 		return
 	}
-	deleteStoredImageAsync(oldIDCardURL)
+	server.deleteStoredImageAsync(oldIDCardURL)
 
 	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
 }
@@ -452,7 +452,7 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
@@ -460,13 +460,13 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能修改草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
 
 	file, fileHeader, err := ctx.Request.FormFile("image")
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请上传健康证图片")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrHealthCertRequired))
 		return
 	}
 	defer file.Close()
@@ -474,11 +474,11 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 	// 上传前内容安全检测：不通过则不保存
 	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
 		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 			return
 		}
 		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片过大，请压缩后再上传")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat img sec check: %w", err)))
@@ -532,7 +532,7 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update rider application health cert: %w", err)))
 		return
 	}
-	deleteStoredImageAsync(oldHealthCertURL)
+	server.deleteStoredImageAsync(oldHealthCertURL)
 
 	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
 }
@@ -564,7 +564,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
@@ -572,7 +572,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 	}
 
 	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能提交草稿状态的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationSubmitDraft))
 		return
 	}
 
@@ -597,7 +597,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 	}
 
 	if len(missingFields) > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请完善以下信息: "+joinStrings(missingFields, ", "))))
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("missing required fields: %s", joinStrings(missingFields, ", "))))
 		return
 	}
 
@@ -636,7 +636,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 			_ = json.Unmarshal(submitted.IDCardOcr, &ocrData)
 		}
 		if ocrData.IDNumber == "" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("身份证号不能为空")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDNumberRequired))
 			return
 		}
 
@@ -798,7 +798,7 @@ func (server *Server) resetRiderApplication(ctx *gin.Context) {
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
@@ -806,7 +806,7 @@ func (server *Server) resetRiderApplication(ctx *gin.Context) {
 	}
 
 	if app.Status != "rejected" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只有被拒绝的申请才能重置")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationCannotReset))
 		return
 	}
 

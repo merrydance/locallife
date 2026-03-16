@@ -50,7 +50,7 @@ func (server *Server) uploadTableImage(ctx *gin.Context) {
 	// 上传前做图片内容安全检测：不通过则不落库/不落盘
 	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
 		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("图片内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat img sec check: %w", err)))

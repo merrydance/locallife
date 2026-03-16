@@ -72,7 +72,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("商户不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -81,7 +81,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 
 	// 检查商户状态：必须是 approved 或 pending_bindbank
 	if merchant.Status != "approved" && merchant.Status != "pending_bindbank" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("商户状态不正确，当前状态: %s", merchant.Status)))
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid merchant status: %s", merchant.Status)))
 		return
 	}
 
@@ -94,11 +94,11 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		// 已有申请，检查状态
 		if existingApplyment.Status == "submitted" || existingApplyment.Status == "auditing" ||
 			existingApplyment.Status == "to_be_signed" || existingApplyment.Status == "signing" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("已有进行中的开户申请，请等待审核结果")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
 			return
 		}
 		if existingApplyment.Status == "finish" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("已完成开户，无需重复提交")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountAlreadyRegistered))
 			return
 		}
 	}
@@ -400,7 +400,7 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("商户不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -861,7 +861,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("运营商不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrOperatorNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -870,7 +870,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 
 	// 检查运营商状态：已入驻（active）或绑卡进件进行中（bindbank_submitted）均可提交/重新提交绑卡
 	if operator.Status != "active" && operator.Status != "bindbank_submitted" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("运营商状态不正确，当前状态: %s", operator.Status)))
+		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid operator status: %s", operator.Status)))
 		return
 	}
 
@@ -882,11 +882,11 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	if err == nil {
 		if existingApplyment.Status == "submitted" || existingApplyment.Status == "auditing" ||
 			existingApplyment.Status == "to_be_signed" || existingApplyment.Status == "signing" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("已有进行中的开户申请，请等待审核结果")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountApplymentPending))
 			return
 		}
 		if existingApplyment.Status == "finish" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("已完成开户，无需重复提交")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAccountAlreadyRegistered))
 			return
 		}
 	}
@@ -939,7 +939,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 
 	// 检查必要信息
 	if legalPersonName == "" || legalPersonIDNumber == "" || idCardFrontURL == "" || idCardBackURL == "" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("运营商身份信息不完整，请先完善身份证信息")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOperatorProfileIncomplete))
 		return
 	}
 
@@ -1218,7 +1218,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("运营商不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrOperatorNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

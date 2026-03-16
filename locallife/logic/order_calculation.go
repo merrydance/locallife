@@ -13,10 +13,11 @@ import (
 )
 
 const (
-	defaultDeliveryDistance = 3000
-	minDeliveryDistance     = 500
-	metersPerLatDegree      = 111000
-	metersPerLngDegree      = 96000
+	// 地理常量已迁移至 logic/geo_constants.go，这里仅保留本包内的别名以兼容现有代码。
+	defaultDeliveryDistance = DefaultDeliveryDistance
+	minDeliveryDistance     = MinDeliveryDistance
+	metersPerLatDegree      = MetersPerLatDegree
+	metersPerLngDegree      = MetersPerLngDegree
 )
 
 // OrderCalculationInput defines the input for order preview calculation.

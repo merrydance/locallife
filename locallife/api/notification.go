@@ -545,7 +545,7 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 			return
 		}
 		if !rider.IsOnline {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上线才能接收实时订单推送")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotOnlineForOrders))
 			return
 		}
 	}

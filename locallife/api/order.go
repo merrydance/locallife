@@ -57,18 +57,6 @@ const (
 	PaymentMethodBalance = "balance"
 )
 
-// 配送距离常量（单位：米）
-const (
-	DefaultDeliveryDistance = 3000 // 默认配送距离 3km
-	MinDeliveryDistance     = 500  // 最小配送距离 500m
-)
-
-// 地理计算常量（用于经纬度转换为米）
-const (
-	MetersPerLatDegree = 111000 // 1度纬度约等于111公里
-	MetersPerLngDegree = 96000  // 1度经度在纬度30度左右约等于96公里
-)
-
 // ==================== 请求/响应结构体 ====================
 
 type orderItemRequest struct {
@@ -548,7 +536,7 @@ func (server *Server) createOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newOrderResponse(result.Order))
+	ctx.JSON(http.StatusCreated, newOrderResponse(result.Order))
 }
 
 // validateOrderTypeFields 验证订单类型与关联字段
@@ -608,7 +596,7 @@ type getOrderRequest struct {
 // @Accept json
 // @Produce json
 // @Param id path int true "订单ID" minimum(1)
-// @Success 200 {object} orderResponse "订单详情"
+// @Success 201 {object} orderResponse "订单详情"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前用户"

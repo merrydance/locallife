@@ -2,7 +2,6 @@ package api
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -139,7 +138,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -148,13 +147,13 @@ func (server *Server) scanTable(ctx *gin.Context) {
 
 	// 检查商户状态
 	if merchant.Status != "approved" {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("商户未营业")))
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantServiceUnavailable))
 		return
 	}
 
 	// P1-022 修复：检查商户实时营业状态
 	if !merchant.IsOpen {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("商户当前未营业")))
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrMerchantServiceUnavailable))
 		return
 	}
 
@@ -165,7 +164,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("桌台不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrTableNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -174,7 +173,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 
 	// 检查桌台状态
 	if table.Status == "disabled" {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("桌台已停用")))
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrTableDisabled))
 		return
 	}
 
@@ -510,7 +509,7 @@ func decorateTableQRCodeWithLabel(pngData []byte, label string) ([]byte, error) 
 func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	tableID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的桌台ID")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidTableID))
 		return
 	}
 
@@ -518,7 +517,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	table, err := server.store.GetTable(ctx, tableID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("桌台不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrTableNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -529,12 +528,12 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("您不是商户")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrNotMerchant))
 		return
 	}
 
 	if table.MerchantID != merchant.ID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("该桌台不属于您的商户")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrTableNotOwned))
 		return
 	}
 

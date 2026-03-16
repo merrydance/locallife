@@ -159,7 +159,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	order, err := server.store.GetOrder(ctx, req.OrderID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("订单不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrOrderNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get order: %w", err)))
@@ -168,13 +168,13 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 
 	// 2. 验证订单属于当前用户
 	if order.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("订单不属于当前用户")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrOrderNotOwned))
 		return
 	}
 
 	// 3. 验证订单已完成（只有完成的订单才能索赔）
 	if order.Status != OrderStatusCompleted {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只有已完成的订单才能申请索赔")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOrderNotEligibleForClaim))
 		return
 	}
 
@@ -183,7 +183,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		EntityType: "user",
 		EntityID:   authPayload.UserID,
 	}); err == nil {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("账户存在异常行为限制，无法提交索赔")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrAccountBehaviorRestricted))
 		return
 	} else if !errors.Is(err, db.ErrRecordNotFound) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -201,14 +201,14 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	}
 	for _, c := range existingClaims {
 		if c.OrderID == req.OrderID {
-			ctx.JSON(http.StatusConflict, errorResponse(errors.New("该订单已存在索赔记录")))
+			ctx.JSON(http.StatusConflict, errorResponse(ErrOrderAlreadyHasClaim))
 			return
 		}
 	}
 
 	// 5. 索赔金额不能超过订单总额
 	if req.ClaimAmount > order.TotalAmount {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("索赔金额不能超过订单总额")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrClaimAmountExceedsOrder))
 		return
 	}
 
@@ -468,7 +468,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 				Remark:     "platform payout",
 			}, asynq.Queue(worker.QueueCritical))
 			if err != nil {
-				fmt.Printf("failed to enqueue claim refund task: %v\n", err)
+				log.Error().Err(err).Int64("claim_id", claim.ID).Msg("failed to enqueue claim refund task")
 			}
 		} else {
 			// Fallback (测试环境或无Redis): 使用原有的 goroutine
@@ -482,7 +482,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 					Remark:     "platform payout",
 				})
 				if refundErr != nil {
-					fmt.Printf("claim refund failed: claim_id=%d, user_id=%d, err=%v\n", claim.ID, authPayload.UserID, refundErr)
+					log.Error().Err(refundErr).Int64("claim_id", claim.ID).Int64("user_id", authPayload.UserID).Msg("claim refund goroutine failed")
 				}
 			}()
 		}
@@ -665,7 +665,7 @@ func (server *Server) ReviewClaim(ctx *gin.Context) {
 	claimIDStr := ctx.Param("id")
 	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的索赔ID")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
 		return
 	}
 
@@ -682,7 +682,7 @@ func (server *Server) ReviewClaim(ctx *gin.Context) {
 	claim, err := server.store.GetClaim(ctx, claimID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("索赔记录不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
 		} else {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
 		}
@@ -691,25 +691,25 @@ func (server *Server) ReviewClaim(ctx *gin.Context) {
 
 	// 检查状态 - 只允许审核pending状态的索赔
 	if claim.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该索赔已审核完成")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrClaimAlreadyReviewed))
 		return
 	}
 
 	// 检查是否是需要人工审核的索赔
 	if claim.ApprovalType.Valid && claim.ApprovalType.String != "manual" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("该索赔无需人工审核")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrClaimNoManualReview))
 		return
 	}
 
 	// 通过时必须提供审核金额
 	if *req.Approved && req.ApprovedAmount == nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("通过审核时必须提供审核金额")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApprovalAmountRequired))
 		return
 	}
 
 	// 审核金额不能超过索赔金额
 	if req.ApprovedAmount != nil && *req.ApprovedAmount > claim.ClaimAmount {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("审核金额不能超过索赔金额")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApprovalAmountExceedsClaim))
 		return
 	}
 
@@ -1288,7 +1288,7 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 	claimIDStr := ctx.Param("id")
 	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的索赔ID")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
 		return
 	}
 
@@ -1297,7 +1297,7 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 	claim, err := server.store.GetClaim(ctx, claimID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("索赔不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
@@ -1306,7 +1306,7 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 
 	// 验证是当前用户的索赔
 	if claim.UserID != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("该索赔不属于当前用户")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrClaimNotOwned))
 		return
 	}
 

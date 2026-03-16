@@ -112,7 +112,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					Return(paymentOrder, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response paymentOrderResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
@@ -210,7 +210,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response paymentOrderResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
@@ -729,7 +729,7 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 					Return(refundOrder, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 
 				var response refundOrderResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)

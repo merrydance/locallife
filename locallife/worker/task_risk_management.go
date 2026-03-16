@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -87,19 +88,42 @@ func (processor *RedisTaskProcessor) HandleCheckMerchantForeignObject(ctx contex
 		return fmt.Errorf("failed to check merchant foreign object status: %w", err)
 	}
 
-	// 如果需要通知整改，发送WebSocket通知
+	// 如果需要通知整改，暂停外卖并发送站内信给商户负责人
 	if result.ShouldNotify {
-		// 注意：Worker中wsHub为nil，通过其他方式发送通知
-		// 实际生产中可以通过消息队列或数据库标记触发通知
-		// 这里记录日志，实际通知由定时任务扫描处理
-		// TODO: 可以改为调用通知服务发送站内信/短信
-		// 异物高发：触发外卖熔断（不影响堂食）
+		// 异物高发：触发外卖熔断（不影响堂食），暂停 24 小时
 		reason := fmt.Sprintf("foreign object claims high: %d in %d days", result.ForeignObjectNum, result.WindowDays)
-		_ = processor.store.SuspendMerchantTakeout(ctx, db.SuspendMerchantTakeoutParams{
+		if err := processor.store.SuspendMerchantTakeout(ctx, db.SuspendMerchantTakeoutParams{
 			MerchantID:           payload.MerchantID,
 			TakeoutSuspendReason: pgtype.Text{String: reason, Valid: true},
 			TakeoutSuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
-		})
+		}); err != nil {
+			log.Error().Err(err).Int64("merchant_id", payload.MerchantID).Msg("failed to suspend merchant takeout")
+			return fmt.Errorf("suspend merchant takeout: %w", err)
+		}
+
+		// 获取商户负责人，向其发送站内信通知
+		merchant, err := processor.store.GetMerchant(ctx, payload.MerchantID)
+		if err != nil {
+			// 通知失败不影响熔断结果，记录日志后继续
+			log.Error().Err(err).Int64("merchant_id", payload.MerchantID).Msg("failed to get merchant for foreign object notification")
+		} else {
+			title := "您的外卖服务已被暂停整改"
+			content := fmt.Sprintf(
+				"您的店铺近 %d 天内收到 %d 次异物投诉，外卖服务已暂停 24 小时，请尽快自查整改。",
+				result.WindowDays, result.ForeignObjectNum,
+			)
+			if err := processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
+				UserID:            merchant.OwnerUserID,
+				Type:              "system",
+				Title:             title,
+				Content:           content,
+				RelatedType:       "merchant",
+				RelatedID:         payload.MerchantID,
+				IgnorePreferences: true, // 食安/风控类关键通知，不受免打扰设置限制
+			}); err != nil {
+				log.Error().Err(err).Int64("merchant_id", payload.MerchantID).Msg("failed to enqueue foreign object notification")
+			}
+		}
 	}
 
 	return nil

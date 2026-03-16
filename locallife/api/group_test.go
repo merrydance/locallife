@@ -70,7 +70,7 @@ func TestCreateGroupApplicationDraftAPI(t *testing.T) {
 					Return(newApp, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{
@@ -474,7 +474,7 @@ func TestCreateGroupJoinRequestAPI(t *testing.T) {
 	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, http.StatusCreated, recorder.Code)
 }
 
 func TestApproveGroupJoinRequestAPI(t *testing.T) {

@@ -10,6 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// eventually 是对 require.Eventually 的薄封装，统一超时与轮询间隔。
+// 用于替代测试中的 time.Sleep + 断言，消除依赖固定等待时间的竞态条件。
+func eventually(t *testing.T, condition func() bool, msgAndArgs ...interface{}) {
+	t.Helper()
+	require.Eventually(t, condition, time.Second, time.Millisecond, msgAndArgs...)
+}
+
 func TestNewHub(t *testing.T) {
 	ctx := context.Background()
 	hub := NewHub(ctx)
@@ -44,16 +51,12 @@ func TestHub_RegisterAndUnregisterRider(t *testing.T) {
 
 	// 注册
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond) // 等待处理
-
-	require.True(t, hub.IsRiderOnline(100))
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online after register")
 	require.Equal(t, 1, hub.GetOnlineRiderCount())
 
 	// 注销
 	hub.Unregister(client)
-	time.Sleep(50 * time.Millisecond)
-
-	require.False(t, hub.IsRiderOnline(100))
+	eventually(t, func() bool { return !hub.IsRiderOnline(100) }, "rider should be offline after unregister")
 	require.Equal(t, 0, hub.GetOnlineRiderCount())
 }
 
@@ -76,15 +79,11 @@ func TestHub_RegisterAndUnregisterMerchant(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
-
-	require.True(t, hub.IsMerchantOnline(200))
+	eventually(t, func() bool { return hub.IsMerchantOnline(200) }, "merchant should be online after register")
 	require.Equal(t, 1, hub.GetOnlineMerchantCount())
 
 	hub.Unregister(client)
-	time.Sleep(50 * time.Millisecond)
-
-	require.False(t, hub.IsMerchantOnline(200))
+	eventually(t, func() bool { return !hub.IsMerchantOnline(200) }, "merchant should be offline after unregister")
 	require.Equal(t, 0, hub.GetOnlineMerchantCount())
 }
 
@@ -108,9 +107,7 @@ func TestHub_ReplaceOldConnection(t *testing.T) {
 	}
 
 	hub.Register(oldClient)
-	time.Sleep(50 * time.Millisecond)
-
-	require.True(t, hub.IsRiderOnline(100))
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online after first register")
 
 	// 创建新连接（同一骑手ID）
 	newClient := &Client{
@@ -125,14 +122,12 @@ func TestHub_ReplaceOldConnection(t *testing.T) {
 	}
 
 	hub.Register(newClient)
-	time.Sleep(50 * time.Millisecond)
-
 	// 旧连接应该被关闭
 	select {
 	case <-oldClient.done:
 		// 预期行为
-	default:
-		t.Error("old client's done channel should be closed")
+	case <-time.After(time.Second):
+		t.Error("old client's done channel should be closed after new connection")
 	}
 
 	// 新连接应该在线
@@ -161,7 +156,7 @@ func TestHub_UnregisterWrongClient(t *testing.T) {
 	}
 
 	hub.Register(oldClient)
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online after first register")
 
 	// 创建并注册新连接（替换旧连接）
 	newClient := &Client{
@@ -176,14 +171,19 @@ func TestHub_UnregisterWrongClient(t *testing.T) {
 	}
 
 	hub.Register(newClient)
-	time.Sleep(50 * time.Millisecond)
+	// 等待新连接处理完成（旧连接被踢出后新连接才算完全注册）
+	eventually(t, func() bool {
+		select {
+		case <-oldClient.done:
+			return true
+		default:
+			return false
+		}
+	}, "old client should be evicted after new connection")
 
 	// 尝试注销旧连接（应该不起作用，因为 map 中现在是新连接）
 	hub.Unregister(oldClient)
-	time.Sleep(50 * time.Millisecond)
-
-	// 新连接应该仍然在线
-	require.True(t, hub.IsRiderOnline(100))
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "new client should still be online after old client unregister")
 	require.Equal(t, 1, hub.GetOnlineRiderCount())
 }
 
@@ -206,7 +206,7 @@ func TestHub_SendToRider(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online before sending message")
 
 	// 发送消息
 	testMsg := Message{
@@ -216,13 +216,12 @@ func TestHub_SendToRider(t *testing.T) {
 	}
 
 	hub.SendToRider(100, testMsg)
-	time.Sleep(50 * time.Millisecond)
 
 	// 验证消息接收
 	select {
 	case received := <-client.send:
 		require.Equal(t, "notification", received.Type)
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Error("expected to receive message")
 	}
 }
@@ -246,7 +245,7 @@ func TestHub_SendToMerchant(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.IsMerchantOnline(200) }, "merchant should be online before sending message")
 
 	testMsg := Message{
 		Type:      "new_order",
@@ -255,12 +254,11 @@ func TestHub_SendToMerchant(t *testing.T) {
 	}
 
 	hub.SendToMerchant(200, testMsg)
-	time.Sleep(50 * time.Millisecond)
 
 	select {
 	case received := <-client.send:
 		require.Equal(t, "new_order", received.Type)
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(time.Second):
 		t.Error("expected to receive message")
 	}
 }
@@ -288,9 +286,7 @@ func TestHub_BroadcastToAllRiders(t *testing.T) {
 		clients = append(clients, client)
 		hub.Register(client)
 	}
-	time.Sleep(50 * time.Millisecond)
-
-	require.Equal(t, 3, hub.GetOnlineRiderCount())
+	eventually(t, func() bool { return hub.GetOnlineRiderCount() == 3 }, "all 3 riders should be online")
 
 	// 广播消息
 	testMsg := Message{
@@ -300,14 +296,13 @@ func TestHub_BroadcastToAllRiders(t *testing.T) {
 	}
 
 	hub.BroadcastToAllRiders(testMsg)
-	time.Sleep(50 * time.Millisecond)
 
 	// 验证所有骑手都收到消息
 	for i, client := range clients {
 		select {
 		case received := <-client.send:
 			require.Equal(t, "broadcast", received.Type, "client %d should receive broadcast", i)
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(time.Second):
 			t.Errorf("client %d did not receive broadcast", i)
 		}
 	}
@@ -336,7 +331,7 @@ func TestHub_BroadcastToRiders(t *testing.T) {
 		clients = append(clients, client)
 		hub.Register(client)
 	}
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.GetOnlineRiderCount() == 3 }, "all 3 riders should be online")
 
 	// 只广播给骑手100和200
 	testMsg := Message{
@@ -346,14 +341,13 @@ func TestHub_BroadcastToRiders(t *testing.T) {
 	}
 
 	hub.BroadcastToRiders([]int64{100, 200}, testMsg)
-	time.Sleep(50 * time.Millisecond)
 
 	// 骑手100和200应该收到消息
 	for i := 0; i < 2; i++ {
 		select {
 		case received := <-clients[i].send:
 			require.Equal(t, "targeted_broadcast", received.Type)
-		case <-time.After(100 * time.Millisecond):
+		case <-time.After(time.Second):
 			t.Errorf("client %d should receive targeted broadcast", i)
 		}
 	}
@@ -362,7 +356,7 @@ func TestHub_BroadcastToRiders(t *testing.T) {
 	select {
 	case <-clients[2].send:
 		t.Error("client 2 (rider 300) should NOT receive targeted broadcast")
-	case <-time.After(50 * time.Millisecond):
+	case <-time.After(200 * time.Millisecond):
 		// 预期行为
 	}
 }
@@ -388,7 +382,7 @@ func TestHub_GetOnlineRiderIDs(t *testing.T) {
 		}
 		hub.Register(client)
 	}
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.GetOnlineRiderCount() == 3 }, "all 3 riders should be online")
 
 	ids := hub.GetOnlineRiderIDs()
 	require.Len(t, ids, 3)
@@ -431,12 +425,9 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			}
 
 			hub.Register(client)
-			time.Sleep(10 * time.Millisecond)
-
-			// 并发检查在线状态
+			// 并发检查在线状态（不等待处理完成，测试 map 的并发安全性）
 			_ = hub.IsRiderOnline(id)
 			_ = hub.GetOnlineRiderCount()
-
 			hub.Unregister(client)
 		}(int64(i))
 	}
@@ -464,7 +455,7 @@ func TestHub_SendBufferFull(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online before sending")
 
 	// 发送多条消息，应该不会阻塞
 	for i := 0; i < 10; i++ {
@@ -473,7 +464,9 @@ func TestHub_SendBufferFull(t *testing.T) {
 			Timestamp: time.Now(),
 		})
 	}
-	time.Sleep(50 * time.Millisecond)
+	// 等待广播消息被 run loop 处理完：channel 满后再发送一条并等该条被投递
+	// 用 Eventually 探测 send channel 中至少有 1 条消息（buffer=1，所以就是满）
+	eventually(t, func() bool { return len(client.send) == 1 }, "send buffer should be full")
 
 	// 只有一条消息被接收，其余被丢弃
 	require.Len(t, client.send, 1)
@@ -499,7 +492,7 @@ func TestHub_AckDedup(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online before ack test")
 
 	msgID := "msg-ack-1"
 	hub.SendToRider(100, Message{
@@ -551,7 +544,7 @@ func TestHub_Replay(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online before replay test")
 
 	msgID := "msg-replay-1"
 	hub.SendToRider(100, Message{
@@ -598,8 +591,10 @@ func BenchmarkHubBroadcastToRiders(b *testing.B) {
 		}
 		hub.Register(client)
 	}
-	// ensure registration processing
-	time.Sleep(50 * time.Millisecond)
+	// ensure registration processing: spin until all riders are registered
+	for hub.GetOnlineRiderCount() < riderCount {
+		time.Sleep(time.Millisecond)
+	}
 
 	msg := Message{Type: "benchmark", Data: json.RawMessage(`{"benchmark":true}`)}
 
@@ -628,13 +623,16 @@ func TestHub_Shutdown(t *testing.T) {
 	}
 
 	hub.Register(client)
-	time.Sleep(50 * time.Millisecond)
+	eventually(t, func() bool { return hub.IsRiderOnline(100) }, "rider should be online before shutdown")
 
 	// 关闭 Hub
 	hub.Shutdown()
-	time.Sleep(50 * time.Millisecond)
 
-	// send channel 应该被关闭
-	_, ok := <-client.send
-	require.False(t, ok, "send channel should be closed after shutdown")
+	// send channel 应该被关闭（Shutdown 会 close 所有 client.send）
+	select {
+	case _, ok := <-client.send:
+		require.False(t, ok, "send channel should be closed after shutdown")
+	case <-time.After(time.Second):
+		t.Fatal("send channel was not closed after shutdown")
+	}
 }

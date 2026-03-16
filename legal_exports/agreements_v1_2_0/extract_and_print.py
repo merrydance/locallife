@@ -13,6 +13,8 @@ TARGETS = {
     "MERCHANT_AGREEMENT": "商户入驻及数字化服务协议",
     "USER_AGREEMENT": "平台用户服务协议",
     "CONSUMER_RIGHTS": "消费者权益保障及纠纷处理规则",
+    "RIDER_AGREEMENT": "骑手承运服务协议",
+    "OPERATOR_AGREEMENT": "区县运营商管理与授权协议",
 }
 
 HTML_SHELL = """<!doctype html>

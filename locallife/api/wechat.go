@@ -12,6 +12,7 @@ import (
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/rs/zerolog/log"
 )
 
 type wechatLoginRequest struct {
@@ -93,17 +94,15 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		}
 	}
 
-	// 记录设备信息（用于M9欺诈检测）
+	// 记录设备信息（用于M9欺诈检测）。此操作为辅助性安全增强，失败不应阻断登录主路径。
 	deviceArg := db.UpsertUserDeviceParams{
 		UserID:            user.ID,
 		DeviceID:          req.DeviceID,
 		DeviceFingerprint: pgtype.Text{String: req.DeviceFingerprint, Valid: req.DeviceFingerprint != ""},
 		DeviceType:        req.DeviceType,
 	}
-	_, err = server.store.UpsertUserDevice(ctx, deviceArg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to record device info: %w", err)))
-		return
+	if _, err = server.store.UpsertUserDevice(ctx, deviceArg); err != nil {
+		log.Warn().Err(err).Int64("user_id", user.ID).Msg("failed to record device info, non-fatal")
 	}
 
 	// 生成访问令牌

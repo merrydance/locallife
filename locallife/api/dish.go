@@ -12,11 +12,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
-
-func isNoRows(err error) bool {
-	return isNotFoundError(err)
-}
 
 // ==================== 菜品分类 ====================
 
@@ -58,7 +55,7 @@ func (server *Server) createDishCategory(ctx *gin.Context) {
 	// 获取商户信息（验证商户权限）
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -84,7 +81,7 @@ func (server *Server) createDishCategory(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, dishCategoryResponse{
+	ctx.JSON(http.StatusCreated, dishCategoryResponse{
 		ID:        category.ID,
 		Name:      category.Name,
 		SortOrder: req.SortOrder,
@@ -109,7 +106,7 @@ type dishTagsResponse struct {
 // @Tags 菜品管理
 // @Accept json
 // @Produce json
-// @Success 200 {object} listDishCategoriesResponse "分类列表"
+// @Success 201 {object} listDishCategoriesResponse "分类列表"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 404 {object} ErrorResponse "商户不存在"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
@@ -122,7 +119,7 @@ func (server *Server) listDishCategories(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -168,7 +165,7 @@ func (server *Server) listGlobalDishCategories(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	_, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -240,7 +237,7 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -254,7 +251,7 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 		CategoryID: uri.ID,
 	})
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not your category")))
 			return
 		}
@@ -265,7 +262,7 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 	// 获取分类名称（用于判断是否改名）
 	category, err := server.store.GetDishCategory(ctx, uri.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("category not found")))
 			return
 		}
@@ -282,48 +279,21 @@ func (server *Server) updateDishCategory(ctx *gin.Context) {
 	}
 
 	if req.Name != nil && *req.Name != category.Name {
-		// 1. 获取或创建新名称的全局分类
-		newCategory, err := server.store.CreateDishCategory(ctx, *req.Name)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create new global dish category: %w", err)))
-			return
-		}
-
-		// 2. 将商户关联到新分类
-		_, err = server.store.LinkMerchantDishCategory(ctx, db.LinkMerchantDishCategoryParams{
-			MerchantID: merchant.ID,
-			CategoryID: newCategory.ID,
-			SortOrder:  finalSortOrder,
-		})
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("link merchant to new dish category: %w", err)))
-			return
-		}
-
-		// 3. 更新该商户下所有属于旧分类的菜品到新分类
-		// 注意：我们需要一个 UpdateDishCategoryForMerchant 的查询，但目前可以先用简单的逻辑
-		// 这里暂且假设我们需要更新 dishes 表
-		err = server.store.UpdateDishesCategory(ctx, db.UpdateDishesCategoryParams{
+		// 将 4 步操作（创建分类 → 关联新分类 → 迁移菜品 → 取消旧关联）封装在同一事务中，
+		// 任一步骤失败均自动回滚，确保数据一致性。
+		txResult, err := server.store.RenameMerchantDishCategoryTx(ctx, db.RenameMerchantDishCategoryTxParams{
 			MerchantID:    merchant.ID,
-			OldCategoryID: pgtype.Int8{Int64: uri.ID, Valid: true},
-			NewCategoryID: pgtype.Int8{Int64: newCategory.ID, Valid: true},
+			OldCategoryID: uri.ID,
+			NewName:       *req.Name,
+			SortOrder:     finalSortOrder,
 		})
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("migrate dishes to new category: %w", err)))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("rename dish category: %w", err)))
 			return
 		}
-
-		// 4. 取消旧分类的关联
-		err = server.store.UnlinkMerchantDishCategory(ctx, db.UnlinkMerchantDishCategoryParams{
-			MerchantID: merchant.ID,
-			CategoryID: uri.ID,
-		})
-		if err != nil {
-			// 即使取消失败也继续，因为新关联已经建立
-			_ = err
-		}
-		finalID = newCategory.ID
-		finalName = newCategory.Name
+		finalID = txResult.NewCategoryID
+		finalName = txResult.NewCategoryName
+		finalSortOrder = txResult.SortOrder
 	} else if req.SortOrder != nil {
 		// 如果只更新了排序，且名称没变，则直接使用新的排序
 		finalSortOrder = *req.SortOrder
@@ -368,7 +338,7 @@ func (server *Server) deleteDishCategory(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -382,7 +352,7 @@ func (server *Server) deleteDishCategory(ctx *gin.Context) {
 		CategoryID: uri.ID,
 	})
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not your category")))
 			return
 		}
@@ -496,7 +466,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -509,7 +479,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 		normalized := normalizeStoredUploadPath(req.ImageURL)
 		prefix := fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID)
 		if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("image_url 仅允许使用通过菜品图片上传接口生成的本地路径")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDishImageURL))
 			return
 		}
 		req.ImageURL = normalized
@@ -524,7 +494,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 			CategoryID: *req.CategoryID,
 		})
 		if err != nil {
-			if isNoRows(err) {
+			if isNotFoundError(err) {
 				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("category does not belong to this merchant")))
 				return
 			}
@@ -621,7 +591,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, dishResponse{
+	ctx.JSON(http.StatusCreated, dishResponse{
 		ID:                  txResult.Dish.ID,
 		MerchantID:          txResult.Dish.MerchantID,
 		CategoryID:          toPtrInt64(txResult.Dish.CategoryID),
@@ -680,7 +650,7 @@ type listDishesResponse struct {
 // @Param is_available query bool false "按可用状态筛选"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} listDishesResponse "菜品列表"
+// @Success 201 {object} listDishesResponse "菜品列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 404 {object} ErrorResponse "商户不存在"
@@ -700,7 +670,7 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -806,7 +776,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -817,7 +787,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 	// 使用单一查询获取菜品完整信息(含食材、标签、定制选项)
 	dish, err := server.store.GetDishComplete(ctx, req.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -906,7 +876,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 	// 使用单一查询获取菜品完整信息(含食材、标签、定制选项)
 	dish, err := server.store.GetDishComplete(ctx, req.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1008,7 +978,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1019,7 +989,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	// 验证菜品所有权
 	dish, err := server.store.GetDish(ctx, uriReq.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1050,7 +1020,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		normalized := normalizeStoredUploadPath(req.ImageURL)
 		prefix := fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID)
 		if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("image_url 仅允许使用通过菜品图片上传接口生成的本地路径")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDishImageURL))
 			return
 		}
 		req.ImageURL = normalized
@@ -1236,7 +1206,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	// 获取商户信息
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1247,7 +1217,7 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	// 验证菜品所有权
 	dish, err := server.store.GetDish(ctx, req.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1283,8 +1253,8 @@ func (server *Server) deleteDish(ctx *gin.Context) {
 	// 从所有套餐中移除该菜品（物理删除关联关系，因为菜品已被软删除）
 	err = server.store.RemoveDishFromAllCombos(ctx, req.ID)
 	if err != nil {
-		// 这里如果失败，我们只记日志，不影响主流程响应，因为菜品本身已经标记删除了
-		fmt.Printf("failed to remove dish %d from combos: %v\n", req.ID, err)
+		// 菜品本身已标记删除，移除套餐关联失败不影响主流程
+		log.Error().Err(err).Int64("dish_id", req.ID).Msg("failed to remove dish from combos after deletion")
 	}
 
 	server.writeAuditLog(ctx, AuditLogInput{
@@ -1399,7 +1369,7 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1410,7 +1380,7 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 	// 获取菜品
 	dish, err := server.store.GetDish(ctx, uri.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1488,7 +1458,7 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1653,7 +1623,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1664,7 +1634,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 	// 获取菜品
 	dish, err := server.store.GetDish(ctx, uri.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1685,7 +1655,7 @@ func (server *Server) setDishCustomizations(ctx *gin.Context) {
 			if _, exists := tagNameMap[o.TagID]; !exists {
 				tag, err := server.store.GetTag(ctx, o.TagID)
 				if err != nil {
-					if isNoRows(err) {
+					if isNotFoundError(err) {
 						ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("tag %d not found", o.TagID)))
 						return
 					}
@@ -1775,7 +1745,7 @@ func (server *Server) getDishCustomizations(ctx *gin.Context) {
 	// 使用单次查询获取菜品和所有定制信息（消除 N+1 查询）
 	dish, err := server.store.GetDishWithCustomizations(ctx, uri.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}
@@ -1876,7 +1846,7 @@ func (server *Server) setDishFeaturedTags(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
 		}
@@ -1887,7 +1857,7 @@ func (server *Server) setDishFeaturedTags(ctx *gin.Context) {
 	// 获取菜品
 	dish, err := server.store.GetDish(ctx, uri.ID)
 	if err != nil {
-		if isNoRows(err) {
+		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("dish not found")))
 			return
 		}

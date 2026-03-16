@@ -16,8 +16,6 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-var ErrInvalidSignature = wechat.ErrInvalidSignature
-
 // TestHandlePaymentNotifyIdempotency 测试支付回调的幂等性检查
 func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 	notificationID := util.RandomString(32)
@@ -89,7 +87,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(ErrInvalidSignature)
+					Return(wechat.ErrInvalidSignature)
 
 				// 签名失败直接返回，不会检查幂等性
 				store.EXPECT().

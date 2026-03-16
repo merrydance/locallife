@@ -198,7 +198,7 @@ func (server *Server) createTable(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newTableResponse(table))
+	ctx.JSON(http.StatusCreated, newTableResponse(table))
 }
 
 type getTableRequest struct {
@@ -211,7 +211,7 @@ type getTableRequest struct {
 // @Tags 桌台管理
 // @Produce json
 // @Param id path int true "桌台ID"
-// @Success 200 {object} tableResponse "桌台详情"
+// @Success 201 {object} tableResponse "桌台详情"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "非桌台所有者"
@@ -919,7 +919,7 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 	normalized := normalizeStoredUploadPath(req.ImageURL)
 	prefix := fmt.Sprintf("uploads/public/merchants/%d/tables/", merchant.ID)
 	if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("image_url 仅允许使用通过桌台图片上传接口生成的本地路径")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidTableImageURL))
 		return
 	}
 	req.ImageURL = normalized

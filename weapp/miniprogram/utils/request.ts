@@ -1,5 +1,5 @@
 import { getToken, clearToken, setToken, isTokenNearExpiry, hasToken } from './auth'
-import { ApiResponse, ErrorCode } from '../api/types'
+import { ApiResponse, ErrorCode, classifyErrorCode } from '../api/types'
 import { logger } from './logger'
 import { ErrorHandler, ErrorType, AppError } from './error-handler'
 import { requestManager } from './request-manager'
@@ -374,9 +374,10 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
       // 尝试从后端响应中提取错误信息
       const responseData = result.data as unknown
-      const envelopeCode = isRecord(responseData) && typeof responseData.code === 'number'
+      const rawEnvelopeCode = isRecord(responseData) && typeof responseData.code === 'number'
         ? responseData.code
         : undefined
+      const envelopeCode = rawEnvelopeCode !== undefined ? classifyErrorCode(rawEnvelopeCode) : undefined
       const envelopeMessage = isRecord(responseData) && typeof responseData.message === 'string'
         ? responseData.message
         : undefined
@@ -396,7 +397,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       if (isExpectedOperatorApplicationNotFound(method, url, result.statusCode, backendMessage, envelopeCode)) {
         logger.debug(`预期业务状态: ${method} ${url} 无申请记录`, {
           statusCode: result.statusCode,
-          code: envelopeCode,
+          code: rawEnvelopeCode ?? envelopeCode,
           message: backendMessage
         }, 'request')
       } else {
@@ -408,48 +409,49 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
 
       if (envelopeCode !== undefined) {
         let userMessage = backendMessage || '服务器响应异常,请稍后重试'
-        let errorDetail = `API ${envelopeCode}`
+        const displayCode = rawEnvelopeCode ?? envelopeCode
+        let errorDetail = `API ${displayCode}`
         let errorType = ErrorType.BUSINESS
 
         if (envelopeCode === ErrorCode.BAD_REQUEST) {
           userMessage = backendMessage || '请求参数错误'
           userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
-          if (backendMessage === 'merchant is not accepting takeout orders') {
+          if (backendMessage === 'merchant is closed') {
             userMessage = '商户休息中～'
           }
-          errorDetail = `参数错误(${envelopeCode}): ${backendMessage}`
+          errorDetail = `参数错误(${displayCode}): ${backendMessage}`
         } else if (envelopeCode === ErrorCode.CONFLICT) {
           userMessage = backendMessage || '操作冲突，请稍后重试'
-          errorDetail = `冲突(${envelopeCode}): ${backendMessage}`
+          errorDetail = `冲突(${displayCode}): ${backendMessage}`
         } else if (envelopeCode === ErrorCode.NOT_FOUND) {
           userMessage = backendMessage || '服务暂时不可用,请稍后重试'
-          errorDetail = backendMessage ? `服务未找到(${envelopeCode}): ${backendMessage}` : `服务未找到(${envelopeCode})`
+          errorDetail = backendMessage ? `服务未找到(${displayCode}): ${backendMessage}` : `服务未找到(${displayCode})`
         } else if (
           envelopeCode === ErrorCode.BAD_GATEWAY ||
           envelopeCode === ErrorCode.SERVICE_UNAVAILABLE ||
           envelopeCode === ErrorCode.GATEWAY_TIMEOUT
         ) {
           userMessage = '服务暂时不可用,请稍后重试'
-          errorDetail = `网关错误(${envelopeCode})`
+          errorDetail = `网关错误(${displayCode})`
           errorType = ErrorType.NETWORK
         } else if (envelopeCode === ErrorCode.INTERNAL_ERROR) {
           userMessage = '服务器内部错误,请稍后重试'
-          errorDetail = `服务器错误(${envelopeCode})`
+          errorDetail = `服务器错误(${displayCode})`
           errorType = ErrorType.NETWORK
         } else if (envelopeCode === ErrorCode.UNAUTHORIZED) {
           userMessage = '登录已过期,请重新登录'
-          errorDetail = `认证失败(${envelopeCode})`
+          errorDetail = `认证失败(${displayCode})`
           errorType = ErrorType.AUTH
         } else if (envelopeCode === ErrorCode.FORBIDDEN) {
           userMessage = backendMessage || '无权限操作'
-          errorDetail = `权限不足(${envelopeCode}): ${backendMessage}`
+          errorDetail = `权限不足(${displayCode}): ${backendMessage}`
           errorType = ErrorType.PERMISSION
         } else if (envelopeCode === ErrorCode.UNPROCESSABLE) {
           userMessage = backendMessage || '请求语义错误'
-          errorDetail = `语义错误(${envelopeCode}): ${backendMessage}`
+          errorDetail = `语义错误(${displayCode}): ${backendMessage}`
         } else if (envelopeCode === ErrorCode.TOO_MANY_REQUESTS) {
           userMessage = '请求过于频繁，请稍后重试'
-          errorDetail = `限流(${envelopeCode})`
+          errorDetail = `限流(${displayCode})`
         }
 
         throw new AppError({
@@ -470,7 +472,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
         
         // 关键逻辑：如果是商户休息中，返回更友好的提示
-        if (backendMessage === 'merchant is not accepting takeout orders') {
+        if (backendMessage === 'merchant is closed') {
             userMessage = '商户休息中～'
         }
         

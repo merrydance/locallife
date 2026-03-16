@@ -13,6 +13,7 @@ import (
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/docs"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/rules"
@@ -43,6 +44,15 @@ type readinessCheckResponse struct {
 	Database string `json:"database"`
 }
 
+type serviceUnavailableResponse struct {
+	Status string `json:"status"`
+	Error  string `json:"error"`
+}
+
+type successMessageResponse struct {
+	Message string `json:"message"`
+}
+
 // Server serves HTTP requests for our banking service.
 type Server struct {
 	config             util.Config
@@ -60,6 +70,7 @@ type Server struct {
 	wsPubSub           *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
 	deliveryBroadcast  *logic.DeliveryBroadcastLogic
 	rateLimiter        *RateLimiter
+	imageDeleter       *imageDeleteWorker // 有界异步图片删除 worker pool
 	rulesEngine        rules.Engine
 	routeService       *logic.RouteService
 	orderCommandSvc    logic.OrderCommandService
@@ -248,6 +259,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		wsHub:           wsHub,
 		wsPubSub:        wsPubSub,
 		rulesEngine:     engine,
+		imageDeleter:    newImageDeleteWorker(),
 	}
 	server.orderCommandSvc = server.buildOrderCommandService()
 	server.orderQuerySvc = server.buildOrderQueryService()
@@ -305,6 +317,9 @@ func (server *Server) Shutdown() {
 	}
 	if server.rateLimiter != nil {
 		server.rateLimiter.Stop()
+	}
+	if server.imageDeleter != nil {
+		server.imageDeleter.shutdown()
 	}
 }
 
@@ -367,6 +382,11 @@ func (server *Server) setupRouter() {
 
 	// Swagger API 文档（开发环境）
 	if server.config.Environment == "development" {
+		// 用运行时配置覆盖 swag 注解中硬编码的 localhost:8080，
+		// 使 Swagger UI 在任意开发/测试环境中均能正确请求 API。
+		if server.config.ExternalBaseURL != "" {
+			docs.SwaggerInfo.Host = server.config.ExternalBaseURL
+		}
 		router.GET("/swagger/*any", ginSwagger.WrapHandler(swaggerFiles.Handler))
 	}
 
@@ -1425,9 +1445,9 @@ func (server *Server) healthCheck(ctx *gin.Context) {
 func (server *Server) readinessCheck(ctx *gin.Context) {
 	// 检查数据库连接
 	if err := server.store.Ping(ctx); err != nil {
-		ctx.JSON(http.StatusServiceUnavailable, gin.H{
-			"status": "not ready",
-			"error":  "database connection failed",
+		ctx.JSON(http.StatusServiceUnavailable, serviceUnavailableResponse{
+			Status: "not ready",
+			Error:  "database connection failed",
 		})
 		return
 	}
@@ -1436,7 +1456,13 @@ func (server *Server) readinessCheck(ctx *gin.Context) {
 }
 
 // ErrorResponse represents an API error response
+// ErrorResponse 是所有 4xx HTTP 错误的统一响应体。
+// 若错误来自 *APIError，则同时返回数字 code 供前端程序化分支；
+// 普通错误只有 error 字段。
 type ErrorResponse struct {
+	// Code 为数字错误码（仅 APIError 时存在），前端应以此为准做多语言处理。
+	Code int `json:"code,omitempty" example:"40401"`
+	// Error 为人类可读的错误描述，降级展示或日志使用。
 	Error string `json:"error" example:"error message"`
 }
 
@@ -1453,10 +1479,13 @@ type errorRes = ErrorResponse
 var _ errorRes
 
 // errorResponse creates an error response.
-// For 4xx client errors: returns the actual error message
-// For 5xx server errors: use internalError() instead to avoid leaking details
-func errorResponse(err error) gin.H {
-	return gin.H{"error": err.Error()}
+// For 4xx client errors: returns the actual error message (and code if *APIError).
+// For 5xx server errors: use internalError() instead to avoid leaking details.
+func errorResponse(err error) ErrorResponse {
+	if apiErr := AsAPIError(err); apiErr != nil {
+		return ErrorResponse{Code: apiErr.Code, Error: apiErr.Message}
+	}
+	return ErrorResponse{Error: err.Error()}
 }
 
 // internalError logs the actual error and returns a safe generic message.
@@ -1465,7 +1494,7 @@ func errorResponse(err error) gin.H {
 // Example:
 //
 //	ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-func internalError(ctx *gin.Context, err error) gin.H {
+func internalError(ctx *gin.Context, err error) ErrorResponse {
 	// Attach to gin context so RequestLoggingMiddleware can include it
 	_ = ctx.Error(err)
 
@@ -1488,10 +1517,10 @@ func internalError(ctx *gin.Context, err error) gin.H {
 
 	evt.Msg("internal error")
 
-	return gin.H{"error": "internal server error"}
+	return ErrorResponse{Error: "internal server error"}
 }
 
 // successMessage creates a standard message response for simple ok/action-complete results.
-func successMessage(msg string) gin.H {
-	return gin.H{"message": msg}
+func successMessage(msg string) successMessageResponse {
+	return successMessageResponse{Message: msg}
 }

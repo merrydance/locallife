@@ -23,8 +23,12 @@ func isDeadlockError(err error) bool {
 	return false
 }
 
-// ExecTx executes a function within a database transaction
+// ExecTx executes a function within a database transaction.
+// It automatically retries on deadlock errors (PostgreSQL code 40P01) up to
+// execTxMaxAttempts times with exponential backoff, while still honouring
+// context cancellation between retries.
 func (store *SQLStore) execTx(ctx context.Context, fn func(*Queries) error) error {
+	var lastErr error
 	for attempt := 1; attempt <= execTxMaxAttempts; attempt++ {
 		tx, err := store.connPool.Begin(ctx)
 		if err != nil {
@@ -43,7 +47,12 @@ func (store *SQLStore) execTx(ctx context.Context, fn func(*Queries) error) erro
 					Int("max_attempts", execTxMaxAttempts).
 					Dur("retry_delay", execTxRetryDelay*time.Duration(attempt)).
 					Msg("tx deadlock detected, retrying")
-				time.Sleep(execTxRetryDelay * time.Duration(attempt))
+				lastErr = err
+				select {
+				case <-time.After(execTxRetryDelay * time.Duration(attempt)):
+				case <-ctx.Done():
+					return ctx.Err()
+				}
 				continue
 			}
 			if isDeadlockError(err) {
@@ -63,7 +72,12 @@ func (store *SQLStore) execTx(ctx context.Context, fn func(*Queries) error) erro
 				Int("max_attempts", execTxMaxAttempts).
 				Dur("retry_delay", execTxRetryDelay*time.Duration(attempt)).
 				Msg("tx commit deadlock detected, retrying")
-			time.Sleep(execTxRetryDelay * time.Duration(attempt))
+			lastErr = commitErr
+			select {
+			case <-time.After(execTxRetryDelay * time.Duration(attempt)):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
 			continue
 		}
 		if isDeadlockError(commitErr) {
@@ -76,5 +90,9 @@ func (store *SQLStore) execTx(ctx context.Context, fn func(*Queries) error) erro
 		return commitErr
 	}
 
-	return nil
+	// All retry attempts exhausted due to repeated deadlocks.
+	if lastErr != nil {
+		return fmt.Errorf("execTx: all %d attempts exhausted due to deadlock: %w", execTxMaxAttempts, lastErr)
+	}
+	return fmt.Errorf("execTx: all %d attempts exhausted", execTxMaxAttempts)
 }

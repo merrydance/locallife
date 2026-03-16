@@ -60,6 +60,11 @@ type Config struct {
 	// Web前端配置
 	WebBaseURL string `mapstructure:"WEB_BASE_URL"` // H5页面基础URL，用于分享功能
 
+	// 对外服务的基础 URL（生产环境必填）。设置后 API 生成的签名 URL 将以此为前缀，
+	// 避免依赖客户端可控的 Origin/Host 头（SSRF/开放重定向防护）。
+	// 示例：https://api.example.com
+	ExternalBaseURL string `mapstructure:"EXTERNAL_BASE_URL"`
+
 	// Web 登录扫码会话
 	WebLoginSessionTTL   time.Duration `mapstructure:"WEB_LOGIN_SESSION_TTL"`
 	WebLoginQRSigningKey string        `mapstructure:"WEB_LOGIN_QR_SIGNING_KEY"`
@@ -100,46 +105,49 @@ type Config struct {
 }
 
 // LoadConfig reads configuration from file or environment variables.
+// Each call creates an isolated viper instance so multiple invocations
+// (e.g. parallel tests) do not share or pollute global state.
 func LoadConfig(path string) (config Config, err error) {
-	viper.AddConfigPath(path)
-	viper.SetConfigName("app")
-	viper.SetConfigType("env")
+	v := viper.New()
+	v.AddConfigPath(path)
+	v.SetConfigName("app")
+	v.SetConfigType("env")
 
-	viper.AutomaticEnv()
-	viper.SetDefault("AUTO_MIGRATE", false)
-	viper.SetDefault("REDIS_REQUIRED", false)
-	viper.SetDefault("LOG_LEVEL", "info")
+	v.AutomaticEnv()
+	v.SetDefault("AUTO_MIGRATE", false)
+	v.SetDefault("REDIS_REQUIRED", false)
+	v.SetDefault("LOG_LEVEL", "info")
 	// WebSocket rollout defaults
-	viper.SetDefault("WS_RELIABLE_ENABLED", true)
-	viper.SetDefault("WS_RELIABLE_PERCENT", 100)
-	viper.SetDefault("RULES_ENGINE_ENABLED", false)
+	v.SetDefault("WS_RELIABLE_ENABLED", true)
+	v.SetDefault("WS_RELIABLE_PERCENT", 100)
+	v.SetDefault("RULES_ENGINE_ENABLED", false)
 	// Geofence defaults
-	viper.SetDefault("GEOFENCE_RADIUS_M", 80)
-	viper.SetDefault("GEOFENCE_DWELL_MIN_SECONDS", 60)
-	viper.SetDefault("GEOFENCE_DWELL_MIN_SAMPLES", 3)
-	viper.SetDefault("GEOFENCE_MIN_ACCURACY_M", 80)
-	viper.SetDefault("GEOFENCE_AUTO_ADVANCE_ENABLED", false)
-	viper.SetDefault("GEOFENCE_AUTO_PICKUP_ENABLED", false)
-	viper.SetDefault("GEOFENCE_AUTO_DELIVER_ENABLED", false)
+	v.SetDefault("GEOFENCE_RADIUS_M", 80)
+	v.SetDefault("GEOFENCE_DWELL_MIN_SECONDS", 60)
+	v.SetDefault("GEOFENCE_DWELL_MIN_SAMPLES", 3)
+	v.SetDefault("GEOFENCE_MIN_ACCURACY_M", 80)
+	v.SetDefault("GEOFENCE_AUTO_ADVANCE_ENABLED", false)
+	v.SetDefault("GEOFENCE_AUTO_PICKUP_ENABLED", false)
+	v.SetDefault("GEOFENCE_AUTO_DELIVER_ENABLED", false)
 	// Delivery defaults
-	viper.SetDefault("RIDER_AVERAGE_SPEED", 15000)
-	viper.SetDefault("DEFAULT_PREPARE_TIME", 20)
+	v.SetDefault("RIDER_AVERAGE_SPEED", 15000)
+	v.SetDefault("DEFAULT_PREPARE_TIME", 20)
 	// Profit sharing return retry defaults
-	viper.SetDefault("PROFIT_SHARING_RETURN_RETRY_INTERVAL", "1m")
-	viper.SetDefault("PROFIT_SHARING_RETURN_MAX_RETRIES", 10)
-	viper.SetDefault("RESERVATION_USER_REFUND_PERCENT_BEFORE_DEADLINE", 100)
-	viper.SetDefault("RESERVATION_USER_REFUND_PERCENT_AFTER_DEADLINE", 0)
-	viper.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_BEFORE_DEADLINE", 100)
-	viper.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE", 100)
+	v.SetDefault("PROFIT_SHARING_RETURN_RETRY_INTERVAL", "1m")
+	v.SetDefault("PROFIT_SHARING_RETURN_MAX_RETRIES", 10)
+	v.SetDefault("RESERVATION_USER_REFUND_PERCENT_BEFORE_DEADLINE", 100)
+	v.SetDefault("RESERVATION_USER_REFUND_PERCENT_AFTER_DEADLINE", 0)
+	v.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_BEFORE_DEADLINE", 100)
+	v.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE", 100)
 	// Web 登录默认过期时间
-	viper.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
+	v.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
 
-	err = viper.ReadInConfig()
+	err = v.ReadInConfig()
 	if err != nil {
 		return
 	}
 
-	err = viper.Unmarshal(&config)
+	err = v.Unmarshal(&config)
 	if err != nil {
 		return
 	}

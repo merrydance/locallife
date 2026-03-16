@@ -39,6 +39,13 @@ type reviewResponse struct {
 	CreatedAt     string   `json:"created_at"`
 }
 
+type reviewListResponse struct {
+	Reviews  []reviewResponse `json:"reviews"`
+	Total    int64            `json:"total"`
+	PageID   int32            `json:"page_id"`
+	PageSize int32            `json:"page_size"`
+}
+
 type replyReviewRequest struct {
 	Reply string `json:"reply" binding:"required,min=1,max=500"`
 }
@@ -129,7 +136,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 	}
 	if err := server.wechatClient.MsgSecCheck(ctx, user.WechatOpenid, 2, req.Content); err != nil {
 		if errors.Is(err, wechat.ErrRiskyTextContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("文本内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrTextContentSafetyFailed))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat msg sec check: %w", err)))
@@ -143,11 +150,11 @@ func (server *Server) createReview(ctx *gin.Context) {
 		for _, p := range req.Images {
 			normalized := normalizeStoredUploadPath(p)
 			if normalized == "" || !strings.HasPrefix(normalized, "uploads/") {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("images 必须是本地 uploads 相对路径")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidFilePath))
 				return
 			}
 			if !strings.HasPrefix(normalized, prefix) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("images 仅允许使用通过评价图片上传接口生成的路径")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidReviewImageURL))
 				return
 			}
 			normalizedImages = append(normalizedImages, normalized)
@@ -169,7 +176,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReviewResponse(review))
+	ctx.JSON(http.StatusCreated, newReviewResponse(review))
 }
 
 // getReview 获取评价详情
@@ -179,7 +186,7 @@ func (server *Server) createReview(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "评价ID"
-// @Success 200 {object} reviewResponse "评价详情"
+// @Success 201 {object} reviewResponse "评价详情"
 // @Failure 400 {object} ErrorResponse "无效的评价ID"
 // @Failure 404 {object} ErrorResponse "评价不存在"
 // @Failure 500 {object} ErrorResponse "内部错误"
@@ -239,7 +246,7 @@ func (server *Server) getReviewByOrder(ctx *gin.Context) {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} map[string]interface{} "评价列表"
+// @Success 200 {object} reviewListResponse "评价列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 500 {object} ErrorResponse "内部错误"
 // @Router /v1/reviews/merchants/{id} [get]
@@ -277,11 +284,11 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"reviews":     newReviewListResponse(reviews),
-		"total": count,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+	response := reviewListResponse{
+		Reviews:  newReviewListResponse(reviews),
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	}
 	ctx.JSON(http.StatusOK, response)
 }
@@ -295,7 +302,7 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 // @Param id path int true "商户ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} map[string]interface{} "评价列表"
+// @Success 200 {object} reviewListResponse "评价列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "无权访问该商户"
@@ -347,11 +354,11 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"reviews":     newReviewListResponse(reviews),
-		"total": count,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+	response := reviewListResponse{
+		Reviews:  newReviewListResponse(reviews),
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	}
 	ctx.JSON(http.StatusOK, response)
 }
@@ -364,7 +371,7 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 // @Produce json
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
-// @Success 200 {object} map[string]interface{} "评价列表"
+// @Success 200 {object} reviewListResponse "评价列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 500 {object} ErrorResponse "内部错误"
@@ -397,11 +404,11 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 		return
 	}
 
-	response := gin.H{
-		"reviews":     newListReviewByUserResponse(reviews),
-		"total": count,
-		"page_id":     req.PageID,
-		"page_size":   req.PageSize,
+	response := reviewListResponse{
+		Reviews:  newListReviewByUserResponse(reviews),
+		Total:    count,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	}
 	ctx.JSON(http.StatusOK, response)
 }
@@ -477,7 +484,7 @@ func (server *Server) replyReview(ctx *gin.Context) {
 	}
 	if err := server.wechatClient.MsgSecCheck(ctx, merchantUser.WechatOpenid, 2, req.Reply); err != nil {
 		if errors.Is(err, wechat.ErrRiskyTextContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("文本内容安全检测未通过")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrTextContentSafetyFailed))
 			return
 		}
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat msg sec check: %w", err)))
@@ -504,7 +511,7 @@ func (server *Server) replyReview(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "评价ID"
-// @Success 200 {object} map[string]interface{} "删除成功"
+// @Success 200 {object} successMessageResponse "删除成功"
 // @Failure 400 {object} ErrorResponse "无效的评价ID"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "只能删除管辖区域商户的评价"

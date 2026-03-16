@@ -530,7 +530,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 	}
 
 	if key == "WEATHER_COEFFICIENT" {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("天气系数由系统根据实时天气自动更新，无法手动修改")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrWeatherCoefficientReadOnly))
 		return
 	}
 
@@ -548,7 +548,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 	}
 
 	if _, ok := editableKeys[key]; !ok {
-		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("该规则仅支持平台侧修改")))
+		ctx.JSON(http.StatusForbidden, errorResponse(ErrRulePlatformOnly))
 		return
 	}
 
@@ -599,32 +599,32 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		} else {
 			val, err := strconv.ParseFloat(req.Value, 64)
 			if err != nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的数值格式")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidNumberFormat))
 				return
 			}
 
 			switch key {
 			case "BASE_DELIVERY_FEE":
 				if val < 0 {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
 					return
 				}
 				arg.BaseFee = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
 			case "BASE_DISTANCE":
 				if val < 0 {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离不能为负数")))
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrDistanceNegative))
 					return
 				}
 				arg.BaseDistance = pgtype.Int4{Int32: int32(val), Valid: true}
 			case "EXTRA_FEE_PER_KM":
 				if val < 0 {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
 					return
 				}
 				arg.ExtraFeePerKm = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
 			case "MIN_DELIVERY_FEE":
 				if val < 0 {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("金额不能为负数")))
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
 					return
 				}
 				arg.MinFee = pgtype.Int8{Int64: yuanToFen(val), Valid: true}
@@ -639,7 +639,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 				}
 			case "DELIVERY_VALUE_RATIO":
 				if val < 0 || val > 100 {
-					ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("货值费率必须在 0-100 之间")))
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrValueRateOutOfRange))
 					return
 				}
 				arg.ValueRatio = numericFromFloat(val / 100.0)
@@ -680,11 +680,11 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		// 校验数值
 		val, err := strconv.ParseFloat(req.Value, 64)
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无效的数值格式")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidNumberFormat))
 			return
 		}
 		if val < 1.0 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("系数不能小于 1.0")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrCoefficientTooLow))
 			return
 		}
 
@@ -738,7 +738,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 		auditMetadata["platform_config_scope_id"] = targetRegionID
 
 	default:
-		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("未知的规则 Key")))
+		ctx.JSON(http.StatusNotFound, errorResponse(ErrUnknownRuleKey))
 		return
 	}
 

@@ -73,7 +73,7 @@ func (server *Server) getRegion(ctx *gin.Context) {
 	region, err := server.store.GetRegion(ctx, id)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("区域不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -434,7 +434,7 @@ func (server *Server) checkRegionAvailability(ctx *gin.Context) {
 	region, err := server.store.GetRegion(ctx, id)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("区域不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRegionNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

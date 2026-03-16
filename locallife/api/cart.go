@@ -243,10 +243,10 @@ func (server *Server) addCartItem(ctx *gin.Context) {
 		return
 	}
 
-	server.returnUpdatedCart(ctx, result.Cart)
+	server.returnUpdatedCart(ctx, result.Cart, http.StatusCreated)
 }
 
-func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart) {
+func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart, statusCode int) {
 	items, err := server.store.ListCartItems(ctx, cart.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list cart items: %w", err)))
@@ -256,7 +256,7 @@ func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart) {
 	response := toCartResponse(logicResp)
 	server.enrichCartItems(ctx, response.Items)
 	server.enrichComboImages(ctx, response.Items)
-	ctx.JSON(http.StatusOK, response)
+	ctx.JSON(statusCode, response)
 }
 
 type updateCartItemRequest struct {
@@ -313,10 +313,10 @@ func (server *Server) updateCartItem(ctx *gin.Context) {
 		return
 	}
 
-	server.returnUpdatedCart(ctx, result.Cart)
+	// updateCartItem
+	server.returnUpdatedCart(ctx, result.Cart, http.StatusOK)
 }
 
-// deleteCartItem godoc
 // @Summary 删除购物车商品
 // @Description 从购物车中移除指定商品
 // @Tags 购物车
@@ -376,7 +376,7 @@ func (server *Server) deleteCartItem(ctx *gin.Context) {
 	}
 
 	// 返回更新后的购物车
-	server.returnUpdatedCart(ctx, cart)
+	server.returnUpdatedCart(ctx, cart, http.StatusOK)
 }
 
 type clearCartRequest struct {
@@ -519,10 +519,13 @@ type calculateCartResponse struct {
 	VoucherTrials []logic.VoucherTrial `json:"voucher_trials,omitempty"`
 	// 会员余额支付能力评估
 	PaymentAssessment logic.PaymentAssessment `json:"payment_assessment"`
-	// 最小起送金额（分），0表示无限制
-	MinOrderAmount int64 `json:"min_order_amount"`
-	// 是否满足起送金额
-	MeetsMinOrder bool `json:"meets_min_order"`
+	// 最小起送金额（分）。0 表示无起送限制，或该商户尚未配置起送金额。
+	// 商户级起送金额配置上线后此字段将从商户配置读取；
+	// 当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。
+	// omitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。
+	MinOrderAmount int64 `json:"min_order_amount,omitempty"`
+	// 是否满足起送金额。MinOrderAmount 为 0（无限制）时该字段不返回。
+	MeetsMinOrder *bool `json:"meets_min_order,omitempty"`
 }
 
 // calculateCart godoc
@@ -546,7 +549,6 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 		return
 	}
 
-	// 记录输入参数，便于排查配送费计算问题（不含用户敏感信息）
 	log.Info().
 		Int64("merchant_id", req.MerchantID).
 		Str("order_type", req.OrderType).
@@ -557,199 +559,96 @@ func (server *Server) calculateCart(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	// 获取商户信息（用于获取region_id和min_order_amount）
+	// Fetch merchant first so we can validate status before doing any expensive work.
 	merchant, err := server.store.GetMerchant(ctx, req.MerchantID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get merchant: %w", err)))
 		return
-	}
-	if req.OrderType == "takeout" {
-		if merchant.Status != "active" || !merchant.IsOpen {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("商户已打烊")))
-			return
-		}
 	}
 
 	if req.OrderType == "" {
 		req.OrderType = "takeout"
 	}
 
-	var tableID, reservationID pgtype.Int8
-	if req.TableID != nil {
-		tableID = pgtype.Int8{Int64: *req.TableID, Valid: true}
-	}
-	if req.ReservationID != nil {
-		reservationID = pgtype.Int8{Int64: *req.ReservationID, Valid: true}
+	if req.OrderType == "takeout" && (merchant.Status != "active" || !merchant.IsOpen) {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrMerchantClosed))
+		return
 	}
 
-	cart, err := server.store.GetCartByUserAndMerchant(ctx, db.GetCartByUserAndMerchantParams{
+	// Bridge the server-layer delivery fee calculator to the logic.DeliveryFeeCalculator signature.
+	feeFn := func(feeCtx context.Context, regionID, merchantID int64, distance int32, orderAmount int64) (logic.DeliveryFeeComputation, error) {
+		res, err := server.calculateDeliveryFeeInternal(feeCtx, regionID, merchantID, distance, orderAmount)
+		if err != nil {
+			return logic.DeliveryFeeComputation{}, err
+		}
+		if res == nil {
+			return logic.DeliveryFeeComputation{}, nil
+		}
+		return logic.DeliveryFeeComputation{
+			Fee:           res.FinalFee,
+			Discount:      res.PromotionDiscount,
+			Suspended:     res.DeliverySuspended,
+			SuspendReason: res.SuspendReason,
+		}, nil
+	}
+
+	preview, err := logic.CalculateCartPreview(ctx, server.store, server.mapClient, merchant, feeFn, logic.CartPreviewInput{
 		UserID:        authPayload.UserID,
 		MerchantID:    req.MerchantID,
 		OrderType:     req.OrderType,
-		TableID:       tableID,
-		ReservationID: reservationID,
+		TableID:       req.TableID,
+		ReservationID: req.ReservationID,
+		AddressID:     req.AddressID,
+		Latitude:      req.Latitude,
+		Longitude:     req.Longitude,
+		VoucherID:     req.VoucherID,
 	})
 	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("购物车为空")))
+		if writeLogicRequestError(ctx, err) {
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get cart by user and merchant: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("calculate cart preview: %w", err)))
 		return
 	}
 
-	items, err := server.store.ListCartItems(ctx, cart.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list cart items: %w", err)))
-		return
-	}
-
-	if len(items) == 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("购物车为空")))
-		return
-	}
-
-	// 计算商品小计
-	var subtotal int64
-	for _, item := range items {
-		var unitPrice int64
-		if item.DishID.Valid {
-			unitPrice = item.DishPrice.Int64
-		} else if item.ComboID.Valid {
-			unitPrice = item.ComboPrice.Int64
-		}
-		subtotal += unitPrice * int64(item.Quantity)
-	}
-
-	// 获取起送金额（从配送费配置中获取，或使用默认值0表示无限制）
-	var minOrderAmount int64
-	meetsMinOrder := true
-	// 起送金额暂不实现，后续可从商户配置或配送费配置中获取
-
-	// 计算配送费（如果提供了地址或坐标）
-	var deliveryFee int64
-	var deliveryFeeDiscount int64
-	var deliveryDistance int32
-	var routeDurationSec int
-	var eta logic.DeliveryETAResult
-	if req.AddressID != nil {
-		address, err := server.store.GetUserAddress(ctx, *req.AddressID)
-		if err != nil || address.UserID != authPayload.UserID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("地址无效")))
-			return
-		}
-		if !address.Latitude.Valid || !address.Longitude.Valid || !merchant.Latitude.Valid || !merchant.Longitude.Valid {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法获取距离，请重新选择地址")))
-			return
-		}
-		if server.mapClient == nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
-			return
-		}
-		fromLoc := maps.Location{Lat: pgNumericToFloat64(merchant.Latitude), Lng: pgNumericToFloat64(merchant.Longitude)}
-		toLoc := maps.Location{Lat: pgNumericToFloat64(address.Latitude), Lng: pgNumericToFloat64(address.Longitude)}
-		routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-		if err != nil || routeResult == nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))
-			return
-		}
-		distance := int32(routeResult.Distance)
-		deliveryDistance = distance
-		feeResult, err := server.calculateDeliveryFeeInternal(
-			ctx,
-			merchant.RegionID,
-			merchant.ID,
-			distance,
-			subtotal,
-		)
-		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-			deliveryFee = feeResult.FinalFee
-			deliveryFeeDiscount = feeResult.PromotionDiscount
-			routeDurationSec = routeResult.Duration
-		}
-	} else if req.Latitude != nil && req.Longitude != nil {
-		if !merchant.Latitude.Valid || !merchant.Longitude.Valid {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法获取距离，请重新选择位置")))
-			return
-		}
-		if server.mapClient == nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
-			return
-		}
-		fromLoc := maps.Location{Lat: pgNumericToFloat64(merchant.Latitude), Lng: pgNumericToFloat64(merchant.Longitude)}
-		toLoc := maps.Location{Lat: *req.Latitude, Lng: *req.Longitude}
-		routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
-		if err != nil || routeResult == nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))
-			return
-		}
-		distance := int32(routeResult.Distance)
-		deliveryDistance = distance
-		feeResult, err := server.calculateDeliveryFeeInternal(
-			ctx,
-			merchant.RegionID,
-			merchant.ID,
-			distance,
-			subtotal,
-		)
-		if err == nil && feeResult != nil && !feeResult.DeliverySuspended {
-			deliveryFee = feeResult.FinalFee
-			deliveryFeeDiscount = feeResult.PromotionDiscount
-			routeDurationSec = routeResult.Duration
-		}
-	}
-
-	// 计算预计送达时间：出餐 + 骑手到店 + 店到用户 + 缓冲
-	eta = logic.ComputeDeliveryETA(ctx, server.store, merchant.ID, deliveryDistance, routeDurationSec)
-
-	// 使用统一优惠引擎计算最终价格
-	engine := logic.NewPromotionEngine(server.store)
-	calcResult, err := engine.CalculateFinalPrice(ctx, logic.OrderContext{
-		MerchantID:          merchant.ID,
-		UserID:              authPayload.UserID,
-		OrderType:           req.OrderType,
-		Subtotal:            subtotal,
-		VoucherID:           req.VoucherID,
-		DeliveryFee:         deliveryFee,
-		DeliveryFeeDiscount: deliveryFeeDiscount,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("calculate final price: %w", err)))
-		return
-	}
-
+	calcResult := preview.Promotion
 	log.Info().
 		Int64("merchant_id", req.MerchantID).
 		Str("order_type", req.OrderType).
-		Int32("delivery_distance", deliveryDistance).
+		Int32("delivery_distance", preview.DeliveryDistance).
 		Int64("total_amount", calcResult.TotalAmount).
 		Msg("calculateCart result from engine")
 
-	ctx.JSON(http.StatusOK, calculateCartResponse{
+	resp := calculateCartResponse{
 		Subtotal:            calcResult.Subtotal,
 		DeliveryFee:         calcResult.DeliveryFee,
 		DeliveryFeeDiscount: calcResult.DeliveryFeeDiscount,
-		DeliveryDistance:    deliveryDistance,
-		DeliveryEtaMinutes:  eta.DeliveryEtaMinutes,
-		PrepareMinutes:      eta.PrepareMinutes,
-		RiderToStoreMinutes: eta.RiderToStoreMinutes,
-		StoreToUserMinutes:  eta.StoreToUserMinutes,
-		BufferMinutes:       eta.BufferMinutes,
+		DeliveryDistance:    preview.DeliveryDistance,
+		DeliveryEtaMinutes:  preview.ETA.DeliveryEtaMinutes,
+		PrepareMinutes:      preview.ETA.PrepareMinutes,
+		RiderToStoreMinutes: preview.ETA.RiderToStoreMinutes,
+		StoreToUserMinutes:  preview.ETA.StoreToUserMinutes,
+		BufferMinutes:       preview.ETA.BufferMinutes,
 		DiscountAmount:      calcResult.VoucherDiscount + calcResult.MerchantDiscount,
 		TotalAmount:         calcResult.TotalAmount,
-		DiscountInfo:        "", // 具体的明细已在 AppliedPromotions 中
+		DiscountInfo:        "",
 		AppliedPromotions:   calcResult.AppliedPromotions,
 		SuggestedVoucher:    calcResult.SuggestedVoucher,
 		LadderPromotions:    calcResult.LadderPromotions,
 		VoucherTrials:       calcResult.VoucherTrials,
 		PaymentAssessment:   calcResult.PaymentAssessment,
-		MinOrderAmount:      minOrderAmount,
-		MeetsMinOrder:       meetsMinOrder,
-	})
+		MinOrderAmount:      preview.MinOrderAmount,
+	}
+	// 仅当商户配置了起送金额时才填充 meets_min_order，避免恒 true 误导前端
+	if preview.MinOrderAmount > 0 {
+		v := preview.MeetsMinOrder
+		resp.MeetsMinOrder = &v
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 浏览历史 API ====================
@@ -775,9 +674,9 @@ type listBrowseHistoryResponse struct {
 	// 浏览记录列表
 	Items []browseHistoryItem `json:"items"`
 	// 总数
-	Total      int64 `json:"total"`
-	PageID     int   `json:"page_id"`
-	PageSize   int   `json:"page_size"`
+	Total    int64 `json:"total"`
+	PageID   int   `json:"page_id"`
+	PageSize int   `json:"page_size"`
 }
 
 // listBrowseHistory godoc
@@ -801,7 +700,7 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 	targetType := ctx.Query("type")
 	// 验证type参数
 	if targetType != "" && targetType != "merchant" && targetType != "dish" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("type参数只能是merchant或dish")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidTypeParam))
 		return
 	}
 
@@ -850,7 +749,44 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 		return
 	}
 
-	// 获取详细信息
+	// 批量收集各类型 ID，避免 N+1 查询
+	var merchantIDs, dishIDs []int64
+	for _, item := range items {
+		switch item.TargetType {
+		case "merchant":
+			merchantIDs = append(merchantIDs, item.TargetID)
+		case "dish":
+			dishIDs = append(dishIDs, item.TargetID)
+		}
+	}
+
+	// 批量获取商户信息（最多 1 次 DB 调用）
+	merchantMap := make(map[int64]db.GetMerchantsByIDsRow, len(merchantIDs))
+	if len(merchantIDs) > 0 {
+		merchants, err := server.store.GetMerchantsByIDs(ctx, merchantIDs)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("batch get merchants for history: %w", err)))
+			return
+		}
+		for _, m := range merchants {
+			merchantMap[m.ID] = m
+		}
+	}
+
+	// 批量获取菜品信息（最多 1 次 DB 调用）
+	dishMap := make(map[int64]db.GetDishesByIDsRow, len(dishIDs))
+	if len(dishIDs) > 0 {
+		dishes, err := server.store.GetDishesByIDs(ctx, dishIDs)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("batch get dishes for history: %w", err)))
+			return
+		}
+		for _, d := range dishes {
+			dishMap[d.ID] = d
+		}
+	}
+
+	// 组装响应
 	result := make([]browseHistoryItem, len(items))
 	for i, item := range items {
 		historyItem := browseHistoryItem{
@@ -860,31 +796,26 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 			ViewCount:    item.ViewCount,
 			LastViewedAt: item.LastViewedAt.Format("2006-01-02 15:04:05"),
 		}
-
-		// 根据类型获取名称和图片
 		switch item.TargetType {
 		case "merchant":
-			merchant, err := server.store.GetMerchant(ctx, item.TargetID)
-			if err == nil {
-				historyItem.Name = merchant.Name
-				historyItem.ImageURL = normalizeUploadURLForClient(merchant.LogoUrl.String)
+			if m, ok := merchantMap[item.TargetID]; ok {
+				historyItem.Name = m.Name
+				historyItem.ImageURL = normalizeUploadURLForClient(m.LogoUrl.String)
 			}
 		case "dish":
-			dish, err := server.store.GetDish(ctx, item.TargetID)
-			if err == nil {
-				historyItem.Name = dish.Name
-				historyItem.ImageURL = normalizeUploadURLForClient(dish.ImageUrl.String)
+			if d, ok := dishMap[item.TargetID]; ok {
+				historyItem.Name = d.Name
+				historyItem.ImageURL = normalizeUploadURLForClient(d.ImageUrl.String)
 			}
 		}
-
 		result[i] = historyItem
 	}
 
 	ctx.JSON(http.StatusOK, listBrowseHistoryResponse{
-		Items:      result,
-		Total:      total,
-		PageID:     page,
-		PageSize:   pageSize,
+		Items:    result,
+		Total:    total,
+		PageID:   page,
+		PageSize: pageSize,
 	})
 }
 
@@ -943,7 +874,7 @@ type userCartsResponse struct {
 func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	orderType := ctx.Query("order_type")
-	fmt.Printf("[DEBUG] getUserCartsSummary: user_id=%d, order_type=%s\n", authPayload.UserID, orderType)
+	log.Debug().Int64("user_id", authPayload.UserID).Str("order_type", orderType).Msg("getUserCartsSummary")
 
 	argSummary := db.GetUserCartsSummaryParams{
 		UserID: authPayload.UserID,
@@ -1066,7 +997,7 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 		return
 	}
 	if len(carts) == 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("购物车为空")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrCartEmpty))
 		return
 	}
 
@@ -1109,27 +1040,27 @@ func (server *Server) previewCombinedCheckout(ctx *gin.Context) {
 		var deliveryFee int64
 		if cartDetail.OrderType == "takeout" {
 			if req.AddressID == nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("外卖合单需要选择配送地址")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryAddressRequired))
 				return
 			}
 			address, err := server.store.GetUserAddress(ctx, *req.AddressID)
 			if err != nil || address.UserID != authPayload.UserID {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("地址无效")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidAddress))
 				return
 			}
 			if !address.Latitude.Valid || !address.Longitude.Valid || !cart.MerchantLatitude.Valid || !cart.MerchantLongitude.Valid {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法获取配送距离，请重新选择地址")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceUnavailable))
 				return
 			}
 			if server.mapClient == nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("无法计算配送距离，请稍后重试")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceCalcFailed))
 				return
 			}
 			fromLoc := maps.Location{Lat: pgNumericToFloat64(cart.MerchantLatitude), Lng: pgNumericToFloat64(cart.MerchantLongitude)}
 			toLoc := maps.Location{Lat: pgNumericToFloat64(address.Latitude), Lng: pgNumericToFloat64(address.Longitude)}
 			routeResult, err := server.mapClient.GetBicyclingRoute(ctx, fromLoc, toLoc)
 			if err != nil || routeResult == nil {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("距离计算失败，请重新选择位置")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrDeliveryDistanceUnavailable))
 				return
 			}
 			distance := int32(routeResult.Distance)

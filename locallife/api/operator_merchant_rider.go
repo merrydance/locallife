@@ -230,7 +230,7 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -322,7 +322,7 @@ func (server *Server) getOperatorMerchantStats(ctx *gin.Context) {
 	merchant, err := server.store.GetMerchant(ctx, req.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("商户不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -610,7 +610,7 @@ func (server *Server) getOperatorRider(ctx *gin.Context) {
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -619,7 +619,7 @@ func (server *Server) getOperatorRider(ctx *gin.Context) {
 
 	// 验证骑手有区域
 	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNoRegionAssigned))
 		return
 	}
 
@@ -724,14 +724,14 @@ func (server *Server) getOperatorRiderStats(ctx *gin.Context) {
 	rider, err := server.store.GetRider(ctx, req.ID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("骑手不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if !rider.RegionID.Valid {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("骑手未分配区域")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNoRegionAssigned))
 		return
 	}
 	if _, err := server.checkOperatorManagesRegion(ctx, rider.RegionID.Int64); err != nil {

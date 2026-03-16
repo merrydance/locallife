@@ -945,7 +945,7 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 	location, err := server.store.GetDeliveryLatestLocation(ctx, pgtype.Int8{Int64: req.DeliveryID, Valid: true})
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("暂无位置信息")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrNoLocationAvailable))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1025,7 +1025,7 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1085,7 +1085,7 @@ func (server *Server) listMyActiveDeliveries(ctx *gin.Context) {
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("您还不是骑手")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

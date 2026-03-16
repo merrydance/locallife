@@ -79,7 +79,7 @@ func (server *Server) createDiscountRule(ctx *gin.Context) {
 	}
 
 	rsp := convertDiscountRuleResponse(rule)
-	ctx.JSON(http.StatusOK, rsp)
+	ctx.JSON(http.StatusCreated, rsp)
 }
 
 // getDiscountRuleRequest 获取满减规则请求

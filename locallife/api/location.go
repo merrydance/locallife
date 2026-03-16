@@ -66,7 +66,7 @@ func (server *Server) getCurrentRegionByLocation(ctx *gin.Context) {
 	region, err := server.store.GetRegion(ctx, regionID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(fmt.Errorf("当前坐标未匹配到区县")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrCoordinateNoDistrict))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

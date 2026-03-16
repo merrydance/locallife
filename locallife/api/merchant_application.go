@@ -352,7 +352,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -395,7 +395,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 	if req.Longitude != nil {
 		lon, err := parseNumericString(*req.Longitude)
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("经度格式错误")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidLongitudeFormat))
 			return
 		}
 		arg.Longitude = lon
@@ -403,7 +403,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 	if req.Latitude != nil {
 		lat, err := parseNumericString(*req.Latitude)
 		if err != nil {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("纬度格式错误")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidLatitudeFormat))
 			return
 		}
 		arg.Latitude = lat
@@ -487,11 +487,11 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 
 	// 验证图片数量限制
 	if len(req.StorefrontImages) > 3 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("门头照最多3张")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrTooManyStorefrontPhotos))
 		return
 	}
 	if len(req.EnvironmentImages) > 5 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("环境照最多5张")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrTooManyAmbientPhotos))
 		return
 	}
 
@@ -499,7 +499,7 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -568,7 +568,7 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 				}
 			}
 			if !found {
-				deleteStoredImageAsync(old)
+				server.deleteStoredImageAsync(old)
 			}
 		}
 	}
@@ -582,7 +582,7 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 				}
 			}
 			if !found {
-				deleteStoredImageAsync(old)
+				server.deleteStoredImageAsync(old)
 			}
 		}
 	}
@@ -622,7 +622,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 	log.Info().Str("request_id", requestID).Dur("duration", time.Since(t1)).Msg("merchant OCR: GetMerchantApplicationDraft done")
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -733,7 +733,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		}
 		localPath = filepath.Clean(localPath)
 		if !strings.HasPrefix(localPath, "uploads/") {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("营业执照图片地址不合法")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
 
@@ -750,10 +750,10 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		}
 		log.Info().Str("request_id", requestID).Msg("merchant OCR: DB updated with new image URL")
 		updatedApp = updated
-		deleteStoredImageAsync(oldImageURL)
+		server.deleteStoredImageAsync(oldImageURL)
 	} else {
 		if app.BusinessLicenseImageUrl == "" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上传营业执照图片")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrBusinessLicenseNotYetUploaded))
 			return
 		}
 		localPath = app.BusinessLicenseImageUrl
@@ -762,7 +762,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		}
 		localPath = filepath.Clean(localPath)
 		if !strings.HasPrefix(localPath, "uploads/") {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("营业执照图片地址不合法")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
 
@@ -823,7 +823,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -898,7 +898,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 		}
 		localPath = filepath.Clean(localPath)
 		if !strings.HasPrefix(localPath, "uploads/") {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("食品经营许可证图片地址不合法")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
 
@@ -913,10 +913,10 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 			return
 		}
 		updatedApp = updated
-		deleteStoredImageAsync(oldFoodPermitURL)
+		server.deleteStoredImageAsync(oldFoodPermitURL)
 	} else {
 		if !app.FoodPermitUrl.Valid || app.FoodPermitUrl.String == "" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上传食品经营许可证图片")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrFoodLicenseNotYetUploaded))
 			return
 		}
 		localPath = app.FoodPermitUrl.String
@@ -925,7 +925,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 		}
 		localPath = filepath.Clean(localPath)
 		if !strings.HasPrefix(localPath, "uploads/") {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("食品经营许可证图片地址不合法")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
 
@@ -985,7 +985,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1013,7 +1013,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 
 	side := ctx.PostForm("side")
 	if side != "Front" && side != "Back" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("side参数必须是Front或Back")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidIDCardSide))
 		return
 	}
 
@@ -1076,7 +1076,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 		}
 		localPath = filepath.Clean(localPath)
 		if !strings.HasPrefix(localPath, "uploads/") {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("身份证图片地址不合法")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
 
@@ -1105,10 +1105,10 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 			}
 			updatedApp = updated
 		}
-		deleteStoredImageAsync(oldIDCardURL)
+		server.deleteStoredImageAsync(oldIDCardURL)
 	} else {
 		if storedPath == "" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("请先上传身份证图片")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardNotYetUploaded))
 			return
 		}
 		localPath = storedPath
@@ -1117,7 +1117,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 		}
 		localPath = filepath.Clean(localPath)
 		if !strings.HasPrefix(localPath, "uploads/") {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("身份证图片地址不合法")))
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
 
@@ -1194,7 +1194,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("请先创建申请")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1204,7 +1204,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 	// 允许提交的状态：draft, rejected, approved, submitted (用于重试)
 	if app.Status != "draft" && app.Status != "rejected" && app.Status != "approved" && app.Status != "submitted" {
 		log.Warn().Str("request_id", requestID).Str("current_status", app.Status).Msg("submit failed: invalid status")
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("当前申请状态不可提交")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationInvalidState))
 		return
 	}
 
@@ -1305,31 +1305,31 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 // validateMerchantApplicationRequired 验证必填字段
 func validateMerchantApplicationRequired(app db.MerchantApplication) error {
 	if app.MerchantName == "" {
-		return errors.New("商户名称不能为空")
+		return ErrMerchantNameRequired
 	}
 	if app.ContactPhone == "" {
-		return errors.New("联系电话不能为空")
+		return ErrPhoneRequired
 	}
 	if app.BusinessAddress == "" {
-		return errors.New("商户地址不能为空")
+		return ErrMerchantAddressRequired
 	}
 	if !app.Longitude.Valid || !app.Latitude.Valid {
-		return errors.New("请选择商户地理位置")
+		return ErrMerchantLocationRequired
 	}
 	if !app.RegionID.Valid {
-		return errors.New("请选择所属区域")
+		return ErrMerchantRegionRequired
 	}
 	if app.BusinessLicenseImageUrl == "" {
-		return errors.New("请上传营业执照")
+		return ErrBusinessLicenseRequired
 	}
 	if !app.FoodPermitUrl.Valid || app.FoodPermitUrl.String == "" {
-		return errors.New("请上传食品经营许可证")
+		return ErrFoodLicenseRequired
 	}
 	if app.LegalPersonIDFrontUrl == "" {
-		return errors.New("请上传身份证正面照")
+		return ErrIDCardFrontRequired
 	}
 	if app.LegalPersonIDBackUrl == "" {
-		return errors.New("请上传身份证背面照")
+		return ErrIDCardBackRequired
 	}
 	return nil
 }
@@ -2179,7 +2179,7 @@ func (server *Server) resetMerchantApplication(ctx *gin.Context) {
 	app, err := server.store.GetUserMerchantApplication(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("申请不存在")))
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -2187,7 +2187,7 @@ func (server *Server) resetMerchantApplication(ctx *gin.Context) {
 	}
 
 	if app.Status != "rejected" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("只能重置被拒绝的申请")))
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationCannotReset))
 		return
 	}
 

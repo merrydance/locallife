@@ -113,7 +113,7 @@ func (server *Server) createDailyInventory(ctx *gin.Context) {
 		},
 	})
 
-	ctx.JSON(http.StatusOK, dailyInventoryResponse{
+	ctx.JSON(http.StatusCreated, dailyInventoryResponse{
 		ID:               inventory.ID,
 		MerchantID:       inventory.MerchantID,
 		DishID:           inventory.DishID,
@@ -152,7 +152,7 @@ type dailyInventoryWithDishResponse struct {
 // @Tags 库存管理
 // @Produce json
 // @Param date query string true "日期(YYYY-MM-DD)"
-// @Success 200 {object} listDailyInventoryResponse "库存列表"
+// @Success 201 {object} listDailyInventoryResponse "库存列表"
 // @Failure 400 {object} ErrorResponse "参数错误"
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 404 {object} ErrorResponse "商户不存在"

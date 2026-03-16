@@ -669,15 +669,22 @@ func (c *EcommerceClient) AddProfitSharingReceiver(ctx context.Context, req *Add
 		"relation_type": req.RelationType,
 	}
 
-	// 如果有名称（个人类型需要）
+	// 如果有名称（个人类型需要）：
+	// 微信支付要求接收方名称必须使用平台公钥加密后传输，明文禁止出现在请求体中。
+	// 参考：https://pay.weixin.qq.com/doc/v3/partner/4012459165
 	if req.EncryptedName != "" {
+		// 调用方已自行加密，直接使用
 		body["encrypted_name"] = req.EncryptedName
 	} else if req.Name != "" {
-		// TODO: 需要使用微信平台证书加密
-		body["name"] = req.Name
+		encryptedName, err := c.EncryptSensitiveData(req.Name)
+		if err != nil {
+			return nil, fmt.Errorf("encrypt receiver name: %w", err)
+		}
+		body["encrypted_name"] = encryptedName
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodPost, profitSharingReceiverAddURL, body)
+	// 包含敏感加密字段时必须携带 Wechatpay-Serial 头，以告知微信使用哪把公钥/证书解密
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, profitSharingReceiverAddURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("add profit sharing receiver: %w", err)
 	}

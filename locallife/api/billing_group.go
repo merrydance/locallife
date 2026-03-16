@@ -116,7 +116,7 @@ func (server *Server) createBillingGroup(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newBillingGroupResponse(billingGroup))
+	ctx.JSON(http.StatusCreated, newBillingGroupResponse(billingGroup))
 }
 
 // joinBillingGroup 加入账单组
@@ -124,7 +124,7 @@ func (server *Server) createBillingGroup(ctx *gin.Context) {
 // @Tags 账单组
 // @Produce json
 // @Param id path int true "账单组ID"
-// @Success 200 {object} billingGroupResponse
+// @Success 201 {object} billingGroupResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
 // @Failure 404 {object} ErrorResponse

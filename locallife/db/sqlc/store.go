@@ -20,6 +20,7 @@ type Store interface {
 	CreateDishTx(ctx context.Context, arg CreateDishTxParams) (CreateDishTxResult, error)
 	UpdateDishTx(ctx context.Context, arg UpdateDishTxParams) (UpdateDishTxResult, error)
 	SetDishCustomizationsTx(ctx context.Context, arg SetDishCustomizationsTxParams) (SetDishCustomizationsTxResult, error)
+	RenameMerchantDishCategoryTx(ctx context.Context, arg RenameMerchantDishCategoryTxParams) (RenameMerchantDishCategoryTxResult, error)
 	// Merchant transactions
 	SetBusinessHoursTx(ctx context.Context, arg SetBusinessHoursTxParams) (SetBusinessHoursTxResult, error)
 	// Merchant application approval transaction

@@ -114,7 +114,7 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 		geo, err := server.mapClient.Geocode(ctx, req.DetailAddress)
 		if err != nil {
 			if errors.Is(err, maps.ErrGeocodeNoResult) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("未能定位，请在地图上选点或补充门牌号")))
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrLocationAddressRequired))
 				return
 			}
 			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("failed to geocode address: %w", err)))
@@ -179,7 +179,7 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newUserAddressResponse(result.Address))
+	ctx.JSON(http.StatusCreated, newUserAddressResponse(result.Address))
 }
 
 // getUserAddress godoc
@@ -189,7 +189,7 @@ func (server *Server) createUserAddress(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "地址ID"
-// @Success 200 {object} userAddressResponse "地址信息"
+// @Success 201 {object} userAddressResponse "地址信息"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "禁止访问"

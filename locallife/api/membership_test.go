@@ -490,7 +490,7 @@ func TestCreateRechargeRuleAPI(t *testing.T) {
 					Return(randomRechargeRule(merchant.ID), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusCreated, recorder.Code)
 			},
 		},
 		{

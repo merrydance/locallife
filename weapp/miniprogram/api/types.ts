@@ -79,6 +79,31 @@ export enum ErrorCode {
     TOKEN_EXPIRED = 1001
 }
 
+/**
+ * 将后端精细 5 位错误码映射到粗粒度 ErrorCode 分类。
+ * 后端错误码规则：前 3 位对应 HTTP 语义，如 400xx → BAD_REQUEST(40000)。
+ * 精确码不命中 enum 常量时，按前 3 位归类后统一处理。
+ */
+export function classifyErrorCode(code: number): ErrorCode {
+    if (code === ErrorCode.SUCCESS) return ErrorCode.SUCCESS
+    if (code === ErrorCode.TOKEN_EXPIRED) return ErrorCode.TOKEN_EXPIRED
+    const hundreds = Math.floor(code / 100)
+    switch (hundreds) {
+        case 400: return ErrorCode.BAD_REQUEST
+        case 401: return ErrorCode.UNAUTHORIZED
+        case 403: return ErrorCode.FORBIDDEN
+        case 404: return ErrorCode.NOT_FOUND
+        case 409: return ErrorCode.CONFLICT
+        case 422: return ErrorCode.UNPROCESSABLE
+        case 429: return ErrorCode.TOO_MANY_REQUESTS
+        case 500: return ErrorCode.INTERNAL_ERROR
+        case 502: return ErrorCode.BAD_GATEWAY
+        case 503: return ErrorCode.SERVICE_UNAVAILABLE
+        case 504: return ErrorCode.GATEWAY_TIMEOUT
+        default:  return code as ErrorCode
+    }
+}
+
 // ==================== 业务通用类型 ====================
 
 /**
