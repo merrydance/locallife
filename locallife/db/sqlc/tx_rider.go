@@ -44,7 +44,7 @@ func (store *SQLStore) WithdrawDepositTx(ctx context.Context, arg WithdrawDeposi
 		// 2. 再次检查可用余额是否充足（在事务内检查，确保并发安全）
 		availableBalance := rider.DepositAmount - rider.FrozenDeposit
 		if arg.Amount > availableBalance {
-			return fmt.Errorf("可用余额不足")
+			return ErrInsufficientDeposit
 		}
 
 		newBalance := rider.DepositAmount - arg.Amount

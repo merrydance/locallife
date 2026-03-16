@@ -331,7 +331,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		} else if feeResult != nil && !feeResult.DeliverySuspended {
 			response[i].EstimatedDeliveryFee = int(feeResult.FinalFee)
 
-			log.Info().
+			log.Debug().
 				Int64("dish_id", dish.ID).
 				Int64("region_id", dish.MerchantRegionID).
 				Int64("merchant_id", dish.MerchantID).
@@ -714,15 +714,8 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 		Distance:       distanceMeters,
 
 		EstimatedDeliveryTime: deliveryTimeSeconds,
-		EstimatedDeliveryFee:  int(yuanToFen(float64(distanceMeters)/1000) + yuanToFen(3)), // Simple fee: 3 RMB base + 1 RMB/km
+		EstimatedDeliveryFee:  0, // Caller overwrites with calculateDeliveryFeeInternal result; 0 = fee unknown (fallback)
 	}
-
-	// DEBUG LOG for searchDishes to trace fee issues
-	log.Info().
-		Int64("dish_id", row.ID).
-		Float64("distance", row.Distance).
-		Int("calculated_fee", resp.EstimatedDeliveryFee).
-		Msg("searchDishes fee calculation details")
 
 	if row.RepurchaseRate.Valid {
 		val, _ := row.RepurchaseRate.Float64Value()

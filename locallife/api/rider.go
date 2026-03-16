@@ -446,9 +446,8 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 		Remark:  req.Remark,
 	})
 	if err != nil {
-		// 区分余额不足错误
-		if err.Error() == "可用余额不足" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		if errors.Is(err, db.ErrInsufficientDeposit) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderInsufficientBalance))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1111,7 +1110,11 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -1158,13 +1161,17 @@ func (server *Server) reportDelay(ctx *gin.Context) {
 		return
 	}
 
+	// 通知骑手延迟：直接调用（SendNotification 内部已通过 Asynq 异步入队，几乎无阻塞）
+	// 使用 context.WithoutCancel 保留请求 trace 信息但不绑定请求生命周期
+	notifyCtx := context.WithoutCancel(ctx.Request.Context())
+
 	// 发送通知给顾客
-	go server.sendDelayNotification(order.UserID, order.ID, req.Reason, req.ExpectedMinutes)
+	server.sendDelayNotification(notifyCtx, order.UserID, order.ID, req.Reason, req.ExpectedMinutes)
 
 	// 发送通知给商户
 	merchant, _ := server.store.GetMerchant(ctx, order.MerchantID)
 	if merchant.OwnerUserID > 0 {
-		go server.sendDelayNotificationToMerchant(merchant.OwnerUserID, order.ID, req.Reason, req.ExpectedMinutes)
+		server.sendDelayNotificationToMerchant(notifyCtx, merchant.OwnerUserID, order.ID, req.Reason, req.ExpectedMinutes)
 	}
 
 	response := delayReportResponse{
@@ -1211,7 +1218,11 @@ func (server *Server) reportException(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
 	if err != nil {
-		ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -1243,7 +1254,7 @@ func (server *Server) reportException(ctx *gin.Context) {
 	exceptionDesc := fmt.Sprintf("异常类型: %s, 描述: %s", getExceptionTypeName(req.ExceptionType), req.Description)
 
 	// 记录异常日志
-	_, err = server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
+	statusLog, err := server.store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
 		OrderID:      order.ID,
 		FromStatus:   pgtype.Text{String: order.Status, Valid: true},
 		ToStatus:     order.Status, // 状态不变
@@ -1256,21 +1267,25 @@ func (server *Server) reportException(ctx *gin.Context) {
 		return
 	}
 
+	// 通知异常：直接调用（SendNotification 内部已通过 Asynq 异步入队）
+	// 使用 context.WithoutCancel 保留请求 trace 信息但不绑定请求生命周期
+	excNotifyCtx := context.WithoutCancel(ctx.Request.Context())
+
 	// 根据异常类型处理
 	switch req.ExceptionType {
 	case "customer_unreachable":
 		// 联系不上顾客 - 通知平台客服
-		go server.notifyPlatformSupport(order.ID, req.ExceptionType, req.Description)
+		server.notifyPlatformSupport(excNotifyCtx, order.ID, req.ExceptionType, req.Description)
 	case "merchant_not_ready":
 		// 商户未出餐 - 通知商户
 		merchant, _ := server.store.GetMerchant(ctx, order.MerchantID)
 		if merchant.OwnerUserID > 0 {
-			go server.notifyMerchantException(merchant.OwnerUserID, order.ID, req.Description)
+			server.notifyMerchantException(excNotifyCtx, merchant.OwnerUserID, order.ID, req.Description)
 		}
 	}
 
 	response := exceptionReportResponse{
-		ID:            time.Now().UnixNano(), // 临时ID
+		ID:            statusLog.ID,
 		OrderID:       order.ID,
 		ExceptionType: req.ExceptionType,
 		Description:   req.Description,
@@ -1297,8 +1312,8 @@ func getExceptionTypeName(exceptionType string) string {
 }
 
 // 辅助函数：发送延时通知给顾客
-func (server *Server) sendDelayNotification(userID int64, orderID int64, reason string, minutes int) {
-	_ = server.SendNotification(context.Background(), SendNotificationParams{
+func (server *Server) sendDelayNotification(ctx context.Context, userID int64, orderID int64, reason string, minutes int) {
+	if err := server.SendNotification(ctx, SendNotificationParams{
 		UserID:      userID,
 		Type:        "delivery_delay",
 		Title:       "配送延迟提醒",
@@ -1309,12 +1324,14 @@ func (server *Server) sendDelayNotification(userID int64, orderID int64, reason 
 			"reason":  reason,
 			"minutes": minutes,
 		},
-	})
+	}); err != nil {
+		log.Warn().Err(err).Int64("user_id", userID).Int64("order_id", orderID).Msg("sendDelayNotification: failed to enqueue")
+	}
 }
 
 // 辅助函数：发送延时通知给商户
-func (server *Server) sendDelayNotificationToMerchant(userID int64, orderID int64, reason string, minutes int) {
-	_ = server.SendNotification(context.Background(), SendNotificationParams{
+func (server *Server) sendDelayNotificationToMerchant(ctx context.Context, userID int64, orderID int64, reason string, minutes int) {
+	if err := server.SendNotification(ctx, SendNotificationParams{
 		UserID:      userID,
 		Type:        "delivery_delay",
 		Title:       "配送延迟通知",
@@ -1325,13 +1342,14 @@ func (server *Server) sendDelayNotificationToMerchant(userID int64, orderID int6
 			"reason":  reason,
 			"minutes": minutes,
 		},
-	})
+	}); err != nil {
+		log.Warn().Err(err).Int64("user_id", userID).Int64("order_id", orderID).Msg("sendDelayNotificationToMerchant: failed to enqueue")
+	}
 }
 
 // 辅助函数：通知平台客服（运营商）
 // 业务逻辑：配送异常时通知该订单所在区域的运营商
-func (server *Server) notifyPlatformSupport(orderID int64, exceptionType, description string) {
-	ctx := context.Background()
+func (server *Server) notifyPlatformSupport(ctx context.Context, orderID int64, exceptionType, description string) {
 
 	// 1. 获取订单
 	order, err := server.store.GetOrder(ctx, orderID)
@@ -1381,8 +1399,8 @@ func (server *Server) notifyPlatformSupport(orderID int64, exceptionType, descri
 }
 
 // 辅助函数：通知商户异常
-func (server *Server) notifyMerchantException(userID int64, orderID int64, description string) {
-	_ = server.SendNotification(context.Background(), SendNotificationParams{
+func (server *Server) notifyMerchantException(ctx context.Context, userID int64, orderID int64, description string) {
+	if err := server.SendNotification(ctx, SendNotificationParams{
 		UserID:      userID,
 		Type:        "delivery_exception",
 		Title:       "配送异常通知",
@@ -1392,7 +1410,9 @@ func (server *Server) notifyMerchantException(userID int64, orderID int64, descr
 		ExtraData: map[string]any{
 			"description": description,
 		},
-	})
+	}); err != nil {
+		log.Warn().Err(err).Int64("user_id", userID).Int64("order_id", orderID).Msg("notifyMerchantException: failed to enqueue")
+	}
 }
 
 // ==================== 高值单资格积分 ====================

@@ -455,7 +455,7 @@ func TestWithdrawDepositTx_InsufficientBalance(t *testing.T) {
 		Remark:  "测试提现失败",
 	})
 	require.Error(t, err)
-	require.Contains(t, err.Error(), "可用余额不足")
+	require.ErrorIs(t, err, ErrInsufficientDeposit)
 
 	// 验证余额未变化
 	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)

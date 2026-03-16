@@ -261,6 +261,196 @@ meetsMinOrder := true
 
 ---
 
+## P1（续）— 新发现高优先级问题
+
+### ✅ P1-8：`withdrawRider` 用字符串比较错误类型，极度脆弱
+
+> **已修复**（2026-03-16）：在 `db/sqlc/errors.go` 新增哨兵错误 `ErrInsufficientDeposit`；`tx_rider.go` 改为 `return ErrInsufficientDeposit`；`api/rider.go` 改为 `errors.Is(err, db.ErrInsufficientDeposit)` 并返回 `ErrRiderInsufficientBalance`；`rider_test.go` 改为 `require.ErrorIs(t, err, ErrInsufficientDeposit)`。
+
+**文件**：[api/rider.go](locallife/api/rider.go#L450)、[db/sqlc/tx_rider.go](locallife/db/sqlc/tx_rider.go#L47)
+
+```go
+// db/sqlc/tx_rider.go
+return fmt.Errorf("可用余额不足")   // ← 用字符串创建 error
+
+// api/rider.go
+if err.Error() == "可用余额不足" {  // ← 用字符串比较 error
+    ctx.JSON(http.StatusBadRequest, errorResponse(err))
+    return
+}
+```
+
+`fmt.Errorf` 的字符串不是合约，任何人修改 DB 层的错误文案（中文措辞、标点符号等）都会导致此判断静默失效：原本应该返回 400 的余额不足错误会升级为 500。
+
+**修复方案**：在 `db/sqlc` 包定义哨兵错误并在 handler 中用 `errors.Is` 比较：
+
+```go
+// db/sqlc/errors.go
+var ErrInsufficientDeposit = errors.New("insufficient deposit balance")
+
+// db/sqlc/tx_rider.go
+return ErrInsufficientDeposit
+
+// api/rider.go
+if errors.Is(err, db.ErrInsufficientDeposit) {
+    ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderInsufficientBalance))
+    return
+}
+```
+
+---
+
+## P2（续）— 新发现中优先级问题
+
+### ✅ P2-11：骑手延时/异常通知以裸 goroutine + `context.Background()` 发出，生命周期完全失控
+
+> **已修复**（2026-03-16）：四个通知 helper 函数均新增 `context.Context` 第一参数，内部不再创建 `context.Background()`；调用方移除 `go` 关键字，改为直接调用并传入 `context.WithoutCancel(ctx.Request.Context())`，保留请求 trace 信息同时不绑定请求生命周期。入队失败改为 `log.Warn()` 记录。
+
+**文件**：[api/rider.go](locallife/api/rider.go#L1162)（reportDelay / reportException）
+
+```go
+// reportDelay
+go server.sendDelayNotification(order.UserID, ...)          // line 1162
+go server.sendDelayNotificationToMerchant(merchant.OwnerUserID, ...) // line 1167
+
+// reportException
+go server.notifyPlatformSupport(order.ID, ...)             // line 1263
+go server.notifyMerchantException(merchant.OwnerUserID, ...) // line 1268
+```
+
+这 4 个被调函数（`sendDelayNotification`、`sendDelayNotificationToMerchant`、`notifyPlatformSupport`、`notifyMerchantException`）均在函数内部创建 `context.Background()` 作为 context，存在两个问题：
+
+1. **泄漏风险**：若通知链路卡住（如 DB 或 WebSocket 阻塞），服务关闭时无法通过 server-level context 取消这些 goroutine；
+2. **可观测性缺失**：`context.Background()` 丢失了请求 trace_id、request_id 等信息，通知日志与原始请求无法关联，线上排查极其困难。
+
+**修复方案**：
+- 将通知逻辑移至已有的 Asynq 任务队列（`DistributeTaskSendNotification`）——这样既解耦、又有重试保障，也是代码库中其他模块（`risk_management.go` 等）的既有做法。
+- 若暂时保留 goroutine 方案，至少传入 server 级别的 detached context 并加 `recover` 防止 panic 导致整个进程崩溃：
+
+```go
+detachedCtx, cancel := context.WithTimeout(server.ctx, 10*time.Second)
+go func() {
+    defer cancel()
+    defer func() { recover() }()
+    server.sendDelayNotification(detachedCtx, ...)
+}()
+```
+
+---
+
+### P2-12：`search.go` 中 `// DEBUG LOG` 调试日志以 `log.Info` 级别在生产环境高频输出
+
+**文件**：[api/search.go](locallife/api/search.go#L617)（searchCombos）、[api/search.go](locallife/api/search.go#L720)（newSearchDishResponseFromGlobalRow）
+
+```go
+log.Info().
+    Int64("merchant_id", row.MerchantID).
+    Int64("final_fee", feeResult.FinalFee).
+    Msg("Delivery fee calculated successfully") // DEBUG LOG       ← line 617
+
+// DEBUG LOG for searchDishes to trace fee issues                   ← line 720
+log.Info().
+    Int64("dish_id", row.ID).
+    Int("calculated_fee", resp.EstimatedDeliveryFee).
+    Msg("searchDishes fee calculation details")
+```
+
+搜索是高频接口，每次请求都会对每个结果 item 打一条 Info 日志，极端情况下（`page_size=50`）一次搜索写 50 条日志，生产环境中会产生大量噪音，淹没真正的错误日志，同时增加日志存储成本。注释 `// DEBUG LOG` 也说明这是调试时遗忘删除的临时代码。
+
+**修复方案**：将这两处 `log.Info()` 降级为 `log.Debug()`，在生产环境中通过 `LOG_LEVEL=warn` 自动关闭，无需改代码：
+
+```go
+if log.Debug().Enabled() {
+    log.Debug().Int64("dish_id", row.ID).Int("fee", resp.EstimatedDeliveryFee).
+        Msg("searchDishes fee calculation details")
+}
+```
+
+---
+
+## P3（续）— 新发现代码质量问题
+
+### ✅ P3-10：`exceptionReportResponse.ID` 使用 `time.Now().UnixNano()` 作“临时 ID”
+
+> **已修复**（2026-03-16）：`reportException` 捕获 `CreateOrderStatusLog` 的返回值，响应中使用 `statusLog.ID` 作为持久化的异常记录 ID，移除 `time.Now().UnixNano()` 临时写法。
+
+**文件**：[api/rider.go](locallife/api/rider.go#L1273)
+
+```go
+response := exceptionReportResponse{
+    ID:            time.Now().UnixNano(), // 临时ID   ← 自述为临时实现
+    OrderID:       order.ID,
+    ...
+}
+```
+
+`reportException` 只在 `order_status_log` 表写了一条日志，并没有创建专用的"异常记录"实体，因此响应 ID 是凭空捏造的纳秒时间戳。问题：
+- 同一订单的多次异常上报返回不同 ID，客户端无法幂等处理；
+- 时间戳不是唯一 ID（在精度极低的虚拟机上存在碰撞风险）；
+- 注释"临时 ID"说明这是未完成的实现。
+
+**修复方案**：选择其一：
+1. 创建 `delivery_exceptions` 表，返回真实 DB ID；
+2. 如不需要持久化异常记录，从响应结构体中移除 `ID` 字段；
+3. 或返回 `order_status_log` 写入后的自增 ID。
+
+---
+
+### ✅ P3-11：`reportDelay` / `reportException` 中 `GetRiderByUserID` 失败无条件返回 404
+
+> **已修复**（2026-03-16）：两处均补充 `isNotFoundError(err)` 判断，仅在骑手记录确实不存在时返回 404，其他 DB 错误返回 500，与同文件其他 handler 保持一致。
+
+**文件**：[api/rider.go](locallife/api/rider.go#L1114)、[api/rider.go](locallife/api/rider.go#L1214)
+
+```go
+rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
+if err != nil {
+    ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered)) // 无 isNotFoundError 判断
+    return
+}
+```
+
+DB 连接超时、上下文被取消、或其他服务错误均会被当作"骑手不存在"返回 404，掩盖真实的系统错误，也导致 Prometheus 的 5xx 指标失准。同文件中其他常规 handler（如 `getRiderMe` 第 89 行）都正确使用了 `isNotFoundError`，这两处是遗漏。
+
+**修复方案**（保持与同文件其他 handler 一致）：
+
+```go
+rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
+if err != nil {
+    if isNotFoundError(err) {
+        ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+        return
+    }
+    ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+    return
+}
+```
+
+---
+
+### ✅ P3-12：`newSearchDishResponseFromGlobalRow` 内嵌简化运费公式，与外层覆盖逻辑形成双轨
+
+> **已修复**（2026-03-16）：Helper 函数中将 `EstimatedDeliveryFee` 初始为 `0`，移除内嵌的 `3元+1元/km` 简化公式和 DEBUG LOG；外层 `searchDishes` 循环计算成功时覆盖为真实运费，失败时保持 `0`。意图单一，无歧义回退路径。
+
+**文件**：[api/search.go](locallife/api/search.go#L724)（`newSearchDishResponseFromGlobalRow` 内部）
+
+```go
+// 构建 response 时先写入简化公式
+EstimatedDeliveryFee: int(yuanToFen(float64(distanceMeters)/1000) + yuanToFen(3)), // 3元基础+1元/km
+
+// 随即外层立刻覆盖
+feeResult, err := server.calculateDeliveryFeeInternal(...)
+if ... {
+    response[i].EstimatedDeliveryFee = int(feeResult.FinalFee) // 覆盖上面那行
+}
+```
+
+简化公式只在 `calculateDeliveryFeeInternal` 失败时作为 fallback 生效，但它被写在 helper 函数内，阅读 helper 函数时无法知道外层会覆盖它，造成读者困惑。此外简化公式未考虑区域差异化运费策略，fallback 返回的运费与实际收取金额可能严重不符。
+
+**修复方案**：将 fallback 逻辑明确化——在 helper 中将 `EstimatedDeliveryFee` 初始为 0，外层计算成功时赋值，失败时保持 0 并由前端提示"运费待计算"。
+
+---
+
 ## 综合改进建议
 
 ### 建议一：引入 `golangci-lint` 到 CI 流程
@@ -343,5 +533,11 @@ var (
 | P3-5 | 🟢 P3 | 🔁 无需修改 | api/server.go | ctx.Error 在 internalError() 辅助函数内为故意行为 |
 | P3-6 | 🟢 P3 | ✅ 已修复 | 多处 | _ = err 静默忽略错误 |
 | P3-7 | 🟢 P3 | ✅ 已修复 | api/dish.go | updateDishCategory 多步无事务 |
-| P3-8 | 🟢 P3 | ✅ 已修复 | api/cart.go | minOrderAmount: 0 语义不明 |
+| P3-8 | 🟢 P3 | ⏳ 待处理 | api/cart.go | minOrderAmount: 0 语义不明 |
 | P3-9 | 🟢 P3 | ✅ 已修复 | maps/tencent.go | geocode/reverse 共用 URL 冗余常量 |
+| P1-8 | 🟠 P1 | ✅ 已修复 | api/rider.go, db/sqlc/tx_rider.go | withdrawRider 用 err.Error() 字符串比较错误类型 |
+| P2-11 | 🟡 P2 | ✅ 已修复 | api/rider.go | 骑手通知裸 goroutine + context.Background()，生命周期失控 |
+| P2-12 | 🟡 P2 | ✅ 已修复 | api/search.go | DEBUG LOG 以 log.Info 在高频搜索接口持续输出 |
+| P3-10 | 🟢 P3 | ✅ 已修复 | api/rider.go | exceptionReportResponse.ID 使用 UnixNano 作临时 ID |
+| P3-11 | 🟢 P3 | ✅ 已修复 | api/rider.go | reportDelay/reportException GetRiderByUserID 失败无条件 404 |
+| P3-12 | 🟢 P3 | ✅ 已修复 | api/search.go | newSearchDishResponseFromGlobalRow 简化运费公式与外层覆盖形成双轨 |
