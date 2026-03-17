@@ -52,7 +52,10 @@ func NewBillReconciliationScheduler(
 	publisher websocket.PubSubPublisher,
 ) *BillReconciliationScheduler {
 	return &BillReconciliationScheduler{
-		cron:       cron.New(),
+		cron: cron.New(cron.WithChain(
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+			cron.Recover(cron.DefaultLogger),
+		)),
 		store:      store,
 		billClient: billClient,
 		publisher:  publisher,

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/hibiken/asynq"
@@ -20,14 +21,24 @@ const (
 // PaymentRecoveryScheduler scans paid but unprocessed payment orders and re-enqueues processing.
 type PaymentRecoveryScheduler struct {
 	cron        *cron.Cron
+	wg          sync.WaitGroup
+	stopCtx     context.Context
+	stopCancel  context.CancelFunc
+	runMu       sync.Mutex
 	store       db.Store
 	distributor TaskDistributor
 }
 
 // NewPaymentRecoveryScheduler creates a new scheduler for payment recovery.
 func NewPaymentRecoveryScheduler(store db.Store, distributor TaskDistributor) *PaymentRecoveryScheduler {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &PaymentRecoveryScheduler{
-		cron:        cron.New(),
+		cron: cron.New(cron.WithChain(
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+			cron.Recover(cron.DefaultLogger),
+		)),
+		stopCtx:     stopCtx,
+		stopCancel:  stopCancel,
 		store:       store,
 		distributor: distributor,
 	}
@@ -36,7 +47,7 @@ func NewPaymentRecoveryScheduler(store db.Store, distributor TaskDistributor) *P
 // Start starts the recovery scheduler.
 func (s *PaymentRecoveryScheduler) Start() error {
 	_, err := s.cron.AddFunc(paymentRecoveryCron, func() {
-		s.runOnce()
+		s.runOnce(s.stopCtx)
 	})
 	if err != nil {
 		return err
@@ -45,28 +56,40 @@ func (s *PaymentRecoveryScheduler) Start() error {
 	s.cron.Start()
 	log.Info().Msg("payment recovery scheduler started (every 5 minutes)")
 
-	go s.runOnce()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.runOnce(s.stopCtx)
+	}()
 	return nil
 }
 
 // RunOnce triggers a single recovery scan.
 func (s *PaymentRecoveryScheduler) RunOnce() {
-	s.runOnce()
+	s.runOnce(context.Background())
 }
 
 // Stop stops the scheduler.
 func (s *PaymentRecoveryScheduler) Stop() {
+	s.stopCancel()
 	s.cron.Stop()
+	s.wg.Wait()
 	log.Info().Msg("payment recovery scheduler stopped")
 }
 
-func (s *PaymentRecoveryScheduler) runOnce() {
+func (s *PaymentRecoveryScheduler) runOnce(ctx context.Context) {
+	if !s.runMu.TryLock() {
+		log.Warn().Msg("payment recovery already running, skipping concurrent execution")
+		return
+	}
+	defer s.runMu.Unlock()
+
 	if s.distributor == nil {
 		log.Warn().Msg("task distributor not configured, skip payment recovery")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
 	cutoff := time.Now().Add(-paymentRecoveryMinAge)

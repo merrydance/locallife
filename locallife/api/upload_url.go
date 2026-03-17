@@ -2,6 +2,7 @@ package api
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -67,6 +68,7 @@ func normalizeImageURLForStorage(p string) string {
 
 // deleteStoredImageAsync 将旧图片文件加入有界删除队列，由 imageDeleteWorker 异步执行删除。
 // 对空路径、外部 URL 或 uploads/ 路径以外的路径为空操作。
+// 删除时优先使用 config.UploadsBaseDir 拼接为绝对路径，避免依赖进程工作目录。
 func (server *Server) deleteStoredImageAsync(storedURL string) {
 	if storedURL == "" {
 		return
@@ -78,6 +80,10 @@ func (server *Server) deleteStoredImageAsync(storedURL string) {
 	path := strings.TrimPrefix(storedURL, "/")
 	if !strings.HasPrefix(path, "uploads/") {
 		return
+	}
+	// 拼接绝对路径
+	if server.config.UploadsBaseDir != "" {
+		path = filepath.Join(server.config.UploadsBaseDir, path)
 	}
 	server.imageDeleter.submit(path)
 }
@@ -127,6 +133,7 @@ func (w *imageDeleteWorker) submit(path string) {
 	select {
 	case w.jobs <- path:
 	default:
+		imageDeleteDroppedTotal.Inc()
 		log.Warn().Str("path", path).Msg("image delete queue full, dropping delete job")
 	}
 }

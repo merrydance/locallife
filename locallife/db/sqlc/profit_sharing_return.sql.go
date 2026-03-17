@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -165,6 +166,55 @@ ORDER BY created_at
 
 func (q *Queries) ListProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) ([]ProfitSharingReturn, error) {
 	rows, err := q.db.Query(ctx, listProfitSharingReturnsByRefundOrder, refundOrderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ProfitSharingReturn{}
+	for rows.Next() {
+		var i ProfitSharingReturn
+		if err := rows.Scan(
+			&i.ID,
+			&i.RefundOrderID,
+			&i.ProfitSharingOrderID,
+			&i.PaymentOrderID,
+			&i.SubMchid,
+			&i.OutOrderNo,
+			&i.OutReturnNo,
+			&i.ReturnMchid,
+			&i.Amount,
+			&i.Status,
+			&i.ReturnID,
+			&i.FailReason,
+			&i.FinishedAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStuckProcessingProfitSharingReturns = `-- name: ListStuckProcessingProfitSharingReturns :many
+SELECT id, refund_order_id, profit_sharing_order_id, payment_order_id, sub_mchid, out_order_no, out_return_no, return_mchid, amount, status, return_id, fail_reason, finished_at, created_at, updated_at FROM profit_sharing_returns
+WHERE status = 'processing'
+  AND updated_at < $1
+ORDER BY updated_at ASC
+LIMIT $2
+`
+
+type ListStuckProcessingProfitSharingReturnsParams struct {
+	UpdatedAt time.Time `json:"updated_at"`
+	Limit     int32     `json:"limit"`
+}
+
+func (q *Queries) ListStuckProcessingProfitSharingReturns(ctx context.Context, arg ListStuckProcessingProfitSharingReturnsParams) ([]ProfitSharingReturn, error) {
+	rows, err := q.db.Query(ctx, listStuckProcessingProfitSharingReturns, arg.UpdatedAt, arg.Limit)
 	if err != nil {
 		return nil, err
 	}

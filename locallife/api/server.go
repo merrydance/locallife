@@ -70,7 +70,8 @@ type Server struct {
 	wsPubSub           *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
 	deliveryBroadcast  *logic.DeliveryBroadcastLogic
 	rateLimiter        *RateLimiter
-	imageDeleter       *imageDeleteWorker // 有界异步图片删除 worker pool
+	imageDeleter       *imageDeleteWorker   // 有界异步图片删除 worker pool
+	keywordWorker      *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
 	rulesEngine        rules.Engine
 	routeService       *logic.RouteService
 	orderCommandSvc    logic.OrderCommandService
@@ -97,6 +98,9 @@ func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInt
 
 // NewServer creates a new HTTP server and set up routing.
 func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherCache, taskDistributor worker.TaskDistributor, auditWriter AuditWriter) (*Server, error) {
+	if taskDistributor == nil {
+		taskDistributor = worker.NewNoopTaskDistributor()
+	}
 	tokenMaker, err := token.NewPasetoMaker(config.TokenSymmetricKey)
 	if err != nil {
 		return nil, fmt.Errorf("cannot create token maker: %w", err)
@@ -260,6 +264,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		wsPubSub:        wsPubSub,
 		rulesEngine:     engine,
 		imageDeleter:    newImageDeleteWorker(),
+		keywordWorker:   newSearchKeywordWorker(store),
 	}
 	server.orderCommandSvc = server.buildOrderCommandService()
 	server.orderQuerySvc = server.buildOrderQueryService()
@@ -320,6 +325,12 @@ func (server *Server) Shutdown() {
 	}
 	if server.imageDeleter != nil {
 		server.imageDeleter.shutdown()
+	}
+	if server.keywordWorker != nil {
+		server.keywordWorker.shutdown()
+	}
+	if c, ok := server.auditWriter.(interface{ Close() }); ok {
+		c.Close()
 	}
 }
 

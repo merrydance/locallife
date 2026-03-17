@@ -25,7 +25,13 @@ type DataCleanupScheduler struct {
 // NewDataCleanupScheduler 创建数据清理调度器
 func NewDataCleanupScheduler(store db.Store, taskDistributor worker.TaskDistributor) *DataCleanupScheduler {
 	return &DataCleanupScheduler{
-		cron:            cron.New(cron.WithSeconds()),
+		cron: cron.New(
+			cron.WithSeconds(),
+			cron.WithChain(
+				cron.SkipIfStillRunning(cron.DefaultLogger),
+				cron.Recover(cron.DefaultLogger),
+			),
+		),
 		store:           store,
 		taskDistributor: taskDistributor,
 	}
@@ -101,7 +107,8 @@ func (s *DataCleanupScheduler) Stop() {
 // cleanupExpiredWebLoginSessions 清理过期的 Web 登录会话
 // 超过5分钟未确认的会话标记为过期
 func (s *DataCleanupScheduler) cleanupExpiredWebLoginSessions() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	count, err := s.store.ExpireWebLoginSessionsBefore(ctx, db.ExpireWebLoginSessionsBeforeParams{
 		Status:    "pending",
@@ -164,7 +171,8 @@ func (s *DataCleanupScheduler) getAbnormalAlertThresholds(ctx context.Context) a
 	return defaults
 }
 func (s *DataCleanupScheduler) checkAbnormalStatsAlerts() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	thresholds := s.getAbnormalAlertThresholds(ctx)
 
 	now := time.Now()
@@ -231,7 +239,8 @@ func (s *DataCleanupScheduler) checkEntityAbnormalAlerts(ctx context.Context, en
 // cleanupExpiredPaymentOrders 清理过期的支付订单
 // 超过过期时间的 pending 支付订单关闭
 func (s *DataCleanupScheduler) cleanupExpiredPaymentOrders() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	count, err := s.store.CloseExpiredPaymentOrders(ctx)
 	if err != nil {
@@ -246,7 +255,8 @@ func (s *DataCleanupScheduler) cleanupExpiredPaymentOrders() {
 
 // backfillAbnormalStatsDaily 回填异常统计日表（默认回填最近3天）
 func (s *DataCleanupScheduler) backfillAbnormalStatsDaily() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 	now := time.Now()
 	startOfToday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.Local)
 	start := startOfToday.AddDate(0, 0, -3)
@@ -272,7 +282,8 @@ func (s *DataCleanupScheduler) backfillAbnormalStatsDaily() {
 // 1. 超过 20 分钟未接单：通知商户和运营商（触发告警）
 // 2. 超过 60 分钟未接单：自动取消订单并已付款退款
 func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
 
 	// 1. 处理严重超时（1小时）：自动取消
 	cancelTime := time.Now().Add(-1 * time.Hour)
@@ -456,7 +467,8 @@ func (s *DataCleanupScheduler) cleanupStaleDeliveries() {
 // cleanupStaleDiningSessions 清理过期的用餐会话
 // 超过12小时未关闭的会话自动关闭
 func (s *DataCleanupScheduler) cleanupStaleDiningSessions() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
 	staleTime := time.Now().Add(-12 * time.Hour)
 	sessions, err := s.store.ListOpenDiningSessionsBefore(ctx, db.ListOpenDiningSessionsBeforeParams{
@@ -493,7 +505,8 @@ func (s *DataCleanupScheduler) cleanupStaleDiningSessions() {
 
 // markExpiredVouchers 标记过期的优惠券
 func (s *DataCleanupScheduler) markExpiredVouchers() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
 	count, err := s.store.ExpireUnusedVouchers(ctx)
 	if err != nil {
@@ -509,7 +522,8 @@ func (s *DataCleanupScheduler) markExpiredVouchers() {
 // cleanupExpiredCarts 清理长期未更新的购物车
 // 超过7天未更新的购物车数据将被物理删除
 func (s *DataCleanupScheduler) cleanupExpiredCarts() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	// 7天前
 	expireTime := time.Now().AddDate(0, 0, -7)
 
@@ -525,7 +539,8 @@ func (s *DataCleanupScheduler) cleanupExpiredCarts() {
 // cleanupStaleOCRTasks 清理长期处于 processing 状态的 OCR 任务
 // 超过1小时未更新的 OCR 标记为 failed，允许用户重试
 func (s *DataCleanupScheduler) cleanupStaleOCRTasks() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 	// 1小时前
 	staleTime := time.Now().Add(-1 * time.Hour)
 

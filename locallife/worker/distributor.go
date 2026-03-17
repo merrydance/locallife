@@ -161,6 +161,13 @@ type TaskDistributor interface {
 		side string,
 		opts ...asynq.Option,
 	) error
+
+	// DistributeTaskUploadShippingInfo 分发微信发货信息上报任务（合规，支持自动重试）
+	DistributeTaskUploadShippingInfo(
+		ctx context.Context,
+		payload *UploadShippingInfoPayload,
+		opts ...asynq.Option,
+	) error
 }
 
 type RedisTaskDistributor struct {

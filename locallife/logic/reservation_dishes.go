@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -238,15 +240,21 @@ func ModifyReservationDishes(
 		TotalAmount:  paymentOrder.Amount,
 	})
 	if err != nil {
-		_, _ = store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 		return result, err
 	}
 	if wxRefund.Status == wechat.RefundStatusSuccess {
-		_, _ = store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		_, _ = store.AddReservationPrepaidAmount(ctx, db.AddReservationPrepaidAmountParams{
+		if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
+		}
+		if _, dbErr := store.AddReservationPrepaidAmount(ctx, db.AddReservationPrepaidAmountParams{
 			ID:            reservation.ID,
 			PrepaidAmount: -refundAmount,
-		})
+		}); dbErr != nil {
+			log.Error().Err(dbErr).Int64("reservation_id", reservation.ID).Msg("failed to update reservation prepaid amount")
+		}
 	}
 
 	result.RefundAmount = refundAmount

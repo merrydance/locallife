@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
+	"github.com/merrydance/locallife/worker"
 	"github.com/rs/zerolog/log"
 )
 
@@ -42,104 +43,26 @@ func (server *Server) sendDeliveryStatusNotification(
 	})
 }
 
-// uploadShippingInfoAsync 骑手取货后异步上报发货信息给微信平台
+// uploadShippingInfoAsync 骑手取货后将发货信息上报任务投入 asynq 队列。
 // 满足「发货信息管理」合规要求，触发后续结算事件推送。
 // 仅对已支付的 profit_sharing 订单上报（堂食/自取无需上报）。
+// 任务由 worker/task_upload_shipping_info.go 处理，支持指数退避重试。
 func (server *Server) uploadShippingInfoAsync(_ context.Context, orderID int64, userID int64) {
-	if server.wechatClient == nil {
+	if server.wechatClient == nil || server.taskDistributor == nil {
 		return
 	}
-	go func() {
-		bgCtx := context.Background()
-		notifyURL := server.config.WechatShippingSettleNotifyURL
-
-		// 1. 查询支付订单
-		po, err := server.store.GetLatestPaymentOrderByOrder(bgCtx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:      pgtype.Int8{Int64: orderID, Valid: true},
-			BusinessType: "order",
-		})
-		if err != nil {
-			log.Warn().Err(err).Int64("order_id", orderID).Msg("shipping upload: get payment order failed, skip")
-			return
-		}
-		if po.Status != "paid" {
-			log.Debug().Int64("order_id", orderID).Str("status", po.Status).Msg("shipping upload: payment order not paid, skip")
-			return
-		}
-
-		// 2. 获取用户 openid
-		user, err := server.store.GetUser(bgCtx, userID)
-		if err != nil || user.WechatOpenid == "" {
-			log.Warn().Err(err).Int64("user_id", userID).Msg("shipping upload: get user openid failed, skip")
-			return
-		}
-
-		now := time.Now()
-
-		switch po.PaymentType {
-		case "profit_sharing":
-			// 合单支付 —— 使用 upload_combined_shipping_info
-			if !po.CombinedPaymentID.Valid {
-				log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: profit_sharing order missing combined_payment_id, skip")
-				return
-			}
-
-			subOrders, err := server.store.GetCombinedPaymentSubOrdersByOrder(bgCtx, orderID)
-			if err != nil || len(subOrders) == 0 {
-				log.Warn().Err(err).Int64("order_id", orderID).Msg("shipping upload: get combined sub orders failed, skip")
-				return
-			}
-
-			// 取合单号：从第一个子单的 combined_payment_id 关联回合单表
-			// combined_payment.combine_out_trade_no = PaymentOrder.out_trade_no（合单层）
-			// 这里使用 PaymentOrder.out_trade_no 即为合单商户订单号
-			var shippingSubs []wechat.ShippingSubOrder
-			for _, sub := range subOrders {
-				shippingSubs = append(shippingSubs, wechat.ShippingSubOrder{
-					MchID:      sub.SubMchid,
-					OutTradeNo: sub.OutTradeNo,
-				})
-			}
-
-			if err := server.wechatClient.UploadCombinedShippingInfo(bgCtx, &wechat.UploadCombinedShippingInfoRequest{
-				CombineOutTradeNo: po.OutTradeNo,
-				PayerOpenID:       user.WechatOpenid,
-				NotifyURL:         notifyURL,
-				UploadTime:        now,
-				SubOrders:         shippingSubs,
-			}); err != nil {
-				log.Error().Err(err).Int64("order_id", orderID).Msg("⚠️ upload_combined_shipping_info failed")
-			} else {
-				log.Info().Int64("order_id", orderID).Msg("upload_combined_shipping_info ok")
-			}
-
-		case "miniprogram":
-			// 单商户直连支付 —— 使用 upload_shipping_info
-			transactionID := ""
-			if po.TransactionID.Valid {
-				transactionID = po.TransactionID.String
-			}
-			if transactionID == "" && po.OutTradeNo == "" {
-				log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: no transaction_id or out_trade_no, skip")
-				return
-			}
-
-			if err := server.wechatClient.UploadShippingInfo(bgCtx, &wechat.UploadShippingInfoRequest{
-				TransactionID: transactionID,
-				OutTradeNo:    po.OutTradeNo,
-				PayerOpenID:   user.WechatOpenid,
-				NotifyURL:     notifyURL,
-				UploadTime:    now,
-			}); err != nil {
-				log.Error().Err(err).Int64("order_id", orderID).Msg("⚠️ upload_shipping_info failed")
-			} else {
-				log.Info().Int64("order_id", orderID).Msg("upload_shipping_info ok")
-			}
-
-		default:
-			// 余额支付等无需上报
-		}
-	}()
+	err := server.taskDistributor.DistributeTaskUploadShippingInfo(
+		context.Background(),
+		&worker.UploadShippingInfoPayload{
+			OrderID: orderID,
+			UserID:  userID,
+		},
+		asynq.Queue(worker.QueueDefault),
+		asynq.MaxRetry(5),
+	)
+	if err != nil {
+		log.Error().Err(err).Int64("order_id", orderID).Msg("failed to enqueue upload_shipping_info task")
+	}
 }
 
 // ==================== 推荐订单 ====================
@@ -206,7 +129,7 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 	})
 	if err != nil {
 		var reqErr *logic.RequestError
-		if errors.As(err, &reqErr) && reqErr.Err != nil && reqErr.Err.Error() == "您尚未分配服务区域，请联系管理员" {
+		if errors.As(err, &reqErr) && errors.Is(reqErr.Err, logic.ErrRiderRegionUnassigned) {
 			server.writeAuditLog(ctx, AuditLogInput{
 				ActorUserID: authPayload.UserID,
 				ActorRole:   "rider",
@@ -452,7 +375,7 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 			})
 		}
 		var reqErr *logic.RequestError
-		if errors.As(err, &reqErr) && reqErr.Err != nil && reqErr.Err.Error() == "您尚未分配服务区域，请联系管理员" {
+		if errors.As(err, &reqErr) && errors.Is(reqErr.Err, logic.ErrRiderRegionUnassigned) {
 			server.writeAuditLog(ctx, AuditLogInput{
 				ActorUserID: authPayload.UserID,
 				ActorRole:   "rider",

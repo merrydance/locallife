@@ -13241,6 +13241,21 @@ func (mr *MockStoreMockRecorder) ListSearchHistory(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSearchHistory", reflect.TypeOf((*MockStore)(nil).ListSearchHistory), ctx, arg)
 }
 
+// ListStuckProcessingProfitSharingReturns mocks base method.
+func (m *MockStore) ListStuckProcessingProfitSharingReturns(ctx context.Context, arg db.ListStuckProcessingProfitSharingReturnsParams) ([]db.ProfitSharingReturn, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListStuckProcessingProfitSharingReturns", ctx, arg)
+	ret0, _ := ret[0].([]db.ProfitSharingReturn)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListStuckProcessingProfitSharingReturns indicates an expected call of ListStuckProcessingProfitSharingReturns.
+func (mr *MockStoreMockRecorder) ListStuckProcessingProfitSharingReturns(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStuckProcessingProfitSharingReturns", reflect.TypeOf((*MockStore)(nil).ListStuckProcessingProfitSharingReturns), ctx, arg)
+}
+
 // ListSuspendedRegions mocks base method.
 func (m *MockStore) ListSuspendedRegions(ctx context.Context) ([]db.WeatherCoefficient, error) {
 	m.ctrl.T.Helper()

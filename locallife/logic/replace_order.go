@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+
+	"github.com/rs/zerolog/log"
 )
 
 // ReplaceOrderInput defines the input for replacing a reservation order.
@@ -205,11 +207,15 @@ func ReplaceReservationOrder(
 					TotalAmount:  paymentOrder.Amount,
 				})
 				if err != nil {
-					_, _ = store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+					}
 					return ReplaceOrderResult{}, err
 				}
 				if wxRefund.Status == wechat.RefundStatusSuccess {
-					_, _ = store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+					if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
+						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
+					}
 				}
 				result.RefundInitiated = true
 			}

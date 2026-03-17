@@ -61,3 +61,10 @@ SET
     updated_at = now()
 WHERE id = $1
 RETURNING *;
+
+-- name: ListStuckProcessingProfitSharingReturns :many
+SELECT * FROM profit_sharing_returns
+WHERE status = 'processing'
+  AND updated_at < $1
+ORDER BY updated_at ASC
+LIMIT $2;

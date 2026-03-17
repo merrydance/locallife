@@ -66,7 +66,7 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请先上线"))
 	}
 	if !rider.RegionID.Valid {
-		return result, NewRequestError(http.StatusBadRequest, errors.New("您尚未分配服务区域，请联系管理员"))
+		return result, NewRequestError(http.StatusBadRequest, ErrRiderRegionUnassigned)
 	}
 
 	availableDeposit := rider.DepositAmount - rider.FrozenDeposit

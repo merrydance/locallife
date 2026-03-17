@@ -73,6 +73,17 @@ type Config struct {
 	UploadURLSigningKey string        `mapstructure:"UPLOAD_URL_SIGNING_KEY"` // HMAC签名密钥（建议随机长字符串）
 	UploadURLTTL        time.Duration `mapstructure:"UPLOAD_URL_TTL"`         // 签名URL有效期（例如 10m, 1h）
 
+	// 本地文件存储根目录（绝对路径）。图片删除以此为基础拼接相对路径，避免依赖进程工作目录。
+	// 默认为空字符串，实际使用时应配置为绝对路径，例如 /app/uploads 对应的上级目录。
+	UploadsBaseDir string `mapstructure:"UPLOADS_BASE_DIR"`
+
+	// 数据库连接池参数
+	DBMaxConns          int32         `mapstructure:"DB_MAX_CONNS"`
+	DBMinConns          int32         `mapstructure:"DB_MIN_CONNS"`
+	DBMaxConnLifetime   time.Duration `mapstructure:"DB_MAX_CONN_LIFETIME"`
+	DBMaxConnIdleTime   time.Duration `mapstructure:"DB_MAX_CONN_IDLE_TIME"`
+	DBHealthCheckPeriod time.Duration `mapstructure:"DB_HEALTH_CHECK_PERIOD"`
+
 	// WebSocket reliable push rollout
 	WebSocketReliableEnabled bool `mapstructure:"WS_RELIABLE_ENABLED"`
 	WebSocketReliablePercent int  `mapstructure:"WS_RELIABLE_PERCENT"`
@@ -141,6 +152,13 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE", 100)
 	// Web 登录默认过期时间
 	v.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
+
+	// 数据库连接池默认值
+	v.SetDefault("DB_MAX_CONNS", 25)
+	v.SetDefault("DB_MIN_CONNS", 5)
+	v.SetDefault("DB_MAX_CONN_LIFETIME", "1h")
+	v.SetDefault("DB_MAX_CONN_IDLE_TIME", "30m")
+	v.SetDefault("DB_HEALTH_CHECK_PERIOD", "1m")
 
 	err = v.ReadInConfig()
 	if err != nil {

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -17,14 +18,24 @@ const (
 // RefundRecoveryScheduler 扫描已取消但未退款的订单并触发退款任务
 type RefundRecoveryScheduler struct {
 	cron        *cron.Cron
+	wg          sync.WaitGroup
+	stopCtx     context.Context
+	stopCancel  context.CancelFunc
+	runMu       sync.Mutex
 	store       db.Store
 	distributor TaskDistributor
 }
 
 // NewRefundRecoveryScheduler 创建新的退款恢复调度器
 func NewRefundRecoveryScheduler(store db.Store, distributor TaskDistributor) *RefundRecoveryScheduler {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &RefundRecoveryScheduler{
-		cron:        cron.New(),
+		cron: cron.New(cron.WithChain(
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+			cron.Recover(cron.DefaultLogger),
+		)),
+		stopCtx:     stopCtx,
+		stopCancel:  stopCancel,
 		store:       store,
 		distributor: distributor,
 	}
@@ -33,7 +44,7 @@ func NewRefundRecoveryScheduler(store db.Store, distributor TaskDistributor) *Re
 // Start 启动调度器
 func (s *RefundRecoveryScheduler) Start() error {
 	_, err := s.cron.AddFunc(refundRecoveryCron, func() {
-		s.runOnce()
+		s.runOnce(s.stopCtx)
 	})
 	if err != nil {
 		return err
@@ -42,24 +53,35 @@ func (s *RefundRecoveryScheduler) Start() error {
 	s.cron.Start()
 	log.Info().Msg("refund recovery scheduler started (every 5 minutes)")
 
-	// 启动时立即运行一次
-	go s.runOnce()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.runOnce(s.stopCtx)
+	}()
 	return nil
 }
 
 // Stop 停止调度器
 func (s *RefundRecoveryScheduler) Stop() {
+	s.stopCancel()
 	s.cron.Stop()
+	s.wg.Wait()
 	log.Info().Msg("refund recovery scheduler stopped")
 }
 
-func (s *RefundRecoveryScheduler) runOnce() {
+func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
+	if !s.runMu.TryLock() {
+		log.Warn().Msg("refund recovery already running, skipping concurrent execution")
+		return
+	}
+	defer s.runMu.Unlock()
+
 	if s.distributor == nil {
 		log.Warn().Msg("task distributor not configured, skip refund recovery")
 		return
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
 	// 查找最近7天内，订单已取消但支付状态仍为paid的记录

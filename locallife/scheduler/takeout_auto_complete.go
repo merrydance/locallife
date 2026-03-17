@@ -27,7 +27,13 @@ type TakeoutAutoCompleteScheduler struct {
 
 func NewTakeoutAutoCompleteScheduler(store db.Store, _ worker.TaskDistributor) *TakeoutAutoCompleteScheduler {
 	return &TakeoutAutoCompleteScheduler{
-		cron:  cron.New(cron.WithSeconds()),
+		cron: cron.New(
+			cron.WithSeconds(),
+			cron.WithChain(
+				cron.SkipIfStillRunning(cron.DefaultLogger),
+				cron.Recover(cron.DefaultLogger),
+			),
+		),
 		store: store,
 	}
 }
@@ -56,7 +62,8 @@ func (s *TakeoutAutoCompleteScheduler) RunOnce() {
 }
 
 func (s *TakeoutAutoCompleteScheduler) autoCompleteTakeoutOrders() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
 	deliveredBefore := time.Now().Add(-TakeoutAutoCompleteAfter)
 	orders, err := s.store.ListTakeoutOrdersDeliveredBefore(ctx, db.ListTakeoutOrdersDeliveredBeforeParams{

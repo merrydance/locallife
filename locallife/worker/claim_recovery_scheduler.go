@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,22 +20,32 @@ const (
 
 // ClaimRecoveryScheduler scans due claim recoveries and applies overdue actions.
 type ClaimRecoveryScheduler struct {
-	cron  *cron.Cron
-	store db.Store
+	cron       *cron.Cron
+	wg         sync.WaitGroup
+	stopCtx    context.Context
+	stopCancel context.CancelFunc
+	runMu      sync.Mutex
+	store      db.Store
 }
 
 // NewClaimRecoveryScheduler creates a new scheduler for claim recoveries.
 func NewClaimRecoveryScheduler(store db.Store) *ClaimRecoveryScheduler {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &ClaimRecoveryScheduler{
-		cron:  cron.New(),
-		store: store,
+		cron: cron.New(cron.WithChain(
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+			cron.Recover(cron.DefaultLogger),
+		)),
+		stopCtx:    stopCtx,
+		stopCancel: stopCancel,
+		store:      store,
 	}
 }
 
 // Start starts the recovery scheduler.
 func (s *ClaimRecoveryScheduler) Start() error {
 	_, err := s.cron.AddFunc(claimRecoveryCron, func() {
-		s.runOnce()
+		s.runOnce(s.stopCtx)
 	})
 	if err != nil {
 		return err
@@ -43,18 +54,30 @@ func (s *ClaimRecoveryScheduler) Start() error {
 	s.cron.Start()
 	log.Info().Msg("claim recovery scheduler started (every 5 minutes)")
 
-	go s.runOnce()
+	s.wg.Add(1)
+	go func() {
+		defer s.wg.Done()
+		s.runOnce(s.stopCtx)
+	}()
 	return nil
 }
 
 // Stop stops the scheduler.
 func (s *ClaimRecoveryScheduler) Stop() {
+	s.stopCancel()
 	s.cron.Stop()
+	s.wg.Wait()
 	log.Info().Msg("claim recovery scheduler stopped")
 }
 
-func (s *ClaimRecoveryScheduler) runOnce() {
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+func (s *ClaimRecoveryScheduler) runOnce(ctx context.Context) {
+	if !s.runMu.TryLock() {
+		log.Warn().Msg("claim recovery already running, skipping concurrent execution")
+		return
+	}
+	defer s.runMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Minute)
 	defer cancel()
 
 	recoveries, err := s.store.ListDueClaimRecoveries(ctx, db.ListDueClaimRecoveriesParams{

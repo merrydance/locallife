@@ -1,7 +1,6 @@
 package api
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -455,36 +454,21 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
-	// 平台先行赔付（异步，不阻塞响应）
+	// 平台先行赔付：入队失败视为服务不可用，直接返回 503，避免向用户呈现"已批准"而实际未打款。
+	// 生产环境通过 main.go 的 Fatal 检查确保 Redis 始终可用（无降级路径）。
 	if decision.Approved && decision.Amount > 0 {
-		if server.taskDistributor != nil {
-			// P2-001 修复: 使用 TaskQueue 保证退款可靠执行
-			err := server.taskDistributor.DistributeTaskClaimRefund(ctx, &worker.ClaimRefundPayload{
-				ClaimID:    claim.ID,
-				UserID:     authPayload.UserID,
-				Amount:     decision.Amount,
-				SourceType: "platform",
-				SourceID:   0,
-				Remark:     "platform payout",
-			}, asynq.Queue(worker.QueueCritical))
-			if err != nil {
-				log.Error().Err(err).Int64("claim_id", claim.ID).Msg("failed to enqueue claim refund task")
-			}
-		} else {
-			// Fallback (测试环境或无Redis): 使用原有的 goroutine
-			go func() {
-				_, refundErr := server.store.ClaimRefundTx(context.Background(), db.ClaimRefundTxParams{
-					ClaimID:    claim.ID,
-					UserID:     authPayload.UserID,
-					Amount:     decision.Amount,
-					SourceType: "platform",
-					SourceID:   0,
-					Remark:     "platform payout",
-				})
-				if refundErr != nil {
-					log.Error().Err(refundErr).Int64("claim_id", claim.ID).Int64("user_id", authPayload.UserID).Msg("claim refund goroutine failed")
-				}
-			}()
+		err := server.taskDistributor.DistributeTaskClaimRefund(ctx, &worker.ClaimRefundPayload{
+			ClaimID:    claim.ID,
+			UserID:     authPayload.UserID,
+			Amount:     decision.Amount,
+			SourceType: "platform",
+			SourceID:   0,
+			Remark:     "platform payout",
+		}, asynq.Queue(worker.QueueCritical))
+		if err != nil {
+			log.Error().Err(err).Int64("claim_id", claim.ID).Msg("failed to enqueue claim refund task")
+			ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("payment service temporarily unavailable, please retry")))
+			return
 		}
 	}
 

@@ -10,7 +10,7 @@ import (
 
 // RecommendDeliveryForUserInput defines request data to recommend delivery orders.
 type RecommendDeliveryForUserInput struct {
-	UserID  int64
+	UserID   int64
 	RiderLat float64
 	RiderLng float64
 }
@@ -41,7 +41,7 @@ func RecommendDeliveryOrdersForUser(
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请先上线"))
 	}
 	if !rider.RegionID.Valid {
-		return result, NewRequestError(http.StatusBadRequest, errors.New("您尚未分配服务区域，请联系管理员"))
+		return result, NewRequestError(http.StatusBadRequest, ErrRiderRegionUnassigned)
 	}
 
 	recommendations, err := RecommendDeliveryOrders(ctx, store, routeService, RecommendDeliveryInput{

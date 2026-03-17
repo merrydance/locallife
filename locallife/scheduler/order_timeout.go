@@ -24,7 +24,13 @@ type OrderTimeoutScheduler struct {
 // NewOrderTimeoutScheduler 创建订单超时清理调度器
 func NewOrderTimeoutScheduler(store db.Store) *OrderTimeoutScheduler {
 	return &OrderTimeoutScheduler{
-		cron:  cron.New(cron.WithSeconds()),
+		cron: cron.New(
+			cron.WithSeconds(),
+			cron.WithChain(
+				cron.SkipIfStillRunning(cron.DefaultLogger), // 防止上次执行未完成时重入
+				cron.Recover(cron.DefaultLogger),            // 捕获 panic，防止 cron 崩溃
+			),
+		),
 		store: store,
 	}
 }
@@ -50,7 +56,8 @@ func (s *OrderTimeoutScheduler) Stop() {
 
 // cleanupTimeoutOrders 清理超时未支付的订单
 func (s *OrderTimeoutScheduler) cleanupTimeoutOrders() {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
 	// 计算超时时间点：当前时间 - 超时时间
 	timeoutBefore := time.Now().Add(-OrderPaymentTimeoutMinutes * time.Minute)

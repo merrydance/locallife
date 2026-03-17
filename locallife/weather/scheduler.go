@@ -17,19 +17,29 @@ import (
 // Scheduler 天气数据定时抓取调度器
 type Scheduler struct {
 	cron          *cron.Cron
+	wg            sync.WaitGroup
+	stopCtx       context.Context
+	stopCancel    context.CancelFunc
 	store         db.Store
 	weatherClient QweatherClient
 	cache         WeatherCache
 	invalidRegion map[int64]time.Time
 	invalidMu     sync.RWMutex
+	runMu         sync.Mutex
 }
 
 var errWeatherNoSuchLocation = errors.New("weather: no such location")
 
 // NewScheduler 创建调度器
 func NewScheduler(store db.Store, weatherClient QweatherClient, cache WeatherCache) *Scheduler {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &Scheduler{
-		cron:          cron.New(),
+		cron: cron.New(cron.WithChain(
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+			cron.Recover(cron.DefaultLogger),
+		)),
+		stopCtx:       stopCtx,
+		stopCancel:    stopCancel,
 		store:         store,
 		weatherClient: weatherClient,
 		cache:         cache,
@@ -41,12 +51,7 @@ func NewScheduler(store db.Store, weatherClient QweatherClient, cache WeatherCac
 func (s *Scheduler) Start() error {
 	// 每15分钟执行一次
 	_, err := s.cron.AddFunc("*/15 * * * *", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		if err := s.FetchAllWeather(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to fetch weather data")
-		}
+		s.runOnce(s.stopCtx)
 	})
 	if err != nil {
 		return err
@@ -55,14 +60,10 @@ func (s *Scheduler) Start() error {
 	s.cron.Start()
 	log.Info().Msg("weather scheduler started (every 15 minutes)")
 
-	// 启动时立即执行一次
+	s.wg.Add(1)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-
-		if err := s.FetchAllWeather(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to fetch initial weather data")
-		}
+		defer s.wg.Done()
+		s.runOnce(s.stopCtx)
 	}()
 
 	return nil
@@ -70,8 +71,25 @@ func (s *Scheduler) Start() error {
 
 // Stop 停止调度器
 func (s *Scheduler) Stop() {
+	s.stopCancel()
 	s.cron.Stop()
+	s.wg.Wait()
 	log.Info().Msg("weather scheduler stopped")
+}
+
+func (s *Scheduler) runOnce(ctx context.Context) {
+	if !s.runMu.TryLock() {
+		log.Warn().Msg("weather scheduler already running, skipping concurrent execution")
+		return
+	}
+	defer s.runMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
+	defer cancel()
+
+	if err := s.FetchAllWeather(ctx); err != nil {
+		log.Error().Err(err).Msg("failed to fetch weather data")
+	}
 }
 
 // FetchAllWeather 抓取所有已开通区域的天气数据

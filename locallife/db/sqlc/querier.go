@@ -1308,6 +1308,7 @@ type Querier interface {
 	ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error)
 	ListSafetyReportsByRegionAndStatus(ctx context.Context, arg ListSafetyReportsByRegionAndStatusParams) ([]SafetyReport, error)
 	ListSearchHistory(ctx context.Context, arg ListSearchHistoryParams) ([]ListSearchHistoryRow, error)
+	ListStuckProcessingProfitSharingReturns(ctx context.Context, arg ListStuckProcessingProfitSharingReturnsParams) ([]ProfitSharingReturn, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
 	ListTableTags(ctx context.Context, tableID int64) ([]ListTableTagsRow, error)

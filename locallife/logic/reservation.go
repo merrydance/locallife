@@ -12,6 +12,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
+
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -555,15 +557,23 @@ func CancelReservation(
 					TotalAmount:  paymentOrder.Amount,
 				})
 				if err != nil {
-					_, _ = store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+					}
 				} else if wxRefund.Status == wechat.RefundStatusSuccess {
-					_, _ = store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-					_, _ = store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+					if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
+						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
+					}
+					if _, dbErr := store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
+						log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
+					}
 				} else if wxRefund.Status == wechat.RefundStatusProcessing {
-					_, _ = store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+					if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 						ID:       refundOrder.ID,
 						RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-					})
+					}); dbErr != nil {
+						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
+					}
 				}
 			}
 		}

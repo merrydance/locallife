@@ -3,10 +3,12 @@ package api
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/rs/zerolog/log"
 )
 
 type operatorRealtimeStatsResponse struct {
@@ -31,14 +33,16 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 	// 优先使用前端传入的 region_id（区域切换场景），无则取默认区域
 	var regionID int64
 	if qRegionID := ctx.Query("region_id"); qRegionID != "" {
-		var parsed int64
-		if _, err := fmt.Sscanf(qRegionID, "%d", &parsed); err == nil && parsed > 0 {
-			if _, err := server.checkOperatorManagesRegion(ctx, parsed); err != nil {
-				ctx.JSON(http.StatusForbidden, errorResponse(err))
-				return
-			}
-			regionID = parsed
+		parsed, err := strconv.ParseInt(qRegionID, 10, 64)
+		if err != nil || parsed <= 0 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid region_id: %s", qRegionID)))
+			return
 		}
+		if _, err := server.checkOperatorManagesRegion(ctx, parsed); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		regionID = parsed
 	}
 	if regionID == 0 {
 		var err error
@@ -102,7 +106,23 @@ func (server *Server) getOperatorRealtimeStats(ctx *gin.Context) {
 	pendingMerchantsRes := <-pendingMerchantsChan
 	pendingRidersRes := <-pendingRidersChan
 
-	// 错误处理 (记录日志，返回0或报错，这里选择宽容处理，出错返回0)
+	// 任一子查询失败则记录日志并返回错误，避免静默返回不可信 0 值
+	for _, r := range []struct {
+		label string
+		res   result
+	}{
+		{"active_merchants", activeMerchantsRes},
+		{"active_riders", activeRidersRes},
+		{"pending_merchants", pendingMerchantsRes},
+		{"pending_riders", pendingRidersRes},
+	} {
+		if r.res.err != nil {
+			log.Error().Err(r.res.err).Str("query", r.label).Msg("realtime stats query failed")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, r.res.err))
+			return
+		}
+	}
+
 	response := operatorRealtimeStatsResponse{
 		ActiveMerchantCount:  activeMerchantsRes.count,
 		ActiveRiderCount:     activeRidersRes.count,

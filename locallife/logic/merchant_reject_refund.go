@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/rs/zerolog/log"
 )
 
 // MerchantRejectRefundInput defines the input for refunding a rejected order.
@@ -101,13 +102,19 @@ func ProcessMerchantRejectRefund(
 
 	switch wxRefund.Status {
 	case wechat.RefundStatusSuccess:
-		_, _ = store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		_, _ = store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+		if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
+		}
+		if _, dbErr := store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
+		}
 	case wechat.RefundStatusProcessing:
-		_, _ = store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		if _, dbErr := store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
 			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-		})
+		}); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
+		}
 	}
 
 	return result, nil

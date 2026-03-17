@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -1483,7 +1484,73 @@ func (server *Server) getSearchSuggestions(ctx *gin.Context) {
 
 // ── 辅助：统一搜索入口（记录历史 + 热词）────────────────────────────────────
 
-// recordSearchKeyword 在后台 goroutine 中记录搜索历史和更新热词计数，不阻塞请求
+const (
+	searchKeywordWorkerCount = 2
+	searchKeywordQueueSize   = 512
+)
+
+type searchKeywordJob struct {
+	userID  int64
+	keyword string
+	ktype   string
+}
+
+// searchKeywordWorker 是处理搜索关键词记录的有界 worker pool。
+// 有界队列防止高并发下无限 goroutine 增长；队列满时丢弃并计数，不阻塞请求。
+type searchKeywordWorker struct {
+	store db.Store
+	jobs  chan searchKeywordJob
+	wg    sync.WaitGroup
+}
+
+func newSearchKeywordWorker(store db.Store) *searchKeywordWorker {
+	w := &searchKeywordWorker{
+		store: store,
+		jobs:  make(chan searchKeywordJob, searchKeywordQueueSize),
+	}
+	for range searchKeywordWorkerCount {
+		w.wg.Add(1)
+		go w.run()
+	}
+	return w
+}
+
+func (w *searchKeywordWorker) run() {
+	defer w.wg.Done()
+	for job := range w.jobs {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if _, err := w.store.UpsertSearchHistory(ctx, db.UpsertSearchHistoryParams{
+			UserID:  job.userID,
+			Keyword: job.keyword,
+			Type:    job.ktype,
+		}); err != nil {
+			log.Warn().Err(err).Str("keyword", job.keyword).Msg("failed to upsert search history")
+		}
+		if err := w.store.IncrementPopularKeyword(ctx, db.IncrementPopularKeywordParams{
+			Keyword: job.keyword,
+			Type:    job.ktype,
+		}); err != nil {
+			log.Warn().Err(err).Str("keyword", job.keyword).Msg("failed to increment popular keyword")
+		}
+		cancel()
+	}
+}
+
+func (w *searchKeywordWorker) submit(userID int64, keyword, ktype string) {
+	select {
+	case w.jobs <- searchKeywordJob{userID: userID, keyword: keyword, ktype: ktype}:
+	default:
+		searchKeywordsDroppedTotal.Inc()
+		log.Warn().Str("keyword", keyword).Msg("search keyword queue full, dropping record job")
+	}
+}
+
+func (w *searchKeywordWorker) shutdown() {
+	close(w.jobs)
+	w.wg.Wait()
+}
+
+// recordSearchKeyword 将搜索关键词记录任务投递到有界 worker pool，不阻塞请求
 func (server *Server) recordSearchKeyword(userID int64, keyword, ktype string) {
 	if keyword == "" {
 		return
@@ -1491,20 +1558,7 @@ func (server *Server) recordSearchKeyword(userID int64, keyword, ktype string) {
 	if gin.Mode() == gin.TestMode {
 		return
 	}
-	go func() {
-		ctx := context.Background()
-		// 记录用户历史（upsert）
-		_, _ = server.store.UpsertSearchHistory(ctx, db.UpsertSearchHistoryParams{
-			UserID:  userID,
-			Keyword: keyword,
-			Type:    ktype,
-		})
-		// 更新热词计数
-		_ = server.store.IncrementPopularKeyword(ctx, db.IncrementPopularKeywordParams{
-			Keyword: keyword,
-			Type:    ktype,
-		})
-	}()
+	server.keywordWorker.submit(userID, keyword, ktype)
 }
 
 // searchCategories godoc

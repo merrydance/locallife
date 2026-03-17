@@ -97,3 +97,7 @@ func (NoopTaskDistributor) DistributeTaskMerchantApplicationFoodPermitOCR(ctx co
 func (NoopTaskDistributor) DistributeTaskMerchantApplicationIDCardOCR(ctx context.Context, applicationID int64, imagePath string, side string, opts ...asynq.Option) error {
 	return nil
 }
+
+func (NoopTaskDistributor) DistributeTaskUploadShippingInfo(ctx context.Context, payload *UploadShippingInfoPayload, opts ...asynq.Option) error {
+	return nil
+}

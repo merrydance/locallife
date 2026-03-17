@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -39,12 +40,50 @@ func NewNoopAuditWriter() AuditWriter {
 	return NoopAuditWriter{}
 }
 
+const (
+	auditWorkerCount = 4
+	auditQueueSize   = 1024
+)
+
+type auditJob struct {
+	action string
+	params db.CreateAuditLogParams
+}
+
 type DBAuditWriter struct {
 	store db.Store
+	jobs  chan auditJob
+	wg    sync.WaitGroup
 }
 
 func NewDBAuditWriter(store db.Store) AuditWriter {
-	return &DBAuditWriter{store: store}
+	w := &DBAuditWriter{
+		store: store,
+		jobs:  make(chan auditJob, auditQueueSize),
+	}
+	for i := 0; i < auditWorkerCount; i++ {
+		w.wg.Add(1)
+		go w.workerLoop()
+	}
+	return w
+}
+
+func (w *DBAuditWriter) workerLoop() {
+	defer w.wg.Done()
+	for job := range w.jobs {
+		ctx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
+		if _, err := w.store.CreateAuditLog(ctx, job.params); err != nil {
+			log.Warn().Err(err).Str("action", job.action).Msg("failed to write audit log")
+		}
+		cancel()
+	}
+}
+
+// Close drains the jobs channel and waits for all workers to finish.
+// Must be called during server shutdown to avoid losing tail audit entries.
+func (w *DBAuditWriter) Close() {
+	close(w.jobs)
+	w.wg.Wait()
 }
 
 func (w *DBAuditWriter) Write(ctx *gin.Context, input AuditLogInput) {
@@ -82,12 +121,10 @@ func (w *DBAuditWriter) Write(ctx *gin.Context, input AuditLogInput) {
 		Metadata:    metadataBytes,
 	}
 
-	go func(action string, p db.CreateAuditLogParams) {
-		writeCtx, cancel := context.WithTimeout(context.Background(), 1500*time.Millisecond)
-		defer cancel()
-
-		if _, writeErr := w.store.CreateAuditLog(writeCtx, p); writeErr != nil {
-			log.Warn().Err(writeErr).Str("action", action).Msg("failed to write audit log")
-		}
-	}(input.Action, params)
+	select {
+	case w.jobs <- auditJob{action: input.Action, params: params}:
+	default:
+		auditLogDroppedTotal.Inc()
+		log.Warn().Str("action", input.Action).Msg("audit log queue full, dropping write")
+	}
 }

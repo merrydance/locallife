@@ -79,18 +79,34 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), interruptSignals...)
 	defer stop()
 
+	// Fail-fast: 生产环境必须配置显式 CORS 白名单，且不能包含通配符 *
+	if config.Environment == "production" {
+		if len(config.AllowedOrigins) == 0 {
+			log.Fatal().Msg("ALLOWED_ORIGINS must not be empty in production")
+		}
+		for _, origin := range config.AllowedOrigins {
+			if origin == "*" {
+				log.Fatal().Msg("ALLOWED_ORIGINS must not contain wildcard '*' in production")
+			}
+		}
+		// 生产环境资金流（赔付/退款/分账）依赖 Redis 任务队列，不允许降级为 NoopDistributor
+		if config.RedisAddress == "" {
+			log.Fatal().Msg("REDIS_ADDRESS is required in production (financial tasks require a real task queue)")
+		}
+	}
+
 	// ✅ P1-4: 优化数据库连接池配置
 	poolConfig, err := pgxpool.ParseConfig(config.DBSource)
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot parse db config")
 	}
 
-	// 连接池优化参数（根据生产环境调整）
-	poolConfig.MaxConns = 25                       // 最大连接数（默认4）
-	poolConfig.MinConns = 5                        // 最小空闲连接（默认0）
-	poolConfig.MaxConnLifetime = 1 * time.Hour     // 连接最大生命周期
-	poolConfig.MaxConnIdleTime = 30 * time.Minute  // 空闲连接超时
-	poolConfig.HealthCheckPeriod = 1 * time.Minute // 健康检查频率
+	// 连接池参数从配置读取，默认值在 util/config.go 中定义
+	poolConfig.MaxConns = config.DBMaxConns
+	poolConfig.MinConns = config.DBMinConns
+	poolConfig.MaxConnLifetime = config.DBMaxConnLifetime
+	poolConfig.MaxConnIdleTime = config.DBMaxConnIdleTime
+	poolConfig.HealthCheckPeriod = config.DBHealthCheckPeriod
 
 	connPool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {

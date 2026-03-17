@@ -134,6 +134,28 @@ var (
 		},
 		[]string{"type"},
 	)
+
+	// 后台队列丢弃计数器
+	searchKeywordsDroppedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "search_keywords_dropped_total",
+			Help: "Total number of search keyword record jobs dropped due to full queue",
+		},
+	)
+
+	imageDeleteDroppedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "image_delete_dropped_total",
+			Help: "Total number of image delete jobs dropped due to full queue",
+		},
+	)
+
+	auditLogDroppedTotal = promauto.NewCounter(
+		prometheus.CounterOpts{
+			Name: "audit_log_dropped_total",
+			Help: "Total number of audit log writes dropped due to full queue",
+		},
+	)
 )
 
 // PrometheusMiddleware 记录 HTTP 请求指标

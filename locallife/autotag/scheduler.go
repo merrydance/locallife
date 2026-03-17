@@ -3,6 +3,7 @@ package autotag
 import (
 	"context"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,15 +14,25 @@ import (
 
 // Scheduler 自动标签定时任务调度器
 type Scheduler struct {
-	cron  *cron.Cron
-	store db.Store
+	cron       *cron.Cron
+	wg         sync.WaitGroup
+	stopCtx    context.Context
+	stopCancel context.CancelFunc
+	runMu      sync.Mutex
+	store      db.Store
 }
 
 // NewScheduler 创建自动标签调度器
 func NewScheduler(store db.Store) *Scheduler {
+	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &Scheduler{
-		cron:  cron.New(),
-		store: store,
+		cron: cron.New(cron.WithChain(
+			cron.SkipIfStillRunning(cron.DefaultLogger),
+			cron.Recover(cron.DefaultLogger),
+		)),
+		stopCtx:    stopCtx,
+		stopCancel: stopCancel,
+		store:      store,
 	}
 }
 
@@ -29,12 +40,7 @@ func NewScheduler(store db.Store) *Scheduler {
 func (s *Scheduler) Start() error {
 	// 每小时执行一次
 	_, err := s.cron.AddFunc("0 * * * *", func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-
-		if err := s.RefreshDishStats(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to refresh auto tags")
-		}
+		s.runOnce(s.stopCtx)
 	})
 	if err != nil {
 		return err
@@ -43,14 +49,10 @@ func (s *Scheduler) Start() error {
 	s.cron.Start()
 	log.Info().Msg("auto-tag scheduler started (every hour)")
 
-	// 启动时立即执行一次
+	s.wg.Add(1)
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-		defer cancel()
-
-		if err := s.RefreshDishStats(ctx); err != nil {
-			log.Error().Err(err).Msg("failed to refresh initial auto tags")
-		}
+		defer s.wg.Done()
+		s.runOnce(s.stopCtx)
 	}()
 
 	return nil
@@ -58,8 +60,25 @@ func (s *Scheduler) Start() error {
 
 // Stop 停止调度器
 func (s *Scheduler) Stop() {
+	s.stopCancel()
 	s.cron.Stop()
+	s.wg.Wait()
 	log.Info().Msg("auto-tag scheduler stopped")
+}
+
+func (s *Scheduler) runOnce(ctx context.Context) {
+	if !s.runMu.TryLock() {
+		log.Warn().Msg("auto-tag scheduler already running, skipping concurrent execution")
+		return
+	}
+	defer s.runMu.Unlock()
+
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	if err := s.RefreshDishStats(ctx); err != nil {
+		log.Error().Err(err).Msg("failed to refresh auto tags")
+	}
 }
 
 // RefreshDishStats 刷新所有菜品统计数据（销量、复购率）

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
+
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 )
@@ -117,19 +119,27 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 			TotalAmount:  paymentOrder.Amount,
 		})
 		if refundErr != nil {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return CreateRefundOrderResult{}, fmt.Errorf("wechat refund: %w", refundErr)
 		}
 
 		switch wxRefund.Status {
 		case wechat.RefundStatusSuccess:
-			_, _ = s.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-			_, _ = s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
+			}
+			if _, dbErr := s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
+			}
 		case wechat.RefundStatusProcessing:
-			_, _ = s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			if _, dbErr := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 				ID:       refundOrder.ID,
 				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-			})
+			}); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
+			}
 		}
 	}
 
@@ -253,43 +263,59 @@ func (s *RefundService) processProfitSharingRefund(
 	input CreateRefundOrderInput,
 ) error {
 	if s.paymentFacade == nil {
-		_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 		return NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
 	}
 
 	profitSharingOrder, err := s.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 	if err != nil {
-		_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 		return NewRequestError(http.StatusBadRequest, errors.New("profit sharing order not found"))
 	}
 	if !profitSharingOrder.SharingOrderID.Valid || profitSharingOrder.SharingOrderID.String == "" {
-		_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 		return NewRequestError(http.StatusBadRequest, errors.New("profit sharing order id missing"))
 	}
 
 	paymentConfig, err := s.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
 	if err != nil {
-		_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 		return err
 	}
 	if paymentConfig.SubMchID == "" {
-		_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 		return NewRequestError(http.StatusBadRequest, errors.New("merchant sub mchid not configured"))
 	}
 
 	var operator db.Operator
 	if profitSharingOrder.OperatorCommission > 0 {
 		if !profitSharingOrder.OperatorID.Valid {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return NewRequestError(http.StatusBadRequest, errors.New("operator not found for profit sharing"))
 		}
 		op, getErr := s.store.GetOperator(ctx, profitSharingOrder.OperatorID.Int64)
 		if getErr != nil {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return getErr
 		}
 		if !op.WechatMchID.Valid || op.WechatMchID.String == "" {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return NewRequestError(http.StatusBadRequest, errors.New("operator wechat mchid not configured"))
 		}
 		operator = op
@@ -299,16 +325,22 @@ func (s *RefundService) processProfitSharingRefund(
 	if profitSharingOrder.RiderAmount > 0 && profitSharingOrder.RiderID.Valid {
 		rider, getRiderErr := s.store.GetRider(ctx, profitSharingOrder.RiderID.Int64)
 		if getRiderErr != nil {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return getRiderErr
 		}
 		user, getUserErr := s.store.GetUser(ctx, rider.UserID)
 		if getUserErr != nil {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return getUserErr
 		}
 		if user.WechatOpenid == "" {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return NewRequestError(http.StatusBadRequest, errors.New("rider wechat openid not configured"))
 		}
 		riderOpenID = user.WechatOpenid
@@ -342,29 +374,37 @@ func (s *RefundService) processProfitSharingRefund(
 			Description:       description,
 		})
 		if returnErr != nil {
-			_, _ = s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+			if _, dbErr := s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
 				ID:         returnRecord.ID,
 				FailReason: pgtype.Text{String: returnErr.Error(), Valid: true},
-			})
+			}); dbErr != nil {
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+			}
 			return returnErr
 		}
 
 		switch returnResp.Result {
 		case "SUCCESS":
 			if returnResp.ReturnID != "" {
-				_, _ = s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+				if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
 					ID:       returnRecord.ID,
 					ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: true},
-				})
+				}); dbErr != nil {
+					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				}
 			}
-			_, _ = s.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID)
+			if _, dbErr := s.store.UpdateProfitSharingReturnToSuccess(ctx, returnRecord.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as success")
+			}
 		case "PROCESSING":
-			_, _ = s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+			if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
 				ID:       returnRecord.ID,
 				ReturnID: pgtype.Text{String: returnResp.ReturnID, Valid: returnResp.ReturnID != ""},
-			})
+			}); dbErr != nil {
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+			}
 			if s.taskScheduler != nil {
-				_ = s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
+				if schedErr := s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
 					ProfitSharingReturnID: returnRecord.ID,
 					OutReturnNo:           returnRecord.OutReturnNo,
 					OutOrderNo:            returnRecord.OutOrderNo,
@@ -372,20 +412,26 @@ func (s *RefundService) processProfitSharingRefund(
 					RefundOrderID:         returnRecord.RefundOrderID,
 					RetryCount:            0,
 					Delay:                 delay,
-				})
+				}); schedErr != nil {
+					log.Error().Err(schedErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
+				}
 			}
 			hasProcessing = true
 		case "FAILED":
-			_, _ = s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+			if _, dbErr := s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
 				ID:         returnRecord.ID,
 				FailReason: pgtype.Text{String: returnResp.FailReason, Valid: returnResp.FailReason != ""},
-			})
+			}); dbErr != nil {
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+			}
 			return fmt.Errorf("profit sharing return failed")
 		default:
-			_, _ = s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
+			if _, dbErr := s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
 				ID:         returnRecord.ID,
 				FailReason: pgtype.Text{String: "unknown return result", Valid: true},
-			})
+			}); dbErr != nil {
+				log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as failed")
+			}
 			return fmt.Errorf("profit sharing return unknown result")
 		}
 
@@ -400,21 +446,27 @@ func (s *RefundService) processProfitSharingRefund(
 	if profitSharingOrder.PlatformCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, s.paymentFacade.SpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission, delay); returnErr != nil {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return NewRequestError(http.StatusInternalServerError, errors.New("profit sharing return failed"))
 		}
 	}
 	if profitSharingOrder.OperatorCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission, delay); returnErr != nil {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return NewRequestError(http.StatusInternalServerError, errors.New("profit sharing return failed"))
 		}
 	}
 	if profitSharingOrder.RiderAmount > 0 {
 		outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypePersonal, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount, delay); returnErr != nil {
-			_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+			}
 			return NewRequestError(http.StatusInternalServerError, errors.New("profit sharing return failed"))
 		}
 	}
@@ -432,21 +484,31 @@ func (s *RefundService) processProfitSharingRefund(
 		TotalAmount:  paymentOrder.Amount,
 	})
 	if err != nil {
-		_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 		return fmt.Errorf("wechat ecommerce refund: %w", err)
 	}
 
 	switch wxRefund.Status {
 	case wechat.RefundStatusSuccess:
-		_, _ = s.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		_, _ = s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
+		}
+		if _, dbErr := s.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
+		}
 	case wechat.RefundStatusProcessing:
-		_, _ = s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		if _, dbErr := s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
 			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-		})
+		}); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as processing")
+		}
 	default:
-		_, _ = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+		}
 	}
 
 	return nil
