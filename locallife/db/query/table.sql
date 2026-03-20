@@ -84,7 +84,7 @@ WHERE merchant_id = $1
 -- name: AddTableImage :one
 INSERT INTO table_images (
     table_id,
-    image_url,
+    media_asset_id,
     sort_order,
     is_primary
 ) VALUES (
@@ -135,12 +135,12 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image,
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -163,10 +163,10 @@ SELECT
     t.status,
     t.created_at,
     COALESCE(
-        (SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
-        (SELECT image_url FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -186,7 +186,7 @@ SELECT
     t.description,
     t.minimum_spend,
     t.status,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 WHERE t.merchant_id = $1 
   AND t.table_type = 'room'
@@ -247,7 +247,7 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
@@ -291,7 +291,7 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
@@ -357,16 +357,16 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
     COALESCE(
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.reservation_date >= CURRENT_DATE - INTERVAL '30 days'
@@ -416,11 +416,11 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
-    COALESCE((SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'

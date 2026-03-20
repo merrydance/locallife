@@ -37,7 +37,7 @@ type kitchenOrderItem struct {
 	CategoryName   string                   `json:"category_name,omitempty"`
 	Quantity       int16                    `json:"quantity"`
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
-	ImageURL       *string                  `json:"image_url,omitempty"`
+	ImageAssetID   *int64                   `json:"image_asset_id,omitempty"`
 	PrepareTime    int16                    `json:"prepare_time"` // 预估制作时间（分钟）
 }
 
@@ -484,16 +484,16 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 			_ = parseJSON(item.Customizations, &customizations)
 		}
 
-		var imageURL *string
+		var imageAssetID *int64
 		var prepareTime int16 = DefaultAvgPrepareTimeMinutes // 默认值
 		var categoryName string
 
 		if item.DishID.Valid {
 			dish, err := server.store.GetDish(ctx, item.DishID.Int64)
 			if err == nil {
-				if dish.ImageUrl.Valid {
-					img := normalizeUploadURLForClient(dish.ImageUrl.String)
-					imageURL = &img
+				if dish.ImageMediaAssetID.Valid {
+					v := dish.ImageMediaAssetID.Int64
+					imageAssetID = &v
 				}
 				prepareTime = dish.PrepareTime
 
@@ -518,7 +518,7 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 			CategoryName:   categoryName,
 			Quantity:       item.Quantity,
 			Customizations: customizations,
-			ImageURL:       imageURL,
+			ImageAssetID:   imageAssetID,
 			PrepareTime:    prepareTime,
 		})
 	}

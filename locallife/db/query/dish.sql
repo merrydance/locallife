@@ -70,7 +70,6 @@ INSERT INTO dishes (
   category_id,
   name,
   description,
-  image_url,
   price,
   member_price,
   is_available,
@@ -78,7 +77,7 @@ INSERT INTO dishes (
   sort_order,
   prepare_time
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 ) RETURNING *;
 
 -- name: GetDish :one
@@ -153,7 +152,7 @@ WHERE
 SELECT 
   d.*,
   m.name AS merchant_name,
-  m.logo_url AS merchant_logo,
+  m.logo_media_asset_id AS merchant_logo_asset_id,
   m.is_open AS merchant_is_open,
   m.region_id AS merchant_region_id,
   m.latitude AS merchant_latitude,
@@ -263,7 +262,7 @@ SET
   category_id = COALESCE(sqlc.narg('category_id'), category_id),
   name = COALESCE(sqlc.narg('name'), name),
   description = COALESCE(sqlc.narg('description'), description),
-  image_url = COALESCE(sqlc.narg('image_url'), image_url),
+  image_media_asset_id = COALESCE(sqlc.narg('image_media_asset_id'), image_media_asset_id),
   price = COALESCE(sqlc.narg('price'), price),
   member_price = COALESCE(sqlc.narg('member_price'), member_price),
   is_available = COALESCE(sqlc.narg('is_available'), is_available),
@@ -526,7 +525,7 @@ SELECT
     d.merchant_id,
     d.name,
     d.description,
-    d.image_url,
+    d.image_media_asset_id,
     d.price,
     d.member_price,
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
@@ -599,7 +598,7 @@ SELECT
     merchant_id,
     name,
     description,
-    image_url,
+    image_media_asset_id,
     price,
     member_price,
     is_available,
@@ -617,13 +616,13 @@ SELECT
     d.merchant_id,
     d.name,
     d.description,
-    d.image_url,
+    d.image_media_asset_id,
     d.price,
     d.member_price,
     d.is_available,
     d.is_online,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_asset_id,
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
@@ -651,7 +650,7 @@ SELECT
     merchant_id,
     name,
     description,
-    image_url,
+    image_media_asset_id,
     price,
     member_price,
     is_available,
@@ -676,7 +675,7 @@ SELECT
     d.category_id,
     d.name,
     d.description,
-    d.image_url,
+    d.image_media_asset_id,
     d.price,
     d.member_price,
     d.is_available,

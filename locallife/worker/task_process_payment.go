@@ -645,10 +645,8 @@ func buildOrderSnapshotPayload(order db.Order, items []db.ListOrderItemsWithDish
 			if item.ComboID.Valid {
 				respItems[i].ComboID = &item.ComboID.Int64
 			}
-			if item.DishImageUrl.Valid {
-				img := item.DishImageUrl.String
-				respItems[i].ImageURL = &img
-			}
+			// Note: image_media_asset_id resolution skipped here;
+			// ImageURL is populated by API layer with CDN URLs.
 			if item.Customizations != nil {
 				var customizations interface{}
 				_ = json.Unmarshal(item.Customizations, &customizations)

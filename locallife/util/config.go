@@ -113,6 +113,32 @@ type Config struct {
 	ReservationUserRefundPercentAfterDeadline      int `mapstructure:"RESERVATION_USER_REFUND_PERCENT_AFTER_DEADLINE"`
 	ReservationMerchantRefundPercentBeforeDeadline int `mapstructure:"RESERVATION_MERCHANT_REFUND_PERCENT_BEFORE_DEADLINE"`
 	ReservationMerchantRefundPercentAfterDeadline  int `mapstructure:"RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE"`
+
+	// 媒体存储配置
+	// FILE_STORAGE_PROVIDER=local 时后端自身充当上传接收端（仅开发环境）。
+	// FILE_STORAGE_PROVIDER=oss 时使用阿里云 OSS 直传，生产环境必须设为 oss。
+	FileStorageProvider string `mapstructure:"FILE_STORAGE_PROVIDER"` // local | oss
+
+	// 阿里云 OSS 配置（FILE_STORAGE_PROVIDER=oss 时必填）
+	OSSEndpoint        string `mapstructure:"OSS_ENDPOINT"`          // OSS 地域端点，如 https://oss-cn-hangzhou.aliyuncs.com
+	OSSPublicBucket    string `mapstructure:"OSS_PUBLIC_BUCKET"`     // 公共桶名称
+	OSSPrivateBucket   string `mapstructure:"OSS_PRIVATE_BUCKET"`    // 私有桶名称
+	OSSAccessKeyID     string `mapstructure:"OSS_ACCESS_KEY_ID"`     // AccessKey ID（服务端使用，不下发客户端）
+	OSSAccessKeySecret string `mapstructure:"OSS_ACCESS_KEY_SECRET"` // AccessKey Secret（服务端使用，不下发客户端）
+	OSSRegion          string `mapstructure:"OSS_REGION"`            // OSS 地域标识，如 cn-hangzhou（v2 SDK V4 签名必填）
+
+	// 阿里云 CDN 配置
+	CDNPublicBaseURL string `mapstructure:"CDN_PUBLIC_BASE_URL"` // 公共图 CDN 域名，如 https://cdn.example.com
+
+	// 媒体访问与上传参数
+	PrivateDownloadURLTTL   time.Duration `mapstructure:"PRIVATE_DOWNLOAD_URL_TTL"`   // 私有图签名地址有效期，如 5m
+	MediaMaxUploadBytes     int64         `mapstructure:"MEDIA_MAX_UPLOAD_BYTES"`     // 单文件最大字节数，如 10485760（10MB）
+	MediaDirectUploadExpire time.Duration `mapstructure:"MEDIA_DIRECT_UPLOAD_EXPIRE"` // 直传凭证有效期，如 15m
+
+	// 图片规格宽度（px）。MediaURLResolver 使用这些值构造 OSS 图片处理参数。
+	ImageVariantThumbWidth  int `mapstructure:"IMAGE_VARIANT_THUMB_WIDTH"`  // 列表缩略图，默认 200
+	ImageVariantCardWidth   int `mapstructure:"IMAGE_VARIANT_CARD_WIDTH"`   // 商品卡片，默认 400
+	ImageVariantDetailWidth int `mapstructure:"IMAGE_VARIANT_DETAIL_WIDTH"` // 详情主图，默认 960
 }
 
 // LoadConfig reads configuration from file or environment variables.
@@ -152,6 +178,14 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE", 100)
 	// Web 登录默认过期时间
 	v.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
+	// 媒体存储默认值
+	v.SetDefault("FILE_STORAGE_PROVIDER", "local")
+	v.SetDefault("PRIVATE_DOWNLOAD_URL_TTL", "5m")
+	v.SetDefault("MEDIA_MAX_UPLOAD_BYTES", 10485760) // 10MB
+	v.SetDefault("MEDIA_DIRECT_UPLOAD_EXPIRE", "15m")
+	v.SetDefault("IMAGE_VARIANT_THUMB_WIDTH", 200)
+	v.SetDefault("IMAGE_VARIANT_CARD_WIDTH", 400)
+	v.SetDefault("IMAGE_VARIANT_DETAIL_WIDTH", 960)
 
 	// 数据库连接池默认值
 	v.SetDefault("DB_MAX_CONNS", 25)

@@ -24,12 +24,12 @@ SELECT
                 'quantity', ci.quantity,
                 'customizations', ci.customizations,
                 'dish_name', d.name,
-                'dish_image_url', d.image_url,
+                'dish_image_media_asset_id', d.image_media_asset_id,
                 'dish_price', d.price,
                 'dish_member_price', d.member_price,
                 'dish_is_available', d.is_available,
                 'combo_name', cs.name,
-                'combo_image_url', cs.image_url,
+                'combo_image_media_asset_id', cs.image_media_asset_id,
                 'combo_original_price', cs.original_price,
                 'combo_price', cs.combo_price,
                 'combo_is_available', cs.is_online
@@ -88,12 +88,12 @@ WHERE ci.id = $1;
 SELECT 
     ci.*,
     d.name AS dish_name,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
     cs.name AS combo_name,
-    cs.image_url AS combo_image_url,
+    cs.image_media_asset_id AS combo_image_media_asset_id,
     cs.original_price AS combo_original_price,
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_available
@@ -107,7 +107,7 @@ ORDER BY ci.created_at;
 SELECT 
     c.*,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     COUNT(ci.id) AS item_count
 FROM carts c
 JOIN merchants m ON m.id = c.merchant_id
@@ -154,7 +154,7 @@ SELECT
     c.table_id,
     c.reservation_id,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     mpc.sub_mch_id AS sub_mchid,
     COUNT(ci.id)::int AS item_count,
     COALESCE(SUM(
@@ -202,14 +202,14 @@ ORDER BY c.updated_at DESC;
 SELECT 
     ci.*,
     d.name AS dish_name,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
     d.is_online AS dish_is_online,
     d.merchant_id AS dish_merchant_id,
     cs.name AS combo_name,
-    cs.image_url AS combo_image_url,
+    cs.image_media_asset_id AS combo_image_media_asset_id,
     cs.combo_price AS combo_price,
     cs.is_online AS combo_is_online,
     cs.merchant_id AS combo_merchant_id
@@ -233,7 +233,7 @@ SELECT
     c.updated_at,
     c.created_at,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.region_id AS region_id,
     mpc.sub_mch_id AS sub_mchid,
     m.status AS merchant_status,

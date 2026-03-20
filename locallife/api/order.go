@@ -158,7 +158,7 @@ type orderItemResponse struct {
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
 
 	// 商品图片URL
-	ImageURL *string `json:"image_url,omitempty" example:"https://example.com/images/dish1001.jpg"`
+	ImageAssetID *int64 `json:"image_asset_id,omitempty" example:"123"`
 }
 
 type orderBadge struct {
@@ -648,9 +648,9 @@ func (server *Server) getOrder(ctx *gin.Context) {
 		if item.ComboID.Valid {
 			resp.Items[i].ComboID = &item.ComboID.Int64
 		}
-		if item.DishImageUrl.Valid {
-			img := normalizeUploadURLForClient(item.DishImageUrl.String)
-			resp.Items[i].ImageURL = &img
+		if item.DishImageMediaAssetID.Valid {
+			v := item.DishImageMediaAssetID.Int64
+			resp.Items[i].ImageAssetID = &v
 		}
 		if item.Customizations != nil {
 			_ = json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
@@ -1166,9 +1166,9 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		if item.ComboID.Valid {
 			resp.Items[i].ComboID = &item.ComboID.Int64
 		}
-		if item.DishImageUrl.Valid {
-			img := normalizeUploadURLForClient(item.DishImageUrl.String)
-			resp.Items[i].ImageURL = &img
+		if item.DishImageMediaAssetID.Valid {
+			v := item.DishImageMediaAssetID.Int64
+			resp.Items[i].ImageAssetID = &v
 		}
 		if item.Customizations != nil {
 			_ = json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)

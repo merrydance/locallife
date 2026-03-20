@@ -98,7 +98,7 @@ ORDER BY created_at;
 SELECT 
     s.*,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     o.order_no
 FROM combined_payment_sub_orders s
 JOIN merchants m ON m.id = s.merchant_id
@@ -141,7 +141,7 @@ SELECT
                 'description', s.description,
                 'profit_sharing_status', s.profit_sharing_status,
                 'merchant_name', m.name,
-                'merchant_logo', m.logo_url,
+                'merchant_logo_media_asset_id', m.logo_media_asset_id,
                 'order_no', o.order_no
             ) ORDER BY s.created_at
         ) FILTER (WHERE s.id IS NOT NULL), '[]'

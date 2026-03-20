@@ -56,7 +56,6 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 					OwnerUserID:     arg.UserID,
 					Name:            arg.MerchantName,
 					Description:     pgtype.Text{},
-					LogoUrl:         pgtype.Text{},
 					Phone:           arg.Phone,
 					Address:         arg.Address,
 					Latitude:        arg.Latitude,

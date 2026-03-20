@@ -192,7 +192,7 @@ type merchantResponse struct {
 	RegionID    int64     `json:"region_id"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
-	LogoURL     *string   `json:"logo_url,omitempty"`
+	LogoAssetID *int64    `json:"logo_asset_id,omitempty"`
 	Phone       string    `json:"phone"`
 	Address     string    `json:"address"`
 	Latitude    *string   `json:"latitude,omitempty"`
@@ -224,10 +224,7 @@ func newMerchantResponse(merchant db.Merchant) merchantResponse {
 	if merchant.Description.Valid {
 		resp.Description = &merchant.Description.String
 	}
-	if merchant.LogoUrl.Valid {
-		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
-		resp.LogoURL = &logo
-	}
+	resp.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
 	if merchant.Latitude.Valid {
 		lat, _ := parseNumericToFloat(merchant.Latitude)
 		latStr := fmt.Sprintf("%.6f", lat)
@@ -311,7 +308,7 @@ func (server *Server) listMyMerchants(ctx *gin.Context) {
 type updateMerchantRequest struct {
 	Name        *string `json:"name" binding:"omitempty,min=2,max=50"`
 	Description *string `json:"description" binding:"omitempty,max=500"`
-	LogoURL     *string `json:"logo_url" binding:"omitempty,max=500"`
+	LogoAssetID *int64  `json:"logo_asset_id" binding:"omitempty,min=1"`
 	Phone       *string `json:"phone" binding:"omitempty,min=11,max=11"`
 	Address     *string `json:"address" binding:"omitempty,min=5,max=200"`
 	Latitude    *string `json:"latitude"`
@@ -377,8 +374,8 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 	if req.Description != nil {
 		arg.Description = pgtype.Text{String: *req.Description, Valid: true}
 	}
-	if req.LogoURL != nil {
-		arg.LogoUrl = pgtype.Text{String: normalizeImageURLForStorage(*req.LogoURL), Valid: true}
+	if req.LogoAssetID != nil {
+		arg.LogoMediaAssetID = pgtype.Int8{Int64: *req.LogoAssetID, Valid: true}
 	}
 	if req.Phone != nil {
 		arg.Phone = pgtype.Text{String: *req.Phone, Valid: true}
@@ -1074,7 +1071,7 @@ type publicMerchantDetailResponse struct {
 	ID                      int64                     `json:"id"`
 	Name                    string                    `json:"name"`
 	Description             *string                   `json:"description,omitempty"`
-	LogoURL                 *string                   `json:"logo_url,omitempty"`
+	LogoAssetID             *int64                    `json:"logo_asset_id,omitempty"`
 	CoverImage              *string                   `json:"cover_image,omitempty"` // 门头照/招牌图
 	Phone                   string                    `json:"phone"`
 	Address                 string                    `json:"address"`
@@ -1172,10 +1169,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	if merchant.Description.Valid {
 		resp.Description = &merchant.Description.String
 	}
-	if merchant.LogoUrl.Valid {
-		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
-		resp.LogoURL = &logo
-	}
+	resp.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
 	if merchant.Latitude.Valid {
 		lat, _ := parseNumericToFloat(merchant.Latitude)
 		resp.Latitude = lat
@@ -1325,7 +1319,7 @@ type publicDishItem struct {
 	Description         string               `json:"description,omitempty"`
 	Price               int64                `json:"price"`
 	MemberPrice         *int64               `json:"member_price,omitempty"`
-	ImageURL            string               `json:"image_url,omitempty"`
+	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
 	CategoryID          int64                `json:"category_id"`
 	CategoryName        string               `json:"category_name"`
 	MonthlySales        int32                `json:"monthly_sales"`
@@ -1422,8 +1416,9 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		if d.Description.Valid {
 			dish.Description = d.Description.String
 		}
-		if d.ImageUrl.Valid {
-			dish.ImageURL = normalizeUploadURLForClient(d.ImageUrl.String)
+		if d.ImageMediaAssetID.Valid {
+			v := d.ImageMediaAssetID.Int64
+			dish.ImageAssetID = &v
 		}
 		if d.MemberPrice.Valid {
 			dish.MemberPrice = &d.MemberPrice.Int64
@@ -1456,12 +1451,12 @@ type publicComboItem struct {
 	ID            int64           `json:"id"`
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
-	ImageURL      string          `json:"image_url,omitempty"`
+	ImageAssetID  *int64          `json:"image_asset_id,omitempty"`
 	ComboPrice    int64           `json:"combo_price"`
 	OriginalPrice int64           `json:"original_price"`
 	Dishes        []comboDishItem `json:"dishes"`
 	Tags          []string        `json:"tags"`
-	DishImages    []string        `json:"dish_images,omitempty"`
+	DishImages    []int64         `json:"dish_images,omitempty"`
 }
 
 type publicMerchantCombosResponse struct {
@@ -1507,8 +1502,9 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 		if c.Description.Valid {
 			combo.Description = c.Description.String
 		}
-		if c.ImageUrl.Valid {
-			combo.ImageURL = normalizeUploadURLForClient(c.ImageUrl.String)
+		if c.ImageMediaAssetID.Valid {
+			v := c.ImageMediaAssetID.Int64
+			combo.ImageAssetID = &v
 		}
 
 		// 解析菜品
@@ -1542,15 +1538,15 @@ func (server *Server) getPublicMerchantCombos(ctx *gin.Context) {
 // ==================== 消费者端包间列表 ====================
 
 type publicRoomItem struct {
-	ID           int64    `json:"id"`
-	Name         string   `json:"name"`
-	Capacity     int16    `json:"capacity"`
-	MinimumSpend *int64   `json:"minimum_spend,omitempty"`
-	Description  string   `json:"description,omitempty"`
-	PrimaryImage string   `json:"primary_image,omitempty"` // 统一字段名：包间主图
-	MonthlySales int64    `json:"monthly_sales"`
-	Status       string   `json:"status"`
-	Tags         []string `json:"tags"`
+	ID                  int64    `json:"id"`
+	Name                string   `json:"name"`
+	Capacity            int16    `json:"capacity"`
+	MinimumSpend        *int64   `json:"minimum_spend,omitempty"`
+	Description         string   `json:"description,omitempty"`
+	PrimaryImageAssetID int64    `json:"primary_image_asset_id,omitempty"`
+	MonthlySales        int64    `json:"monthly_sales"`
+	Status              string   `json:"status"`
+	Tags                []string `json:"tags"`
 }
 
 type publicMerchantRoomsResponse struct {
@@ -1599,8 +1595,10 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 		if r.MinimumSpend.Valid {
 			room.MinimumSpend = &r.MinimumSpend.Int64
 		}
-		if r.PrimaryImage != "" {
-			room.PrimaryImage = normalizeUploadURLForClient(r.PrimaryImage)
+		if r.PrimaryImageAssetID != nil {
+			if v, ok := r.PrimaryImageAssetID.(int64); ok {
+				room.PrimaryImageAssetID = v
+			}
 		}
 
 		// 获取包间标签
@@ -1672,11 +1670,10 @@ func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []
 	}
 
 	// 按 combo_id 组织图片
-	imgMap := make(map[int64][]string)
+	imgMap := make(map[int64][]int64)
 	for _, row := range memberImages {
-		if row.ImageUrl.Valid {
-			fullURL := normalizeUploadURLForClient(row.ImageUrl.String)
-			imgMap[row.ComboID] = append(imgMap[row.ComboID], fullURL)
+		if row.ImageMediaAssetID.Valid {
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], row.ImageMediaAssetID.Int64)
 		}
 	}
 

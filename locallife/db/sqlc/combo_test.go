@@ -12,13 +12,13 @@ import (
 // 辅助函数：创建随机套餐
 func createRandomComboSet(t *testing.T, merchantID int64) ComboSet {
 	arg := CreateComboSetParams{
-		MerchantID:    merchantID,
-		Name:          util.RandomString(10),
-		Description:   pgtype.Text{String: util.RandomString(30), Valid: true},
-		ImageUrl:      pgtype.Text{String: "https://example.com/combo.jpg", Valid: true},
-		OriginalPrice: util.RandomMoney(),
-		ComboPrice:    util.RandomMoney(),
-		IsOnline:      true,
+		MerchantID:        merchantID,
+		Name:              util.RandomString(10),
+		Description:       pgtype.Text{String: util.RandomString(30), Valid: true},
+		ImageMediaAssetID: pgtype.Int8{},
+		OriginalPrice:     util.RandomMoney(),
+		ComboPrice:        util.RandomMoney(),
+		IsOnline:          true,
 	}
 
 	combo, err := testStore.CreateComboSet(context.Background(), arg)

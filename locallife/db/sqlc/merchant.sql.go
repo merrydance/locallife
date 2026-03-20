@@ -247,7 +247,6 @@ INSERT INTO merchants (
   owner_user_id,
   name,
   description,
-  logo_url,
   phone,
   address,
   latitude,
@@ -256,16 +255,15 @@ INSERT INTO merchants (
   application_data,
   region_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id
 `
 
 type CreateMerchantParams struct {
 	OwnerUserID     int64          `json:"owner_user_id"`
 	Name            string         `json:"name"`
 	Description     pgtype.Text    `json:"description"`
-	LogoUrl         pgtype.Text    `json:"logo_url"`
 	Phone           string         `json:"phone"`
 	Address         string         `json:"address"`
 	Latitude        pgtype.Numeric `json:"latitude"`
@@ -281,7 +279,6 @@ func (q *Queries) CreateMerchant(ctx context.Context, arg CreateMerchantParams) 
 		arg.OwnerUserID,
 		arg.Name,
 		arg.Description,
-		arg.LogoUrl,
 		arg.Phone,
 		arg.Address,
 		arg.Latitude,
@@ -296,7 +293,6 @@ func (q *Queries) CreateMerchant(ctx context.Context, arg CreateMerchantParams) 
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -315,6 +311,7 @@ func (q *Queries) CreateMerchant(ctx context.Context, arg CreateMerchantParams) 
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
@@ -325,11 +322,8 @@ INSERT INTO merchant_applications (
   user_id,
   merchant_name,
   business_license_number,
-  business_license_image_url,
   legal_person_name,
   legal_person_id_number,
-  legal_person_id_front_url,
-  legal_person_id_back_url,
   contact_phone,
   business_address,
   business_scope,
@@ -337,26 +331,23 @@ INSERT INTO merchant_applications (
   latitude,
   region_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-RETURNING id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type CreateMerchantApplicationParams struct {
-	UserID                  int64          `json:"user_id"`
-	MerchantName            string         `json:"merchant_name"`
-	BusinessLicenseNumber   string         `json:"business_license_number"`
-	BusinessLicenseImageUrl string         `json:"business_license_image_url"`
-	LegalPersonName         string         `json:"legal_person_name"`
-	LegalPersonIDNumber     string         `json:"legal_person_id_number"`
-	LegalPersonIDFrontUrl   string         `json:"legal_person_id_front_url"`
-	LegalPersonIDBackUrl    string         `json:"legal_person_id_back_url"`
-	ContactPhone            string         `json:"contact_phone"`
-	BusinessAddress         string         `json:"business_address"`
-	BusinessScope           pgtype.Text    `json:"business_scope"`
-	Longitude               pgtype.Numeric `json:"longitude"`
-	Latitude                pgtype.Numeric `json:"latitude"`
-	RegionID                pgtype.Int8    `json:"region_id"`
+	UserID                int64          `json:"user_id"`
+	MerchantName          string         `json:"merchant_name"`
+	BusinessLicenseNumber string         `json:"business_license_number"`
+	LegalPersonName       string         `json:"legal_person_name"`
+	LegalPersonIDNumber   string         `json:"legal_person_id_number"`
+	ContactPhone          string         `json:"contact_phone"`
+	BusinessAddress       string         `json:"business_address"`
+	BusinessScope         pgtype.Text    `json:"business_scope"`
+	Longitude             pgtype.Numeric `json:"longitude"`
+	Latitude              pgtype.Numeric `json:"latitude"`
+	RegionID              pgtype.Int8    `json:"region_id"`
 }
 
 // ==================== 商户入驻申请 ====================
@@ -365,11 +356,8 @@ func (q *Queries) CreateMerchantApplication(ctx context.Context, arg CreateMerch
 		arg.UserID,
 		arg.MerchantName,
 		arg.BusinessLicenseNumber,
-		arg.BusinessLicenseImageUrl,
 		arg.LegalPersonName,
 		arg.LegalPersonIDNumber,
-		arg.LegalPersonIDFrontUrl,
-		arg.LegalPersonIDBackUrl,
 		arg.ContactPhone,
 		arg.BusinessAddress,
 		arg.BusinessScope,
@@ -383,11 +371,8 @@ func (q *Queries) CreateMerchantApplication(ctx context.Context, arg CreateMerch
 		&i.UserID,
 		&i.MerchantName,
 		&i.BusinessLicenseNumber,
-		&i.BusinessLicenseImageUrl,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.LegalPersonIDFrontUrl,
-		&i.LegalPersonIDBackUrl,
 		&i.ContactPhone,
 		&i.BusinessAddress,
 		&i.BusinessScope,
@@ -400,13 +385,16 @@ func (q *Queries) CreateMerchantApplication(ctx context.Context, arg CreateMerch
 		&i.Longitude,
 		&i.Latitude,
 		&i.RegionID,
-		&i.FoodPermitUrl,
 		&i.FoodPermitOcr,
 		&i.BusinessLicenseOcr,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -523,7 +511,7 @@ func (q *Queries) GetBusinessHourByDayOfWeek(ctx context.Context, arg GetBusines
 }
 
 const getMerchant = `-- name: GetMerchant :one
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE id = $1 AND deleted_at IS NULL LIMIT 1
 `
 
@@ -535,7 +523,6 @@ func (q *Queries) GetMerchant(ctx context.Context, id int64) (Merchant, error) {
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -554,12 +541,13 @@ func (q *Queries) GetMerchant(ctx context.Context, id int64) (Merchant, error) {
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
 
 const getMerchantApplication = `-- name: GetMerchantApplication :one
-SELECT id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE id = $1 LIMIT 1
 `
 
@@ -571,11 +559,8 @@ func (q *Queries) GetMerchantApplication(ctx context.Context, id int64) (Merchan
 		&i.UserID,
 		&i.MerchantName,
 		&i.BusinessLicenseNumber,
-		&i.BusinessLicenseImageUrl,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.LegalPersonIDFrontUrl,
-		&i.LegalPersonIDBackUrl,
 		&i.ContactPhone,
 		&i.BusinessAddress,
 		&i.BusinessScope,
@@ -588,19 +573,22 @@ func (q *Queries) GetMerchantApplication(ctx context.Context, id int64) (Merchan
 		&i.Longitude,
 		&i.Latitude,
 		&i.RegionID,
-		&i.FoodPermitUrl,
 		&i.FoodPermitOcr,
 		&i.BusinessLicenseOcr,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const getMerchantApplicationByLicenseNumber = `-- name: GetMerchantApplicationByLicenseNumber :one
-SELECT id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE business_license_number = $1
 LIMIT 1
 `
@@ -613,11 +601,8 @@ func (q *Queries) GetMerchantApplicationByLicenseNumber(ctx context.Context, bus
 		&i.UserID,
 		&i.MerchantName,
 		&i.BusinessLicenseNumber,
-		&i.BusinessLicenseImageUrl,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.LegalPersonIDFrontUrl,
-		&i.LegalPersonIDBackUrl,
 		&i.ContactPhone,
 		&i.BusinessAddress,
 		&i.BusinessScope,
@@ -630,19 +615,22 @@ func (q *Queries) GetMerchantApplicationByLicenseNumber(ctx context.Context, bus
 		&i.Longitude,
 		&i.Latitude,
 		&i.RegionID,
-		&i.FoodPermitUrl,
 		&i.FoodPermitOcr,
 		&i.BusinessLicenseOcr,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const getMerchantByBindCode = `-- name: GetMerchantByBindCode :one
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE bind_code = $1 AND deleted_at IS NULL
 LIMIT 1
 `
@@ -656,7 +644,6 @@ func (q *Queries) GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Tex
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -675,12 +662,13 @@ func (q *Queries) GetMerchantByBindCode(ctx context.Context, bindCode pgtype.Tex
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
 
 const getMerchantByOwner = `-- name: GetMerchantByOwner :one
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id FROM merchants m
 LEFT JOIN merchant_staff ms ON m.id = ms.merchant_id AND ms.status = 'active'
 WHERE (m.owner_user_id = $1 OR ms.user_id = $1) AND m.deleted_at IS NULL
 ORDER BY CASE WHEN m.owner_user_id = $1 THEN 0 ELSE 1 END
@@ -697,7 +685,6 @@ func (q *Queries) GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Me
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -716,6 +703,7 @@ func (q *Queries) GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Me
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
@@ -742,7 +730,7 @@ func (q *Queries) GetMerchantIsOpen(ctx context.Context, id int64) (GetMerchantI
 const getMerchantWithTags = `-- name: GetMerchantWithTags :one
 
 SELECT 
-  merchants.id, merchants.owner_user_id, merchants.name, merchants.description, merchants.logo_url, merchants.phone, merchants.address, merchants.latitude, merchants.longitude, merchants.status, merchants.application_data, merchants.created_at, merchants.updated_at, merchants.version, merchants.region_id, merchants.is_open, merchants.auto_close_at, merchants.deleted_at, merchants.pending_owner_bind, merchants.bind_code, merchants.bind_code_expires_at, merchants.group_id, merchants.brand_id,
+  merchants.id, merchants.owner_user_id, merchants.name, merchants.description, merchants.phone, merchants.address, merchants.latitude, merchants.longitude, merchants.status, merchants.application_data, merchants.created_at, merchants.updated_at, merchants.version, merchants.region_id, merchants.is_open, merchants.auto_close_at, merchants.deleted_at, merchants.pending_owner_bind, merchants.bind_code, merchants.bind_code_expires_at, merchants.group_id, merchants.brand_id, merchants.logo_media_asset_id,
   COALESCE(
     (
       SELECT json_agg(tags.*)
@@ -771,7 +759,6 @@ func (q *Queries) GetMerchantWithTags(ctx context.Context, id int64) (GetMerchan
 		&i.Merchant.OwnerUserID,
 		&i.Merchant.Name,
 		&i.Merchant.Description,
-		&i.Merchant.LogoUrl,
 		&i.Merchant.Phone,
 		&i.Merchant.Address,
 		&i.Merchant.Latitude,
@@ -790,6 +777,7 @@ func (q *Queries) GetMerchantWithTags(ctx context.Context, id int64) (GetMerchan
 		&i.Merchant.BindCodeExpiresAt,
 		&i.Merchant.GroupID,
 		&i.Merchant.BrandID,
+		&i.Merchant.LogoMediaAssetID,
 		&i.Tags,
 	)
 	return i, err
@@ -800,7 +788,7 @@ SELECT
     id,
     name,
     description,
-    logo_url,
+    logo_media_asset_id,
     address,
     latitude,
     longitude,
@@ -811,14 +799,14 @@ WHERE id = ANY($1::bigint[])
 `
 
 type GetMerchantsByIDsRow struct {
-	ID          int64          `json:"id"`
-	Name        string         `json:"name"`
-	Description pgtype.Text    `json:"description"`
-	LogoUrl     pgtype.Text    `json:"logo_url"`
-	Address     string         `json:"address"`
-	Latitude    pgtype.Numeric `json:"latitude"`
-	Longitude   pgtype.Numeric `json:"longitude"`
-	Status      string         `json:"status"`
+	ID               int64          `json:"id"`
+	Name             string         `json:"name"`
+	Description      pgtype.Text    `json:"description"`
+	LogoMediaAssetID pgtype.Int8    `json:"logo_media_asset_id"`
+	Address          string         `json:"address"`
+	Latitude         pgtype.Numeric `json:"latitude"`
+	Longitude        pgtype.Numeric `json:"longitude"`
+	Status           string         `json:"status"`
 }
 
 // 批量获取商户详情
@@ -835,7 +823,7 @@ func (q *Queries) GetMerchantsByIDs(ctx context.Context, dollar_1 []int64) ([]Ge
 			&i.ID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
+			&i.LogoMediaAssetID,
 			&i.Address,
 			&i.Latitude,
 			&i.Longitude,
@@ -856,7 +844,7 @@ SELECT
     m.id,
     m.name,
     m.description,
-    m.logo_url,
+    m.logo_media_asset_id,
     m.address,
     m.latitude,
     m.longitude,
@@ -877,17 +865,17 @@ WHERE m.id = ANY($1::bigint[])
 `
 
 type GetMerchantsWithStatsByIDsRow struct {
-	ID            int64          `json:"id"`
-	Name          string         `json:"name"`
-	Description   pgtype.Text    `json:"description"`
-	LogoUrl       pgtype.Text    `json:"logo_url"`
-	Address       string         `json:"address"`
-	Latitude      pgtype.Numeric `json:"latitude"`
-	Longitude     pgtype.Numeric `json:"longitude"`
-	RegionID      int64          `json:"region_id"`
-	Status        string         `json:"status"`
-	IsOpen        bool           `json:"is_open"`
-	MonthlyOrders int32          `json:"monthly_orders"`
+	ID               int64          `json:"id"`
+	Name             string         `json:"name"`
+	Description      pgtype.Text    `json:"description"`
+	LogoMediaAssetID pgtype.Int8    `json:"logo_media_asset_id"`
+	Address          string         `json:"address"`
+	Latitude         pgtype.Numeric `json:"latitude"`
+	Longitude        pgtype.Numeric `json:"longitude"`
+	RegionID         int64          `json:"region_id"`
+	Status           string         `json:"status"`
+	IsOpen           bool           `json:"is_open"`
+	MonthlyOrders    int32          `json:"monthly_orders"`
 }
 
 // 批量获取商户详情及统计数据（用于推荐流展示）
@@ -904,7 +892,7 @@ func (q *Queries) GetMerchantsWithStatsByIDs(ctx context.Context, dollar_1 []int
 			&i.ID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
+			&i.LogoMediaAssetID,
 			&i.Address,
 			&i.Latitude,
 			&i.Longitude,
@@ -929,7 +917,7 @@ SELECT
     m.id,
     m.name,
     m.description,
-    m.logo_url,
+    m.logo_media_asset_id,
     m.address,
     m.latitude,
     m.longitude,
@@ -956,15 +944,15 @@ type GetPopularMerchantsParams struct {
 }
 
 type GetPopularMerchantsRow struct {
-	ID          int64          `json:"id"`
-	Name        string         `json:"name"`
-	Description pgtype.Text    `json:"description"`
-	LogoUrl     pgtype.Text    `json:"logo_url"`
-	Address     string         `json:"address"`
-	Latitude    pgtype.Numeric `json:"latitude"`
-	Longitude   pgtype.Numeric `json:"longitude"`
-	TotalOrders int32          `json:"total_orders"`
-	AvgRating   pgtype.Numeric `json:"avg_rating"`
+	ID               int64          `json:"id"`
+	Name             string         `json:"name"`
+	Description      pgtype.Text    `json:"description"`
+	LogoMediaAssetID pgtype.Int8    `json:"logo_media_asset_id"`
+	Address          string         `json:"address"`
+	Latitude         pgtype.Numeric `json:"latitude"`
+	Longitude        pgtype.Numeric `json:"longitude"`
+	TotalOrders      int32          `json:"total_orders"`
+	AvgRating        pgtype.Numeric `json:"avg_rating"`
 }
 
 // ============================================
@@ -985,7 +973,7 @@ func (q *Queries) GetPopularMerchants(ctx context.Context, arg GetPopularMerchan
 			&i.ID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
+			&i.LogoMediaAssetID,
 			&i.Address,
 			&i.Latitude,
 			&i.Longitude,
@@ -1003,7 +991,7 @@ func (q *Queries) GetPopularMerchants(ctx context.Context, arg GetPopularMerchan
 }
 
 const getUserMerchantApplication = `-- name: GetUserMerchantApplication :one
-SELECT id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -1017,11 +1005,8 @@ func (q *Queries) GetUserMerchantApplication(ctx context.Context, userID int64) 
 		&i.UserID,
 		&i.MerchantName,
 		&i.BusinessLicenseNumber,
-		&i.BusinessLicenseImageUrl,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.LegalPersonIDFrontUrl,
-		&i.LegalPersonIDBackUrl,
 		&i.ContactPhone,
 		&i.BusinessAddress,
 		&i.BusinessScope,
@@ -1034,19 +1019,22 @@ func (q *Queries) GetUserMerchantApplication(ctx context.Context, userID int64) 
 		&i.Longitude,
 		&i.Latitude,
 		&i.RegionID,
-		&i.FoodPermitUrl,
 		&i.FoodPermitOcr,
 		&i.BusinessLicenseOcr,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
 
 const listAllMerchantApplications = `-- name: ListAllMerchantApplications :many
-SELECT id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
 `
@@ -1070,11 +1058,8 @@ func (q *Queries) ListAllMerchantApplications(ctx context.Context, arg ListAllMe
 			&i.UserID,
 			&i.MerchantName,
 			&i.BusinessLicenseNumber,
-			&i.BusinessLicenseImageUrl,
 			&i.LegalPersonName,
 			&i.LegalPersonIDNumber,
-			&i.LegalPersonIDFrontUrl,
-			&i.LegalPersonIDBackUrl,
 			&i.ContactPhone,
 			&i.BusinessAddress,
 			&i.BusinessScope,
@@ -1087,13 +1072,16 @@ func (q *Queries) ListAllMerchantApplications(ctx context.Context, arg ListAllMe
 			&i.Longitude,
 			&i.Latitude,
 			&i.RegionID,
-			&i.FoodPermitUrl,
 			&i.FoodPermitOcr,
 			&i.BusinessLicenseOcr,
 			&i.IDCardFrontOcr,
 			&i.IDCardBackOcr,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.BusinessLicenseMediaAssetID,
+			&i.FoodPermitMediaAssetID,
+			&i.IDCardFrontMediaAssetID,
+			&i.IDCardBackMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1106,7 +1094,7 @@ func (q *Queries) ListAllMerchantApplications(ctx context.Context, arg ListAllMe
 }
 
 const listAllMerchants = `-- name: ListAllMerchants :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $1 OFFSET $2
@@ -1131,7 +1119,6 @@ func (q *Queries) ListAllMerchants(ctx context.Context, arg ListAllMerchantsPara
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1150,6 +1137,7 @@ func (q *Queries) ListAllMerchants(ctx context.Context, arg ListAllMerchantsPara
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1162,7 +1150,7 @@ func (q *Queries) ListAllMerchants(ctx context.Context, arg ListAllMerchantsPara
 }
 
 const listMerchantApplications = `-- name: ListMerchantApplications :many
-SELECT id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images FROM merchant_applications
+SELECT id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM merchant_applications
 WHERE status = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -1188,11 +1176,8 @@ func (q *Queries) ListMerchantApplications(ctx context.Context, arg ListMerchant
 			&i.UserID,
 			&i.MerchantName,
 			&i.BusinessLicenseNumber,
-			&i.BusinessLicenseImageUrl,
 			&i.LegalPersonName,
 			&i.LegalPersonIDNumber,
-			&i.LegalPersonIDFrontUrl,
-			&i.LegalPersonIDBackUrl,
 			&i.ContactPhone,
 			&i.BusinessAddress,
 			&i.BusinessScope,
@@ -1205,13 +1190,16 @@ func (q *Queries) ListMerchantApplications(ctx context.Context, arg ListMerchant
 			&i.Longitude,
 			&i.Latitude,
 			&i.RegionID,
-			&i.FoodPermitUrl,
 			&i.FoodPermitOcr,
 			&i.BusinessLicenseOcr,
 			&i.IDCardFrontOcr,
 			&i.IDCardBackOcr,
 			&i.StorefrontImages,
 			&i.EnvironmentImages,
+			&i.BusinessLicenseMediaAssetID,
+			&i.FoodPermitMediaAssetID,
+			&i.IDCardFrontMediaAssetID,
+			&i.IDCardBackMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1368,7 +1356,7 @@ func (q *Queries) ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag
 }
 
 const listMerchants = `-- name: ListMerchants :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE status = $1 AND deleted_at IS NULL
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -1394,7 +1382,6 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1413,6 +1400,7 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1425,7 +1413,7 @@ func (q *Queries) ListMerchants(ctx context.Context, arg ListMerchantsParams) ([
 }
 
 const listMerchantsByOwner = `-- name: ListMerchantsByOwner :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE owner_user_id = $1 AND deleted_at IS NULL
 ORDER BY created_at ASC
 `
@@ -1445,7 +1433,6 @@ func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) (
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1464,6 +1451,7 @@ func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) (
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1477,7 +1465,7 @@ func (q *Queries) ListMerchantsByOwner(ctx context.Context, ownerUserID int64) (
 
 const listMerchantsByRegion = `-- name: ListMerchantsByRegion :many
 
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE region_id = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -1506,7 +1494,6 @@ func (q *Queries) ListMerchantsByRegion(ctx context.Context, arg ListMerchantsBy
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1525,6 +1512,7 @@ func (q *Queries) ListMerchantsByRegion(ctx context.Context, arg ListMerchantsBy
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1537,7 +1525,7 @@ func (q *Queries) ListMerchantsByRegion(ctx context.Context, arg ListMerchantsBy
 }
 
 const listMerchantsByRegionWithStatus = `-- name: ListMerchantsByRegionWithStatus :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE region_id = $1
   AND ($2::varchar IS NULL OR status = $2)
   AND deleted_at IS NULL
@@ -1572,7 +1560,6 @@ func (q *Queries) ListMerchantsByRegionWithStatus(ctx context.Context, arg ListM
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1591,6 +1578,7 @@ func (q *Queries) ListMerchantsByRegionWithStatus(ctx context.Context, arg ListM
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1603,7 +1591,7 @@ func (q *Queries) ListMerchantsByRegionWithStatus(ctx context.Context, arg ListM
 }
 
 const listMerchantsByTag = `-- name: ListMerchantsByTag :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id FROM merchants m
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE mt.tag_id = $1
   AND m.status = 'active'
@@ -1631,7 +1619,6 @@ func (q *Queries) ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTag
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1650,6 +1637,7 @@ func (q *Queries) ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTag
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1663,7 +1651,7 @@ func (q *Queries) ListMerchantsByTag(ctx context.Context, arg ListMerchantsByTag
 
 const listMerchantsWithTagCount = `-- name: ListMerchantsWithTagCount :many
 SELECT 
-  m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id,
+  m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id,
   COUNT(mt.tag_id) as tag_count
 FROM merchants m
 LEFT JOIN merchant_tags mt ON m.id = mt.merchant_id
@@ -1684,7 +1672,6 @@ type ListMerchantsWithTagCountRow struct {
 	OwnerUserID       int64              `json:"owner_user_id"`
 	Name              string             `json:"name"`
 	Description       pgtype.Text        `json:"description"`
-	LogoUrl           pgtype.Text        `json:"logo_url"`
 	Phone             string             `json:"phone"`
 	Address           string             `json:"address"`
 	Latitude          pgtype.Numeric     `json:"latitude"`
@@ -1703,6 +1690,7 @@ type ListMerchantsWithTagCountRow struct {
 	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
 	GroupID           pgtype.Int8        `json:"group_id"`
 	BrandID           pgtype.Int8        `json:"brand_id"`
+	LogoMediaAssetID  pgtype.Int8        `json:"logo_media_asset_id"`
 	TagCount          int64              `json:"tag_count"`
 }
 
@@ -1720,7 +1708,6 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1739,6 +1726,7 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 			&i.TagCount,
 		); err != nil {
 			return nil, err
@@ -1752,7 +1740,7 @@ func (q *Queries) ListMerchantsWithTagCount(ctx context.Context, arg ListMerchan
 }
 
 const listOpenMerchants = `-- name: ListOpenMerchants :many
-SELECT id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id FROM merchants
+SELECT id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id FROM merchants
 WHERE status = 'active'
   AND is_open = true
 ORDER BY created_at DESC
@@ -1779,7 +1767,6 @@ func (q *Queries) ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsPa
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1798,6 +1785,7 @@ func (q *Queries) ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsPa
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1825,7 +1813,7 @@ func (q *Queries) RemoveMerchantTag(ctx context.Context, arg RemoveMerchantTagPa
 }
 
 const searchMerchants = `-- name: SearchMerchants :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, COALESCE(mp.total_orders, 0)::int AS total_orders,
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, COALESCE(mp.total_orders, 0)::int AS total_orders,
   COALESCE(
     (SELECT json_agg(t.name)
      FROM tags t
@@ -1875,7 +1863,6 @@ type SearchMerchantsRow struct {
 	OwnerUserID       int64              `json:"owner_user_id"`
 	Name              string             `json:"name"`
 	Description       pgtype.Text        `json:"description"`
-	LogoUrl           pgtype.Text        `json:"logo_url"`
 	Phone             string             `json:"phone"`
 	Address           string             `json:"address"`
 	Latitude          pgtype.Numeric     `json:"latitude"`
@@ -1894,6 +1881,7 @@ type SearchMerchantsRow struct {
 	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
 	GroupID           pgtype.Int8        `json:"group_id"`
 	BrandID           pgtype.Int8        `json:"brand_id"`
+	LogoMediaAssetID  pgtype.Int8        `json:"logo_media_asset_id"`
 	TotalOrders       int32              `json:"total_orders"`
 	Tags              interface{}        `json:"tags"`
 	StorefrontImages  []byte             `json:"storefront_images"`
@@ -1921,7 +1909,6 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -1940,6 +1927,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 			&i.TotalOrders,
 			&i.Tags,
 			&i.StorefrontImages,
@@ -1956,7 +1944,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 }
 
 const searchMerchantsByTag = `-- name: SearchMerchantsByTag :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.logo_url, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, COALESCE(mp.total_orders, 0)::int AS total_orders,
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, COALESCE(mp.total_orders, 0)::int AS total_orders,
   COALESCE(
     (SELECT json_agg(t.name)
      FROM tags t
@@ -2004,7 +1992,6 @@ type SearchMerchantsByTagRow struct {
 	OwnerUserID       int64              `json:"owner_user_id"`
 	Name              string             `json:"name"`
 	Description       pgtype.Text        `json:"description"`
-	LogoUrl           pgtype.Text        `json:"logo_url"`
 	Phone             string             `json:"phone"`
 	Address           string             `json:"address"`
 	Latitude          pgtype.Numeric     `json:"latitude"`
@@ -2023,6 +2010,7 @@ type SearchMerchantsByTagRow struct {
 	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
 	GroupID           pgtype.Int8        `json:"group_id"`
 	BrandID           pgtype.Int8        `json:"brand_id"`
+	LogoMediaAssetID  pgtype.Int8        `json:"logo_media_asset_id"`
 	TotalOrders       int32              `json:"total_orders"`
 	Tags              interface{}        `json:"tags"`
 	StorefrontImages  []byte             `json:"storefront_images"`
@@ -2051,7 +2039,6 @@ func (q *Queries) SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsB
 			&i.OwnerUserID,
 			&i.Name,
 			&i.Description,
-			&i.LogoUrl,
 			&i.Phone,
 			&i.Address,
 			&i.Latitude,
@@ -2070,6 +2057,7 @@ func (q *Queries) SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsB
 			&i.BindCodeExpiresAt,
 			&i.GroupID,
 			&i.BrandID,
+			&i.LogoMediaAssetID,
 			&i.TotalOrders,
 			&i.Tags,
 			&i.StorefrontImages,
@@ -2130,7 +2118,7 @@ UPDATE merchants
 SET
   name = COALESCE($1, name),
   description = COALESCE($2, description),
-  logo_url = COALESCE($3, logo_url),
+  logo_media_asset_id = COALESCE($3, logo_media_asset_id),
   phone = COALESCE($4, phone),
   address = COALESCE($5, address),
   latitude = COALESCE($6, latitude),
@@ -2141,20 +2129,20 @@ SET
 WHERE id = $9
   AND version = $10
   AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id
 `
 
 type UpdateMerchantParams struct {
-	Name        pgtype.Text    `json:"name"`
-	Description pgtype.Text    `json:"description"`
-	LogoUrl     pgtype.Text    `json:"logo_url"`
-	Phone       pgtype.Text    `json:"phone"`
-	Address     pgtype.Text    `json:"address"`
-	Latitude    pgtype.Numeric `json:"latitude"`
-	Longitude   pgtype.Numeric `json:"longitude"`
-	RegionID    pgtype.Int8    `json:"region_id"`
-	ID          int64          `json:"id"`
-	Version     int32          `json:"version"`
+	Name             pgtype.Text    `json:"name"`
+	Description      pgtype.Text    `json:"description"`
+	LogoMediaAssetID pgtype.Int8    `json:"logo_media_asset_id"`
+	Phone            pgtype.Text    `json:"phone"`
+	Address          pgtype.Text    `json:"address"`
+	Latitude         pgtype.Numeric `json:"latitude"`
+	Longitude        pgtype.Numeric `json:"longitude"`
+	RegionID         pgtype.Int8    `json:"region_id"`
+	ID               int64          `json:"id"`
+	Version          int32          `json:"version"`
 }
 
 // ✅ P1-2: 使用乐观锁(version)防止并发更新丢失
@@ -2162,7 +2150,7 @@ func (q *Queries) UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) 
 	row := q.db.QueryRow(ctx, updateMerchant,
 		arg.Name,
 		arg.Description,
-		arg.LogoUrl,
+		arg.LogoMediaAssetID,
 		arg.Phone,
 		arg.Address,
 		arg.Latitude,
@@ -2177,7 +2165,6 @@ func (q *Queries) UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) 
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -2196,6 +2183,7 @@ func (q *Queries) UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) 
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
@@ -2209,7 +2197,7 @@ SET
   reviewed_at = $5,
   updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, merchant_name, business_license_number, business_license_image_url, legal_person_name, legal_person_id_number, legal_person_id_front_url, legal_person_id_back_url, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_url, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type UpdateMerchantApplicationStatusParams struct {
@@ -2234,11 +2222,8 @@ func (q *Queries) UpdateMerchantApplicationStatus(ctx context.Context, arg Updat
 		&i.UserID,
 		&i.MerchantName,
 		&i.BusinessLicenseNumber,
-		&i.BusinessLicenseImageUrl,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.LegalPersonIDFrontUrl,
-		&i.LegalPersonIDBackUrl,
 		&i.ContactPhone,
 		&i.BusinessAddress,
 		&i.BusinessScope,
@@ -2251,13 +2236,16 @@ func (q *Queries) UpdateMerchantApplicationStatus(ctx context.Context, arg Updat
 		&i.Longitude,
 		&i.Latitude,
 		&i.RegionID,
-		&i.FoodPermitUrl,
 		&i.FoodPermitOcr,
 		&i.BusinessLicenseOcr,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.StorefrontImages,
 		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }
@@ -2269,7 +2257,7 @@ SET
   bind_code_expires_at = $3,
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id
 `
 
 type UpdateMerchantBindCodeParams struct {
@@ -2287,7 +2275,6 @@ func (q *Queries) UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchant
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -2306,6 +2293,7 @@ func (q *Queries) UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchant
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
@@ -2318,7 +2306,7 @@ SET
   auto_close_at = $3,
   updated_at = now()
 WHERE id = $1
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id
 `
 
 type UpdateMerchantIsOpenParams struct {
@@ -2337,7 +2325,6 @@ func (q *Queries) UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIs
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -2356,6 +2343,7 @@ func (q *Queries) UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIs
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
@@ -2366,7 +2354,7 @@ SET
   status = $2,
   updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, owner_user_id, name, description, logo_url, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id
 `
 
 type UpdateMerchantStatusParams struct {
@@ -2382,7 +2370,6 @@ func (q *Queries) UpdateMerchantStatus(ctx context.Context, arg UpdateMerchantSt
 		&i.OwnerUserID,
 		&i.Name,
 		&i.Description,
-		&i.LogoUrl,
 		&i.Phone,
 		&i.Address,
 		&i.Latitude,
@@ -2401,6 +2388,7 @@ func (q *Queries) UpdateMerchantStatus(ctx context.Context, arg UpdateMerchantSt
 		&i.BindCodeExpiresAt,
 		&i.GroupID,
 		&i.BrandID,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }

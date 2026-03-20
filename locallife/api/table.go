@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -429,8 +428,10 @@ func (server *Server) listAvailableRooms(ctx *gin.Context) {
 		if r.MinimumSpend.Valid {
 			item.MinimumSpend = r.MinimumSpend.Int64
 		}
-		if r.PrimaryImage != "" {
-			item.PrimaryImage = normalizeUploadURLForClient(r.PrimaryImage)
+		if r.PrimaryImageAssetID != nil {
+			if id, ok := r.PrimaryImageAssetID.(int64); ok && id != 0 {
+				item.PrimaryImageAssetID = &id
+			}
 		}
 		resp.Rooms[i] = item
 	}
@@ -483,8 +484,10 @@ func (server *Server) listMerchantRoomsForCustomer(ctx *gin.Context) {
 		if r.MinimumSpend.Valid {
 			item.MinimumSpend = r.MinimumSpend.Int64
 		}
-		if r.PrimaryImage != "" {
-			item.PrimaryImage = normalizeUploadURLForClient(r.PrimaryImage)
+		if r.PrimaryImageAssetID != nil {
+			if id, ok := r.PrimaryImageAssetID.(int64); ok && id != 0 {
+				item.PrimaryImageAssetID = &id
+			}
 		}
 		resp.Rooms[i] = item
 	}
@@ -844,17 +847,17 @@ func (server *Server) deleteTable(ctx *gin.Context) {
 // ==================== 桌台图片管理 ====================
 
 type tableImageResponse struct {
-	ID        int64  `json:"id"`
-	TableID   int64  `json:"table_id"`
-	ImageURL  string `json:"image_url"`
-	SortOrder int32  `json:"sort_order"`
-	IsPrimary bool   `json:"is_primary"`
+	ID           int64  `json:"id"`
+	TableID      int64  `json:"table_id"`
+	MediaAssetID *int64 `json:"media_asset_id,omitempty"`
+	SortOrder    int32  `json:"sort_order"`
+	IsPrimary    bool   `json:"is_primary"`
 }
 
 type addTableImageRequest struct {
-	ImageURL  string `json:"image_url" binding:"required,min=1,max=500"`
-	SortOrder int32  `json:"sort_order" binding:"omitempty,min=0,max=100"`
-	IsPrimary bool   `json:"is_primary"`
+	MediaAssetID int64 `json:"media_asset_id" binding:"required,min=1"`
+	SortOrder    int32 `json:"sort_order" binding:"omitempty,min=0,max=100"`
+	IsPrimary    bool  `json:"is_primary"`
 }
 
 // addTableImage godoc
@@ -915,15 +918,6 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 		return
 	}
 
-	// 桌台/包间图片必须先审后存：仅允许使用 uploads/public/... 本地路径
-	normalized := normalizeStoredUploadPath(req.ImageURL)
-	prefix := fmt.Sprintf("uploads/public/merchants/%d/tables/", merchant.ID)
-	if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidTableImageURL))
-		return
-	}
-	req.ImageURL = normalized
-
 	// 如果设置为主图，先清除其他主图标记
 	if req.IsPrimary {
 		err = server.store.SetPrimaryTableImage(ctx, uriReq.ID)
@@ -935,10 +929,10 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 
 	// 添加图片
 	image, err := server.store.AddTableImage(ctx, db.AddTableImageParams{
-		TableID:   uriReq.ID,
-		ImageUrl:  normalizeImageURLForStorage(req.ImageURL),
-		SortOrder: req.SortOrder,
-		IsPrimary: req.IsPrimary,
+		TableID:      uriReq.ID,
+		MediaAssetID: pgtype.Int8{Int64: req.MediaAssetID, Valid: true},
+		SortOrder:    req.SortOrder,
+		IsPrimary:    req.IsPrimary,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -946,11 +940,11 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusCreated, tableImageResponse{
-		ID:        image.ID,
-		TableID:   image.TableID,
-		ImageURL:  normalizeUploadURLForClient(image.ImageUrl),
-		SortOrder: image.SortOrder,
-		IsPrimary: image.IsPrimary,
+		ID:           image.ID,
+		TableID:      image.TableID,
+		MediaAssetID: int64PtrFromPgInt8(image.MediaAssetID),
+		SortOrder:    image.SortOrder,
+		IsPrimary:    image.IsPrimary,
 	})
 }
 
@@ -983,11 +977,11 @@ func (server *Server) listTableImages(ctx *gin.Context) {
 	resp := make([]tableImageResponse, len(images))
 	for i, img := range images {
 		resp[i] = tableImageResponse{
-			ID:        img.ID,
-			TableID:   img.TableID,
-			ImageURL:  normalizeUploadURLForClient(img.ImageUrl),
-			SortOrder: img.SortOrder,
-			IsPrimary: img.IsPrimary,
+			ID:           img.ID,
+			TableID:      img.TableID,
+			MediaAssetID: int64PtrFromPgInt8(img.MediaAssetID),
+			SortOrder:    img.SortOrder,
+			IsPrimary:    img.IsPrimary,
 		}
 	}
 
@@ -1065,11 +1059,11 @@ func (server *Server) setTablePrimaryImage(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, tableImageResponse{
-		ID:        image.ID,
-		TableID:   image.TableID,
-		ImageURL:  normalizeUploadURLForClient(image.ImageUrl),
-		SortOrder: image.SortOrder,
-		IsPrimary: image.IsPrimary,
+		ID:           image.ID,
+		TableID:      image.TableID,
+		MediaAssetID: int64PtrFromPgInt8(image.MediaAssetID),
+		SortOrder:    image.SortOrder,
+		IsPrimary:    image.IsPrimary,
 	})
 }
 
@@ -1346,16 +1340,16 @@ type roomDetailResponse struct {
 	MinimumSpend        int64          `json:"minimum_spend,omitempty"`
 	Status              string         `json:"status"`
 	Tags                []tableTagInfo `json:"tags"`
-	Images              []string       `json:"images"`
-	PrimaryImage        string         `json:"primary_image,omitempty"`
+	Images              []int64        `json:"images"`
+	PrimaryImageAssetID *int64         `json:"primary_image_asset_id,omitempty"`
 	MonthlyReservations int64          `json:"monthly_reservations"`
 	// 商户信息
-	MerchantName      string   `json:"merchant_name"`
-	MerchantLogo      string   `json:"merchant_logo,omitempty"`
-	MerchantAddress   string   `json:"merchant_address,omitempty"`
-	MerchantPhone     string   `json:"merchant_phone,omitempty"`
-	MerchantLatitude  *float64 `json:"merchant_latitude,omitempty"`
-	MerchantLongitude *float64 `json:"merchant_longitude,omitempty"`
+	MerchantName        string   `json:"merchant_name"`
+	MerchantLogoAssetID *int64   `json:"merchant_logo_asset_id,omitempty"`
+	MerchantAddress     string   `json:"merchant_address,omitempty"`
+	MerchantPhone       string   `json:"merchant_phone,omitempty"`
+	MerchantLatitude    *float64 `json:"merchant_latitude,omitempty"`
+	MerchantLongitude   *float64 `json:"merchant_longitude,omitempty"`
 }
 
 // roomListItemResponse 包间列表项响应（C端顾客使用）
@@ -1367,7 +1361,7 @@ type roomListItemResponse struct {
 	Description         string `json:"description,omitempty"`
 	MinimumSpend        int64  `json:"minimum_spend,omitempty"`
 	Status              string `json:"status"`
-	PrimaryImage        string `json:"primary_image,omitempty"`
+	PrimaryImageAssetID *int64 `json:"primary_image_asset_id,omitempty"`
 	MonthlyReservations int64  `json:"monthly_reservations,omitempty"`
 }
 
@@ -1431,9 +1425,11 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 		return
 	}
 
-	imageUrls := make([]string, len(images))
-	for i, img := range images {
-		imageUrls[i] = normalizeUploadURLForClient(img.ImageUrl)
+	imageAssetIDs := make([]int64, 0, len(images))
+	for _, img := range images {
+		if img.MediaAssetID.Valid {
+			imageAssetIDs = append(imageAssetIDs, img.MediaAssetID.Int64)
+		}
 	}
 
 	resp := roomDetailResponse{
@@ -1443,7 +1439,7 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 		Capacity:            room.Capacity,
 		Status:              room.Status,
 		Tags:                tagList,
-		Images:              imageUrls,
+		Images:              imageAssetIDs,
 		MonthlyReservations: room.MonthlyReservations,
 		MerchantName:        room.MerchantName,
 		MerchantAddress:     room.MerchantAddress,
@@ -1456,11 +1452,13 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 	if room.MinimumSpend.Valid {
 		resp.MinimumSpend = room.MinimumSpend.Int64
 	}
-	if room.PrimaryImage != "" {
-		resp.PrimaryImage = normalizeUploadURLForClient(room.PrimaryImage)
+	if room.PrimaryImageAssetID != nil {
+		if id, ok := room.PrimaryImageAssetID.(int64); ok && id != 0 {
+			resp.PrimaryImageAssetID = &id
+		}
 	}
-	if room.MerchantLogo.Valid {
-		resp.MerchantLogo = normalizeUploadURLForClient(room.MerchantLogo.String)
+	if room.MerchantLogoMediaAssetID.Valid {
+		resp.MerchantLogoAssetID = &room.MerchantLogoMediaAssetID.Int64
 	}
 	if room.MerchantLatitude.Valid {
 		lat, _ := room.MerchantLatitude.Float64Value()

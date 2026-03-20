@@ -501,12 +501,12 @@ func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 	merchant := randomMerchant(user.ID)
 	order := randomKitchenOrder(merchant.ID, user.ID)
 	dish := db.Dish{
-		ID:          1,
-		MerchantID:  merchant.ID,
-		Name:        "测试菜品",
-		Price:       10 * fenPerYuan,
-		PrepareTime: 20, // 20分钟制作时间
-		ImageUrl:    pgtype.Text{String: "https://example.com/dish.jpg", Valid: true},
+		ID:                1,
+		MerchantID:        merchant.ID,
+		Name:              "测试菜品",
+		Price:             10 * fenPerYuan,
+		PrepareTime:       20, // 20分钟制作时间
+		ImageMediaAssetID: pgtype.Int8{},
 	}
 	orderItem := db.OrderItem{
 		ID:        1,

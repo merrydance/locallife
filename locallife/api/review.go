@@ -25,18 +25,17 @@ type createReviewRequest struct {
 }
 
 type reviewResponse struct {
-	ID            int64    `json:"id"`
-	OrderID       int64    `json:"order_id"`
-	UserID        int64    `json:"user_id"`
-	MerchantID    int64    `json:"merchant_id"`
-	MerchantName  string   `json:"merchant_name,omitempty"`
-	MerchantLogo  string   `json:"merchant_logo,omitempty"`
-	Content       string   `json:"content"`
-	Images        []string `json:"images,omitempty"`
-	IsVisible     bool     `json:"is_visible"`
-	MerchantReply *string  `json:"merchant_reply,omitempty"`
-	RepliedAt     *string  `json:"replied_at,omitempty"`
-	CreatedAt     string   `json:"created_at"`
+	ID                  int64   `json:"id"`
+	OrderID             int64   `json:"order_id"`
+	UserID              int64   `json:"user_id"`
+	MerchantID          int64   `json:"merchant_id"`
+	MerchantName        string  `json:"merchant_name,omitempty"`
+	MerchantLogoAssetID *int64  `json:"merchant_logo_asset_id,omitempty"`
+	Content             string  `json:"content"`
+	IsVisible           bool    `json:"is_visible"`
+	MerchantReply       *string `json:"merchant_reply,omitempty"`
+	RepliedAt           *string `json:"replied_at,omitempty"`
+	CreatedAt           string  `json:"created_at"`
 }
 
 type reviewListResponse struct {
@@ -143,24 +142,8 @@ func (server *Server) createReview(ctx *gin.Context) {
 		return
 	}
 
-	// 4.2 评价图片必须是本地 uploads 相对路径，且必须归属当前用户
-	if len(req.Images) > 0 {
-		normalizedImages := make([]string, 0, len(req.Images))
-		prefix := fmt.Sprintf("uploads/reviews/%d/", authPayload.UserID)
-		for _, p := range req.Images {
-			normalized := normalizeStoredUploadPath(p)
-			if normalized == "" || !strings.HasPrefix(normalized, "uploads/") {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidFilePath))
-				return
-			}
-			if !strings.HasPrefix(normalized, prefix) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidReviewImageURL))
-				return
-			}
-			normalizedImages = append(normalizedImages, normalized)
-		}
-		req.Images = normalizedImages
-	}
+	// TODO(media-service): images now stored separately in review_images table
+	// if len(req.Images) > 0 { ... }
 
 	// 5. 创建评价
 	review, err := server.store.CreateReview(ctx, db.CreateReviewParams{
@@ -168,7 +151,6 @@ func (server *Server) createReview(ctx *gin.Context) {
 		UserID:     authPayload.UserID,
 		MerchantID: order.MerchantID,
 		Content:    req.Content,
-		Images:     req.Images,
 		IsVisible:  isVisible,
 	})
 	if err != nil {
@@ -565,18 +547,12 @@ func (server *Server) deleteReview(ctx *gin.Context) {
 // ==================== 辅助函数 ====================
 
 func newReviewResponse(review db.Review) reviewResponse {
-	images := make([]string, 0, len(review.Images))
-	for _, img := range review.Images {
-		images = append(images, normalizeUploadURLForClient(img))
-	}
-
 	resp := reviewResponse{
 		ID:         review.ID,
 		OrderID:    review.OrderID,
 		UserID:     review.UserID,
 		MerchantID: review.MerchantID,
 		Content:    review.Content,
-		Images:     images,
 		IsVisible:  review.IsVisible,
 		CreatedAt:  review.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 	}
@@ -604,22 +580,19 @@ func newReviewListResponse(reviews []db.Review) []reviewResponse {
 func newListReviewByUserResponse(reviews []db.ListReviewsByUserRow) []reviewResponse {
 	responses := make([]reviewResponse, len(reviews))
 	for i, r := range reviews {
-		images := make([]string, 0, len(r.Images))
-		for _, img := range r.Images {
-			images = append(images, normalizeUploadURLForClient(img))
-		}
-
 		resp := reviewResponse{
 			ID:           r.ID,
 			OrderID:      r.OrderID,
 			UserID:       r.UserID,
 			MerchantID:   r.MerchantID,
 			MerchantName: r.MerchantName,
-			MerchantLogo: normalizeUploadURLForClient(r.MerchantLogo.String),
 			Content:      r.Content,
-			Images:       images,
 			IsVisible:    r.IsVisible,
 			CreatedAt:    r.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+		if r.MerchantLogoMediaAssetID.Valid {
+			v := r.MerchantLogoMediaAssetID.Int64
+			resp.MerchantLogoAssetID = &v
 		}
 
 		if r.MerchantReply.Valid {

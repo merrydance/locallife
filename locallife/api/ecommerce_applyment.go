@@ -164,14 +164,14 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		OutRequestNo:          outRequestNo,
 		OrganizationType:      organizationType,
 		BusinessLicenseNumber: pgtype.Text{String: application.BusinessLicenseNumber, Valid: application.BusinessLicenseNumber != ""},
-		BusinessLicenseCopy:   pgtype.Text{String: application.BusinessLicenseImageUrl, Valid: application.BusinessLicenseImageUrl != ""},
+		BusinessLicenseCopy:   pgtype.Text{}, // TODO(media-service): resolve URL from BusinessLicenseMediaAssetID
 		MerchantName:          application.MerchantName,
 		LegalPerson:           application.LegalPersonName,
 		IDCardNumber:          encryptedIDCardNumber, // AES 加密存储
 		IDCardName:            application.LegalPersonName,
 		IDCardValidTime:       idCardValidTime,
-		IDCardFrontCopy:       application.LegalPersonIDFrontUrl,
-		IDCardBackCopy:        application.LegalPersonIDBackUrl,
+		IDCardFrontCopy:       "", // TODO(media-service): resolve URL from IDCardFrontMediaAssetID
+		IDCardBackCopy:        "", // TODO(media-service): resolve URL from IDCardBackMediaAssetID
 		AccountType:           req.AccountType,
 		AccountBank:           req.AccountBank,
 		BankAddressCode:       req.BankAddressCode,
@@ -215,32 +215,11 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	}
 
 	// ==================== 上传图片到微信获取 MediaID ====================
-	// 上传身份证正面
-	idCardFrontMediaID, err := server.uploadImageToWechat(ctx, application.LegalPersonIDFrontUrl, "id_front.jpg")
-	if err != nil {
-		log.Error().Err(err).Msg("上传身份证正面失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传身份证正面失败: %w", err)))
-		return
-	}
-
-	// 上传身份证背面
-	idCardBackMediaID, err := server.uploadImageToWechat(ctx, application.LegalPersonIDBackUrl, "id_back.jpg")
-	if err != nil {
-		log.Error().Err(err).Msg("上传身份证背面失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传身份证背面失败: %w", err)))
-		return
-	}
-
-	// 上传营业执照（如有）
+	// TODO(media-service): 上传图片需从媒体资产ID解析URL，待媒体服务接入后实现。
+	// 当前省略微信进件图片上传，使用空字符串占位。
+	idCardFrontMediaID := ""
+	idCardBackMediaID := ""
 	var businessLicenseMediaID string
-	if application.BusinessLicenseImageUrl != "" {
-		businessLicenseMediaID, err = server.uploadImageToWechat(ctx, application.BusinessLicenseImageUrl, "license.jpg")
-		if err != nil {
-			log.Error().Err(err).Msg("上传营业执照失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传营业执照失败: %w", err)))
-			return
-		}
-	}
 
 	// ==================== 加密敏感信息（用于发送给微信） ====================
 	// 加密身份证姓名
@@ -916,18 +895,12 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	if application.LegalPersonIDNumber.Valid {
 		legalPersonIDNumber = application.LegalPersonIDNumber.String
 	}
-	idCardFrontURL := ""
-	if application.IDCardFrontUrl.Valid {
-		idCardFrontURL = application.IDCardFrontUrl.String
-	}
-	idCardBackURL := ""
-	if application.IDCardBackUrl.Valid {
-		idCardBackURL = application.IDCardBackUrl.String
-	}
-	businessLicenseURL := ""
-	if application.BusinessLicenseUrl.Valid {
-		businessLicenseURL = application.BusinessLicenseUrl.String
-	}
+	idCardFrontURL := "" // TODO(media-service): resolve from IDCardFrontMediaAssetID
+	_ = application.IDCardFrontMediaAssetID
+	idCardBackURL := "" // TODO(media-service): resolve from IDCardBackMediaAssetID
+	_ = application.IDCardBackMediaAssetID
+	businessLicenseURL := "" // TODO(media-service): resolve from BusinessLicenseMediaAssetID
+	_ = application.BusinessLicenseMediaAssetID
 	businessLicenseNumber := ""
 	if application.BusinessLicenseNumber.Valid {
 		businessLicenseNumber = application.BusinessLicenseNumber.String
@@ -938,7 +911,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	}
 
 	// 检查必要信息
-	if legalPersonName == "" || legalPersonIDNumber == "" || idCardFrontURL == "" || idCardBackURL == "" {
+	if legalPersonName == "" || legalPersonIDNumber == "" || !application.IDCardFrontMediaAssetID.Valid || !application.IDCardBackMediaAssetID.Valid {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOperatorProfileIncomplete))
 		return
 	}

@@ -29,15 +29,15 @@ type cartItemResponse struct {
 	CustomizationDetails []orderCustomizationItem `json:"customization_details,omitempty"`
 	// 聚合好的规格描述文字 (如 "不辣/大份")
 	SpecText string `json:"spec_text,omitempty"`
-	// 套餐成员图片
-	ComboMemberImages []string `json:"combo_member_images,omitempty"`
+	// 套餐成员图片 asset ID 列表
+	ComboMemberImages []int64 `json:"combo_member_images,omitempty"`
 	// 商品信息
-	Name        string `json:"name"`
-	ImageURL    string `json:"image_url,omitempty"`
-	UnitPrice   int64  `json:"unit_price"`
-	MemberPrice *int64 `json:"member_price,omitempty"`
-	IsAvailable bool   `json:"is_available"`
-	Subtotal    int64  `json:"subtotal"`
+	Name         string `json:"name"`
+	ImageAssetID *int64 `json:"image_asset_id,omitempty"`
+	UnitPrice    int64  `json:"unit_price"`
+	MemberPrice  *int64 `json:"member_price,omitempty"`
+	IsAvailable  bool   `json:"is_available"`
+	Subtotal     int64  `json:"subtotal"`
 }
 
 type cartResponse struct {
@@ -123,7 +123,7 @@ func (server *Server) getCart(ctx *gin.Context) {
 		return
 	}
 
-	logicResp := logic.BuildCartResponse(cart, items, normalizeUploadURLForClient)
+	logicResp := logic.BuildCartResponse(cart, items)
 	resp := toCartResponse(logicResp)
 	server.enrichCartItems(ctx, resp.Items)
 	server.enrichComboImages(ctx, resp.Items)
@@ -149,7 +149,7 @@ func toCartResponse(logicResp logic.CartResponse) cartResponse {
 			Quantity:       item.Quantity,
 			Customizations: item.Customizations,
 			Name:           item.Name,
-			ImageURL:       item.ImageURL,
+			ImageAssetID:   item.ImageAssetID,
 			UnitPrice:      item.UnitPrice,
 			MemberPrice:    item.MemberPrice,
 			IsAvailable:    item.IsAvailable,
@@ -252,7 +252,7 @@ func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart, statusCo
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("list cart items: %w", err)))
 		return
 	}
-	logicResp := logic.BuildCartResponse(cart, items, normalizeUploadURLForClient)
+	logicResp := logic.BuildCartResponse(cart, items)
 	response := toCartResponse(logicResp)
 	server.enrichCartItems(ctx, response.Items)
 	server.enrichComboImages(ctx, response.Items)
@@ -800,12 +800,12 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 		case "merchant":
 			if m, ok := merchantMap[item.TargetID]; ok {
 				historyItem.Name = m.Name
-				historyItem.ImageURL = normalizeUploadURLForClient(m.LogoUrl.String)
+				// ImageURL 将在 media service 就绪后通过 asset ID 解析；暂时留空
 			}
 		case "dish":
 			if d, ok := dishMap[item.TargetID]; ok {
 				historyItem.Name = d.Name
-				historyItem.ImageURL = normalizeUploadURLForClient(d.ImageUrl.String)
+				// ImageURL 将在 media service 就绪后通过 asset ID 解析；暂时留空
 			}
 		}
 		result[i] = historyItem
@@ -843,8 +843,8 @@ type merchantCartResponse struct {
 	ReservationID int64 `json:"reservation_id,omitempty"`
 	// 商户名称
 	MerchantName string `json:"merchant_name"`
-	// 商户Logo URL
-	MerchantLogo string `json:"merchant_logo,omitempty"`
+	// 商户 Logo 媒体资产 ID
+	MerchantLogoAssetID *int64 `json:"merchant_logo_asset_id,omitempty"`
 	// 商品数量
 	ItemCount int `json:"item_count"`
 	// 商品小计（分）
@@ -916,10 +916,13 @@ func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 			TableID:       cart.TableID.Int64,
 			ReservationID: cart.ReservationID.Int64,
 			MerchantName:  cart.MerchantName,
-			MerchantLogo:  normalizeUploadURLForClient(cart.MerchantLogo.String),
 			ItemCount:     int(cart.ItemCount),
 			Subtotal:      cart.Subtotal,
 			AllAvailable:  cart.AllAvailable,
+		}
+		if cart.MerchantLogoMediaAssetID.Valid {
+			v := cart.MerchantLogoMediaAssetID.Int64
+			cartList[i].MerchantLogoAssetID = &v
 		}
 	}
 
@@ -1205,12 +1208,11 @@ func (server *Server) enrichComboImages(ctx context.Context, items []cartItemRes
 		return
 	}
 
-	// 按 combo_id 组织图片
-	imgMap := make(map[int64][]string)
+	// 按 combo_id 组织图片 asset ID
+	imgMap := make(map[int64][]int64)
 	for _, row := range memberImages {
-		if row.ImageUrl.Valid {
-			fullURL := normalizeUploadURLForClient(row.ImageUrl.String)
-			imgMap[row.ComboID] = append(imgMap[row.ComboID], fullURL)
+		if row.ImageMediaAssetID.Valid {
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], row.ImageMediaAssetID.Int64)
 		}
 	}
 

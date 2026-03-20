@@ -70,9 +70,9 @@ func TestCreateReviewAPI(t *testing.T) {
 						UserID:     user.ID,
 						MerchantID: merchant.ID,
 						Content:    "Great food and service!",
-						Images:     []string{fmt.Sprintf("uploads/reviews/%d/image1.jpg", user.ID)},
-						IsVisible:  true,
-						CreatedAt:  time.Now(),
+
+						IsVisible: true,
+						CreatedAt: time.Now(),
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -784,7 +784,6 @@ func randomReview(userID, merchantID int64) db.Review {
 		UserID:     userID,
 		MerchantID: merchantID,
 		Content:    "Great food and service!",
-		Images:     []string{"https://example.com/image1.jpg"},
 		IsVisible:  true,
 		CreatedAt:  time.Now(),
 	}

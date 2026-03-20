@@ -18,34 +18,34 @@ import (
 // ==================== Group Application ====================
 
 type groupApplicationResponse struct {
-	ID              int64      `json:"id"`
-	ApplicantUserID int64      `json:"applicant_user_id"`
-	GroupName       string     `json:"group_name"`
-	ContactPhone    string     `json:"contact_phone"`
-	LicenseNumber   *string    `json:"license_number,omitempty"`
-	LicenseImageURL *string    `json:"license_image_url,omitempty"`
-	Address         *string    `json:"address,omitempty"`
-	RegionID        *int64     `json:"region_id,omitempty"`
-	Status          string     `json:"status"`
-	RejectReason    *string    `json:"reject_reason,omitempty"`
-	ReviewedBy      *int64     `json:"reviewed_by,omitempty"`
-	ReviewedAt      *time.Time `json:"reviewed_at,omitempty"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	ID                  int64      `json:"id"`
+	ApplicantUserID     int64      `json:"applicant_user_id"`
+	GroupName           string     `json:"group_name"`
+	ContactPhone        string     `json:"contact_phone"`
+	LicenseNumber       *string    `json:"license_number,omitempty"`
+	LicenseImageAssetID *int64     `json:"license_image_asset_id,omitempty"`
+	Address             *string    `json:"address,omitempty"`
+	RegionID            *int64     `json:"region_id,omitempty"`
+	Status              string     `json:"status"`
+	RejectReason        *string    `json:"reject_reason,omitempty"`
+	ReviewedBy          *int64     `json:"reviewed_by,omitempty"`
+	ReviewedAt          *time.Time `json:"reviewed_at,omitempty"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
 }
 
 type groupResponse struct {
-	ID              int64     `json:"id"`
-	Name            string    `json:"name"`
-	OwnerUserID     int64     `json:"owner_user_id"`
-	Status          string    `json:"status"`
-	ContactPhone    *string   `json:"contact_phone,omitempty"`
-	LicenseNumber   *string   `json:"license_number,omitempty"`
-	LicenseImageURL *string   `json:"license_image_url,omitempty"`
-	Address         *string   `json:"address,omitempty"`
-	RegionID        *int64    `json:"region_id,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID                  int64     `json:"id"`
+	Name                string    `json:"name"`
+	OwnerUserID         int64     `json:"owner_user_id"`
+	Status              string    `json:"status"`
+	ContactPhone        *string   `json:"contact_phone,omitempty"`
+	LicenseNumber       *string   `json:"license_number,omitempty"`
+	LicenseImageAssetID *int64    `json:"license_image_asset_id,omitempty"`
+	Address             *string   `json:"address,omitempty"`
+	RegionID            *int64    `json:"region_id,omitempty"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 type groupApplicationReviewResponse struct {
@@ -54,19 +54,19 @@ type groupApplicationReviewResponse struct {
 }
 
 type groupMerchantResponse struct {
-	ID      int64  `json:"id"`
-	Name    string `json:"name"`
-	LogoURL string `json:"logo_url,omitempty"`
-	Address string `json:"address"`
-	Phone   string `json:"phone"`
-	Status  string `json:"status"`
+	ID          int64  `json:"id"`
+	Name        string `json:"name"`
+	LogoAssetID *int64 `json:"logo_asset_id,omitempty"`
+	Address     string `json:"address"`
+	Phone       string `json:"phone"`
+	Status      string `json:"status"`
 }
 
 type brandResponse struct {
 	ID          int64     `json:"id"`
 	GroupID     int64     `json:"group_id"`
 	Name        string    `json:"name"`
-	LogoURL     *string   `json:"logo_url,omitempty"`
+	LogoAssetID *int64    `json:"logo_asset_id,omitempty"`
 	Description *string   `json:"description,omitempty"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -122,7 +122,7 @@ func newGroupApplicationResponse(app db.MerchantGroupApplication) groupApplicati
 		UpdatedAt:       app.UpdatedAt,
 	}
 	resp.LicenseNumber = pgTextToPtr(app.LicenseNumber)
-	resp.LicenseImageURL = pgTextToPtr(app.LicenseImageUrl)
+	resp.LicenseImageAssetID = pgInt8ToPtr(app.LicenseMediaAssetID)
 	resp.Address = pgTextToPtr(app.Address)
 	resp.RegionID = pgInt8ToPtr(app.RegionID)
 	resp.RejectReason = pgTextToPtr(app.RejectReason)
@@ -142,7 +142,7 @@ func newGroupResponse(group db.MerchantGroup) groupResponse {
 	}
 	resp.ContactPhone = pgTextToPtr(group.ContactPhone)
 	resp.LicenseNumber = pgTextToPtr(group.LicenseNumber)
-	resp.LicenseImageURL = pgTextToPtr(group.LicenseImageUrl)
+	resp.LicenseImageAssetID = pgInt8ToPtr(group.LicenseMediaAssetID)
 	resp.Address = pgTextToPtr(group.Address)
 	resp.RegionID = pgInt8ToPtr(group.RegionID)
 	return resp
@@ -157,7 +157,7 @@ func newBrandResponse(brand db.MerchantBrand) brandResponse {
 		CreatedAt: brand.CreatedAt,
 		UpdatedAt: brand.UpdatedAt,
 	}
-	resp.LogoURL = pgTextToPtr(brand.LogoUrl)
+	resp.LogoAssetID = pgInt8ToPtr(brand.LogoMediaAssetID)
 	resp.Description = pgTextToPtr(brand.Description)
 	return resp
 }
@@ -295,12 +295,12 @@ func (server *Server) getOrCreateGroupApplicationDraft(ctx *gin.Context) {
 }
 
 type updateGroupApplicationBasicRequest struct {
-	GroupName       *string `json:"group_name,omitempty"`
-	ContactPhone    *string `json:"contact_phone,omitempty"`
-	LicenseNumber   *string `json:"license_number,omitempty"`
-	LicenseImageURL *string `json:"license_image_url,omitempty"`
-	Address         *string `json:"address,omitempty"`
-	RegionID        *int64  `json:"region_id,omitempty"`
+	GroupName           *string `json:"group_name,omitempty"`
+	ContactPhone        *string `json:"contact_phone,omitempty"`
+	LicenseNumber       *string `json:"license_number,omitempty"`
+	LicenseImageAssetID *int64  `json:"license_image_asset_id,omitempty"`
+	Address             *string `json:"address,omitempty"`
+	RegionID            *int64  `json:"region_id,omitempty"`
 }
 
 // updateGroupApplicationBasic godoc
@@ -358,13 +358,13 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 	}
 
 	update := db.UpdateGroupApplicationBasicParams{
-		ID:              app.ID,
-		GroupName:       groupName,
-		ContactPhone:    contactPhone,
-		LicenseNumber:   toPgText(req.LicenseNumber),
-		LicenseImageUrl: toPgText(req.LicenseImageURL),
-		Address:         toPgText(req.Address),
-		RegionID:        toPgInt8(req.RegionID),
+		ID:                  app.ID,
+		GroupName:           groupName,
+		ContactPhone:        contactPhone,
+		LicenseNumber:       toPgText(req.LicenseNumber),
+		LicenseMediaAssetID: toPgInt8(req.LicenseImageAssetID),
+		Address:             toPgText(req.Address),
+		RegionID:            toPgInt8(req.RegionID),
 	}
 
 	updated, err := server.store.UpdateGroupApplicationBasic(ctx, update)
@@ -445,7 +445,7 @@ func (server *Server) uploadGroupBusinessLicenseOCR(ctx *gin.Context) {
 	}
 
 	uploader := util.NewFileUploader(util.UploadBaseDir)
-	uploadedURL, err := uploader.UploadMerchantImageForOCR(authPayload.UserID, "group_license", file, fileHeader)
+	_, err = uploader.UploadMerchantImageForOCR(authPayload.UserID, "group_license", file, fileHeader)
 	if err != nil {
 		if errors.Is(err, util.ErrImageTooLargeForOCR) || errors.Is(err, util.ErrInvalidImageFormat) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(err))
@@ -469,10 +469,10 @@ func (server *Server) uploadGroupBusinessLicenseOCR(ctx *gin.Context) {
 	merged, _ := json.Marshal(data)
 
 	updated, err := server.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{
-		ID:              app.ID,
-		LicenseImageUrl: pgtype.Text{String: uploadedURL, Valid: true},
-		LicenseNumber:   pgtype.Text{String: licenseNumber, Valid: licenseNumber != ""},
-		ApplicationData: merged,
+		ID:                  app.ID,
+		LicenseMediaAssetID: pgtype.Int8{}, // TODO(media-service): create media asset from uploadedURL
+		LicenseNumber:       pgtype.Text{String: licenseNumber, Valid: licenseNumber != ""},
+		ApplicationData:     merged,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -633,14 +633,14 @@ func (server *Server) reviewGroupApplication(ctx *gin.Context) {
 // ==================== Groups & Brands ====================
 
 type createGroupRequest struct {
-	Name            string          `json:"name" binding:"required"`
-	OwnerUserID     int64           `json:"owner_user_id" binding:"required"`
-	ContactPhone    *string         `json:"contact_phone,omitempty"`
-	LicenseNumber   *string         `json:"license_number,omitempty"`
-	LicenseImageURL *string         `json:"license_image_url,omitempty"`
-	Address         *string         `json:"address,omitempty"`
-	RegionID        *int64          `json:"region_id,omitempty"`
-	ApplicationData json.RawMessage `json:"application_data,omitempty"`
+	Name                string          `json:"name" binding:"required"`
+	OwnerUserID         int64           `json:"owner_user_id" binding:"required"`
+	ContactPhone        *string         `json:"contact_phone,omitempty"`
+	LicenseNumber       *string         `json:"license_number,omitempty"`
+	LicenseImageAssetID *int64          `json:"license_image_asset_id,omitempty"`
+	Address             *string         `json:"address,omitempty"`
+	RegionID            *int64          `json:"region_id,omitempty"`
+	ApplicationData     json.RawMessage `json:"application_data,omitempty"`
 }
 
 // createGroup godoc
@@ -665,14 +665,14 @@ func (server *Server) createGroup(ctx *gin.Context) {
 	}
 
 	group, err := server.store.CreateMerchantGroup(ctx, db.CreateMerchantGroupParams{
-		Name:            req.Name,
-		OwnerUserID:     req.OwnerUserID,
-		ContactPhone:    toPgText(req.ContactPhone),
-		LicenseNumber:   toPgText(req.LicenseNumber),
-		LicenseImageUrl: toPgText(req.LicenseImageURL),
-		Address:         toPgText(req.Address),
-		RegionID:        toPgInt8(req.RegionID),
-		ApplicationData: req.ApplicationData,
+		Name:                req.Name,
+		OwnerUserID:         req.OwnerUserID,
+		ContactPhone:        toPgText(req.ContactPhone),
+		LicenseNumber:       toPgText(req.LicenseNumber),
+		LicenseMediaAssetID: toPgInt8(req.LicenseImageAssetID),
+		Address:             toPgText(req.Address),
+		RegionID:            toPgInt8(req.RegionID),
+		ApplicationData:     req.ApplicationData,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -786,13 +786,13 @@ func (server *Server) getGroup(ctx *gin.Context) {
 }
 
 type updateGroupRequest struct {
-	Name            *string `json:"name,omitempty"`
-	ContactPhone    *string `json:"contact_phone,omitempty"`
-	LicenseNumber   *string `json:"license_number,omitempty"`
-	LicenseImageURL *string `json:"license_image_url,omitempty"`
-	Address         *string `json:"address,omitempty"`
-	RegionID        *int64  `json:"region_id,omitempty"`
-	Status          *string `json:"status,omitempty"`
+	Name                *string `json:"name,omitempty"`
+	ContactPhone        *string `json:"contact_phone,omitempty"`
+	LicenseNumber       *string `json:"license_number,omitempty"`
+	LicenseImageAssetID *int64  `json:"license_image_asset_id,omitempty"`
+	Address             *string `json:"address,omitempty"`
+	RegionID            *int64  `json:"region_id,omitempty"`
+	Status              *string `json:"status,omitempty"`
 }
 
 // updateGroup godoc
@@ -851,14 +851,14 @@ func (server *Server) updateGroup(ctx *gin.Context) {
 	}
 
 	updated, err := server.store.UpdateMerchantGroup(ctx, db.UpdateMerchantGroupParams{
-		ID:              groupID,
-		Name:            name,
-		ContactPhone:    toPgText(req.ContactPhone),
-		LicenseNumber:   toPgText(req.LicenseNumber),
-		LicenseImageUrl: toPgText(req.LicenseImageURL),
-		Address:         toPgText(req.Address),
-		RegionID:        toPgInt8(req.RegionID),
-		Status:          status,
+		ID:                  groupID,
+		Name:                name,
+		ContactPhone:        toPgText(req.ContactPhone),
+		LicenseNumber:       toPgText(req.LicenseNumber),
+		LicenseMediaAssetID: toPgInt8(req.LicenseImageAssetID),
+		Address:             toPgText(req.Address),
+		RegionID:            toPgInt8(req.RegionID),
+		Status:              status,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -899,17 +899,13 @@ func (server *Server) listGroupMerchants(ctx *gin.Context) {
 
 	resp := make([]groupMerchantResponse, 0, len(merchants))
 	for _, m := range merchants {
-		logo := ""
-		if m.LogoUrl.Valid {
-			logo = normalizeUploadURLForClient(m.LogoUrl.String)
-		}
 		resp = append(resp, groupMerchantResponse{
-			ID:      m.ID,
-			Name:    m.Name,
-			LogoURL: logo,
-			Address: m.Address,
-			Phone:   m.Phone,
-			Status:  m.Status,
+			ID:          m.ID,
+			Name:        m.Name,
+			LogoAssetID: int64PtrFromPgInt8(m.LogoMediaAssetID),
+			Address:     m.Address,
+			Phone:       m.Phone,
+			Status:      m.Status,
 		})
 	}
 
@@ -955,7 +951,6 @@ func (server *Server) listGroupBrands(ctx *gin.Context) {
 
 type createGroupBrandRequest struct {
 	Name        string  `json:"name" binding:"required"`
-	LogoURL     *string `json:"logo_url,omitempty"`
 	Description *string `json:"description,omitempty"`
 }
 
@@ -992,10 +987,10 @@ func (server *Server) createGroupBrand(ctx *gin.Context) {
 	}
 
 	brand, err := server.store.CreateMerchantBrand(ctx, db.CreateMerchantBrandParams{
-		GroupID:     groupID,
-		Name:        req.Name,
-		LogoUrl:     toPgText(req.LogoURL),
-		Description: toPgText(req.Description),
+		GroupID:          groupID,
+		Name:             req.Name,
+		LogoMediaAssetID: pgtype.Int8{}, // TODO(media-service): accept logo_asset_id in request
+		Description:      toPgText(req.Description),
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

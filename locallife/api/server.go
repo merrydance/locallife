@@ -16,6 +16,7 @@ import (
 	"github.com/merrydance/locallife/docs"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
@@ -70,6 +71,8 @@ type Server struct {
 	wsPubSub           *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
 	deliveryBroadcast  *logic.DeliveryBroadcastLogic
 	rateLimiter        *RateLimiter
+	mediaRegistry      *media.Registry
+	mediaResolver      *media.URLResolver
 	imageDeleter       *imageDeleteWorker   // 有界异步图片删除 worker pool
 	keywordWorker      *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
 	rulesEngine        rules.Engine
@@ -276,6 +279,33 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	}
 
 	server.routeService = logic.NewRouteService(mapClient)
+
+	// 初始化媒体中心
+	var mediaStorage media.ObjectStorage
+	if config.FileStorageProvider == "oss" {
+		mediaStorage, err = media.NewOSSStorage(
+			config.OSSEndpoint,
+			config.OSSRegion,
+			config.OSSAccessKeyID,
+			config.OSSAccessKeySecret,
+			config.OSSPublicBucket,
+			config.OSSPrivateBucket,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create OSS storage: %w", err)
+		}
+		log.Info().Msg("✅ Media storage initialized with Aliyun OSS")
+	} else {
+		mediaStorage = media.NewLocalStorage(config.ExternalBaseURL, "uploads/dev")
+		log.Info().Msg("✅ Media storage initialized with local fallback")
+	}
+	server.mediaRegistry = media.NewRegistry(store, mediaStorage)
+	server.mediaResolver = media.NewURLResolver(media.ResolverConfig{
+		CDNPublicBaseURL: config.CDNPublicBaseURL,
+		ThumbWidth:       config.ImageVariantThumbWidth,
+		CardWidth:        config.ImageVariantCardWidth,
+		DetailWidth:      config.ImageVariantDetailWidth,
+	}, mediaStorage)
 
 	server.setupRouter()
 	return server, nil
@@ -528,6 +558,16 @@ func (server *Server) setupRouter() {
 	authGroup.PATCH("/users/me", server.updateCurrentUser)
 
 	authGroup.POST("/auth/web-login/confirm", server.confirmWebLoginSession)
+
+	// 媒体中心路由
+	mediaGroup := authGroup.Group("/media")
+	{
+		mediaGroup.POST("/upload-sessions", server.createMediaUploadSession)
+		mediaGroup.POST("/complete", server.completeMediaUpload)
+		mediaGroup.POST("/private-access", server.getMediaPrivateAccess)
+		mediaGroup.GET("/:id", server.getMediaAsset)
+		mediaGroup.DELETE("/:id", server.deleteMediaAsset)
+	}
 
 	// M2: 用户地址路由
 	authGroup.POST("/addresses", server.createUserAddress)

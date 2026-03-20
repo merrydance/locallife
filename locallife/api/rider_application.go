@@ -103,20 +103,20 @@ func parseChineseYMD(dateStr string) (time.Time, error) {
 
 // riderApplicationResponse 骑手申请响应
 type riderApplicationResponse struct {
-	ID             int64              `json:"id"`
-	UserID         int64              `json:"user_id"`
-	RealName       *string            `json:"real_name,omitempty"`
-	Phone          *string            `json:"phone,omitempty"`
-	IDCardFrontURL *string            `json:"id_card_front_url,omitempty"`
-	IDCardBackURL  *string            `json:"id_card_back_url,omitempty"`
-	IDCardOCR      *IDCardOCRData     `json:"id_card_ocr,omitempty"`
-	HealthCertURL  *string            `json:"health_cert_url,omitempty"`
-	HealthCertOCR  *HealthCertOCRData `json:"health_cert_ocr,omitempty"`
-	Status         string             `json:"status"`
-	RejectReason   *string            `json:"reject_reason,omitempty"`
-	CreatedAt      time.Time          `json:"created_at"`
-	UpdatedAt      *time.Time         `json:"updated_at,omitempty"`
-	SubmittedAt    *time.Time         `json:"submitted_at,omitempty"`
+	ID                 int64              `json:"id"`
+	UserID             int64              `json:"user_id"`
+	RealName           *string            `json:"real_name,omitempty"`
+	Phone              *string            `json:"phone,omitempty"`
+	IDCardFrontAssetID *int64             `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID  *int64             `json:"id_card_back_asset_id,omitempty"`
+	IDCardOCR          *IDCardOCRData     `json:"id_card_ocr,omitempty"`
+	HealthCertAssetID  *int64             `json:"health_cert_asset_id,omitempty"`
+	HealthCertOCR      *HealthCertOCRData `json:"health_cert_ocr,omitempty"`
+	Status             string             `json:"status"`
+	RejectReason       *string            `json:"reject_reason,omitempty"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          *time.Time         `json:"updated_at,omitempty"`
+	SubmittedAt        *time.Time         `json:"submitted_at,omitempty"`
 }
 
 func newRiderApplicationResponse(app db.RiderApplication) riderApplicationResponse {
@@ -133,15 +133,9 @@ func newRiderApplicationResponse(app db.RiderApplication) riderApplicationRespon
 	if app.Phone.Valid {
 		resp.Phone = &app.Phone.String
 	}
-	if app.IDCardFrontUrl.Valid {
-		resp.IDCardFrontURL = &app.IDCardFrontUrl.String
-	}
-	if app.IDCardBackUrl.Valid {
-		resp.IDCardBackURL = &app.IDCardBackUrl.String
-	}
-	if app.HealthCertUrl.Valid {
-		resp.HealthCertURL = &app.HealthCertUrl.String
-	}
+	resp.IDCardFrontAssetID = int64PtrFromPgInt8(app.IDCardFrontMediaAssetID)
+	resp.IDCardBackAssetID = int64PtrFromPgInt8(app.IDCardBackMediaAssetID)
+	resp.HealthCertAssetID = int64PtrFromPgInt8(app.HealthCertMediaAssetID)
 	if app.RejectReason.Valid {
 		resp.RejectReason = &app.RejectReason.String
 	}
@@ -341,21 +335,13 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 记录旧图片路径，上传成功后删除
+	// TODO(media-service): oldIDCardURL was used to delete old file; now handled by media service
 	var oldIDCardURL string
-	if side == "Front" {
-		if app.IDCardFrontUrl.Valid {
-			oldIDCardURL = app.IDCardFrontUrl.String
-		}
-	} else {
-		if app.IDCardBackUrl.Valid {
-			oldIDCardURL = app.IDCardBackUrl.String
-		}
-	}
+	_ = oldIDCardURL
 
 	// 保存图片到本地
 	uploader := util.NewFileUploader("uploads")
-	imageURL, err := uploader.UploadRiderImage(authPayload.UserID, "idcard", file, fileHeader)
+	_, err = uploader.UploadRiderImage(authPayload.UserID, "idcard", file, fileHeader)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("upload rider idcard image: %w", err)))
 		return
@@ -380,7 +366,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 	}
 
 	if side == "Front" {
-		arg.IDCardFrontUrl = pgtype.Text{String: imageURL, Valid: true}
+		// TODO(media-service): set IDCardFrontMediaAssetID after media upload
 
 		if ocrResult != nil {
 			// 构建OCR数据，合并已有数据
@@ -404,7 +390,7 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 			}
 		}
 	} else {
-		arg.IDCardBackUrl = pgtype.Text{String: imageURL, Valid: true}
+		// TODO(media-service): set IDCardBackMediaAssetID after media upload
 
 		if ocrResult != nil && ocrResult.ValidDate != "" {
 			// 解析有效期，格式可能是 "20200101-20300101" 或 "20200101-长期"
@@ -489,14 +475,12 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 		return
 	}
 
-	// 记录旧健康证路径，上传成功后删除
+	// TODO(media-service): oldHealthCertURL was used to delete old file; now handled by media service
 	oldHealthCertURL := ""
-	if app.HealthCertUrl.Valid {
-		oldHealthCertURL = app.HealthCertUrl.String
-	}
+	_ = oldHealthCertURL
 
 	uploader := util.NewFileUploader("uploads")
-	imageURL, err := uploader.UploadRiderImage(authPayload.UserID, "healthcert", file, fileHeader)
+	_, err = uploader.UploadRiderImage(authPayload.UserID, "healthcert", file, fileHeader)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("upload rider healthcert image: %w", err)))
 		return
@@ -523,8 +507,8 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 
 	arg := db.UpdateRiderApplicationHealthCertParams{
 		ID:            app.ID,
-		HealthCertUrl: pgtype.Text{String: imageURL, Valid: true},
 		HealthCertOcr: healthOCRBytes,
+		// TODO(media-service): set HealthCertMediaAssetID after media upload
 	}
 
 	updated, err := server.store.UpdateRiderApplicationHealthCert(ctx, arg)
@@ -586,13 +570,13 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 	if !app.Phone.Valid || app.Phone.String == "" {
 		missingFields = append(missingFields, "手机号")
 	}
-	if !app.IDCardFrontUrl.Valid || app.IDCardFrontUrl.String == "" {
+	if !app.IDCardFrontMediaAssetID.Valid {
 		missingFields = append(missingFields, "身份证正面照片")
 	}
-	if !app.IDCardBackUrl.Valid || app.IDCardBackUrl.String == "" {
+	if !app.IDCardBackMediaAssetID.Valid {
 		missingFields = append(missingFields, "身份证背面照片")
 	}
-	if !app.HealthCertUrl.Valid || app.HealthCertUrl.String == "" {
+	if !app.HealthCertMediaAssetID.Valid {
 		missingFields = append(missingFields, "健康证照片")
 	}
 
@@ -609,7 +593,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 			UserID: authPayload.UserID,
 			Metadata: map[string]interface{}{
 				"domain":               "rider_application",
-				"health_cert_uploaded": app.HealthCertUrl.Valid && app.HealthCertUrl.String != "",
+				"health_cert_uploaded": app.HealthCertMediaAssetID.Valid,
 				"idcard_ocr_valid":     len(app.IDCardOcr) > 0,
 				"health_ocr_valid":     len(app.HealthCertOcr) > 0,
 				"idcard_not_expired":   approved || rejectReason != "身份证已过期，请更换有效身份证后重新申请",
@@ -682,7 +666,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 // 返回：是否通过，拒绝原因（如果不通过）
 func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bool, string) {
 	// 1. 健康证必须已上传
-	if !app.HealthCertUrl.Valid || app.HealthCertUrl.String == "" {
+	if !app.HealthCertMediaAssetID.Valid {
 		return false, "健康证未上传"
 	}
 

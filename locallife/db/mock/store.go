@@ -950,6 +950,21 @@ func (mr *MockStoreMockRecorder) CompleteTakeoutOrderByUser(ctx, id any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTakeoutOrderByUser", reflect.TypeOf((*MockStore)(nil).CompleteTakeoutOrderByUser), ctx, id)
 }
 
+// CompleteUploadSession mocks base method.
+func (m *MockStore) CompleteUploadSession(ctx context.Context, arg db.CompleteUploadSessionParams) (db.MediaUploadSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteUploadSession", ctx, arg)
+	ret0, _ := ret[0].(db.MediaUploadSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteUploadSession indicates an expected call of CompleteUploadSession.
+func (mr *MockStoreMockRecorder) CompleteUploadSession(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteUploadSession", reflect.TypeOf((*MockStore)(nil).CompleteUploadSession), ctx, arg)
+}
+
 // ConfirmFraudPattern mocks base method.
 func (m *MockStore) ConfirmFraudPattern(ctx context.Context, arg db.ConfirmFraudPatternParams) error {
 	m.ctrl.T.Helper()
@@ -962,6 +977,21 @@ func (m *MockStore) ConfirmFraudPattern(ctx context.Context, arg db.ConfirmFraud
 func (mr *MockStoreMockRecorder) ConfirmFraudPattern(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfirmFraudPattern", reflect.TypeOf((*MockStore)(nil).ConfirmFraudPattern), ctx, arg)
+}
+
+// ConfirmMediaAssetUploaded mocks base method.
+func (m *MockStore) ConfirmMediaAssetUploaded(ctx context.Context, arg db.ConfirmMediaAssetUploadedParams) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConfirmMediaAssetUploaded", ctx, arg)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConfirmMediaAssetUploaded indicates an expected call of ConfirmMediaAssetUploaded.
+func (mr *MockStoreMockRecorder) ConfirmMediaAssetUploaded(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfirmMediaAssetUploaded", reflect.TypeOf((*MockStore)(nil).ConfirmMediaAssetUploaded), ctx, arg)
 }
 
 // ConfirmReservationTx mocks base method.
@@ -2989,6 +3019,21 @@ func (mr *MockStoreMockRecorder) CreateIngredient(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateIngredient", reflect.TypeOf((*MockStore)(nil).CreateIngredient), ctx, arg)
 }
 
+// CreateMediaAsset mocks base method.
+func (m *MockStore) CreateMediaAsset(ctx context.Context, arg db.CreateMediaAssetParams) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateMediaAsset", ctx, arg)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateMediaAsset indicates an expected call of CreateMediaAsset.
+func (mr *MockStoreMockRecorder) CreateMediaAsset(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateMediaAsset", reflect.TypeOf((*MockStore)(nil).CreateMediaAsset), ctx, arg)
+}
+
 // CreateMembershipTransaction mocks base method.
 func (m *MockStore) CreateMembershipTransaction(ctx context.Context, arg db.CreateMembershipTransactionParams) (db.MembershipTransaction, error) {
 	m.ctrl.T.Helper()
@@ -3857,6 +3902,21 @@ func (m *MockStore) CreateTag(ctx context.Context, arg db.CreateTagParams) (db.T
 func (mr *MockStoreMockRecorder) CreateTag(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTag", reflect.TypeOf((*MockStore)(nil).CreateTag), ctx, arg)
+}
+
+// CreateUploadSession mocks base method.
+func (m *MockStore) CreateUploadSession(ctx context.Context, arg db.CreateUploadSessionParams) (db.MediaUploadSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateUploadSession", ctx, arg)
+	ret0, _ := ret[0].(db.MediaUploadSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateUploadSession indicates an expected call of CreateUploadSession.
+func (mr *MockStoreMockRecorder) CreateUploadSession(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateUploadSession", reflect.TypeOf((*MockStore)(nil).CreateUploadSession), ctx, arg)
 }
 
 // CreateUser mocks base method.
@@ -4861,6 +4921,21 @@ func (mr *MockStoreMockRecorder) DeleteVoucher(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteVoucher", reflect.TypeOf((*MockStore)(nil).DeleteVoucher), ctx, id)
 }
 
+// ExpireStaleUploadSessions mocks base method.
+func (m *MockStore) ExpireStaleUploadSessions(ctx context.Context) ([]db.MediaUploadSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExpireStaleUploadSessions", ctx)
+	ret0, _ := ret[0].([]db.MediaUploadSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExpireStaleUploadSessions indicates an expected call of ExpireStaleUploadSessions.
+func (mr *MockStoreMockRecorder) ExpireStaleUploadSessions(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpireStaleUploadSessions", reflect.TypeOf((*MockStore)(nil).ExpireStaleUploadSessions), ctx)
+}
+
 // ExpireUnusedVouchers mocks base method.
 func (m *MockStore) ExpireUnusedVouchers(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -4874,6 +4949,21 @@ func (m *MockStore) ExpireUnusedVouchers(ctx context.Context) (int64, error) {
 func (mr *MockStoreMockRecorder) ExpireUnusedVouchers(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpireUnusedVouchers", reflect.TypeOf((*MockStore)(nil).ExpireUnusedVouchers), ctx)
+}
+
+// ExpireUploadSession mocks base method.
+func (m *MockStore) ExpireUploadSession(ctx context.Context, id string) (db.MediaUploadSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ExpireUploadSession", ctx, id)
+	ret0, _ := ret[0].(db.MediaUploadSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ExpireUploadSession indicates an expected call of ExpireUploadSession.
+func (mr *MockStoreMockRecorder) ExpireUploadSession(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExpireUploadSession", reflect.TypeOf((*MockStore)(nil).ExpireUploadSession), ctx, id)
 }
 
 // ExpireWebLoginSession mocks base method.
@@ -6616,6 +6706,36 @@ func (mr *MockStoreMockRecorder) GetMatchingRechargeRule(ctx, arg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMatchingRechargeRule", reflect.TypeOf((*MockStore)(nil).GetMatchingRechargeRule), ctx, arg)
 }
 
+// GetMediaAssetByID mocks base method.
+func (m *MockStore) GetMediaAssetByID(ctx context.Context, id int64) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMediaAssetByID", ctx, id)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMediaAssetByID indicates an expected call of GetMediaAssetByID.
+func (mr *MockStoreMockRecorder) GetMediaAssetByID(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMediaAssetByID", reflect.TypeOf((*MockStore)(nil).GetMediaAssetByID), ctx, id)
+}
+
+// GetMediaAssetByObjectKey mocks base method.
+func (m *MockStore) GetMediaAssetByObjectKey(ctx context.Context, objectKey string) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMediaAssetByObjectKey", ctx, objectKey)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMediaAssetByObjectKey indicates an expected call of GetMediaAssetByObjectKey.
+func (mr *MockStoreMockRecorder) GetMediaAssetByObjectKey(ctx, objectKey any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMediaAssetByObjectKey", reflect.TypeOf((*MockStore)(nil).GetMediaAssetByObjectKey), ctx, objectKey)
+}
+
 // GetMembershipByMerchantAndUser mocks base method.
 func (m *MockStore) GetMembershipByMerchantAndUser(ctx context.Context, arg db.GetMembershipByMerchantAndUserParams) (db.MerchantMembership, error) {
 	m.ctrl.T.Helper()
@@ -7966,6 +8086,21 @@ func (mr *MockStoreMockRecorder) GetPendingOperatorApplicationByRegion(ctx, regi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingOperatorApplicationByRegion", reflect.TypeOf((*MockStore)(nil).GetPendingOperatorApplicationByRegion), ctx, regionID)
 }
 
+// GetPendingUploadSessionByIdempotencyKey mocks base method.
+func (m *MockStore) GetPendingUploadSessionByIdempotencyKey(ctx context.Context, arg db.GetPendingUploadSessionByIdempotencyKeyParams) (db.MediaUploadSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPendingUploadSessionByIdempotencyKey", ctx, arg)
+	ret0, _ := ret[0].(db.MediaUploadSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPendingUploadSessionByIdempotencyKey indicates an expected call of GetPendingUploadSessionByIdempotencyKey.
+func (mr *MockStoreMockRecorder) GetPendingUploadSessionByIdempotencyKey(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingUploadSessionByIdempotencyKey", reflect.TypeOf((*MockStore)(nil).GetPendingUploadSessionByIdempotencyKey), ctx, arg)
+}
+
 // GetPlatformConfig mocks base method.
 func (m *MockStore) GetPlatformConfig(ctx context.Context, arg db.GetPlatformConfigParams) (db.PlatformConfig, error) {
 	m.ctrl.T.Helper()
@@ -9284,6 +9419,21 @@ func (m *MockStore) GetUnconfirmedFraudPatterns(ctx context.Context, limit int32
 func (mr *MockStoreMockRecorder) GetUnconfirmedFraudPatterns(ctx, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUnconfirmedFraudPatterns", reflect.TypeOf((*MockStore)(nil).GetUnconfirmedFraudPatterns), ctx, limit)
+}
+
+// GetUploadSession mocks base method.
+func (m *MockStore) GetUploadSession(ctx context.Context, id string) (db.MediaUploadSession, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetUploadSession", ctx, id)
+	ret0, _ := ret[0].(db.MediaUploadSession)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetUploadSession indicates an expected call of GetUploadSession.
+func (mr *MockStoreMockRecorder) GetUploadSession(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetUploadSession", reflect.TypeOf((*MockStore)(nil).GetUploadSession), ctx, id)
 }
 
 // GetUser mocks base method.
@@ -11274,6 +11424,21 @@ func (m *MockStore) ListIngredients(ctx context.Context, arg db.ListIngredientsP
 func (mr *MockStoreMockRecorder) ListIngredients(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListIngredients", reflect.TypeOf((*MockStore)(nil).ListIngredients), ctx, arg)
+}
+
+// ListMediaAssetsByUploader mocks base method.
+func (m *MockStore) ListMediaAssetsByUploader(ctx context.Context, arg db.ListMediaAssetsByUploaderParams) ([]db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMediaAssetsByUploader", ctx, arg)
+	ret0, _ := ret[0].([]db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMediaAssetsByUploader indicates an expected call of ListMediaAssetsByUploader.
+func (mr *MockStoreMockRecorder) ListMediaAssetsByUploader(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMediaAssetsByUploader", reflect.TypeOf((*MockStore)(nil).ListMediaAssetsByUploader), ctx, arg)
 }
 
 // ListMembershipTransactions mocks base method.
@@ -14820,6 +14985,36 @@ func (mr *MockStoreMockRecorder) SetDishCustomizationsTx(ctx, arg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetDishCustomizationsTx", reflect.TypeOf((*MockStore)(nil).SetDishCustomizationsTx), ctx, arg)
 }
 
+// SetMediaAssetModerationStatus mocks base method.
+func (m *MockStore) SetMediaAssetModerationStatus(ctx context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetMediaAssetModerationStatus", ctx, arg)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetMediaAssetModerationStatus indicates an expected call of SetMediaAssetModerationStatus.
+func (mr *MockStoreMockRecorder) SetMediaAssetModerationStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMediaAssetModerationStatus", reflect.TypeOf((*MockStore)(nil).SetMediaAssetModerationStatus), ctx, arg)
+}
+
+// SetMediaAssetUploadStatus mocks base method.
+func (m *MockStore) SetMediaAssetUploadStatus(ctx context.Context, arg db.SetMediaAssetUploadStatusParams) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetMediaAssetUploadStatus", ctx, arg)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetMediaAssetUploadStatus indicates an expected call of SetMediaAssetUploadStatus.
+func (mr *MockStoreMockRecorder) SetMediaAssetUploadStatus(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMediaAssetUploadStatus", reflect.TypeOf((*MockStore)(nil).SetMediaAssetUploadStatus), ctx, arg)
+}
+
 // SetOperatorWallet mocks base method.
 func (m *MockStore) SetOperatorWallet(ctx context.Context, arg db.SetOperatorWalletParams) error {
 	m.ctrl.T.Helper()
@@ -14904,6 +15099,21 @@ func (m *MockStore) SetUserRequiresEvidence(ctx context.Context, arg db.SetUserR
 func (mr *MockStoreMockRecorder) SetUserRequiresEvidence(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetUserRequiresEvidence", reflect.TypeOf((*MockStore)(nil).SetUserRequiresEvidence), ctx, arg)
+}
+
+// SoftDeleteMediaAsset mocks base method.
+func (m *MockStore) SoftDeleteMediaAsset(ctx context.Context, id int64) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SoftDeleteMediaAsset", ctx, id)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SoftDeleteMediaAsset indicates an expected call of SoftDeleteMediaAsset.
+func (mr *MockStoreMockRecorder) SoftDeleteMediaAsset(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SoftDeleteMediaAsset", reflect.TypeOf((*MockStore)(nil).SoftDeleteMediaAsset), ctx, id)
 }
 
 // SoftDeleteMerchantStaff mocks base method.

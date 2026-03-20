@@ -305,10 +305,8 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 							Type:       "dish", // Default
 							Name:       item.DishName.String,
 						}
-						// 简单的映射，不像 listMerchantReservations 那么细致，主要为了状态更新
-						if item.DishImageUrl.Valid {
-							resResp.Items[i].ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
-						}
+						// 图片 URL 将由 media service 就绪后提供；暂时留空
+						_ = item.DishImageMediaAssetID
 					}
 				}
 

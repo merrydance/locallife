@@ -21,7 +21,7 @@ UPDATE merchant_group_applications
 SET group_name = COALESCE($2, group_name),
     contact_phone = COALESCE($3, contact_phone),
     license_number = COALESCE($4, license_number),
-    license_image_url = COALESCE($5, license_image_url),
+    license_media_asset_id = COALESCE($5, license_media_asset_id),
     address = COALESCE($6, address),
     region_id = COALESCE($7, region_id),
     updated_at = now()
@@ -30,7 +30,7 @@ RETURNING *;
 
 -- name: UpdateGroupApplicationLicense :one
 UPDATE merchant_group_applications
-SET license_image_url = COALESCE($2, license_image_url),
+SET license_media_asset_id = COALESCE($2, license_media_asset_id),
     license_number = COALESCE($3, license_number),
     application_data = COALESCE($4, application_data),
     updated_at = now()
@@ -66,7 +66,7 @@ RETURNING *;
 -- Groups
 -- name: CreateMerchantGroup :one
 INSERT INTO merchant_groups (
-  name, owner_user_id, contact_phone, license_number, license_image_url, address, region_id, application_data
+  name, owner_user_id, contact_phone, license_number, license_media_asset_id, address, region_id, application_data
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8
 ) RETURNING *;
@@ -87,7 +87,7 @@ UPDATE merchant_groups
 SET name = COALESCE($2, name),
     contact_phone = COALESCE($3, contact_phone),
     license_number = COALESCE($4, license_number),
-    license_image_url = COALESCE($5, license_image_url),
+    license_media_asset_id = COALESCE($5, license_media_asset_id),
     address = COALESCE($6, address),
     region_id = COALESCE($7, region_id),
     status = COALESCE($8, status),
@@ -97,7 +97,7 @@ RETURNING *;
 
 -- name: CreateMerchantBrand :one
 INSERT INTO merchant_brands (
-  group_id, name, logo_url, description
+  group_id, name, logo_media_asset_id, description
 ) VALUES (
   $1, $2, $3, $4
 ) RETURNING *;
@@ -189,4 +189,4 @@ RETURNING *;
 
 -- Group merchants
 -- name: ListGroupMerchants :many
-SELECT id, name, logo_url, address, phone, status FROM merchants WHERE group_id = $1 ORDER BY created_at DESC;
+SELECT id, name, logo_media_asset_id, address, phone, status FROM merchants WHERE group_id = $1 ORDER BY created_at DESC;

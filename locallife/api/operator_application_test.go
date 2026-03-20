@@ -38,9 +38,9 @@ func randomOperatorApplicationSubmitted(userID, regionID int64) db.OperatorAppli
 	app.Name = pgtype.Text{String: "测试运营商", Valid: true}
 	app.ContactName = pgtype.Text{String: "张三", Valid: true}
 	app.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
-	app.BusinessLicenseUrl = pgtype.Text{String: "uploads/operators/1/license/test.jpg", Valid: true}
-	app.IDCardFrontUrl = pgtype.Text{String: "uploads/operators/1/idcard/front.jpg", Valid: true}
-	app.IDCardBackUrl = pgtype.Text{String: "uploads/operators/1/idcard/back.jpg", Valid: true}
+	app.BusinessLicenseMediaAssetID = pgtype.Int8{}
+	app.IDCardFrontMediaAssetID = pgtype.Int8{}
+	app.IDCardBackMediaAssetID = pgtype.Int8{}
 	app.SubmittedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	return app
 }
@@ -493,9 +493,9 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 				completeApp.Name = pgtype.Text{String: "测试运营商", Valid: true}
 				completeApp.ContactName = pgtype.Text{String: "张三", Valid: true}
 				completeApp.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
-				completeApp.BusinessLicenseUrl = pgtype.Text{String: "uploads/test.jpg", Valid: true}
-				completeApp.IDCardFrontUrl = pgtype.Text{String: "uploads/front.jpg", Valid: true}
-				completeApp.IDCardBackUrl = pgtype.Text{String: "uploads/back.jpg", Valid: true}
+				completeApp.BusinessLicenseMediaAssetID = pgtype.Int8{}
+				completeApp.IDCardFrontMediaAssetID = pgtype.Int8{}
+				completeApp.IDCardBackMediaAssetID = pgtype.Int8{}
 
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).
@@ -548,8 +548,8 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 				app.LegalPersonName = pgtype.Text{String: "李四", Valid: true}
 				app.ContactName = pgtype.Text{String: "李四", Valid: true}
 				app.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
-				app.IDCardFrontUrl = pgtype.Text{String: "uploads/front.jpg", Valid: true}
-				app.IDCardBackUrl = pgtype.Text{String: "uploads/back.jpg", Valid: true}
+				app.IDCardFrontMediaAssetID = pgtype.Int8{}
+				app.IDCardBackMediaAssetID = pgtype.Int8{}
 
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).
@@ -591,9 +591,9 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 				completeApp.Name = pgtype.Text{String: "测试运营商", Valid: true}
 				completeApp.ContactName = pgtype.Text{String: "张三", Valid: true}
 				completeApp.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
-				completeApp.BusinessLicenseUrl = pgtype.Text{String: "uploads/test.jpg", Valid: true}
-				completeApp.IDCardFrontUrl = pgtype.Text{String: "uploads/front.jpg", Valid: true}
-				completeApp.IDCardBackUrl = pgtype.Text{String: "uploads/back.jpg", Valid: true}
+				completeApp.BusinessLicenseMediaAssetID = pgtype.Int8{}
+				completeApp.IDCardFrontMediaAssetID = pgtype.Int8{}
+				completeApp.IDCardBackMediaAssetID = pgtype.Int8{}
 
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).

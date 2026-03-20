@@ -82,7 +82,6 @@ func createRandomDish(t *testing.T, merchantID, categoryID int64) Dish {
 		CategoryID:  pgtype.Int8{Int64: categoryID, Valid: true},
 		Name:        util.RandomString(10),
 		Description: pgtype.Text{String: util.RandomString(50), Valid: true},
-		ImageUrl:    pgtype.Text{String: "https://example.com/dish.jpg", Valid: true},
 		Price:       util.RandomMoney(),
 		MemberPrice: pgtype.Int8{Int64: util.RandomMoney(), Valid: true},
 		IsAvailable: true,

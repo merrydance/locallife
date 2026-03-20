@@ -55,7 +55,6 @@ func createRandomMerchantWithOwner(t *testing.T, ownerID int64) Merchant {
 		OwnerUserID:     ownerID,
 		Name:            util.RandomString(10),
 		Description:     pgtype.Text{String: util.RandomString(50), Valid: true},
-		LogoUrl:         pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
 		Phone:           "13800138000",
 		Address:         util.RandomString(30),
 		Latitude:        numericFromFloat(39.9282),
@@ -85,17 +84,14 @@ func createRandomMerchantApplication(t *testing.T) MerchantApplication {
 
 func createRandomMerchantApplicationWithUser(t *testing.T, userID int64) MerchantApplication {
 	arg := CreateMerchantApplicationParams{
-		UserID:                  userID,
-		MerchantName:            util.RandomString(10),
-		BusinessLicenseNumber:   util.RandomString(18),
-		BusinessLicenseImageUrl: "uploads/merchants/test/license.jpg",
-		LegalPersonName:         util.RandomString(6),
-		LegalPersonIDNumber:     "110101199001011234",
-		LegalPersonIDFrontUrl:   "uploads/merchants/test/id_front.jpg",
-		LegalPersonIDBackUrl:    "uploads/merchants/test/id_back.jpg",
-		ContactPhone:            "13800138000",
-		BusinessAddress:         util.RandomString(30),
-		BusinessScope:           pgtype.Text{String: "餐饮服务", Valid: true},
+		UserID:                userID,
+		MerchantName:          util.RandomString(10),
+		BusinessLicenseNumber: util.RandomString(18),
+		LegalPersonName:       util.RandomString(6),
+		LegalPersonIDNumber:   "110101199001011234",
+		ContactPhone:          "13800138000",
+		BusinessAddress:       util.RandomString(30),
+		BusinessScope:         pgtype.Text{String: "餐饮服务", Valid: true},
 	}
 
 	application, err := testStore.CreateMerchantApplication(context.Background(), arg)
@@ -183,15 +179,15 @@ func TestUpdateMerchant(t *testing.T) {
 	newPhone := "13900139000"
 
 	arg := UpdateMerchantParams{
-		ID:          merchant1.ID,
-		Version:     merchant1.Version, // ✅ 必须传入当前version
-		Name:        pgtype.Text{String: newName, Valid: true},
-		Phone:       pgtype.Text{String: newPhone, Valid: true},
-		Description: pgtype.Text{}, // 不更新
-		LogoUrl:     pgtype.Text{},
-		Address:     pgtype.Text{},
-		Latitude:    pgtype.Numeric{},
-		Longitude:   pgtype.Numeric{},
+		ID:               merchant1.ID,
+		Version:          merchant1.Version, // ✅ 必须传入当前version
+		Name:             pgtype.Text{String: newName, Valid: true},
+		Phone:            pgtype.Text{String: newPhone, Valid: true},
+		Description:      pgtype.Text{}, // 不更新
+		LogoMediaAssetID: pgtype.Int8{},
+		Address:          pgtype.Text{},
+		Latitude:         pgtype.Numeric{},
+		Longitude:        pgtype.Numeric{},
 	}
 
 	merchant2, err := testStore.UpdateMerchant(context.Background(), arg)
@@ -848,7 +844,6 @@ func createMerchantInRegion(t *testing.T, regionID int64, status string) Merchan
 		OwnerUserID:     user.ID,
 		Name:            util.RandomString(10),
 		Description:     pgtype.Text{String: util.RandomString(50), Valid: true},
-		LogoUrl:         pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
 		Phone:           "13800138000",
 		Address:         util.RandomString(30),
 		Latitude:        pgtype.Numeric{},

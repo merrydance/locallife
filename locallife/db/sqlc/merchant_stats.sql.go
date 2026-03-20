@@ -378,7 +378,7 @@ SELECT
   d.description,
   d.price,
   d.member_price,
-  d.image_url,
+  d.image_media_asset_id,
   d.is_available,
   d.sort_order,
   d.prepare_time,
@@ -446,7 +446,7 @@ type GetMerchantDishesWithCategoryRow struct {
 	Description         pgtype.Text `json:"description"`
 	Price               int64       `json:"price"`
 	MemberPrice         pgtype.Int8 `json:"member_price"`
-	ImageUrl            pgtype.Text `json:"image_url"`
+	ImageMediaAssetID   pgtype.Int8 `json:"image_media_asset_id"`
 	IsAvailable         bool        `json:"is_available"`
 	SortOrder           int16       `json:"sort_order"`
 	PrepareTime         int16       `json:"prepare_time"`
@@ -474,7 +474,7 @@ func (q *Queries) GetMerchantDishesWithCategory(ctx context.Context, merchantID 
 			&i.Description,
 			&i.Price,
 			&i.MemberPrice,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.IsAvailable,
 			&i.SortOrder,
 			&i.PrepareTime,
@@ -554,7 +554,7 @@ SELECT
   cs.id,
   cs.name,
   cs.description,
-  cs.image_url,
+  cs.image_media_asset_id,
   cs.combo_price,
   -- 实时计算实际原价（单品价之和）
   COALESCE(
@@ -584,15 +584,15 @@ ORDER BY cs.id
 `
 
 type GetMerchantOnlineCombosRow struct {
-	ID            int64       `json:"id"`
-	Name          string      `json:"name"`
-	Description   pgtype.Text `json:"description"`
-	ImageUrl      pgtype.Text `json:"image_url"`
-	ComboPrice    int64       `json:"combo_price"`
-	OriginalPrice int64       `json:"original_price"`
-	IsOnline      bool        `json:"is_online"`
-	Dishes        []byte      `json:"dishes"`
-	Tags          interface{} `json:"tags"`
+	ID                int64       `json:"id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	ComboPrice        int64       `json:"combo_price"`
+	OriginalPrice     int64       `json:"original_price"`
+	IsOnline          bool        `json:"is_online"`
+	Dishes            []byte      `json:"dishes"`
+	Tags              interface{} `json:"tags"`
 }
 
 // 获取商户所有在线套餐 - 消费者端使用
@@ -609,7 +609,7 @@ func (q *Queries) GetMerchantOnlineCombos(ctx context.Context, merchantID int64)
 			&i.ID,
 			&i.Name,
 			&i.Description,
-			&i.ImageUrl,
+			&i.ImageMediaAssetID,
 			&i.ComboPrice,
 			&i.OriginalPrice,
 			&i.IsOnline,

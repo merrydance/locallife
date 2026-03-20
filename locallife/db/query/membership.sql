@@ -15,7 +15,7 @@ SELECT * FROM merchant_memberships
 WHERE merchant_id = $1 AND user_id = $2 LIMIT 1;
 
 -- name: ListUserMemberships :many
-SELECT m.*, mer.name as merchant_name, mer.logo_url
+SELECT m.*, mer.name as merchant_name, mer.logo_media_asset_id
 FROM merchant_memberships m
 JOIN merchants mer ON mer.id = m.merchant_id
 WHERE m.user_id = $1

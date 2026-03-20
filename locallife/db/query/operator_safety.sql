@@ -6,10 +6,9 @@ INSERT INTO safety_reports (
     description,
     level,
     merchant_ids,
-    images,
     status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
+    $1, $2, $3, $4, $5, $6, $7
 ) RETURNING *;
 
 -- name: GetSafetyReport :one

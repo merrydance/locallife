@@ -28,7 +28,7 @@ type membershipResponse struct {
 	ID             int64      `json:"id"`
 	MerchantID     int64      `json:"merchant_id"`
 	MerchantName   string     `json:"merchant_name,omitempty"`
-	LogoURL        string     `json:"logo_url,omitempty"`
+	LogoAssetID    *int64     `json:"logo_asset_id,omitempty"`
 	UserID         int64      `json:"user_id"`
 	Balance        int64      `json:"balance"`
 	TotalRecharged int64      `json:"total_recharged"`
@@ -95,8 +95,9 @@ func (server *Server) joinMembership(ctx *gin.Context) {
 		TotalConsumed:  result.Membership.TotalConsumed,
 		CreatedAt:      result.Membership.CreatedAt,
 	}
-	if merchant.LogoUrl.Valid {
-		rsp.LogoURL = normalizeUploadURLForClient(merchant.LogoUrl.String)
+	if merchant.LogoMediaAssetID.Valid {
+		v := merchant.LogoMediaAssetID.Int64
+		rsp.LogoAssetID = &v
 	}
 
 	ctx.JSON(http.StatusOK, rsp)
@@ -519,8 +520,9 @@ func convertUserMembershipResponse(m db.ListUserMembershipsRow) membershipRespon
 		CreatedAt:      m.CreatedAt,
 		UpdatedAt:      pgTimeToPtr(m.UpdatedAt),
 	}
-	if m.LogoUrl.Valid {
-		rsp.LogoURL = normalizeUploadURLForClient(m.LogoUrl.String)
+	if m.LogoMediaAssetID.Valid {
+		v := m.LogoMediaAssetID.Int64
+		rsp.LogoAssetID = &v
 	}
 	return rsp
 }

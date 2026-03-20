@@ -39,7 +39,7 @@ type scanTableMerchantInfo struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
-	LogoUrl     *string `json:"logo_url,omitempty"`
+	LogoAssetID *int64  `json:"logo_asset_id,omitempty"`
 	Phone       string  `json:"phone,omitempty"`
 	Address     string  `json:"address,omitempty"`
 	Status      string  `json:"status"`
@@ -62,7 +62,7 @@ type scanTableDishInfo struct {
 	ID                  int64                `json:"id"`
 	Name                string               `json:"name"`
 	Description         *string              `json:"description,omitempty"`
-	ImageUrl            *string              `json:"image_url,omitempty"`
+	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
 	Price               int64                `json:"price"`
 	OriginalPrice       int64                `json:"original_price"`
 	MemberPrice         *int64               `json:"member_price,omitempty"`
@@ -89,7 +89,7 @@ type scanTableComboInfo struct {
 	ID            int64    `json:"id"`
 	Name          string   `json:"name"`
 	Description   *string  `json:"description,omitempty"`
-	ImageUrl      *string  `json:"image_url,omitempty"`
+	ImageAssetID  *int64   `json:"image_asset_id,omitempty"`
 	Price         int64    `json:"price"`
 	OriginalPrice *int64   `json:"original_price,omitempty"`
 	IsAvailable   bool     `json:"is_available"`
@@ -247,10 +247,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		if dish.Description.Valid {
 			dishInfo.Description = &dish.Description.String
 		}
-		if dish.ImageUrl.Valid {
-			img := normalizeUploadURLForClient(dish.ImageUrl.String)
-			dishInfo.ImageUrl = &img
-		}
+		dishInfo.ImageAssetID = int64PtrFromPgInt8(dish.ImageMediaAssetID)
 		if dish.MemberPrice.Valid {
 			dishInfo.MemberPrice = &dish.MemberPrice.Int64
 		}
@@ -298,10 +295,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		if combo.Description.Valid {
 			comboInfo.Description = &combo.Description.String
 		}
-		if combo.ImageUrl.Valid {
-			img := normalizeUploadURLForClient(combo.ImageUrl.String)
-			comboInfo.ImageUrl = &img
-		}
+		comboInfo.ImageAssetID = int64PtrFromPgInt8(combo.ImageMediaAssetID)
 		if combo.OriginalPrice > 0 {
 			comboInfo.OriginalPrice = &combo.OriginalPrice
 		}
@@ -361,10 +355,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 	if merchant.Description.Valid {
 		response.Merchant.Description = &merchant.Description.String
 	}
-	if merchant.LogoUrl.Valid {
-		logo := normalizeUploadURLForClient(merchant.LogoUrl.String)
-		response.Merchant.LogoUrl = &logo
-	}
+	response.Merchant.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
 	if table.Description.Valid {
 		response.Table.Description = &table.Description.String
 	}

@@ -15,13 +15,13 @@ import (
 // ==================== 收藏 API ====================
 
 type favoriteMerchantResponse struct {
-	ID           int64  `json:"id"`
-	MerchantID   int64  `json:"merchant_id"`
-	MerchantName string `json:"merchant_name"`
-	MerchantLogo string `json:"merchant_logo,omitempty"`
-	Address      string `json:"address"`
-	Status       string `json:"status"`
-	CreatedAt    string `json:"created_at"`
+	ID                  int64  `json:"id"`
+	MerchantID          int64  `json:"merchant_id"`
+	MerchantName        string `json:"merchant_name"`
+	MerchantLogoAssetID *int64 `json:"merchant_logo_asset_id,omitempty"`
+	Address             string `json:"address"`
+	Status              string `json:"status"`
+	CreatedAt           string `json:"created_at"`
 }
 
 type favoriteDishResponse struct {
@@ -29,7 +29,7 @@ type favoriteDishResponse struct {
 	DishID       int64  `json:"dish_id"`
 	DishName     string `json:"dish_name"`
 	Description  string `json:"description,omitempty"`
-	ImageURL     string `json:"image_url,omitempty"`
+	ImageAssetID *int64 `json:"image_asset_id,omitempty"`
 	Price        int64  `json:"price"`
 	MemberPrice  *int64 `json:"member_price,omitempty"`
 	IsAvailable  bool   `json:"is_available"`
@@ -176,13 +176,13 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 	var response []favoriteMerchantResponse
 	for _, m := range merchants {
 		response = append(response, favoriteMerchantResponse{
-			ID:           m.ID,
-			MerchantID:   m.MerchantID,
-			MerchantName: m.MerchantName,
-			MerchantLogo: normalizeUploadURLForClient(m.MerchantLogo.String),
-			Address:      m.MerchantAddress,
-			Status:       m.MerchantStatus,
-			CreatedAt:    m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			ID:                  m.ID,
+			MerchantID:          m.MerchantID,
+			MerchantName:        m.MerchantName,
+			MerchantLogoAssetID: int64PtrFromPgInt8(m.MerchantLogoMediaAssetID),
+			Address:             m.MerchantAddress,
+			Status:              m.MerchantStatus,
+			CreatedAt:           m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}
 
@@ -350,7 +350,7 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 			DishID:       d.DishID,
 			DishName:     d.DishName,
 			Description:  d.DishDescription.String,
-			ImageURL:     normalizeUploadURLForClient(d.DishImageUrl.String),
+			ImageAssetID: int64PtrFromPgInt8(d.DishImageMediaAssetID),
 			Price:        d.DishPrice,
 			IsAvailable:  d.DishIsAvailable,
 			MerchantID:   d.MerchantID,

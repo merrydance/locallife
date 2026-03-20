@@ -18,22 +18,22 @@ type listPendingOperatorApplicationsRequest struct {
 }
 
 type adminOperatorApplicationItem struct {
-	ID                     int64      `json:"id"`
-	UserID                 int64      `json:"user_id"`
-	RegionID               int64      `json:"region_id"`
-	RegionName             string     `json:"region_name"`
-	RegionCode             string     `json:"region_code"`
-	Name                   string     `json:"name"`
-	ContactName            string     `json:"contact_name"`
-	ContactPhone           string     `json:"contact_phone"`
-	BusinessLicenseURL     string     `json:"business_license_url"`
-	BusinessLicenseNumber  string     `json:"business_license_number"`
-	LegalPersonName        string     `json:"legal_person_name"`
-	LegalPersonIDNumber    string     `json:"legal_person_id_number"`
-	RequestedContractYears int32      `json:"requested_contract_years"`
-	Status                 string     `json:"status"`
-	SubmittedAt            *time.Time `json:"submitted_at,omitempty"`
-	CreatedAt              time.Time  `json:"created_at"`
+	ID                          int64      `json:"id"`
+	UserID                      int64      `json:"user_id"`
+	RegionID                    int64      `json:"region_id"`
+	RegionName                  string     `json:"region_name"`
+	RegionCode                  string     `json:"region_code"`
+	Name                        string     `json:"name"`
+	ContactName                 string     `json:"contact_name"`
+	ContactPhone                string     `json:"contact_phone"`
+	BusinessLicenseMediaAssetID *int64     `json:"business_license_media_asset_id,omitempty"`
+	BusinessLicenseNumber       string     `json:"business_license_number"`
+	LegalPersonName             string     `json:"legal_person_name"`
+	LegalPersonIDNumber         string     `json:"legal_person_id_number"`
+	RequestedContractYears      int32      `json:"requested_contract_years"`
+	Status                      string     `json:"status"`
+	SubmittedAt                 *time.Time `json:"submitted_at,omitempty"`
+	CreatedAt                   time.Time  `json:"created_at"`
 }
 
 type listPendingOperatorApplicationsResponse struct {
@@ -58,7 +58,7 @@ type rejectOperatorApplicationAdminRequest struct {
 }
 
 func operatorNameFromApprovedApplication(app db.OperatorApplication) string {
-	if app.BusinessLicenseUrl.Valid && strings.TrimSpace(app.BusinessLicenseUrl.String) != "" && len(app.BusinessLicenseOcr) > 0 {
+	if app.BusinessLicenseMediaAssetID.Valid && len(app.BusinessLicenseOcr) > 0 {
 		var ocr BusinessLicenseOCRData
 		if err := json.Unmarshal(app.BusinessLicenseOcr, &ocr); err == nil {
 			enterpriseName := strings.TrimSpace(ocr.EnterpriseName)
@@ -115,21 +115,21 @@ func (server *Server) listPendingOperatorApplicationsAdmin(ctx *gin.Context) {
 	applications := make([]adminOperatorApplicationItem, 0, len(rows))
 	for _, row := range rows {
 		item := adminOperatorApplicationItem{
-			ID:                     row.ID,
-			UserID:                 row.UserID,
-			RegionID:               row.RegionID,
-			RegionName:             row.RegionName,
-			RegionCode:             row.RegionCode,
-			Name:                   row.Name.String,
-			ContactName:            row.ContactName.String,
-			ContactPhone:           row.ContactPhone.String,
-			BusinessLicenseURL:     row.BusinessLicenseUrl.String,
-			BusinessLicenseNumber:  row.BusinessLicenseNumber.String,
-			LegalPersonName:        row.LegalPersonName.String,
-			LegalPersonIDNumber:    row.LegalPersonIDNumber.String,
-			RequestedContractYears: row.RequestedContractYears,
-			Status:                 row.Status,
-			CreatedAt:              row.CreatedAt,
+			ID:                          row.ID,
+			UserID:                      row.UserID,
+			RegionID:                    row.RegionID,
+			RegionName:                  row.RegionName,
+			RegionCode:                  row.RegionCode,
+			Name:                        row.Name.String,
+			ContactName:                 row.ContactName.String,
+			ContactPhone:                row.ContactPhone.String,
+			BusinessLicenseMediaAssetID: int64PtrFromPgInt8(row.BusinessLicenseMediaAssetID),
+			BusinessLicenseNumber:       row.BusinessLicenseNumber.String,
+			LegalPersonName:             row.LegalPersonName.String,
+			LegalPersonIDNumber:         row.LegalPersonIDNumber.String,
+			RequestedContractYears:      row.RequestedContractYears,
+			Status:                      row.Status,
+			CreatedAt:                   row.CreatedAt,
 		}
 		if row.SubmittedAt.Valid {
 			t := row.SubmittedAt.Time

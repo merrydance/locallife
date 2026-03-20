@@ -23,16 +23,16 @@ import (
 
 func randomComboSet(merchantID int64) db.ComboSet {
 	return db.ComboSet{
-		ID:            util.RandomInt(1, 1000),
-		MerchantID:    merchantID,
-		Name:          util.RandomString(8),
-		Description:   pgtype.Text{String: util.RandomString(20), Valid: true},
-		ImageUrl:      pgtype.Text{String: "https://example.com/combo.jpg", Valid: true},
-		OriginalPrice: util.RandomInt(5000, 15000),
-		ComboPrice:    util.RandomInt(4000, 12000),
-		IsOnline:      true,
-		CreatedAt:     time.Now(),
-		UpdatedAt:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ID:                util.RandomInt(1, 1000),
+		MerchantID:        merchantID,
+		Name:              util.RandomString(8),
+		Description:       pgtype.Text{String: util.RandomString(20), Valid: true},
+		ImageMediaAssetID: pgtype.Int8{},
+		OriginalPrice:     util.RandomInt(5000, 15000),
+		ComboPrice:        util.RandomInt(4000, 12000),
+		IsOnline:          true,
+		CreatedAt:         time.Now(),
+		UpdatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 }
 
@@ -201,18 +201,18 @@ func TestGetComboSetAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				detailsRow := db.GetComboSetWithDetailsRow{
-					ID:            combo.ID,
-					MerchantID:    combo.MerchantID,
-					Name:          combo.Name,
-					Description:   combo.Description,
-					ImageUrl:      combo.ImageUrl,
-					OriginalPrice: combo.OriginalPrice,
-					ComboPrice:    combo.ComboPrice,
-					IsOnline:      combo.IsOnline,
-					CreatedAt:     combo.CreatedAt,
-					UpdatedAt:     combo.UpdatedAt,
-					Dishes:        dishesJSON,
-					Tags:          tagsJSON,
+					ID:                combo.ID,
+					MerchantID:        combo.MerchantID,
+					Name:              combo.Name,
+					Description:       combo.Description,
+					ImageMediaAssetID: combo.ImageMediaAssetID,
+					OriginalPrice:     combo.OriginalPrice,
+					ComboPrice:        combo.ComboPrice,
+					IsOnline:          combo.IsOnline,
+					CreatedAt:         combo.CreatedAt,
+					UpdatedAt:         combo.UpdatedAt,
+					Dishes:            dishesJSON,
+					Tags:              tagsJSON,
 				}
 
 				store.EXPECT().

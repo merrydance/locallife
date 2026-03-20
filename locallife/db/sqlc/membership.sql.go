@@ -792,7 +792,7 @@ func (q *Queries) ListMerchantRechargeRules(ctx context.Context, merchantID int6
 }
 
 const listUserMemberships = `-- name: ListUserMemberships :many
-SELECT m.id, m.merchant_id, m.user_id, m.balance, m.total_recharged, m.total_consumed, m.created_at, m.updated_at, m.principal_balance, m.bonus_balance, mer.name as merchant_name, mer.logo_url
+SELECT m.id, m.merchant_id, m.user_id, m.balance, m.total_recharged, m.total_consumed, m.created_at, m.updated_at, m.principal_balance, m.bonus_balance, mer.name as merchant_name, mer.logo_media_asset_id
 FROM merchant_memberships m
 JOIN merchants mer ON mer.id = m.merchant_id
 WHERE m.user_id = $1
@@ -818,7 +818,7 @@ type ListUserMembershipsRow struct {
 	PrincipalBalance int64              `json:"principal_balance"`
 	BonusBalance     int64              `json:"bonus_balance"`
 	MerchantName     string             `json:"merchant_name"`
-	LogoUrl          pgtype.Text        `json:"logo_url"`
+	LogoMediaAssetID pgtype.Int8        `json:"logo_media_asset_id"`
 }
 
 func (q *Queries) ListUserMemberships(ctx context.Context, arg ListUserMembershipsParams) ([]ListUserMembershipsRow, error) {
@@ -842,7 +842,7 @@ func (q *Queries) ListUserMemberships(ctx context.Context, arg ListUserMembershi
 			&i.PrincipalBalance,
 			&i.BonusBalance,
 			&i.MerchantName,
-			&i.LogoUrl,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}

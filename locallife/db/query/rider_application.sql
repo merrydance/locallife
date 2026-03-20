@@ -32,8 +32,8 @@ RETURNING *;
 -- 更新身份证信息
 UPDATE rider_applications
 SET 
-    id_card_front_url = COALESCE(sqlc.narg(id_card_front_url), id_card_front_url),
-    id_card_back_url = COALESCE(sqlc.narg(id_card_back_url), id_card_back_url),
+    id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
+    id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
     id_card_ocr = COALESCE(sqlc.narg(id_card_ocr), id_card_ocr),
     -- OCR识别出姓名时自动更新real_name
     real_name = COALESCE(sqlc.narg(real_name), real_name),
@@ -45,7 +45,7 @@ RETURNING *;
 -- 更新健康证信息
 UPDATE rider_applications
 SET 
-    health_cert_url = COALESCE(sqlc.narg(health_cert_url), health_cert_url),
+    health_cert_media_asset_id = COALESCE(sqlc.narg(health_cert_media_asset_id), health_cert_media_asset_id),
     health_cert_ocr = COALESCE(sqlc.narg(health_cert_ocr), health_cert_ocr),
     updated_at = now()
 WHERE id = $1 AND status = 'draft'

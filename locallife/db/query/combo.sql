@@ -7,7 +7,7 @@ INSERT INTO combo_sets (
   merchant_id,
   name,
   description,
-  image_url,
+  image_media_asset_id,
   original_price,
   combo_price,
   is_online
@@ -28,7 +28,7 @@ SELECT
         'dish_id', cd.dish_id,
         'dish_name', d.name,
         'dish_price', d.price,
-        'dish_image_url', d.image_url,
+        'dish_image_media_asset_id', d.image_media_asset_id,
         'quantity', cd.quantity
       )
     ) FILTER (WHERE cd.dish_id IS NOT NULL),
@@ -65,7 +65,7 @@ UPDATE combo_sets
 SET
   name = COALESCE(sqlc.narg('name'), name),
   description = COALESCE(sqlc.narg('description'), description),
-  image_url = COALESCE(sqlc.narg('image_url'), image_url),
+  image_media_asset_id = COALESCE(sqlc.narg('image_media_asset_id'), image_media_asset_id),
   original_price = COALESCE(sqlc.narg('original_price'), original_price),
   combo_price = COALESCE(sqlc.narg('combo_price'), combo_price),
   is_online = COALESCE(sqlc.narg('is_online'), is_online),
@@ -169,7 +169,7 @@ SELECT
     cs.merchant_id,
     cs.name,
     cs.description,
-    cs.image_url,
+    cs.image_media_asset_id,
     cs.original_price,
     cs.combo_price,
     COALESCE(SUM(oi.quantity), 0)::int AS total_sold
@@ -193,7 +193,7 @@ SELECT
     merchant_id,
     name,
     description,
-    image_url,
+    image_media_asset_id,
     original_price,
     combo_price,
     is_online
@@ -211,22 +211,21 @@ SELECT
     cs.name,
     cs.description,
     COALESCE(
-        NULLIF(cs.image_url, ''),
-        (SELECT d.image_url 
+        NULLIF(cs.image_media_asset_id::text, ''),
+        (SELECT d.image_media_asset_id::text
          FROM combo_dishes cd 
          JOIN dishes d ON cd.dish_id = d.id 
          WHERE cd.combo_id = cs.id 
-           AND d.image_url IS NOT NULL 
-           AND d.image_url != ''
+           AND d.image_media_asset_id IS NOT NULL
            AND d.deleted_at IS NULL
          ORDER BY cd.id ASC 
          LIMIT 1)
-    ) AS image_url,
+    ) AS image_media_asset_id,
     cs.original_price,
     cs.combo_price,
     cs.is_online,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
@@ -254,7 +253,7 @@ SELECT
     cs.merchant_id,
     cs.name,
     cs.description,
-    cs.image_url,
+    cs.image_media_asset_id,
     cs.original_price,
     cs.combo_price AS price,
     cs.is_online,
@@ -293,13 +292,13 @@ SELECT
     cs.merchant_id,
     cs.name,
     cs.description,
-  cs.image_url,
-  dish_img.image_url AS fallback_image_url,
+    cs.image_media_asset_id,
+  dish_img.image_media_asset_id AS fallback_image_media_asset_id,
     cs.original_price,
     cs.combo_price,
     cs.is_online,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.latitude AS merchant_latitude,
     m.longitude AS merchant_longitude,
     m.region_id AS merchant_region_id,
@@ -326,12 +325,11 @@ SELECT
 FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
 LEFT JOIN LATERAL (
-    SELECT d.image_url
+    SELECT d.image_media_asset_id
     FROM combo_dishes cd
     JOIN dishes d ON cd.dish_id = d.id
     WHERE cd.combo_id = cs.id
-      AND d.image_url IS NOT NULL
-      AND d.image_url != ''
+      AND d.image_media_asset_id IS NOT NULL
       AND d.deleted_at IS NULL
     ORDER BY cd.id ASC
     LIMIT 1
@@ -372,7 +370,7 @@ WHERE
 
 -- name: GetComboMemberImagesByCombos :many
 -- 批量获取多个套餐的成员图片
-SELECT cd.combo_id, d.image_url
+SELECT cd.combo_id, d.image_media_asset_id
 FROM combo_dishes cd
 JOIN dishes d ON cd.dish_id = d.id
 WHERE cd.combo_id = ANY($1::bigint[])

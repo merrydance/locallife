@@ -20,18 +20,18 @@ func TestBuildCartResponse_DishItem(t *testing.T) {
 
 	items := []db.ListCartItemsRow{
 		{
-			ID:              10,
-			Quantity:        2,
-			DishID:          pgtype.Int8{Int64: 3, Valid: true},
-			DishName:        pgtype.Text{String: "Dish", Valid: true},
-			DishImageUrl:    pgtype.Text{String: "/img.png", Valid: true},
-			DishPrice:       pgtype.Int8{Int64: 500, Valid: true},
-			DishMemberPrice: pgtype.Int8{Int64: 450, Valid: true},
-			DishIsAvailable: pgtype.Bool{Bool: true, Valid: true},
+			ID:                    10,
+			Quantity:              2,
+			DishID:                pgtype.Int8{Int64: 3, Valid: true},
+			DishName:              pgtype.Text{String: "Dish", Valid: true},
+			DishImageMediaAssetID: pgtype.Int8{},
+			DishPrice:             pgtype.Int8{Int64: 500, Valid: true},
+			DishMemberPrice:       pgtype.Int8{Int64: 450, Valid: true},
+			DishIsAvailable:       pgtype.Bool{Bool: true, Valid: true},
 		},
 	}
 
-	resp := BuildCartResponse(cart, items, func(s string) string { return "norm:" + s })
+	resp := BuildCartResponse(cart, items)
 
 	require.Equal(t, int64(1), resp.ID)
 	require.Equal(t, int64(2), resp.MerchantID)
@@ -47,7 +47,7 @@ func TestBuildCartResponse_DishItem(t *testing.T) {
 	require.NotNil(t, item.DishID)
 	require.Equal(t, int64(3), *item.DishID)
 	require.Equal(t, "Dish", item.Name)
-	require.Equal(t, "norm:/img.png", item.ImageURL)
+	require.Nil(t, item.ImageAssetID)
 	require.Equal(t, int64(500), item.UnitPrice)
 	require.NotNil(t, item.MemberPrice)
 	require.Equal(t, int64(450), *item.MemberPrice)
@@ -63,18 +63,18 @@ func TestBuildCartResponse_Customizations(t *testing.T) {
 	cart := db.Cart{ID: 1, MerchantID: 2, OrderType: "dine_in"}
 	items := []db.ListCartItemsRow{
 		{
-			ID:               10,
-			Quantity:         1,
-			ComboID:          pgtype.Int8{Int64: 7, Valid: true},
-			ComboName:        pgtype.Text{String: "Combo", Valid: true},
-			ComboImageUrl:    pgtype.Text{String: "/combo.png", Valid: true},
-			ComboPrice:       pgtype.Int8{Int64: 1200, Valid: true},
-			ComboIsAvailable: pgtype.Bool{Bool: false, Valid: true},
-			Customizations:   blob,
+			ID:                     10,
+			Quantity:               1,
+			ComboID:                pgtype.Int8{Int64: 7, Valid: true},
+			ComboName:              pgtype.Text{String: "Combo", Valid: true},
+			ComboImageMediaAssetID: pgtype.Int8{},
+			ComboPrice:             pgtype.Int8{Int64: 1200, Valid: true},
+			ComboIsAvailable:       pgtype.Bool{Bool: false, Valid: true},
+			Customizations:         blob,
 		},
 	}
 
-	resp := BuildCartResponse(cart, items, func(s string) string { return s })
+	resp := BuildCartResponse(cart, items)
 
 	require.Equal(t, 1, len(resp.Items))
 	require.NotNil(t, resp.Items[0].Customizations)

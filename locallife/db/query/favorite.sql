@@ -26,7 +26,7 @@ SELECT
     f.created_at,
     m.id AS merchant_id,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.address AS merchant_address,
     m.status AS merchant_status
 FROM favorites f
@@ -46,7 +46,7 @@ SELECT
     d.id AS dish_id,
     d.name AS dish_name,
     d.description AS dish_description,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,

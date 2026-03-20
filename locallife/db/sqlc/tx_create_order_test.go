@@ -636,9 +636,9 @@ func createMerchantWithLocation(t *testing.T, ownerID int64) Merchant {
 		OwnerUserID: ownerID,
 		Name:        util.RandomString(10),
 		Description: pgtype.Text{String: util.RandomString(50), Valid: true},
-		LogoUrl:     pgtype.Text{String: "https://example.com/logo.jpg", Valid: true},
-		Phone:       "13800138000",
-		Address:     "北京市朝阳区测试路" + util.RandomString(8), // 添加随机后缀避免重复
+
+		Phone:   "13800138000",
+		Address: "北京市朝阳区测试路" + util.RandomString(8), // 添加随机后缀避免重复
 		// 设置经纬度（北京朝阳区）
 		Latitude:        pgtype.Numeric{Int: big.NewInt(399282), Exp: -4, Valid: true},  // 39.9282
 		Longitude:       pgtype.Numeric{Int: big.NewInt(1164507), Exp: -4, Valid: true}, // 116.4507

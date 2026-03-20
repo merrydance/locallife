@@ -89,15 +89,15 @@ type reservationResponse struct {
 }
 
 type reservationItemResponse struct {
-	ID         int64  `json:"id"`
-	DishID     *int64 `json:"dish_id,omitempty"`
-	ComboID    *int64 `json:"combo_id,omitempty"`
-	Name       string `json:"name,omitempty"`
-	ImageURL   string `json:"image_url,omitempty"`
-	Quantity   int16  `json:"quantity"`
-	UnitPrice  int64  `json:"unit_price"`
-	TotalPrice int64  `json:"total_price"`
-	Type       string `json:"type,omitempty"`
+	ID           int64  `json:"id"`
+	DishID       *int64 `json:"dish_id,omitempty"`
+	ComboID      *int64 `json:"combo_id,omitempty"`
+	Name         string `json:"name,omitempty"`
+	ImageAssetID *int64 `json:"image_asset_id,omitempty"`
+	Quantity     int16  `json:"quantity"`
+	UnitPrice    int64  `json:"unit_price"`
+	TotalPrice   int64  `json:"total_price"`
+	Type         string `json:"type,omitempty"`
 }
 
 type reservationListResponse struct {
@@ -284,8 +284,8 @@ func mapOrderItemsToReservationItems(items []db.ListOrderItemsWithDishByOrderRow
 			mapped.ComboID = &item.ComboID.Int64
 			mapped.Type = "combo"
 		}
-		if item.DishImageUrl.Valid {
-			mapped.ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
+		if item.DishImageMediaAssetID.Valid {
+			mapped.ImageAssetID = &item.DishImageMediaAssetID.Int64
 		}
 
 		resp = append(resp, mapped)
@@ -1049,8 +1049,8 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 					if item.DishName.Valid {
 						resp[i].Items[j].Name = item.DishName.String
 					}
-					if item.DishImageUrl.Valid {
-						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
+					if item.DishImageMediaAssetID.Valid {
+						resp[i].Items[j].ImageAssetID = &item.DishImageMediaAssetID.Int64
 					}
 				} else if item.ComboID.Valid {
 					resp[i].Items[j].ComboID = &item.ComboID.Int64
@@ -1058,8 +1058,8 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 					if item.ComboName.Valid {
 						resp[i].Items[j].Name = item.ComboName.String
 					}
-					if item.ComboImageUrl.Valid {
-						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.ComboImageUrl.String)
+					if item.ComboImageMediaAssetID.Valid {
+						resp[i].Items[j].ImageAssetID = &item.ComboImageMediaAssetID.Int64
 					}
 				}
 			}
@@ -1903,8 +1903,8 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 					if item.DishName.Valid {
 						resp[i].Items[j].Name = item.DishName.String
 					}
-					if item.DishImageUrl.Valid {
-						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.DishImageUrl.String)
+					if item.DishImageMediaAssetID.Valid {
+						resp[i].Items[j].ImageAssetID = &item.DishImageMediaAssetID.Int64
 					}
 				} else if item.ComboID.Valid {
 					resp[i].Items[j].ComboID = &item.ComboID.Int64
@@ -1912,8 +1912,8 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 					if item.ComboName.Valid {
 						resp[i].Items[j].Name = item.ComboName.String
 					}
-					if item.ComboImageUrl.Valid {
-						resp[i].Items[j].ImageURL = normalizeUploadURLForClient(item.ComboImageUrl.String)
+					if item.ComboImageMediaAssetID.Valid {
+						resp[i].Items[j].ImageAssetID = &item.ComboImageMediaAssetID.Int64
 					}
 				}
 			}

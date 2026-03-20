@@ -33,13 +33,13 @@ type operatorApplicationResponse struct {
 	Name                   string                  `json:"name,omitempty"`
 	ContactName            string                  `json:"contact_name,omitempty"`
 	ContactPhone           string                  `json:"contact_phone,omitempty"`
-	BusinessLicenseURL     string                  `json:"business_license_url,omitempty"`
+	BusinessLicenseAssetID *int64                  `json:"business_license_asset_id,omitempty"`
 	BusinessLicenseNumber  string                  `json:"business_license_number,omitempty"`
 	BusinessLicenseOCR     *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
 	LegalPersonName        string                  `json:"legal_person_name,omitempty"`
 	LegalPersonIDNumber    string                  `json:"legal_person_id_number,omitempty"`
-	IDCardFrontURL         string                  `json:"id_card_front_url,omitempty"`
-	IDCardBackURL          string                  `json:"id_card_back_url,omitempty"`
+	IDCardFrontAssetID     *int64                  `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID      *int64                  `json:"id_card_back_asset_id,omitempty"`
 	IDCardFrontOCR         *OperatorIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
 	IDCardBackOCR          *OperatorIDCardBackOCR  `json:"id_card_back_ocr,omitempty"`
 	RequestedContractYears int32                   `json:"requested_contract_years"`
@@ -91,8 +91,9 @@ func newOperatorApplicationResponse(app db.OperatorApplication, regionName strin
 	if app.ContactPhone.Valid {
 		resp.ContactPhone = app.ContactPhone.String
 	}
-	if app.BusinessLicenseUrl.Valid {
-		resp.BusinessLicenseURL = app.BusinessLicenseUrl.String
+	if app.BusinessLicenseMediaAssetID.Valid {
+		v := app.BusinessLicenseMediaAssetID.Int64
+		resp.BusinessLicenseAssetID = &v
 	}
 	if app.BusinessLicenseNumber.Valid {
 		resp.BusinessLicenseNumber = app.BusinessLicenseNumber.String
@@ -103,11 +104,13 @@ func newOperatorApplicationResponse(app db.OperatorApplication, regionName strin
 	if app.LegalPersonIDNumber.Valid {
 		resp.LegalPersonIDNumber = app.LegalPersonIDNumber.String
 	}
-	if app.IDCardFrontUrl.Valid {
-		resp.IDCardFrontURL = app.IDCardFrontUrl.String
+	if app.IDCardFrontMediaAssetID.Valid {
+		v := app.IDCardFrontMediaAssetID.Int64
+		resp.IDCardFrontAssetID = &v
 	}
-	if app.IDCardBackUrl.Valid {
-		resp.IDCardBackURL = app.IDCardBackUrl.String
+	if app.IDCardBackMediaAssetID.Valid {
+		v := app.IDCardBackMediaAssetID.Int64
+		resp.IDCardBackAssetID = &v
 	}
 	if app.RejectReason.Valid {
 		resp.RejectReason = app.RejectReason.String
@@ -519,15 +522,13 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 记录旧图片路径，上传成功后删除
+	// TODO(media-service): oldImageURL was used to delete old file; now handled by media service
 	oldImageURL := ""
-	if app.BusinessLicenseUrl.Valid {
-		oldImageURL = app.BusinessLicenseUrl.String
-	}
+	_ = oldImageURL
 
 	// 保存图片
 	uploader := util.NewFileUploader("uploads")
-	imageURL, err := uploader.UploadOperatorImage(authPayload.UserID, "license", file, fileHeader)
+	_, err = uploader.UploadOperatorImage(authPayload.UserID, "license", file, fileHeader)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -548,8 +549,8 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 
 	// 构建更新参数
 	arg := db.UpdateOperatorApplicationBusinessLicenseParams{
-		ID:                 app.ID,
-		BusinessLicenseUrl: pgtype.Text{String: imageURL, Valid: true},
+		ID: app.ID,
+		// TODO(media-service): set BusinessLicenseMediaAssetID after media upload
 	}
 
 	if ocrResult != nil {
@@ -659,21 +660,13 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 记录旧图片路径，上传成功后删除
+	// TODO(media-service): oldIDCardURL was used to delete old file; now handled by media service
 	var oldIDCardURL string
-	if side == "Front" {
-		if app.IDCardFrontUrl.Valid {
-			oldIDCardURL = app.IDCardFrontUrl.String
-		}
-	} else {
-		if app.IDCardBackUrl.Valid {
-			oldIDCardURL = app.IDCardBackUrl.String
-		}
-	}
+	_ = oldIDCardURL
 
 	// 保存图片
 	uploader := util.NewFileUploader("uploads")
-	imageURL, err := uploader.UploadOperatorImage(authPayload.UserID, "idcard_"+side, file, fileHeader)
+	_, err = uploader.UploadOperatorImage(authPayload.UserID, "idcard_"+side, file, fileHeader)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -695,8 +688,8 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 
 	if side == "Front" {
 		arg := db.UpdateOperatorApplicationIDCardFrontParams{
-			ID:             app.ID,
-			IDCardFrontUrl: pgtype.Text{String: imageURL, Valid: true},
+			ID: app.ID,
+			// TODO(media-service): set IDCardFrontMediaAssetID after media upload
 		}
 
 		if ocrResult != nil {
@@ -723,8 +716,8 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 		updatedApp, err = server.store.UpdateOperatorApplicationIDCardFront(ctx, arg)
 	} else {
 		arg := db.UpdateOperatorApplicationIDCardBackParams{
-			ID:            app.ID,
-			IDCardBackUrl: pgtype.Text{String: imageURL, Valid: true},
+			ID: app.ID,
+			// TODO(media-service): set IDCardBackMediaAssetID after media upload
 		}
 
 		if ocrResult != nil && ocrResult.ValidDate != "" {
@@ -857,10 +850,10 @@ func validateOperatorApplicationRequired(app db.OperatorApplication) error {
 	if !app.ContactPhone.Valid || app.ContactPhone.String == "" {
 		return ErrPhoneRequired
 	}
-	if !app.IDCardFrontUrl.Valid || app.IDCardFrontUrl.String == "" {
+	if !app.IDCardFrontMediaAssetID.Valid {
 		return ErrLegalRepIDCardFrontRequired
 	}
-	if !app.IDCardBackUrl.Valid || app.IDCardBackUrl.String == "" {
+	if !app.IDCardBackMediaAssetID.Valid {
 		return ErrLegalRepIDCardBackRequired
 	}
 	return nil

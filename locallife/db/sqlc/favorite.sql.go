@@ -135,7 +135,7 @@ SELECT
     d.id AS dish_id,
     d.name AS dish_name,
     d.description AS dish_description,
-    d.image_url AS dish_image_url,
+    d.image_media_asset_id AS dish_image_media_asset_id,
     d.price AS dish_price,
     d.member_price AS dish_member_price,
     d.is_available AS dish_is_available,
@@ -157,18 +157,18 @@ type ListFavoriteDishesParams struct {
 }
 
 type ListFavoriteDishesRow struct {
-	ID              int64       `json:"id"`
-	CreatedAt       time.Time   `json:"created_at"`
-	DishID          int64       `json:"dish_id"`
-	DishName        string      `json:"dish_name"`
-	DishDescription pgtype.Text `json:"dish_description"`
-	DishImageUrl    pgtype.Text `json:"dish_image_url"`
-	DishPrice       int64       `json:"dish_price"`
-	DishMemberPrice pgtype.Int8 `json:"dish_member_price"`
-	DishIsAvailable bool        `json:"dish_is_available"`
-	DishIsOnline    bool        `json:"dish_is_online"`
-	MerchantID      int64       `json:"merchant_id"`
-	MerchantName    string      `json:"merchant_name"`
+	ID                    int64       `json:"id"`
+	CreatedAt             time.Time   `json:"created_at"`
+	DishID                int64       `json:"dish_id"`
+	DishName              string      `json:"dish_name"`
+	DishDescription       pgtype.Text `json:"dish_description"`
+	DishImageMediaAssetID pgtype.Int8 `json:"dish_image_media_asset_id"`
+	DishPrice             int64       `json:"dish_price"`
+	DishMemberPrice       pgtype.Int8 `json:"dish_member_price"`
+	DishIsAvailable       bool        `json:"dish_is_available"`
+	DishIsOnline          bool        `json:"dish_is_online"`
+	MerchantID            int64       `json:"merchant_id"`
+	MerchantName          string      `json:"merchant_name"`
 }
 
 func (q *Queries) ListFavoriteDishes(ctx context.Context, arg ListFavoriteDishesParams) ([]ListFavoriteDishesRow, error) {
@@ -186,7 +186,7 @@ func (q *Queries) ListFavoriteDishes(ctx context.Context, arg ListFavoriteDishes
 			&i.DishID,
 			&i.DishName,
 			&i.DishDescription,
-			&i.DishImageUrl,
+			&i.DishImageMediaAssetID,
 			&i.DishPrice,
 			&i.DishMemberPrice,
 			&i.DishIsAvailable,
@@ -210,7 +210,7 @@ SELECT
     f.created_at,
     m.id AS merchant_id,
     m.name AS merchant_name,
-    m.logo_url AS merchant_logo,
+    m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.address AS merchant_address,
     m.status AS merchant_status
 FROM favorites f
@@ -227,13 +227,13 @@ type ListFavoriteMerchantsParams struct {
 }
 
 type ListFavoriteMerchantsRow struct {
-	ID              int64       `json:"id"`
-	CreatedAt       time.Time   `json:"created_at"`
-	MerchantID      int64       `json:"merchant_id"`
-	MerchantName    string      `json:"merchant_name"`
-	MerchantLogo    pgtype.Text `json:"merchant_logo"`
-	MerchantAddress string      `json:"merchant_address"`
-	MerchantStatus  string      `json:"merchant_status"`
+	ID                       int64       `json:"id"`
+	CreatedAt                time.Time   `json:"created_at"`
+	MerchantID               int64       `json:"merchant_id"`
+	MerchantName             string      `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8 `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string      `json:"merchant_address"`
+	MerchantStatus           string      `json:"merchant_status"`
 }
 
 func (q *Queries) ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMerchantsParams) ([]ListFavoriteMerchantsRow, error) {
@@ -250,7 +250,7 @@ func (q *Queries) ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMer
 			&i.CreatedAt,
 			&i.MerchantID,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantStatus,
 		); err != nil {

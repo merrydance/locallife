@@ -49,7 +49,7 @@ INSERT INTO merchant_group_applications (
   applicant_user_id, group_name, contact_phone
 ) VALUES (
   $1, '', ''
-) RETURNING id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
+) RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
 `
 
 // Group applications
@@ -62,7 +62,6 @@ func (q *Queries) CreateGroupApplicationDraft(ctx context.Context, applicantUser
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -72,6 +71,7 @@ func (q *Queries) CreateGroupApplicationDraft(ctx context.Context, applicantUser
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
@@ -226,24 +226,24 @@ func (q *Queries) CreateGroupMenuTemplate(ctx context.Context, arg CreateGroupMe
 
 const createMerchantBrand = `-- name: CreateMerchantBrand :one
 INSERT INTO merchant_brands (
-  group_id, name, logo_url, description
+  group_id, name, logo_media_asset_id, description
 ) VALUES (
   $1, $2, $3, $4
-) RETURNING id, group_id, name, logo_url, description, status, created_at, updated_at
+) RETURNING id, group_id, name, description, status, created_at, updated_at, logo_media_asset_id
 `
 
 type CreateMerchantBrandParams struct {
-	GroupID     int64       `json:"group_id"`
-	Name        string      `json:"name"`
-	LogoUrl     pgtype.Text `json:"logo_url"`
-	Description pgtype.Text `json:"description"`
+	GroupID          int64       `json:"group_id"`
+	Name             string      `json:"name"`
+	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
+	Description      pgtype.Text `json:"description"`
 }
 
 func (q *Queries) CreateMerchantBrand(ctx context.Context, arg CreateMerchantBrandParams) (MerchantBrand, error) {
 	row := q.db.QueryRow(ctx, createMerchantBrand,
 		arg.GroupID,
 		arg.Name,
-		arg.LogoUrl,
+		arg.LogoMediaAssetID,
 		arg.Description,
 	)
 	var i MerchantBrand
@@ -251,32 +251,32 @@ func (q *Queries) CreateMerchantBrand(ctx context.Context, arg CreateMerchantBra
 		&i.ID,
 		&i.GroupID,
 		&i.Name,
-		&i.LogoUrl,
 		&i.Description,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
 
 const createMerchantGroup = `-- name: CreateMerchantGroup :one
 INSERT INTO merchant_groups (
-  name, owner_user_id, contact_phone, license_number, license_image_url, address, region_id, application_data
+  name, owner_user_id, contact_phone, license_number, license_media_asset_id, address, region_id, application_data
 ) VALUES (
   $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, name, owner_user_id, status, contact_phone, license_number, license_image_url, address, region_id, application_data, created_at, updated_at
+) RETURNING id, name, owner_user_id, status, contact_phone, license_number, address, region_id, application_data, created_at, updated_at, license_media_asset_id
 `
 
 type CreateMerchantGroupParams struct {
-	Name            string      `json:"name"`
-	OwnerUserID     int64       `json:"owner_user_id"`
-	ContactPhone    pgtype.Text `json:"contact_phone"`
-	LicenseNumber   pgtype.Text `json:"license_number"`
-	LicenseImageUrl pgtype.Text `json:"license_image_url"`
-	Address         pgtype.Text `json:"address"`
-	RegionID        pgtype.Int8 `json:"region_id"`
-	ApplicationData []byte      `json:"application_data"`
+	Name                string      `json:"name"`
+	OwnerUserID         int64       `json:"owner_user_id"`
+	ContactPhone        pgtype.Text `json:"contact_phone"`
+	LicenseNumber       pgtype.Text `json:"license_number"`
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
+	Address             pgtype.Text `json:"address"`
+	RegionID            pgtype.Int8 `json:"region_id"`
+	ApplicationData     []byte      `json:"application_data"`
 }
 
 // Groups
@@ -286,7 +286,7 @@ func (q *Queries) CreateMerchantGroup(ctx context.Context, arg CreateMerchantGro
 		arg.OwnerUserID,
 		arg.ContactPhone,
 		arg.LicenseNumber,
-		arg.LicenseImageUrl,
+		arg.LicenseMediaAssetID,
 		arg.Address,
 		arg.RegionID,
 		arg.ApplicationData,
@@ -299,18 +299,18 @@ func (q *Queries) CreateMerchantGroup(ctx context.Context, arg CreateMerchantGro
 		&i.Status,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
 
 const getGroupApplication = `-- name: GetGroupApplication :one
-SELECT id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at FROM merchant_group_applications
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
 WHERE id = $1
 `
 
@@ -323,7 +323,6 @@ func (q *Queries) GetGroupApplication(ctx context.Context, id int64) (MerchantGr
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -333,6 +332,7 @@ func (q *Queries) GetGroupApplication(ctx context.Context, id int64) (MerchantGr
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
@@ -393,7 +393,7 @@ func (q *Queries) GetGroupPolicies(ctx context.Context, groupID int64) (GroupPol
 }
 
 const getLatestGroupApplicationByApplicant = `-- name: GetLatestGroupApplicationByApplicant :one
-SELECT id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at FROM merchant_group_applications
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id FROM merchant_group_applications
 WHERE applicant_user_id = $1
 ORDER BY created_at DESC
 LIMIT 1
@@ -408,7 +408,6 @@ func (q *Queries) GetLatestGroupApplicationByApplicant(ctx context.Context, appl
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -418,12 +417,13 @@ func (q *Queries) GetLatestGroupApplicationByApplicant(ctx context.Context, appl
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
 
 const getMerchantBrand = `-- name: GetMerchantBrand :one
-SELECT id, group_id, name, logo_url, description, status, created_at, updated_at FROM merchant_brands WHERE id = $1
+SELECT id, group_id, name, description, status, created_at, updated_at, logo_media_asset_id FROM merchant_brands WHERE id = $1
 `
 
 func (q *Queries) GetMerchantBrand(ctx context.Context, id int64) (MerchantBrand, error) {
@@ -433,17 +433,17 @@ func (q *Queries) GetMerchantBrand(ctx context.Context, id int64) (MerchantBrand
 		&i.ID,
 		&i.GroupID,
 		&i.Name,
-		&i.LogoUrl,
 		&i.Description,
 		&i.Status,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LogoMediaAssetID,
 	)
 	return i, err
 }
 
 const getMerchantGroup = `-- name: GetMerchantGroup :one
-SELECT id, name, owner_user_id, status, contact_phone, license_number, license_image_url, address, region_id, application_data, created_at, updated_at FROM merchant_groups
+SELECT id, name, owner_user_id, status, contact_phone, license_number, address, region_id, application_data, created_at, updated_at, license_media_asset_id FROM merchant_groups
 WHERE id = $1
 `
 
@@ -457,12 +457,12 @@ func (q *Queries) GetMerchantGroup(ctx context.Context, id int64) (MerchantGroup
 		&i.Status,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
@@ -520,16 +520,16 @@ func (q *Queries) ListGroupJoinRequestsByGroup(ctx context.Context, groupID int6
 }
 
 const listGroupMerchants = `-- name: ListGroupMerchants :many
-SELECT id, name, logo_url, address, phone, status FROM merchants WHERE group_id = $1 ORDER BY created_at DESC
+SELECT id, name, logo_media_asset_id, address, phone, status FROM merchants WHERE group_id = $1 ORDER BY created_at DESC
 `
 
 type ListGroupMerchantsRow struct {
-	ID      int64       `json:"id"`
-	Name    string      `json:"name"`
-	LogoUrl pgtype.Text `json:"logo_url"`
-	Address string      `json:"address"`
-	Phone   string      `json:"phone"`
-	Status  string      `json:"status"`
+	ID               int64       `json:"id"`
+	Name             string      `json:"name"`
+	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
+	Address          string      `json:"address"`
+	Phone            string      `json:"phone"`
+	Status           string      `json:"status"`
 }
 
 // Group merchants
@@ -545,7 +545,7 @@ func (q *Queries) ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) (
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
-			&i.LogoUrl,
+			&i.LogoMediaAssetID,
 			&i.Address,
 			&i.Phone,
 			&i.Status,
@@ -561,7 +561,7 @@ func (q *Queries) ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) (
 }
 
 const listMerchantBrandsByGroup = `-- name: ListMerchantBrandsByGroup :many
-SELECT id, group_id, name, logo_url, description, status, created_at, updated_at FROM merchant_brands WHERE group_id = $1 ORDER BY created_at DESC
+SELECT id, group_id, name, description, status, created_at, updated_at, logo_media_asset_id FROM merchant_brands WHERE group_id = $1 ORDER BY created_at DESC
 `
 
 func (q *Queries) ListMerchantBrandsByGroup(ctx context.Context, groupID int64) ([]MerchantBrand, error) {
@@ -577,11 +577,11 @@ func (q *Queries) ListMerchantBrandsByGroup(ctx context.Context, groupID int64) 
 			&i.ID,
 			&i.GroupID,
 			&i.Name,
-			&i.LogoUrl,
 			&i.Description,
 			&i.Status,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -594,7 +594,7 @@ func (q *Queries) ListMerchantBrandsByGroup(ctx context.Context, groupID int64) 
 }
 
 const listMerchantGroups = `-- name: ListMerchantGroups :many
-SELECT id, name, owner_user_id, status, contact_phone, license_number, license_image_url, address, region_id, application_data, created_at, updated_at FROM merchant_groups
+SELECT id, name, owner_user_id, status, contact_phone, license_number, address, region_id, application_data, created_at, updated_at, license_media_asset_id FROM merchant_groups
 WHERE status = 'active'
   AND ($1::text IS NULL OR name ILIKE '%' || $1 || '%')
 ORDER BY created_at DESC
@@ -623,12 +623,12 @@ func (q *Queries) ListMerchantGroups(ctx context.Context, arg ListMerchantGroups
 			&i.Status,
 			&i.ContactPhone,
 			&i.LicenseNumber,
-			&i.LicenseImageUrl,
 			&i.Address,
 			&i.RegionID,
 			&i.ApplicationData,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.LicenseMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -648,7 +648,7 @@ SET status = 'draft',
     reviewed_at = NULL,
     updated_at = now()
 WHERE id = $1
-RETURNING id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
 `
 
 func (q *Queries) ResetGroupApplicationToDraft(ctx context.Context, id int64) (MerchantGroupApplication, error) {
@@ -660,7 +660,6 @@ func (q *Queries) ResetGroupApplicationToDraft(ctx context.Context, id int64) (M
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -670,6 +669,7 @@ func (q *Queries) ResetGroupApplicationToDraft(ctx context.Context, id int64) (M
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
@@ -682,7 +682,7 @@ SET status = $2,
     reviewed_at = $5,
     updated_at = now()
 WHERE id = $1
-RETURNING id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
 `
 
 type ReviewGroupApplicationParams struct {
@@ -708,7 +708,6 @@ func (q *Queries) ReviewGroupApplication(ctx context.Context, arg ReviewGroupApp
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -718,6 +717,7 @@ func (q *Queries) ReviewGroupApplication(ctx context.Context, arg ReviewGroupApp
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
@@ -726,7 +726,7 @@ const submitGroupApplication = `-- name: SubmitGroupApplication :one
 UPDATE merchant_group_applications
 SET status = 'submitted', updated_at = now()
 WHERE id = $1
-RETURNING id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
 `
 
 func (q *Queries) SubmitGroupApplication(ctx context.Context, id int64) (MerchantGroupApplication, error) {
@@ -738,7 +738,6 @@ func (q *Queries) SubmitGroupApplication(ctx context.Context, id int64) (Merchan
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -748,6 +747,7 @@ func (q *Queries) SubmitGroupApplication(ctx context.Context, id int64) (Merchan
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
@@ -757,22 +757,22 @@ UPDATE merchant_group_applications
 SET group_name = COALESCE($2, group_name),
     contact_phone = COALESCE($3, contact_phone),
     license_number = COALESCE($4, license_number),
-    license_image_url = COALESCE($5, license_image_url),
+    license_media_asset_id = COALESCE($5, license_media_asset_id),
     address = COALESCE($6, address),
     region_id = COALESCE($7, region_id),
     updated_at = now()
 WHERE id = $1
-RETURNING id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
 `
 
 type UpdateGroupApplicationBasicParams struct {
-	ID              int64       `json:"id"`
-	GroupName       string      `json:"group_name"`
-	ContactPhone    string      `json:"contact_phone"`
-	LicenseNumber   pgtype.Text `json:"license_number"`
-	LicenseImageUrl pgtype.Text `json:"license_image_url"`
-	Address         pgtype.Text `json:"address"`
-	RegionID        pgtype.Int8 `json:"region_id"`
+	ID                  int64       `json:"id"`
+	GroupName           string      `json:"group_name"`
+	ContactPhone        string      `json:"contact_phone"`
+	LicenseNumber       pgtype.Text `json:"license_number"`
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
+	Address             pgtype.Text `json:"address"`
+	RegionID            pgtype.Int8 `json:"region_id"`
 }
 
 func (q *Queries) UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGroupApplicationBasicParams) (MerchantGroupApplication, error) {
@@ -781,7 +781,7 @@ func (q *Queries) UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGro
 		arg.GroupName,
 		arg.ContactPhone,
 		arg.LicenseNumber,
-		arg.LicenseImageUrl,
+		arg.LicenseMediaAssetID,
 		arg.Address,
 		arg.RegionID,
 	)
@@ -792,7 +792,6 @@ func (q *Queries) UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGro
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -802,31 +801,32 @@ func (q *Queries) UpdateGroupApplicationBasic(ctx context.Context, arg UpdateGro
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
 
 const updateGroupApplicationLicense = `-- name: UpdateGroupApplicationLicense :one
 UPDATE merchant_group_applications
-SET license_image_url = COALESCE($2, license_image_url),
+SET license_media_asset_id = COALESCE($2, license_media_asset_id),
     license_number = COALESCE($3, license_number),
     application_data = COALESCE($4, application_data),
     updated_at = now()
 WHERE id = $1
-RETURNING id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
 `
 
 type UpdateGroupApplicationLicenseParams struct {
-	ID              int64       `json:"id"`
-	LicenseImageUrl pgtype.Text `json:"license_image_url"`
-	LicenseNumber   pgtype.Text `json:"license_number"`
-	ApplicationData []byte      `json:"application_data"`
+	ID                  int64       `json:"id"`
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
+	LicenseNumber       pgtype.Text `json:"license_number"`
+	ApplicationData     []byte      `json:"application_data"`
 }
 
 func (q *Queries) UpdateGroupApplicationLicense(ctx context.Context, arg UpdateGroupApplicationLicenseParams) (MerchantGroupApplication, error) {
 	row := q.db.QueryRow(ctx, updateGroupApplicationLicense,
 		arg.ID,
-		arg.LicenseImageUrl,
+		arg.LicenseMediaAssetID,
 		arg.LicenseNumber,
 		arg.ApplicationData,
 	)
@@ -837,7 +837,6 @@ func (q *Queries) UpdateGroupApplicationLicense(ctx context.Context, arg UpdateG
 		&i.GroupName,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.Status,
@@ -847,6 +846,7 @@ func (q *Queries) UpdateGroupApplicationLicense(ctx context.Context, arg UpdateG
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }
@@ -894,24 +894,24 @@ UPDATE merchant_groups
 SET name = COALESCE($2, name),
     contact_phone = COALESCE($3, contact_phone),
     license_number = COALESCE($4, license_number),
-    license_image_url = COALESCE($5, license_image_url),
+    license_media_asset_id = COALESCE($5, license_media_asset_id),
     address = COALESCE($6, address),
     region_id = COALESCE($7, region_id),
     status = COALESCE($8, status),
     updated_at = now()
 WHERE id = $1
-RETURNING id, name, owner_user_id, status, contact_phone, license_number, license_image_url, address, region_id, application_data, created_at, updated_at
+RETURNING id, name, owner_user_id, status, contact_phone, license_number, address, region_id, application_data, created_at, updated_at, license_media_asset_id
 `
 
 type UpdateMerchantGroupParams struct {
-	ID              int64       `json:"id"`
-	Name            string      `json:"name"`
-	ContactPhone    pgtype.Text `json:"contact_phone"`
-	LicenseNumber   pgtype.Text `json:"license_number"`
-	LicenseImageUrl pgtype.Text `json:"license_image_url"`
-	Address         pgtype.Text `json:"address"`
-	RegionID        pgtype.Int8 `json:"region_id"`
-	Status          string      `json:"status"`
+	ID                  int64       `json:"id"`
+	Name                string      `json:"name"`
+	ContactPhone        pgtype.Text `json:"contact_phone"`
+	LicenseNumber       pgtype.Text `json:"license_number"`
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
+	Address             pgtype.Text `json:"address"`
+	RegionID            pgtype.Int8 `json:"region_id"`
+	Status              string      `json:"status"`
 }
 
 func (q *Queries) UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGroupParams) (MerchantGroup, error) {
@@ -920,7 +920,7 @@ func (q *Queries) UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGro
 		arg.Name,
 		arg.ContactPhone,
 		arg.LicenseNumber,
-		arg.LicenseImageUrl,
+		arg.LicenseMediaAssetID,
 		arg.Address,
 		arg.RegionID,
 		arg.Status,
@@ -933,12 +933,12 @@ func (q *Queries) UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGro
 		&i.Status,
 		&i.ContactPhone,
 		&i.LicenseNumber,
-		&i.LicenseImageUrl,
 		&i.Address,
 		&i.RegionID,
 		&i.ApplicationData,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
 	)
 	return i, err
 }

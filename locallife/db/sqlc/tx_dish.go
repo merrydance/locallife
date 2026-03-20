@@ -13,7 +13,6 @@ type CreateDishTxParams struct {
 	CategoryID    pgtype.Int8
 	Name          string
 	Description   pgtype.Text
-	ImageUrl      pgtype.Text
 	Price         int64
 	MemberPrice   pgtype.Int8
 	IsAvailable   bool
@@ -45,7 +44,6 @@ func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams)
 			CategoryID:  arg.CategoryID,
 			Name:        arg.Name,
 			Description: arg.Description,
-			ImageUrl:    arg.ImageUrl,
 			Price:       arg.Price,
 			MemberPrice: arg.MemberPrice,
 			IsAvailable: arg.IsAvailable,
@@ -91,19 +89,19 @@ func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams)
 
 // UpdateDishTxParams contains the input parameters for updating a dish with ingredients and tags
 type UpdateDishTxParams struct {
-	ID            int64
-	CategoryID    pgtype.Int8
-	Name          pgtype.Text
-	Description   pgtype.Text
-	ImageUrl      pgtype.Text
-	Price         pgtype.Int8
-	MemberPrice   pgtype.Int8
-	IsAvailable   pgtype.Bool
-	IsOnline      pgtype.Bool
-	SortOrder     pgtype.Int2
-	PrepareTime   pgtype.Int2
-	IngredientIDs *[]int64 // nil means don't update, empty slice means clear all
-	TagIDs        *[]int64 // nil means don't update, empty slice means clear all
+	ID                int64
+	CategoryID        pgtype.Int8
+	Name              pgtype.Text
+	Description       pgtype.Text
+	ImageMediaAssetID pgtype.Int8
+	Price             pgtype.Int8
+	MemberPrice       pgtype.Int8
+	IsAvailable       pgtype.Bool
+	IsOnline          pgtype.Bool
+	SortOrder         pgtype.Int2
+	PrepareTime       pgtype.Int2
+	IngredientIDs     *[]int64 // nil means don't update, empty slice means clear all
+	TagIDs            *[]int64 // nil means don't update, empty slice means clear all
 }
 
 // UpdateDishTxResult contains the result of the update dish transaction
@@ -122,17 +120,17 @@ func (store *SQLStore) UpdateDishTx(ctx context.Context, arg UpdateDishTxParams)
 
 		// Step 1: Update dish
 		result.Dish, err = q.UpdateDish(ctx, UpdateDishParams{
-			ID:          arg.ID,
-			CategoryID:  arg.CategoryID,
-			Name:        arg.Name,
-			Description: arg.Description,
-			ImageUrl:    arg.ImageUrl,
-			Price:       arg.Price,
-			MemberPrice: arg.MemberPrice,
-			IsAvailable: arg.IsAvailable,
-			IsOnline:    arg.IsOnline,
-			SortOrder:   arg.SortOrder,
-			PrepareTime: arg.PrepareTime,
+			ID:                arg.ID,
+			CategoryID:        arg.CategoryID,
+			Name:              arg.Name,
+			Description:       arg.Description,
+			ImageMediaAssetID: arg.ImageMediaAssetID,
+			Price:             arg.Price,
+			MemberPrice:       arg.MemberPrice,
+			IsAvailable:       arg.IsAvailable,
+			IsOnline:          arg.IsOnline,
+			SortOrder:         arg.SortOrder,
+			PrepareTime:       arg.PrepareTime,
 		})
 		if err != nil {
 			return fmt.Errorf("update dish: %w", err)

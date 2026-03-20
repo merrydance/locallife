@@ -97,32 +97,32 @@ type MerchantIDCardOCRData struct {
 
 // merchantApplicationDraftResponse 商户申请草稿响应
 type merchantApplicationDraftResponse struct {
-	ID                      int64                   `json:"id"`
-	UserID                  int64                   `json:"user_id"`
-	MerchantName            string                  `json:"merchant_name"`
-	ContactPhone            string                  `json:"contact_phone"`
-	BusinessAddress         string                  `json:"business_address"`
-	Longitude               *string                 `json:"longitude,omitempty"`
-	Latitude                *string                 `json:"latitude,omitempty"`
-	RegionID                *int64                  `json:"region_id,omitempty"`
-	BusinessLicenseImageURL string                  `json:"business_license_image_url"`
-	BusinessLicenseNumber   string                  `json:"business_license_number"`
-	BusinessScope           *string                 `json:"business_scope,omitempty"`
-	BusinessLicenseOCR      *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
-	FoodPermitURL           *string                 `json:"food_permit_url,omitempty"`
-	FoodPermitOCR           *FoodPermitOCRData      `json:"food_permit_ocr,omitempty"`
-	LegalPersonName         string                  `json:"legal_person_name"`
-	LegalPersonIDNumber     string                  `json:"legal_person_id_number"`
-	LegalPersonIDFrontURL   string                  `json:"legal_person_id_front_url"`
-	LegalPersonIDBackURL    string                  `json:"legal_person_id_back_url"`
-	IDCardFrontOCR          *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
-	IDCardBackOCR           *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
-	StorefrontImages        []string                `json:"storefront_images,omitempty"`
-	EnvironmentImages       []string                `json:"environment_images,omitempty"`
-	Status                  string                  `json:"status"`
-	RejectReason            *string                 `json:"reject_reason,omitempty"`
-	CreatedAt               time.Time               `json:"created_at"`
-	UpdatedAt               time.Time               `json:"updated_at"`
+	ID                          int64                   `json:"id"`
+	UserID                      int64                   `json:"user_id"`
+	MerchantName                string                  `json:"merchant_name"`
+	ContactPhone                string                  `json:"contact_phone"`
+	BusinessAddress             string                  `json:"business_address"`
+	Longitude                   *string                 `json:"longitude,omitempty"`
+	Latitude                    *string                 `json:"latitude,omitempty"`
+	RegionID                    *int64                  `json:"region_id,omitempty"`
+	BusinessLicenseMediaAssetID *int64                  `json:"business_license_media_asset_id,omitempty"`
+	BusinessLicenseNumber       string                  `json:"business_license_number"`
+	BusinessScope               *string                 `json:"business_scope,omitempty"`
+	BusinessLicenseOCR          *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
+	FoodPermitMediaAssetID      *int64                  `json:"food_permit_media_asset_id,omitempty"`
+	FoodPermitOCR               *FoodPermitOCRData      `json:"food_permit_ocr,omitempty"`
+	LegalPersonName             string                  `json:"legal_person_name"`
+	LegalPersonIDNumber         string                  `json:"legal_person_id_number"`
+	IDCardFrontMediaAssetID     *int64                  `json:"id_card_front_media_asset_id,omitempty"`
+	IDCardBackMediaAssetID      *int64                  `json:"id_card_back_media_asset_id,omitempty"`
+	IDCardFrontOCR              *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
+	IDCardBackOCR               *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
+	StorefrontImages            []string                `json:"storefront_images,omitempty"`
+	EnvironmentImages           []string                `json:"environment_images,omitempty"`
+	Status                      string                  `json:"status"`
+	RejectReason                *string                 `json:"reject_reason,omitempty"`
+	CreatedAt                   time.Time               `json:"created_at"`
+	UpdatedAt                   time.Time               `json:"updated_at"`
 }
 
 func marshalOCRTaskPending() []byte {
@@ -151,20 +151,20 @@ func checkApplicationEditable(status string) (editable bool, needReset bool, err
 
 func newMerchantApplicationDraftResponse(app db.MerchantApplication) merchantApplicationDraftResponse {
 	resp := merchantApplicationDraftResponse{
-		ID:                      app.ID,
-		UserID:                  app.UserID,
-		MerchantName:            app.MerchantName,
-		ContactPhone:            app.ContactPhone,
-		BusinessAddress:         app.BusinessAddress,
-		BusinessLicenseImageURL: app.BusinessLicenseImageUrl,
-		BusinessLicenseNumber:   app.BusinessLicenseNumber,
-		LegalPersonName:         app.LegalPersonName,
-		LegalPersonIDNumber:     app.LegalPersonIDNumber,
-		LegalPersonIDFrontURL:   app.LegalPersonIDFrontUrl,
-		LegalPersonIDBackURL:    app.LegalPersonIDBackUrl,
-		Status:                  app.Status,
-		CreatedAt:               app.CreatedAt,
-		UpdatedAt:               app.UpdatedAt,
+		ID:                          app.ID,
+		UserID:                      app.UserID,
+		MerchantName:                app.MerchantName,
+		ContactPhone:                app.ContactPhone,
+		BusinessAddress:             app.BusinessAddress,
+		BusinessLicenseMediaAssetID: int64PtrFromPgInt8(app.BusinessLicenseMediaAssetID),
+		BusinessLicenseNumber:       app.BusinessLicenseNumber,
+		LegalPersonName:             app.LegalPersonName,
+		LegalPersonIDNumber:         app.LegalPersonIDNumber,
+		IDCardFrontMediaAssetID:     int64PtrFromPgInt8(app.IDCardFrontMediaAssetID),
+		IDCardBackMediaAssetID:      int64PtrFromPgInt8(app.IDCardBackMediaAssetID),
+		Status:                      app.Status,
+		CreatedAt:                   app.CreatedAt,
+		UpdatedAt:                   app.UpdatedAt,
 	}
 
 	// 经纬度
@@ -204,10 +204,8 @@ func newMerchantApplicationDraftResponse(app db.MerchantApplication) merchantApp
 		resp.BusinessScope = &app.BusinessScope.String
 	}
 
-	// 食品许可证URL
-	if app.FoodPermitUrl.Valid {
-		resp.FoodPermitURL = &app.FoodPermitUrl.String
-	}
+	// 食品许可证媒体资产ID
+	resp.FoodPermitMediaAssetID = int64PtrFromPgInt8(app.FoodPermitMediaAssetID)
 
 	// 拒绝原因
 	if app.RejectReason.Valid {
@@ -653,7 +651,6 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		Str("request_id", requestID).
 		Int64("user_id", authPayload.UserID).
 		Bool("has_existing_ocr", hasExistingOCR).
-		Str("stored_image_url", app.BusinessLicenseImageUrl).
 		Msg("merchant business license ocr: request received")
 
 	// 获取上传的文件（兼容 image/file 字段）；如果未传文件则回退使用已上传的营业执照图片。
@@ -715,7 +712,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 	}
 
 	var updatedApp db.MerchantApplication
-	oldImageURL := app.BusinessLicenseImageUrl
+	// TODO(media-service): oldImageURL was used to delete old file; now handled by media service
 	localPath := ""
 
 	if fromUpload {
@@ -739,9 +736,9 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 
 		// 更新图片URL，并清空旧 OCR（避免旧 OCR 与新图不一致）
 		saveArg := db.UpdateMerchantApplicationBusinessLicenseParams{
-			ID:                      app.ID,
-			BusinessLicenseImageUrl: pgtype.Text{String: uploadedURL, Valid: true},
-			BusinessLicenseOcr:      marshalOCRTaskPending(),
+			ID:                 app.ID,
+			BusinessLicenseOcr: marshalOCRTaskPending(),
+			// TODO(media-service): set BusinessLicenseMediaAssetID after media upload
 		}
 		updated, err := server.store.UpdateMerchantApplicationBusinessLicense(ctx, saveArg)
 		if err != nil {
@@ -750,13 +747,14 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		}
 		log.Info().Str("request_id", requestID).Msg("merchant OCR: DB updated with new image URL")
 		updatedApp = updated
-		server.deleteStoredImageAsync(oldImageURL)
+		// TODO(media-service): server.deleteStoredImageAsync(oldImageURL)
 	} else {
-		if app.BusinessLicenseImageUrl == "" {
+		if !app.BusinessLicenseMediaAssetID.Valid {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrBusinessLicenseNotYetUploaded))
 			return
 		}
-		localPath = app.BusinessLicenseImageUrl
+		// TODO(media-service): resolve local path from asset ID
+		localPath = ""
 		if strings.Contains(localPath, "/uploads/") {
 			localPath = localPath[strings.Index(localPath, "/uploads/")+1:]
 		}
@@ -854,7 +852,6 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 		Str("request_id", requestID).
 		Int64("user_id", authPayload.UserID).
 		Bool("has_existing_ocr", hasExistingOCR).
-		Str("stored_image_url", app.FoodPermitUrl.String).
 		Msg("merchant food permit ocr: request received")
 
 	// 获取上传的文件（兼容 image/file 字段）；如果未传文件则回退使用已上传的食品证图片。
@@ -879,10 +876,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 	}
 
 	var updatedApp db.MerchantApplication
-	oldFoodPermitURL := ""
-	if app.FoodPermitUrl.Valid {
-		oldFoodPermitURL = app.FoodPermitUrl.String
-	}
+	// TODO(media-service): oldFoodPermitURL was used to delete old file; now handled by media service
 	localPath := ""
 
 	if fromUpload {
@@ -904,8 +898,8 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 
 		saveArg := db.UpdateMerchantApplicationFoodPermitParams{
 			ID:            app.ID,
-			FoodPermitUrl: pgtype.Text{String: uploadedURL, Valid: true},
 			FoodPermitOcr: marshalOCRTaskPending(),
+			// TODO(media-service): set FoodPermitMediaAssetID after media upload
 		}
 		updated, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, saveArg)
 		if err != nil {
@@ -913,13 +907,14 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 			return
 		}
 		updatedApp = updated
-		server.deleteStoredImageAsync(oldFoodPermitURL)
+		// TODO(media-service): server.deleteStoredImageAsync(oldFoodPermitURL)
 	} else {
-		if !app.FoodPermitUrl.Valid || app.FoodPermitUrl.String == "" {
+		if !app.FoodPermitMediaAssetID.Valid {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrFoodLicenseNotYetUploaded))
 			return
 		}
-		localPath = app.FoodPermitUrl.String
+		// TODO(media-service): resolve local path from asset ID
+		localPath = ""
 		if strings.Contains(localPath, "/uploads/") {
 			localPath = localPath[strings.Index(localPath, "/uploads/")+1:]
 		}
@@ -1035,10 +1030,10 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 	storedPath := ""
 	if side == "Front" {
 		hasExistingOCR = len(app.IDCardFrontOcr) > 0
-		storedPath = app.LegalPersonIDFrontUrl
+		// TODO(media-service): resolve local path from app.IDCardFrontMediaAssetID
 	} else {
 		hasExistingOCR = len(app.IDCardBackOcr) > 0
-		storedPath = app.LegalPersonIDBackUrl
+		// TODO(media-service): resolve local path from app.IDCardBackMediaAssetID
 	}
 
 	log.Info().
@@ -1082,9 +1077,9 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 
 		if side == "Front" {
 			saveArg := db.UpdateMerchantApplicationIDCardFrontParams{
-				ID:                    app.ID,
-				LegalPersonIDFrontUrl: pgtype.Text{String: uploadedURL, Valid: true},
-				IDCardFrontOcr:        marshalOCRTaskPending(),
+				ID:             app.ID,
+				IDCardFrontOcr: marshalOCRTaskPending(),
+				// TODO(media-service): set IDCardFrontMediaAssetID after media upload
 			}
 			updated, err := server.store.UpdateMerchantApplicationIDCardFront(ctx, saveArg)
 			if err != nil {
@@ -1094,9 +1089,9 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 			updatedApp = updated
 		} else {
 			saveArg := db.UpdateMerchantApplicationIDCardBackParams{
-				ID:                   app.ID,
-				LegalPersonIDBackUrl: pgtype.Text{String: uploadedURL, Valid: true},
-				IDCardBackOcr:        marshalOCRTaskPending(),
+				ID:            app.ID,
+				IDCardBackOcr: marshalOCRTaskPending(),
+				// TODO(media-service): set IDCardBackMediaAssetID after media upload
 			}
 			updated, err := server.store.UpdateMerchantApplicationIDCardBack(ctx, saveArg)
 			if err != nil {
@@ -1245,15 +1240,15 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 			json.Unmarshal(submittedApp.EnvironmentImages, &environmentImages) //nolint:errcheck
 		}
 		appData, _ := json.Marshal(map[string]interface{}{
-			"business_license_number":    submittedApp.BusinessLicenseNumber,
-			"legal_person_name":          submittedApp.LegalPersonName,
-			"legal_person_id_number":     submittedApp.LegalPersonIDNumber,
-			"business_license_image_url": submittedApp.BusinessLicenseImageUrl,
-			"legal_person_id_front_url":  submittedApp.LegalPersonIDFrontUrl,
-			"legal_person_id_back_url":   submittedApp.LegalPersonIDBackUrl,
-			"food_permit_url":            submittedApp.FoodPermitUrl.String,
-			"storefront_images":          storefrontImages,
-			"environment_images":         environmentImages,
+			"business_license_number":         submittedApp.BusinessLicenseNumber,
+			"legal_person_name":               submittedApp.LegalPersonName,
+			"legal_person_id_number":          submittedApp.LegalPersonIDNumber,
+			"business_license_media_asset_id": submittedApp.BusinessLicenseMediaAssetID.Int64,
+			"id_card_front_media_asset_id":    submittedApp.IDCardFrontMediaAssetID.Int64,
+			"id_card_back_media_asset_id":     submittedApp.IDCardBackMediaAssetID.Int64,
+			"food_permit_media_asset_id":      submittedApp.FoodPermitMediaAssetID.Int64,
+			"storefront_images":               storefrontImages,
+			"environment_images":              environmentImages,
 		})
 
 		var regionID int64
@@ -1319,16 +1314,16 @@ func validateMerchantApplicationRequired(app db.MerchantApplication) error {
 	if !app.RegionID.Valid {
 		return ErrMerchantRegionRequired
 	}
-	if app.BusinessLicenseImageUrl == "" {
+	if !app.BusinessLicenseMediaAssetID.Valid {
 		return ErrBusinessLicenseRequired
 	}
-	if !app.FoodPermitUrl.Valid || app.FoodPermitUrl.String == "" {
+	if !app.FoodPermitMediaAssetID.Valid {
 		return ErrFoodLicenseRequired
 	}
-	if app.LegalPersonIDFrontUrl == "" {
+	if !app.IDCardFrontMediaAssetID.Valid {
 		return ErrIDCardFrontRequired
 	}
-	if app.LegalPersonIDBackUrl == "" {
+	if !app.IDCardBackMediaAssetID.Valid {
 		return ErrIDCardBackRequired
 	}
 	return nil

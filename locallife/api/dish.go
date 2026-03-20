@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -379,7 +378,6 @@ type createDishRequest struct {
 	CategoryID          *int64                    `json:"category_id" binding:"omitempty,min=1"`
 	Name                string                    `json:"name" binding:"required,min=1,max=50"`
 	Description         string                    `json:"description" binding:"omitempty,max=500"`
-	ImageURL            string                    `json:"image_url" binding:"omitempty,max=500"`
 	Price               int64                     `json:"price" binding:"required,min=1,max=9999900"` // 最高99999元
 	MemberPrice         *int64                    `json:"member_price" binding:"omitempty,min=1,max=9999900"`
 	IsAvailable         bool                      `json:"is_available"`
@@ -398,7 +396,7 @@ type dishResponse struct {
 	CategoryName        *string              `json:"category_name,omitempty"`
 	Name                string               `json:"name"`
 	Description         string               `json:"description"`
-	ImageURL            string               `json:"image_url"`
+	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
 	Price               int64                `json:"price"`
 	OriginalPrice       int64                `json:"original_price"`
 	MemberPrice         *int64               `json:"member_price"`
@@ -474,17 +472,6 @@ func (server *Server) createDish(ctx *gin.Context) {
 		return
 	}
 
-	// 菜品图片必须先审后存：仅允许使用 uploads/public/... 本地路径
-	if strings.TrimSpace(req.ImageURL) != "" {
-		normalized := normalizeStoredUploadPath(req.ImageURL)
-		prefix := fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID)
-		if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDishImageURL))
-			return
-		}
-		req.ImageURL = normalized
-	}
-
 	// 准备参数
 	var categoryID pgtype.Int8
 	if req.CategoryID != nil {
@@ -522,7 +509,6 @@ func (server *Server) createDish(ctx *gin.Context) {
 		CategoryID:    categoryID,
 		Name:          req.Name,
 		Description:   pgtype.Text{String: req.Description, Valid: req.Description != ""},
-		ImageUrl:      pgtype.Text{String: normalizeImageURLForStorage(req.ImageURL), Valid: req.ImageURL != ""},
 		Price:         req.Price,
 		MemberPrice:   memberPrice,
 		IsAvailable:   req.IsAvailable,
@@ -597,7 +583,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 		CategoryID:          toPtrInt64(txResult.Dish.CategoryID),
 		Name:                txResult.Dish.Name,
 		Description:         txResult.Dish.Description.String,
-		ImageURL:            normalizeUploadURLForClient(txResult.Dish.ImageUrl.String),
+		ImageAssetID:        int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID),
 		Price:               txResult.Dish.Price,
 		OriginalPrice:       txResult.Dish.Price,
 		MemberPrice:         toPtrInt64(txResult.Dish.MemberPrice),
@@ -727,7 +713,7 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 			CategoryID:    toPtrInt64(dish.CategoryID),
 			Name:          dish.Name,
 			Description:   dish.Description.String,
-			ImageURL:      normalizeUploadURLForClient(dish.ImageUrl.String),
+			ImageAssetID:  int64PtrFromPgInt8(dish.ImageMediaAssetID),
 			Price:         dish.Price,
 			OriginalPrice: dish.Price,
 			MemberPrice:   toPtrInt64(dish.MemberPrice),
@@ -840,7 +826,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 		CategoryName:        toPtrString(dish.CategoryName),
 		Name:                dish.Name,
 		Description:         dish.Description.String,
-		ImageURL:            normalizeUploadURLForClient(dish.ImageUrl.String),
+		ImageAssetID:        int64PtrFromPgInt8(dish.ImageMediaAssetID),
 		Price:               dish.Price,
 		OriginalPrice:       dish.Price,
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
@@ -916,7 +902,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 		CategoryName:        toPtrString(dish.CategoryName),
 		Name:                dish.Name,
 		Description:         dish.Description.String,
-		ImageURL:            normalizeUploadURLForClient(dish.ImageUrl.String),
+		ImageAssetID:        int64PtrFromPgInt8(dish.ImageMediaAssetID),
 		Price:               dish.Price,
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
 		IsAvailable:         dish.IsAvailable,
@@ -930,17 +916,17 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 }
 
 type updateDishRequest struct {
-	CategoryID  *int64  `json:"category_id" binding:"omitempty,min=1"`
-	Name        string  `json:"name" binding:"omitempty,min=1,max=100"`        // 菜品名称，最大100字符
-	Description string  `json:"description" binding:"omitempty,max=1000"`      // 描述，最大1000字符
-	ImageURL    string  `json:"image_url" binding:"omitempty,max=500"`         // 图片URL，最大500字符
-	Price       *int64  `json:"price" binding:"omitempty,min=1,max=100000000"` // 价格（分），最大100万元
-	MemberPrice *int64  `json:"member_price" binding:"omitempty,min=0,max=100000000"`
-	IsAvailable *bool   `json:"is_available"`
-	IsOnline    *bool   `json:"is_online"`
-	SortOrder   *int16  `json:"sort_order" binding:"omitempty,min=0"`
-	PrepareTime *int16  `json:"prepare_time" binding:"omitempty,min=1,max=120"` // 预估制作时间（分钟），1-120分钟
-	TagIDs      []int64 `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`  // 标签ID列表（最多10个）
+	CategoryID   *int64  `json:"category_id" binding:"omitempty,min=1"`
+	Name         string  `json:"name" binding:"omitempty,min=1,max=100"`        // 菜品名称，最大100字符
+	Description  string  `json:"description" binding:"omitempty,max=1000"`      // 描述，最大1000字符
+	ImageAssetID *int64  `json:"image_asset_id" binding:"omitempty,min=1"`      // 图片媒体资产ID
+	Price        *int64  `json:"price" binding:"omitempty,min=1,max=100000000"` // 价格（分），最大100万元
+	MemberPrice  *int64  `json:"member_price" binding:"omitempty,min=0,max=100000000"`
+	IsAvailable  *bool   `json:"is_available"`
+	IsOnline     *bool   `json:"is_online"`
+	SortOrder    *int16  `json:"sort_order" binding:"omitempty,min=0"`
+	PrepareTime  *int16  `json:"prepare_time" binding:"omitempty,min=1,max=120"` // 预估制作时间（分钟），1-120分钟
+	TagIDs       []int64 `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`  // 标签ID列表（最多10个）
 }
 
 // updateDish godoc
@@ -1015,17 +1001,6 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		return
 	}
 
-	// 菜品图片必须先审后存：仅允许使用 uploads/public/... 本地路径
-	if strings.TrimSpace(req.ImageURL) != "" {
-		normalized := normalizeStoredUploadPath(req.ImageURL)
-		prefix := fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID)
-		if normalized == "" || !strings.HasPrefix(normalized, prefix) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDishImageURL))
-			return
-		}
-		req.ImageURL = normalized
-	}
-
 	// 准备更新参数
 	var categoryID pgtype.Int8
 	if req.CategoryID != nil {
@@ -1042,9 +1017,9 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		description = pgtype.Text{String: req.Description, Valid: true}
 	}
 
-	var imageURL pgtype.Text
-	if req.ImageURL != "" {
-		imageURL = pgtype.Text{String: normalizeImageURLForStorage(req.ImageURL), Valid: true}
+	var imageMediaAssetID pgtype.Int8
+	if req.ImageAssetID != nil {
+		imageMediaAssetID = pgtype.Int8{Int64: *req.ImageAssetID, Valid: true}
 	}
 
 	var price pgtype.Int8
@@ -1085,18 +1060,18 @@ func (server *Server) updateDish(ctx *gin.Context) {
 
 	// 使用事务更新菜品（支持标签更新）
 	txResult, err := server.store.UpdateDishTx(ctx, db.UpdateDishTxParams{
-		ID:          uriReq.ID,
-		CategoryID:  categoryID,
-		Name:        name,
-		Description: description,
-		ImageUrl:    imageURL,
-		Price:       price,
-		MemberPrice: memberPrice,
-		IsAvailable: isAvailable,
-		IsOnline:    isOnline,
-		SortOrder:   sortOrder,
-		PrepareTime: prepareTime,
-		TagIDs:      tagIDs,
+		ID:                uriReq.ID,
+		CategoryID:        categoryID,
+		Name:              name,
+		Description:       description,
+		ImageMediaAssetID: imageMediaAssetID,
+		Price:             price,
+		MemberPrice:       memberPrice,
+		IsAvailable:       isAvailable,
+		IsOnline:          isOnline,
+		SortOrder:         sortOrder,
+		PrepareTime:       prepareTime,
+		TagIDs:            tagIDs,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update dish tx: %w", err)))
@@ -1120,8 +1095,8 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	if req.Description != "" {
 		updatedFields["description"] = req.Description
 	}
-	if req.ImageURL != "" {
-		updatedFields["image_url"] = req.ImageURL
+	if req.ImageAssetID != nil {
+		updatedFields["image_media_asset_id"] = *req.ImageAssetID
 	}
 	if req.CategoryID != nil {
 		updatedFields["category_id"] = *req.CategoryID
@@ -1149,19 +1124,19 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, dishResponse{
-		ID:          txResult.Dish.ID,
-		MerchantID:  txResult.Dish.MerchantID,
-		CategoryID:  toPtrInt64(txResult.Dish.CategoryID),
-		Name:        txResult.Dish.Name,
-		Description: txResult.Dish.Description.String,
-		ImageURL:    normalizeUploadURLForClient(txResult.Dish.ImageUrl.String),
-		Price:       txResult.Dish.Price,
-		MemberPrice: toPtrInt64(txResult.Dish.MemberPrice),
-		IsAvailable: txResult.Dish.IsAvailable,
-		IsOnline:    txResult.Dish.IsOnline,
-		SortOrder:   txResult.Dish.SortOrder,
-		PrepareTime: txResult.Dish.PrepareTime,
-		Tags:        tags,
+		ID:           txResult.Dish.ID,
+		MerchantID:   txResult.Dish.MerchantID,
+		CategoryID:   toPtrInt64(txResult.Dish.CategoryID),
+		Name:         txResult.Dish.Name,
+		Description:  txResult.Dish.Description.String,
+		ImageAssetID: int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID),
+		Price:        txResult.Dish.Price,
+		MemberPrice:  toPtrInt64(txResult.Dish.MemberPrice),
+		IsAvailable:  txResult.Dish.IsAvailable,
+		IsOnline:     txResult.Dish.IsOnline,
+		SortOrder:    txResult.Dish.SortOrder,
+		PrepareTime:  txResult.Dish.PrepareTime,
+		Tags:         tags,
 	})
 
 	server.writeAuditLog(ctx, AuditLogInput{

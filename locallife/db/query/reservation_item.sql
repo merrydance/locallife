@@ -14,9 +14,9 @@ INSERT INTO reservation_items (
 SELECT 
     ri.*,
     d.name as dish_name,
-    d.image_url as dish_image_url,
+    d.image_media_asset_id as dish_image_media_asset_id,
     cs.name as combo_name,
-    cs.image_url as combo_image_url
+    cs.image_media_asset_id as combo_image_media_asset_id
 FROM reservation_items ri
 LEFT JOIN dishes d ON ri.dish_id = d.id
 LEFT JOIN combo_sets cs ON ri.combo_id = cs.id

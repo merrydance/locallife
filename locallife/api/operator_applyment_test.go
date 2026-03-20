@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -41,51 +39,22 @@ func randomOperatorForApplyment(userID int64) db.Operator {
 // randomOperatorApplicationForApplyment 创建随机运营商申请（进件测试专用）
 func randomOperatorApplicationForApplyment(userID int64) db.OperatorApplication {
 	return db.OperatorApplication{
-		ID:                     util.RandomInt(1, 1000),
-		UserID:                 userID,
-		RegionID:               util.RandomInt(1, 100),
-		Name:                   pgtype.Text{String: util.RandomString(10), Valid: true},
-		ContactName:            pgtype.Text{String: util.RandomString(6), Valid: true},
-		ContactPhone:           pgtype.Text{String: "13800138000", Valid: true},
-		BusinessLicenseUrl:     pgtype.Text{String: "https://example.com/license.jpg", Valid: true},
-		BusinessLicenseNumber:  pgtype.Text{String: util.RandomString(18), Valid: true},
-		LegalPersonName:        pgtype.Text{String: util.RandomString(6), Valid: true},
-		LegalPersonIDNumber:    pgtype.Text{String: "110101199001011234", Valid: true},
-		IDCardFrontUrl:         pgtype.Text{String: "https://example.com/id_front.jpg", Valid: true},
-		IDCardBackUrl:          pgtype.Text{String: "https://example.com/id_back.jpg", Valid: true},
-		IDCardBackOcr:          []byte(`{"valid_date": "2020.01.01-2030.01.01"}`),
-		RequestedContractYears: 3,
-		Status:                 "approved",
+		ID:                          util.RandomInt(1, 1000),
+		UserID:                      userID,
+		RegionID:                    util.RandomInt(1, 100),
+		Name:                        pgtype.Text{String: util.RandomString(10), Valid: true},
+		ContactName:                 pgtype.Text{String: util.RandomString(6), Valid: true},
+		ContactPhone:                pgtype.Text{String: "13800138000", Valid: true},
+		BusinessLicenseMediaAssetID: pgtype.Int8{},
+		BusinessLicenseNumber:       pgtype.Text{String: util.RandomString(18), Valid: true},
+		LegalPersonName:             pgtype.Text{String: util.RandomString(6), Valid: true},
+		LegalPersonIDNumber:         pgtype.Text{String: "110101199001011234", Valid: true},
+		IDCardFrontMediaAssetID:     pgtype.Int8{},
+		IDCardBackMediaAssetID:      pgtype.Int8{},
+		IDCardBackOcr:               []byte(`{"valid_date": "2020.01.01-2030.01.01"}`),
+		RequestedContractYears:      3,
+		Status:                      "approved",
 	}
-}
-
-func writeTestOperatorUploadImage(t *testing.T, name string) string {
-	t.Helper()
-
-	root := filepath.Join("uploads", "test")
-	require.NoError(t, os.MkdirAll(root, 0o755))
-
-	path := filepath.Join(root, name)
-	minJPEG := []byte{
-		0xFF, 0xD8, 0xFF, 0xE0, 0x00, 0x10, 0x4A, 0x46, 0x49, 0x46, 0x00, 0x01,
-		0x01, 0x00, 0x00, 0x01, 0x00, 0x01, 0x00, 0x00, 0xFF, 0xDB, 0x00, 0x43,
-		0x00, 0x08, 0x06, 0x06, 0x07, 0x06, 0x05, 0x08, 0x07, 0x07, 0x07, 0x09,
-		0x09, 0x08, 0x0A, 0x0C, 0x14, 0x0D, 0x0C, 0x0B, 0x0B, 0x0C, 0x19, 0x12,
-		0x13, 0x0F, 0x14, 0x1D, 0x1A, 0x1F, 0x1E, 0x1D, 0x1A, 0x1C, 0x1C, 0x20,
-		0x24, 0x2E, 0x27, 0x20, 0x22, 0x2C, 0x23, 0x1C, 0x1C, 0x28, 0x37, 0x29,
-		0x2C, 0x30, 0x31, 0x34, 0x34, 0x34, 0x1F, 0x27, 0x39, 0x3D, 0x38, 0x32,
-		0x3C, 0x2E, 0x33, 0x34, 0x32, 0xFF, 0xC0, 0x00, 0x0B, 0x08, 0x00, 0x01,
-		0x00, 0x01, 0x01, 0x01, 0x11, 0x00, 0xFF, 0xC4, 0x00, 0x1F, 0x00, 0x00,
-		0x01, 0x05, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x00, 0x00, 0x00, 0x00,
-		0x00, 0x00, 0x00, 0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-		0x09, 0x0A, 0x0B, 0xFF, 0xC4, 0x00, 0xB5, 0x10, 0x00, 0x02, 0x01, 0x03,
-		0x03, 0x02, 0x04, 0x03, 0x05, 0x05, 0x04, 0x04, 0x00, 0x00, 0x01, 0x7D,
-		0xFF, 0xDA, 0x00, 0x08, 0x01, 0x01, 0x00, 0x00, 0x3F, 0x00, 0x7F, 0xFF,
-		0xD9,
-	}
-	require.NoError(t, os.WriteFile(path, minJPEG, 0o644))
-
-	return path
 }
 
 // ==================== 运营商开户测试 ====================
@@ -96,9 +65,9 @@ func TestOperatorBindBankAPI(t *testing.T) {
 	application := randomOperatorApplicationForApplyment(user.ID)
 
 	applicationWithTestURL := application
-	applicationWithTestURL.IDCardFrontUrl = pgtype.Text{String: writeTestOperatorUploadImage(t, "operator_id_front.jpg"), Valid: true}
-	applicationWithTestURL.IDCardBackUrl = pgtype.Text{String: writeTestOperatorUploadImage(t, "operator_id_back.jpg"), Valid: true}
-	applicationWithTestURL.BusinessLicenseUrl = pgtype.Text{String: writeTestOperatorUploadImage(t, "operator_license.jpg"), Valid: true}
+	applicationWithTestURL.IDCardFrontMediaAssetID = pgtype.Int8{}
+	applicationWithTestURL.IDCardBackMediaAssetID = pgtype.Int8{}
+	applicationWithTestURL.BusinessLicenseMediaAssetID = pgtype.Int8{}
 
 	testCases := []struct {
 		name          string

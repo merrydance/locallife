@@ -1514,11 +1514,11 @@ func TestAddTableImageAPI(t *testing.T) {
 					AddTableImage(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.TableImage{
-						ID:        1,
-						TableID:   table.ID,
-						ImageUrl:  fmt.Sprintf("uploads/public/merchants/%d/tables/room1.jpg", merchant.ID),
-						SortOrder: 1,
-						IsPrimary: true,
+						ID:           1,
+						TableID:      table.ID,
+						MediaAssetID: pgtype.Int8{},
+						SortOrder:    1,
+						IsPrimary:    true,
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -1553,11 +1553,11 @@ func TestAddTableImageAPI(t *testing.T) {
 					AddTableImage(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.TableImage{
-						ID:        2,
-						TableID:   table.ID,
-						ImageUrl:  fmt.Sprintf("uploads/public/merchants/%d/tables/room2.jpg", merchant.ID),
-						SortOrder: 2,
-						IsPrimary: false,
+						ID:           2,
+						TableID:      table.ID,
+						MediaAssetID: pgtype.Int8{},
+						SortOrder:    2,
+						IsPrimary:    false,
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -1673,8 +1673,8 @@ func TestListTableImagesAPI(t *testing.T) {
 					ListTableImages(gomock.Any(), table.ID).
 					Times(1).
 					Return([]db.TableImage{
-						{ID: 1, TableID: table.ID, ImageUrl: "https://example.com/img1.jpg", IsPrimary: true},
-						{ID: 2, TableID: table.ID, ImageUrl: "https://example.com/img2.jpg", IsPrimary: false},
+						{ID: 1, TableID: table.ID, IsPrimary: true},
+						{ID: 2, TableID: table.ID, IsPrimary: false},
 					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -1883,7 +1883,6 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 					Return(db.TableImage{
 						ID:        1,
 						TableID:   table.ID,
-						ImageUrl:  "https://example.com/img1.jpg",
 						IsPrimary: true,
 					}, nil)
 			},

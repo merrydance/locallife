@@ -49,22 +49,20 @@ INSERT INTO safety_reports (
     description,
     level,
     merchant_ids,
-    images,
     status
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8
-) RETURNING id, reporter_id, region_id, title, description, level, merchant_ids, images, status, resolution_notes, created_at, updated_at
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at
 `
 
 type CreateSafetyReportParams struct {
-	ReporterID  int64    `json:"reporter_id"`
-	RegionID    int64    `json:"region_id"`
-	Title       string   `json:"title"`
-	Description string   `json:"description"`
-	Level       string   `json:"level"`
-	MerchantIds []int64  `json:"merchant_ids"`
-	Images      []string `json:"images"`
-	Status      string   `json:"status"`
+	ReporterID  int64   `json:"reporter_id"`
+	RegionID    int64   `json:"region_id"`
+	Title       string  `json:"title"`
+	Description string  `json:"description"`
+	Level       string  `json:"level"`
+	MerchantIds []int64 `json:"merchant_ids"`
+	Status      string  `json:"status"`
 }
 
 func (q *Queries) CreateSafetyReport(ctx context.Context, arg CreateSafetyReportParams) (SafetyReport, error) {
@@ -75,7 +73,6 @@ func (q *Queries) CreateSafetyReport(ctx context.Context, arg CreateSafetyReport
 		arg.Description,
 		arg.Level,
 		arg.MerchantIds,
-		arg.Images,
 		arg.Status,
 	)
 	var i SafetyReport
@@ -87,7 +84,6 @@ func (q *Queries) CreateSafetyReport(ctx context.Context, arg CreateSafetyReport
 		&i.Description,
 		&i.Level,
 		&i.MerchantIds,
-		&i.Images,
 		&i.Status,
 		&i.ResolutionNotes,
 		&i.CreatedAt,
@@ -97,7 +93,7 @@ func (q *Queries) CreateSafetyReport(ctx context.Context, arg CreateSafetyReport
 }
 
 const getSafetyReport = `-- name: GetSafetyReport :one
-SELECT id, reporter_id, region_id, title, description, level, merchant_ids, images, status, resolution_notes, created_at, updated_at FROM safety_reports
+SELECT id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at FROM safety_reports
 WHERE id = $1 LIMIT 1
 `
 
@@ -112,7 +108,6 @@ func (q *Queries) GetSafetyReport(ctx context.Context, id int64) (SafetyReport, 
 		&i.Description,
 		&i.Level,
 		&i.MerchantIds,
-		&i.Images,
 		&i.Status,
 		&i.ResolutionNotes,
 		&i.CreatedAt,
@@ -122,7 +117,7 @@ func (q *Queries) GetSafetyReport(ctx context.Context, id int64) (SafetyReport, 
 }
 
 const listSafetyReportsByRegion = `-- name: ListSafetyReportsByRegion :many
-SELECT id, reporter_id, region_id, title, description, level, merchant_ids, images, status, resolution_notes, created_at, updated_at FROM safety_reports
+SELECT id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at FROM safety_reports
 WHERE region_id = $1
 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3
@@ -151,7 +146,6 @@ func (q *Queries) ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyR
 			&i.Description,
 			&i.Level,
 			&i.MerchantIds,
-			&i.Images,
 			&i.Status,
 			&i.ResolutionNotes,
 			&i.CreatedAt,
@@ -168,7 +162,7 @@ func (q *Queries) ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyR
 }
 
 const listSafetyReportsByRegionAndStatus = `-- name: ListSafetyReportsByRegionAndStatus :many
-SELECT id, reporter_id, region_id, title, description, level, merchant_ids, images, status, resolution_notes, created_at, updated_at FROM safety_reports
+SELECT id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at FROM safety_reports
 WHERE region_id = $1
     AND status = $2
 ORDER BY created_at DESC, id DESC
@@ -204,7 +198,6 @@ func (q *Queries) ListSafetyReportsByRegionAndStatus(ctx context.Context, arg Li
 			&i.Description,
 			&i.Level,
 			&i.MerchantIds,
-			&i.Images,
 			&i.Status,
 			&i.ResolutionNotes,
 			&i.CreatedAt,
@@ -238,7 +231,7 @@ SET
     resolution_notes = COALESCE($3, resolution_notes),
     updated_at = now()
 WHERE id = $1
-RETURNING id, reporter_id, region_id, title, description, level, merchant_ids, images, status, resolution_notes, created_at, updated_at
+RETURNING id, reporter_id, region_id, title, description, level, merchant_ids, status, resolution_notes, created_at, updated_at
 `
 
 type UpdateSafetyReportStatusParams struct {
@@ -258,7 +251,6 @@ func (q *Queries) UpdateSafetyReportStatus(ctx context.Context, arg UpdateSafety
 		&i.Description,
 		&i.Level,
 		&i.MerchantIds,
-		&i.Images,
 		&i.Status,
 		&i.ResolutionNotes,
 		&i.CreatedAt,

@@ -6,16 +6,13 @@ INSERT INTO merchant_applications (
   user_id,
   merchant_name,
   business_license_number,
-  business_license_image_url,
   legal_person_name,
   legal_person_id_number,
-  legal_person_id_front_url,
-  legal_person_id_back_url,
   contact_phone,
   business_address,
   status
 ) VALUES (
-  $1, '', '', '', '', '', '', '', '', '', 'draft'
+  $1, '', '', '', '', '', '', 'draft'
 )
 RETURNING *;
 
@@ -44,7 +41,7 @@ RETURNING *;
 -- 更新营业执照信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  business_license_image_url = COALESCE(sqlc.narg(business_license_image_url), business_license_image_url),
+  business_license_media_asset_id = COALESCE(sqlc.narg(business_license_media_asset_id), business_license_media_asset_id),
   business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
   business_scope = COALESCE(sqlc.narg(business_scope), business_scope),
   business_license_ocr = COALESCE(sqlc.narg(business_license_ocr), business_license_ocr),
@@ -56,7 +53,7 @@ RETURNING *;
 -- 更新食品经营许可证信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  food_permit_url = COALESCE(sqlc.narg(food_permit_url), food_permit_url),
+  food_permit_media_asset_id = COALESCE(sqlc.narg(food_permit_media_asset_id), food_permit_media_asset_id),
   food_permit_ocr = COALESCE(sqlc.narg(food_permit_ocr), food_permit_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
@@ -66,7 +63,7 @@ RETURNING *;
 -- 更新身份证正面信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  legal_person_id_front_url = COALESCE(sqlc.narg(legal_person_id_front_url), legal_person_id_front_url),
+  id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
   legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
   legal_person_id_number = COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number),
   id_card_front_ocr = COALESCE(sqlc.narg(id_card_front_ocr), id_card_front_ocr),
@@ -78,7 +75,7 @@ RETURNING *;
 -- 更新身份证背面信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
-  legal_person_id_back_url = COALESCE(sqlc.narg(legal_person_id_back_url), legal_person_id_back_url),
+  id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
   id_card_back_ocr = COALESCE(sqlc.narg(id_card_back_ocr), id_card_back_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'

@@ -16,26 +16,26 @@ const addTableImage = `-- name: AddTableImage :one
 
 INSERT INTO table_images (
     table_id,
-    image_url,
+    media_asset_id,
     sort_order,
     is_primary
 ) VALUES (
     $1, $2, $3, $4
-) RETURNING id, table_id, image_url, sort_order, is_primary, created_at
+) RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
 `
 
 type AddTableImageParams struct {
-	TableID   int64  `json:"table_id"`
-	ImageUrl  string `json:"image_url"`
-	SortOrder int32  `json:"sort_order"`
-	IsPrimary bool   `json:"is_primary"`
+	TableID      int64       `json:"table_id"`
+	MediaAssetID pgtype.Int8 `json:"media_asset_id"`
+	SortOrder    int32       `json:"sort_order"`
+	IsPrimary    bool        `json:"is_primary"`
 }
 
 // ============ Table Images ============
 func (q *Queries) AddTableImage(ctx context.Context, arg AddTableImageParams) (TableImage, error) {
 	row := q.db.QueryRow(ctx, addTableImage,
 		arg.TableID,
-		arg.ImageUrl,
+		arg.MediaAssetID,
 		arg.SortOrder,
 		arg.IsPrimary,
 	)
@@ -43,10 +43,10 @@ func (q *Queries) AddTableImage(ctx context.Context, arg AddTableImageParams) (T
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }
@@ -281,16 +281,16 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
     COALESCE(
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
-        (SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.reservation_date >= CURRENT_DATE - INTERVAL '30 days'
@@ -326,23 +326,23 @@ type ExploreNearbyRoomsParams struct {
 }
 
 type ExploreNearbyRoomsRow struct {
-	ID                  int64          `json:"id"`
-	MerchantID          int64          `json:"merchant_id"`
-	TableNo             string         `json:"table_no"`
-	TableType           string         `json:"table_type"`
-	Capacity            int16          `json:"capacity"`
-	Description         pgtype.Text    `json:"description"`
-	MinimumSpend        pgtype.Int8    `json:"minimum_spend"`
-	Status              string         `json:"status"`
-	CreatedAt           time.Time      `json:"created_at"`
-	MerchantName        string         `json:"merchant_name"`
-	MerchantLogo        pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress     string         `json:"merchant_address"`
-	MerchantLatitude    pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude   pgtype.Numeric `json:"merchant_longitude"`
-	MerchantPhone       string         `json:"merchant_phone"`
-	PrimaryImage        string         `json:"primary_image"`
-	MonthlyReservations int32          `json:"monthly_reservations"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
+	MerchantPhone            string         `json:"merchant_phone"`
+	PrimaryImageAssetID      interface{}    `json:"primary_image_asset_id"`
+	MonthlyReservations      int32          `json:"monthly_reservations"`
 }
 
 // 探索附近包间（无需指定预订日期时段），用于本地包间浏览流
@@ -375,12 +375,12 @@ func (q *Queries) ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRooms
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
 			&i.MerchantPhone,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 			&i.MonthlyReservations,
 		); err != nil {
 			return nil, err
@@ -394,7 +394,7 @@ func (q *Queries) ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRooms
 }
 
 const getPrimaryTableImage = `-- name: GetPrimaryTableImage :one
-SELECT id, table_id, image_url, sort_order, is_primary, created_at FROM table_images
+SELECT id, table_id, sort_order, is_primary, created_at, media_asset_id FROM table_images
 WHERE table_id = $1 AND is_primary = TRUE
 LIMIT 1
 `
@@ -405,10 +405,10 @@ func (q *Queries) GetPrimaryTableImage(ctx context.Context, tableID int64) (Tabl
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }
@@ -425,12 +425,12 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
     m.phone as merchant_phone,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image,
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -443,22 +443,22 @@ WHERE t.id = $1
 `
 
 type GetRoomDetailForCustomerRow struct {
-	ID                  int64          `json:"id"`
-	MerchantID          int64          `json:"merchant_id"`
-	TableNo             string         `json:"table_no"`
-	Capacity            int16          `json:"capacity"`
-	Description         pgtype.Text    `json:"description"`
-	MinimumSpend        pgtype.Int8    `json:"minimum_spend"`
-	Status              string         `json:"status"`
-	CreatedAt           time.Time      `json:"created_at"`
-	MerchantName        string         `json:"merchant_name"`
-	MerchantLogo        pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress     string         `json:"merchant_address"`
-	MerchantLatitude    pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude   pgtype.Numeric `json:"merchant_longitude"`
-	MerchantPhone       string         `json:"merchant_phone"`
-	PrimaryImage        string         `json:"primary_image"`
-	MonthlyReservations int64          `json:"monthly_reservations"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
+	MerchantPhone            string         `json:"merchant_phone"`
+	PrimaryImageAssetID      interface{}    `json:"primary_image_asset_id"`
+	MonthlyReservations      int64          `json:"monthly_reservations"`
 }
 
 // ============ Customer-side Room Queries (C端包间查询) ============
@@ -476,12 +476,12 @@ func (q *Queries) GetRoomDetailForCustomer(ctx context.Context, id int64) (GetRo
 		&i.Status,
 		&i.CreatedAt,
 		&i.MerchantName,
-		&i.MerchantLogo,
+		&i.MerchantLogoMediaAssetID,
 		&i.MerchantAddress,
 		&i.MerchantLatitude,
 		&i.MerchantLongitude,
 		&i.MerchantPhone,
-		&i.PrimaryImage,
+		&i.PrimaryImageAssetID,
 		&i.MonthlyReservations,
 	)
 	return i, err
@@ -622,7 +622,7 @@ SELECT
     t.description,
     t.minimum_spend,
     t.status,
-    COALESCE((SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 WHERE t.merchant_id = $1 
   AND t.table_type = 'room'
@@ -631,14 +631,14 @@ ORDER BY t.capacity, t.table_no
 `
 
 type ListAvailableRoomsForCustomerRow struct {
-	ID           int64       `json:"id"`
-	MerchantID   int64       `json:"merchant_id"`
-	TableNo      string      `json:"table_no"`
-	Capacity     int16       `json:"capacity"`
-	Description  pgtype.Text `json:"description"`
-	MinimumSpend pgtype.Int8 `json:"minimum_spend"`
-	Status       string      `json:"status"`
-	PrimaryImage string      `json:"primary_image"`
+	ID                  int64       `json:"id"`
+	MerchantID          int64       `json:"merchant_id"`
+	TableNo             string      `json:"table_no"`
+	Capacity            int16       `json:"capacity"`
+	Description         pgtype.Text `json:"description"`
+	MinimumSpend        pgtype.Int8 `json:"minimum_spend"`
+	Status              string      `json:"status"`
+	PrimaryImageAssetID interface{} `json:"primary_image_asset_id"`
 }
 
 // 获取商户的可用包间列表（含主图）供顾客查看
@@ -659,7 +659,7 @@ func (q *Queries) ListAvailableRoomsForCustomer(ctx context.Context, merchantID 
 			&i.Description,
 			&i.MinimumSpend,
 			&i.Status,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -682,10 +682,10 @@ SELECT
     t.status,
     t.created_at,
     COALESCE(
-        (SELECT image_url FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
-        (SELECT image_url FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
-        ''
-    )::TEXT as primary_image,
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id AND is_primary = TRUE LIMIT 1),
+        (SELECT media_asset_id FROM table_images WHERE table_id = t.id ORDER BY sort_order ASC, created_at ASC LIMIT 1),
+        0
+    ) as primary_image_asset_id,
     (SELECT COUNT(*) FROM table_reservations tr 
      WHERE tr.table_id = t.id 
        AND tr.status IN ('confirmed', 'completed')
@@ -705,7 +705,7 @@ type ListMerchantRoomsForCustomerRow struct {
 	MinimumSpend        pgtype.Int8 `json:"minimum_spend"`
 	Status              string      `json:"status"`
 	CreatedAt           time.Time   `json:"created_at"`
-	PrimaryImage        string      `json:"primary_image"`
+	PrimaryImageAssetID interface{} `json:"primary_image_asset_id"`
 	MonthlyReservations int64       `json:"monthly_reservations"`
 }
 
@@ -728,7 +728,7 @@ func (q *Queries) ListMerchantRoomsForCustomer(ctx context.Context, merchantID i
 			&i.MinimumSpend,
 			&i.Status,
 			&i.CreatedAt,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 			&i.MonthlyReservations,
 		); err != nil {
 			return nil, err
@@ -742,7 +742,7 @@ func (q *Queries) ListMerchantRoomsForCustomer(ctx context.Context, merchantID i
 }
 
 const listTableImages = `-- name: ListTableImages :many
-SELECT id, table_id, image_url, sort_order, is_primary, created_at FROM table_images
+SELECT id, table_id, sort_order, is_primary, created_at, media_asset_id FROM table_images
 WHERE table_id = $1
 ORDER BY is_primary DESC, sort_order ASC, created_at ASC
 `
@@ -759,10 +759,10 @@ func (q *Queries) ListTableImages(ctx context.Context, tableID int64) ([]TableIm
 		if err := rows.Scan(
 			&i.ID,
 			&i.TableID,
-			&i.ImageUrl,
 			&i.SortOrder,
 			&i.IsPrimary,
 			&i.CreatedAt,
+			&i.MediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -990,7 +990,7 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
@@ -1034,21 +1034,21 @@ type SearchRoomsParams struct {
 }
 
 type SearchRoomsRow struct {
-	ID                int64          `json:"id"`
-	MerchantID        int64          `json:"merchant_id"`
-	TableNo           string         `json:"table_no"`
-	TableType         string         `json:"table_type"`
-	Capacity          int16          `json:"capacity"`
-	Description       pgtype.Text    `json:"description"`
-	MinimumSpend      pgtype.Int8    `json:"minimum_spend"`
-	QrCodeUrl         pgtype.Text    `json:"qr_code_url"`
-	Status            string         `json:"status"`
-	CreatedAt         time.Time      `json:"created_at"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress   string         `json:"merchant_address"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	QrCodeUrl                pgtype.Text    `json:"qr_code_url"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
 }
 
 // ============ Room Search ============
@@ -1085,7 +1085,7 @@ func (q *Queries) SearchRooms(ctx context.Context, arg SearchRoomsParams) ([]Sea
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
@@ -1113,7 +1113,7 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude
@@ -1160,21 +1160,21 @@ type SearchRoomsByMerchantTagParams struct {
 }
 
 type SearchRoomsByMerchantTagRow struct {
-	ID                int64          `json:"id"`
-	MerchantID        int64          `json:"merchant_id"`
-	TableNo           string         `json:"table_no"`
-	TableType         string         `json:"table_type"`
-	Capacity          int16          `json:"capacity"`
-	Description       pgtype.Text    `json:"description"`
-	MinimumSpend      pgtype.Int8    `json:"minimum_spend"`
-	QrCodeUrl         pgtype.Text    `json:"qr_code_url"`
-	Status            string         `json:"status"`
-	CreatedAt         time.Time      `json:"created_at"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress   string         `json:"merchant_address"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	QrCodeUrl                pgtype.Text    `json:"qr_code_url"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
 }
 
 // 按商户标签（菜系）搜索包间
@@ -1210,7 +1210,7 @@ func (q *Queries) SearchRoomsByMerchantTag(ctx context.Context, arg SearchRoomsB
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
@@ -1238,11 +1238,11 @@ SELECT
     t.status,
     t.created_at,
     m.name as merchant_name,
-    m.logo_url as merchant_logo,
+    m.logo_media_asset_id as merchant_logo_media_asset_id,
     m.address as merchant_address,
     m.latitude as merchant_latitude,
     m.longitude as merchant_longitude,
-    COALESCE((SELECT ti.image_url FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), '')::TEXT as primary_image
+    COALESCE((SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 WHERE t.table_type = 'room'
@@ -1283,22 +1283,22 @@ type SearchRoomsWithImageParams struct {
 }
 
 type SearchRoomsWithImageRow struct {
-	ID                int64          `json:"id"`
-	MerchantID        int64          `json:"merchant_id"`
-	TableNo           string         `json:"table_no"`
-	TableType         string         `json:"table_type"`
-	Capacity          int16          `json:"capacity"`
-	Description       pgtype.Text    `json:"description"`
-	MinimumSpend      pgtype.Int8    `json:"minimum_spend"`
-	QrCodeUrl         pgtype.Text    `json:"qr_code_url"`
-	Status            string         `json:"status"`
-	CreatedAt         time.Time      `json:"created_at"`
-	MerchantName      string         `json:"merchant_name"`
-	MerchantLogo      pgtype.Text    `json:"merchant_logo"`
-	MerchantAddress   string         `json:"merchant_address"`
-	MerchantLatitude  pgtype.Numeric `json:"merchant_latitude"`
-	MerchantLongitude pgtype.Numeric `json:"merchant_longitude"`
-	PrimaryImage      string         `json:"primary_image"`
+	ID                       int64          `json:"id"`
+	MerchantID               int64          `json:"merchant_id"`
+	TableNo                  string         `json:"table_no"`
+	TableType                string         `json:"table_type"`
+	Capacity                 int16          `json:"capacity"`
+	Description              pgtype.Text    `json:"description"`
+	MinimumSpend             pgtype.Int8    `json:"minimum_spend"`
+	QrCodeUrl                pgtype.Text    `json:"qr_code_url"`
+	Status                   string         `json:"status"`
+	CreatedAt                time.Time      `json:"created_at"`
+	MerchantName             string         `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8    `json:"merchant_logo_media_asset_id"`
+	MerchantAddress          string         `json:"merchant_address"`
+	MerchantLatitude         pgtype.Numeric `json:"merchant_latitude"`
+	MerchantLongitude        pgtype.Numeric `json:"merchant_longitude"`
+	PrimaryImageAssetID      interface{}    `json:"primary_image_asset_id"`
 }
 
 // 搜索包间（带主图），增强版 SearchRooms
@@ -1333,11 +1333,11 @@ func (q *Queries) SearchRoomsWithImage(ctx context.Context, arg SearchRoomsWithI
 			&i.Status,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantLatitude,
 			&i.MerchantLongitude,
-			&i.PrimaryImage,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -1360,7 +1360,7 @@ func (q *Queries) SetPrimaryTableImage(ctx context.Context, tableID int64) error
 }
 
 const setTableImagePrimary = `-- name: SetTableImagePrimary :one
-UPDATE table_images SET is_primary = TRUE WHERE id = $1 RETURNING id, table_id, image_url, sort_order, is_primary, created_at
+UPDATE table_images SET is_primary = TRUE WHERE id = $1 RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
 `
 
 func (q *Queries) SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error) {
@@ -1369,10 +1369,10 @@ func (q *Queries) SetTableImagePrimary(ctx context.Context, id int64) (TableImag
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }
@@ -1440,7 +1440,7 @@ UPDATE table_images
 SET sort_order = COALESCE($1, sort_order),
     is_primary = COALESCE($2, is_primary)
 WHERE id = $3
-RETURNING id, table_id, image_url, sort_order, is_primary, created_at
+RETURNING id, table_id, sort_order, is_primary, created_at, media_asset_id
 `
 
 type UpdateTableImageParams struct {
@@ -1455,10 +1455,10 @@ func (q *Queries) UpdateTableImage(ctx context.Context, arg UpdateTableImagePara
 	err := row.Scan(
 		&i.ID,
 		&i.TableID,
-		&i.ImageUrl,
 		&i.SortOrder,
 		&i.IsPrimary,
 		&i.CreatedAt,
+		&i.MediaAssetID,
 	)
 	return i, err
 }

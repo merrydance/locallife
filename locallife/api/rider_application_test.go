@@ -31,10 +31,10 @@ func randomRiderApplicationWithData(userID int64) db.RiderApplication {
 		UserID:         userID,
 		RealName:       pgtype.Text{String: "张三", Valid: true},
 		Phone:          pgtype.Text{String: "13812345678", Valid: true},
-		IDCardFrontUrl: pgtype.Text{String: "uploads/riders/1/idcard/front.jpg", Valid: true},
-		IDCardBackUrl:  pgtype.Text{String: "uploads/riders/1/idcard/back.jpg", Valid: true},
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID: pgtype.Int8{},
 		IDCardOcr:      []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"20350101"}`),
-		HealthCertUrl:  pgtype.Text{String: "uploads/riders/1/healthcert/cert.jpg", Valid: true},
+		HealthCertMediaAssetID: pgtype.Int8{},
 		HealthCertOcr:  []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2030年12月31日"}`),
 		Status:         "draft",
 		CreatedAt:      time.Now(),
@@ -376,7 +376,7 @@ func TestSubmitRiderApplication(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				// 缺少健康证
 				app := randomRiderApplicationWithData(user.ID)
-				app.HealthCertUrl = pgtype.Text{Valid: false}
+				app.HealthCertMediaAssetID = pgtype.Int8{}
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).

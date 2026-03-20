@@ -340,7 +340,6 @@ func createIntegrationMerchant(t *testing.T, store *db.SQLStore, ownerID, region
 		OwnerUserID:     ownerID,
 		Name:            "集成测试餐厅",
 		Description:     pgtype.Text{String: "集成测试", Valid: true},
-		LogoUrl:         pgtype.Text{String: "https://example.com/logo.png", Valid: true},
 		Phone:           "13800138000",
 		Address:         "测试地址",
 		Latitude:        pgtype.Numeric{Valid: false},

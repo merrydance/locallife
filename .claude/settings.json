@@ -1,6 +1,0 @@
-{
-  "env": {
-    "ANTHROPIC_MODEL": "qwen3-coder-plus",
-    "ANTHROPIC_SMALL_FAST_MODEL": "qwen-flash"
-  }
-}

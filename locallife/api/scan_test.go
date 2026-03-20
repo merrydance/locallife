@@ -31,28 +31,28 @@ import (
 
 func randomDishForMenu(categoryID int64) db.ListDishesForMenuRow {
 	return db.ListDishesForMenuRow{
-		ID:          util.RandomInt(1, 1000),
-		CategoryID:  pgtype.Int8{Int64: categoryID, Valid: true},
-		Name:        util.RandomString(10),
-		Description: pgtype.Text{String: util.RandomString(50), Valid: true},
-		ImageUrl:    pgtype.Text{String: "https://example.com/dish.jpg", Valid: true},
-		Price:       util.RandomInt(1000, 10000),
-		MemberPrice: pgtype.Int8{Int64: util.RandomInt(800, 9000), Valid: true},
-		IsAvailable: true,
-		SortOrder:   int16(util.RandomInt(1, 100)),
+		ID:                util.RandomInt(1, 1000),
+		CategoryID:        pgtype.Int8{Int64: categoryID, Valid: true},
+		Name:              util.RandomString(10),
+		Description:       pgtype.Text{String: util.RandomString(50), Valid: true},
+		ImageMediaAssetID: pgtype.Int8{},
+		Price:             util.RandomInt(1000, 10000),
+		MemberPrice:       pgtype.Int8{Int64: util.RandomInt(800, 9000), Valid: true},
+		IsAvailable:       true,
+		SortOrder:         int16(util.RandomInt(1, 100)),
 	}
 }
 
 func randomComboForMenu(merchantID int64) db.ListOnlineCombosByMerchantRow {
 	return db.ListOnlineCombosByMerchantRow{
-		ID:            util.RandomInt(1, 1000),
-		MerchantID:    merchantID,
-		Name:          util.RandomString(10),
-		Description:   pgtype.Text{String: util.RandomString(50), Valid: true},
-		ImageUrl:      pgtype.Text{String: "https://example.com/combo.jpg", Valid: true},
-		OriginalPrice: util.RandomInt(5000, 10000),
-		Price:         util.RandomInt(3000, 5000),
-		IsOnline:      true,
+		ID:                util.RandomInt(1, 1000),
+		MerchantID:        merchantID,
+		Name:              util.RandomString(10),
+		Description:       pgtype.Text{String: util.RandomString(50), Valid: true},
+		ImageMediaAssetID: pgtype.Int8{},
+		OriginalPrice:     util.RandomInt(5000, 10000),
+		Price:             util.RandomInt(3000, 5000),
+		IsOnline:          true,
 	}
 }
 

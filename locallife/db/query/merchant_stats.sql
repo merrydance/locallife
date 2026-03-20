@@ -234,7 +234,7 @@ SELECT
   d.description,
   d.price,
   d.member_price,
-  d.image_url,
+  d.image_media_asset_id,
   d.is_available,
   d.sort_order,
   d.prepare_time,
@@ -301,7 +301,7 @@ SELECT
   cs.id,
   cs.name,
   cs.description,
-  cs.image_url,
+  cs.image_media_asset_id,
   cs.combo_price,
   -- 实时计算实际原价（单品价之和）
   COALESCE(

@@ -103,7 +103,7 @@ type searchDishResponse struct {
 	CategoryID     *int64  `json:"category_id,omitempty"`
 	Name           string  `json:"name"`
 	Description    string  `json:"description"`
-	ImageURL       string  `json:"image_url"`
+	ImageAssetID   *int64  `json:"image_asset_id,omitempty"`
 	Price          int64   `json:"price"`                  // Cents
 	OriginalPrice  int64   `json:"original_price"`         // Cents
 	MemberPrice    int64   `json:"member_price,omitempty"` // Cents
@@ -114,7 +114,7 @@ type searchDishResponse struct {
 	RepurchaseRate float64 `json:"repurchase_rate"`
 	// New fields for home feed
 	MerchantName          string               `json:"merchant_name,omitempty"`
-	MerchantLogo          string               `json:"merchant_logo,omitempty"`
+	MerchantLogoAssetID   *int64               `json:"merchant_logo_asset_id,omitempty"`
 	MerchantIsOpen        *bool                `json:"merchant_is_open,omitempty"`
 	Distance              int                  `json:"distance"`                // Meters
 	EstimatedDeliveryTime int                  `json:"estimated_delivery_time"` // Seconds
@@ -131,7 +131,7 @@ type searchMerchantResponse struct {
 	Latitude             float64   `json:"-"`
 	Longitude            float64   `json:"-"`
 	Phone                string    `json:"phone,omitempty"`
-	LogoURL              string    `json:"logo_url"`
+	LogoAssetID          *int64    `json:"logo_asset_id,omitempty"`
 	CoverImage           string    `json:"cover_image,omitempty"` // 门头照（首张），作为列表卡片封面
 	Status               string    `json:"status"`
 	IsOpen               bool      `json:"is_open"`
@@ -149,13 +149,13 @@ type searchComboResponse struct {
 	MerchantID            int64    `json:"merchant_id"`
 	Name                  string   `json:"name"`
 	Description           string   `json:"description"`
-	ImageURL              string   `json:"image_url"`
+	ImageAssetID          *int64   `json:"image_asset_id,omitempty"`
 	OriginalPrice         int64    `json:"original_price"`  // Cents
 	ComboPrice            int64    `json:"combo_price"`     // Cents
 	SavingsPercent        int      `json:"savings_percent"` // 节省百分比
 	MonthlySales          int32    `json:"monthly_sales"`
 	MerchantName          string   `json:"merchant_name"`
-	MerchantLogo          string   `json:"merchant_logo"`
+	MerchantLogoAssetID   *int64   `json:"merchant_logo_asset_id,omitempty"`
 	MerchantIsOpen        bool     `json:"merchant_is_open"`
 	Distance              int      `json:"distance"`
 	EstimatedDeliveryFee  *int64   `json:"estimated_delivery_fee,omitempty"`
@@ -584,9 +584,11 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		}
 
 		// Prefer combo image; fall back to first dish image if missing
-		imageURL := row.ImageUrl.String
-		if imageURL == "" {
-			imageURL = row.FallbackImageUrl.String
+		var imageAssetID *int64
+		if row.ImageMediaAssetID.Valid {
+			imageAssetID = &row.ImageMediaAssetID.Int64
+		} else if row.FallbackImageMediaAssetID.Valid {
+			imageAssetID = &row.FallbackImageMediaAssetID.Int64
 		}
 
 		// Delivery Fee & Time Calculation
@@ -631,13 +633,13 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 			MerchantID:            row.MerchantID,
 			Name:                  row.Name,
 			Description:           row.Description.String,
-			ImageURL:              normalizeUploadURLForClient(imageURL),
+			ImageAssetID:          imageAssetID,
 			OriginalPrice:         originalPrice,
 			ComboPrice:            comboPrice,
 			SavingsPercent:        savings,
 			MonthlySales:          row.MonthlySales,
 			MerchantName:          row.MerchantName,
-			MerchantLogo:          normalizeUploadURLForClient(row.MerchantLogo.String),
+			MerchantLogoAssetID:   int64PtrFromPgInt8(row.MerchantLogoMediaAssetID),
 			MerchantIsOpen:        row.MerchantIsOpen,
 			Distance:              distanceMeters,
 			EstimatedDeliveryFee:  estimatedFee,
@@ -664,7 +666,7 @@ func newSearchDishResponseFromDish(dish db.Dish) searchDishResponse {
 		MerchantID:    dish.MerchantID,
 		Name:          dish.Name,
 		Description:   dish.Description.String,
-		ImageURL:      normalizeUploadURLForClient(dish.ImageUrl.String),
+		ImageAssetID:  int64PtrFromPgInt8(dish.ImageMediaAssetID),
 		Price:         int64(dish.Price),
 		OriginalPrice: int64(dish.Price),
 		IsAvailable:   dish.IsAvailable,
@@ -701,7 +703,7 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 		MerchantID:    row.MerchantID,
 		Name:          row.Name,
 		Description:   row.Description.String,
-		ImageURL:      normalizeUploadURLForClient(row.ImageUrl.String),
+		ImageAssetID:  int64PtrFromPgInt8(row.ImageMediaAssetID),
 		Price:         int64(row.Price),
 		OriginalPrice: int64(row.Price),
 		IsAvailable:   row.IsAvailable,
@@ -709,10 +711,10 @@ func newSearchDishResponseFromGlobalRow(row db.SearchDishesGlobalRow, distanceMe
 		SortOrder:     row.SortOrder,
 		MonthlySales:  row.MonthlySales,
 		// Enriched Fields
-		MerchantName:   row.MerchantName,
-		MerchantLogo:   normalizeUploadURLForClient(row.MerchantLogo.String),
-		MerchantIsOpen: &row.MerchantIsOpen,
-		Distance:       distanceMeters,
+		MerchantName:        row.MerchantName,
+		MerchantLogoAssetID: int64PtrFromPgInt8(row.MerchantLogoAssetID),
+		MerchantIsOpen:      &row.MerchantIsOpen,
+		Distance:            distanceMeters,
 
 		EstimatedDeliveryTime: deliveryTimeSeconds,
 		EstimatedDeliveryFee:  0, // Caller overwrites with calculateDeliveryFeeInternal result; 0 = fee unknown (fallback)
@@ -779,7 +781,7 @@ func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) se
 		ID:          merchant.ID,
 		Name:        merchant.Name,
 		Description: merchant.Description.String,
-		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
+		LogoAssetID: int64PtrFromPgInt8(merchant.LogoMediaAssetID),
 		Status:      merchant.Status,
 		IsOpen:      merchant.IsOpen,
 		RegionID:    merchant.RegionID,
@@ -819,7 +821,7 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 		ID:          merchant.ID,
 		Name:        merchant.Name,
 		Description: merchant.Description.String,
-		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
+		LogoAssetID: int64PtrFromPgInt8(merchant.LogoMediaAssetID),
 		Status:      merchant.Status,
 		IsOpen:      merchant.IsOpen,
 		RegionID:    merchant.RegionID, // 添加区域ID用于运费计算
@@ -880,19 +882,19 @@ type searchRoomsRequest struct {
 }
 
 type searchRoomResponse struct {
-	ID                int64   `json:"id"`
-	MerchantID        int64   `json:"merchant_id"`
-	TableNo           string  `json:"table_no"`
-	Capacity          int16   `json:"capacity"`
-	Description       *string `json:"description,omitempty"`
-	MinimumSpend      *int64  `json:"minimum_spend,omitempty"` // 分
-	Status            string  `json:"status"`
-	MerchantName      string  `json:"merchant_name"`
-	MerchantLogo      *string `json:"merchant_logo,omitempty"`
-	MerchantAddress   string  `json:"merchant_address"`
-	MerchantLatitude  float64 `json:"merchant_latitude"`
-	MerchantLongitude float64 `json:"merchant_longitude"`
-	PrimaryImage      *string `json:"primary_image,omitempty"` // 包间主图
+	ID                  int64   `json:"id"`
+	MerchantID          int64   `json:"merchant_id"`
+	TableNo             string  `json:"table_no"`
+	Capacity            int16   `json:"capacity"`
+	Description         *string `json:"description,omitempty"`
+	MinimumSpend        *int64  `json:"minimum_spend,omitempty"` // 分
+	Status              string  `json:"status"`
+	MerchantName        string  `json:"merchant_name"`
+	MerchantLogoAssetID *int64  `json:"merchant_logo_asset_id,omitempty"`
+	MerchantAddress     string  `json:"merchant_address"`
+	MerchantLatitude    float64 `json:"merchant_latitude"`
+	MerchantLongitude   float64 `json:"merchant_longitude"`
+	PrimaryImageAssetID *int64  `json:"primary_image_asset_id,omitempty"` // 包间主图
 }
 
 // searchRooms godoc
@@ -1060,9 +1062,9 @@ func newSearchRoomResponseFromTag(r db.SearchRoomsByMerchantTagRow) searchRoomRe
 	if r.MinimumSpend.Valid {
 		resp.MinimumSpend = &r.MinimumSpend.Int64
 	}
-	if r.MerchantLogo.Valid {
-		logo := normalizeUploadURLForClient(r.MerchantLogo.String)
-		resp.MerchantLogo = &logo
+	if r.MerchantLogoMediaAssetID.Valid {
+		logoID := r.MerchantLogoMediaAssetID.Int64
+		resp.MerchantLogoAssetID = &logoID
 	}
 	if r.MerchantLatitude.Valid {
 		lat, _ := r.MerchantLatitude.Float64Value()
@@ -1093,13 +1095,14 @@ func newSearchRoomResponseWithImage(r db.SearchRoomsWithImageRow) searchRoomResp
 	if r.MinimumSpend.Valid {
 		resp.MinimumSpend = &r.MinimumSpend.Int64
 	}
-	if r.MerchantLogo.Valid {
-		logo := normalizeUploadURLForClient(r.MerchantLogo.String)
-		resp.MerchantLogo = &logo
+	if r.MerchantLogoMediaAssetID.Valid {
+		logoID := r.MerchantLogoMediaAssetID.Int64
+		resp.MerchantLogoAssetID = &logoID
 	}
-	if r.PrimaryImage != "" {
-		primaryImage := normalizeUploadURLForClient(r.PrimaryImage)
-		resp.PrimaryImage = &primaryImage
+	if r.PrimaryImageAssetID != nil {
+		if id, ok := r.PrimaryImageAssetID.(int64); ok && id != 0 {
+			resp.PrimaryImageAssetID = &id
+		}
 	}
 	if r.MerchantLatitude.Valid {
 		lat, _ := r.MerchantLatitude.Float64Value()

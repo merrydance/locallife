@@ -318,13 +318,14 @@ type ComboSet struct {
 	MerchantID    int64              `json:"merchant_id"`
 	Name          string             `json:"name"`
 	Description   pgtype.Text        `json:"description"`
-	ImageUrl      pgtype.Text        `json:"image_url"`
 	OriginalPrice int64              `json:"original_price"`
 	ComboPrice    int64              `json:"combo_price"`
 	IsOnline      bool               `json:"is_online"`
 	CreatedAt     time.Time          `json:"created_at"`
 	UpdatedAt     pgtype.Timestamptz `json:"updated_at"`
 	DeletedAt     pgtype.Timestamptz `json:"deleted_at"`
+	// 套餐封面图媒体资产 ID，取代 image_url 字段
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
 }
 
 type ComboTag struct {
@@ -482,7 +483,6 @@ type Dish struct {
 	CategoryID  pgtype.Int8        `json:"category_id"`
 	Name        string             `json:"name"`
 	Description pgtype.Text        `json:"description"`
-	ImageUrl    pgtype.Text        `json:"image_url"`
 	Price       int64              `json:"price"`
 	MemberPrice pgtype.Int8        `json:"member_price"`
 	IsAvailable bool               `json:"is_available"`
@@ -495,6 +495,8 @@ type Dish struct {
 	DeletedAt      pgtype.Timestamptz `json:"deleted_at"`
 	MonthlySales   int32              `json:"monthly_sales"`
 	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
+	// 菜品图片媒体资产 ID，取代 image_url 字段
+	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
 }
 
 type DishCategory struct {
@@ -668,6 +670,52 @@ type Ingredient struct {
 	CreatedAt  time.Time   `json:"created_at"`
 }
 
+// 媒体资产表，统一管理 OSS 上传文件的元数据
+type MediaAsset struct {
+	ID int64 `json:"id"`
+	// OSS 对象键，全局唯一，不包含域名
+	ObjectKey string `json:"object_key"`
+	// 可见性：public（公共桶，走 CDN）或 private（私有桶，鉴权后签名访问）
+	Visibility string `json:"visibility"`
+	// 媒体用途类别，决定 object_key 前缀和权限策略
+	MediaCategory  string      `json:"media_category"`
+	MimeType       string      `json:"mime_type"`
+	FileSize       int64       `json:"file_size"`
+	Width          pgtype.Int4 `json:"width"`
+	Height         pgtype.Int4 `json:"height"`
+	ChecksumSha256 string      `json:"checksum_sha256"`
+	// 上传状态：pending（待上传）→ uploaded（已传到 OSS）→ confirmed（后端已确认）→ failed/deleted
+	UploadStatus string `json:"upload_status"`
+	// 内容审核状态：pending → approved/rejected/quarantined
+	ModerationStatus string `json:"moderation_status"`
+	UploadedBy       int64  `json:"uploaded_by"`
+	// 来源客户端类型，用于审计
+	SourceClient string             `json:"source_client"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    time.Time          `json:"updated_at"`
+	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+}
+
+// 媒体上传会话表，每次申请直传 OSS 创建一条记录
+type MediaUploadSession struct {
+	// upload_id，客户端在 complete 时回传用于校验
+	ID            string      `json:"id"`
+	MediaAssetID  pgtype.Int8 `json:"media_asset_id"`
+	UserID        int64       `json:"user_id"`
+	BusinessType  string      `json:"business_type"`
+	MediaCategory string      `json:"media_category"`
+	Visibility    string      `json:"visibility"`
+	// 预分配的 OSS 对象键，complete 时必须与此一致
+	ObjectKey      string `json:"object_key"`
+	ChecksumSha256 string `json:"checksum_sha256"`
+	ContentType    string `json:"content_type"`
+	ContentLength  int64  `json:"content_length"`
+	Status         string `json:"status"`
+	// 直传凭证过期时间，过期后 complete 失败
+	ExpireAt  time.Time `json:"expire_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // M10: 会员交易流水表
 type MembershipTransaction struct {
 	ID              int64       `json:"id"`
@@ -689,7 +737,6 @@ type Merchant struct {
 	OwnerUserID int64          `json:"owner_user_id"`
 	Name        string         `json:"name"`
 	Description pgtype.Text    `json:"description"`
-	LogoUrl     pgtype.Text    `json:"logo_url"`
 	Phone       string         `json:"phone"`
 	Address     string         `json:"address"`
 	Latitude    pgtype.Numeric `json:"latitude"`
@@ -717,21 +764,20 @@ type Merchant struct {
 	BindCodeExpiresAt pgtype.Timestamptz `json:"bind_code_expires_at"`
 	GroupID           pgtype.Int8        `json:"group_id"`
 	BrandID           pgtype.Int8        `json:"brand_id"`
+	// 商户 Logo 媒体资产 ID，取代 logo_url 字段
+	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
 }
 
 type MerchantApplication struct {
-	ID                      int64       `json:"id"`
-	UserID                  int64       `json:"user_id"`
-	MerchantName            string      `json:"merchant_name"`
-	BusinessLicenseNumber   string      `json:"business_license_number"`
-	BusinessLicenseImageUrl string      `json:"business_license_image_url"`
-	LegalPersonName         string      `json:"legal_person_name"`
-	LegalPersonIDNumber     string      `json:"legal_person_id_number"`
-	LegalPersonIDFrontUrl   string      `json:"legal_person_id_front_url"`
-	LegalPersonIDBackUrl    string      `json:"legal_person_id_back_url"`
-	ContactPhone            string      `json:"contact_phone"`
-	BusinessAddress         string      `json:"business_address"`
-	BusinessScope           pgtype.Text `json:"business_scope"`
+	ID                    int64       `json:"id"`
+	UserID                int64       `json:"user_id"`
+	MerchantName          string      `json:"merchant_name"`
+	BusinessLicenseNumber string      `json:"business_license_number"`
+	LegalPersonName       string      `json:"legal_person_name"`
+	LegalPersonIDNumber   string      `json:"legal_person_id_number"`
+	ContactPhone          string      `json:"contact_phone"`
+	BusinessAddress       string      `json:"business_address"`
+	BusinessScope         pgtype.Text `json:"business_scope"`
 	// draft=草稿, submitted=已提交(待审核), approved=已通过, rejected=已拒绝
 	Status       string             `json:"status"`
 	RejectReason pgtype.Text        `json:"reject_reason"`
@@ -745,8 +791,6 @@ type MerchantApplication struct {
 	Latitude pgtype.Numeric `json:"latitude"`
 	// 区域ID，根据商户定位自动确定
 	RegionID pgtype.Int8 `json:"region_id"`
-	// 食品经营许可证图片URL
-	FoodPermitUrl pgtype.Text `json:"food_permit_url"`
 	// 食品经营许可证OCR识别结果JSON
 	FoodPermitOcr []byte `json:"food_permit_ocr"`
 	// 营业执照OCR识别结果JSON
@@ -759,6 +803,14 @@ type MerchantApplication struct {
 	StorefrontImages []byte `json:"storefront_images"`
 	// 店内环境照片URL数组 JSON，最多5张
 	EnvironmentImages []byte `json:"environment_images"`
+	// 营业执照图片媒体资产 ID
+	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
+	// 食品经营许可证图片媒体资产 ID
+	FoodPermitMediaAssetID pgtype.Int8 `json:"food_permit_media_asset_id"`
+	// 法人身份证正面媒体资产 ID
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	// 法人身份证背面媒体资产 ID
+	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
 }
 
 // Boss 店铺认领关系表 - Boss 可以认领多个店铺，只有分析和员工管理权限
@@ -776,11 +828,12 @@ type MerchantBrand struct {
 	ID          int64       `json:"id"`
 	GroupID     int64       `json:"group_id"`
 	Name        string      `json:"name"`
-	LogoUrl     pgtype.Text `json:"logo_url"`
 	Description pgtype.Text `json:"description"`
 	Status      string      `json:"status"`
 	CreatedAt   time.Time   `json:"created_at"`
 	UpdatedAt   time.Time   `json:"updated_at"`
+	// 品牌 Logo 媒体资产 ID，取代 logo_url 字段
+	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
 }
 
 type MerchantBusinessHour struct {
@@ -827,12 +880,13 @@ type MerchantGroup struct {
 	Status          string      `json:"status"`
 	ContactPhone    pgtype.Text `json:"contact_phone"`
 	LicenseNumber   pgtype.Text `json:"license_number"`
-	LicenseImageUrl pgtype.Text `json:"license_image_url"`
 	Address         pgtype.Text `json:"address"`
 	RegionID        pgtype.Int8 `json:"region_id"`
 	ApplicationData []byte      `json:"application_data"`
 	CreatedAt       time.Time   `json:"created_at"`
 	UpdatedAt       time.Time   `json:"updated_at"`
+	// 集团营业执照图片媒体资产 ID，取代 license_image_url 字段
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
 }
 
 type MerchantGroupApplication struct {
@@ -841,7 +895,6 @@ type MerchantGroupApplication struct {
 	GroupName       string             `json:"group_name"`
 	ContactPhone    string             `json:"contact_phone"`
 	LicenseNumber   pgtype.Text        `json:"license_number"`
-	LicenseImageUrl pgtype.Text        `json:"license_image_url"`
 	Address         pgtype.Text        `json:"address"`
 	RegionID        pgtype.Int8        `json:"region_id"`
 	Status          string             `json:"status"`
@@ -851,6 +904,8 @@ type MerchantGroupApplication struct {
 	ApplicationData []byte             `json:"application_data"`
 	CreatedAt       time.Time          `json:"created_at"`
 	UpdatedAt       time.Time          `json:"updated_at"`
+	// 集团营业执照图片媒体资产 ID，取代 license_image_url 字段
+	LicenseMediaAssetID pgtype.Int8 `json:"license_media_asset_id"`
 }
 
 type MerchantGroupAuditLog struct {
@@ -1068,14 +1123,11 @@ type OperatorApplication struct {
 	Name                  pgtype.Text `json:"name"`
 	ContactName           pgtype.Text `json:"contact_name"`
 	ContactPhone          pgtype.Text `json:"contact_phone"`
-	BusinessLicenseUrl    pgtype.Text `json:"business_license_url"`
 	BusinessLicenseNumber pgtype.Text `json:"business_license_number"`
 	// 营业执照OCR识别结果JSON
 	BusinessLicenseOcr  []byte      `json:"business_license_ocr"`
 	LegalPersonName     pgtype.Text `json:"legal_person_name"`
 	LegalPersonIDNumber pgtype.Text `json:"legal_person_id_number"`
-	IDCardFrontUrl      pgtype.Text `json:"id_card_front_url"`
-	IDCardBackUrl       pgtype.Text `json:"id_card_back_url"`
 	// 身份证正面OCR识别结果JSON
 	IDCardFrontOcr []byte `json:"id_card_front_ocr"`
 	// 身份证背面OCR识别结果JSON
@@ -1089,6 +1141,12 @@ type OperatorApplication struct {
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"`
 	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
+	// 运营商营业执照媒体资产 ID
+	BusinessLicenseMediaAssetID pgtype.Int8 `json:"business_license_media_asset_id"`
+	// 运营商法人身份证正面媒体资产 ID
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	// 运营商法人身份证背面媒体资产 ID
+	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
 }
 
 // 运营商管理的区域列表，支持一个运营商管理多个区县
@@ -1496,8 +1554,6 @@ type Review struct {
 	MerchantID int64 `json:"merchant_id"`
 	// 评价内容
 	Content string `json:"content"`
-	// 评价图片URLs，PostgreSQL数组类型
-	Images []string `json:"images"`
 	// 是否可见，低信用用户评价不展示
 	IsVisible bool `json:"is_visible"`
 	// 商户回复内容
@@ -1505,6 +1561,16 @@ type Review struct {
 	// 回复时间
 	RepliedAt pgtype.Timestamptz `json:"replied_at"`
 	CreatedAt time.Time          `json:"created_at"`
+}
+
+// 评价图片关联表，取代 reviews.images 数组字段
+type ReviewImage struct {
+	ID           int64 `json:"id"`
+	ReviewID     int64 `json:"review_id"`
+	MediaAssetID int64 `json:"media_asset_id"`
+	// 图片排列顺序
+	SortOrder int32     `json:"sort_order"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // 骑手表
@@ -1540,15 +1606,12 @@ type Rider struct {
 
 // 骑手入驻申请表，支持草稿保存和自动审核
 type RiderApplication struct {
-	ID             int64       `json:"id"`
-	UserID         int64       `json:"user_id"`
-	RealName       pgtype.Text `json:"real_name"`
-	Phone          pgtype.Text `json:"phone"`
-	IDCardFrontUrl pgtype.Text `json:"id_card_front_url"`
-	IDCardBackUrl  pgtype.Text `json:"id_card_back_url"`
+	ID       int64       `json:"id"`
+	UserID   int64       `json:"user_id"`
+	RealName pgtype.Text `json:"real_name"`
+	Phone    pgtype.Text `json:"phone"`
 	// 身份证OCR识别结果JSON
-	IDCardOcr     []byte      `json:"id_card_ocr"`
-	HealthCertUrl pgtype.Text `json:"health_cert_url"`
+	IDCardOcr []byte `json:"id_card_ocr"`
 	// 健康证OCR识别结果JSON
 	HealthCertOcr []byte `json:"health_cert_ocr"`
 	// draft=草稿, submitted=已提交待审核, approved=已通过, rejected=已拒绝
@@ -1559,6 +1622,12 @@ type RiderApplication struct {
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
+	// 骑手身份证正面媒体资产 ID
+	IDCardFrontMediaAssetID pgtype.Int8 `json:"id_card_front_media_asset_id"`
+	// 骑手身份证背面媒体资产 ID
+	IDCardBackMediaAssetID pgtype.Int8 `json:"id_card_back_media_asset_id"`
+	// 骑手健康证媒体资产 ID
+	HealthCertMediaAssetID pgtype.Int8 `json:"health_cert_media_asset_id"`
 }
 
 // 骑手押金流水
@@ -1702,11 +1771,19 @@ type SafetyReport struct {
 	Description     string      `json:"description"`
 	Level           string      `json:"level"`
 	MerchantIds     []int64     `json:"merchant_ids"`
-	Images          []string    `json:"images"`
 	Status          string      `json:"status"`
 	ResolutionNotes pgtype.Text `json:"resolution_notes"`
 	CreatedAt       time.Time   `json:"created_at"`
 	UpdatedAt       time.Time   `json:"updated_at"`
+}
+
+// 安全事件上报图片关联表，取代 safety_reports.images text[] 字段
+type SafetyReportImage struct {
+	ID           int64     `json:"id"`
+	ReportID     int64     `json:"report_id"`
+	MediaAssetID int64     `json:"media_asset_id"`
+	SortOrder    int16     `json:"sort_order"`
+	CreatedAt    time.Time `json:"created_at"`
 }
 
 type SearchHistory struct {
@@ -1759,13 +1836,13 @@ type TableImage struct {
 	ID int64 `json:"id"`
 	// 桌台ID
 	TableID int64 `json:"table_id"`
-	// 图片URL
-	ImageUrl string `json:"image_url"`
 	// 排序顺序
 	SortOrder int32 `json:"sort_order"`
 	// 是否为主图
 	IsPrimary bool      `json:"is_primary"`
 	CreatedAt time.Time `json:"created_at"`
+	// 桌台图片媒体资产 ID，取代 image_url 字段
+	MediaAssetID pgtype.Int8 `json:"media_asset_id"`
 }
 
 type TableReservation struct {
@@ -1841,6 +1918,8 @@ type User struct {
 	// 微信头像URL
 	AvatarUrl pgtype.Text `json:"avatar_url"`
 	CreatedAt time.Time   `json:"created_at"`
+	// 用户头像媒体资产 ID，用于应用内上传的头像；微信头像仍存 avatar_url
+	AvatarMediaAssetID pgtype.Int8 `json:"avatar_media_asset_id"`
 }
 
 type UserAddress struct {

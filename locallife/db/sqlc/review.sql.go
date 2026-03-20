@@ -56,20 +56,18 @@ INSERT INTO reviews (
   user_id,
   merchant_id,
   content,
-  images,
   is_visible
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
-) RETURNING id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at
+  $1, $2, $3, $4, $5
+) RETURNING id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at
 `
 
 type CreateReviewParams struct {
-	OrderID    int64    `json:"order_id"`
-	UserID     int64    `json:"user_id"`
-	MerchantID int64    `json:"merchant_id"`
-	Content    string   `json:"content"`
-	Images     []string `json:"images"`
-	IsVisible  bool     `json:"is_visible"`
+	OrderID    int64  `json:"order_id"`
+	UserID     int64  `json:"user_id"`
+	MerchantID int64  `json:"merchant_id"`
+	Content    string `json:"content"`
+	IsVisible  bool   `json:"is_visible"`
 }
 
 func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Review, error) {
@@ -78,7 +76,6 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 		arg.UserID,
 		arg.MerchantID,
 		arg.Content,
-		arg.Images,
 		arg.IsVisible,
 	)
 	var i Review
@@ -88,7 +85,6 @@ func (q *Queries) CreateReview(ctx context.Context, arg CreateReviewParams) (Rev
 		&i.UserID,
 		&i.MerchantID,
 		&i.Content,
-		&i.Images,
 		&i.IsVisible,
 		&i.MerchantReply,
 		&i.RepliedAt,
@@ -108,7 +104,7 @@ func (q *Queries) DeleteReview(ctx context.Context, id int64) error {
 }
 
 const getReview = `-- name: GetReview :one
-SELECT id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at FROM reviews
+SELECT id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at FROM reviews
 WHERE id = $1 LIMIT 1
 `
 
@@ -121,7 +117,6 @@ func (q *Queries) GetReview(ctx context.Context, id int64) (Review, error) {
 		&i.UserID,
 		&i.MerchantID,
 		&i.Content,
-		&i.Images,
 		&i.IsVisible,
 		&i.MerchantReply,
 		&i.RepliedAt,
@@ -131,7 +126,7 @@ func (q *Queries) GetReview(ctx context.Context, id int64) (Review, error) {
 }
 
 const getReviewByOrderID = `-- name: GetReviewByOrderID :one
-SELECT id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at FROM reviews
+SELECT id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at FROM reviews
 WHERE order_id = $1 LIMIT 1
 `
 
@@ -144,7 +139,6 @@ func (q *Queries) GetReviewByOrderID(ctx context.Context, orderID int64) (Review
 		&i.UserID,
 		&i.MerchantID,
 		&i.Content,
-		&i.Images,
 		&i.IsVisible,
 		&i.MerchantReply,
 		&i.RepliedAt,
@@ -154,7 +148,7 @@ func (q *Queries) GetReviewByOrderID(ctx context.Context, orderID int64) (Review
 }
 
 const listAllReviewsByMerchant = `-- name: ListAllReviewsByMerchant :many
-SELECT id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at FROM reviews
+SELECT id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at FROM reviews
 WHERE merchant_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -182,7 +176,6 @@ func (q *Queries) ListAllReviewsByMerchant(ctx context.Context, arg ListAllRevie
 			&i.UserID,
 			&i.MerchantID,
 			&i.Content,
-			&i.Images,
 			&i.IsVisible,
 			&i.MerchantReply,
 			&i.RepliedAt,
@@ -199,7 +192,7 @@ func (q *Queries) ListAllReviewsByMerchant(ctx context.Context, arg ListAllRevie
 }
 
 const listReviewsByMerchant = `-- name: ListReviewsByMerchant :many
-SELECT id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at FROM reviews
+SELECT id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at FROM reviews
 WHERE merchant_id = $1
   AND is_visible = true
 ORDER BY created_at DESC
@@ -227,7 +220,6 @@ func (q *Queries) ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMe
 			&i.UserID,
 			&i.MerchantID,
 			&i.Content,
-			&i.Images,
 			&i.IsVisible,
 			&i.MerchantReply,
 			&i.RepliedAt,
@@ -244,7 +236,7 @@ func (q *Queries) ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMe
 }
 
 const listReviewsByUser = `-- name: ListReviewsByUser :many
-SELECT r.id, r.order_id, r.user_id, r.merchant_id, r.content, r.images, r.is_visible, r.merchant_reply, r.replied_at, r.created_at, m.name as merchant_name, m.logo_url as merchant_logo
+SELECT r.id, r.order_id, r.user_id, r.merchant_id, r.content, r.is_visible, r.merchant_reply, r.replied_at, r.created_at, m.name as merchant_name, m.logo_media_asset_id as merchant_logo_media_asset_id
 FROM reviews r
 JOIN merchants m ON r.merchant_id = m.id
 WHERE r.user_id = $1
@@ -259,18 +251,17 @@ type ListReviewsByUserParams struct {
 }
 
 type ListReviewsByUserRow struct {
-	ID            int64              `json:"id"`
-	OrderID       int64              `json:"order_id"`
-	UserID        int64              `json:"user_id"`
-	MerchantID    int64              `json:"merchant_id"`
-	Content       string             `json:"content"`
-	Images        []string           `json:"images"`
-	IsVisible     bool               `json:"is_visible"`
-	MerchantReply pgtype.Text        `json:"merchant_reply"`
-	RepliedAt     pgtype.Timestamptz `json:"replied_at"`
-	CreatedAt     time.Time          `json:"created_at"`
-	MerchantName  string             `json:"merchant_name"`
-	MerchantLogo  pgtype.Text        `json:"merchant_logo"`
+	ID                       int64              `json:"id"`
+	OrderID                  int64              `json:"order_id"`
+	UserID                   int64              `json:"user_id"`
+	MerchantID               int64              `json:"merchant_id"`
+	Content                  string             `json:"content"`
+	IsVisible                bool               `json:"is_visible"`
+	MerchantReply            pgtype.Text        `json:"merchant_reply"`
+	RepliedAt                pgtype.Timestamptz `json:"replied_at"`
+	CreatedAt                time.Time          `json:"created_at"`
+	MerchantName             string             `json:"merchant_name"`
+	MerchantLogoMediaAssetID pgtype.Int8        `json:"merchant_logo_media_asset_id"`
 }
 
 func (q *Queries) ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]ListReviewsByUserRow, error) {
@@ -288,13 +279,12 @@ func (q *Queries) ListReviewsByUser(ctx context.Context, arg ListReviewsByUserPa
 			&i.UserID,
 			&i.MerchantID,
 			&i.Content,
-			&i.Images,
 			&i.IsVisible,
 			&i.MerchantReply,
 			&i.RepliedAt,
 			&i.CreatedAt,
 			&i.MerchantName,
-			&i.MerchantLogo,
+			&i.MerchantLogoMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -311,7 +301,7 @@ UPDATE reviews
 SET merchant_reply = $2,
     replied_at = now()
 WHERE id = $1
-RETURNING id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at
+RETURNING id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at
 `
 
 type UpdateMerchantReplyParams struct {
@@ -328,7 +318,6 @@ func (q *Queries) UpdateMerchantReply(ctx context.Context, arg UpdateMerchantRep
 		&i.UserID,
 		&i.MerchantID,
 		&i.Content,
-		&i.Images,
 		&i.IsVisible,
 		&i.MerchantReply,
 		&i.RepliedAt,
@@ -341,7 +330,7 @@ const updateReviewVisibility = `-- name: UpdateReviewVisibility :one
 UPDATE reviews
 SET is_visible = $2
 WHERE id = $1
-RETURNING id, order_id, user_id, merchant_id, content, images, is_visible, merchant_reply, replied_at, created_at
+RETURNING id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at
 `
 
 type UpdateReviewVisibilityParams struct {
@@ -358,7 +347,6 @@ func (q *Queries) UpdateReviewVisibility(ctx context.Context, arg UpdateReviewVi
 		&i.UserID,
 		&i.MerchantID,
 		&i.Content,
-		&i.Images,
 		&i.IsVisible,
 		&i.MerchantReply,
 		&i.RepliedAt,

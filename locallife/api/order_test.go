@@ -30,7 +30,7 @@ func dishWithCustomizationsFromDish(dish db.Dish) db.GetDishWithCustomizationsRo
 		CategoryID:          dish.CategoryID,
 		Name:                dish.Name,
 		Description:         dish.Description,
-		ImageUrl:            dish.ImageUrl,
+		ImageMediaAssetID:   dish.ImageMediaAssetID,
 		Price:               dish.Price,
 		MemberPrice:         dish.MemberPrice,
 		IsAvailable:         dish.IsAvailable,

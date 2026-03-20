@@ -38,7 +38,7 @@ ORDER BY id;
 -- name: ListOrderItemsWithDishByOrder :many
 SELECT 
     oi.*,
-    d.image_url as dish_image_url
+    d.image_media_asset_id as dish_image_media_asset_id
 FROM order_items oi
 LEFT JOIN dishes d ON oi.dish_id = d.id
 WHERE oi.order_id = $1

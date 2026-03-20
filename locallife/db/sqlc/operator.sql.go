@@ -99,7 +99,7 @@ func (q *Queries) CreateOperator(ctx context.Context, arg CreateOperatorParams) 
 }
 
 const getApprovedOperatorApplicationByUserID = `-- name: GetApprovedOperatorApplicationByUserID :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_url, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_url, id_card_back_url, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at FROM operator_applications
+SELECT id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id FROM operator_applications
 WHERE user_id = $1 AND status = 'approved'
 ORDER BY reviewed_at DESC
 LIMIT 1
@@ -116,13 +116,10 @@ func (q *Queries) GetApprovedOperatorApplicationByUserID(ctx context.Context, us
 		&i.Name,
 		&i.ContactName,
 		&i.ContactPhone,
-		&i.BusinessLicenseUrl,
 		&i.BusinessLicenseNumber,
 		&i.BusinessLicenseOcr,
 		&i.LegalPersonName,
 		&i.LegalPersonIDNumber,
-		&i.IDCardFrontUrl,
-		&i.IDCardBackUrl,
 		&i.IDCardFrontOcr,
 		&i.IDCardBackOcr,
 		&i.RequestedContractYears,
@@ -133,6 +130,9 @@ func (q *Queries) GetApprovedOperatorApplicationByUserID(ctx context.Context, us
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
 	)
 	return i, err
 }

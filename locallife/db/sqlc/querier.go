@@ -97,7 +97,9 @@ type Querier interface {
 	CloseExpiredPaymentOrders(ctx context.Context) (int64, error)
 	// 用户点击完成（外卖）：直接进入 completed，并补齐 user_delivered_at
 	CompleteTakeoutOrderByUser(ctx context.Context, id int64) (Order, error)
+	CompleteUploadSession(ctx context.Context, arg CompleteUploadSessionParams) (MediaUploadSession, error)
 	ConfirmFraudPattern(ctx context.Context, arg ConfirmFraudPatternParams) error
+	ConfirmMediaAssetUploaded(ctx context.Context, arg ConfirmMediaAssetUploadedParams) (MediaAsset, error)
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
 	ConfirmWebLoginSession(ctx context.Context, arg ConfirmWebLoginSessionParams) (WebLoginSession, error)
@@ -329,6 +331,10 @@ type Querier interface {
 	// 食材管理查询 (Ingredient Queries)
 	// ============================================
 	CreateIngredient(ctx context.Context, arg CreateIngredientParams) (Ingredient, error)
+	// ============================================================
+	// 媒体资产查询 (Media Asset Queries)
+	// ============================================================
+	CreateMediaAsset(ctx context.Context, arg CreateMediaAssetParams) (MediaAsset, error)
 	// Membership Transactions
 	CreateMembershipTransaction(ctx context.Context, arg CreateMembershipTransactionParams) (MembershipTransaction, error)
 	CreateMembershipTransactionWithPaymentOrderID(ctx context.Context, arg CreateMembershipTransactionWithPaymentOrderIDParams) (MembershipTransaction, error)
@@ -415,6 +421,10 @@ type Querier interface {
 	// 商户代客创建预订（无需支付，直接 confirmed 状态）
 	CreateTableReservationByMerchant(ctx context.Context, arg CreateTableReservationByMerchantParams) (TableReservation, error)
 	CreateTag(ctx context.Context, arg CreateTagParams) (Tag, error)
+	// ============================================================
+	// 上传会话查询 (Upload Session Queries)
+	// ============================================================
+	CreateUploadSession(ctx context.Context, arg CreateUploadSessionParams) (MediaUploadSession, error)
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
 	CreateUserAddress(ctx context.Context, arg CreateUserAddressParams) (UserAddress, error)
 	// 创建用户余额账户
@@ -497,7 +507,9 @@ type Querier interface {
 	DeleteUserRoleByUserAndRole(ctx context.Context, arg DeleteUserRoleByUserAndRoleParams) error
 	// 软删除代金券模板
 	DeleteVoucher(ctx context.Context, id int64) error
+	ExpireStaleUploadSessions(ctx context.Context) ([]MediaUploadSession, error)
 	ExpireUnusedVouchers(ctx context.Context) (int64, error)
+	ExpireUploadSession(ctx context.Context, id string) (MediaUploadSession, error)
 	ExpireWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	// 批量过期超时的 pending 会话
 	ExpireWebLoginSessionsBefore(ctx context.Context, arg ExpireWebLoginSessionsBeforeParams) (int64, error)
@@ -662,6 +674,8 @@ type Querier interface {
 	GetLatestWeatherCoefficient(ctx context.Context, regionID int64) (WeatherCoefficient, error)
 	GetMaliciousClaims(ctx context.Context, createdAt time.Time) ([]Claim, error)
 	GetMatchingRechargeRule(ctx context.Context, arg GetMatchingRechargeRuleParams) (RechargeRule, error)
+	GetMediaAssetByID(ctx context.Context, id int64) (MediaAsset, error)
+	GetMediaAssetByObjectKey(ctx context.Context, objectKey string) (MediaAsset, error)
 	GetMembershipByMerchantAndUser(ctx context.Context, arg GetMembershipByMerchantAndUserParams) (MerchantMembership, error)
 	GetMembershipByMerchantAndUserForUpdate(ctx context.Context, arg GetMembershipByMerchantAndUserForUpdateParams) (MerchantMembership, error)
 	GetMembershipConsumeByOrder(ctx context.Context, arg GetMembershipConsumeByOrderParams) (MembershipTransaction, error)
@@ -801,6 +815,7 @@ type Querier interface {
 	GetPendingClaims(ctx context.Context, limit int32) ([]Claim, error)
 	// 检查区域是否有待审核或已通过的申请（用于区域独占检查）
 	GetPendingOperatorApplicationByRegion(ctx context.Context, regionID int64) (OperatorApplication, error)
+	GetPendingUploadSessionByIdempotencyKey(ctx context.Context, arg GetPendingUploadSessionByIdempotencyKeyParams) (MediaUploadSession, error)
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	// 平台日统计
 	GetPlatformDailyStats(ctx context.Context, arg GetPlatformDailyStatsParams) ([]GetPlatformDailyStatsRow, error)
@@ -941,6 +956,7 @@ type Querier interface {
 	GetTopSellingDishes(ctx context.Context, arg GetTopSellingDishesParams) ([]GetTopSellingDishesRow, error)
 	GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error)
 	GetUnconfirmedFraudPatterns(ctx context.Context, limit int32) ([]FraudPattern, error)
+	GetUploadSession(ctx context.Context, id string) (MediaUploadSession, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserAddress(ctx context.Context, id int64) (UserAddress, error)
 	// ==========================================
@@ -1122,6 +1138,7 @@ type Querier interface {
 	// Group merchants
 	ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) ([]ListGroupMerchantsRow, error)
 	ListIngredients(ctx context.Context, arg ListIngredientsParams) ([]Ingredient, error)
+	ListMediaAssetsByUploader(ctx context.Context, arg ListMediaAssetsByUploaderParams) ([]MediaAsset, error)
 	ListMembershipTransactions(ctx context.Context, arg ListMembershipTransactionsParams) ([]MembershipTransaction, error)
 	ListMembershipTransactionsByType(ctx context.Context, arg ListMembershipTransactionsByTypeParams) ([]MembershipTransaction, error)
 	// 获取商户当前有效的配送费优惠
@@ -1431,6 +1448,8 @@ type Querier interface {
 	SetAddressAsDefault(ctx context.Context, arg SetAddressAsDefaultParams) (UserAddress, error)
 	// 先将用户的所有地址设为非默认
 	SetDefaultAddress(ctx context.Context, userID int64) error
+	SetMediaAssetModerationStatus(ctx context.Context, arg SetMediaAssetModerationStatusParams) (MediaAsset, error)
+	SetMediaAssetUploadStatus(ctx context.Context, arg SetMediaAssetUploadStatusParams) (MediaAsset, error)
 	SetOperatorWallet(ctx context.Context, arg SetOperatorWalletParams) error
 	SetPaymentOrderCombinedID(ctx context.Context, arg SetPaymentOrderCombinedIDParams) (PaymentOrder, error)
 	// 先清除所有主图标记，再设置新的主图
@@ -1439,6 +1458,7 @@ type Querier interface {
 	SetTableImagePrimary(ctx context.Context, id int64) (TableImage, error)
 	// 设置用户需要提交证据
 	SetUserRequiresEvidence(ctx context.Context, arg SetUserRequiresEvidenceParams) error
+	SoftDeleteMediaAsset(ctx context.Context, id int64) (MediaAsset, error)
 	// 软删除员工（设置 status='disabled'），保留历史记录
 	SoftDeleteMerchantStaff(ctx context.Context, id int64) (MerchantStaff, error)
 	SubmitGroupApplication(ctx context.Context, id int64) (MerchantGroupApplication, error)

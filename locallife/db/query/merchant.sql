@@ -5,11 +5,8 @@ INSERT INTO merchant_applications (
   user_id,
   merchant_name,
   business_license_number,
-  business_license_image_url,
   legal_person_name,
   legal_person_id_number,
-  legal_person_id_front_url,
-  legal_person_id_back_url,
   contact_phone,
   business_address,
   business_scope,
@@ -17,7 +14,7 @@ INSERT INTO merchant_applications (
   latitude,
   region_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
 RETURNING *;
 
@@ -65,7 +62,6 @@ INSERT INTO merchants (
   owner_user_id,
   name,
   description,
-  logo_url,
   phone,
   address,
   latitude,
@@ -74,7 +70,7 @@ INSERT INTO merchants (
   application_data,
   region_id
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING *;
 
@@ -121,7 +117,7 @@ UPDATE merchants
 SET
   name = COALESCE(sqlc.narg('name'), name),
   description = COALESCE(sqlc.narg('description'), description),
-  logo_url = COALESCE(sqlc.narg('logo_url'), logo_url),
+  logo_media_asset_id = COALESCE(sqlc.narg('logo_media_asset_id'), logo_media_asset_id),
   phone = COALESCE(sqlc.narg('phone'), phone),
   address = COALESCE(sqlc.narg('address'), address),
   latitude = COALESCE(sqlc.narg('latitude'), latitude),
@@ -338,7 +334,7 @@ SELECT
     m.id,
     m.name,
     m.description,
-    m.logo_url,
+    m.logo_media_asset_id,
     m.address,
     m.latitude,
     m.longitude,
@@ -363,7 +359,7 @@ SELECT
     id,
     name,
     description,
-    logo_url,
+    logo_media_asset_id,
     address,
     latitude,
     longitude,
@@ -378,7 +374,7 @@ SELECT
     m.id,
     m.name,
     m.description,
-    m.logo_url,
+    m.logo_media_asset_id,
     m.address,
     m.latitude,
     m.longitude,

@@ -10,7 +10,7 @@ import (
 )
 
 type ApproveGroupApplicationTxParams struct {
-	ApplicationID int64
+	ApplicationID  int64
 	ReviewerUserID int64
 }
 
@@ -32,14 +32,14 @@ func (store *SQLStore) ApproveGroupApplicationTx(ctx context.Context, arg Approv
 		}
 
 		group, err := q.CreateMerchantGroup(ctx, CreateMerchantGroupParams{
-			Name:            app.GroupName,
-			OwnerUserID:     app.ApplicantUserID,
-			ContactPhone:    pgtype.Text{String: app.ContactPhone, Valid: app.ContactPhone != ""},
-			LicenseNumber:   app.LicenseNumber,
-			LicenseImageUrl: app.LicenseImageUrl,
-			Address:         app.Address,
-			RegionID:        app.RegionID,
-			ApplicationData: app.ApplicationData,
+			Name:                app.GroupName,
+			OwnerUserID:         app.ApplicantUserID,
+			ContactPhone:        pgtype.Text{String: app.ContactPhone, Valid: app.ContactPhone != ""},
+			LicenseNumber:       app.LicenseNumber,
+			LicenseMediaAssetID: app.LicenseMediaAssetID,
+			Address:             app.Address,
+			RegionID:            app.RegionID,
+			ApplicationData:     app.ApplicationData,
 		})
 		if err != nil {
 			return err
@@ -137,7 +137,7 @@ func (store *SQLStore) ApproveGroupJoinRequestTx(ctx context.Context, arg Approv
 		}
 
 		meta, _ := json.Marshal(map[string]any{
-			"request_id": req.ID,
+			"request_id":  req.ID,
 			"merchant_id": req.MerchantID,
 		})
 		_, err = q.CreateGroupAuditLog(ctx, CreateGroupAuditLogParams{

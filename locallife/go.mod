@@ -4,6 +4,7 @@ go 1.24.0
 
 require (
 	github.com/aead/chacha20poly1305 v0.0.0-20201124145622-1a5aba2a8b29
+	github.com/aliyun/alibabacloud-oss-go-sdk-v2 v1.4.0
 	github.com/casbin/casbin/v2 v2.134.0
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-playground/validator/v10 v10.28.0

@@ -88,7 +88,6 @@ func (server *Server) submitSafetyReport(ctx *gin.Context) {
 		Level:       req.Level,
 		Status:      SafetyReportStatusPending,
 		MerchantIds: req.MerchantIDs,
-		Images:      req.Images,
 	}
 
 	// 2. 存储报告

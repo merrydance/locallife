@@ -4,10 +4,9 @@ INSERT INTO reviews (
   user_id,
   merchant_id,
   content,
-  images,
   is_visible
 ) VALUES (
-  $1, $2, $3, $4, $5, $6
+  $1, $2, $3, $4, $5
 ) RETURNING *;
 
 -- name: GetReview :one
@@ -31,7 +30,7 @@ WHERE merchant_id = $1
   AND is_visible = true;
 
 -- name: ListReviewsByUser :many
-SELECT r.*, m.name as merchant_name, m.logo_url as merchant_logo
+SELECT r.*, m.name as merchant_name, m.logo_media_asset_id as merchant_logo_media_asset_id
 FROM reviews r
 JOIN merchants m ON r.merchant_id = m.id
 WHERE r.user_id = $1

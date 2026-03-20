@@ -12,7 +12,7 @@ type ListGroupApplicationsAdminParams struct {
 
 func (store *SQLStore) ListGroupApplicationsAdmin(ctx context.Context, arg ListGroupApplicationsAdminParams) ([]MerchantGroupApplication, error) {
 	const listGroupApplicationsAdmin = `
-SELECT id, applicant_user_id, group_name, contact_phone, license_number, license_image_url, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
+SELECT id, applicant_user_id, group_name, contact_phone, license_number, license_media_asset_id, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at
 FROM merchant_group_applications
 WHERE (NULLIF($1::text, '') IS NULL OR status = $1)
 ORDER BY created_at DESC
@@ -33,7 +33,7 @@ LIMIT $2 OFFSET $3`
 			&item.GroupName,
 			&item.ContactPhone,
 			&item.LicenseNumber,
-			&item.LicenseImageUrl,
+			&item.LicenseMediaAssetID,
 			&item.Address,
 			&item.RegionID,
 			&item.Status,

@@ -21,20 +21,17 @@ import (
 
 func randomMerchantAppDraft(userID int64) db.MerchantApplication {
 	return db.MerchantApplication{
-		ID:                      1,
-		UserID:                  userID,
-		MerchantName:            "",
-		BusinessLicenseNumber:   "",
-		BusinessLicenseImageUrl: "",
-		LegalPersonName:         "",
-		LegalPersonIDNumber:     "",
-		LegalPersonIDFrontUrl:   "",
-		LegalPersonIDBackUrl:    "",
-		ContactPhone:            "",
-		BusinessAddress:         "",
-		Status:                  "draft",
-		CreatedAt:               time.Now(),
-		UpdatedAt:               time.Now(),
+		ID:                    1,
+		UserID:                userID,
+		MerchantName:          "",
+		BusinessLicenseNumber: "",
+		LegalPersonName:       "",
+		LegalPersonIDNumber:   "",
+		ContactPhone:          "",
+		BusinessAddress:       "",
+		Status:                "draft",
+		CreatedAt:             time.Now(),
+		UpdatedAt:             time.Now(),
 	}
 }
 
@@ -67,29 +64,26 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 	})
 
 	return db.MerchantApplication{
-		ID:                      1,
-		UserID:                  userID,
-		MerchantName:            "测试餐厅",
-		BusinessLicenseNumber:   "91110000MA12345678",
-		BusinessLicenseImageUrl: "uploads/merchants/1/business_license/test.jpg",
-		BusinessLicenseOcr:      licenseOCR,
-		LegalPersonName:         "张三",
-		LegalPersonIDNumber:     "110101199001011234",
-		LegalPersonIDFrontUrl:   "uploads/merchants/1/id_front/test.jpg",
-		LegalPersonIDBackUrl:    "uploads/merchants/1/id_back/test.jpg",
-		IDCardFrontOcr:          idCardFrontOCR,
-		IDCardBackOcr:           idCardBackOCR,
-		ContactPhone:            "13800138000",
-		BusinessAddress:         "北京市朝阳区测试路100号1楼",
-		BusinessScope:           pgtype.Text{String: "餐饮服务", Valid: true},
-		FoodPermitUrl:           pgtype.Text{String: "uploads/merchants/1/food_permit/test.jpg", Valid: true},
-		FoodPermitOcr:           foodPermitOCR,
-		Longitude:               pgtype.Numeric{Int: big.NewInt(1163210000), Exp: -7, Valid: true},
-		Latitude:                pgtype.Numeric{Int: big.NewInt(399080000), Exp: -7, Valid: true},
-		RegionID:                pgtype.Int8{Int64: 1, Valid: true},
-		Status:                  "draft",
-		CreatedAt:               time.Now(),
-		UpdatedAt:               time.Now(),
+		ID:                     1,
+		UserID:                 userID,
+		MerchantName:           "测试餐厅",
+		BusinessLicenseNumber:  "91110000MA12345678",
+		BusinessLicenseOcr:     licenseOCR,
+		LegalPersonName:        "张三",
+		LegalPersonIDNumber:    "110101199001011234",
+		IDCardFrontOcr:         idCardFrontOCR,
+		IDCardBackOcr:          idCardBackOCR,
+		ContactPhone:           "13800138000",
+		BusinessAddress:        "北京市朝阳区测试路100号1楼",
+		BusinessScope:          pgtype.Text{String: "餐饮服务", Valid: true},
+		FoodPermitMediaAssetID: pgtype.Int8{Int64: 1, Valid: true},
+		FoodPermitOcr:          foodPermitOCR,
+		Longitude:              pgtype.Numeric{Int: big.NewInt(1163210000), Exp: -7, Valid: true},
+		Latitude:               pgtype.Numeric{Int: big.NewInt(399080000), Exp: -7, Valid: true},
+		RegionID:               pgtype.Int8{Int64: 1, Valid: true},
+		Status:                 "draft",
+		CreatedAt:              time.Now(),
+		UpdatedAt:              time.Now(),
 	}
 }
 
@@ -413,7 +407,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
-				app.FoodPermitUrl = pgtype.Text{Valid: false} // 没有食品许可证
+				app.FoodPermitMediaAssetID = pgtype.Int8{} // 没有食品许可证
 
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).

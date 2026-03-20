@@ -61,7 +61,7 @@ RETURNING *;
 -- 更新营业执照信息（图片URL、执照号和OCR结果）
 UPDATE operator_applications
 SET
-  business_license_url = COALESCE(sqlc.narg(business_license_url), business_license_url),
+  business_license_media_asset_id = COALESCE(sqlc.narg(business_license_media_asset_id), business_license_media_asset_id),
   business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
   business_license_ocr = COALESCE(sqlc.narg(business_license_ocr), business_license_ocr),
   name = COALESCE(sqlc.narg(name), name),
@@ -73,7 +73,7 @@ RETURNING *;
 -- 更新身份证正面信息（图片URL、姓名、身份证号和OCR结果）
 UPDATE operator_applications
 SET
-  id_card_front_url = COALESCE(sqlc.narg(id_card_front_url), id_card_front_url),
+  id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
   legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
   legal_person_id_number = COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number),
   id_card_front_ocr = COALESCE(sqlc.narg(id_card_front_ocr), id_card_front_ocr),
@@ -85,7 +85,7 @@ RETURNING *;
 -- 更新身份证背面信息（图片URL和OCR结果）
 UPDATE operator_applications
 SET
-  id_card_back_url = COALESCE(sqlc.narg(id_card_back_url), id_card_back_url),
+  id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
   id_card_back_ocr = COALESCE(sqlc.narg(id_card_back_ocr), id_card_back_ocr),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'

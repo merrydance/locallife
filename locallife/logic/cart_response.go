@@ -15,7 +15,7 @@ type CartItemResponse struct {
 	Quantity       int16                  `json:"quantity"`
 	Customizations map[string]interface{} `json:"customizations,omitempty"`
 	Name           string                 `json:"name"`
-	ImageURL       string                 `json:"image_url,omitempty"`
+	ImageAssetID   *int64                 `json:"image_asset_id,omitempty"`
 	UnitPrice      int64                  `json:"unit_price"`
 	MemberPrice    *int64                 `json:"member_price,omitempty"`
 	IsAvailable    bool                   `json:"is_available"`
@@ -35,7 +35,7 @@ type CartResponse struct {
 }
 
 // BuildCartResponse converts cart + item rows into response-friendly structures.
-func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow, normalizeImageURL func(string) string) CartResponse {
+func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow) CartResponse {
 	cartItems := make([]CartItemResponse, 0, len(items))
 	var subtotal int64
 	var totalCount int
@@ -43,13 +43,16 @@ func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow, normalizeImage
 	for _, item := range items {
 		var unitPrice int64
 		var name string
-		var imageURL string
+		var imageAssetID *int64
 		var memberPrice *int64
 		var isAvailable bool
 
 		if item.DishID.Valid {
 			name = item.DishName.String
-			imageURL = normalizeImageURL(item.DishImageUrl.String)
+			if item.DishImageMediaAssetID.Valid {
+				v := item.DishImageMediaAssetID.Int64
+				imageAssetID = &v
+			}
 			unitPrice = item.DishPrice.Int64
 			if item.DishMemberPrice.Valid {
 				memberPrice = &item.DishMemberPrice.Int64
@@ -57,7 +60,10 @@ func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow, normalizeImage
 			isAvailable = item.DishIsAvailable.Bool
 		} else if item.ComboID.Valid {
 			name = item.ComboName.String
-			imageURL = normalizeImageURL(item.ComboImageUrl.String)
+			if item.ComboImageMediaAssetID.Valid {
+				v := item.ComboImageMediaAssetID.Int64
+				imageAssetID = &v
+			}
 			unitPrice = item.ComboPrice.Int64
 			isAvailable = item.ComboIsAvailable.Bool
 		}
@@ -67,14 +73,14 @@ func BuildCartResponse(cart db.Cart, items []db.ListCartItemsRow, normalizeImage
 		totalCount += int(item.Quantity)
 
 		cartItem := CartItemResponse{
-			ID:          item.ID,
-			Quantity:    item.Quantity,
-			Name:        name,
-			ImageURL:    imageURL,
-			UnitPrice:   unitPrice,
-			MemberPrice: memberPrice,
-			IsAvailable: isAvailable,
-			Subtotal:    itemSubtotal,
+			ID:           item.ID,
+			Quantity:     item.Quantity,
+			Name:         name,
+			ImageAssetID: imageAssetID,
+			UnitPrice:    unitPrice,
+			MemberPrice:  memberPrice,
+			IsAvailable:  isAvailable,
+			Subtotal:     itemSubtotal,
 		}
 
 		if item.DishID.Valid {

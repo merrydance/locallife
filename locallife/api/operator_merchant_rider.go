@@ -47,12 +47,12 @@ type merchantListItem struct {
 }
 
 type listOperatorMerchantsResponse struct {
-	Merchants  []merchantListItem `json:"merchants"`
-	Total      int64              `json:"total"`
-	PageID     int32              `json:"page_id"`
-	PageSize   int32              `json:"page_size"`
-	Page       int32              `json:"page"`
-	Limit      int32              `json:"limit"`
+	Merchants []merchantListItem `json:"merchants"`
+	Total     int64              `json:"total"`
+	PageID    int32              `json:"page_id"`
+	PageSize  int32              `json:"page_size"`
+	Page      int32              `json:"page"`
+	Limit     int32              `json:"limit"`
 }
 
 // listOperatorMerchants 获取运营商管辖区域内的商户列表
@@ -171,12 +171,12 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listOperatorMerchantsResponse{
-		Merchants:  result,
-		Total:      total,
-		PageID:     req.Page,
-		PageSize:   req.Limit,
-		Page:       req.Page,
-		Limit:      req.Limit,
+		Merchants: result,
+		Total:     total,
+		PageID:    req.Page,
+		PageSize:  req.Limit,
+		Page:      req.Page,
+		Limit:     req.Limit,
 	})
 }
 
@@ -190,7 +190,7 @@ type merchantDetailResponse struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	LogoURL     string  `json:"logo_url"`
+	LogoAssetID int64   `json:"logo_asset_id,omitempty"`
 	Phone       string  `json:"phone"`
 	Address     string  `json:"address"`
 	Status      string  `json:"status"`
@@ -247,7 +247,7 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 		ID:          merchant.ID,
 		Name:        merchant.Name,
 		Description: merchant.Description.String,
-		LogoURL:     normalizeUploadURLForClient(merchant.LogoUrl.String),
+		LogoAssetID: merchant.LogoMediaAssetID.Int64,
 		Phone:       merchant.Phone,
 		Address:     merchant.Address,
 		Status:      merchant.Status,
@@ -417,12 +417,12 @@ type riderListItem struct {
 }
 
 type listOperatorRidersResponse struct {
-	Riders     []riderListItem `json:"riders"`
-	Total      int64           `json:"total"`
-	PageID     int32           `json:"page_id"`
-	PageSize   int32           `json:"page_size"`
-	Page       int32           `json:"page"`
-	Limit      int32           `json:"limit"`
+	Riders   []riderListItem `json:"riders"`
+	Total    int64           `json:"total"`
+	PageID   int32           `json:"page_id"`
+	PageSize int32           `json:"page_size"`
+	Page     int32           `json:"page"`
+	Limit    int32           `json:"limit"`
 }
 
 // listOperatorRiders 获取运营商管辖区域内的骑手列表
@@ -547,12 +547,12 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listOperatorRidersResponse{
-		Riders:     result,
-		Total:      total,
-		PageID:     req.Page,
-		PageSize:   req.Limit,
-		Page:       req.Page,
-		Limit:      req.Limit,
+		Riders:   result,
+		Total:    total,
+		PageID:   req.Page,
+		PageSize: req.Limit,
+		Page:     req.Page,
+		Limit:    req.Limit,
 	})
 }
 
