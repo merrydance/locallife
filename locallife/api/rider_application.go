@@ -4,8 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -303,13 +306,37 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 获取上传的文件
+	// 获取上传的文件；若未提供文件则检查 media_asset_id（媒体服务流程）
 	file, fileHeader, err := ctx.Request.FormFile("image")
+	var fromAssetID bool
+	var assetFileBytes []byte
+	var mediaAssetID int64
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardImageRequired))
-		return
+		// 无文件上传，检查是否提供了媒体资产 ID
+		if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+			if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+				mediaAssetID = id
+				localPath := server.mediaAssetLocalPath(ctx, id)
+				if localPath == "" {
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+					return
+				}
+				data, readErr := os.ReadFile(localPath)
+				if readErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("read media asset file: %w", readErr)))
+					return
+				}
+				assetFileBytes = data
+				fromAssetID = true
+			}
+		}
+		if !fromAssetID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardImageRequired))
+			return
+		}
+	} else {
+		defer file.Close()
 	}
-	defer file.Close()
 
 	side := ctx.PostForm("side")
 	if side != "Front" && side != "Back" {
@@ -317,44 +344,50 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 上传前内容安全检测：不通过则不保存
-	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+	// 内容安全检测（仅文件上传路径；媒体服务上传时已在上传端检测）
+	if !fromAssetID {
+		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
+			if errors.Is(err, wechat.ErrRiskyContent) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+				return
+			}
+			if errors.Is(err, wechat.ErrImageTooLarge) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+				return
+			}
+			ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat img sec check: %w", err)))
 			return
 		}
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat img sec check: %w", err)))
-		return
-	}
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
 
-	// TODO(media-service): oldIDCardURL was used to delete old file; now handled by media service
-	var oldIDCardURL string
-	_ = oldIDCardURL
+		// 保存图片到本地
+		uploader := util.NewFileUploader("uploads")
+		_, err = uploader.UploadRiderImage(authPayload.UserID, "idcard", file, fileHeader)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("upload rider idcard image: %w", err)))
+			return
+		}
 
-	// 保存图片到本地
-	uploader := util.NewFileUploader("uploads")
-	_, err = uploader.UploadRiderImage(authPayload.UserID, "idcard", file, fileHeader)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("upload rider idcard image: %w", err)))
-		return
+		// 重新打开文件用于OCR
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 	}
 
-	// 重新打开文件用于OCR
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+	// 构建 OCR 读取器
+	var ocrReader multipart.File
+	if fromAssetID {
+		ocrReader = util.NewBytesFile(assetFileBytes)
+	} else {
+		ocrReader = file
 	}
 
 	// 调用微信OCR
-	ocrResult, err := server.wechatClient.OCRIDCard(ctx, file, side)
+	ocrResult, err := server.wechatClient.OCRIDCard(ctx, ocrReader, side)
 	if err != nil {
 		log.Error().Err(err).Msg("身份证OCR识别失败")
 		// OCR失败不阻止保存图片URL，允许手动填写
@@ -366,7 +399,9 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 	}
 
 	if side == "Front" {
-		// TODO(media-service): set IDCardFrontMediaAssetID after media upload
+		if fromAssetID {
+			arg.IDCardFrontMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
+		}
 
 		if ocrResult != nil {
 			// 构建OCR数据，合并已有数据
@@ -390,7 +425,9 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 			}
 		}
 	} else {
-		// TODO(media-service): set IDCardBackMediaAssetID after media upload
+		if fromAssetID {
+			arg.IDCardBackMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
+		}
 
 		if ocrResult != nil && ocrResult.ValidDate != "" {
 			// 解析有效期，格式可能是 "20200101-20300101" 或 "20200101-长期"
@@ -411,7 +448,6 @@ func (server *Server) uploadRiderIDCardOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update rider application idcard: %w", err)))
 		return
 	}
-	server.deleteStoredImageAsync(oldIDCardURL)
 
 	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
 }
@@ -450,50 +486,75 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 		return
 	}
 
+	// 获取上传的文件；若未提供文件则检查 media_asset_id（媒体服务流程）
 	file, fileHeader, err := ctx.Request.FormFile("image")
+	var fromAssetID bool
+	var assetFileBytes []byte
+	var mediaAssetID int64
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrHealthCertRequired))
-		return
-	}
-	defer file.Close()
-
-	// 上传前内容安全检测：不通过则不保存
-	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+		if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+			if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+				mediaAssetID = id
+				localPath := server.mediaAssetLocalPath(ctx, id)
+				if localPath == "" {
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+					return
+				}
+				data, readErr := os.ReadFile(localPath)
+				if readErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("read media asset file: %w", readErr)))
+					return
+				}
+				assetFileBytes = data
+				fromAssetID = true
+			}
+		}
+		if !fromAssetID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrHealthCertRequired))
 			return
 		}
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+	} else {
+		defer file.Close()
+	}
+
+	var ocrReader multipart.File
+	if fromAssetID {
+		ocrReader = util.NewBytesFile(assetFileBytes)
+	} else {
+		// 内容安全检测（文件上传路径）
+		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
+			if errors.Is(err, wechat.ErrRiskyContent) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+				return
+			}
+			if errors.Is(err, wechat.ErrImageTooLarge) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+				return
+			}
+			ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat img sec check: %w", err)))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("wechat img sec check: %w", err)))
-		return
-	}
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 
-	// TODO(media-service): oldHealthCertURL was used to delete old file; now handled by media service
-	oldHealthCertURL := ""
-	_ = oldHealthCertURL
+		uploader := util.NewFileUploader("uploads")
+		_, err = uploader.UploadRiderImage(authPayload.UserID, "healthcert", file, fileHeader)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("upload rider healthcert image: %w", err)))
+			return
+		}
 
-	uploader := util.NewFileUploader("uploads")
-	_, err = uploader.UploadRiderImage(authPayload.UserID, "healthcert", file, fileHeader)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("upload rider healthcert image: %w", err)))
-		return
-	}
-
-	// 重新回到文件开头用于OCR（通用印刷体，非证照接口）
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ocrReader = file
 	}
 
 	var healthOCRBytes []byte
-	ocrResult, err := server.wechatClient.OCRPrintedText(ctx, file)
+	ocrResult, err := server.wechatClient.OCRPrintedText(ctx, ocrReader)
 	if err != nil {
 		log.Error().Err(err).Msg("健康证OCR识别失败")
 	} else if ocrResult != nil {
@@ -508,7 +569,9 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 	arg := db.UpdateRiderApplicationHealthCertParams{
 		ID:            app.ID,
 		HealthCertOcr: healthOCRBytes,
-		// TODO(media-service): set HealthCertMediaAssetID after media upload
+	}
+	if fromAssetID {
+		arg.HealthCertMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
 	}
 
 	updated, err := server.store.UpdateRiderApplicationHealthCert(ctx, arg)
@@ -516,7 +579,6 @@ func (server *Server) uploadRiderHealthCert(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update rider application health cert: %w", err)))
 		return
 	}
-	server.deleteStoredImageAsync(oldHealthCertURL)
 
 	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
 }

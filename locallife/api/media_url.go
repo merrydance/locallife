@@ -2,9 +2,24 @@ package api
 
 import (
 	"context"
+	"path/filepath"
 
 	"github.com/merrydance/locallife/media"
 )
+
+// mediaAssetLocalPath 在本地存储模式下，根据 media_asset ID 返回文件的本地绝对路径。
+// 用于将已通过媒体上传服务上传的图片文件提供给 OCR 等本地处理逻辑使用。
+// 若非本地存储模式（FILE_STORAGE_PROVIDER=oss）或资产不存在，返回空字符串。
+func (server *Server) mediaAssetLocalPath(ctx context.Context, assetID int64) string {
+	if server.config.FileStorageProvider != "local" {
+		return ""
+	}
+	asset, err := server.store.GetMediaAssetByID(ctx, assetID)
+	if err != nil {
+		return ""
+	}
+	return filepath.Join("uploads/dev", filepath.FromSlash(asset.ObjectKey))
+}
 
 // batchPublicImageURLs 接收一组 media_asset ID，一次性查询 media_assets 表，
 // 返回 assetID → CDN URL 的映射。未找到的 ID 不在返回 map 中。

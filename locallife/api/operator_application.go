@@ -3,7 +3,10 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -496,52 +499,75 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 获取上传的文件
+	// 获取上传的文件；若未提供文件则检查 media_asset_id（媒体服务流程）
 	file, fileHeader, err := ctx.Request.FormFile("image")
+	var fromAssetID bool
+	var assetFileBytes []byte
+	var mediaAssetID int64
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrBusinessLicenseRequired))
-		return
-	}
-	defer file.Close()
-
-	// 上传前内容安全检测：不通过则不保存
-	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+		if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+			if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+				mediaAssetID = id
+				localPath := server.mediaAssetLocalPath(ctx, id)
+				if localPath == "" {
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+					return
+				}
+				data, readErr := os.ReadFile(localPath)
+				if readErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, readErr))
+					return
+				}
+				assetFileBytes = data
+				fromAssetID = true
+			}
+		}
+		if !fromAssetID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrBusinessLicenseRequired))
 			return
 		}
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+	} else {
+		defer file.Close()
+	}
+
+	var ocrReader multipart.File
+	if fromAssetID {
+		ocrReader = util.NewBytesFile(assetFileBytes)
+	} else {
+		// 内容安全检测（文件上传路径）
+		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
+			if errors.Is(err, wechat.ErrRiskyContent) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+				return
+			}
+			if errors.Is(err, wechat.ErrImageTooLarge) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+				return
+			}
+			ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
-		return
-	}
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 
-	// TODO(media-service): oldImageURL was used to delete old file; now handled by media service
-	oldImageURL := ""
-	_ = oldImageURL
+		uploader := util.NewFileUploader("uploads")
+		_, err = uploader.UploadOperatorImage(authPayload.UserID, "license", file, fileHeader)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 
-	// 保存图片
-	uploader := util.NewFileUploader("uploads")
-	_, err = uploader.UploadOperatorImage(authPayload.UserID, "license", file, fileHeader)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 重新回到文件开头用于OCR（微信支持 multipart 上传，不需要公网URL）
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ocrReader = file
 	}
 
 	// 调用微信OCR
-	ocrResult, err := server.wechatClient.OCRBusinessLicense(ctx, file)
+	ocrResult, err := server.wechatClient.OCRBusinessLicense(ctx, ocrReader)
 	if err != nil {
 		log.Error().Err(err).Msg("营业执照OCR识别失败")
 		// OCR失败不阻止保存，允许手动填写
@@ -550,7 +576,9 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 	// 构建更新参数
 	arg := db.UpdateOperatorApplicationBusinessLicenseParams{
 		ID: app.ID,
-		// TODO(media-service): set BusinessLicenseMediaAssetID after media upload
+	}
+	if fromAssetID {
+		arg.BusinessLicenseMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
 	}
 
 	if ocrResult != nil {
@@ -586,7 +614,6 @@ func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	server.deleteStoredImageAsync(oldImageURL)
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
@@ -628,13 +655,36 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 获取上传的文件
+	// 获取上传的文件；若未提供文件则检查 media_asset_id（媒体服务流程）
 	file, fileHeader, err := ctx.Request.FormFile("image")
+	var fromAssetID bool
+	var assetFileBytes []byte
+	var mediaAssetID int64
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardImageRequired))
-		return
+		if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+			if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+				mediaAssetID = id
+				localPath := server.mediaAssetLocalPath(ctx, id)
+				if localPath == "" {
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+					return
+				}
+				data, readErr := os.ReadFile(localPath)
+				if readErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, readErr))
+					return
+				}
+				assetFileBytes = data
+				fromAssetID = true
+			}
+		}
+		if !fromAssetID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardImageRequired))
+			return
+		}
+	} else {
+		defer file.Close()
 	}
-	defer file.Close()
 
 	side := ctx.PostForm("side")
 	if side != "Front" && side != "Back" {
@@ -642,44 +692,44 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	// 上传前内容安全检测：不通过则不保存
-	if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-		if errors.Is(err, wechat.ErrRiskyContent) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+	var ocrReader multipart.File
+	if fromAssetID {
+		ocrReader = util.NewBytesFile(assetFileBytes)
+	} else {
+		// 内容安全检测（文件上传路径）
+		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
+			if errors.Is(err, wechat.ErrRiskyContent) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
+				return
+			}
+			if errors.Is(err, wechat.ErrImageTooLarge) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+				return
+			}
+			ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
 			return
 		}
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
-		return
-	}
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
 
-	// TODO(media-service): oldIDCardURL was used to delete old file; now handled by media service
-	var oldIDCardURL string
-	_ = oldIDCardURL
+		uploader := util.NewFileUploader("uploads")
+		_, err = uploader.UploadOperatorImage(authPayload.UserID, "idcard_"+side, file, fileHeader)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
 
-	// 保存图片
-	uploader := util.NewFileUploader("uploads")
-	_, err = uploader.UploadOperatorImage(authPayload.UserID, "idcard_"+side, file, fileHeader)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 重新打开文件用于OCR
-	if _, err := file.Seek(0, 0); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		if _, err := file.Seek(0, 0); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		ocrReader = file
 	}
 
 	// 调用微信OCR
-	ocrResult, err := server.wechatClient.OCRIDCard(ctx, file, side)
+	ocrResult, err := server.wechatClient.OCRIDCard(ctx, ocrReader, side)
 	if err != nil {
 		log.Error().Err(err).Msg("身份证OCR识别失败")
 	}
@@ -689,7 +739,9 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 	if side == "Front" {
 		arg := db.UpdateOperatorApplicationIDCardFrontParams{
 			ID: app.ID,
-			// TODO(media-service): set IDCardFrontMediaAssetID after media upload
+		}
+		if fromAssetID {
+			arg.IDCardFrontMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
 		}
 
 		if ocrResult != nil {
@@ -717,7 +769,9 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 	} else {
 		arg := db.UpdateOperatorApplicationIDCardBackParams{
 			ID: app.ID,
-			// TODO(media-service): set IDCardBackMediaAssetID after media upload
+		}
+		if fromAssetID {
+			arg.IDCardBackMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
 		}
 
 		if ocrResult != nil && ocrResult.ValidDate != "" {
@@ -736,7 +790,6 @@ func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	server.deleteStoredImageAsync(oldIDCardURL)
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))

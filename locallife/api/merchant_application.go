@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -705,14 +706,23 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 			Msg("merchant business license ocr: no file in request")
 	}
 
-	// 未上传新文件且已有OCR：直接返回（避免重复OCR）
-	if !fromUpload && hasExistingOCR {
+	// 检查是否提供了媒体资产 ID（新媒体流程：先通过 POST /media/upload 上传后传入）
+	var fromAssetID bool
+	var newAssetID int64
+	if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+		if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+			fromAssetID = true
+			newAssetID = id
+		}
+	}
+
+	// 未上传新文件且没有新资产 ID 且已有OCR：直接返回（避免重复OCR）
+	if !fromUpload && !fromAssetID && hasExistingOCR {
 		ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(app))
 		return
 	}
 
 	var updatedApp db.MerchantApplication
-	// TODO(media-service): oldImageURL was used to delete old file; now handled by media service
 	localPath := ""
 
 	if fromUpload {
@@ -738,7 +748,6 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		saveArg := db.UpdateMerchantApplicationBusinessLicenseParams{
 			ID:                 app.ID,
 			BusinessLicenseOcr: marshalOCRTaskPending(),
-			// TODO(media-service): set BusinessLicenseMediaAssetID after media upload
 		}
 		updated, err := server.store.UpdateMerchantApplicationBusinessLicense(ctx, saveArg)
 		if err != nil {
@@ -747,19 +756,33 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 		}
 		log.Info().Str("request_id", requestID).Msg("merchant OCR: DB updated with new image URL")
 		updatedApp = updated
-		// TODO(media-service): server.deleteStoredImageAsync(oldImageURL)
+	} else if fromAssetID {
+		// 通过媒体服务新上传：绑定资产 ID 并触发 OCR
+		localPath = server.mediaAssetLocalPath(ctx, newAssetID)
+		if localPath == "" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+			return
+		}
+		saveArg := db.UpdateMerchantApplicationBusinessLicenseParams{
+			ID:                          app.ID,
+			BusinessLicenseOcr:          marshalOCRTaskPending(),
+			BusinessLicenseMediaAssetID: pgtype.Int8{Int64: newAssetID, Valid: true},
+		}
+		updated, err := server.store.UpdateMerchantApplicationBusinessLicense(ctx, saveArg)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		log.Info().Str("request_id", requestID).Int64("asset_id", newAssetID).Msg("merchant OCR: DB updated with media asset ID")
+		updatedApp = updated
 	} else {
 		if !app.BusinessLicenseMediaAssetID.Valid {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrBusinessLicenseNotYetUploaded))
 			return
 		}
-		// TODO(media-service): resolve local path from asset ID
-		localPath = ""
-		if strings.Contains(localPath, "/uploads/") {
-			localPath = localPath[strings.Index(localPath, "/uploads/")+1:]
-		}
-		localPath = filepath.Clean(localPath)
-		if !strings.HasPrefix(localPath, "uploads/") {
+		// 从已绑定的媒体资产解析本地路径，重新触发 OCR
+		localPath = server.mediaAssetLocalPath(ctx, app.BusinessLicenseMediaAssetID.Int64)
+		if localPath == "" {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
@@ -869,14 +892,23 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 		defer file.Close()
 	}
 
-	// 未上传新文件且已有OCR：直接返回（避免重复OCR）
-	if !fromUpload && hasExistingOCR {
+	// 检查是否提供了媒体资产 ID（新媒体流程）
+	var fromAssetID bool
+	var newAssetID int64
+	if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+		if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+			fromAssetID = true
+			newAssetID = id
+		}
+	}
+
+	// 未上传新文件且没有新资产 ID 且已有OCR：直接返回（避免重复OCR）
+	if !fromUpload && !fromAssetID && hasExistingOCR {
 		ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(app))
 		return
 	}
 
 	var updatedApp db.MerchantApplication
-	// TODO(media-service): oldFoodPermitURL was used to delete old file; now handled by media service
 	localPath := ""
 
 	if fromUpload {
@@ -899,7 +931,6 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 		saveArg := db.UpdateMerchantApplicationFoodPermitParams{
 			ID:            app.ID,
 			FoodPermitOcr: marshalOCRTaskPending(),
-			// TODO(media-service): set FoodPermitMediaAssetID after media upload
 		}
 		updated, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, saveArg)
 		if err != nil {
@@ -907,19 +938,32 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 			return
 		}
 		updatedApp = updated
-		// TODO(media-service): server.deleteStoredImageAsync(oldFoodPermitURL)
+	} else if fromAssetID {
+		// 通过媒体服务新上传：绑定资产 ID 并触发 OCR
+		localPath = server.mediaAssetLocalPath(ctx, newAssetID)
+		if localPath == "" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+			return
+		}
+		saveArg := db.UpdateMerchantApplicationFoodPermitParams{
+			ID:                  app.ID,
+			FoodPermitOcr:       marshalOCRTaskPending(),
+			FoodPermitMediaAssetID: pgtype.Int8{Int64: newAssetID, Valid: true},
+		}
+		updated, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, saveArg)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		updatedApp = updated
 	} else {
 		if !app.FoodPermitMediaAssetID.Valid {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrFoodLicenseNotYetUploaded))
 			return
 		}
-		// TODO(media-service): resolve local path from asset ID
-		localPath = ""
-		if strings.Contains(localPath, "/uploads/") {
-			localPath = localPath[strings.Index(localPath, "/uploads/")+1:]
-		}
-		localPath = filepath.Clean(localPath)
-		if !strings.HasPrefix(localPath, "uploads/") {
+		// 从已绑定的媒体资产解析本地路径，重新触发 OCR
+		localPath = server.mediaAssetLocalPath(ctx, app.FoodPermitMediaAssetID.Int64)
+		if localPath == "" {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
 			return
 		}
@@ -1030,10 +1074,14 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 	storedPath := ""
 	if side == "Front" {
 		hasExistingOCR = len(app.IDCardFrontOcr) > 0
-		// TODO(media-service): resolve local path from app.IDCardFrontMediaAssetID
+		if app.IDCardFrontMediaAssetID.Valid {
+			storedPath = server.mediaAssetLocalPath(ctx, app.IDCardFrontMediaAssetID.Int64)
+		}
 	} else {
 		hasExistingOCR = len(app.IDCardBackOcr) > 0
-		// TODO(media-service): resolve local path from app.IDCardBackMediaAssetID
+		if app.IDCardBackMediaAssetID.Valid {
+			storedPath = server.mediaAssetLocalPath(ctx, app.IDCardBackMediaAssetID.Int64)
+		}
 	}
 
 	log.Info().
@@ -1044,14 +1092,23 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 		Str("stored_image_url", storedPath).
 		Msg("merchant id card ocr: request received")
 
-	// 未上传新文件且已有OCR：直接返回（避免重复OCR）
-	if !fromUpload && hasExistingOCR {
+	// 检查是否提供了媒体资产 ID（新媒体流程）
+	var fromAssetID bool
+	var newAssetID int64
+	if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+		if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+			fromAssetID = true
+			newAssetID = id
+		}
+	}
+
+	// 未上传新文件且没有新资产 ID 且已有OCR：直接返回（避免重复OCR）
+	if !fromUpload && !fromAssetID && hasExistingOCR {
 		ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(app))
 		return
 	}
 
 	var updatedApp db.MerchantApplication
-	oldIDCardURL := storedPath
 	localPath := ""
 
 	if fromUpload {
@@ -1079,7 +1136,6 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 			saveArg := db.UpdateMerchantApplicationIDCardFrontParams{
 				ID:             app.ID,
 				IDCardFrontOcr: marshalOCRTaskPending(),
-				// TODO(media-service): set IDCardFrontMediaAssetID after media upload
 			}
 			updated, err := server.store.UpdateMerchantApplicationIDCardFront(ctx, saveArg)
 			if err != nil {
@@ -1091,7 +1147,6 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 			saveArg := db.UpdateMerchantApplicationIDCardBackParams{
 				ID:            app.ID,
 				IDCardBackOcr: marshalOCRTaskPending(),
-				// TODO(media-service): set IDCardBackMediaAssetID after media upload
 			}
 			updated, err := server.store.UpdateMerchantApplicationIDCardBack(ctx, saveArg)
 			if err != nil {
@@ -1100,21 +1155,44 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 			}
 			updatedApp = updated
 		}
-		server.deleteStoredImageAsync(oldIDCardURL)
+	} else if fromAssetID {
+		// 通过媒体服务新上传：绑定资产 ID 并触发 OCR
+		localPath = server.mediaAssetLocalPath(ctx, newAssetID)
+		if localPath == "" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+			return
+		}
+		if side == "Front" {
+			saveArg := db.UpdateMerchantApplicationIDCardFrontParams{
+				ID:                   app.ID,
+				IDCardFrontOcr:       marshalOCRTaskPending(),
+				IDCardFrontMediaAssetID: pgtype.Int8{Int64: newAssetID, Valid: true},
+			}
+			updated, err := server.store.UpdateMerchantApplicationIDCardFront(ctx, saveArg)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			updatedApp = updated
+		} else {
+			saveArg := db.UpdateMerchantApplicationIDCardBackParams{
+				ID:                  app.ID,
+				IDCardBackOcr:       marshalOCRTaskPending(),
+				IDCardBackMediaAssetID: pgtype.Int8{Int64: newAssetID, Valid: true},
+			}
+			updated, err := server.store.UpdateMerchantApplicationIDCardBack(ctx, saveArg)
+			if err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+			updatedApp = updated
+		}
 	} else {
 		if storedPath == "" {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardNotYetUploaded))
 			return
 		}
 		localPath = storedPath
-		if strings.Contains(localPath, "/uploads/") {
-			localPath = localPath[strings.Index(localPath, "/uploads/")+1:]
-		}
-		localPath = filepath.Clean(localPath)
-		if !strings.HasPrefix(localPath, "uploads/") {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
-			return
-		}
 
 		// 使用已上传的图片触发OCR：写入 pending 状态
 		if side == "Front" {
