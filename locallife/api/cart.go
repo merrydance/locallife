@@ -30,11 +30,11 @@ type cartItemResponse struct {
 	CustomizationDetails []orderCustomizationItem `json:"customization_details,omitempty"`
 	// 聚合好的规格描述文字 (如 "不辣/大份")
 	SpecText string `json:"spec_text,omitempty"`
-	// 套餐成员图片 asset ID 列表
-	ComboMemberImages []int64 `json:"combo_member_images,omitempty"`
+	// 套餐成员图片 CDN URL 列表
+	ComboMemberImageURLs []string `json:"combo_member_image_urls,omitempty"`
 	// 商品信息
 	Name         string `json:"name"`
-	ImageAssetID *int64 `json:"image_asset_id,omitempty"`
+	ImageAssetID *int64 `json:"-"`
 	ImageURL     string `json:"image_url,omitempty"`
 	UnitPrice    int64  `json:"unit_price"`
 	MemberPrice  *int64 `json:"member_price,omitempty"`
@@ -865,8 +865,9 @@ type merchantCartResponse struct {
 	ReservationID int64 `json:"reservation_id,omitempty"`
 	// 商户名称
 	MerchantName string `json:"merchant_name"`
-	// 商户 Logo 媒体资产 ID
-	MerchantLogoAssetID *int64 `json:"merchant_logo_asset_id,omitempty"`
+	// 商户 Logo CDN URL
+	MerchantLogoAssetID *int64 `json:"-"`
+	MerchantLogoURL     string `json:"merchant_logo_url,omitempty"`
 	// 商品数量
 	ItemCount int `json:"item_count"`
 	// 商品小计（分）
@@ -945,6 +946,22 @@ func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 		if cart.MerchantLogoMediaAssetID.Valid {
 			v := cart.MerchantLogoMediaAssetID.Int64
 			cartList[i].MerchantLogoAssetID = &v
+		}
+	}
+
+	// 批量解析商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(cartList))
+	for _, c := range cartList {
+		if c.MerchantLogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *c.MerchantLogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range cartList {
+			if cartList[i].MerchantLogoAssetID != nil {
+				cartList[i].MerchantLogoURL = logoURLs[*cartList[i].MerchantLogoAssetID]
+			}
 		}
 	}
 
@@ -1206,7 +1223,7 @@ func (server *Server) enrichCartItems(ctx context.Context, items []cartItemRespo
 	}
 }
 
-// enrichComboImages 为套餐商品填充成员图片
+// enrichComboImages 为套餐商品批量填充成员图片 CDN URL
 func (server *Server) enrichComboImages(ctx context.Context, items []cartItemResponse) {
 	if len(items) == 0 {
 		return
@@ -1230,19 +1247,31 @@ func (server *Server) enrichComboImages(ctx context.Context, items []cartItemRes
 		return
 	}
 
-	// 按 combo_id 组织图片 asset ID
+	// 收集所有 asset ID 并按 combo_id 分组
 	imgMap := make(map[int64][]int64)
+	var allAssetIDs []int64
 	for _, row := range memberImages {
 		if row.ImageMediaAssetID.Valid {
-			imgMap[row.ComboID] = append(imgMap[row.ComboID], row.ImageMediaAssetID.Int64)
+			id := row.ImageMediaAssetID.Int64
+			imgMap[row.ComboID] = append(imgMap[row.ComboID], id)
+			allAssetIDs = append(allAssetIDs, id)
 		}
 	}
+
+	// 批量解析 CDN URL
+	imgURLs := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantCard)
 
 	// 回填到 items
 	for i := range items {
 		if items[i].ComboID != nil {
-			if imgs, ok := imgMap[*items[i].ComboID]; ok {
-				items[i].ComboMemberImages = imgs
+			if ids, ok := imgMap[*items[i].ComboID]; ok {
+				urls := make([]string, 0, len(ids))
+				for _, id := range ids {
+					if u, ok2 := imgURLs[id]; ok2 {
+						urls = append(urls, u)
+					}
+				}
+				items[i].ComboMemberImageURLs = urls
 			}
 		}
 	}

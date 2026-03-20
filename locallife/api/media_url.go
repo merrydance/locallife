@@ -105,6 +105,47 @@ func (server *Server) enrichSearchMerchantURLs(ctx context.Context, merchants []
 	}
 }
 
+// enrichSearchRoomURLs 为搜索包间结果批量填充 MerchantLogoURL 和 ImageURL。
+func (server *Server) enrichSearchRoomURLs(ctx context.Context, rooms []searchRoomResponse) {
+	assetIDs := make([]int64, 0, len(rooms)*2)
+	for _, r := range rooms {
+		if r.MerchantLogoAssetID != nil {
+			assetIDs = append(assetIDs, *r.MerchantLogoAssetID)
+		}
+		if r.PrimaryImageAssetID != nil {
+			assetIDs = append(assetIDs, *r.PrimaryImageAssetID)
+		}
+	}
+	imgURLs := server.batchPublicImageURLs(ctx, assetIDs, media.VariantCard)
+	for i := range rooms {
+		if rooms[i].MerchantLogoAssetID != nil {
+			rooms[i].MerchantLogoURL = imgURLs[*rooms[i].MerchantLogoAssetID]
+		}
+		if rooms[i].PrimaryImageAssetID != nil {
+			rooms[i].ImageURL = imgURLs[*rooms[i].PrimaryImageAssetID]
+		}
+	}
+}
+
+// enrichPublicRoomImageURLs 为公开包间列表批量填充 ImageURL。
+func (server *Server) enrichPublicRoomImageURLs(ctx context.Context, rooms []publicRoomItem) {
+	assetIDs := make([]int64, 0, len(rooms))
+	for _, r := range rooms {
+		if r.PrimaryImageAssetID != 0 {
+			assetIDs = append(assetIDs, r.PrimaryImageAssetID)
+		}
+	}
+	if len(assetIDs) == 0 {
+		return
+	}
+	imgURLs := server.batchPublicImageURLs(ctx, assetIDs, media.VariantCard)
+	for i := range rooms {
+		if rooms[i].PrimaryImageAssetID != 0 {
+			rooms[i].ImageURL = imgURLs[rooms[i].PrimaryImageAssetID]
+		}
+	}
+}
+
 // enrichSearchComboURLs 为搜索套餐结果批量填充 ImageURL 和 MerchantLogoURL。
 func (server *Server) enrichSearchComboURLs(ctx context.Context, combos []searchComboResponse) {
 	assetIDs := make([]int64, 0, len(combos)*2)

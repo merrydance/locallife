@@ -193,7 +193,8 @@ type merchantResponse struct {
 	RegionID    int64     `json:"region_id"`
 	Name        string    `json:"name"`
 	Description *string   `json:"description,omitempty"`
-	LogoAssetID *int64    `json:"logo_asset_id,omitempty"`
+	LogoAssetID *int64    `json:"-"`
+	LogoURL     string    `json:"logo_url,omitempty"`
 	Phone       string    `json:"phone"`
 	Address     string    `json:"address"`
 	Latitude    *string   `json:"latitude,omitempty"`
@@ -273,7 +274,9 @@ func (server *Server) getCurrentMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantResponse(merchant))
+	resp := newMerchantResponse(merchant)
+	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // listMyMerchants godoc
@@ -301,6 +304,21 @@ func (server *Server) listMyMerchants(ctx *gin.Context) {
 	responses := make([]merchantResponse, len(merchants))
 	for i, m := range merchants {
 		responses[i] = newMerchantResponse(m)
+	}
+
+	logoAssetIDs := make([]int64, 0, len(responses))
+	for _, r := range responses {
+		if r.LogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.LogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range responses {
+			if responses[i].LogoAssetID != nil {
+				responses[i].LogoURL = logoURLs[*responses[i].LogoAssetID]
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, responses)
@@ -424,7 +442,9 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantResponse(updatedMerchant))
+	resp := newMerchantResponse(updatedMerchant)
+	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 商户门头照/环境照更新（已通过审核后） ====================
@@ -1072,7 +1092,8 @@ type publicMerchantDetailResponse struct {
 	ID                      int64                     `json:"id"`
 	Name                    string                    `json:"name"`
 	Description             *string                   `json:"description,omitempty"`
-	LogoAssetID             *int64                    `json:"logo_asset_id,omitempty"`
+	LogoAssetID             *int64                    `json:"-"`
+	LogoURL                 string                    `json:"logo_url,omitempty"`
 	CoverImage              *string                   `json:"cover_image,omitempty"` // 门头照/招牌图
 	Phone                   string                    `json:"phone"`
 	Address                 string                    `json:"address"`
@@ -1171,6 +1192,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.Description = &merchant.Description.String
 	}
 	resp.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
+	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
 	if merchant.Latitude.Valid {
 		lat, _ := parseNumericToFloat(merchant.Latitude)
 		resp.Latitude = lat
@@ -1320,7 +1342,7 @@ type publicDishItem struct {
 	Description         string               `json:"description,omitempty"`
 	Price               int64                `json:"price"`
 	MemberPrice         *int64               `json:"member_price,omitempty"`
-	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
+	ImageAssetID        *int64               `json:"-"`
 	ImageURL            string               `json:"image_url,omitempty"`
 	CategoryID          int64                `json:"category_id"`
 	CategoryName        string               `json:"category_name"`
@@ -1469,13 +1491,12 @@ type publicComboItem struct {
 	ID            int64           `json:"id"`
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
-	ImageAssetID  *int64          `json:"image_asset_id,omitempty"`
+	ImageAssetID  *int64          `json:"-"`
 	ImageURL      string          `json:"image_url,omitempty"`
 	ComboPrice    int64           `json:"combo_price"`
 	OriginalPrice int64           `json:"original_price"`
 	Dishes        []comboDishItem `json:"dishes"`
 	Tags          []string        `json:"tags"`
-	DishImages    []int64         `json:"dish_images,omitempty"`
 	DishImageURLs []string        `json:"dish_image_urls,omitempty"` // 子菜品图片 CDN URL 列表
 }
 
@@ -1563,7 +1584,8 @@ type publicRoomItem struct {
 	Capacity            int16    `json:"capacity"`
 	MinimumSpend        *int64   `json:"minimum_spend,omitempty"`
 	Description         string   `json:"description,omitempty"`
-	PrimaryImageAssetID int64    `json:"primary_image_asset_id,omitempty"`
+	PrimaryImageAssetID int64    `json:"-"`
+	ImageURL            string   `json:"image_url,omitempty"`
 	MonthlySales        int64    `json:"monthly_sales"`
 	Status              string   `json:"status"`
 	Tags                []string `json:"tags"`
@@ -1632,6 +1654,7 @@ func (server *Server) getPublicMerchantRooms(ctx *gin.Context) {
 		roomList = append(roomList, room)
 	}
 
+	server.enrichPublicRoomImageURLs(ctx, roomList)
 	ctx.JSON(http.StatusOK, publicMerchantRoomsResponse{
 		Rooms: roomList,
 	})
@@ -1711,7 +1734,6 @@ func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []
 			combos[i].ImageURL = imgURLs[*combos[i].ImageAssetID]
 		}
 		if imgs, ok := imgMap[combos[i].ID]; ok {
-			combos[i].DishImages = imgs
 			urls := make([]string, 0, len(imgs))
 			for _, id := range imgs {
 				if u, ok2 := imgURLs[id]; ok2 {

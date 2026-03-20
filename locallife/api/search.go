@@ -103,7 +103,7 @@ type searchDishResponse struct {
 	CategoryID     *int64  `json:"category_id,omitempty"`
 	Name           string  `json:"name"`
 	Description    string  `json:"description"`
-	ImageAssetID   *int64  `json:"image_asset_id,omitempty"`
+	ImageAssetID   *int64  `json:"-"`
 	ImageURL       string  `json:"image_url,omitempty"`
 	Price          int64   `json:"price"`                  // Cents
 	OriginalPrice  int64   `json:"original_price"`         // Cents
@@ -115,7 +115,7 @@ type searchDishResponse struct {
 	RepurchaseRate float64 `json:"repurchase_rate"`
 	// New fields for home feed
 	MerchantName          string               `json:"merchant_name,omitempty"`
-	MerchantLogoAssetID   *int64               `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoAssetID   *int64               `json:"-"`
 	MerchantLogoURL       string               `json:"merchant_logo_url,omitempty"`
 	MerchantIsOpen        *bool                `json:"merchant_is_open,omitempty"`
 	Distance              int                  `json:"distance"`                // Meters
@@ -133,7 +133,7 @@ type searchMerchantResponse struct {
 	Latitude             float64   `json:"-"`
 	Longitude            float64   `json:"-"`
 	Phone                string    `json:"phone,omitempty"`
-	LogoAssetID          *int64    `json:"logo_asset_id,omitempty"`
+	LogoAssetID          *int64    `json:"-"`
 	LogoURL              string    `json:"logo_url,omitempty"`
 	CoverImage           string    `json:"cover_image,omitempty"` // 门头照（首张），作为列表卡片封面
 	Status               string    `json:"status"`
@@ -152,14 +152,14 @@ type searchComboResponse struct {
 	MerchantID            int64    `json:"merchant_id"`
 	Name                  string   `json:"name"`
 	Description           string   `json:"description"`
-	ImageAssetID          *int64   `json:"image_asset_id,omitempty"`
+	ImageAssetID          *int64   `json:"-"`
 	ImageURL              string   `json:"image_url,omitempty"`
 	OriginalPrice         int64    `json:"original_price"`  // Cents
 	ComboPrice            int64    `json:"combo_price"`     // Cents
 	SavingsPercent        int      `json:"savings_percent"` // 节省百分比
 	MonthlySales          int32    `json:"monthly_sales"`
 	MerchantName          string   `json:"merchant_name"`
-	MerchantLogoAssetID   *int64   `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoAssetID   *int64   `json:"-"`
 	MerchantLogoURL       string   `json:"merchant_logo_url,omitempty"`
 	MerchantIsOpen        bool     `json:"merchant_is_open"`
 	Distance              int      `json:"distance"`
@@ -252,8 +252,8 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 			response[i] = newSearchDishResponseFromDish(dish)
 		}
 
-server.enrichSearchDishURLs(ctx, response)
-			ctx.JSON(http.StatusOK, searchDishListResponse{
+		server.enrichSearchDishURLs(ctx, response)
+		ctx.JSON(http.StatusOK, searchDishListResponse{
 			Dishes:   response,
 			Total:    total,
 			PageID:   req.PageID,
@@ -899,11 +899,13 @@ type searchRoomResponse struct {
 	MinimumSpend        *int64  `json:"minimum_spend,omitempty"` // 分
 	Status              string  `json:"status"`
 	MerchantName        string  `json:"merchant_name"`
-	MerchantLogoAssetID *int64  `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoAssetID *int64  `json:"-"`
+	MerchantLogoURL     string  `json:"merchant_logo_url,omitempty"`
 	MerchantAddress     string  `json:"merchant_address"`
 	MerchantLatitude    float64 `json:"merchant_latitude"`
 	MerchantLongitude   float64 `json:"merchant_longitude"`
-	PrimaryImageAssetID *int64  `json:"primary_image_asset_id,omitempty"` // 包间主图
+	PrimaryImageAssetID *int64  `json:"-"`                                // 包间主图
+	ImageURL            string  `json:"image_url,omitempty"`
 }
 
 // searchRooms godoc
@@ -1046,6 +1048,7 @@ func (server *Server) searchRooms(ctx *gin.Context) {
 		}
 	}
 
+	server.enrichSearchRoomURLs(ctx, rooms)
 	ctx.JSON(http.StatusOK, searchRoomListResponse{
 		Rooms:    rooms,
 		Total:    total,

@@ -41,7 +41,7 @@ type comboSetResponse struct {
 	Description *string `json:"description,omitempty"`
 	ComboPrice  int64   `json:"combo_price"`
 	IsOnline    bool    `json:"is_online"`
-	DishImages  []int64 `json:"dish_images,omitempty"`
+	DishImageURLs []string `json:"dish_image_urls,omitempty"`
 }
 
 func (server *Server) getMerchantFromContextOrOwner(ctx *gin.Context, userID int64) (db.Merchant, error) {
@@ -176,15 +176,13 @@ type comboSetWithDetailsResponse struct {
 	MerchantID    int64                 `json:"merchant_id"`
 	Name          string                `json:"name"`
 	Description   *string               `json:"description,omitempty"`
-	ImageAssetID  *int64                `json:"image_asset_id,omitempty"`
-	ImageURL      string                 `json:"image_url,omitempty"`
+	ImageURL      string                `json:"image_url,omitempty"`
 	OriginalPrice int64                 `json:"original_price"`
 	ComboPrice    int64                 `json:"combo_price"`
 	IsOnline      bool                  `json:"is_online"`
 	Dishes        []dishInComboResponse `json:"dishes"`
 	Tags          []tagResponse         `json:"tags"`
 	IsOpen        bool                  `json:"is_open"`
-	DishImages    []int64               `json:"dish_images,omitempty"` // 子菜品图片 asset ID 列表
 	DishImageURLs []string              `json:"dish_image_urls,omitempty"` // 子菜品图片 CDN URL 列表
 }
 
@@ -192,7 +190,6 @@ type dishInComboResponse struct {
 	ID           int64  `json:"dish_id"`
 	Name         string `json:"dish_name"`
 	Price        int64  `json:"dish_price,omitempty"`
-	ImageAssetID *int64 `json:"dish_image_asset_id,omitempty"`
 	Quantity     int32  `json:"quantity,omitempty"`
 }
 
@@ -317,7 +314,6 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		MerchantID:    result.MerchantID,
 		Name:          result.Name,
 		Description:   stringPtrFromPgText(result.Description),
-		ImageAssetID:  int64PtrFromPgInt8(result.ImageMediaAssetID),
 		ImageURL:      server.publicImageURL(ctx, int64PtrFromPgInt8(result.ImageMediaAssetID), media.VariantCard),
 		OriginalPrice: result.OriginalPrice,
 		ComboPrice:    result.ComboPrice,
@@ -420,7 +416,6 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		MerchantID:    result.MerchantID,
 		Name:          result.Name,
 		Description:   stringPtrFromPgText(result.Description),
-		ImageAssetID:  int64PtrFromPgInt8(result.ImageMediaAssetID),
 		ImageURL:      server.publicImageURL(ctx, int64PtrFromPgInt8(result.ImageMediaAssetID), media.VariantCard),
 		OriginalPrice: result.OriginalPrice,
 		ComboPrice:    result.ComboPrice,
@@ -442,7 +437,6 @@ type listComboSetsRequest struct {
 }
 
 type listComboSetsResponse struct {
-	DishImages []string           `json:"dish_images,omitempty"`
 	ComboSets  []comboSetResponse `json:"combo_sets"`
 	Total      int64              `json:"total"`
 	PageID     int32              `json:"page_id"`
@@ -1061,10 +1055,23 @@ func (server *Server) enrichComboSetImages(ctx context.Context, combos []comboSe
 		}
 	}
 
+	// 收集所有 asset ID 并批量解析 URL
+	var allAssetIDs []int64
+	for _, ids := range imgMap {
+		allAssetIDs = append(allAssetIDs, ids...)
+	}
+	urlMap := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantCard)
+
 	// 回填
 	for i := range combos {
 		if imgs, ok := imgMap[combos[i].ID]; ok {
-			combos[i].DishImages = imgs
+			urls := make([]string, 0, len(imgs))
+			for _, id := range imgs {
+				if u, ok := urlMap[id]; ok {
+					urls = append(urls, u)
+				}
+			}
+			combos[i].DishImageURLs = urls
 		}
 	}
 }
@@ -1084,7 +1091,6 @@ func (server *Server) enrichSingleComboImages(ctx context.Context, combo *comboS
 			assetIDs = append(assetIDs, row.ImageMediaAssetID.Int64)
 		}
 	}
-	combo.DishImages = assetIDs
 
 	if len(assetIDs) > 0 {
 		imgURLs := server.batchPublicImageURLs(ctx, assetIDs, media.VariantCard)

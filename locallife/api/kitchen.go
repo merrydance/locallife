@@ -38,7 +38,7 @@ type kitchenOrderItem struct {
 	CategoryName   string                   `json:"category_name,omitempty"`
 	Quantity       int16                    `json:"quantity"`
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
-	ImageAssetID   *int64                   `json:"image_asset_id,omitempty"`
+	ImageAssetID   *int64                   `json:"-"`
 	ImageURL       string                   `json:"image_url,omitempty"`
 	PrepareTime    int16                    `json:"prepare_time"` // 预估制作时间（分钟）
 }
