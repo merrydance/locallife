@@ -9,6 +9,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
 
@@ -158,7 +159,8 @@ type orderItemResponse struct {
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
 
 	// 商品图片URL
-	ImageAssetID *int64 `json:"image_asset_id,omitempty" example:"123"`
+	ImageAssetID *int64 `json:"-"`
+	ImageURL     string `json:"image_url,omitempty"`
 }
 
 type orderBadge struct {
@@ -659,6 +661,12 @@ func (server *Server) getOrder(ctx *gin.Context) {
 	resp.DeliveryEtaMinutes = result.DeliveryEtaMinutes
 	resp.EstimatedDeliveryAt = result.EstimatedDeliveryAt
 	resp.WechatTransactionID = result.WechatTransactionID
+
+	for i := range resp.Items {
+		if resp.Items[i].ImageAssetID != nil {
+			resp.Items[i].ImageURL = server.publicImageURL(ctx, resp.Items[i].ImageAssetID, media.VariantCard)
+		}
+	}
 
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -1172,6 +1180,12 @@ func (server *Server) getMerchantOrder(ctx *gin.Context) {
 		}
 		if item.Customizations != nil {
 			_ = json.Unmarshal(item.Customizations, &resp.Items[i].Customizations)
+		}
+	}
+
+	for i := range resp.Items {
+		if resp.Items[i].ImageAssetID != nil {
+			resp.Items[i].ImageURL = server.publicImageURL(ctx, resp.Items[i].ImageAssetID, media.VariantCard)
 		}
 	}
 

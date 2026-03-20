@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
 
@@ -30,7 +31,8 @@ type reviewResponse struct {
 	UserID              int64   `json:"user_id"`
 	MerchantID          int64   `json:"merchant_id"`
 	MerchantName        string  `json:"merchant_name,omitempty"`
-	MerchantLogoAssetID *int64  `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoAssetID *int64  `json:"-"`
+	MerchantLogoURL     string  `json:"merchant_logo_url,omitempty"`
 	Content             string  `json:"content"`
 	IsVisible           bool    `json:"is_visible"`
 	MerchantReply       *string `json:"merchant_reply,omitempty"`
@@ -391,6 +393,21 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 		Total:    count,
 		PageID:   req.PageID,
 		PageSize: req.PageSize,
+	}
+	// 批量填充商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(response.Reviews))
+	for _, r := range response.Reviews {
+		if r.MerchantLogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.MerchantLogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range response.Reviews {
+			if response.Reviews[i].MerchantLogoAssetID != nil {
+				response.Reviews[i].MerchantLogoURL = logoURLs[*response.Reviews[i].MerchantLogoAssetID]
+			}
+		}
 	}
 	ctx.JSON(http.StatusOK, response)
 }

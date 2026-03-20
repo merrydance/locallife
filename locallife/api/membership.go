@@ -9,6 +9,7 @@ import (
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
 
@@ -28,7 +29,8 @@ type membershipResponse struct {
 	ID             int64      `json:"id"`
 	MerchantID     int64      `json:"merchant_id"`
 	MerchantName   string     `json:"merchant_name,omitempty"`
-	LogoAssetID    *int64     `json:"logo_asset_id,omitempty"`
+	LogoAssetID    *int64     `json:"-"`
+	LogoURL        string     `json:"logo_url,omitempty"`
 	UserID         int64      `json:"user_id"`
 	Balance        int64      `json:"balance"`
 	TotalRecharged int64      `json:"total_recharged"`
@@ -99,6 +101,7 @@ func (server *Server) joinMembership(ctx *gin.Context) {
 		v := merchant.LogoMediaAssetID.Int64
 		rsp.LogoAssetID = &v
 	}
+	rsp.LogoURL = server.publicImageURL(ctx, rsp.LogoAssetID, media.VariantCard)
 
 	ctx.JSON(http.StatusOK, rsp)
 }
@@ -151,6 +154,22 @@ func (server *Server) listUserMemberships(ctx *gin.Context) {
 	rsp := make([]membershipResponse, len(memberships))
 	for i, m := range memberships {
 		rsp[i] = convertUserMembershipResponse(m)
+	}
+
+	// 批量填充商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(rsp))
+	for _, r := range rsp {
+		if r.LogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.LogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range rsp {
+			if rsp[i].LogoAssetID != nil {
+				rsp[i].LogoURL = logoURLs[*rsp[i].LogoAssetID]
+			}
+		}
 	}
 
 	ctx.JSON(http.StatusOK, listUserMembershipsResponse{

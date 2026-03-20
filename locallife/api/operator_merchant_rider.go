@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 )
 
 // ============================================================================
@@ -190,7 +191,8 @@ type merchantDetailResponse struct {
 	ID          int64   `json:"id"`
 	Name        string  `json:"name"`
 	Description string  `json:"description"`
-	LogoAssetID int64   `json:"logo_asset_id,omitempty"`
+	LogoAssetID int64   `json:"-"`
+	LogoURL     string  `json:"logo_url,omitempty"`
 	Phone       string  `json:"phone"`
 	Address     string  `json:"address"`
 	Status      string  `json:"status"`
@@ -243,7 +245,7 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, merchantDetailResponse{
+	resp := merchantDetailResponse{
 		ID:          merchant.ID,
 		Name:        merchant.Name,
 		Description: merchant.Description.String,
@@ -259,7 +261,11 @@ func (server *Server) getOperatorMerchant(ctx *gin.Context) {
 		Version:     merchant.Version,
 		CreatedAt:   merchant.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:   merchant.UpdatedAt.Format("2006-01-02 15:04:05"),
-	})
+	}
+	if resp.LogoAssetID != 0 {
+		resp.LogoURL = server.publicImageURL(ctx, &resp.LogoAssetID, media.VariantCard)
+	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // ==================== 商户经营统计 ====================

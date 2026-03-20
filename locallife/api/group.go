@@ -11,6 +11,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 )
@@ -56,7 +57,8 @@ type groupApplicationReviewResponse struct {
 type groupMerchantResponse struct {
 	ID          int64  `json:"id"`
 	Name        string `json:"name"`
-	LogoAssetID *int64 `json:"logo_asset_id,omitempty"`
+	LogoAssetID *int64 `json:"-"`
+	LogoURL     string `json:"logo_url,omitempty"`
 	Address     string `json:"address"`
 	Phone       string `json:"phone"`
 	Status      string `json:"status"`
@@ -66,7 +68,8 @@ type brandResponse struct {
 	ID          int64     `json:"id"`
 	GroupID     int64     `json:"group_id"`
 	Name        string    `json:"name"`
-	LogoAssetID *int64    `json:"logo_asset_id,omitempty"`
+	LogoAssetID *int64    `json:"-"`
+	LogoURL     string    `json:"logo_url,omitempty"`
 	Description *string   `json:"description,omitempty"`
 	Status      string    `json:"status"`
 	CreatedAt   time.Time `json:"created_at"`
@@ -909,6 +912,12 @@ func (server *Server) listGroupMerchants(ctx *gin.Context) {
 		})
 	}
 
+	for i := range resp {
+		if resp[i].LogoAssetID != nil {
+			resp[i].LogoURL = server.publicImageURL(ctx, resp[i].LogoAssetID, media.VariantCard)
+		}
+	}
+
 	ctx.JSON(http.StatusOK, resp)
 }
 
@@ -944,6 +953,12 @@ func (server *Server) listGroupBrands(ctx *gin.Context) {
 	resp := make([]brandResponse, 0, len(brands))
 	for _, b := range brands {
 		resp = append(resp, newBrandResponse(b))
+	}
+
+	for i := range resp {
+		if resp[i].LogoAssetID != nil {
+			resp[i].LogoURL = server.publicImageURL(ctx, resp[i].LogoAssetID, media.VariantCard)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -997,7 +1012,11 @@ func (server *Server) createGroupBrand(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, newBrandResponse(brand))
+	brandResp := newBrandResponse(brand)
+	if brandResp.LogoAssetID != nil {
+		brandResp.LogoURL = server.publicImageURL(ctx, brandResp.LogoAssetID, media.VariantCard)
+	}
+	ctx.JSON(http.StatusCreated, brandResp)
 }
 
 // getBrand godoc
@@ -1034,7 +1053,11 @@ func (server *Server) getBrand(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newBrandResponse(brand))
+	brandResp := newBrandResponse(brand)
+	if brandResp.LogoAssetID != nil {
+		brandResp.LogoURL = server.publicImageURL(ctx, brandResp.LogoAssetID, media.VariantCard)
+	}
+	ctx.JSON(http.StatusOK, brandResp)
 }
 
 // ==================== Join Requests ====================

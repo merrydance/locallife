@@ -8,6 +8,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
@@ -436,6 +437,12 @@ func (server *Server) listAvailableRooms(ctx *gin.Context) {
 		resp.Rooms[i] = item
 	}
 
+	for i := range resp.Rooms {
+		if resp.Rooms[i].PrimaryImageAssetID != nil {
+			resp.Rooms[i].ImageURL = server.publicImageURL(ctx, resp.Rooms[i].PrimaryImageAssetID, media.VariantCard)
+		}
+	}
+
 	ctx.JSON(http.StatusOK, resp)
 }
 
@@ -490,6 +497,12 @@ func (server *Server) listMerchantRoomsForCustomer(ctx *gin.Context) {
 			}
 		}
 		resp.Rooms[i] = item
+	}
+
+	for i := range resp.Rooms {
+		if resp.Rooms[i].PrimaryImageAssetID != nil {
+			resp.Rooms[i].ImageURL = server.publicImageURL(ctx, resp.Rooms[i].PrimaryImageAssetID, media.VariantCard)
+		}
 	}
 
 	ctx.JSON(http.StatusOK, resp)
@@ -1340,12 +1353,14 @@ type roomDetailResponse struct {
 	MinimumSpend        int64          `json:"minimum_spend,omitempty"`
 	Status              string         `json:"status"`
 	Tags                []tableTagInfo `json:"tags"`
-	Images              []int64        `json:"images"`
-	PrimaryImageAssetID *int64         `json:"primary_image_asset_id,omitempty"`
+	ImageURLs           []string       `json:"image_urls"`
+	PrimaryImageAssetID *int64         `json:"-"`
+	PrimaryImageURL     string         `json:"primary_image_url,omitempty"`
 	MonthlyReservations int64          `json:"monthly_reservations"`
 	// 商户信息
 	MerchantName        string   `json:"merchant_name"`
-	MerchantLogoAssetID *int64   `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoAssetID *int64   `json:"-"`
+	MerchantLogoURL     string   `json:"merchant_logo_url,omitempty"`
 	MerchantAddress     string   `json:"merchant_address,omitempty"`
 	MerchantPhone       string   `json:"merchant_phone,omitempty"`
 	MerchantLatitude    *float64 `json:"merchant_latitude,omitempty"`
@@ -1361,7 +1376,8 @@ type roomListItemResponse struct {
 	Description         string `json:"description,omitempty"`
 	MinimumSpend        int64  `json:"minimum_spend,omitempty"`
 	Status              string `json:"status"`
-	PrimaryImageAssetID *int64 `json:"primary_image_asset_id,omitempty"`
+	PrimaryImageAssetID *int64 `json:"-"`
+	ImageURL            string `json:"image_url,omitempty"`
 	MonthlyReservations int64  `json:"monthly_reservations,omitempty"`
 }
 
@@ -1431,6 +1447,15 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 			imageAssetIDs = append(imageAssetIDs, img.MediaAssetID.Int64)
 		}
 	}
+	imageURLs := make([]string, 0, len(imageAssetIDs))
+	if len(imageAssetIDs) > 0 {
+		resolvedURLs := server.batchPublicImageURLs(ctx, imageAssetIDs, media.VariantDetail)
+		for _, id := range imageAssetIDs {
+			if u, ok := resolvedURLs[id]; ok {
+				imageURLs = append(imageURLs, u)
+			}
+		}
+	}
 
 	resp := roomDetailResponse{
 		ID:                  room.ID,
@@ -1439,7 +1464,7 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 		Capacity:            room.Capacity,
 		Status:              room.Status,
 		Tags:                tagList,
-		Images:              imageAssetIDs,
+		ImageURLs:           imageURLs,
 		MonthlyReservations: room.MonthlyReservations,
 		MerchantName:        room.MerchantName,
 		MerchantAddress:     room.MerchantAddress,
@@ -1455,10 +1480,12 @@ func (server *Server) getRoomDetail(ctx *gin.Context) {
 	if room.PrimaryImageAssetID != nil {
 		if id, ok := room.PrimaryImageAssetID.(int64); ok && id != 0 {
 			resp.PrimaryImageAssetID = &id
+			resp.PrimaryImageURL = server.publicImageURL(ctx, &id, media.VariantCard)
 		}
 	}
 	if room.MerchantLogoMediaAssetID.Valid {
 		resp.MerchantLogoAssetID = &room.MerchantLogoMediaAssetID.Int64
+		resp.MerchantLogoURL = server.publicImageURL(ctx, resp.MerchantLogoAssetID, media.VariantCard)
 	}
 	if room.MerchantLatitude.Valid {
 		lat, _ := room.MerchantLatitude.Float64Value()

@@ -8,6 +8,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 
+	"github.com/merrydance/locallife/media"
+
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -18,7 +20,8 @@ type favoriteMerchantResponse struct {
 	ID                  int64  `json:"id"`
 	MerchantID          int64  `json:"merchant_id"`
 	MerchantName        string `json:"merchant_name"`
-	MerchantLogoAssetID *int64 `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoAssetID *int64 `json:"-"`
+	MerchantLogoURL     string `json:"merchant_logo_url,omitempty"`
 	Address             string `json:"address"`
 	Status              string `json:"status"`
 	CreatedAt           string `json:"created_at"`
@@ -29,7 +32,8 @@ type favoriteDishResponse struct {
 	DishID       int64  `json:"dish_id"`
 	DishName     string `json:"dish_name"`
 	Description  string `json:"description,omitempty"`
-	ImageAssetID *int64 `json:"image_asset_id,omitempty"`
+	ImageAssetID *int64 `json:"-"`
+	ImageURL     string `json:"image_url,omitempty"`
 	Price        int64  `json:"price"`
 	MemberPrice  *int64 `json:"member_price,omitempty"`
 	IsAvailable  bool   `json:"is_available"`
@@ -188,6 +192,22 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 
 	if response == nil {
 		response = []favoriteMerchantResponse{}
+	}
+
+	// 批量填充商户 Logo URL
+	logoAssetIDs := make([]int64, 0, len(response))
+	for _, r := range response {
+		if r.MerchantLogoAssetID != nil {
+			logoAssetIDs = append(logoAssetIDs, *r.MerchantLogoAssetID)
+		}
+	}
+	if len(logoAssetIDs) > 0 {
+		logoURLs := server.batchPublicImageURLs(ctx, logoAssetIDs, media.VariantCard)
+		for i := range response {
+			if response[i].MerchantLogoAssetID != nil {
+				response[i].MerchantLogoURL = logoURLs[*response[i].MerchantLogoAssetID]
+			}
+		}
 	}
 
 	totalPages := (int(count) + int(req.PageSize) - 1) / int(req.PageSize)
@@ -365,6 +385,22 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 
 	if response == nil {
 		response = []favoriteDishResponse{}
+	}
+
+	// 批量填充菜品图片 URL
+	imgAssetIDs := make([]int64, 0, len(response))
+	for _, r := range response {
+		if r.ImageAssetID != nil {
+			imgAssetIDs = append(imgAssetIDs, *r.ImageAssetID)
+		}
+	}
+	if len(imgAssetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, imgAssetIDs, media.VariantCard)
+		for i := range response {
+			if response[i].ImageAssetID != nil {
+				response[i].ImageURL = imgURLs[*response[i].ImageAssetID]
+			}
+		}
 	}
 
 	totalPages := (int(count) + int(req.PageSize) - 1) / int(req.PageSize)
