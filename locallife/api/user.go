@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 )
 
@@ -82,12 +83,22 @@ func (server *Server) getCurrentUser(ctx *gin.Context) {
 		roles[i] = r.Role
 	}
 
-	ctx.JSON(http.StatusOK, newUserResponse(user, roles))
+	resp := newUserResponse(user, roles)
+	server.enrichUserAvatarURL(ctx, &resp, user)
+	ctx.JSON(http.StatusOK, resp)
+}
+
+func (server *Server) enrichUserAvatarURL(ctx *gin.Context, resp *userResponse, user db.User) {
+	if user.AvatarMediaAssetID.Valid {
+		avatarURL := server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
+		resp.AvatarURL = &avatarURL
+	}
 }
 
 type updateUserRequest struct {
-	FullName  *string `json:"full_name" binding:"omitempty,min=1,max=50"`
-	AvatarURL *string `json:"avatar_url" binding:"omitempty,min=1,max=2048"`
+	FullName           *string `json:"full_name" binding:"omitempty,min=1,max=50"`
+	AvatarURL          *string `json:"avatar_url" binding:"omitempty,min=1,max=2048"`
+	AvatarMediaAssetID *int64  `json:"avatar_media_asset_id" binding:"omitempty,min=1"`
 }
 
 // updateCurrentUser godoc
@@ -135,6 +146,10 @@ func (server *Server) updateCurrentUser(ctx *gin.Context) {
 		arg.AvatarUrl = pgtype.Text{String: normalizeImageURLForStorage(*req.AvatarURL), Valid: true}
 	}
 
+	if req.AvatarMediaAssetID != nil {
+		arg.AvatarMediaAssetID = pgtype.Int8{Int64: *req.AvatarMediaAssetID, Valid: true}
+	}
+
 	user, err := server.store.UpdateUser(ctx, arg)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -157,5 +172,7 @@ func (server *Server) updateCurrentUser(ctx *gin.Context) {
 		roles[i] = r.Role
 	}
 
-	ctx.JSON(http.StatusOK, newUserResponse(user, roles))
+	resp := newUserResponse(user, roles)
+	server.enrichUserAvatarURL(ctx, &resp, user)
+	ctx.JSON(http.StatusOK, resp)
 }
