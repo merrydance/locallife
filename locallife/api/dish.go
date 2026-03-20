@@ -388,6 +388,7 @@ type createDishRequest struct {
 	IngredientIDs       []int64                   `json:"ingredient_ids" binding:"omitempty,max=20,dive,min=1"` // 最多20个食材
 	TagIDs              []int64                   `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`        // 最多10个标签
 	CustomizationGroups []customizationGroupInput `json:"customization_groups" binding:"omitempty,max=20,dive"` // 定制选项分组
+	ImageAssetID        *int64                    `json:"image_asset_id" binding:"omitempty,min=1"`             // 图片媒体资产ID
 }
 
 type dishResponse struct {
@@ -576,6 +577,19 @@ func (server *Server) createDish(ctx *gin.Context) {
 				Options:    options,
 			})
 		}
+	}
+
+	// 如果提供了图片资产 ID，更新菜品图片
+	if req.ImageAssetID != nil {
+		updatedDish, err := server.store.UpdateDish(ctx, db.UpdateDishParams{
+			ID:                txResult.Dish.ID,
+			ImageMediaAssetID: pgtype.Int8{Int64: *req.ImageAssetID, Valid: true},
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("set dish image: %w", err)))
+			return
+		}
+		txResult.Dish = updatedDish
 	}
 
 	assetID := int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID)

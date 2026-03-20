@@ -1,4 +1,5 @@
-import { request, uploadFile } from '../utils/request'
+import { request } from '../utils/request'
+import { uploadMedia, postFormData } from '../utils/media'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 
@@ -109,23 +110,29 @@ export function updateOperatorBasic(data: UpdateOperatorBasicRequest) {
 /**
  * 上传营业执照并识别
  */
-export function ocrOperatorBusinessLicense(filePath: string) {
-  return uploadFile<OperatorApplicationResponse>(
-    filePath,
+export async function ocrOperatorBusinessLicense(filePath: string) {
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'operator',
+    mediaCategory: 'business_license'
+  })
+  return postFormData<OperatorApplicationResponse>(
     '/v1/operator/application/license/ocr',
-    'image'
+    { media_asset_id: mediaId }
   )
 }
 
 /**
  * 上传身份证并识别
  */
-export function ocrOperatorIdCard(filePath: string, side: 'Front' | 'Back') {
-  return uploadFile<OperatorApplicationResponse>(
-    filePath,
+export async function ocrOperatorIdCard(filePath: string, side: 'Front' | 'Back') {
+  const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'operator',
+    mediaCategory
+  })
+  return postFormData<OperatorApplicationResponse>(
     '/v1/operator/application/idcard/ocr',
-    'image',
-    { side }
+    { media_asset_id: mediaId, side }
   )
 }
 

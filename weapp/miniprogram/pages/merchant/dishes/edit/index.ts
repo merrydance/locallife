@@ -1,6 +1,6 @@
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { DishManagementService, CreateDishRequest, UpdateDishRequest } from '../../../../api/dish'
-import { API_BASE } from '../../../../utils/request'
+import { getMediaDisplayUrl } from '../../../../utils/media'
 import { logger } from '../../../../utils/logger'
 
 interface UploadFileItem {
@@ -42,7 +42,8 @@ Page({
       is_online: true,
       is_available: true,
       prepare_time: 15,
-      image_url: ''
+      image_asset_id: 0,   // 图片媒体资产 ID（新）
+      image_preview_url: '' // 本地/CDN 预览 URL
     },
     displayPrice: '', // 元
     displayMemberPrice: '', // 元
@@ -112,11 +113,12 @@ Page({
           is_online: res.is_online,
           is_available: res.is_available,
           prepare_time: res.prepare_time || 15,
-          image_url: res.image_url
+          image_asset_id: 0,
+          image_preview_url: res.image_url ? getMediaDisplayUrl(res.image_url) : ''
         },
         displayPrice: (res.price / 100).toFixed(2),
         displayMemberPrice: res.member_price ? (res.member_price / 100).toFixed(2) : '',
-        fileList: res.image_url ? [{ url: this.buildPreviewUrl(res.image_url), remotePath: res.image_url, status: 'done' }] : [],
+        fileList: res.image_url ? [{ url: getMediaDisplayUrl(res.image_url), status: 'done' }] : [],
         selectedCategoryName: res.category_name || '',
         selectedCategoryValue: res.category_id ? String(res.category_id) : '',
         isFeatured: res.tags?.some((t: { name: string }) => t.name === '推荐') ?? false,
@@ -180,17 +182,7 @@ Page({
   // ==================== 图片处理 ====================
 
   buildPreviewUrl(path: string): string {
-    if (!path) return ''
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('wxfile://') || path.startsWith('data:')) {
-      return path
-    }
-    if (path.startsWith('//')) {
-      return `https:${path}`
-    }
-    if (path.startsWith('/')) {
-      return `${API_BASE}${path}`
-    }
-    return `${API_BASE}/${path}`
+    return getMediaDisplayUrl(path)
   },
 
   async onImageAdd(e: WechatMiniprogram.CustomEvent<{ files: Array<{ url: string }> }>) {
@@ -207,10 +199,11 @@ Page({
     })
 
     try {
-      const remoteUrl = await DishManagementService.uploadDishImage(localPath)
+      const { mediaId, displayUrl } = await DishManagementService.uploadDishImage(localPath)
       this.setData({
-        fileList: [{ url: this.buildPreviewUrl(remoteUrl), remotePath: remoteUrl, status: 'done' }],
-        'formData.image_url': remoteUrl
+        fileList: [{ url: displayUrl, status: 'done' }],
+        'formData.image_asset_id': mediaId,
+        'formData.image_preview_url': displayUrl
       })
       wx.showToast({ title: '上传成功', icon: 'success' })
     } catch (err) {
@@ -239,7 +232,8 @@ Page({
   onImageRemove() {
     this.setData({
       fileList: [],
-      'formData.image_url': ''
+      'formData.image_asset_id': 0,
+      'formData.image_preview_url': ''
     })
   },
 
@@ -326,8 +320,8 @@ Page({
     if (description) {
       payload.description = description
     }
-    if (this.data.formData.image_url) {
-      payload.image_url = this.data.formData.image_url
+    if (this.data.formData.image_asset_id) {
+      payload.image_asset_id = this.data.formData.image_asset_id
     }
     if (this.data.formData.member_price > 0) {
       payload.member_price = this.data.formData.member_price

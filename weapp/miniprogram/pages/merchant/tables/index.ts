@@ -100,7 +100,7 @@ Page({
     rawTables: [] as TableResponse[],
     availableTags: [] as TableTagOption[],
     tableImages: [] as TableImageResponse[],
-    pendingImageUrls: [] as string[],
+    pendingMediaIds: [] as number[],
     pendingImagePreviews: [] as string[],
     imageUploading: false,
     tagSubmitting: false,
@@ -128,7 +128,7 @@ Page({
       rawTables: ensureArray(this.data.rawTables),
       availableTags: ensureArray(this.data.availableTags),
       tableImages: ensureArray(this.data.tableImages),
-      pendingImageUrls: ensureArray(this.data.pendingImageUrls),
+      pendingMediaIds: ensureArray(this.data.pendingMediaIds),
       pendingImagePreviews: ensureArray(this.data.pendingImagePreviews),
       'formData.tag_ids': ensureArray(this.data.formData?.tag_ids)
     })
@@ -262,7 +262,7 @@ Page({
       isEdit: false,
       editingTableId: 0,
       tableImages: [],
-      pendingImageUrls: [],
+      pendingMediaIds: [],
       pendingImagePreviews: [],
       formData: createDefaultFormData()
     })
@@ -279,7 +279,7 @@ Page({
       formVisible: true,
       isEdit: true,
       editingTableId: id,
-      pendingImageUrls: [],
+      pendingMediaIds: [],
       pendingImagePreviews: [],
       formData: {
         table_no: table.table_no,
@@ -327,21 +327,21 @@ Page({
       this.setData({ imageUploading: true })
 
       const uploaded = await tableManagementService.uploadTableImageFile(filePath)
-      const imageUrl = uploaded?.image_url
-      if (!imageUrl) {
+      const { mediaId, displayUrl } = uploaded
+      if (!mediaId) {
         wx.showToast({ title: '上传失败', icon: 'none' })
         return
       }
 
       if (this.data.isEdit && this.data.editingTableId > 0) {
-        await tableManagementService.uploadTableImage(this.data.editingTableId, { image_url: imageUrl })
+        await tableManagementService.uploadTableImage(this.data.editingTableId, { media_asset_id: mediaId })
         await this.loadTableImages(this.data.editingTableId)
       } else {
-        const pendingImageUrls = ensureArray(this.data.pendingImageUrls)
+        const pendingMediaIds = ensureArray(this.data.pendingMediaIds)
         const pendingImagePreviews = ensureArray(this.data.pendingImagePreviews)
         this.setData({
-          pendingImageUrls: [...pendingImageUrls, imageUrl],
-          pendingImagePreviews: [...pendingImagePreviews, normalizeMediaUrl(imageUrl)]
+          pendingMediaIds: [...pendingMediaIds, mediaId],
+          pendingImagePreviews: [...pendingImagePreviews, displayUrl]
         })
       }
 
@@ -370,11 +370,11 @@ Page({
     }
 
     if (!this.data.isEdit && typeof index === 'number') {
-      const next = [...ensureArray(this.data.pendingImageUrls)]
+      const next = [...ensureArray(this.data.pendingMediaIds)]
       const nextPreviews = [...ensureArray(this.data.pendingImagePreviews)]
       next.splice(index, 1)
       nextPreviews.splice(index, 1)
-      this.setData({ pendingImageUrls: next, pendingImagePreviews: nextPreviews })
+      this.setData({ pendingMediaIds: next, pendingImagePreviews: nextPreviews })
     }
   },
 
@@ -558,9 +558,9 @@ Page({
       } else {
         const created = await tableManagementService.createTable(createPayload)
 
-        if (Array.isArray(this.data.pendingImageUrls) && this.data.pendingImageUrls.length > 0) {
-          for (const imageUrl of this.data.pendingImageUrls) {
-            await tableManagementService.uploadTableImage(created.id, { image_url: imageUrl })
+        if (Array.isArray(this.data.pendingMediaIds) && this.data.pendingMediaIds.length > 0) {
+          for (const mediaId of this.data.pendingMediaIds) {
+            await tableManagementService.uploadTableImage(created.id, { media_asset_id: mediaId })
           }
         }
 

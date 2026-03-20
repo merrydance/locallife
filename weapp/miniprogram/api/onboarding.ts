@@ -1,4 +1,5 @@
-import { request, uploadFile } from '../utils/request'
+import { request } from '../utils/request'
+import { uploadMedia, postFormData, MediaUploadResult } from '../utils/media'
 import type { AgreementConsentPayload } from './agreement-consent'
 
 // ==================== OCR Status Types ====================
@@ -141,17 +142,19 @@ export function updateMerchantBasicInfo(data: UpdateMerchantBasicInfoRequest) {
 /**
  * 营业执照 OCR（异步）
  * POST /v1/merchant/application/license/ocr
- * @param filePath 本地文件路径，若不传则复用已上传的图片
+ * 若传 filePath：先上传到媒体服务，再个 media_asset_id 调用 OCR
  */
-export function ocrBusinessLicense(filePath?: string) {
+export async function ocrBusinessLicense(filePath?: string) {
   if (filePath) {
-    return uploadFile<MerchantApplicationDraftResponse>(
-      filePath,
+    const { mediaId } = await uploadMedia(filePath, {
+      businessType: 'merchant',
+      mediaCategory: 'business_license'
+    })
+    return postFormData<MerchantApplicationDraftResponse>(
       '/v1/merchant/application/license/ocr',
-      'image'
+      { media_asset_id: mediaId }
     )
   }
-  // 不传文件时，触发复用已有图片的 OCR
   return request<MerchantApplicationDraftResponse>({
     url: '/v1/merchant/application/license/ocr',
     method: 'POST'
@@ -162,12 +165,15 @@ export function ocrBusinessLicense(filePath?: string) {
  * 食品经营许可证 OCR（异步）
  * POST /v1/merchant/application/foodpermit/ocr
  */
-export function ocrFoodPermit(filePath?: string) {
+export async function ocrFoodPermit(filePath?: string) {
   if (filePath) {
-    return uploadFile<MerchantApplicationDraftResponse>(
-      filePath,
+    const { mediaId } = await uploadMedia(filePath, {
+      businessType: 'merchant',
+      mediaCategory: 'food_permit'
+    })
+    return postFormData<MerchantApplicationDraftResponse>(
       '/v1/merchant/application/foodpermit/ocr',
-      'image'
+      { media_asset_id: mediaId }
     )
   }
   return request<MerchantApplicationDraftResponse>({
@@ -181,13 +187,16 @@ export function ocrFoodPermit(filePath?: string) {
  * POST /v1/merchant/application/idcard/ocr
  * @param side 'Front' 或 'Back'
  */
-export function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back') {
+export async function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back') {
   if (filePath) {
-    return uploadFile<MerchantApplicationDraftResponse>(
-      filePath,
+    const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
+    const { mediaId } = await uploadMedia(filePath, {
+      businessType: 'merchant',
+      mediaCategory
+    })
+    return postFormData<MerchantApplicationDraftResponse>(
       '/v1/merchant/application/idcard/ocr',
-      'image',
-      { side }
+      { media_asset_id: mediaId, side }
     )
   }
   return request<MerchantApplicationDraftResponse>({
@@ -234,17 +243,23 @@ export function resetMerchantApplication() {
 
 /**
  * 上传商户图片文件（Logo、门头照、环境照）
- * POST /v1/merchants/images/upload
+ * 媒体服务三步流程
  * @param filePath 本地文件路径
  * @param category 'logo' | 'storefront' | 'environment'
+ * @returns { mediaId, displayUrl, urls }
  */
-export function uploadMerchantImage(filePath: string, category: 'logo' | 'storefront' | 'environment') {
-  return uploadFile<UploadImageResponse>(
-    filePath,
-    '/v1/merchants/images/upload',
-    'image',
-    { category }
-  )
+export function uploadMerchantImage(
+  filePath: string,
+  category: 'logo' | 'storefront' | 'environment'
+): Promise<MediaUploadResult> {
+  const mediaCategory =
+    category === 'logo' ? 'logo'
+    : category === 'storefront' ? 'storefront'
+    : 'environment'
+  return uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory
+  })
 }
 
 /**

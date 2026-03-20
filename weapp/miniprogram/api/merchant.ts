@@ -405,14 +405,16 @@ export function getMyMerchantProfile() {
 /**
  * 更新当前商户 Logo（商户工作台）
  * PATCH /v1/merchants/me
- * @param logoUrl 图片相对路径（rawUrl）
- * @param version 乐观锁版本号，必须从 GET /v1/merchants/me 获取
+ * @param logoAssetId 媒体资产 ID
+ * @param version 乐观锁版本号
  */
-export function updateMyMerchantLogo(logoUrl: string, version: number) {
+export function updateMyMerchantLogo(logoAssetId: number | null, version: number) {
+  const data: Record<string, unknown> = { version }
+  if (logoAssetId) data.logo_asset_id = logoAssetId
   return request<MerchantOperatorResponse>({
     url: '/v1/merchants/me',
     method: 'PATCH',
-    data: { logo_url: logoUrl, version }
+    data
   })
 }
 

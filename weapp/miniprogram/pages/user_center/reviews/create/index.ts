@@ -6,7 +6,7 @@ import { getStableBarHeights } from '../../../../utils/responsive'
 interface ReviewUploadFile {
   url: string
   status?: 'loading' | 'done' | 'failed'
-  remotePath?: string
+  mediaId?: number
 }
 
 Page({
@@ -107,22 +107,21 @@ Page({
         const currentIndex = fileList.length + i
         
         try {
-            const url = await ReviewService.uploadReviewImage(file.url)
-            this.updateFileStatus(currentIndex, 'done', url)
+            const { mediaId } = await ReviewService.uploadReviewImage(file.url)
+            this.updateFileStatus(currentIndex, 'done', mediaId)
         } catch (err) {
             this.updateFileStatus(currentIndex, 'failed')
         }
     }
   },
 
-  updateFileStatus(index: number, status: 'loading' | 'done' | 'failed', url?: string) {
+  updateFileStatus(index: number, status: 'loading' | 'done' | 'failed', mediaId?: number) {
     const { fileList } = this.data
     if (!fileList[index]) return
     
     fileList[index].status = status
-    if (url) {
-        // 后端返回的是相对路径，需要处理
-        fileList[index].remotePath = url 
+    if (mediaId) {
+        fileList[index].mediaId = mediaId
     }
     
     this.setData({ fileList })
@@ -155,18 +154,17 @@ Page({
     this.setData({ submitting: true })
 
     try {
-      // 提取成功上传的远程路径
-      const remoteImages = fileList
-        .filter((f) => f.status === 'done' && f.remotePath)
-        .map((f) => f.remotePath)
-        .filter((path): path is string => Boolean(path))
+      // 提取成功上传的媒体资产 ID
+      const mediaAssetIds = fileList
+        .filter((f) => f.status === 'done' && f.mediaId)
+        .map((f) => f.mediaId as number)
 
       const reviewData: CreateReviewParams = {
         order_id: orderId,
         rating: this.data.rating,
         content,
         tags: this.data.selectedTags.length > 0 ? this.data.selectedTags : undefined,
-        images: remoteImages.length > 0 ? remoteImages : undefined
+        media_asset_ids: mediaAssetIds.length > 0 ? mediaAssetIds : undefined
       }
 
       await ReviewService.createReview(reviewData)

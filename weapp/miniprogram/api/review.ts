@@ -1,4 +1,5 @@
-import { request, uploadFile } from '../utils/request'
+import { request } from '../utils/request'
+import { uploadMedia, MediaUploadResult } from '../utils/media'
 
 export interface Review {
     id: number
@@ -30,7 +31,7 @@ export interface CreateReviewParams {
     rating: number
     content: string
     tags?: string[]       // 快捷标签
-    images?: string[]
+    media_asset_ids?: number[]  // 图片媒体资产ID列表（新）
 }
 
 export class ReviewService {
@@ -81,12 +82,14 @@ export class ReviewService {
     }
 
     /**
-     * 上传评价图片
-     * POST /v1/reviews/images/upload
+     * 上传评价图片（媒体服务三步流程）
+     * @returns { mediaId, displayUrl, urls }
      */
-    static async uploadReviewImage(filePath: string): Promise<string> {
-        return await uploadFile<{ image_url: string }>(filePath, '/v1/reviews/images/upload', 'image')
-            .then((res) => res.image_url)
+    static async uploadReviewImage(filePath: string): Promise<MediaUploadResult> {
+        return uploadMedia(filePath, {
+            businessType: 'user',
+            mediaCategory: 'review'
+        })
     }
 }
 

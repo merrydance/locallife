@@ -209,13 +209,10 @@ export async function uploadMedia(
 const PLACEHOLDER = "/assets/placeholder.png";
 
 /**
- * 从 urls map 中取指定变体的 URL；
- * 兼容旧的 image_url 字符串（以 uploads/ 或 http 开头）。
+ * 兼容旧的 image_url 字符串（以 uploads/ 或 http 开头）的 URL 规范化。
+ * 新格式 CDN URL（http/https）直接透传；旧格式补全为绝对路径。
  */
-export function getMediaDisplayUrl(
-  url?: string,
-  variant: MediaVariant = "card"
-): string {
+export function getMediaDisplayUrl(url?: string): string {
   if (!url) return PLACEHOLDER;
   if (url.startsWith("http")) return url;
   if (url.startsWith("uploads/") || url.startsWith("/uploads/")) {

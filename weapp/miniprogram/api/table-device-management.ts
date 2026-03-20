@@ -4,7 +4,8 @@
  * 包含：桌台管理、设备管理、显示配置、二维码管理
  */
 
-import { request, uploadFile } from '../utils/request'
+import { request } from '../utils/request'
+import { uploadMedia } from '../utils/media'
 
 // ==================== 数据类型定义 ====================
 
@@ -272,7 +273,7 @@ export class TableManagementService {
      * @param tableId 桌台ID
      * @param imageData 图片数据
      */
-    async uploadTableImage(tableId: number, imageData: { image_url: string, sort_order?: number }): Promise<TableImageResponse> {
+    async uploadTableImage(tableId: number, imageData: { media_asset_id: number, sort_order?: number, is_primary?: boolean }): Promise<TableImageResponse> {
         return request({
             url: `/v1/tables/${tableId}/images`,
             method: 'POST',
@@ -281,10 +282,14 @@ export class TableManagementService {
     }
 
     /**
-     * 上传桌台图片文件，返回可关联的 image_url
+     * 上传桌台图片文件（媒体服务三步流程）
+     * @returns { mediaId, displayUrl, urls }
      */
-    async uploadTableImageFile(filePath: string): Promise<{ image_url: string }> {
-        return uploadFile<{ image_url: string }>(filePath, '/v1/tables/images/upload', 'image')
+    async uploadTableImageFile(filePath: string): Promise<import('../utils/media').MediaUploadResult> {
+        return uploadMedia(filePath, {
+            businessType: 'merchant',
+            mediaCategory: 'table'
+        })
     }
 
     /**

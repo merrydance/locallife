@@ -166,7 +166,7 @@ export function getUserInfo() {
 /**
  * 更新用户信息 - 基于 PATCH /v1/users/me
  */
-export function updateUserInfo(data: { avatar_url?: string, full_name?: string }) {
+export function updateUserInfo(data: { avatar_url?: string, avatar_media_asset_id?: number, full_name?: string }) {
   return request<UserResponse>({
     url: '/v1/users/me',
     method: 'PATCH',

@@ -1,4 +1,5 @@
-import { request, uploadFile } from '../utils/request'
+import { request } from '../utils/request'
+import { uploadMedia, postFormData } from '../utils/media'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 
@@ -64,23 +65,29 @@ export function updateRiderApplicationBasic(data: UpdateRiderBasicRequest) {
 /**
  * 上传并在识别身份证照片
  */
-export function ocrRiderIdCard(filePath: string, side: 'Front' | 'Back') {
-  return uploadFile<RiderApplicationResponse>(
-    filePath,
+export async function ocrRiderIdCard(filePath: string, side: 'Front' | 'Back') {
+  const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'rider',
+    mediaCategory
+  })
+  return postFormData<RiderApplicationResponse>(
     '/v1/rider/application/idcard/ocr',
-    'image',
-    { side }
+    { media_asset_id: mediaId, side }
   )
 }
 
 /**
  * 上传并在识别健康证照片
  */
-export function ocrRiderHealthCert(filePath: string) {
-  return uploadFile<RiderApplicationResponse>(
-    filePath,
+export async function ocrRiderHealthCert(filePath: string) {
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'rider',
+    mediaCategory: 'health_cert'
+  })
+  return postFormData<RiderApplicationResponse>(
     '/v1/rider/application/healthcert',
-    'image'
+    { media_asset_id: mediaId }
   )
 }
 

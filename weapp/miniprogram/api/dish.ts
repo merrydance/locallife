@@ -3,8 +3,8 @@
  * 基于swagger.json完全重构，仅保留后端支持的接口
  */
 
-import { request, API_BASE } from '../utils/request'
-import { getToken } from '../utils/auth'
+import { request } from '../utils/request'
+import { uploadMedia, MediaUploadResult } from '../utils/media'
 
 // ==================== 菜品数据类型定义 ====================
 
@@ -130,7 +130,7 @@ export interface ListDishesResponse {
 export interface CreateDishRequest extends Record<string, unknown> {
     category_id?: number                         // 分类ID
     description?: string                         // 菜品描述
-    image_url?: string                           // 菜品图片URL
+    image_asset_id?: number                      // 菜品图片媒体资产ID（新）
     ingredient_ids?: number[]                    // 食材ID列表（最多20个）
     is_available?: boolean                       // 是否可用
     is_online?: boolean                          // 是否上架
@@ -151,7 +151,7 @@ export interface UpdateDishRequest extends Record<string, unknown> {
     description?: string                         // 菜品描述
     price?: number                               // 价格（分）
     member_price?: number                        // 会员价（分）
-    image_url?: string                           // 菜品图片URL
+    image_asset_id?: number                      // 菜品图片媒体资产ID（新）
     category_id?: number                         // 分类ID
     prepare_time?: number                        // 预估制作时间（分钟）
     sort_order?: number                          // 排序
@@ -814,39 +814,13 @@ export class DishManagementService {
     }
 
     /**
-     * 上传菜品图片
-     * POST /v1/dishes/images/upload
+     * 上传菜品图片（媒体服务三步流程）
+     * @returns { mediaId, displayUrl, urls }
      */
-    static async uploadDishImage(filePath: string): Promise<string> {
-        return new Promise((resolve, reject) => {
-            const token = getToken()
-            wx.uploadFile({
-                url: `${API_BASE}/v1/dishes/images/upload`,
-                filePath,
-                name: 'image',
-                header: {
-                    'Authorization': `Bearer ${token}`
-                },
-                success: (res) => {
-                    if (res.statusCode === 200) {
-                        try {
-                            const data = JSON.parse(res.data)
-                            if (data.code === 0 && data.data && data.data.image_url) {
-                                resolve(data.data.image_url)
-                            } else if (data.image_url) {
-                                resolve(data.image_url)
-                            } else {
-                                resolve(data.data?.image_url || data.image_url)
-                            }
-                        } catch (e) {
-                            reject(new Error('Parse response failed'))
-                        }
-                    } else {
-                        reject(new Error(`HTTP ${res.statusCode}`))
-                    }
-                },
-                fail: reject
-            })
+    static async uploadDishImage(filePath: string): Promise<MediaUploadResult> {
+        return uploadMedia(filePath, {
+            businessType: 'merchant',
+            mediaCategory: 'dish'
         })
     }
 }

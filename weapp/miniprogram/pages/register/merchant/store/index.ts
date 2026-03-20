@@ -925,18 +925,10 @@ Page({
       const result = await uploadMerchantImage(newFile.url, 'storefront')
       console.log('[MerchantRegister] 门头照上传响应:', JSON.stringify(result))
 
-      const rawUrl = result.image_url  // 后端返回的相对路径
-      if (!rawUrl) {
-        console.error('[MerchantRegister] 响应中没有 image_url 字段:', result)
-        throw new Error('上传响应格式错误')
-      }
-
-      // 调用签名接口获取可访问的 URL
-      // 855 require REMOVED
-      const displayUrl = await resolveImageURL(rawUrl)
+      const displayUrl = result.displayUrl
       console.log('[MerchantRegister] 门头照显示 URL:', displayUrl)
 
-      currentImages.push({ url: displayUrl, rawUrl })
+      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
       this.setData({ storefrontImages: currentImages })
 
       // 保存到后端（使用相对路径）
@@ -1000,18 +992,10 @@ Page({
       const result = await uploadMerchantImage(newFile.url, 'environment')
       console.log('[MerchantRegister] 环境照上传响应:', JSON.stringify(result))
 
-      const rawUrl = result.image_url  // 后端返回的相对路径
-      if (!rawUrl) {
-        console.error('[MerchantRegister] 环境照响应中没有 image_url 字段:', result)
-        throw new Error('上传响应格式错误')
-      }
-
-      // 调用签名接口获取可访问的 URL
-      // 931 require REMOVED
-      const displayUrl = await resolveImageURL(rawUrl)
+      const displayUrl = result.displayUrl
       console.log('[MerchantRegister] 环境照显示 URL:', displayUrl)
 
-      currentImages.push({ url: displayUrl, rawUrl })
+      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
       this.setData({ environmentImages: currentImages })
 
       // 保存到后端（使用相对路径）

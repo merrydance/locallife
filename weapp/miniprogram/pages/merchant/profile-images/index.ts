@@ -100,17 +100,13 @@ Page({
     this.setData({ logoUploading: true })
     wx.showLoading({ title: '上传中...' })
     try {
-      const result = await uploadMerchantImage(newFile.url, 'logo')
-      if (!result.image_url) throw new Error('上传响应格式错误')
-
-      const rawUrl = result.image_url
-      const displayUrl = await resolveImageURL(rawUrl)
+      const { mediaId, displayUrl } = await uploadMerchantImage(newFile.url, 'logo')
 
       // 保存到后端（需要当前 version）
-      const updated = await updateMyMerchantLogo(rawUrl, this.data._merchantVersion)
+      const updated = await updateMyMerchantLogo(mediaId, this.data._merchantVersion)
 
       this.setData({
-        logoImage: { url: displayUrl, rawUrl },
+        logoImage: { url: displayUrl, rawUrl: displayUrl },
         _merchantVersion: updated.version,
         logoUploading: false
       })
@@ -132,7 +128,7 @@ Page({
         if (!res.confirm) return
         wx.showLoading({ title: '保存中...' })
         try {
-          const updated = await updateMyMerchantLogo('', this.data._merchantVersion)
+          const updated = await updateMyMerchantLogo(null, this.data._merchantVersion)
           this.setData({ logoImage: null, _merchantVersion: updated.version })
           wx.hideLoading()
           wx.showToast({ title: '已删除', icon: 'success' })
@@ -163,12 +159,8 @@ Page({
     this.setData({ storefrontSaving: true })
     wx.showLoading({ title: '上传中...' })
     try {
-      const result = await uploadMerchantImage(newFile.url, 'storefront')
-      if (!result.image_url) throw new Error('上传响应格式错误')
-
-      const rawUrl = result.image_url
-      const displayUrl = await resolveImageURL(rawUrl)
-      currentImages.push({ url: displayUrl, rawUrl })
+      const { displayUrl } = await uploadMerchantImage(newFile.url, 'storefront')
+      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
 
       await updateShopImages({
         storefront_images: currentImages.map((img) => img.rawUrl || img.url)
@@ -220,12 +212,8 @@ Page({
     this.setData({ environmentSaving: true })
     wx.showLoading({ title: '上传中...' })
     try {
-      const result = await uploadMerchantImage(newFile.url, 'environment')
-      if (!result.image_url) throw new Error('上传响应格式错误')
-
-      const rawUrl = result.image_url
-      const displayUrl = await resolveImageURL(rawUrl)
-      currentImages.push({ url: displayUrl, rawUrl })
+      const { displayUrl } = await uploadMerchantImage(newFile.url, 'environment')
+      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
 
       await updateShopImages({
         environment_images: currentImages.map((img) => img.rawUrl || img.url)

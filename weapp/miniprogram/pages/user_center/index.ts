@@ -592,8 +592,8 @@ Page({
 
     try {
       // 1. Upload to Server
-      const imageUrl = await UploadService.uploadImage(avatarUrl, 'avatar')
-      const remoteUrl = imageUrl
+      const { mediaId, displayUrl } = await UploadService.uploadImage(avatarUrl, 'avatar')
+      const remoteUrl = displayUrl
 
       // 2. Persist locally with remote URL
       wx.setStorageSync('user_avatar', remoteUrl)
@@ -609,7 +609,7 @@ Page({
       })
 
       // 4. Update Backend Profile
-      await updateUserInfo({ avatar_url: remoteUrl })
+      await updateUserInfo({ avatar_media_asset_id: mediaId })
 
     } catch (error) {
       console.error('Failed to update avatar on backend', error)
