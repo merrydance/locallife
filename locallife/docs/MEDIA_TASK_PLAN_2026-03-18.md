@@ -120,7 +120,7 @@
   - `ImageVariantThumbWidth int`
   - `ImageVariantCardWidth int`
   - `ImageVariantDetailWidth int`
-- [ ] `app.env.example`：补充所有新配置项的示例值和注释
+- [x] `app.env.example`：补充所有新配置项的示例值和注释
 - [ ] `app.env`（本地开发）：填入开发环境对应值（`FileStorageProvider=local` 先跑通）
 
 ---
@@ -249,20 +249,20 @@
 
 ### 5.6 商户入驻申请（merchant_applications）
 
-- [ ] 接口改为接受 `business_license_media_asset_id`, `food_permit_media_asset_id`
-- [ ] OCR 链路：改为从 `media_assets.object_key` 取图路径，调用 OCR 服务
+- [x] 接口改为接受 `business_license_media_asset_id`, `food_permit_media_asset_id`
+- [x] OCR 链路：改为从 `media_assets.object_key` 取图路径，调用 OCR 服务
 - [ ] 回归测试：申请提交 + OCR 识别
 
 ### 5.7 骑手入驻申请
 
-- [ ] 接口改为接受 `idcard_front_media_asset_id`, `idcard_back_media_asset_id`, `health_cert_media_asset_id`
-- [ ] OCR 链路适配
+- [x] 接口改为接受 `idcard_front_media_asset_id`, `idcard_back_media_asset_id`, `health_cert_media_asset_id`
+- [x] OCR 链路适配
 - [ ] 回归测试：申请提交 + 材料展示
 
 ### 5.8 运营商入驻申请
 
-- [ ] 接口改为接受 `business_license_media_asset_id`, `license_image_media_asset_id`, `logo_media_asset_id`
-- [ ] OCR 链路适配
+- [x] 接口改为接受 `business_license_media_asset_id`, `id_card_front_media_asset_id`, `id_card_back_media_asset_id`（实际 DB 字段与原计划 `license_image/logo_media_asset_id` 有出入，以实际迁移为准）
+- [x] OCR 链路适配
 - [ ] 回归测试：申请提交 + 材料展示
 
 ### 5.9 全局图片 URL 生成替换
