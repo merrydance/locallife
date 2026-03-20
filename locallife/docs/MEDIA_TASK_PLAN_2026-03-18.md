@@ -223,8 +223,8 @@
 ### 5.2 桌台图片（table_images）
 
 - [ ] `api/` 桌台相关接口：添加图片改为提交 `media_asset_id`
-- [ ] 桌台图列表响应通过 `MediaURLResolver` 返回规格图 URL
-- [ ] 主图逻辑 `is_primary` 在新模型下仍正确
+- [x] 桌台图列表响应通过 `MediaURLResolver` 返回规格图 URL（`roomDetailResponse.ImageURLs []string` + `PrimaryImageURL` + `roomListItemResponse.ImageURL`）
+- [x] 主图逻辑 `is_primary` 在新模型下仍正确
 - [ ] 回归测试：桌台图片增删改查
 
 ### 5.3 评价（reviews）
@@ -237,8 +237,8 @@
 ### 5.4 商户设置与品牌
 
 - [ ] 商户 logo 上传接口改为接受 `logo_media_asset_id`
-- [ ] 商户详情/列表响应保留兼容字段 `logo_url`（由 `MediaURLResolver` 生成）
-- [ ] 品牌/集团 logo 同步改造
+- [x] 商户详情/列表响应保留兼容字段 `logo_url`（由 `MediaURLResolver` 生成，已覆盖 merchant.go / favorite.go / membership.go / operator_merchant_rider.go / group.go merchantResponse）
+- [x] 品牌/集团 logo 同步改造（`brandResponse.LogoURL` + `groupMerchantResponse.LogoURL` 已注入）
 - [ ] 回归测试：商户设置 logo + 列表展示
 
 ### 5.5 用户头像
@@ -283,6 +283,13 @@
 - [x] `api/search.go`：`searchComboResponse.ImageURL` + `MerchantLogoURL` — `enrichSearchComboURLs` 注入
 - [x] `api/merchant.go`：`publicDishItem.ImageURL` — `getPublicMerchantDishes` 建列后批量填充（`VariantCard`）
 - [x] `api/merchant.go`：`publicComboItem.ImageURL` + `DishImageURLs []string` — `enrichPublicComboListImages` 重构为同时解析套餐自身图片和成员图片 URL
+- [x] `api/favorite.go`：`favoriteMerchantResponse.MerchantLogoURL` + `favoriteDishResponse.ImageURL` — 两个 list 处理器各自批量填充
+- [x] `api/membership.go`：`membershipResponse.LogoURL` — 单项 `getMerchantMembership` + 列表 `listUserMemberships` 各自注入
+- [x] `api/operator_merchant_rider.go`：`merchantDetailResponse.LogoURL` — 提取响应体变量后注入
+- [x] `api/review.go`：`reviewResponse.MerchantLogoURL` — `getMyReviews` 批量填充
+- [x] `api/table.go`：`roomDetailResponse.ImageURLs []string`（图集）+ `PrimaryImageURL` + `MerchantLogoURL`；`roomListItemResponse.ImageURL` — 三处 handler 各自注入
+- [x] `api/order.go`：`orderItemResponse.ImageURL` — `createOrder` + `getMerchantOrder` 两处循环后批量填充（`VariantCard`）
+- [x] `api/group.go`：`groupMerchantResponse.LogoURL` + `brandResponse.LogoURL` — `listGroupMerchants`、`listGroupBrands`、`createGroupBrand`、`getBrand` 均已注入
 - [ ] `api/media_url.go` 中 enrich helper 函数集成测试覆盖
 
 ---
