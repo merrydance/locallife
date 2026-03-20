@@ -37,6 +37,7 @@ type Querier interface {
 	AddOperatorRegion(ctx context.Context, arg AddOperatorRegionParams) (OperatorRegion, error)
 	// 追加菜品支付成功后累加预付金额
 	AddReservationPrepaidAmount(ctx context.Context, arg AddReservationPrepaidAmountParams) (TableReservation, error)
+	AddReviewImage(ctx context.Context, arg AddReviewImageParams) (ReviewImage, error)
 	// ============ Table Images ============
 	AddTableImage(ctx context.Context, arg AddTableImageParams) (TableImage, error)
 	// ============ Table Tags ============
@@ -498,6 +499,7 @@ type Querier interface {
 	DeleteReservationInventoryByDish(ctx context.Context, arg DeleteReservationInventoryByDishParams) error
 	DeleteReservationItems(ctx context.Context, reservationID int64) error
 	DeleteReview(ctx context.Context, id int64) error
+	DeleteReviewImages(ctx context.Context, reviewID int64) error
 	DeleteSearchHistory(ctx context.Context, arg DeleteSearchHistoryParams) error
 	DeleteTable(ctx context.Context, id int64) error
 	DeleteTableImage(ctx context.Context, id int64) error
@@ -1295,6 +1297,8 @@ type Querier interface {
 	ListReservationsByTableAndDate(ctx context.Context, arg ListReservationsByTableAndDateParams) ([]TableReservation, error)
 	// 用户预订列表：只返回在线预订（source = 'online' 或 NULL），不包括商户代客创建的预订
 	ListReservationsByUserWithStatus(ctx context.Context, arg ListReservationsByUserWithStatusParams) ([]ListReservationsByUserWithStatusRow, error)
+	ListReviewImages(ctx context.Context, reviewID int64) ([]ReviewImage, error)
+	ListReviewImagesByReviews(ctx context.Context, dollar_1 []int64) ([]ReviewImage, error)
 	ListReviewsByMerchant(ctx context.Context, arg ListReviewsByMerchantParams) ([]Review, error)
 	ListReviewsByUser(ctx context.Context, arg ListReviewsByUserParams) ([]ListReviewsByUserRow, error)
 	ListRiderActiveDeliveries(ctx context.Context, riderID pgtype.Int8) ([]Delivery, error)

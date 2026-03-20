@@ -691,7 +691,7 @@ func (q *Queries) ListMembershipTransactionsByType(ctx context.Context, arg List
 }
 
 const listMerchantMembers = `-- name: ListMerchantMembers :many
-SELECT m.id, m.merchant_id, m.user_id, m.balance, m.total_recharged, m.total_consumed, m.created_at, m.updated_at, m.principal_balance, m.bonus_balance, u.full_name, u.phone, u.avatar_url
+SELECT m.id, m.merchant_id, m.user_id, m.balance, m.total_recharged, m.total_consumed, m.created_at, m.updated_at, m.principal_balance, m.bonus_balance, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 FROM merchant_memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.merchant_id = $1
@@ -706,19 +706,20 @@ type ListMerchantMembersParams struct {
 }
 
 type ListMerchantMembersRow struct {
-	ID               int64              `json:"id"`
-	MerchantID       int64              `json:"merchant_id"`
-	UserID           int64              `json:"user_id"`
-	Balance          int64              `json:"balance"`
-	TotalRecharged   int64              `json:"total_recharged"`
-	TotalConsumed    int64              `json:"total_consumed"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
-	PrincipalBalance int64              `json:"principal_balance"`
-	BonusBalance     int64              `json:"bonus_balance"`
-	FullName         string             `json:"full_name"`
-	Phone            pgtype.Text        `json:"phone"`
-	AvatarUrl        pgtype.Text        `json:"avatar_url"`
+	ID                 int64              `json:"id"`
+	MerchantID         int64              `json:"merchant_id"`
+	UserID             int64              `json:"user_id"`
+	Balance            int64              `json:"balance"`
+	TotalRecharged     int64              `json:"total_recharged"`
+	TotalConsumed      int64              `json:"total_consumed"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	PrincipalBalance   int64              `json:"principal_balance"`
+	BonusBalance       int64              `json:"bonus_balance"`
+	FullName           string             `json:"full_name"`
+	Phone              pgtype.Text        `json:"phone"`
+	AvatarUrl          pgtype.Text        `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8        `json:"avatar_media_asset_id"`
 }
 
 func (q *Queries) ListMerchantMembers(ctx context.Context, arg ListMerchantMembersParams) ([]ListMerchantMembersRow, error) {
@@ -744,6 +745,7 @@ func (q *Queries) ListMerchantMembers(ctx context.Context, arg ListMerchantMembe
 			&i.FullName,
 			&i.Phone,
 			&i.AvatarUrl,
+			&i.AvatarMediaAssetID,
 		); err != nil {
 			return nil, err
 		}

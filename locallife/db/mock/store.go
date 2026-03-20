@@ -192,6 +192,21 @@ func (mr *MockStoreMockRecorder) AddReservationPrepaidAmount(ctx, arg any) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddReservationPrepaidAmount", reflect.TypeOf((*MockStore)(nil).AddReservationPrepaidAmount), ctx, arg)
 }
 
+// AddReviewImage mocks base method.
+func (m *MockStore) AddReviewImage(ctx context.Context, arg db.AddReviewImageParams) (db.ReviewImage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddReviewImage", ctx, arg)
+	ret0, _ := ret[0].(db.ReviewImage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddReviewImage indicates an expected call of AddReviewImage.
+func (mr *MockStoreMockRecorder) AddReviewImage(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddReviewImage", reflect.TypeOf((*MockStore)(nil).AddReviewImage), ctx, arg)
+}
+
 // AddTableImage mocks base method.
 func (m *MockStore) AddTableImage(ctx context.Context, arg db.AddTableImageParams) (db.TableImage, error) {
 	m.ctrl.T.Helper()
@@ -4792,6 +4807,20 @@ func (m *MockStore) DeleteReview(ctx context.Context, id int64) error {
 func (mr *MockStoreMockRecorder) DeleteReview(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReview", reflect.TypeOf((*MockStore)(nil).DeleteReview), ctx, id)
+}
+
+// DeleteReviewImages mocks base method.
+func (m *MockStore) DeleteReviewImages(ctx context.Context, reviewID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteReviewImages", ctx, reviewID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteReviewImages indicates an expected call of DeleteReviewImages.
+func (mr *MockStoreMockRecorder) DeleteReviewImages(ctx, reviewID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReviewImages", reflect.TypeOf((*MockStore)(nil).DeleteReviewImages), ctx, reviewID)
 }
 
 // DeleteSearchHistory mocks base method.
@@ -13089,6 +13118,36 @@ func (m *MockStore) ListReservationsByUserWithStatus(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) ListReservationsByUserWithStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReservationsByUserWithStatus", reflect.TypeOf((*MockStore)(nil).ListReservationsByUserWithStatus), ctx, arg)
+}
+
+// ListReviewImages mocks base method.
+func (m *MockStore) ListReviewImages(ctx context.Context, reviewID int64) ([]db.ReviewImage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListReviewImages", ctx, reviewID)
+	ret0, _ := ret[0].([]db.ReviewImage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListReviewImages indicates an expected call of ListReviewImages.
+func (mr *MockStoreMockRecorder) ListReviewImages(ctx, reviewID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReviewImages", reflect.TypeOf((*MockStore)(nil).ListReviewImages), ctx, reviewID)
+}
+
+// ListReviewImagesByReviews mocks base method.
+func (m *MockStore) ListReviewImagesByReviews(ctx context.Context, dollar_1 []int64) ([]db.ReviewImage, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListReviewImagesByReviews", ctx, dollar_1)
+	ret0, _ := ret[0].([]db.ReviewImage)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListReviewImagesByReviews indicates an expected call of ListReviewImagesByReviews.
+func (mr *MockStoreMockRecorder) ListReviewImagesByReviews(ctx, dollar_1 any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReviewImagesByReviews", reflect.TypeOf((*MockStore)(nil).ListReviewImagesByReviews), ctx, dollar_1)
 }
 
 // ListReviewsByMerchant mocks base method.

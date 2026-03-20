@@ -58,6 +58,25 @@ RETURNING *;
 DELETE FROM reviews
 WHERE id = $1;
 
+-- name: AddReviewImage :one
+INSERT INTO review_images (review_id, media_asset_id, sort_order)
+VALUES ($1, $2, $3)
+RETURNING *;
+
+-- name: ListReviewImages :many
+SELECT * FROM review_images
+WHERE review_id = $1
+ORDER BY sort_order ASC;
+
+-- name: ListReviewImagesByReviews :many
+SELECT * FROM review_images
+WHERE review_id = ANY($1::bigint[])
+ORDER BY review_id, sort_order ASC;
+
+-- name: DeleteReviewImages :exec
+DELETE FROM review_images
+WHERE review_id = $1;
+
 -- name: ListAllReviewsByMerchant :many
 -- 商户查看所有评价（包含不可见的）
 SELECT * FROM reviews

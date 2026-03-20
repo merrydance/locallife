@@ -222,21 +222,21 @@
 
 ### 5.2 桌台图片（table_images）
 
-- [ ] `api/` 桌台相关接口：添加图片改为提交 `media_asset_id`
+- [x] `api/` 桌台相关接口：添加图片改为提交 `media_asset_id`（`addTableImageRequest.MediaAssetID int64 binding:"required,min=1"` 写入 `table_images.media_asset_id`）
 - [x] 桌台图列表响应通过 `MediaURLResolver` 返回规格图 URL（`roomDetailResponse.ImageURLs []string` + `PrimaryImageURL` + `roomListItemResponse.ImageURL`）
 - [x] 主图逻辑 `is_primary` 在新模型下仍正确
 - [ ] 回归测试：桌台图片增删改查
 
 ### 5.3 评价（reviews）
 
-- [ ] `api/` 评价接口：提交评价接受 `media_asset_ids []int64`
-- [ ] 写入 `review_images` 关联表（不再写 `reviews.images` 数组）
-- [ ] 评价详情和列表响应通过 `MediaURLResolver` 返回规格图
+- [x] `api/` 评价接口：提交评价接受 `media_asset_ids []int64`
+- [x] 写入 `review_images` 关联表（不再写 `reviews.images` 数组）
+- [x] 评价详情和列表响应通过 `MediaURLResolver` 返回规格图（`enrichSingleReviewImages` / `enrichReviewListImages`）
 - [ ] 回归测试：评价上传 + 展示
 
 ### 5.4 商户设置与品牌
 
-- [ ] 商户 logo 上传接口改为接受 `logo_media_asset_id`
+- [x] 商户 logo 上传接口改为接受 `logo_media_asset_id`（`updateMerchantRequest.LogoAssetID *int64 json:"logo_asset_id"` 映射到 `arg.LogoMediaAssetID`）
 - [x] 商户详情/列表响应保留兼容字段 `logo_url`（由 `MediaURLResolver` 生成，已覆盖 merchant.go / favorite.go / membership.go / operator_merchant_rider.go / group.go merchantResponse）
 - [x] 品牌/集团 logo 同步改造（`brandResponse.LogoURL` + `groupMerchantResponse.LogoURL` 已注入）
 - [ ] 回归测试：商户设置 logo + 列表展示
@@ -267,9 +267,11 @@
 
 ### 5.9 全局图片 URL 生成替换
 
-- [ ] `grep -r "normalizeUploadURLForClient\|UPLOADS_BASE_URL\|image_url.*uploads"` 全量排查
-- [ ] 逐处替换为 `MediaURLResolver.PublicVariantURL` / `PublicOriginalURL`
-- [ ] 确认没有遗漏的硬编码 `/uploads/` 路径返回给客户端
+- [x] `grep -r "normalizeUploadURLForClient\|UPLOADS_BASE_URL\|image_url.*uploads"` 全量排查
+- [x] 用户/员工/会员/顾客头像：`avatar_media_asset_id` 有值时通过 `publicImageURL(ctx, id, VariantOriginal)` 生成，否则回退 `normalizeUploadURLForClient(avatarUrl)` for 旧数据
+  - 涉及：`api/user.go`, `api/staff.go`, `api/membership.go`, `api/merchant_stats.go`
+  - SQL 查询同步新增 `u.avatar_media_asset_id`：`ListMerchantStaffByMerchant`, `ListMerchantMembers`, `GetMerchantCustomerStats`, `GetCustomerMerchantDetail`
+- [x] 剩余 `normalizeUploadURLForClient` 均为合法回退（旧 storefront_images JSONB、直传响应、QR 码），不在此阶段替换
 
 ### 5.10 业务响应 URL 填充（response-side enrichment）
 

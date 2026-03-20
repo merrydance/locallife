@@ -20,24 +20,26 @@ import (
 // ==================== 请求/响应结构体 ====================
 
 type createReviewRequest struct {
-	OrderID int64    `json:"order_id" binding:"required,min=1"`
-	Content string   `json:"content" binding:"required,min=1,max=1000"`
-	Images  []string `json:"images,omitempty" binding:"omitempty,max=9,dive,min=1,max=500"` // 最多9张图片（本地 uploads 相对路径）
+	OrderID       int64   `json:"order_id" binding:"required,min=1"`
+	Content       string  `json:"content" binding:"required,min=1,max=1000"`
+	MediaAssetIDs []int64 `json:"media_asset_ids,omitempty" binding:"omitempty,max=9,dive,min=1"` // 最多9张图片（media_asset ID 列表）
 }
 
 type reviewResponse struct {
-	ID                  int64   `json:"id"`
-	OrderID             int64   `json:"order_id"`
-	UserID              int64   `json:"user_id"`
-	MerchantID          int64   `json:"merchant_id"`
-	MerchantName        string  `json:"merchant_name,omitempty"`
-	MerchantLogoAssetID *int64  `json:"-"`
-	MerchantLogoURL     string  `json:"merchant_logo_url,omitempty"`
-	Content             string  `json:"content"`
-	IsVisible           bool    `json:"is_visible"`
-	MerchantReply       *string `json:"merchant_reply,omitempty"`
-	RepliedAt           *string `json:"replied_at,omitempty"`
-	CreatedAt           string  `json:"created_at"`
+	ID                  int64    `json:"id"`
+	OrderID             int64    `json:"order_id"`
+	UserID              int64    `json:"user_id"`
+	MerchantID          int64    `json:"merchant_id"`
+	MerchantName        string   `json:"merchant_name,omitempty"`
+	MerchantLogoAssetID *int64   `json:"-"`
+	MerchantLogoURL     string   `json:"merchant_logo_url,omitempty"`
+	Content             string   `json:"content"`
+	IsVisible           bool     `json:"is_visible"`
+	MerchantReply       *string  `json:"merchant_reply,omitempty"`
+	RepliedAt           *string  `json:"replied_at,omitempty"`
+	CreatedAt           string   `json:"created_at"`
+	ImageAssetIDs       []int64  `json:"-"`
+	ImageURLs           []string `json:"image_urls,omitempty"`
 }
 
 type reviewListResponse struct {
@@ -144,9 +146,6 @@ func (server *Server) createReview(ctx *gin.Context) {
 		return
 	}
 
-	// TODO(media-service): images now stored separately in review_images table
-	// if len(req.Images) > 0 { ... }
-
 	// 5. 创建评价
 	review, err := server.store.CreateReview(ctx, db.CreateReviewParams{
 		OrderID:    req.OrderID,
@@ -160,7 +159,26 @@ func (server *Server) createReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, newReviewResponse(review))
+	// 6. 写入评价图片
+	for i, assetID := range req.MediaAssetIDs {
+		_, _ = server.store.AddReviewImage(ctx, db.AddReviewImageParams{
+			ReviewID:     review.ID,
+			MediaAssetID: assetID,
+			SortOrder:    int32(i),
+		})
+	}
+
+	resp := newReviewResponse(review)
+	if len(req.MediaAssetIDs) > 0 {
+		resp.ImageAssetIDs = req.MediaAssetIDs
+		urls := server.batchPublicImageURLs(ctx, req.MediaAssetIDs, media.VariantOriginal)
+		for _, id := range req.MediaAssetIDs {
+			if u, ok := urls[id]; ok {
+				resp.ImageURLs = append(resp.ImageURLs, u)
+			}
+		}
+	}
+	ctx.JSON(http.StatusCreated, resp)
 }
 
 // getReview 获取评价详情
@@ -195,7 +213,9 @@ func (server *Server) getReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReviewResponse(review))
+	resp := newReviewResponse(review)
+	server.enrichSingleReviewImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // getReviewByOrder 根据订单ID获取评价
@@ -218,7 +238,9 @@ func (server *Server) getReviewByOrder(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReviewResponse(review))
+	resp := newReviewResponse(review)
+	server.enrichSingleReviewImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // listMerchantReviews 获取商户评价列表（顾客视角）
@@ -274,6 +296,7 @@ func (server *Server) listMerchantReviews(ctx *gin.Context) {
 		PageID:   req.PageID,
 		PageSize: req.PageSize,
 	}
+	server.enrichReviewListImages(ctx, response.Reviews)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -344,6 +367,7 @@ func (server *Server) listMerchantAllReviews(ctx *gin.Context) {
 		PageID:   req.PageID,
 		PageSize: req.PageSize,
 	}
+	server.enrichReviewListImages(ctx, response.Reviews)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -409,6 +433,7 @@ func (server *Server) listUserReviews(ctx *gin.Context) {
 			}
 		}
 	}
+	server.enrichReviewListImages(ctx, response.Reviews)
 	ctx.JSON(http.StatusOK, response)
 }
 
@@ -500,7 +525,9 @@ func (server *Server) replyReview(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newReviewResponse(updatedReview))
+	resp := newReviewResponse(updatedReview)
+	server.enrichSingleReviewImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // deleteReview 删除评价（运营商）
@@ -592,6 +619,63 @@ func newReviewListResponse(reviews []db.Review) []reviewResponse {
 		responses[i] = newReviewResponse(review)
 	}
 	return responses
+}
+
+// enrichSingleReviewImages loads and enriches image URLs for a single reviewResponse.
+func (server *Server) enrichSingleReviewImages(ctx *gin.Context, resp *reviewResponse) {
+	images, err := server.store.ListReviewImages(ctx, resp.ID)
+	if err != nil || len(images) == 0 {
+		return
+	}
+	assetIDs := make([]int64, len(images))
+	for i, img := range images {
+		assetIDs[i] = img.MediaAssetID
+	}
+	resp.ImageAssetIDs = assetIDs
+	urls := server.batchPublicImageURLs(ctx, assetIDs, media.VariantOriginal)
+	for _, id := range assetIDs {
+		if u, ok := urls[id]; ok {
+			resp.ImageURLs = append(resp.ImageURLs, u)
+		}
+	}
+}
+
+// enrichReviewListImages batch-loads and enriches image URLs for a slice of reviewResponse.
+func (server *Server) enrichReviewListImages(ctx *gin.Context, reviews []reviewResponse) {
+	if len(reviews) == 0 {
+		return
+	}
+	reviewIDs := make([]int64, len(reviews))
+	for i, r := range reviews {
+		reviewIDs[i] = r.ID
+	}
+	allImages, err := server.store.ListReviewImagesByReviews(ctx, reviewIDs)
+	if err != nil || len(allImages) == 0 {
+		return
+	}
+	// group by review_id
+	byReview := make(map[int64][]int64)
+	for _, img := range allImages {
+		byReview[img.ReviewID] = append(byReview[img.ReviewID], img.MediaAssetID)
+	}
+	// collect all asset IDs for batch URL resolution
+	allAssetIDs := make([]int64, 0, len(allImages))
+	for _, img := range allImages {
+		allAssetIDs = append(allAssetIDs, img.MediaAssetID)
+	}
+	urlMap := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantOriginal)
+	for i := range reviews {
+		assetIDs, ok := byReview[reviews[i].ID]
+		if !ok {
+			continue
+		}
+		reviews[i].ImageAssetIDs = assetIDs
+		for _, id := range assetIDs {
+			if u, ok := urlMap[id]; ok {
+				reviews[i].ImageURLs = append(reviews[i].ImageURLs, u)
+			}
+		}
+	}
 }
 
 func newListReviewByUserResponse(reviews []db.ListReviewsByUserRow) []reviewResponse {

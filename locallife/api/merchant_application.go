@@ -946,8 +946,8 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 			return
 		}
 		saveArg := db.UpdateMerchantApplicationFoodPermitParams{
-			ID:                  app.ID,
-			FoodPermitOcr:       marshalOCRTaskPending(),
+			ID:                     app.ID,
+			FoodPermitOcr:          marshalOCRTaskPending(),
 			FoodPermitMediaAssetID: pgtype.Int8{Int64: newAssetID, Valid: true},
 		}
 		updated, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, saveArg)
@@ -1164,8 +1164,8 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 		}
 		if side == "Front" {
 			saveArg := db.UpdateMerchantApplicationIDCardFrontParams{
-				ID:                   app.ID,
-				IDCardFrontOcr:       marshalOCRTaskPending(),
+				ID:                      app.ID,
+				IDCardFrontOcr:          marshalOCRTaskPending(),
 				IDCardFrontMediaAssetID: pgtype.Int8{Int64: newAssetID, Valid: true},
 			}
 			updated, err := server.store.UpdateMerchantApplicationIDCardFront(ctx, saveArg)
@@ -1176,8 +1176,8 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 			updatedApp = updated
 		} else {
 			saveArg := db.UpdateMerchantApplicationIDCardBackParams{
-				ID:                  app.ID,
-				IDCardBackOcr:       marshalOCRTaskPending(),
+				ID:                     app.ID,
+				IDCardBackOcr:          marshalOCRTaskPending(),
 				IDCardBackMediaAssetID: pgtype.Int8{Int64: newAssetID, Valid: true},
 			}
 			updated, err := server.store.UpdateMerchantApplicationIDCardBack(ctx, saveArg)

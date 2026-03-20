@@ -12,6 +12,31 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addReviewImage = `-- name: AddReviewImage :one
+INSERT INTO review_images (review_id, media_asset_id, sort_order)
+VALUES ($1, $2, $3)
+RETURNING id, review_id, media_asset_id, sort_order, created_at
+`
+
+type AddReviewImageParams struct {
+	ReviewID     int64 `json:"review_id"`
+	MediaAssetID int64 `json:"media_asset_id"`
+	SortOrder    int32 `json:"sort_order"`
+}
+
+func (q *Queries) AddReviewImage(ctx context.Context, arg AddReviewImageParams) (ReviewImage, error) {
+	row := q.db.QueryRow(ctx, addReviewImage, arg.ReviewID, arg.MediaAssetID, arg.SortOrder)
+	var i ReviewImage
+	err := row.Scan(
+		&i.ID,
+		&i.ReviewID,
+		&i.MediaAssetID,
+		&i.SortOrder,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const countAllReviewsByMerchant = `-- name: CountAllReviewsByMerchant :one
 SELECT COUNT(*) FROM reviews
 WHERE merchant_id = $1
@@ -103,6 +128,16 @@ func (q *Queries) DeleteReview(ctx context.Context, id int64) error {
 	return err
 }
 
+const deleteReviewImages = `-- name: DeleteReviewImages :exec
+DELETE FROM review_images
+WHERE review_id = $1
+`
+
+func (q *Queries) DeleteReviewImages(ctx context.Context, reviewID int64) error {
+	_, err := q.db.Exec(ctx, deleteReviewImages, reviewID)
+	return err
+}
+
 const getReview = `-- name: GetReview :one
 SELECT id, order_id, user_id, merchant_id, content, is_visible, merchant_reply, replied_at, created_at FROM reviews
 WHERE id = $1 LIMIT 1
@@ -179,6 +214,70 @@ func (q *Queries) ListAllReviewsByMerchant(ctx context.Context, arg ListAllRevie
 			&i.IsVisible,
 			&i.MerchantReply,
 			&i.RepliedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReviewImages = `-- name: ListReviewImages :many
+SELECT id, review_id, media_asset_id, sort_order, created_at FROM review_images
+WHERE review_id = $1
+ORDER BY sort_order ASC
+`
+
+func (q *Queries) ListReviewImages(ctx context.Context, reviewID int64) ([]ReviewImage, error) {
+	rows, err := q.db.Query(ctx, listReviewImages, reviewID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReviewImage{}
+	for rows.Next() {
+		var i ReviewImage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReviewID,
+			&i.MediaAssetID,
+			&i.SortOrder,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listReviewImagesByReviews = `-- name: ListReviewImagesByReviews :many
+SELECT id, review_id, media_asset_id, sort_order, created_at FROM review_images
+WHERE review_id = ANY($1::bigint[])
+ORDER BY review_id, sort_order ASC
+`
+
+func (q *Queries) ListReviewImagesByReviews(ctx context.Context, dollar_1 []int64) ([]ReviewImage, error) {
+	rows, err := q.db.Query(ctx, listReviewImagesByReviews, dollar_1)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ReviewImage{}
+	for rows.Next() {
+		var i ReviewImage
+		if err := rows.Scan(
+			&i.ID,
+			&i.ReviewID,
+			&i.MediaAssetID,
+			&i.SortOrder,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err

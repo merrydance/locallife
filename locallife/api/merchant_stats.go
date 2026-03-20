@@ -6,6 +6,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
@@ -386,11 +387,15 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 			lastOrderAt = t.Format(time.RFC3339)
 		}
 
+		avatarURL := normalizeUploadURLForClient(customer.AvatarUrl.String)
+		if customer.AvatarMediaAssetID.Valid {
+			avatarURL = server.publicImageURL(ctx, &customer.AvatarMediaAssetID.Int64, media.VariantOriginal)
+		}
 		result[i] = customerStatRow{
 			UserID:         customer.UserID,
 			FullName:       customer.FullName,
 			Phone:          customer.Phone.String,
-			AvatarURL:      normalizeUploadURLForClient(customer.AvatarUrl.String),
+			AvatarURL:      avatarURL,
 			TotalOrders:    customer.TotalOrders,
 			TotalAmount:    customer.TotalAmount,
 			AvgOrderAmount: int64(customer.AvgOrderAmount),
@@ -514,11 +519,15 @@ func (server *Server) getCustomerDetail(ctx *gin.Context) {
 		lastOrderAt = t.Format(time.RFC3339)
 	}
 
+	avatarURL := normalizeUploadURLForClient(customer.AvatarUrl.String)
+	if customer.AvatarMediaAssetID.Valid {
+		avatarURL = server.publicImageURL(ctx, &customer.AvatarMediaAssetID.Int64, media.VariantOriginal)
+	}
 	ctx.JSON(http.StatusOK, customerDetailResponse{
 		UserID:         customer.UserID,
 		FullName:       customer.FullName,
 		Phone:          customer.Phone.String,
-		AvatarURL:      normalizeUploadURLForClient(customer.AvatarUrl.String),
+		AvatarURL:      avatarURL,
 		TotalOrders:    customer.TotalOrders,
 		TotalAmount:    customer.TotalAmount,
 		AvgOrderAmount: int64(customer.AvgOrderAmount),

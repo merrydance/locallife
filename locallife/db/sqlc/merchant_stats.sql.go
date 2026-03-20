@@ -89,6 +89,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -103,7 +104,7 @@ JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
   AND o.status IN ('user_delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 `
 
 type GetCustomerMerchantDetailParams struct {
@@ -112,15 +113,16 @@ type GetCustomerMerchantDetailParams struct {
 }
 
 type GetCustomerMerchantDetailRow struct {
-	UserID         int64       `json:"user_id"`
-	FullName       string      `json:"full_name"`
-	Phone          pgtype.Text `json:"phone"`
-	AvatarUrl      pgtype.Text `json:"avatar_url"`
-	TotalOrders    int32       `json:"total_orders"`
-	TotalAmount    int64       `json:"total_amount"`
-	AvgOrderAmount int32       `json:"avg_order_amount"`
-	FirstOrderAt   interface{} `json:"first_order_at"`
-	LastOrderAt    interface{} `json:"last_order_at"`
+	UserID             int64       `json:"user_id"`
+	FullName           string      `json:"full_name"`
+	Phone              pgtype.Text `json:"phone"`
+	AvatarUrl          pgtype.Text `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8 `json:"avatar_media_asset_id"`
+	TotalOrders        int32       `json:"total_orders"`
+	TotalAmount        int64       `json:"total_amount"`
+	AvgOrderAmount     int32       `json:"avg_order_amount"`
+	FirstOrderAt       interface{} `json:"first_order_at"`
+	LastOrderAt        interface{} `json:"last_order_at"`
 }
 
 // 单个顾客在某商户的消费详情
@@ -132,6 +134,7 @@ func (q *Queries) GetCustomerMerchantDetail(ctx context.Context, arg GetCustomer
 		&i.FullName,
 		&i.Phone,
 		&i.AvatarUrl,
+		&i.AvatarMediaAssetID,
 		&i.TotalOrders,
 		&i.TotalAmount,
 		&i.AvgOrderAmount,
@@ -231,6 +234,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -244,7 +248,7 @@ FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.status IN ('user_delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 ORDER BY 
     CASE 
         WHEN $2::text = 'total_orders' THEN COUNT(*)
@@ -262,15 +266,16 @@ type GetMerchantCustomerStatsParams struct {
 }
 
 type GetMerchantCustomerStatsRow struct {
-	UserID         int64       `json:"user_id"`
-	FullName       string      `json:"full_name"`
-	Phone          pgtype.Text `json:"phone"`
-	AvatarUrl      pgtype.Text `json:"avatar_url"`
-	TotalOrders    int32       `json:"total_orders"`
-	TotalAmount    int64       `json:"total_amount"`
-	AvgOrderAmount int32       `json:"avg_order_amount"`
-	FirstOrderAt   interface{} `json:"first_order_at"`
-	LastOrderAt    interface{} `json:"last_order_at"`
+	UserID             int64       `json:"user_id"`
+	FullName           string      `json:"full_name"`
+	Phone              pgtype.Text `json:"phone"`
+	AvatarUrl          pgtype.Text `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8 `json:"avatar_media_asset_id"`
+	TotalOrders        int32       `json:"total_orders"`
+	TotalAmount        int64       `json:"total_amount"`
+	AvgOrderAmount     int32       `json:"avg_order_amount"`
+	FirstOrderAt       interface{} `json:"first_order_at"`
+	LastOrderAt        interface{} `json:"last_order_at"`
 }
 
 // 顾客消费分析: 实时计算每个顾客的消费统计
@@ -293,6 +298,7 @@ func (q *Queries) GetMerchantCustomerStats(ctx context.Context, arg GetMerchantC
 			&i.FullName,
 			&i.Phone,
 			&i.AvatarUrl,
+			&i.AvatarMediaAssetID,
 			&i.TotalOrders,
 			&i.TotalAmount,
 			&i.AvgOrderAmount,

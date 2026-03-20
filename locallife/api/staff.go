@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 )
 
@@ -73,7 +74,9 @@ func (server *Server) listMerchantStaff(ctx *gin.Context) {
 			FullName:   s.FullName,
 			CreatedAt:  s.CreatedAt,
 		}
-		if s.AvatarUrl.Valid {
+		if s.AvatarMediaAssetID.Valid {
+			resp[i].AvatarURL = server.publicImageURL(ctx, &s.AvatarMediaAssetID.Int64, media.VariantOriginal)
+		} else if s.AvatarUrl.Valid {
 			resp[i].AvatarURL = normalizeUploadURLForClient(s.AvatarUrl.String)
 		}
 	}

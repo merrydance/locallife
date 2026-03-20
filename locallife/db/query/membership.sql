@@ -23,7 +23,7 @@ ORDER BY m.balance DESC
 LIMIT $2 OFFSET $3;
 
 -- name: ListMerchantMembers :many
-SELECT m.*, u.full_name, u.phone, u.avatar_url
+SELECT m.*, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 FROM merchant_memberships m
 JOIN users u ON u.id = m.user_id
 WHERE m.merchant_id = $1

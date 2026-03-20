@@ -61,6 +61,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -74,7 +75,7 @@ FROM orders o
 JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.status IN ('user_delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id
 ORDER BY 
     CASE 
         WHEN sqlc.arg(order_by)::text = 'total_orders' THEN COUNT(*)
@@ -97,6 +98,7 @@ SELECT
     u.full_name,
     u.phone,
     u.avatar_url,
+    u.avatar_media_asset_id,
     COUNT(*)::int AS total_orders,
     COALESCE(SUM(o.final_amount), 0)::bigint AS total_amount,
     CASE 
@@ -111,7 +113,7 @@ JOIN users u ON u.id = o.user_id
 WHERE o.merchant_id = $1
   AND o.user_id = $2
   AND o.status IN ('user_delivered', 'completed')
-GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url;
+GROUP BY o.user_id, u.full_name, u.phone, u.avatar_url, u.avatar_media_asset_id;
 
 -- name: GetCustomerFavoriteDishes :many
 -- 查询顾客最喜欢的菜品

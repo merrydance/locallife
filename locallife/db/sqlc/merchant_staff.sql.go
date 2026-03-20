@@ -167,7 +167,8 @@ const listMerchantStaffByMerchant = `-- name: ListMerchantStaffByMerchant :many
 SELECT 
     ms.id, ms.merchant_id, ms.user_id, ms.role, ms.status, ms.invited_by, ms.created_at, ms.updated_at,
     u.full_name,
-    u.avatar_url
+    u.avatar_url,
+    u.avatar_media_asset_id
 FROM merchant_staff ms
 JOIN users u ON ms.user_id = u.id
 WHERE ms.merchant_id = $1
@@ -186,16 +187,17 @@ ORDER BY
 `
 
 type ListMerchantStaffByMerchantRow struct {
-	ID         int64              `json:"id"`
-	MerchantID int64              `json:"merchant_id"`
-	UserID     int64              `json:"user_id"`
-	Role       string             `json:"role"`
-	Status     string             `json:"status"`
-	InvitedBy  pgtype.Int8        `json:"invited_by"`
-	CreatedAt  time.Time          `json:"created_at"`
-	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
-	FullName   string             `json:"full_name"`
-	AvatarUrl  pgtype.Text        `json:"avatar_url"`
+	ID                 int64              `json:"id"`
+	MerchantID         int64              `json:"merchant_id"`
+	UserID             int64              `json:"user_id"`
+	Role               string             `json:"role"`
+	Status             string             `json:"status"`
+	InvitedBy          pgtype.Int8        `json:"invited_by"`
+	CreatedAt          time.Time          `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	FullName           string             `json:"full_name"`
+	AvatarUrl          pgtype.Text        `json:"avatar_url"`
+	AvatarMediaAssetID pgtype.Int8        `json:"avatar_media_asset_id"`
 }
 
 // 显示所有员工，包括离职员工（软删除），按状态和角色排序
@@ -219,6 +221,7 @@ func (q *Queries) ListMerchantStaffByMerchant(ctx context.Context, merchantID in
 			&i.UpdatedAt,
 			&i.FullName,
 			&i.AvatarUrl,
+			&i.AvatarMediaAssetID,
 		); err != nil {
 			return nil, err
 		}
