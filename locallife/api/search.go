@@ -104,6 +104,7 @@ type searchDishResponse struct {
 	Name           string  `json:"name"`
 	Description    string  `json:"description"`
 	ImageAssetID   *int64  `json:"image_asset_id,omitempty"`
+	ImageURL       string  `json:"image_url,omitempty"`
 	Price          int64   `json:"price"`                  // Cents
 	OriginalPrice  int64   `json:"original_price"`         // Cents
 	MemberPrice    int64   `json:"member_price,omitempty"` // Cents
@@ -115,6 +116,7 @@ type searchDishResponse struct {
 	// New fields for home feed
 	MerchantName          string               `json:"merchant_name,omitempty"`
 	MerchantLogoAssetID   *int64               `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoURL       string               `json:"merchant_logo_url,omitempty"`
 	MerchantIsOpen        *bool                `json:"merchant_is_open,omitempty"`
 	Distance              int                  `json:"distance"`                // Meters
 	EstimatedDeliveryTime int                  `json:"estimated_delivery_time"` // Seconds
@@ -132,6 +134,7 @@ type searchMerchantResponse struct {
 	Longitude            float64   `json:"-"`
 	Phone                string    `json:"phone,omitempty"`
 	LogoAssetID          *int64    `json:"logo_asset_id,omitempty"`
+	LogoURL              string    `json:"logo_url,omitempty"`
 	CoverImage           string    `json:"cover_image,omitempty"` // 门头照（首张），作为列表卡片封面
 	Status               string    `json:"status"`
 	IsOpen               bool      `json:"is_open"`
@@ -150,12 +153,14 @@ type searchComboResponse struct {
 	Name                  string   `json:"name"`
 	Description           string   `json:"description"`
 	ImageAssetID          *int64   `json:"image_asset_id,omitempty"`
+	ImageURL              string   `json:"image_url,omitempty"`
 	OriginalPrice         int64    `json:"original_price"`  // Cents
 	ComboPrice            int64    `json:"combo_price"`     // Cents
 	SavingsPercent        int      `json:"savings_percent"` // 节省百分比
 	MonthlySales          int32    `json:"monthly_sales"`
 	MerchantName          string   `json:"merchant_name"`
 	MerchantLogoAssetID   *int64   `json:"merchant_logo_asset_id,omitempty"`
+	MerchantLogoURL       string   `json:"merchant_logo_url,omitempty"`
 	MerchantIsOpen        bool     `json:"merchant_is_open"`
 	Distance              int      `json:"distance"`
 	EstimatedDeliveryFee  *int64   `json:"estimated_delivery_fee,omitempty"`
@@ -247,7 +252,8 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 			response[i] = newSearchDishResponseFromDish(dish)
 		}
 
-		ctx.JSON(http.StatusOK, searchDishListResponse{
+server.enrichSearchDishURLs(ctx, response)
+			ctx.JSON(http.StatusOK, searchDishListResponse{
 			Dishes:   response,
 			Total:    total,
 			PageID:   req.PageID,
@@ -352,6 +358,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 		}
 	}
 
+	server.enrichSearchDishURLs(ctx, response)
 	ctx.JSON(http.StatusOK, searchDishListResponse{
 		Dishes:   response,
 		Total:    total,
@@ -490,6 +497,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		}
 	}
 
+	server.enrichSearchMerchantURLs(ctx, response)
 	ctx.JSON(http.StatusOK, searchMerchantListResponse{
 		Merchants: response,
 		Total:     total,
@@ -651,6 +659,7 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 		}
 	}
 
+	server.enrichSearchComboURLs(ctx, response)
 	ctx.JSON(http.StatusOK, searchComboListResponse{
 		Combos:   response,
 		Total:    total,

@@ -7,6 +7,7 @@ import (
 	"net/http"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
@@ -397,6 +398,7 @@ type dishResponse struct {
 	Name                string               `json:"name"`
 	Description         string               `json:"description"`
 	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
+	ImageURL            string               `json:"image_url,omitempty"`
 	Price               int64                `json:"price"`
 	OriginalPrice       int64                `json:"original_price"`
 	MemberPrice         *int64               `json:"member_price"`
@@ -577,13 +579,15 @@ func (server *Server) createDish(ctx *gin.Context) {
 		}
 	}
 
+	assetID := int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusCreated, dishResponse{
 		ID:                  txResult.Dish.ID,
 		MerchantID:          txResult.Dish.MerchantID,
 		CategoryID:          toPtrInt64(txResult.Dish.CategoryID),
 		Name:                txResult.Dish.Name,
 		Description:         txResult.Dish.Description.String,
-		ImageAssetID:        int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID),
+		ImageAssetID:        assetID,
+		ImageURL:            server.publicImageURL(ctx, assetID, media.VariantCard),
 		Price:               txResult.Dish.Price,
 		OriginalPrice:       txResult.Dish.Price,
 		MemberPrice:         toPtrInt64(txResult.Dish.MemberPrice),
@@ -704,16 +708,31 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 		return
 	}
 
+	// 批量解析图片 URL
+	imgAssetIDs := make([]int64, 0, len(dishes))
+	for _, d := range dishes {
+		if d.ImageMediaAssetID.Valid {
+			imgAssetIDs = append(imgAssetIDs, d.ImageMediaAssetID.Int64)
+		}
+	}
+	imgURLs := server.batchPublicImageURLs(ctx, imgAssetIDs, media.VariantCard)
+
 	// 转换响应
 	result := make([]dishResponse, len(dishes))
 	for i, dish := range dishes {
+		assetID := int64PtrFromPgInt8(dish.ImageMediaAssetID)
+		var imgURL string
+		if assetID != nil {
+			imgURL = imgURLs[*assetID]
+		}
 		result[i] = dishResponse{
 			ID:            dish.ID,
 			MerchantID:    dish.MerchantID,
 			CategoryID:    toPtrInt64(dish.CategoryID),
 			Name:          dish.Name,
 			Description:   dish.Description.String,
-			ImageAssetID:  int64PtrFromPgInt8(dish.ImageMediaAssetID),
+			ImageAssetID:  assetID,
+			ImageURL:      imgURL,
 			Price:         dish.Price,
 			OriginalPrice: dish.Price,
 			MemberPrice:   toPtrInt64(dish.MemberPrice),
@@ -819,6 +838,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 		return
 	}
 
+	dishAssetID := int64PtrFromPgInt8(dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusOK, dishResponse{
 		ID:                  dish.ID,
 		MerchantID:          dish.MerchantID,
@@ -826,7 +846,8 @@ func (server *Server) getDish(ctx *gin.Context) {
 		CategoryName:        toPtrString(dish.CategoryName),
 		Name:                dish.Name,
 		Description:         dish.Description.String,
-		ImageAssetID:        int64PtrFromPgInt8(dish.ImageMediaAssetID),
+		ImageAssetID:        dishAssetID,
+		ImageURL:            server.publicImageURL(ctx, dishAssetID, media.VariantDetail),
 		Price:               dish.Price,
 		OriginalPrice:       dish.Price,
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
@@ -895,6 +916,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 		return
 	}
 
+	publicAssetID := int64PtrFromPgInt8(dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusOK, dishResponse{
 		ID:                  dish.ID,
 		MerchantID:          dish.MerchantID,
@@ -902,7 +924,8 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 		CategoryName:        toPtrString(dish.CategoryName),
 		Name:                dish.Name,
 		Description:         dish.Description.String,
-		ImageAssetID:        int64PtrFromPgInt8(dish.ImageMediaAssetID),
+		ImageAssetID:        publicAssetID,
+		ImageURL:            server.publicImageURL(ctx, publicAssetID, media.VariantDetail),
 		Price:               dish.Price,
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
 		IsAvailable:         dish.IsAvailable,
@@ -1123,13 +1146,15 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		updatedFields["tag_ids"] = req.TagIDs
 	}
 
+	updatedAssetID := int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusOK, dishResponse{
 		ID:           txResult.Dish.ID,
 		MerchantID:   txResult.Dish.MerchantID,
 		CategoryID:   toPtrInt64(txResult.Dish.CategoryID),
 		Name:         txResult.Dish.Name,
 		Description:  txResult.Dish.Description.String,
-		ImageAssetID: int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID),
+		ImageAssetID: updatedAssetID,
+		ImageURL:     server.publicImageURL(ctx, updatedAssetID, media.VariantCard),
 		Price:        txResult.Dish.Price,
 		MemberPrice:  toPtrInt64(txResult.Dish.MemberPrice),
 		IsAvailable:  txResult.Dish.IsAvailable,

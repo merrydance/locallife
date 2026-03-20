@@ -121,3 +121,11 @@ SET status = 'expired'
 WHERE status = 'pending'
   AND expire_at < now()
 RETURNING *;
+
+-- name: ListMediaAssetsByIDs :many
+SELECT id, object_key, visibility, media_category, mime_type, file_size,
+       width, height, checksum_sha256, upload_status, moderation_status,
+       uploaded_by, source_client, created_at, updated_at, deleted_at
+FROM media_assets
+WHERE id = ANY(@ids::bigint[])
+  AND deleted_at IS NULL;

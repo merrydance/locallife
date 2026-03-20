@@ -11426,6 +11426,21 @@ func (mr *MockStoreMockRecorder) ListIngredients(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListIngredients", reflect.TypeOf((*MockStore)(nil).ListIngredients), ctx, arg)
 }
 
+// ListMediaAssetsByIDs mocks base method.
+func (m *MockStore) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMediaAssetsByIDs", ctx, ids)
+	ret0, _ := ret[0].([]db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMediaAssetsByIDs indicates an expected call of ListMediaAssetsByIDs.
+func (mr *MockStoreMockRecorder) ListMediaAssetsByIDs(ctx, ids any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMediaAssetsByIDs", reflect.TypeOf((*MockStore)(nil).ListMediaAssetsByIDs), ctx, ids)
+}
+
 // ListMediaAssetsByUploader mocks base method.
 func (m *MockStore) ListMediaAssetsByUploader(ctx context.Context, arg db.ListMediaAssetsByUploaderParams) ([]db.MediaAsset, error) {
 	m.ctrl.T.Helper()

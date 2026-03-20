@@ -12,6 +12,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
@@ -1320,6 +1321,7 @@ type publicDishItem struct {
 	Price               int64                `json:"price"`
 	MemberPrice         *int64               `json:"member_price,omitempty"`
 	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
+	ImageURL            string               `json:"image_url,omitempty"`
 	CategoryID          int64                `json:"category_id"`
 	CategoryName        string               `json:"category_name"`
 	MonthlySales        int32                `json:"monthly_sales"`
@@ -1427,6 +1429,22 @@ func (server *Server) getPublicMerchantDishes(ctx *gin.Context) {
 		dishList = append(dishList, dish)
 	}
 
+	// 批量解析菜品图片 URL
+	dishAssetIDs := make([]int64, 0, len(dishList))
+	for _, d := range dishList {
+		if d.ImageAssetID != nil {
+			dishAssetIDs = append(dishAssetIDs, *d.ImageAssetID)
+		}
+	}
+	if len(dishAssetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, dishAssetIDs, media.VariantCard)
+		for i := range dishList {
+			if dishList[i].ImageAssetID != nil {
+				dishList[i].ImageURL = imgURLs[*dishList[i].ImageAssetID]
+			}
+		}
+	}
+
 	// 构建分类列表
 	var categories []publicDishCategoryItem
 	for _, c := range categoryMap {
@@ -1452,11 +1470,13 @@ type publicComboItem struct {
 	Name          string          `json:"name"`
 	Description   string          `json:"description,omitempty"`
 	ImageAssetID  *int64          `json:"image_asset_id,omitempty"`
+	ImageURL      string          `json:"image_url,omitempty"`
 	ComboPrice    int64           `json:"combo_price"`
 	OriginalPrice int64           `json:"original_price"`
 	Dishes        []comboDishItem `json:"dishes"`
 	Tags          []string        `json:"tags"`
 	DishImages    []int64         `json:"dish_images,omitempty"`
+	DishImageURLs []string        `json:"dish_image_urls,omitempty"` // 子菜品图片 CDN URL 列表
 }
 
 type publicMerchantCombosResponse struct {
@@ -1653,13 +1673,9 @@ func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []
 		return
 	}
 
-	comboIDs := make([]int64, 0)
+	comboIDs := make([]int64, 0, len(combos))
 	for _, c := range combos {
 		comboIDs = append(comboIDs, c.ID)
-	}
-
-	if len(comboIDs) == 0 {
-		return
 	}
 
 	// 批量查询成员图片
@@ -1669,7 +1685,7 @@ func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []
 		return
 	}
 
-	// 按 combo_id 组织图片
+	// 按 combo_id 组织成员图片 asset IDs
 	imgMap := make(map[int64][]int64)
 	for _, row := range memberImages {
 		if row.ImageMediaAssetID.Valid {
@@ -1677,10 +1693,32 @@ func (server *Server) enrichPublicComboListImages(ctx context.Context, combos []
 		}
 	}
 
+	// 收集所有需要解析的 asset ID（套餐自身图 + 成员图）
+	allAssetIDs := make([]int64, 0, len(combos)+len(memberImages))
+	for _, c := range combos {
+		if c.ImageAssetID != nil {
+			allAssetIDs = append(allAssetIDs, *c.ImageAssetID)
+		}
+	}
+	for _, ids := range imgMap {
+		allAssetIDs = append(allAssetIDs, ids...)
+	}
+	imgURLs := server.batchPublicImageURLs(ctx, allAssetIDs, media.VariantCard)
+
 	// 回填
 	for i := range combos {
+		if combos[i].ImageAssetID != nil {
+			combos[i].ImageURL = imgURLs[*combos[i].ImageAssetID]
+		}
 		if imgs, ok := imgMap[combos[i].ID]; ok {
 			combos[i].DishImages = imgs
+			urls := make([]string, 0, len(imgs))
+			for _, id := range imgs {
+				if u, ok2 := imgURLs[id]; ok2 {
+					urls = append(urls, u)
+				}
+			}
+			combos[i].DishImageURLs = urls
 		}
 	}
 }

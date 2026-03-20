@@ -1138,6 +1138,7 @@ type Querier interface {
 	// Group merchants
 	ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) ([]ListGroupMerchantsRow, error)
 	ListIngredients(ctx context.Context, arg ListIngredientsParams) ([]Ingredient, error)
+	ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]MediaAsset, error)
 	ListMediaAssetsByUploader(ctx context.Context, arg ListMediaAssetsByUploaderParams) ([]MediaAsset, error)
 	ListMembershipTransactions(ctx context.Context, arg ListMembershipTransactionsParams) ([]MembershipTransaction, error)
 	ListMembershipTransactionsByType(ctx context.Context, arg ListMembershipTransactionsByTypeParams) ([]MembershipTransaction, error)

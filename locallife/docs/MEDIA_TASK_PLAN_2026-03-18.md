@@ -215,8 +215,8 @@
 
 ### 5.1 菜品（dishes）
 
-- [ ] `api/dish.go`：创建/更新接口接受 `image_media_asset_id`（不再接收图片文件流）
-- [ ] `api/dish.go`：列表和详情响应通过 `MediaURLResolver` 返回规格图 URL
+- [x] `api/dish.go`：创建/更新接口接受 `image_media_asset_id`（不再接收图片文件流）
+- [x] `api/dish.go`：列表和详情响应通过 `MediaURLResolver` 返回规格图 URL
   - 列表默认返回 `card_url`，详情返回 `detail_url`，保留兼容字段 `image_url`（指向 `card_url`）
 - [ ] 回归测试：菜品 CRUD + 图片展示
 
@@ -270,6 +270,20 @@
 - [ ] `grep -r "normalizeUploadURLForClient\|UPLOADS_BASE_URL\|image_url.*uploads"` 全量排查
 - [ ] 逐处替换为 `MediaURLResolver.PublicVariantURL` / `PublicOriginalURL`
 - [ ] 确认没有遗漏的硬编码 `/uploads/` 路径返回给客户端
+
+### 5.10 业务响应 URL 填充（response-side enrichment）
+
+- [x] `api/kitchen.go`：`kitchenOrderItem.ImageURL` — `batchPublicImageURLs` 在 `convertToKitchenOrder` 循环后批量填充（`VariantThumb`）
+- [x] `api/cart.go`：`cartItemResponse.ImageURL` — 新增 `enrichCartImageURLs` 方法，在两处 `toCartResponse` 调用点后注入
+- [x] `api/cart.go`：`browseHistoryItem.ImageURL` — 复用已查询的 `dishMap`/`merchantMap`，单次 `batchPublicImageURLs` 替换旧 TODO 注释
+- [x] `api/combo.go`：`comboSetWithDetailsResponse.ImageURL` — 两处构造点均调用 `publicImageURL`
+- [x] `api/combo.go`：`comboSetWithDetailsResponse.DishImageURLs []string` — `enrichSingleComboImages` 同时填充 asset ID 列表和 CDN URL 列表
+- [x] `api/search.go`：`searchDishResponse.ImageURL` + `MerchantLogoURL` — `enrichSearchDishURLs` 在两条搜索路径各自 `ctx.JSON` 前注入
+- [x] `api/search.go`：`searchMerchantResponse.LogoURL` — `enrichSearchMerchantURLs` 在合并路径后注入
+- [x] `api/search.go`：`searchComboResponse.ImageURL` + `MerchantLogoURL` — `enrichSearchComboURLs` 注入
+- [x] `api/merchant.go`：`publicDishItem.ImageURL` — `getPublicMerchantDishes` 建列后批量填充（`VariantCard`）
+- [x] `api/merchant.go`：`publicComboItem.ImageURL` + `DishImageURLs []string` — `enrichPublicComboListImages` 重构为同时解析套餐自身图片和成员图片 URL
+- [ ] `api/media_url.go` 中 enrich helper 函数集成测试覆盖
 
 ---
 
@@ -436,7 +450,7 @@
 | Phase 2 数据库迁移 | 14 | 14 |
 | Phase 3 后端配置 | 3 | 1 |
 | Phase 4 媒体中心模块 | 14 | 8 |
-| Phase 5 业务接口改造 | ~25 | 0 |
+| Phase 5 业务接口改造 | ~25 | 12 |
 | Phase 6 Web 端 | ~15 | 0 |
 | Phase 7 小程序端 | ~15 | 0 |
 | Phase 8 旧链路下线 | 8 | 0 |

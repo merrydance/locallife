@@ -7,6 +7,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
@@ -38,6 +39,7 @@ type kitchenOrderItem struct {
 	Quantity       int16                    `json:"quantity"`
 	Customizations []orderCustomizationItem `json:"customizations,omitempty"`
 	ImageAssetID   *int64                   `json:"image_asset_id,omitempty"`
+	ImageURL       string                   `json:"image_url,omitempty"`
 	PrepareTime    int16                    `json:"prepare_time"` // 预估制作时间（分钟）
 }
 
@@ -522,7 +524,21 @@ func (server *Server) convertToKitchenOrder(ctx *gin.Context, order db.Order) (k
 			PrepareTime:    prepareTime,
 		})
 	}
-
+	// 批量解析菜品图片 URL
+	kitchenAssetIDs := make([]int64, 0, len(kitchenItems))
+	for _, ki := range kitchenItems {
+		if ki.ImageAssetID != nil {
+			kitchenAssetIDs = append(kitchenAssetIDs, *ki.ImageAssetID)
+		}
+	}
+	if len(kitchenAssetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, kitchenAssetIDs, media.VariantThumb)
+		for i := range kitchenItems {
+			if kitchenItems[i].ImageAssetID != nil {
+				kitchenItems[i].ImageURL = imgURLs[*kitchenItems[i].ImageAssetID]
+			}
+		}
+	}
 	// 获取桌台号（堂食订单）
 	var tableNo *string
 	if order.TableID.Valid {

@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
@@ -176,6 +177,7 @@ type comboSetWithDetailsResponse struct {
 	Name          string                `json:"name"`
 	Description   *string               `json:"description,omitempty"`
 	ImageAssetID  *int64                `json:"image_asset_id,omitempty"`
+	ImageURL      string                 `json:"image_url,omitempty"`
 	OriginalPrice int64                 `json:"original_price"`
 	ComboPrice    int64                 `json:"combo_price"`
 	IsOnline      bool                  `json:"is_online"`
@@ -183,6 +185,7 @@ type comboSetWithDetailsResponse struct {
 	Tags          []tagResponse         `json:"tags"`
 	IsOpen        bool                  `json:"is_open"`
 	DishImages    []int64               `json:"dish_images,omitempty"` // 子菜品图片 asset ID 列表
+	DishImageURLs []string              `json:"dish_image_urls,omitempty"` // 子菜品图片 CDN URL 列表
 }
 
 type dishInComboResponse struct {
@@ -315,6 +318,7 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		Name:          result.Name,
 		Description:   stringPtrFromPgText(result.Description),
 		ImageAssetID:  int64PtrFromPgInt8(result.ImageMediaAssetID),
+		ImageURL:      server.publicImageURL(ctx, int64PtrFromPgInt8(result.ImageMediaAssetID), media.VariantCard),
 		OriginalPrice: result.OriginalPrice,
 		ComboPrice:    result.ComboPrice,
 		IsOnline:      result.IsOnline,
@@ -417,6 +421,7 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		Name:          result.Name,
 		Description:   stringPtrFromPgText(result.Description),
 		ImageAssetID:  int64PtrFromPgInt8(result.ImageMediaAssetID),
+		ImageURL:      server.publicImageURL(ctx, int64PtrFromPgInt8(result.ImageMediaAssetID), media.VariantCard),
 		OriginalPrice: result.OriginalPrice,
 		ComboPrice:    result.ComboPrice,
 		IsOnline:      result.IsOnline,
@@ -1073,11 +1078,22 @@ func (server *Server) enrichSingleComboImages(ctx context.Context, combo *comboS
 		return
 	}
 
-	var images []int64
+	var assetIDs []int64
 	for _, row := range memberImages {
 		if row.ImageMediaAssetID.Valid {
-			images = append(images, row.ImageMediaAssetID.Int64)
+			assetIDs = append(assetIDs, row.ImageMediaAssetID.Int64)
 		}
 	}
-	combo.DishImages = images
+	combo.DishImages = assetIDs
+
+	if len(assetIDs) > 0 {
+		imgURLs := server.batchPublicImageURLs(ctx, assetIDs, media.VariantCard)
+		urls := make([]string, 0, len(assetIDs))
+		for _, id := range assetIDs {
+			if u, ok := imgURLs[id]; ok {
+				urls = append(urls, u)
+			}
+		}
+		combo.DishImageURLs = urls
+	}
 }

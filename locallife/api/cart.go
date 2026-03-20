@@ -15,6 +15,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 )
 
@@ -34,6 +35,7 @@ type cartItemResponse struct {
 	// 商品信息
 	Name         string `json:"name"`
 	ImageAssetID *int64 `json:"image_asset_id,omitempty"`
+	ImageURL     string `json:"image_url,omitempty"`
 	UnitPrice    int64  `json:"unit_price"`
 	MemberPrice  *int64 `json:"member_price,omitempty"`
 	IsAvailable  bool   `json:"is_available"`
@@ -126,6 +128,7 @@ func (server *Server) getCart(ctx *gin.Context) {
 	logicResp := logic.BuildCartResponse(cart, items)
 	resp := toCartResponse(logicResp)
 	server.enrichCartItems(ctx, resp.Items)
+	server.enrichCartImageURLs(ctx, resp.Items)
 	server.enrichComboImages(ctx, resp.Items)
 	ctx.JSON(http.StatusOK, resp)
 }
@@ -255,6 +258,7 @@ func (server *Server) returnUpdatedCart(ctx *gin.Context, cart db.Cart, statusCo
 	logicResp := logic.BuildCartResponse(cart, items)
 	response := toCartResponse(logicResp)
 	server.enrichCartItems(ctx, response.Items)
+	server.enrichCartImageURLs(ctx, response.Items)
 	server.enrichComboImages(ctx, response.Items)
 	ctx.JSON(statusCode, response)
 }
@@ -786,6 +790,20 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 		}
 	}
 
+	// 批量解析图片 URL（利用已查询的 dishMap / merchantMap，单次 DB 调用）
+	historyAssetIDs := make([]int64, 0, len(merchantMap)+len(dishMap))
+	for _, m := range merchantMap {
+		if m.LogoMediaAssetID.Valid {
+			historyAssetIDs = append(historyAssetIDs, m.LogoMediaAssetID.Int64)
+		}
+	}
+	for _, d := range dishMap {
+		if d.ImageMediaAssetID.Valid {
+			historyAssetIDs = append(historyAssetIDs, d.ImageMediaAssetID.Int64)
+		}
+	}
+	historyImgURLs := server.batchPublicImageURLs(ctx, historyAssetIDs, media.VariantCard)
+
 	// 组装响应
 	result := make([]browseHistoryItem, len(items))
 	for i, item := range items {
@@ -800,12 +818,16 @@ func (server *Server) listBrowseHistory(ctx *gin.Context) {
 		case "merchant":
 			if m, ok := merchantMap[item.TargetID]; ok {
 				historyItem.Name = m.Name
-				// ImageURL 将在 media service 就绪后通过 asset ID 解析；暂时留空
+				if m.LogoMediaAssetID.Valid {
+					historyItem.ImageURL = historyImgURLs[m.LogoMediaAssetID.Int64]
+				}
 			}
 		case "dish":
 			if d, ok := dishMap[item.TargetID]; ok {
 				historyItem.Name = d.Name
-				// ImageURL 将在 media service 就绪后通过 asset ID 解析；暂时留空
+				if d.ImageMediaAssetID.Valid {
+					historyItem.ImageURL = historyImgURLs[d.ImageMediaAssetID.Int64]
+				}
 			}
 		}
 		result[i] = historyItem

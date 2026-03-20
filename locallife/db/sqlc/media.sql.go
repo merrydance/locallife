@@ -422,6 +422,52 @@ func (q *Queries) GetUploadSession(ctx context.Context, id string) (MediaUploadS
 	return i, err
 }
 
+const listMediaAssetsByIDs = `-- name: ListMediaAssetsByIDs :many
+SELECT id, object_key, visibility, media_category, mime_type, file_size,
+       width, height, checksum_sha256, upload_status, moderation_status,
+       uploaded_by, source_client, created_at, updated_at, deleted_at
+FROM media_assets
+WHERE id = ANY($1::bigint[])
+  AND deleted_at IS NULL
+`
+
+func (q *Queries) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]MediaAsset, error) {
+	rows, err := q.db.Query(ctx, listMediaAssetsByIDs, ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []MediaAsset{}
+	for rows.Next() {
+		var i MediaAsset
+		if err := rows.Scan(
+			&i.ID,
+			&i.ObjectKey,
+			&i.Visibility,
+			&i.MediaCategory,
+			&i.MimeType,
+			&i.FileSize,
+			&i.Width,
+			&i.Height,
+			&i.ChecksumSha256,
+			&i.UploadStatus,
+			&i.ModerationStatus,
+			&i.UploadedBy,
+			&i.SourceClient,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.DeletedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMediaAssetsByUploader = `-- name: ListMediaAssetsByUploader :many
 SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at FROM media_assets
 WHERE uploaded_by = $1
