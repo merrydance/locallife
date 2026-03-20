@@ -308,6 +308,14 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	}, mediaStorage)
 
 	server.setupRouter()
+
+	// 本地开发模式：在 /v1/media/_devupload 注册直传代理（模拟 OSS 直传，不需要认证）
+	if config.FileStorageProvider != "oss" {
+		if ls, ok := mediaStorage.(*media.LocalStorage); ok {
+			server.router.POST("/v1/media/_devupload", gin.WrapF(ls.DevUploadHandler()))
+		}
+	}
+
 	return server, nil
 }
 

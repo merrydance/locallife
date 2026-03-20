@@ -36,11 +36,11 @@ import {
   apiPut,
   apiDelete,
   apiPatch,
-  apiUpload,
   formatAmount,
   getMediaUrl,
   formatImageUrl 
 } from "@/lib/api";
+import { uploadMedia } from "@/lib/media";
 import { 
   DishResponse, 
   DishCategory, 
@@ -185,7 +185,6 @@ export function DishesPageClient() {
         category_id: editDish.category_id,
         is_online: editDish.is_online,
         is_available: editDish.is_available,
-        image_url: editDish.image_url,
         tag_ids: selectedTagIds,
         customization_groups: customizationGroups.map((g, idx) => ({
           name: g.name || "",
@@ -200,7 +199,11 @@ export function DishesPageClient() {
       };
 
       if (editDish.id) {
-        await apiPut(`/dishes/${editDish.id}`, payload);
+        // 更新菜品：如有新上传的图片，带上 image_asset_id
+        await apiPut(`/dishes/${editDish.id}`, {
+          ...payload,
+          ...(editDish.image_asset_id ? { image_asset_id: editDish.image_asset_id } : {}),
+        });
         // Backend updateDish doesn't include customizations, update them separately
         await apiPut(`/dishes/${editDish.id}/customizations`, { 
           groups: payload.customization_groups 
@@ -242,10 +245,20 @@ export function DishesPageClient() {
 
     setUploadingImage(true);
     try {
-      const res = await apiUpload<{ image_url: string }>("/dishes/images/upload", file);
-      setEditDish(prev => ({ ...prev, image_url: res.image_url }));
+      const { mediaId, urls } = await uploadMedia(file, {
+        businessType: "merchant",
+        mediaCategory: "dish",
+      });
+      // 存储 asset id，同时用 card 变体 URL 作为预览
+      const previewUrl = urls["card"] ?? urls["original"] ?? "";
+      setEditDish(prev => ({
+        ...prev,
+        image_asset_id: mediaId,
+        image_url: previewUrl,
+      }));
     } catch (err) {
       console.error("Upload failed", err);
+      toast.error("图片上传失败");
     } finally {
       setUploadingImage(false);
     }

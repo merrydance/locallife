@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import { 
   Building2, 
@@ -31,6 +31,7 @@ import {
   apiDelete, 
   getMediaUrl
 } from "@/lib/api";
+import { uploadMedia } from "@/lib/media";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -157,7 +158,6 @@ export function MerchantSettingsPageClient() {
         description: profile.description,
         phone: profile.phone,
         address: profile.address,
-        logo_url: profile.logo_url,
         latitude: profile.latitude,
         longitude: profile.longitude,
         version: profile.version
@@ -190,30 +190,22 @@ export function MerchantSettingsPageClient() {
 
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file) return;
-
-    const formData = new FormData();
-    formData.append("image", file);
-    formData.append("category", "logo");
+    if (!file || !profile) return;
 
     toast.loading("上传中...", { id: "upload" });
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_BASE || "/v1"}/merchants/images/upload`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${localStorage.getItem("access_token")}`
-        },
-        body: formData
+      const { mediaId, urls } = await uploadMedia(file, {
+        businessType: "merchant",
+        mediaCategory: "logo",
       });
-      
-      if (!response.ok) throw new Error("上传失败");
-      
-      const data = await response.json();
-      const imageUrl = data.data?.image_url || data.image_url;
-      
-      if (profile) {
-        setProfile({ ...profile, logo_url: imageUrl });
-      }
+
+      // 立即保存 logo_asset_id 到后端（使用当前 version）
+      const updated = await apiPatch<MerchantProfile>("/merchants/me", {
+        logo_asset_id: mediaId,
+        version: profile.version,
+      });
+      // 用返回的最新 profile（包含新 version 和新 logo_url）更新本地状态
+      setProfile({ ...updated, logo_url: urls["card"] ?? urls["original"] ?? updated.logo_url });
       toast.success("上传成功", { id: "upload" });
     } catch {
       toast.error("上传失败", { id: "upload" });

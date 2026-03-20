@@ -34,6 +34,7 @@ export interface DishResponse {
   name: string;
   description: string;
   image_url: string;
+  image_asset_id?: number;
   price: number;
   member_price?: number;
   is_available: boolean;
@@ -64,6 +65,7 @@ export interface CreateDishRequest {
   name: string;
   description?: string;
   image_url?: string;
+  image_asset_id?: number;
   price: number;
   member_price?: number;
   category_id?: number;

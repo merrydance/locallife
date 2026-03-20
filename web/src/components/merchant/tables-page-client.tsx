@@ -62,7 +62,8 @@ import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
-import { apiGet, apiPost, apiPatch, apiPut, apiDelete, apiUpload, getMediaUrl, getAuthToken } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete, getMediaUrl, getAuthToken } from "@/lib/api";
+import { uploadMedia } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import type { TableResponse, TableType, TableStatus, TableTag, CreateTableRequest, TableImageResponse } from "@/types/table";
 
@@ -112,7 +113,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
 
   // Image state
   const [tableImages, setTableImages] = useState<TableImageResponse[]>([]);
-  const [pendingImages, setPendingImages] = useState<string[]>([]); // URLs of images uploaded before table creation
+  const [pendingImages, setPendingImages] = useState<{ mediaId: number; previewUrl: string }[]>([]); // images queued before table creation
 
   // Confirm Dialog States
   const [deleteTableDialog, setDeleteTableDialog] = useState<{ open: boolean; id: number | null }>({ open: false, id: null });
@@ -159,17 +160,20 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
     const file = e.target.files[0];
     try {
       setLoading(true);
-      // 1. Upload image to get URL
-      const uploadRes = await apiUpload<{ image_url: string }>("/tables/images/upload", file);
+      const { mediaId, urls } = await uploadMedia(file, {
+        businessType: "merchant",
+        mediaCategory: "table",
+      });
+      const previewUrl = urls["card"] ?? urls["original"] ?? "";
       
       if (editingTable) {
-        // 2. Add image to existing table
-        await apiPost(`/tables/${editingTable.id}/images`, { image_url: uploadRes.image_url });
+        // 直接关联到已有桌台
+        await apiPost(`/tables/${editingTable.id}/images`, { media_asset_id: mediaId });
         toast.success("图片上传成功");
         loadTableImages(editingTable.id);
       } else {
-        // 2. Queue image for new table
-        setPendingImages(prev => [...prev, uploadRes.image_url]);
+        // 尚未创建桶台，暂存 asset ID + 预览 URL
+        setPendingImages(prev => [...(prev ?? []), { mediaId, previewUrl }]);
         toast.success("图片已暂存，保存桌台后将生效");
       }
     } catch (error: unknown) {
@@ -270,10 +274,10 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
         const response = await apiPost<TableResponse>("/tables", data);
         
         // Handle pending images
-        if (pendingImages.length > 0 && response.id) {
+        if (pendingImages && pendingImages.length > 0 && response.id) {
           toast.info(`正在关联 ${pendingImages.length} 张照片...`);
-          for (const imageUrl of pendingImages) {
-            await apiPost(`/tables/${response.id}/images`, { image_url: imageUrl });
+          for (const { mediaId } of pendingImages) {
+            await apiPost(`/tables/${response.id}/images`, { media_asset_id: mediaId });
           }
         }
         
@@ -649,10 +653,10 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                   ))}
 
                   {/* Pending Images (Creation mode) */}
-                  {!editingTable && pendingImages.map((url, idx) => (
+                  {!editingTable && (pendingImages ?? []).map((item, idx) => (
                     <div key={`pending-${idx}`} className="relative aspect-4/3 rounded-2xl overflow-hidden border-2 border-primary/30 bg-slate-50 shadow-sm group">
                       <Image 
-                        src={getMediaUrl(url)} 
+                        src={getMediaUrl(item.previewUrl)} 
                         alt="待保存图片" 
                         width={400}
                         height={300}
@@ -666,7 +670,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                           size="icon" 
                           variant="destructive" 
                           className="h-8 w-8 rounded-full"
-                          onClick={() => setPendingImages(prev => prev.filter((_, i) => i !== idx))}
+                          onClick={() => setPendingImages(prev => (prev ?? []).filter((_, i) => i !== idx))}
                         >
                           <X className="h-4 w-4" />
                         </Button>

@@ -43,7 +43,7 @@ func (s *LocalStorage) PrivateBucket() string { return "local-private" }
 // FormFields 包含 key（objectKey）和一个简单令牌，后端路由验证此令牌防止意外公开使用。
 func (s *LocalStorage) CreateDirectUpload(_ context.Context, req DirectUploadRequest) (DirectUploadResult, error) {
 	return DirectUploadResult{
-		UploadHost: s.serverBaseURL,
+		UploadHost: s.serverBaseURL + "/v1/media/_devupload",
 		FormFields: map[string]string{
 			"key":         req.ObjectKey,
 			"_dev_bucket": req.Bucket,
