@@ -243,8 +243,8 @@
 
 ### 5.5 用户头像
 
-- [ ] `api/` 用户接口：头像改为接受 `avatar_media_asset_id`
-- [ ] 用户信息响应保留兼容字段 `avatar_url`
+- [x] `api/user.go` + `db/query/user.sql`：头像改为同时接受 `avatar_media_asset_id`（新字段）和兼容旧 `avatar_url`
+- [x] 用户信息响应：若 `avatar_media_asset_id` 有值则通过 `MediaURLResolver.VariantOriginal` 生成 `avatar_url`，否则回退旧逻辑
 - [ ] 回归测试：头像更新 + 展示
 
 ### 5.6 商户入驻申请（merchant_applications）
