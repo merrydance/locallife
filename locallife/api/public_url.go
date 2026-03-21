@@ -50,21 +50,3 @@ func (server *Server) externalBaseURL(ctx *gin.Context) string {
 
 	return scheme + "://" + host
 }
-
-func normalizeUploadPath(p string) string {
-	p = strings.TrimSpace(p)
-	if p == "" {
-		return p
-	}
-
-	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
-		return p
-	}
-
-	p = strings.TrimPrefix(p, "/")
-	if strings.HasPrefix(p, "uploads/") {
-		return p
-	}
-
-	return "uploads/" + p
-}

@@ -298,6 +298,11 @@ func TestListMerchantReviewsAPI(t *testing.T) {
 					CountReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
 					Return(int64(2), nil)
+
+				store.EXPECT().
+					ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ReviewImage{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -424,6 +429,11 @@ func TestReplyReviewAPI(t *testing.T) {
 						RepliedAt:     pgtype.Timestamptz{Time: time.Now(), Valid: true},
 						CreatedAt:     review.CreatedAt,
 					}, nil)
+
+				store.EXPECT().
+					ListReviewImages(gomock.Any(), gomock.Eq(review.ID)).
+					Times(1).
+					Return([]db.ReviewImage{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

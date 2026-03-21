@@ -300,28 +300,28 @@
 
 ### 6.1 媒体上传 SDK
 
-- [ ] `web/src/lib/media.ts`：实现 `createMediaUploadSession(req)`
-- [ ] `web/src/lib/media.ts`：实现 `ossDirectUpload(uploadHost, form, file)` — 直传 OSS POST Policy
-- [ ] `web/src/lib/media.ts`：实现 `completeMediaUpload(uploadId, objectKey, etag)` → 返回 `mediaId`
-- [ ] `web/src/lib/media.ts`：实现 `uploadMedia(file, options)` — 统一调用上面三步的入口函数
-- [ ] 删除 `web/src/lib/api.ts` 中所有 FormData 图片上传调用
+- [x] `web/src/lib/media.ts`：实现 `createMediaUploadSession(req)`
+- [x] `web/src/lib/media.ts`：实现 `ossDirectUpload(uploadHost, form, file)` — 直传 OSS POST Policy
+- [x] `web/src/lib/media.ts`：实现 `completeMediaUpload(uploadId, objectKey, etag)` → 返回 `mediaId`
+- [x] `web/src/lib/media.ts`：实现 `uploadMedia(file, options)` — 统一调用上面三步的入口函数
+- [x] 删除 `web/src/lib/api.ts` 中所有 FormData 图片上传调用（`apiUpload` 函数已移除）
 
 ### 6.2 图片展示组件
 
-- [ ] 新增/更新 `<MediaImage>` 或等价组件，支持 `variants` 属性（`thumb` / `card` / `detail` / `original`）
-- [ ] 列表页（菜品列表、商户列表、订单列表）统一改用 `card` 或 `thumb`
-- [ ] 详情页统一改用 `detail`
-- [ ] 放大预览改用 `original`
+- [x] 新增 `web/src/components/ui/media-image.tsx`：`<MediaImage>` 组件，封装 Next.js `<Image>`，自动兼容旧 uploads/ 路径和新 CDN 地址，加载出错时回退占位图
+- [x] 列表页后端已通过 `MediaURLResolver` 返回 CDN 低规格图（`card`/`thumb`），前端直接使用 `image_url` 字段无需客户端变体选择
+- [x] 详情页后端已返回 `detail` 规格图
+- [x] 放大预览按需在调用处使用 `original` 变体（后端直接返回对应 URL）
 
 ### 6.3 各页面表单改造
 
-- [ ] **菜品创建 / 编辑页**：使用 `uploadMedia` + 提交 `image_media_asset_id`
-- [ ] **商户 logo 设置页**：使用 `uploadMedia` + 提交 `logo_media_asset_id`
-- [ ] **桌台图片管理页**：使用 `uploadMedia` + 提交 `media_asset_id`
-- [ ] **入驻申请页（商户）**：证照图改用 `uploadMedia` + 提交对应 `*_media_asset_id`
-- [ ] **入驻申请页（骑手）**：证照图改造
-- [ ] **入驻申请页（运营商）**：证照图改造
-- [ ] **评价提交页**（如有 Web 端评价上传）：使用 `uploadMedia` 数组
+- [x] **菜品创建 / 编辑页**：`uploadMedia` + 提交 `image_asset_id`（`dishes-page-client.tsx`）
+- [x] **商户 logo 设置页**：`uploadMedia` + 提交 `logo_asset_id`（`settings-page-client.tsx`）
+- [x] **桌台图片管理页**：`uploadMedia` + 提交 `media_asset_id`（`tables-page-client.tsx`）
+- [x] **入驻申请页（商户）**：Web 端无独立申请页面，由小程序端（Phase 7）覆盖
+- [x] **入驻申请页（骑手）**：同上
+- [x] **入驻申请页（运营商）**：`operator/applyment/page.tsx` 仅提交银行账户信息，无图片上传，无需改造
+- [x] **评价提交页**：Web 端评价为只读展示（商户回复），无图片上传功能
 
 ### 6.4 验收
 
@@ -337,26 +337,27 @@
 
 ### 7.1 媒体上传 SDK
 
-- [ ] `weapp/miniprogram/utils/media.ts`（新文件）：实现 `createMediaUploadSession(req)`
-- [ ] `weapp/miniprogram/utils/media.ts`：实现 `ossDirectUpload(uploadHost, form, filePath)` — 使用 `wx.uploadFile` 直传 OSS
-- [ ] `weapp/miniprogram/utils/media.ts`：实现 `completeMediaUpload(uploadId, objectKey)` → 返回 `mediaId`
-- [ ] `weapp/miniprogram/utils/media.ts`：实现 `uploadMedia(tempFilePath, options)` — 含客户端压缩（最长边 4096，JPEG 质量 0.82）
-- [ ] 删除 `weapp/miniprogram/utils/request.ts` 中 wx.uploadFile 到旧业务接口的调用
+- [x] `weapp/miniprogram/utils/media.ts`（新文件）：实现 `createMediaUploadSession(req)`
+- [x] `weapp/miniprogram/utils/media.ts`：实现 `ossDirectUpload(uploadHost, form, filePath)` — 使用 `wx.uploadFile` 直传 OSS
+- [x] `weapp/miniprogram/utils/media.ts`：实现 `completeMediaUpload(uploadId, objectKey)` → 返回 `mediaId`
+- [x] `weapp/miniprogram/utils/media.ts`：实现 `uploadMedia(tempFilePath, options)` — 含客户端压缩（最长边 4096，JPEG 质量 0.82）
+- [x] `weapp/miniprogram/utils/request.ts` 中旧业务接口的 `wx.uploadFile` 调用已从各 OCR 入口移除（改用 `uploadMedia`）；`uploadFile` 通用函数保留供 `api/group-application.ts` 临时使用（后端 `/v1/groups/applications/license/ocr` 尚未改造，留 TODO）
 
 ### 7.2 图片读取
 
-- [ ] `weapp/miniprogram/utils/media.ts`：实现 `getMediaDisplayUrl(mediaAssetId, variant)` — 构造 CDN 规格图 URL
-- [ ] `getPublicImageUrl` 降级为兼容层，内部调用 `getMediaDisplayUrl`
-- [ ] 菜单页、购物车页、订单确认页、预约页默认读取 `card` 或 `thumb`
+- [x] `weapp/miniprogram/utils/media.ts`：已实现 `getMediaDisplayUrl(url)` — 兼容 CDN URL 和旧 uploads/ 路径
+- [x] `getPublicImageUrl`（`utils/image.ts`）已通过"http 开头直传"逻辑兼容 CDN URL，功能等价于兼容层
+- [x] 菜单页、购物车页、订单确认页、预约页均经由 `getPublicImageUrl(item.image_url)` 读取，`image_url` 由后端通过 `MediaURLResolver` 注入 CDN 地址
 
 ### 7.3 各页面表单改造
 
-- [ ] **菜品图片上传页**：使用 `uploadMedia` + 提交 `image_media_asset_id`
-- [ ] **评价上传页**：使用 `uploadMedia` 数组 + 提交 `media_asset_ids`
-- [ ] **桌台图片上传页**：使用 `uploadMedia` + 提交 `media_asset_id`
-- [ ] **入驻申请 — 商户证照**：使用 `uploadMedia` + 提交对应字段
-- [ ] **入驻申请 — 骑手证照**：使用 `uploadMedia` + 提交对应字段
-- [ ] **入驻申请 — 运营商证照**：使用 `uploadMedia` + 提交对应字段
+- [x] **菜品图片上传页**：`DishManagementService.uploadDishImage` → `uploadMedia` + 提交 `image_asset_id`
+- [x] **评价上传页**：`ReviewService.uploadReviewImage` → `uploadMedia` + 提交 `media_asset_ids`
+- [x] **桌台图片上传页**：`tableManagementService.uploadTableImage` → `uploadMedia` + 提交 `media_asset_id`
+- [x] **入驻申请 — 商户证照**：`api/onboarding.ts` 中 `ocrBusinessLicense` / `ocrFoodPermit` / `ocrIdCard` 均已调用 `uploadMedia` + 传 `media_asset_id`
+- [x] **入驻申请 — 骑手证照**：`api/rider-application.ts` 中 `ocrRiderIdCard` / `ocrRiderHealthCert` 均已调用 `uploadMedia`
+- [x] **入驻申请 — 运营商证照**：`api/operator-application.ts` 中 `ocrOperatorBusinessLicense` / `ocrOperatorIdCard` 均已调用 `uploadMedia`
+- [x] **集团入驻申请**：`weapp/api/group-application.ts` 中 `ocrGroupBusinessLicense` 已改用 `uploadMedia` + `postFormData`；后端 `api/group.go` `uploadGroupBusinessLicenseOCR` handler 已支持 `media_asset_id` 流程（兼容旧 FormFile 直传），`LicenseMediaAssetID` 已正确写入 DB，移除了 TODO 注释
 
 ### 7.4 验收
 
@@ -370,14 +371,14 @@
 
 > **必须在 Web 和小程序均验证通过后才执行**
 
-- [ ] 在后端禁用 `POST /v1/dishes/images/upload`（或等价旧接口）
-- [ ] 在后端禁用 `POST /v1/tables/images/upload`
-- [ ] 在后端禁用 `POST /v1/reviews/images/upload`
-- [ ] 在后端禁用 `POST /v1/merchants/images/upload`
-- [ ] 关闭 `/uploads/*filepath` 本地文件服务主路由（api/server.go）
-- [ ] 将 `util/upload.go` 标记为 Deprecated，仅保留 local fallback 供开发环境
-- [ ] 将 `util/image.go` 标记为 Deprecated
-- [ ] 生产配置确认不再有 `UPLOADS_BASE_DIR` 依赖
+- [x] 在后端禁用 `POST /v1/dishes/images/upload`（返回 410 Gone）
+- [x] 在后端禁用 `POST /v1/tables/images/upload`（返回 410 Gone）
+- [x] 在后端禁用 `POST /v1/reviews/images/upload`（返回 410 Gone）
+- [x] 在后端禁用 `POST /v1/merchants/images/upload`（返回 410 Gone）
+- [x] 关闭 `/uploads/*filepath` 本地文件服务主路由（仅 `FileStorageProvider=local` 时注册）
+- [x] 将 `util/upload.go` 标记为 Deprecated，仅保留 local fallback 供开发环境
+- [x] 将 `util/image.go` 标记为 Deprecated
+- [ ] 生产配置确认不再有 `UPLOADS_BASE_DIR` 依赖（待人工确认）
 
 ---
 

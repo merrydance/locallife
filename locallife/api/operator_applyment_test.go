@@ -65,9 +65,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 	application := randomOperatorApplicationForApplyment(user.ID)
 
 	applicationWithTestURL := application
-	applicationWithTestURL.IDCardFrontMediaAssetID = pgtype.Int8{}
-	applicationWithTestURL.IDCardBackMediaAssetID = pgtype.Int8{}
-	applicationWithTestURL.BusinessLicenseMediaAssetID = pgtype.Int8{}
 
 	testCases := []struct {
 		name          string
@@ -115,12 +112,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(randomEcommerceApplymentForTest("operator", operator.ID), nil)
-
-				// Mock 图片上传
-				ecommerceClient.EXPECT().
-					UploadImage(gomock.Any(), gomock.Any(), gomock.Any()).
-					Times(3).
-					Return(&wechat.ImageUploadResponse{MediaID: "media_id_123"}, nil)
 
 				// Mock 加密
 				ecommerceClient.EXPECT().

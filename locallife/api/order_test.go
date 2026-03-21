@@ -1390,16 +1390,6 @@ func TestAcceptOrderAPI(t *testing.T) {
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateOrderStatusTxResult{Order: acceptedOrder}, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), acceptedOrder.UserID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1542,17 +1532,6 @@ func TestRejectOrderAPI(t *testing.T) {
 					CancelOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CancelOrderTxResult{Order: rejectedOrder}, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), rejectedOrder.UserID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-
 				// 退款相关调用
 				store.EXPECT().
 					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
@@ -1825,14 +1804,6 @@ func TestUrgeOrderAPI(t *testing.T) {
 					Times(1).
 					Return(int64(0), nil)
 				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), paidOrder.MerchantID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.OrderStatusLog{}, nil)
@@ -1858,14 +1829,6 @@ func TestUrgeOrderAPI(t *testing.T) {
 					CountRecentOrderStatusLogs(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(int64(0), nil)
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), preparingOrder.MerchantID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
 				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -2055,17 +2018,13 @@ func TestConfirmOrderAPI(t *testing.T) {
 					Times(1).
 					Return(db.OrderStatusLog{}, nil)
 				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), order.MerchantID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-				store.EXPECT().
 					GetDeliveryByOrderID(gomock.Any(), order.ID).
 					Times(1).
 					Return(db.Delivery{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2353,14 +2312,6 @@ func TestMarkOrderReadyAPI(t *testing.T) {
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateOrderStatusTxResult{Order: readyOrder}, nil)
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), readyOrder.UserID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2505,14 +2456,6 @@ func TestCompleteOrderAPI(t *testing.T) {
 					CompleteOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CompleteOrderTxResult{Order: completedOrder}, nil)
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), completedOrder.UserID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2542,14 +2485,6 @@ func TestCompleteOrderAPI(t *testing.T) {
 					CompleteOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CompleteOrderTxResult{Order: completedOrder}, nil)
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), completedOrder.UserID).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

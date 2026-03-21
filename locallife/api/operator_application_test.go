@@ -493,9 +493,8 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 				completeApp.Name = pgtype.Text{String: "测试运营商", Valid: true}
 				completeApp.ContactName = pgtype.Text{String: "张三", Valid: true}
 				completeApp.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
-				completeApp.BusinessLicenseMediaAssetID = pgtype.Int8{}
-				completeApp.IDCardFrontMediaAssetID = pgtype.Int8{}
-				completeApp.IDCardBackMediaAssetID = pgtype.Int8{}
+				completeApp.IDCardFrontMediaAssetID = pgtype.Int8{Int64: 1, Valid: true}
+				completeApp.IDCardBackMediaAssetID = pgtype.Int8{Int64: 2, Valid: true}
 
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).
@@ -548,8 +547,8 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 				app.LegalPersonName = pgtype.Text{String: "李四", Valid: true}
 				app.ContactName = pgtype.Text{String: "李四", Valid: true}
 				app.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
-				app.IDCardFrontMediaAssetID = pgtype.Int8{}
-				app.IDCardBackMediaAssetID = pgtype.Int8{}
+				app.IDCardFrontMediaAssetID = pgtype.Int8{Int64: 1, Valid: true}
+				app.IDCardBackMediaAssetID = pgtype.Int8{Int64: 2, Valid: true}
 
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).
@@ -591,9 +590,8 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 				completeApp.Name = pgtype.Text{String: "测试运营商", Valid: true}
 				completeApp.ContactName = pgtype.Text{String: "张三", Valid: true}
 				completeApp.ContactPhone = pgtype.Text{String: "13800138000", Valid: true}
-				completeApp.BusinessLicenseMediaAssetID = pgtype.Int8{}
-				completeApp.IDCardFrontMediaAssetID = pgtype.Int8{}
-				completeApp.IDCardBackMediaAssetID = pgtype.Int8{}
+				completeApp.IDCardFrontMediaAssetID = pgtype.Int8{Int64: 1, Valid: true}
+				completeApp.IDCardBackMediaAssetID = pgtype.Int8{Int64: 2, Valid: true}
 
 				store.EXPECT().
 					GetOperatorApplicationDraft(gomock.Any(), user.ID).

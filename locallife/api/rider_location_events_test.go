@@ -229,17 +229,6 @@ func TestMaybeAutoConfirmPickup(t *testing.T) {
 		CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(db.OrderStatusLog{}, nil)
-
-	store.EXPECT().
-		GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-		Times(1).
-		Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-	store.EXPECT().
-		CreateNotification(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.Notification{}, nil)
-
 	server.maybeAutoConfirmPickup(t.Context(), delivery, rider)
 }
 
@@ -284,16 +273,5 @@ func TestMaybeAutoConfirmDelivery(t *testing.T) {
 		CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(db.OrderStatusLog{}, nil)
-
-	store.EXPECT().
-		GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-		Times(1).
-		Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-	store.EXPECT().
-		CreateNotification(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.Notification{}, nil)
-
 	server.maybeAutoConfirmDelivery(t.Context(), delivery, rider)
 }

@@ -44,7 +44,6 @@ func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient we
 	return server
 }
 
-
 // randomMerchantForApplyment 创建随机商户（进件测试专用）
 func randomMerchantForApplyment(ownerID int64) db.Merchant {
 	return db.Merchant{
@@ -61,16 +60,16 @@ func randomMerchantForApplyment(ownerID int64) db.Merchant {
 // randomMerchantApplicationForApplyment 创建随机商户申请（进件测试专用）
 func randomMerchantApplicationForApplyment(userID int64) db.MerchantApplication {
 	return db.MerchantApplication{
-		ID:                      util.RandomInt(1, 1000),
-		UserID:                  userID,
-		MerchantName:            util.RandomString(10),
-		BusinessLicenseNumber:   util.RandomString(18),
-		LegalPersonName:         util.RandomString(6),
-		LegalPersonIDNumber:     "110101199001011234",
-		ContactPhone:            "13800138000",
-		BusinessAddress:         util.RandomString(30),
-		Status:                  "approved",
-		IDCardBackOcr:           []byte(`{"valid_date": "2020.01.01-2030.01.01"}`),
+		ID:                    util.RandomInt(1, 1000),
+		UserID:                userID,
+		MerchantName:          util.RandomString(10),
+		BusinessLicenseNumber: util.RandomString(18),
+		LegalPersonName:       util.RandomString(6),
+		LegalPersonIDNumber:   "110101199001011234",
+		ContactPhone:          "13800138000",
+		BusinessAddress:       util.RandomString(30),
+		Status:                "approved",
+		IDCardBackOcr:         []byte(`{"valid_date": "2020.01.01-2030.01.01"}`),
 	}
 }
 
@@ -142,12 +141,6 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
-
-				// Mock 图片上传
-				ecommerceClient.EXPECT().
-					UploadImage(gomock.Any(), gomock.Any(), gomock.Any()).
-					Times(3). // 身份证正面、背面、营业执照
-					Return(&wechat.ImageUploadResponse{MediaID: "media_id_123"}, nil)
 
 				// Mock 加密
 				ecommerceClient.EXPECT().
@@ -696,77 +689,6 @@ func TestMerchantBindBankWithoutEcommerceClient(t *testing.T) {
 	require.Contains(t, response.Message, "待人工处理")
 }
 
-// ==================== 图片上传失败测试 ====================
-
-func TestMerchantBindBankUploadImageFailed(t *testing.T) {
-	user, _ := randomUser(t)
-	merchant := randomMerchantForApplyment(user.ID)
-	application := randomMerchantApplicationForApplyment(user.ID)
-
-	applicationWithTestURL := application
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-
-	// 获取商户
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), user.ID).
-		Times(1).
-		Return(merchant, nil)
-
-	// 检查是否有进行中的申请
-	store.EXPECT().
-		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
-
-	// 获取商户申请信息
-	store.EXPECT().
-		GetUserMerchantApplication(gomock.Any(), user.ID).
-		Times(1).
-		Return(applicationWithTestURL, nil)
-
-	// 创建进件记录
-	store.EXPECT().
-		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
-
-	// Mock 图片上传失败
-	ecommerceClient.EXPECT().
-		UploadImage(gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(nil, fmt.Errorf("upload failed"))
-
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
-
-	body := gin.H{
-		"account_type":      "ACCOUNT_TYPE_PRIVATE",
-		"account_bank":      "招商银行",
-		"bank_address_code": "440300",
-		"account_number":    "6214830012345678",
-		"account_name":      "张三",
-		"contact_phone":     "13800138000",
-	}
-	data, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	url := "/v1/merchant/applyment/bindbank"
-	request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
-	require.NoError(t, err)
-	request.Header.Set("Content-Type", "application/json")
-
-	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-
-	recorder := httptest.NewRecorder()
-	server.router.ServeHTTP(recorder, request)
-
-	require.Equal(t, http.StatusInternalServerError, recorder.Code)
-}
-
 // ==================== 加密失败测试 ====================
 
 func TestMerchantBindBankEncryptFailed(t *testing.T) {
@@ -805,12 +727,6 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 		CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
-
-	// Mock 图片上传成功
-	ecommerceClient.EXPECT().
-		UploadImage(gomock.Any(), gomock.Any(), gomock.Any()).
-		Times(3).
-		Return(&wechat.ImageUploadResponse{MediaID: "media_id_123"}, nil)
 
 	// Mock 加密失败
 	ecommerceClient.EXPECT().

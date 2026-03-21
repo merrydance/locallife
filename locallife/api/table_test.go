@@ -1486,9 +1486,9 @@ func TestAddTableImageAPI(t *testing.T) {
 			name:    "OK",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url":  fmt.Sprintf("uploads/public/merchants/%d/tables/room1.jpg", merchant.ID),
-				"sort_order": 1,
-				"is_primary": true,
+				"media_asset_id": 1,
+				"sort_order":     1,
+				"is_primary":     true,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1529,9 +1529,9 @@ func TestAddTableImageAPI(t *testing.T) {
 			name:    "OK_NotPrimary",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url":  fmt.Sprintf("uploads/public/merchants/%d/tables/room2.jpg", merchant.ID),
-				"sort_order": 2,
-				"is_primary": false,
+				"media_asset_id": 2,
+				"sort_order":     2,
+				"is_primary":     false,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1568,7 +1568,7 @@ func TestAddTableImageAPI(t *testing.T) {
 			name:    "NotMerchant",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url": "https://example.com/room1.jpg",
+				"media_asset_id": 1,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1587,7 +1587,7 @@ func TestAddTableImageAPI(t *testing.T) {
 			name:    "TableNotFound",
 			tableID: 99999,
 			body: gin.H{
-				"image_url": "https://example.com/room1.jpg",
+				"media_asset_id": 1,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -1608,10 +1608,10 @@ func TestAddTableImageAPI(t *testing.T) {
 			},
 		},
 		{
-			name:    "InvalidImageURL",
+			name:    "InvalidMediaAssetID",
 			tableID: table.ID,
 			body: gin.H{
-				"image_url": "",
+				"media_asset_id": 0,
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)

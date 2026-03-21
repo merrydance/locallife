@@ -3,7 +3,6 @@ package api
 import (
 	"bytes"
 	"encoding/json"
-	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,87 +20,25 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
-func TestUploadMerchantImageAPI(t *testing.T) {
+// TestUploadMerchantImageAPI_Gone verifies the old upload endpoint returns 410 Gone.
+// The endpoint has been replaced by the media upload flow (POST /v1/media/upload-sessions).
+func TestUploadMerchantImageAPI_Gone(t *testing.T) {
 	user, _ := randomUser(t)
 
-	testCases := []struct {
-		name          string
-		category      string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name:     "OK",
-			category: "business_license",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var response uploadImageResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.NotEmpty(t, response.ImageURL)
-				require.Contains(t, response.ImageURL, "merchants")
-				require.Contains(t, response.ImageURL, "business_license")
-			},
-		},
-		{
-			name:     "InvalidCategory",
-			category: "invalid",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:     "NoAuthorization",
-			category: "logo",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// No authorization
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-	}
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
 
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	wechatClient := mockwechat.NewMockWechatClient(ctrl)
+	server := newTestServerWithWechat(t, store, wechatClient)
 
-			store := mockdb.NewMockStore(ctrl)
-			wechatClient := mockwechat.NewMockWechatClient(ctrl)
-			// business_license no longer goes through ImgSecCheck
-			server := newTestServerWithWechat(t, store, wechatClient)
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchants/images/upload", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-			// Create multipart form
-			body := &bytes.Buffer{}
-			writer := multipart.NewWriter(body)
-			_ = writer.WriteField("category", tc.category)
-
-			// Add fake image file
-			part, err := writer.CreateFormFile("image", "test.jpg")
-			require.NoError(t, err)
-			_, err = part.Write(testPNGImage)
-			require.NoError(t, err)
-			writer.Close()
-
-			url := "/v1/merchants/images/upload"
-			request, err := http.NewRequest(http.MethodPost, url, body)
-			require.NoError(t, err)
-			request.Header.Set("Content-Type", writer.FormDataContentType())
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-			tc.checkResponse(t, recorder)
-		})
-	}
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusGone, recorder.Code)
 }
 
 func TestGetCurrentMerchantAPI(t *testing.T) {

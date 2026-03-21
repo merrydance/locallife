@@ -3,13 +3,7 @@ package api
 import (
 	"encoding/json"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
-	"net/url"
-	"os"
-	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -472,199 +466,6 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// ==================== 辅助函数 ====================
-
-// uploadImageToWechat 从 URL 下载图片并上传到微信支付获取 MediaID
-// imageURL: 图片 URL（可以是本地存储或 OSS 的 URL）
-// filename: 文件名（用于指定 Content-Type）
-// 返回微信的 MediaID
-func (server *Server) uploadImageToWechat(ctx *gin.Context, imageURL string, filename string) (string, error) {
-	var imageData []byte
-	const maxImageBytes int64 = 2 * 1024 * 1024
-
-	if strings.HasPrefix(imageURL, "http://") || strings.HasPrefix(imageURL, "https://") {
-		// 外部URL：服务端拉取（限制来源、协议与大小）
-		parsedURL, err := url.Parse(imageURL)
-		if err != nil {
-			return "", fmt.Errorf("无效的图片URL")
-		}
-		if parsedURL.Scheme != "https" && parsedURL.Scheme != "http" {
-			return "", fmt.Errorf("仅支持 http/https 协议")
-		}
-		if !server.isAllowedImageURL(ctx, parsedURL) {
-			return "", fmt.Errorf("图片URL不在允许的范围内")
-		}
-		if err := blockPrivateNetworkHosts(parsedURL.Hostname()); err != nil {
-			return "", err
-		}
-
-		httpClient := &http.Client{Timeout: 10 * time.Second}
-		resp, err := httpClient.Get(imageURL)
-		if err != nil {
-			return "", fmt.Errorf("下载图片失败: %w", err)
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			return "", fmt.Errorf("下载图片失败: HTTP %d", resp.StatusCode)
-		}
-
-		if resp.ContentLength > maxImageBytes {
-			return "", fmt.Errorf("图片大小超过 2MB 限制")
-		}
-		limitedReader := io.LimitReader(resp.Body, maxImageBytes+1)
-		imageData, err = io.ReadAll(limitedReader)
-		if err != nil {
-			return "", fmt.Errorf("读取图片数据失败: %w", err)
-		}
-		if int64(len(imageData)) > maxImageBytes {
-			return "", fmt.Errorf("图片大小超过 2MB 限制")
-		}
-	} else {
-		// 本地路径：直接读文件（不依赖公网/uploads）
-		localPath, err := sanitizeUploadLocalPath(imageURL)
-		if err != nil {
-			return "", err
-		}
-		f, err := os.Open(localPath)
-		if err != nil {
-			return "", fmt.Errorf("读取本地图片失败: %w", err)
-		}
-		defer f.Close()
-
-		fileInfo, err := f.Stat()
-		if err != nil {
-			return "", fmt.Errorf("读取本地图片失败: %w", err)
-		}
-		if fileInfo.Size() > maxImageBytes {
-			return "", fmt.Errorf("图片大小超过 2MB 限制")
-		}
-		limitedReader := io.LimitReader(f, maxImageBytes+1)
-		imageData, err = io.ReadAll(limitedReader)
-		if err != nil {
-			return "", fmt.Errorf("读取图片数据失败: %w", err)
-		}
-		if int64(len(imageData)) > maxImageBytes {
-			return "", fmt.Errorf("图片大小超过 2MB 限制")
-		}
-	}
-
-	// 检查图片大小（微信限制 2MB）
-	if int64(len(imageData)) > maxImageBytes {
-		return "", fmt.Errorf("图片大小超过 2MB 限制")
-	}
-
-	// 上传到微信
-	uploadResp, err := server.ecommerceClient.UploadImage(ctx, filename, imageData)
-	if err != nil {
-		return "", fmt.Errorf("上传到微信失败: %w", err)
-	}
-
-	return uploadResp.MediaID, nil
-}
-
-func (server *Server) isAllowedImageURL(ctx *gin.Context, parsedURL *url.URL) bool {
-	if parsedURL == nil {
-		return false
-	}
-
-	if !strings.HasPrefix(parsedURL.Path, "/uploads/") {
-		return false
-	}
-
-	allowedHosts := map[string]struct{}{}
-	if ctx != nil {
-		if host := strings.TrimSpace(ctx.Request.Host); host != "" {
-			allowedHosts[host] = struct{}{}
-			if h, _, err := net.SplitHostPort(host); err == nil && h != "" {
-				allowedHosts[h] = struct{}{}
-			}
-		}
-		if forwardedHost := strings.TrimSpace(ctx.GetHeader("X-Forwarded-Host")); forwardedHost != "" {
-			for _, host := range strings.Split(forwardedHost, ",") {
-				host = strings.TrimSpace(host)
-				if host == "" {
-					continue
-				}
-				allowedHosts[host] = struct{}{}
-				if h, _, err := net.SplitHostPort(host); err == nil && h != "" {
-					allowedHosts[h] = struct{}{}
-				}
-			}
-		}
-	}
-
-	if server.config.WebBaseURL != "" {
-		if webURL, err := url.Parse(server.config.WebBaseURL); err == nil {
-			if webURL.Host != "" {
-				allowedHosts[webURL.Host] = struct{}{}
-				if h, _, err := net.SplitHostPort(webURL.Host); err == nil && h != "" {
-					allowedHosts[h] = struct{}{}
-				}
-			}
-		}
-	}
-
-	if len(allowedHosts) == 0 {
-		return false
-	}
-
-	if parsedURL.Host == "" {
-		return false
-	}
-
-	if _, ok := allowedHosts[parsedURL.Host]; ok {
-		return true
-	}
-	if h, _, err := net.SplitHostPort(parsedURL.Host); err == nil {
-		if _, ok := allowedHosts[h]; ok {
-			return true
-		}
-	}
-
-	return false
-}
-
-func sanitizeUploadLocalPath(imageURL string) (string, error) {
-	localPath := strings.TrimPrefix(normalizeUploadPath(imageURL), "/")
-	cleanPath := filepath.Clean(localPath)
-	if cleanPath == "." || strings.HasPrefix(cleanPath, "..") || strings.HasPrefix(cleanPath, "/") {
-		return "", fmt.Errorf("非法的本地图片路径")
-	}
-	if !strings.HasPrefix(cleanPath, "uploads/") {
-		return "", fmt.Errorf("非法的本地图片路径")
-	}
-	return cleanPath, nil
-}
-
-func blockPrivateNetworkHosts(hostname string) error {
-	if hostname == "" {
-		return fmt.Errorf("图片URL无效")
-	}
-
-	if ip := net.ParseIP(hostname); ip != nil {
-		if isPrivateIP(ip) {
-			return fmt.Errorf("禁止访问内网地址")
-		}
-		return nil
-	}
-
-	ips, err := net.LookupIP(hostname)
-	if err != nil {
-		return fmt.Errorf("解析图片URL失败")
-	}
-	for _, ip := range ips {
-		if isPrivateIP(ip) {
-			return fmt.Errorf("禁止访问内网地址")
-		}
-	}
-	return nil
-}
-
-func isPrivateIP(ip net.IP) bool {
-	return ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsUnspecified()
-}
-
 // parseIDCardValidTime 解析身份证有效期
 func parseIDCardValidTime(validDate string) string {
 	// 输入格式: "2020.01.01-2030.01.01" 或 "2020.01.01-长期"
@@ -911,7 +712,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	}
 
 	// 检查必要信息
-	if legalPersonName == "" || legalPersonIDNumber == "" || !application.IDCardFrontMediaAssetID.Valid || !application.IDCardBackMediaAssetID.Valid {
+	if legalPersonName == "" || legalPersonIDNumber == "" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrOperatorProfileIncomplete))
 		return
 	}
@@ -1005,32 +806,11 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	}
 
 	// ==================== 上传图片到微信获取 MediaID ====================
-	// 上传身份证正面
-	idCardFrontMediaID, err := server.uploadImageToWechat(ctx, idCardFrontURL, "id_front.jpg")
-	if err != nil {
-		log.Error().Err(err).Msg("上传运营商身份证正面失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传身份证正面失败: %w", err)))
-		return
-	}
-
-	// 上传身份证背面
-	idCardBackMediaID, err := server.uploadImageToWechat(ctx, idCardBackURL, "id_back.jpg")
-	if err != nil {
-		log.Error().Err(err).Msg("上传运营商身份证背面失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传身份证背面失败: %w", err)))
-		return
-	}
-
-	// 上传营业执照（如有）
+	// TODO(media-service): 上传图片需从媒体资产ID解析URL，待媒体服务接入后实现。
+	// 当前省略微信进件图片上传，使用空字符串占位。
+	idCardFrontMediaID := ""
+	idCardBackMediaID := ""
 	var businessLicenseMediaID string
-	if businessLicenseURL != "" {
-		businessLicenseMediaID, err = server.uploadImageToWechat(ctx, businessLicenseURL, "license.jpg")
-		if err != nil {
-			log.Error().Err(err).Msg("上传运营商营业执照失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传营业执照失败: %w", err)))
-			return
-		}
-	}
 
 	// ==================== 加密敏感信息（用于发送给微信） ====================
 	// 加密身份证姓名

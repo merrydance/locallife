@@ -362,17 +362,6 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(updatedOrder, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-
 				// Mock for convertToKitchenOrder
 				store.EXPECT().
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(order.ID)).
@@ -417,17 +406,6 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 					UpdateOrderToReady(gomock.Any(), gomock.Eq(order.ID)).
 					Times(1).
 					Return(updatedOrder, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-
 				// Mock for convertToKitchenOrder
 				store.EXPECT().
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(order.ID)).

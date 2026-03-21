@@ -1,199 +1,35 @@
 package api
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"mime/multipart"
-	"net/http"
-	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
+"net/http"
+"net/http/httptest"
+"testing"
+"time"
 
-	mockdb "github.com/merrydance/locallife/db/mock"
-	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/wechat"
-	mockwechat "github.com/merrydance/locallife/wechat/mock"
+mockdb "github.com/merrydance/locallife/db/mock"
+mockwechat "github.com/merrydance/locallife/wechat/mock"
 
-	"github.com/stretchr/testify/require"
-	"go.uber.org/mock/gomock"
+"github.com/stretchr/testify/require"
+"go.uber.org/mock/gomock"
 )
 
-var testPNGImage = []byte{
-	0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
-	0x00, 0x00, 0x00, 0x0D, 0x49, 0x48, 0x44, 0x52,
-	0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01,
-	0x08, 0x06, 0x00, 0x00, 0x00, 0x1F, 0x15, 0xC4,
-	0x89, 0x00, 0x00, 0x00, 0x0A, 0x49, 0x44, 0x41,
-	0x54, 0x78, 0x9C, 0x63, 0x00, 0x01, 0x00, 0x00,
-	0x05, 0x00, 0x01, 0x0D, 0x0A, 0x2D, 0xB4,
-	0x00, 0x00, 0x00, 0x00, 0x49, 0x45, 0x4E, 0x44,
-	0xAE, 0x42, 0x60, 0x82,
-}
+// TestUploadDishImageAPI_Gone verifies the old upload endpoint returns 410 Gone.
+// The endpoint has been replaced by the media upload flow (POST /v1/media/upload-sessions).
+func TestUploadDishImageAPI_Gone(t *testing.T) {
+user, _ := randomUser(t)
 
-func TestUploadDishImageAPI(t *testing.T) {
-	user, _ := randomUser(t)
-	merchant := randomMerchant(user.ID)
-	uploadDir := filepath.Join("uploads", "public", "merchants", fmt.Sprintf("%d", merchant.ID), "dishes")
+ctrl := gomock.NewController(t)
+defer ctrl.Finish()
 
-	testCases := []struct {
-		name          string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
-	}{
-		{
-			name: "OK",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					AnyTimes().
-					Return(merchant, nil)
+store := mockdb.NewMockStore(ctrl)
+wechatClient := mockwechat.NewMockWechatClient(ctrl)
+server := newTestServerWithWechat(t, store, wechatClient)
 
-				wechatClient.EXPECT().
-					ImgSecCheck(gomock.Any(), gomock.Any()).
-					AnyTimes().
-					Return(nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+request, err := http.NewRequest(http.MethodPost, "/v1/dishes/images/upload", nil)
+require.NoError(t, err)
+addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 
-				var response uploadImageResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.NotEmpty(t, response.ImageURL)
-				require.Contains(t, response.ImageURL, fmt.Sprintf("uploads/public/merchants/%d/dishes/", merchant.ID))
-
-				_ = os.Remove(strings.TrimPrefix(response.ImageURL, "/"))
-				_ = os.RemoveAll(uploadDir)
-			},
-		},
-		{
-			name: "RiskyContent",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					AnyTimes().
-					Return(merchant, nil)
-
-				wechatClient.EXPECT().
-					ImgSecCheck(gomock.Any(), gomock.Any()).
-					AnyTimes().
-					Return(wechat.ErrRiskyContent)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name: "WechatError",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					AnyTimes().
-					Return(merchant, nil)
-
-				wechatClient.EXPECT().
-					ImgSecCheck(gomock.Any(), gomock.Any()).
-					AnyTimes().
-					Return(errors.New("wechat unavailable"))
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadGateway, recorder.Code)
-			},
-		},
-		{
-			name: "NotMerchant",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					AnyTimes().
-					Return(db.Merchant{}, db.ErrRecordNotFound)
-
-				wechatClient.EXPECT().
-					ImgSecCheck(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusForbidden, recorder.Code)
-			},
-		},
-		{
-			name:      "NoAuthorization",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
-			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
-
-				wechatClient.EXPECT().
-					ImgSecCheck(gomock.Any(), gomock.Any()).
-					Times(0)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusUnauthorized, recorder.Code)
-			},
-		},
-	}
-
-	for i := range testCases {
-		tc := testCases[i]
-		t.Run(tc.name, func(t *testing.T) {
-			_ = os.RemoveAll(uploadDir)
-			defer func() { _ = os.RemoveAll(uploadDir) }()
-
-			ctrl := gomock.NewController(t)
-			defer ctrl.Finish()
-
-			store := mockdb.NewMockStore(ctrl)
-			wechatClient := mockwechat.NewMockWechatClient(ctrl)
-			tc.buildStubs(store, wechatClient)
-
-			server := newTestServerWithWechat(t, store, wechatClient)
-
-			body := &bytes.Buffer{}
-			writer := multipart.NewWriter(body)
-			part, err := writer.CreateFormFile("image", "test.jpg")
-			require.NoError(t, err)
-			_, err = part.Write(testPNGImage)
-			require.NoError(t, err)
-			require.NoError(t, writer.Close())
-
-			url := "/v1/dishes/images/upload"
-			request, err := http.NewRequest(http.MethodPost, url, body)
-			require.NoError(t, err)
-			request.Header.Set("Content-Type", writer.FormDataContentType())
-
-			tc.setupAuth(t, request, server.tokenMaker)
-
-			recorder := httptest.NewRecorder()
-			server.router.ServeHTTP(recorder, request)
-
-			if tc.name != "OK" {
-				entries, err := os.ReadDir(uploadDir)
-				if err == nil {
-					require.Len(t, entries, 0)
-				} else {
-					require.True(t, os.IsNotExist(err))
-				}
-			}
-
-			tc.checkResponse(t, recorder)
-		})
-	}
+recorder := httptest.NewRecorder()
+server.router.ServeHTTP(recorder, request)
+require.Equal(t, http.StatusGone, recorder.Code)
 }

@@ -27,17 +27,17 @@ func randomRiderApplication(userID int64) db.RiderApplication {
 
 func randomRiderApplicationWithData(userID int64) db.RiderApplication {
 	return db.RiderApplication{
-		ID:             1,
-		UserID:         userID,
-		RealName:       pgtype.Text{String: "张三", Valid: true},
-		Phone:          pgtype.Text{String: "13812345678", Valid: true},
-		IDCardFrontMediaAssetID: pgtype.Int8{},
-		IDCardBackMediaAssetID: pgtype.Int8{},
-		IDCardOcr:      []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"20350101"}`),
-		HealthCertMediaAssetID: pgtype.Int8{},
-		HealthCertOcr:  []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2030年12月31日"}`),
-		Status:         "draft",
-		CreatedAt:      time.Now(),
+		ID:                      1,
+		UserID:                  userID,
+		RealName:                pgtype.Text{String: "张三", Valid: true},
+		Phone:                   pgtype.Text{String: "13812345678", Valid: true},
+		IDCardFrontMediaAssetID: pgtype.Int8{Int64: 1, Valid: true},
+		IDCardBackMediaAssetID:  pgtype.Int8{Int64: 2, Valid: true},
+		IDCardOcr:               []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"20350101"}`),
+		HealthCertMediaAssetID:  pgtype.Int8{Int64: 3, Valid: true},
+		HealthCertOcr:           []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2030年12月31日"}`),
+		Status:                  "draft",
+		CreatedAt:               time.Now(),
 	}
 }
 

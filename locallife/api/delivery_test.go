@@ -255,17 +255,6 @@ func TestGrabOrderAPI(t *testing.T) {
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return([]db.OrderItem{}, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(merchant.OwnerUserID)).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-
 				store.EXPECT().
 					UpdateOrderToCourierAccepted(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
@@ -431,17 +420,6 @@ func TestConfirmPickupAPI(t *testing.T) {
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return([]db.OrderItem{}, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-
 				store.EXPECT().
 					UpdateDeliveryToPickedTx(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -951,16 +929,6 @@ func TestStartPickupAPI(t *testing.T) {
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return([]db.OrderItem{}, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1139,17 +1107,6 @@ func TestStartDeliveryAPI(t *testing.T) {
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return([]db.OrderItem{}, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-
 				store.EXPECT().
 					UpdateDeliveryToDeliveringTx(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1327,17 +1284,6 @@ func TestConfirmDeliveryAPI(t *testing.T) {
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return([]db.OrderItem{}, nil)
-
-				store.EXPECT().
-					GetUserNotificationPreferences(gomock.Any(), gomock.Eq(order.UserID)).
-					Times(1).
-					Return(db.UserNotificationPreference{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Notification{}, nil)
-
 				store.EXPECT().
 					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 					Times(1).
