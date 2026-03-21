@@ -2046,7 +2046,6 @@ func TestGetRoomDetailAPI_WithImages(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	room := randomTable(merchant.ID)
-	room.TableType = "room"
 
 	const imageAssetID int64 = 77
 	tableImage := db.TableImage{

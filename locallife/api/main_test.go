@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
@@ -254,6 +255,34 @@ func newTestServerWithTaskDistributor(t *testing.T, store db.Store, taskDistribu
 
 	server.setupRouter()
 	return server
+}
+
+// newTestServerForMedia creates a test server with a temp-dir-backed LocalStorage.
+// Returns the server and the temp directory (auto-cleaned on test end).
+func newTestServerForMedia(t *testing.T, store db.Store) (*Server, string) {
+	t.Helper()
+	config := util.Config{
+		Environment:         "test",
+		TokenSymmetricKey:   util.RandomString(32),
+		AccessTokenDuration: time.Minute,
+	}
+
+	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
+	require.NoError(t, err)
+	server.wsHub = nil
+	server.wsPubSub = nil
+
+	tempDir := t.TempDir()
+	ls := media.NewLocalStorage("http://testserver", tempDir)
+	server.mediaRegistry = media.NewRegistry(store, ls)
+	server.mediaResolver = media.NewURLResolver(media.ResolverConfig{
+		CDNPublicBaseURL: "https://cdn.test.example.com",
+		ThumbWidth:       200,
+		CardWidth:        400,
+		DetailWidth:      960,
+	}, ls)
+
+	return server, tempDir
 }
 
 func TestMain(m *testing.M) {
