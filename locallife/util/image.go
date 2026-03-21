@@ -1,3 +1,5 @@
+// Deprecated: 此包中的图片处理函数（ConvertToWebP、ResizeImage 等）仅供
+// 本地开发环境和旧数据兼容使用。生产环境图片变换通过 OSS 图片处理样式完成。
 package util
 
 import (

@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"mime/multipart"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -385,7 +387,8 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 // @Tags 集团申请
 // @Accept multipart/form-data
 // @Produce json
-// @Param image formData file true "营业执照图片"
+// @Param image formData file false "营业执照图片（可选；不传则使用 media_asset_id）"
+// @Param media_asset_id formData string false "媒体资产 ID（与 image 二选一）"
 // @Success 200 {object} groupApplicationResponse
 // @Failure 400 {object} ErrorResponse
 // @Failure 401 {object} ErrorResponse
@@ -417,17 +420,48 @@ func (server *Server) uploadGroupBusinessLicenseOCR(ctx *gin.Context) {
 		}
 	}
 
+	// 获取上传的文件；若未提供文件则回退 media_asset_id（媒体服务流程）
 	file, fileHeader, err := ctx.Request.FormFile("image")
 	if err != nil {
 		file, fileHeader, err = ctx.Request.FormFile("file")
 	}
+	var fromAssetID bool
+	var assetFileBytes []byte
+	var mediaAssetID int64
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("license image is required")))
-		return
+		if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
+			if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
+				mediaAssetID = id
+				localPath := server.mediaAssetLocalPath(ctx, id)
+				if localPath == "" {
+					ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
+					return
+				}
+				fileData, readErr := os.ReadFile(localPath)
+				if readErr != nil {
+					ctx.JSON(http.StatusInternalServerError, internalError(ctx, readErr))
+					return
+				}
+				assetFileBytes = fileData
+				fromAssetID = true
+			}
+		}
+		if !fromAssetID {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("license image is required")))
+			return
+		}
+	} else {
+		defer file.Close()
 	}
-	defer file.Close()
 
-	ocrResp, err := server.wechatClient.OCRBusinessLicense(ctx, file)
+	var ocrReader multipart.File
+	if fromAssetID {
+		ocrReader = util.NewBytesFile(assetFileBytes)
+	} else {
+		ocrReader = file
+	}
+
+	ocrResp, err := server.wechatClient.OCRBusinessLicense(ctx, ocrReader)
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
 		return
@@ -437,25 +471,26 @@ func (server *Server) uploadGroupBusinessLicenseOCR(ctx *gin.Context) {
 		return
 	}
 
-	if seeker, ok := file.(io.Seeker); ok {
-		if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+	if !fromAssetID {
+		if seeker, ok := file.(io.Seeker); ok {
+			if _, err := seeker.Seek(0, io.SeekStart); err != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+				return
+			}
+		} else {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid file stream")))
+			return
+		}
+		uploader := util.NewFileUploader(util.UploadBaseDir)
+		_, err = uploader.UploadMerchantImageForOCR(authPayload.UserID, "group_license", file, fileHeader)
+		if err != nil {
+			if errors.Is(err, util.ErrImageTooLargeForOCR) || errors.Is(err, util.ErrInvalidImageFormat) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-	} else {
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid file stream")))
-		return
-	}
-
-	uploader := util.NewFileUploader(util.UploadBaseDir)
-	_, err = uploader.UploadMerchantImageForOCR(authPayload.UserID, "group_license", file, fileHeader)
-	if err != nil {
-		if errors.Is(err, util.ErrImageTooLargeForOCR) || errors.Is(err, util.ErrInvalidImageFormat) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
 	}
 
 	licenseNumber := ocrResp.CreditCode
@@ -471,12 +506,15 @@ func (server *Server) uploadGroupBusinessLicenseOCR(ctx *gin.Context) {
 	data["business_license_ocr_at"] = time.Now().Format(time.RFC3339)
 	merged, _ := json.Marshal(data)
 
-	updated, err := server.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{
-		ID:                  app.ID,
-		LicenseMediaAssetID: pgtype.Int8{}, // TODO(media-service): create media asset from uploadedURL
-		LicenseNumber:       pgtype.Text{String: licenseNumber, Valid: licenseNumber != ""},
-		ApplicationData:     merged,
-	})
+	arg := db.UpdateGroupApplicationLicenseParams{
+		ID:              app.ID,
+		LicenseNumber:   pgtype.Text{String: licenseNumber, Valid: licenseNumber != ""},
+		ApplicationData: merged,
+	}
+	if fromAssetID {
+		arg.LicenseMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
+	}
+	updated, err := server.store.UpdateGroupApplicationLicense(ctx, arg)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

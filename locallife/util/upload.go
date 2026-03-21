@@ -1,3 +1,6 @@
+// Deprecated: 此包中的上传函数（FileUploader、UploadMerchantImage 等）仅供
+// 本地开发环境和旧数据兼容使用。新代码请使用媒体上传服务（POST /v1/media/upload-sessions
+// → 直传 OSS → POST /v1/media/complete）。
 package util
 
 import (

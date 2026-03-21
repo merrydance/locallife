@@ -1,4 +1,5 @@
-import { request, uploadFile } from '../utils/request'
+import { request } from '../utils/request'
+import { uploadMedia, postFormData } from '../utils/media'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 
@@ -66,13 +67,16 @@ export function updateGroupApplicationBasic(data: UpdateGroupApplicationBasicReq
 }
 
 /**
- * 上传并在识别集团营业执照
+ * 上传并识别集团营业执照
  */
-export function ocrGroupBusinessLicense(filePath: string) {
-  return uploadFile<GroupApplicationResponse>(
-    filePath,
+export async function ocrGroupBusinessLicense(filePath: string) {
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'group',
+    mediaCategory: 'business_license',
+  })
+  return postFormData<GroupApplicationResponse>(
     '/v1/groups/applications/license/ocr',
-    'image'
+    { media_asset_id: mediaId }
   )
 }
 

@@ -383,10 +383,13 @@ func (server *Server) setupRouter() {
 	// Parts larger than this will be stored in temporary files.
 	router.MaxMultipartMemory = 8 << 20 // 8 MiB
 
-	// 🖼️ 上传文件访问
+	// 🖼️ 上传文件访问（仅本地开发模式启用）
+	// 生产环境使用 OSS presigned URL，此路由无需开放。
 	// 安全策略：证件照/营业执照等敏感图片不允许匿名直出；
 	// 通过 /v1/uploads/sign 生成短期签名URL，再由 /uploads/*filepath 校验签名后提供下载。
-	router.GET("/uploads/*filepath", server.getSignedUpload)
+	if server.config.FileStorageProvider == "local" {
+		router.GET("/uploads/*filepath", server.getSignedUpload)
+	}
 
 	// 📝 注册自定义验证器
 	registerCustomValidators()
@@ -477,7 +480,9 @@ func (server *Server) setupRouter() {
 	// 需要认证的路由
 	authGroup := v1.Group("")
 	authGroup.Use(authMiddleware(server.tokenMaker))
-	authGroup.POST("/uploads/sign", server.signUploadURL)
+	if server.config.FileStorageProvider == "local" {
+		authGroup.POST("/uploads/sign", server.signUploadURL)
+	}
 	authClientLogGroup := authGroup.Group("/logs")
 	if rateLimiter != nil {
 		authClientLogGroup.Use(rateLimiter.SensitiveAPIMiddleware(20)) // 客户端错误上报限流：每分钟 20 次/客户端
@@ -591,7 +596,11 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/location/direction/bicycling", server.getBicyclingRoute)
 
 	// M3: 商户管理路由
+	// 以下上传路由已废弃，统一返回 410 Gone（不经过业务中间件以避免不必要的 DB 查询）
 	authGroup.POST("/merchants/images/upload", server.uploadMerchantImage)
+	authGroup.POST("/dishes/images/upload", server.uploadDishImage)
+	authGroup.POST("/tables/images/upload", server.uploadTableImage)
+	authGroup.POST("/reviews/images/upload", server.uploadReviewImage)
 	authGroup.GET("/merchants/me", server.getCurrentMerchant)
 	authGroup.GET("/merchants/my", server.listMyMerchants) // 获取用户所有商户（多店铺切换）
 	authGroup.PATCH("/merchants/me", server.updateCurrentMerchant)
@@ -695,7 +704,6 @@ func (server *Server) setupRouter() {
 	dishesGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "chef"))
 
 	{
-		dishesGroup.POST("/images/upload", server.uploadDishImage)
 		// 菜品分类
 		dishesGroup.POST("/categories", server.createDishCategory)
 		dishesGroup.GET("/categories", server.listDishCategories)
@@ -780,7 +788,6 @@ func (server *Server) setupRouter() {
 	// M5: 桌台与包间管理路由
 	tablesGroup := authGroup.Group("/tables")
 	{
-		tablesGroup.POST("/images/upload", server.uploadTableImage)
 		tablesGroup.POST("", server.createTable)
 		tablesGroup.GET("/:id", server.getTable)
 		tablesGroup.GET("", server.listTables)
@@ -1340,9 +1347,6 @@ func (server *Server) setupRouter() {
 	// M13: 评价系统路由
 	reviewsGroup := authGroup.Group("/reviews")
 	{
-		// 上传评价图片
-		reviewsGroup.POST("/images/upload", server.uploadReviewImage)
-
 		// 创建评价
 		reviewsGroup.POST("", server.createReview)
 

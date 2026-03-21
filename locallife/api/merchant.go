@@ -15,7 +15,6 @@ import (
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
-	"github.com/merrydance/locallife/wechat"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5"
@@ -88,16 +87,6 @@ func (server *Server) resolveMerchantForUser(ctx *gin.Context, userID int64) (db
 	return merchants[0], nil
 }
 
-// ==================== 文件上传 ====================
-
-type uploadImageRequest struct {
-	Category string `form:"category" binding:"required,oneof=business_license id_front id_back logo storefront environment"`
-}
-
-type uploadImageResponse struct {
-	ImageURL string `json:"image_url"`
-}
-
 type merchantVersionConflictResponse struct {
 	Error          string `json:"error"`
 	CurrentVersion int32  `json:"current_version"`
@@ -115,74 +104,17 @@ type merchantHasOrderedResponse struct {
 }
 
 // uploadMerchantImage godoc
-// @Summary 上传商户图片
-// @Description 上传商户入驻所需图片（营业执照、身份证、Logo、门头照、环境照）
+// @Summary [Deprecated] 上传商户图片
+// @Description **已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions → 直传 OSS → POST /v1/media/complete，然后将 media_asset_id 提交至商户接口。
 // @Tags 商户
-// @Accept multipart/form-data
 // @Produce json
-// @Param category formData string true "图片类别" Enums(business_license, id_front, id_back, logo, storefront, environment)
-// @Param image formData file true "图片文件"
-// @Success 200 {object} uploadImageResponse "上传成功"
-// @Failure 400 {object} ErrorResponse "请求参数错误"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Success 410 {object} ErrorResponse "接口已停用"
 // @Router /v1/merchants/images/upload [post]
 // @Security BearerAuth
 func (server *Server) uploadMerchantImage(ctx *gin.Context) {
-	var req uploadImageRequest
-	if err := ctx.ShouldBind(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取认证信息
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取上传的文件
-	file, header, err := ctx.Request.FormFile("image")
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("failed to get file: %w", err)))
-		return
-	}
-	defer file.Close()
-
-	// 商户入驻证照（营业执照/身份证）在审核通过前仅本人可见，不走内容安全；
-	// 仅对会公开展示的图片（如 logo）执行内容安全检测。
-	if req.Category == "logo" {
-		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-			if errors.Is(err, wechat.ErrRiskyContent) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
-				return
-			}
-
-			// 开发环境详尽报错
-			errMsg := "微信图片安全检测服务异常"
-			if server.config.Environment == "development" {
-				errMsg = fmt.Sprintf("微信图片安全检测失败: %v", err)
-			}
-			ctx.JSON(http.StatusBadGateway, errorResponse(errors.New(errMsg)))
-
-			internalError(ctx, fmt.Errorf("wechat img sec check (logo): %w", err))
-			return
-		}
-		if _, err := file.Seek(0, 0); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
-	// 上传文件
-	uploader := util.NewFileUploader("uploads")
-	relativePath, err := uploader.UploadMerchantImage(authPayload.UserID, req.Category, file, header)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 返回文件URL（相对路径）
-	ctx.JSON(http.StatusOK, uploadImageResponse{
-		ImageURL: normalizeUploadURLForClient(relativePath),
-	})
+	ctx.JSON(http.StatusGone, errorResponse(errors.New(
+		"此接口已停用。请改用媒体上传接口：POST /v1/media/upload-sessions",
+	)))
 }
 
 // ==================== 商户管理 ====================

@@ -366,40 +366,6 @@ export async function apiDelete<T>(
   return unwrapEnvelope(json);
 }
 
-export async function apiUpload<T>(
-  path: string,
-  file: File,
-  init: RequestInit = {}
-): Promise<T> {
-  const tokenUsed = getAuthToken();
-  const url = `${API_BASE}${path}`;
-  const formData = new FormData();
-  formData.append("image", file);
-
-  const response = await fetch(url, {
-    ...init,
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "X-Response-Envelope": "1",
-      ...withAuthHeaders(init),
-    },
-    body: formData,
-    cache: "no-store",
-  });
-
-  if (response.status === 401) {
-    return handle401AndRetry(() => apiUpload<T>(path, file, init), tokenUsed);
-  }
-
-  if (!response.ok) {
-    return handleError(response);
-  }
-
-  const json = (await response.json()) as ApiEnvelope<T> | T;
-  return unwrapEnvelope(json);
-}
-
 export function getMediaUrl(path?: string) {
   if (!path) return "";
   if (path.startsWith("http")) return path;
