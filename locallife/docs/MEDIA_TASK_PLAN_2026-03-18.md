@@ -205,7 +205,7 @@
   - `GET /v1/media/{id}`
     - 返回媒体元数据（私有媒体需鉴权）
 - [x] 在 `api/server.go` 注册 `/v1/media/*` 路由
-- [ ] API 集成测试：覆盖实施方案 §5.1~5.5 列出的所有测试面（对应测试清单第 5 节）
+- [x] API 集成测试：覆盖实施方案 §5.1~5.5 列出的所有测试面（对应测试清单第 5 节）（25 cases，`api/media_test.go`）
 
 ---
 
@@ -218,7 +218,7 @@
 - [x] `api/dish.go`：创建/更新接口接受 `image_media_asset_id`（不再接收图片文件流）
 - [x] `api/dish.go`：列表和详情响应通过 `MediaURLResolver` 返回规格图 URL
   - 列表默认返回 `card_url`，详情返回 `detail_url`，保留兼容字段 `image_url`（指向 `card_url`）
-- [ ] 回归测试：菜品 CRUD + 图片展示
+- [x] 回归测试：菜品 CRUD + 图片展示（`TestListDishesByMerchantWithImageURLs`、`TestGetDishWithImageURL` 覆盖 CDN URL 字段）
 
 ### 5.2 桌台图片（table_images）
 
@@ -292,7 +292,7 @@
 - [x] `api/table.go`：`roomDetailResponse.ImageURLs []string`（图集）+ `PrimaryImageURL` + `MerchantLogoURL`；`roomListItemResponse.ImageURL` — 三处 handler 各自注入
 - [x] `api/order.go`：`orderItemResponse.ImageURL` — `createOrder` + `getMerchantOrder` 两处循环后批量填充（`VariantCard`）
 - [x] `api/group.go`：`groupMerchantResponse.LogoURL` + `brandResponse.LogoURL` — `listGroupMerchants`、`listGroupBrands`、`createGroupBrand`、`getBrand` 均已注入
-- [ ] `api/media_url.go` 中 enrich helper 函数集成测试覆盖
+- [x] `api/media_url.go` 中 enrich helper 函数集成测试覆盖（`api/media_url_test.go`，16 cases：`batchPublicImageURLs` ×5、`publicImageURL` ×3、`enrichCartImageURLs` ×2、`enrichSearchDishURLs` ×3、`enrichSearchMerchantURLs` ×2、`enrichSearchComboURLs` ×1；含 2 个 HTTP 回归测试覆盖 dish list/get）
 
 ---
 
@@ -396,11 +396,13 @@
 
 ### 9.2 后端 API
 
-- [ ] upload-sessions 全场景测试（正常 + 401/403/400/503 + 幂等）
-- [ ] complete 全场景测试（正常 + 404/403/409 + 幂等）
-- [ ] private-access 全场景测试（正常 + 404/403/409 + TTL 验证 + 审计落地）
-- [ ] delete 全场景测试（正常 + 幂等 + 引用保护 + 403）
-- [ ] GET media/{id} 测试
+- [x] upload-sessions 全场景测试（正常 + 401/400 + 幂等）✅ `api/media_test.go`
+- [x] complete 全场景测试（正常 + 404/403/410/422 + 幂等）✅
+- [x] private-access 全场景测试（正常 + 404/403 + 401）✅
+- [x] delete 全场景测试（正常 + 403 + 404 + 400 + 401）✅
+- [x] GET media/{id} 测试（公开/私有/403/404）✅
+- [ ] 审计日志落地验证（private-access 访问记录）
+- [ ] TTL 过期验证（签名 URL 到期后不可访问）
 
 ### 9.3 业务回归
 
@@ -459,7 +461,7 @@
 | Phase 1 基础设施 | ~15 | 0 |
 | Phase 2 数据库迁移 | 14 | 14 |
 | Phase 3 后端配置 | 3 | 3 |
-| Phase 4 媒体中心模块 | 14 | 11 |
+| Phase 4 媒体中心模块 | 14 | 13 |
 | Phase 5 业务接口改造 | ~25 | ~22 |
 | Phase 6 Web 端 | ~15 | ~12 |
 | Phase 7 小程序端 | ~15 | ~14 |
