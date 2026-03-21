@@ -272,3 +272,46 @@ func randomMerchant(ownerID int64) db.Merchant {
 		UpdatedAt:   time.Now(),
 	}
 }
+
+// TestGetCurrentMerchantAPI_WithLogoURL 回归测试（Phase 5.4）：
+// 当商户设置了 logo_media_asset_id 时，GET /v1/merchants/me 响应中应包含 CDN logo_url。
+func TestGetCurrentMerchantAPI_WithLogoURL(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.LogoMediaAssetID = pgtype.Int8{Int64: 42, Valid: true}
+
+	const assetID int64 = 42
+	logoAsset := db.MediaAsset{
+		ID:         assetID,
+		ObjectKey:  "merchant/logo/1/logo_card.jpg",
+		Visibility: "public",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		MinTimes(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), assetID).
+		Times(1).
+		Return(logoAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchants/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Contains(t, resp.LogoURL, "https://cdn.test.example.com", "logo_url 应指向 CDN 域名")
+	require.Contains(t, resp.LogoURL, logoAsset.ObjectKey, "logo_url 应包含 object key")
+}

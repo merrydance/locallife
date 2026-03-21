@@ -2039,3 +2039,65 @@ func TestListMerchantRoomsForCustomerAPI(t *testing.T) {
 		})
 	}
 }
+
+// TestGetRoomDetailAPI_WithImages 回归测试（Phase 5.2）：
+// 当包间存在关联图片资产时，GET /v1/rooms/{id} 响应中应包含 CDN image_urls。
+func TestGetRoomDetailAPI_WithImages(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	room := randomTable(merchant.ID)
+	room.TableType = "room"
+
+	const imageAssetID int64 = 77
+	tableImage := db.TableImage{
+		TableID:      room.ID,
+		MediaAssetID: pgtype.Int8{Int64: imageAssetID, Valid: true},
+	}
+	imageAsset := db.MediaAsset{
+		ID:         imageAssetID,
+		ObjectKey:  "table/room/77/room_photo.jpg",
+		Visibility: "public",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetRoomDetailForCustomer(gomock.Any(), gomock.Eq(room.ID)).
+		Times(1).
+		Return(db.GetRoomDetailForCustomerRow{
+			ID:           room.ID,
+			MerchantID:   room.MerchantID,
+			TableNo:      room.TableNo,
+			Capacity:     room.Capacity,
+			Status:       room.Status,
+			MerchantName: "Test Merchant",
+		}, nil)
+	store.EXPECT().
+		ListTableTags(gomock.Any(), gomock.Eq(room.ID)).
+		Times(1).Return([]db.ListTableTagsRow{}, nil)
+	store.EXPECT().
+		ListTableImages(gomock.Any(), gomock.Eq(room.ID)).
+		Times(1).Return([]db.TableImage{tableImage}, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.MediaAsset{imageAsset}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	url := fmt.Sprintf("/v1/rooms/%d", room.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp roomDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Len(t, resp.ImageURLs, 1, "包间应有 1 条 image_url")
+	require.Contains(t, resp.ImageURLs[0], "https://cdn.test.example.com", "image_url 应指向 CDN 域名")
+	require.Contains(t, resp.ImageURLs[0], imageAsset.ObjectKey, "image_url 应包含 object key")
+}

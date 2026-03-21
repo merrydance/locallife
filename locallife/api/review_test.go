@@ -812,3 +812,55 @@ func randomCompletedOrder(userID, merchantID int64) db.Order {
 		CreatedAt:   time.Now(),
 	}
 }
+
+// TestListMerchantReviewsAPI_WithImages 回归测试（Phase 5.3）：
+// 当评价存在关联图片时，GET /v1/reviews/merchants/{id} 响应中应包含 CDN image_urls。
+func TestListMerchantReviewsAPI_WithImages(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	review := db.Review{
+		ID: 1, OrderID: 1, UserID: user.ID, MerchantID: merchant.ID,
+		Content: "Great!", IsVisible: true, CreatedAt: time.Now(),
+	}
+
+	const imageAssetID int64 = 99
+	reviewImage := db.ReviewImage{ReviewID: review.ID, MediaAssetID: imageAssetID}
+	imageAsset := db.MediaAsset{ID: imageAssetID, ObjectKey: "review/image/99/photo.jpg", Visibility: "public"}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		ListReviewsByMerchant(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.Review{review}, nil)
+	store.EXPECT().
+		CountReviewsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).Return(int64(1), nil)
+	store.EXPECT().
+		ListReviewImagesByReviews(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.ReviewImage{reviewImage}, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+		Times(1).Return([]db.MediaAsset{imageAsset}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+
+	url := fmt.Sprintf("/v1/reviews/merchants/%d?page_id=1&page_size=10", merchant.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response struct {
+		Reviews []reviewResponse `json:"reviews"`
+	}
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Reviews, 1)
+	require.Len(t, response.Reviews[0].ImageURLs, 1, "review 应有 1 条 image_url")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], "https://cdn.test.example.com")
+	require.Contains(t, response.Reviews[0].ImageURLs[0], imageAsset.ObjectKey)
+}
