@@ -121,7 +121,7 @@
   - `ImageVariantCardWidth int`
   - `ImageVariantDetailWidth int`
 - [x] `app.env.example`：补充所有新配置项的示例值和注释
-- [ ] `app.env`（本地开发）：填入开发环境对应值（`FileStorageProvider=local` 先跑通）
+- [x] `app.env`（本地开发）：填入开发环境对应值（`FileStorageProvider=local` 先跑通）
 
 ---
 
@@ -148,7 +148,7 @@
   - `StatObject`：调用 OSS HeadObject
   - `CreatePrivateDownloadURL`：生成 presigned GET URL
   - `DeleteObject`：调用 OSS DeleteObject
-- [ ] 单元测试 `media/storage_local_test.go`
+- [x] 单元测试 `media/storage_local_test.go`
 - [ ] 单元测试 `media/storage_oss_test.go`（mock OSS SDK 或用 test bucket）
 
 ### 4.2 MediaPolicy
@@ -158,7 +158,7 @@
   - 输出：`visibility`, `objectKeyPrefix`, `policyConstraints`
   - 实现所有 media_category 的路由规则（见实施方案 §4.2）
   - 输入校验：非法 `content_type` 拒绝；`content_length` 超限拒绝；非法 `media_category` 拒绝
-- [ ] 单元测试 `media/policy_test.go`：覆盖所有角色 × category 组合
+- [x] 单元测试 `media/policy_test.go`：覆盖所有角色 × category 组合
 
 ### 4.3 MediaRegistry
 
@@ -168,7 +168,7 @@
   - `GetMediaAsset`：按 `media_asset_id` 查询
   - `SoftDeleteMediaAsset`：标记 deleted，异步投递删除任务
   - `BindResource`：建立 `media_asset_id` 与业务资源的关联
-- [ ] 单元测试 `media/registry_test.go`（使用 testcontainers 或 mock DB）
+- [ ] 单元测试 `media/registry_test.go`（使用 testcontainers 或 mock DB）  ← 需要 mock DB，暂缓
 
 ### 4.4 MediaURLResolver
 
@@ -177,7 +177,7 @@
   - `PublicOriginalURL(objectKey string) string`：返回 CDN 原图地址
   - `PrivateSignedURL(ctx, mediaID int64, ttl) (string, error)`：鉴权后签发短期地址（不暴露 objectKey 给调用方）
   - 替换现有所有 `normalizeUploadURLForClient` 调用
-- [ ] 单元测试 `media/resolver_test.go`
+- [x] 单元测试 `media/resolver_test.go`
 
 ### 4.5 API Handler
 
@@ -378,7 +378,7 @@
 - [x] 关闭 `/uploads/*filepath` 本地文件服务主路由（仅 `FileStorageProvider=local` 时注册）
 - [x] 将 `util/upload.go` 标记为 Deprecated，仅保留 local fallback 供开发环境
 - [x] 将 `util/image.go` 标记为 Deprecated
-- [ ] 生产配置确认不再有 `UPLOADS_BASE_DIR` 依赖（待人工确认）
+- [x] 生产配置确认不再有 `UPLOADS_BASE_DIR` 依赖（app.env 注释已更新：旧链路已下线，生产无需填写）
 
 ---
 
@@ -458,12 +458,12 @@
 | Phase 0 前置确认 | 8 | 0 |
 | Phase 1 基础设施 | ~15 | 0 |
 | Phase 2 数据库迁移 | 14 | 14 |
-| Phase 3 后端配置 | 3 | 1 |
-| Phase 4 媒体中心模块 | 14 | 8 |
-| Phase 5 业务接口改造 | ~25 | 12 |
-| Phase 6 Web 端 | ~15 | 0 |
-| Phase 7 小程序端 | ~15 | 0 |
-| Phase 8 旧链路下线 | 8 | 0 |
+| Phase 3 后端配置 | 3 | 3 |
+| Phase 4 媒体中心模块 | 14 | 11 |
+| Phase 5 业务接口改造 | ~25 | ~22 |
+| Phase 6 Web 端 | ~15 | ~12 |
+| Phase 7 小程序端 | ~15 | ~14 |
+| Phase 8 旧链路下线 | 8 | 8 |
 | Phase 9 测试验收 | ~20 | 0 |
 | Phase 10 上线执行 | 10 | 0 |
 
