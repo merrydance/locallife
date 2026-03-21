@@ -1,6 +1,5 @@
 import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
-import { resolveImageURL } from '../../../utils/image-security'
 
 type BusinessHoursView = NonNullable<PublicMerchantDetail['business_hours']>[number] & {
   day_name: string
@@ -75,12 +74,6 @@ Page({
         return
       }
 
-      const [coverImage, businessLicense, foodPermit] = await Promise.all([
-        resolveImageURL(merchant.cover_image || merchant.logo_url || ''),
-        resolveImageURL(merchant.business_license_image_url || ''),
-        resolveImageURL(merchant.food_permit_url || '')
-      ])
-
       const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
       const formattedHours: BusinessHoursView[] = (merchant.business_hours || []).map((h) => ({
         ...h,
@@ -90,10 +83,10 @@ Page({
       this.setData({
         restaurant: {
           ...merchant,
-          cover_image: coverImage,
+          cover_image: merchant.cover_image || merchant.logo_url || '',
           logo_url: getPublicImageUrl(merchant.logo_url || ''),
-          business_license_image_url: businessLicense,
-          food_permit_url: foodPermit,
+          business_license_image_url: merchant.business_license_image_url,
+          food_permit_url: merchant.food_permit_url,
           business_hours: formattedHours,
           biz_status: merchant.is_open ? 'OPEN' : 'CLOSED',
           tags: merchant.tags || [],

@@ -121,7 +121,7 @@ export interface AdminOperatorApplicationItem {
     name: string
     contact_name: string
     contact_phone: string
-    business_license_url: string
+    business_license_media_asset_id?: number
     business_license_number: string
     legal_person_name: string
     legal_person_id_number: string
@@ -132,8 +132,9 @@ export interface AdminOperatorApplicationItem {
 }
 
 export interface AdminOperatorApplicationDetail extends AdminOperatorApplicationItem {
-    id_card_front_url?: string
-    id_card_back_url?: string
+    business_license_asset_id?: number
+    id_card_front_asset_id?: number
+    id_card_back_asset_id?: number
     reject_reason?: string
     updated_at?: string
     reviewed_at?: string
@@ -164,7 +165,7 @@ export interface AdminGroupApplicationItem {
     group_name: string
     contact_phone: string
     license_number?: string
-    license_image_url?: string
+    license_image_asset_id?: number
     address?: string
     region_id?: number
     status: string

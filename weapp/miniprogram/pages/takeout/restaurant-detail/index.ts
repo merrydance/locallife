@@ -8,7 +8,6 @@ import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
 import { getUserCarts } from '../../../api/cart'
 import CartService from '../../../services/cart'
 import { getPublicImageUrl } from '../../../utils/image'
-import { resolveImageURL } from '../../../utils/image-security'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 
@@ -204,13 +203,6 @@ Page({
       const merchant: PublicMerchantDetail = await getPublicMerchantDetail(merchantId)
 
       if (merchant) {
-        // 私有图片需要签名（营业执照、食品许可证）
-        const [coverImage, businessLicense, foodPermit] = await Promise.all([
-          resolveImageURL(merchant.cover_image || merchant.logo_url || ''),
-          resolveImageURL(merchant.business_license_image_url || ''),
-          resolveImageURL(merchant.food_permit_url || '')
-        ])
-
         // 格式化营业时间
         let businessHoursDisplay = ''
         if (merchant.business_hours && merchant.business_hours.length > 0) {
@@ -234,7 +226,7 @@ Page({
         return {
           id: merchant.id,
           name: merchant.name,
-          cover_image: coverImage,
+          cover_image: merchant.cover_image || merchant.logo_url || '',
           logo_url: getPublicImageUrl(merchant.logo_url || ''),
           address: merchant.address,
           phone: merchant.phone,
@@ -245,8 +237,8 @@ Page({
           avg_prep_minutes: merchant.avg_prep_minutes || 15,
           biz_status: merchant.is_open ? 'OPEN' : 'CLOSED',
           description: merchant.description || '',
-          business_license_image_url: businessLicense,
-          food_permit_url: foodPermit,
+          business_license_image_url: merchant.business_license_image_url,
+          food_permit_url: merchant.food_permit_url,
           business_hours: formattedHours,
           business_hours_display: businessHoursDisplay,
           discount_rules: merchant.discount_rules || [],

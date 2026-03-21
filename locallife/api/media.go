@@ -206,8 +206,12 @@ func (server *Server) getMediaPrivateAccess(ctx *gin.Context) {
 	}
 
 	if asset.UploadedBy != authPayload.UserID {
-		ctx.JSON(http.StatusForbidden, errorResponse(media.ErrUnauthorized))
-		return
+		// 平台管理员可以访问任意私有资产（用于审核场景）
+		isAdmin, err := server.hasActiveRole(ctx, authPayload.UserID, RoleAdmin)
+		if err != nil || !isAdmin {
+			ctx.JSON(http.StatusForbidden, errorResponse(media.ErrUnauthorized))
+			return
+		}
 	}
 
 	ttl := server.config.PrivateDownloadURLTTL

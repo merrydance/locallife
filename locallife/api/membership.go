@@ -1056,8 +1056,6 @@ func (server *Server) listMerchantMembers(ctx *gin.Context) {
 		avatarURL := ""
 		if m.AvatarMediaAssetID.Valid {
 			avatarURL = server.publicImageURL(ctx, &m.AvatarMediaAssetID.Int64, media.VariantOriginal)
-		} else if m.AvatarUrl.Valid {
-			avatarURL = normalizeUploadURLForClient(m.AvatarUrl.String)
 		}
 		rsp[i] = merchantMemberResponse{
 			UserID:         m.UserID,
@@ -1158,8 +1156,6 @@ func (server *Server) getMerchantMemberDetail(ctx *gin.Context) {
 	avatarURL := ""
 	if user.AvatarMediaAssetID.Valid {
 		avatarURL = server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
-	} else if user.AvatarUrl.Valid {
-		avatarURL = normalizeUploadURLForClient(user.AvatarUrl.String)
 	}
 
 	ctx.JSON(http.StatusOK, merchantMemberDetailResponse{
@@ -1247,8 +1243,6 @@ func (server *Server) adjustMemberBalance(ctx *gin.Context) {
 	avatarURL := ""
 	if user.AvatarMediaAssetID.Valid {
 		avatarURL = server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
-	} else if user.AvatarUrl.Valid {
-		avatarURL = normalizeUploadURLForClient(user.AvatarUrl.String)
 	}
 
 	ctx.JSON(http.StatusOK, merchantMemberResponse{

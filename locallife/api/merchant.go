@@ -1202,18 +1202,19 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.Longitude = lng
 	}
 
-	// 解析 application_data 获取证照信息（慢操作：presign+DB，lite 模式跳过）
+	// 解析 application_data 获取证照信息（lite 模式跳过）
 	if !liteMode && merchant.ApplicationData != nil {
 		var appData map[string]interface{}
 		if err := json.Unmarshal(merchant.ApplicationData, &appData); err == nil {
-			if licenseURL, ok := appData["business_license_image_url"].(string); ok && licenseURL != "" {
-				// 预签名：消费者没有凭证调用 /v1/uploads/sign，需在此处提前签发
-				signed := server.presignPublicUpload(ctx, licenseURL, merchant.OwnerUserID)
-				resp.BusinessLicenseImageURL = &signed
+			if v, ok := appData["business_license_media_asset_id"].(float64); ok && v > 0 {
+				id := int64(v)
+				url := server.publicImageURL(ctx, &id, media.VariantOriginal)
+				resp.BusinessLicenseImageURL = &url
 			}
-			if permitURL, ok := appData["food_permit_url"].(string); ok && permitURL != "" {
-				signed := server.presignPublicUpload(ctx, permitURL, merchant.OwnerUserID)
-				resp.FoodPermitURL = &signed
+			if v, ok := appData["food_permit_media_asset_id"].(float64); ok && v > 0 {
+				id := int64(v)
+				url := server.publicImageURL(ctx, &id, media.VariantOriginal)
+				resp.FoodPermitURL = &url
 			}
 		}
 	}
@@ -1224,9 +1225,9 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		if appErr == nil && len(application.StorefrontImages) > 0 {
 			var storefrontImages []string
 			if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil && len(storefrontImages) > 0 {
-				normalized := normalizeUploadURLForClient(storefrontImages[0])
-				if normalized != "" {
-					resp.CoverImage = &normalized
+				url := storefrontImages[0]
+				if url != "" {
+					resp.CoverImage = &url
 				}
 			}
 		}

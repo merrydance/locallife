@@ -387,7 +387,7 @@ func (server *Server) listMerchantCustomers(ctx *gin.Context) {
 			lastOrderAt = t.Format(time.RFC3339)
 		}
 
-		avatarURL := normalizeUploadURLForClient(customer.AvatarUrl.String)
+		avatarURL := ""
 		if customer.AvatarMediaAssetID.Valid {
 			avatarURL = server.publicImageURL(ctx, &customer.AvatarMediaAssetID.Int64, media.VariantOriginal)
 		}
@@ -519,7 +519,7 @@ func (server *Server) getCustomerDetail(ctx *gin.Context) {
 		lastOrderAt = t.Format(time.RFC3339)
 	}
 
-	avatarURL := normalizeUploadURLForClient(customer.AvatarUrl.String)
+	avatarURL := ""
 	if customer.AvatarMediaAssetID.Valid {
 		avatarURL = server.publicImageURL(ctx, &customer.AvatarMediaAssetID.Int64, media.VariantOriginal)
 	}

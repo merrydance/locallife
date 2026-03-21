@@ -55,14 +55,14 @@
             <text class="meta-label">注册地址</text>
             <text class="meta-value">{{application.address || '-'}}</text>
           </view>
-          <view wx:if="{{application.license_image_url}}" class="image-row">
+          <view wx:if="{{licenseImageUrl}}" class="image-row">
             <text class="meta-label">营业执照</text>
             <image
               class="cert-image"
-              src="{{application.license_image_url}}"
+              src="{{licenseImageUrl}}"
               mode="aspectFill"
               lazy-load
-              data-url="{{application.license_image_url}}"
+              data-url="{{licenseImageUrl}}"
               bind:tap="onPreviewImage"
             />
           </view>

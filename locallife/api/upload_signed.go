@@ -362,37 +362,6 @@ func (server *Server) canAccessOperatorUpload(ctx *gin.Context, uid, operatorID 
 	return operator.UserID == uid, nil
 }
 
-// presignPublicUpload returns a pre-signed access URL for a private upload file, signed
-// under the given ownerUserID (who owns the file directory). Used by public-facing API
-// handlers to vend time-limited access to otherwise-private files (e.g., merchant
-// business licences shown to consumers on the merchant detail page).
-// A 1-hour TTL is used since consumers do not have credentials to re-sign.
-func (server *Server) presignPublicUpload(ctx *gin.Context, rawPath string, ownerUserID int64) string {
-	if rawPath == "" {
-		return ""
-	}
-	normalized := normalizeStoredUploadPath(rawPath)
-	if normalized == "" {
-		return rawPath
-	}
-	if isPubliclyAccessibleUploadPath(normalized) {
-		publicPath := strings.TrimPrefix(normalized, "uploads/")
-		return fmt.Sprintf("%s/uploads/%s", server.externalBaseURL(ctx), strings.TrimPrefix(publicPath, "/"))
-	}
-	// Use a generous 1-hour TTL so consumers can view the image without re-signing.
-	ttl := time.Hour
-	expires := time.Now().Add(ttl).Unix()
-	sig := server.signUploadAccess(ownerUserID, expires, normalized)
-	publicPath := strings.TrimPrefix(normalized, "uploads/")
-	return fmt.Sprintf("%s/uploads/%s?expires=%d&uid=%d&sig=%s",
-		server.externalBaseURL(ctx),
-		strings.TrimPrefix(publicPath, "/"),
-		expires,
-		ownerUserID,
-		sig,
-	)
-}
-
 func isIDCardPath(normalized string) bool {
 	if normalized == "" {
 		return false

@@ -51,14 +51,14 @@
             <text class="meta-label">营业执照号</text>
             <text class="meta-value">{{application.business_license_number || '-'}}</text>
           </view>
-          <view wx:if="{{application.business_license_url}}" class="image-row">
+          <view wx:if="{{businessLicenseUrl}}" class="image-row">
             <text class="meta-label">营业执照</text>
             <image
               class="cert-image"
-              src="{{application.business_license_url}}"
+              src="{{businessLicenseUrl}}"
               mode="aspectFill"
               lazy-load
-              data-url="{{application.business_license_url}}"
+              data-url="{{businessLicenseUrl}}"
               bind:tap="onPreviewImage"
             />
           </view>
@@ -74,25 +74,25 @@
             <text class="meta-label">法人证件号</text>
             <text class="meta-value">{{application.legal_person_id_number || '-'}}</text>
           </view>
-          <view wx:if="{{application.id_card_front_url}}" class="image-row">
+          <view wx:if="{{idCardFrontUrl}}" class="image-row">
             <text class="meta-label">身份证人像面</text>
             <image
               class="cert-image"
-              src="{{application.id_card_front_url}}"
+              src="{{idCardFrontUrl}}"
               mode="aspectFill"
               lazy-load
-              data-url="{{application.id_card_front_url}}"
+              data-url="{{idCardFrontUrl}}"
               bind:tap="onPreviewImage"
             />
           </view>
-          <view wx:if="{{application.id_card_back_url}}" class="image-row">
+          <view wx:if="{{idCardBackUrl}}" class="image-row">
             <text class="meta-label">身份证国徽面</text>
             <image
               class="cert-image"
-              src="{{application.id_card_back_url}}"
+              src="{{idCardBackUrl}}"
               mode="aspectFill"
               lazy-load
-              data-url="{{application.id_card_back_url}}"
+              data-url="{{idCardBackUrl}}"
               bind:tap="onPreviewImage"
             />
           </view>

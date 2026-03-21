@@ -76,8 +76,6 @@ func (server *Server) listMerchantStaff(ctx *gin.Context) {
 		}
 		if s.AvatarMediaAssetID.Valid {
 			resp[i].AvatarURL = server.publicImageURL(ctx, &s.AvatarMediaAssetID.Int64, media.VariantOriginal)
-		} else if s.AvatarUrl.Valid {
-			resp[i].AvatarURL = normalizeUploadURLForClient(s.AvatarUrl.String)
 		}
 	}
 

@@ -3,7 +3,7 @@ import {
   platformManagementService,
   type AdminOperatorApplicationDetail
 } from '@/api/platform-management'
-import { resolveImageURL } from '@/utils/image-security'
+import { getPrivateMediaUrl } from '@/utils/image-security'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type ImageTapEvent = WechatMiniprogram.CustomEvent & {
@@ -51,6 +51,9 @@ Page({
     error: null as string | null,
     applicationID: 0,
     application: null as AdminOperatorApplicationDetail | null,
+    businessLicenseUrl: '',
+    idCardFrontUrl: '',
+    idCardBackUrl: '',
     statusLabel: '',
     statusTheme: 'primary' as StatusTheme,
     rejectReason: ''
@@ -79,22 +82,19 @@ Page({
     this.setData({ loading: true, requesting: true, error: null })
     try {
       const detail = await platformManagementService.getAdminOperatorApplicationDetail(this.data.applicationID)
-      const [businessLicenseURL, idCardFrontURL, idCardBackURL] = await Promise.all([
-        detail.business_license_url ? resolveImageURL(detail.business_license_url) : Promise.resolve(''),
-        detail.id_card_front_url ? resolveImageURL(detail.id_card_front_url) : Promise.resolve(''),
-        detail.id_card_back_url ? resolveImageURL(detail.id_card_back_url) : Promise.resolve('')
+      const [businessLicenseUrl, idCardFrontUrl, idCardBackUrl] = await Promise.all([
+        detail.business_license_asset_id ? getPrivateMediaUrl(detail.business_license_asset_id) : Promise.resolve(''),
+        detail.id_card_front_asset_id ? getPrivateMediaUrl(detail.id_card_front_asset_id) : Promise.resolve(''),
+        detail.id_card_back_asset_id ? getPrivateMediaUrl(detail.id_card_back_asset_id) : Promise.resolve('')
       ])
 
-      const normalizedDetail: AdminOperatorApplicationDetail = {
-        ...detail,
-        business_license_url: businessLicenseURL || detail.business_license_url,
-        id_card_front_url: idCardFrontURL || detail.id_card_front_url,
-        id_card_back_url: idCardBackURL || detail.id_card_back_url
-      }
-      const status = getStatusDisplay(normalizedDetail.status)
+      const status = getStatusDisplay(detail.status)
 
       this.setData({
-        application: normalizedDetail,
+        application: detail,
+        businessLicenseUrl,
+        idCardFrontUrl,
+        idCardBackUrl,
         statusLabel: status.label,
         statusTheme: status.theme
       })

@@ -3,7 +3,7 @@ import {
   platformManagementService,
   type AdminGroupApplicationItem
 } from '@/api/platform-management'
-import { resolveImageURL } from '@/utils/image-security'
+import { getPrivateMediaUrl } from '@/utils/image-security'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type ImageTapEvent = WechatMiniprogram.CustomEvent & {
@@ -38,6 +38,7 @@ Page({
     error: null as string | null,
     applicationID: 0,
     application: null as AdminGroupApplicationItem | null,
+    licenseImageUrl: '',
     statusLabel: '',
     statusTheme: 'primary' as StatusTheme,
     showRejectDialog: false,
@@ -65,18 +66,14 @@ Page({
     this.setData({ loading: true, requesting: true, error: null })
     try {
       const detail = await platformManagementService.getAdminGroupApplicationDetail(this.data.applicationID)
-      let licenseURL = detail.license_image_url || ''
-      if (licenseURL) {
-        licenseURL = await resolveImageURL(licenseURL)
-      }
-      const normalizedDetail: AdminGroupApplicationItem = {
-        ...detail,
-        license_image_url: licenseURL || detail.license_image_url
-      }
+      const licenseImageUrl = detail.license_image_asset_id
+        ? await getPrivateMediaUrl(detail.license_image_asset_id)
+        : ''
 
-      const status = getStatusDisplay(normalizedDetail.status)
+      const status = getStatusDisplay(detail.status)
       this.setData({
-        application: normalizedDetail,
+        application: detail,
+        licenseImageUrl,
         statusLabel: status.label,
         statusTheme: status.theme
       })

@@ -47,13 +47,17 @@ function hexToBase64(hex: string): string {
   for (let i = 0; i < hex.length; i += 2) {
     bytes[i / 2] = parseInt(hex.substr(i, 2), 16)
   }
-  return wx.arrayBufferToBase64(bytes.buffer as ArrayBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.byteLength; i++) {
+    binary += String.fromCharCode(bytes[i])
+  }
+  return btoa(binary)
 }
 
 /** 获取临时文件的 SHA-256（base64）及文件大小 */
 function getFileSHA256AndSize(
   filePath: string
-): Promise<{ sha256Base64: string; size: number }> {
+): Promise<{ sha256Base64: string, size: number }> {
   return new Promise((resolve) => {
     let size = 0
     try {
@@ -63,7 +67,15 @@ function getFileSHA256AndSize(
       /* 尺寸未知时以 0 代替 */
     }
 
-    ;(wx as WechatMiniprogram.Wx & { getFileInfo: (opts: { filePath: string; digestAlgorithm: string; success: (res: { digest: string }) => void; fail: () => void }) => void }).getFileInfo({
+    type WxWithFileInfo = WechatMiniprogram.Wx & {
+      getFileInfo: (opts: {
+        filePath: string,
+        digestAlgorithm: string,
+        success: (res: { digest: string }) => void,
+        fail: () => void,
+      }) => void
+    }
+    (wx as WxWithFileInfo).getFileInfo({
       filePath,
       digestAlgorithm: 'sha256',
       success: (res) => resolve({ sha256Base64: hexToBase64(res.digest), size }),

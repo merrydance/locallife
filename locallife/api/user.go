@@ -1,9 +1,7 @@
 package api
 
 import (
-	"errors"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -12,8 +10,6 @@ import (
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 )
-
-var errInvalidExternalAvatarURL = errors.New("avatar_url must be a valid uploads URL")
 
 type userResponse struct {
 	ID           int64     `json:"id"`
@@ -36,11 +32,6 @@ func newUserResponse(user db.User, roles []string) userResponse {
 
 	if user.Phone.Valid {
 		resp.Phone = &user.Phone.String
-	}
-
-	if user.AvatarUrl.Valid {
-		avatar := normalizeUploadURLForClient(user.AvatarUrl.String)
-		resp.AvatarURL = &avatar
 	}
 
 	return resp
@@ -84,20 +75,15 @@ func (server *Server) getCurrentUser(ctx *gin.Context) {
 	}
 
 	resp := newUserResponse(user, roles)
-	server.enrichUserAvatarURL(ctx, &resp, user)
-	ctx.JSON(http.StatusOK, resp)
-}
-
-func (server *Server) enrichUserAvatarURL(ctx *gin.Context, resp *userResponse, user db.User) {
 	if user.AvatarMediaAssetID.Valid {
 		avatarURL := server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
 		resp.AvatarURL = &avatarURL
 	}
+	ctx.JSON(http.StatusOK, resp)
 }
 
 type updateUserRequest struct {
 	FullName           *string `json:"full_name" binding:"omitempty,min=1,max=50"`
-	AvatarURL          *string `json:"avatar_url" binding:"omitempty,min=1,max=2048"`
 	AvatarMediaAssetID *int64  `json:"avatar_media_asset_id" binding:"omitempty,min=1"`
 }
 
@@ -135,17 +121,6 @@ func (server *Server) updateCurrentUser(ctx *gin.Context) {
 		}
 	}
 
-	if req.AvatarURL != nil {
-		avatarURL := strings.TrimSpace(*req.AvatarURL)
-		if strings.HasPrefix(avatarURL, "http://") || strings.HasPrefix(avatarURL, "https://") {
-			if !strings.Contains(avatarURL, "/uploads/") {
-				ctx.JSON(http.StatusBadRequest, errorResponse(errInvalidExternalAvatarURL))
-				return
-			}
-		}
-		arg.AvatarUrl = pgtype.Text{String: normalizeImageURLForStorage(*req.AvatarURL), Valid: true}
-	}
-
 	if req.AvatarMediaAssetID != nil {
 		arg.AvatarMediaAssetID = pgtype.Int8{Int64: *req.AvatarMediaAssetID, Valid: true}
 	}
@@ -173,6 +148,9 @@ func (server *Server) updateCurrentUser(ctx *gin.Context) {
 	}
 
 	resp := newUserResponse(user, roles)
-	server.enrichUserAvatarURL(ctx, &resp, user)
+	if user.AvatarMediaAssetID.Valid {
+		avatarURL := server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
+		resp.AvatarURL = &avatarURL
+	}
 	ctx.JSON(http.StatusOK, resp)
 }
