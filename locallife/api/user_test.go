@@ -255,3 +255,103 @@ func requireBodyMatchUser(t *testing.T, body *bytes.Buffer, user db.User) {
 	require.Equal(t, user.ID, gotUser.ID)
 	require.Equal(t, user.WechatOpenid, gotUser.WechatOpenID)
 }
+
+// TestGetCurrentUserAPI_WithAvatarURL — Phase 5.5
+// 当用户 avatar_media_asset_id 有值时，GET /v1/users/me 应返回包含 CDN 地址的 avatar_url
+func TestGetCurrentUserAPI_WithAvatarURL(t *testing.T) {
+	user, _ := randomUser(t)
+	const avatarAssetID int64 = 55
+	user.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
+
+	avatarAsset := db.MediaAsset{
+		ID:         avatarAssetID,
+		ObjectKey:  "user/avatar/55/avatar.jpg",
+		Visibility: "public",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUser(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{}, nil)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
+		Times(1).
+		Return(avatarAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/users/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.AvatarURL)
+	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
+	require.Contains(t, *resp.AvatarURL, "user/avatar/55/avatar.jpg")
+}
+
+// TestUpdateCurrentUserAPI_WithAvatarAssetID — Phase 5.5
+// PATCH /v1/users/me 提交 avatar_media_asset_id 后，响应中 avatar_url 应指向 CDN 地址
+func TestUpdateCurrentUserAPI_WithAvatarAssetID(t *testing.T) {
+	user, _ := randomUser(t)
+	const avatarAssetID int64 = 88
+
+	updatedUser := user
+	updatedUser.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
+
+	avatarAsset := db.MediaAsset{
+		ID:         avatarAssetID,
+		ObjectKey:  "user/avatar/88/profile.jpg",
+		Visibility: "public",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		UpdateUser(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(updatedUser, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{}, nil)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
+		Times(1).
+		Return(avatarAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	body := map[string]interface{}{"avatar_media_asset_id": avatarAssetID}
+	data, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPatch, "/v1/users/me", bytes.NewReader(data))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.AvatarURL)
+	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
+	require.Contains(t, *resp.AvatarURL, "user/avatar/88/profile.jpg")
+}

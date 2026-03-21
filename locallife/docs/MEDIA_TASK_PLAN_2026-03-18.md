@@ -149,7 +149,7 @@
   - `CreatePrivateDownloadURL`：生成 presigned GET URL
   - `DeleteObject`：调用 OSS DeleteObject
 - [x] 单元测试 `media/storage_local_test.go`
-- [ ] 单元测试 `media/storage_oss_test.go`（mock OSS SDK 或用 test bucket）
+- [x] 单元测试 `media/storage_oss_test.go`（mock OSS SDK 或用 test bucket）
 
 ### 4.2 MediaPolicy
 
@@ -168,7 +168,7 @@
   - `GetMediaAsset`：按 `media_asset_id` 查询
   - `SoftDeleteMediaAsset`：标记 deleted，异步投递删除任务
   - `BindResource`：建立 `media_asset_id` 与业务资源的关联
-- [ ] 单元测试 `media/registry_test.go`（使用 testcontainers 或 mock DB）  ← 需要 mock DB，暂缓
+- [x] 单元测试 `media/registry_test.go`（使用 mock DB；18 cases：CreateUploadSession ×4、CompleteUpload ×7、GetAsset ×3、SoftDelete ×2、CreatePrivateAccessURL ×2）
 
 ### 4.4 MediaURLResolver
 
@@ -225,45 +225,45 @@
 - [x] `api/` 桌台相关接口：添加图片改为提交 `media_asset_id`（`addTableImageRequest.MediaAssetID int64 binding:"required,min=1"` 写入 `table_images.media_asset_id`）
 - [x] 桌台图列表响应通过 `MediaURLResolver` 返回规格图 URL（`roomDetailResponse.ImageURLs []string` + `PrimaryImageURL` + `roomListItemResponse.ImageURL`）
 - [x] 主图逻辑 `is_primary` 在新模型下仍正确
-- [ ] 回归测试：桌台图片增删改查
+- [x] 回归测试：桌台图片增删改查
 
 ### 5.3 评价（reviews）
 
 - [x] `api/` 评价接口：提交评价接受 `media_asset_ids []int64`
 - [x] 写入 `review_images` 关联表（不再写 `reviews.images` 数组）
 - [x] 评价详情和列表响应通过 `MediaURLResolver` 返回规格图（`enrichSingleReviewImages` / `enrichReviewListImages`）
-- [ ] 回归测试：评价上传 + 展示
+- [x] 回归测试：评价上传 + 展示
 
 ### 5.4 商户设置与品牌
 
 - [x] 商户 logo 上传接口改为接受 `logo_media_asset_id`（`updateMerchantRequest.LogoAssetID *int64 json:"logo_asset_id"` 映射到 `arg.LogoMediaAssetID`）
 - [x] 商户详情/列表响应保留兼容字段 `logo_url`（由 `MediaURLResolver` 生成，已覆盖 merchant.go / favorite.go / membership.go / operator_merchant_rider.go / group.go merchantResponse）
 - [x] 品牌/集团 logo 同步改造（`brandResponse.LogoURL` + `groupMerchantResponse.LogoURL` 已注入）
-- [ ] 回归测试：商户设置 logo + 列表展示
+- [x] 回归测试：商户设置 logo + 列表展示
 
 ### 5.5 用户头像
 
 - [x] `api/user.go` + `db/query/user.sql`：头像改为同时接受 `avatar_media_asset_id`（新字段）和兼容旧 `avatar_url`
 - [x] 用户信息响应：若 `avatar_media_asset_id` 有值则通过 `MediaURLResolver.VariantOriginal` 生成 `avatar_url`，否则回退旧逻辑
-- [ ] 回归测试：头像更新 + 展示
+- [x] 回归测试：头像更新 + 展示
 
 ### 5.6 商户入驻申请（merchant_applications）
 
 - [x] 接口改为接受 `business_license_media_asset_id`, `food_permit_media_asset_id`
 - [x] OCR 链路：改为从 `media_assets.object_key` 取图路径，调用 OCR 服务
-- [ ] 回归测试：申请提交 + OCR 识别
+- [x] 回归测试：申请提交 + OCR 识别
 
 ### 5.7 骑手入驻申请
 
 - [x] 接口改为接受 `idcard_front_media_asset_id`, `idcard_back_media_asset_id`, `health_cert_media_asset_id`
 - [x] OCR 链路适配
-- [ ] 回归测试：申请提交 + 材料展示
+- [x] 回归测试：申请提交 + 材料展示
 
 ### 5.8 运营商入驻申请
 
 - [x] 接口改为接受 `business_license_media_asset_id`, `id_card_front_media_asset_id`, `id_card_back_media_asset_id`（实际 DB 字段与原计划 `license_image/logo_media_asset_id` 有出入，以实际迁移为准）
 - [x] OCR 链路适配
-- [ ] 回归测试：申请提交 + 材料展示
+- [x] 回归测试：申请提交 + 材料展示
 
 ### 5.9 全局图片 URL 生成替换
 
@@ -461,8 +461,8 @@
 | Phase 1 基础设施 | ~15 | 0 |
 | Phase 2 数据库迁移 | 14 | 14 |
 | Phase 3 后端配置 | 3 | 3 |
-| Phase 4 媒体中心模块 | 14 | 13 |
-| Phase 5 业务接口改造 | ~25 | ~22 |
+| Phase 4 媒体中心模块 | 14 | 14 |
+| Phase 5 业务接口改造 | ~25 | 25 |
 | Phase 6 Web 端 | ~15 | ~12 |
 | Phase 7 小程序端 | ~15 | ~14 |
 | Phase 8 旧链路下线 | 8 | 8 |

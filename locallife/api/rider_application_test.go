@@ -546,3 +546,41 @@ func TestResetRiderApplication(t *testing.T) {
 		})
 	}
 }
+
+// TestCreateOrGetRiderApplicationDraft_WithMediaAssetIDs — Phase 5.7
+// 当骑手申请草稿中已绑定证照媒体资产 ID 时，GET /v1/rider/application
+// 响应中应包含 id_card_front_asset_id、id_card_back_asset_id、health_cert_asset_id
+func TestCreateOrGetRiderApplicationDraft_WithMediaAssetIDs(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomRiderApplicationWithData(user.ID)
+	// randomRiderApplicationWithData 已设置:
+	//   IDCardFrontMediaAssetID = 1, IDCardBackMediaAssetID = 2, HealthCertMediaAssetID = 3
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetRiderApplicationByUserID(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/rider/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp riderApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.IDCardFrontAssetID)
+	require.Equal(t, int64(1), *resp.IDCardFrontAssetID)
+	require.NotNil(t, resp.IDCardBackAssetID)
+	require.Equal(t, int64(2), *resp.IDCardBackAssetID)
+	require.NotNil(t, resp.HealthCertAssetID)
+	require.Equal(t, int64(3), *resp.HealthCertAssetID)
+}

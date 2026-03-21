@@ -741,3 +741,44 @@ func TestIsAddressMatch(t *testing.T) {
 		})
 	}
 }
+
+// TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs — Phase 5.6
+// 当草稿中已绑定证照媒体资产 ID 时，GET /v1/merchant/application 响应中应包含
+// business_license_media_asset_id 和 food_permit_media_asset_id 字段
+func TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraftWithData(user.ID)
+	// randomMerchantAppDraftWithData 已设置:
+	//   BusinessLicenseMediaAssetID = 2, FoodPermitMediaAssetID = 1
+	//   IDCardFrontMediaAssetID = 3, IDCardBackMediaAssetID = 4
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.BusinessLicenseMediaAssetID)
+	require.Equal(t, int64(2), *resp.BusinessLicenseMediaAssetID)
+	require.NotNil(t, resp.FoodPermitMediaAssetID)
+	require.Equal(t, int64(1), *resp.FoodPermitMediaAssetID)
+	require.NotNil(t, resp.IDCardFrontMediaAssetID)
+	require.Equal(t, int64(3), *resp.IDCardFrontMediaAssetID)
+	require.NotNil(t, resp.IDCardBackMediaAssetID)
+	require.Equal(t, int64(4), *resp.IDCardBackMediaAssetID)
+}

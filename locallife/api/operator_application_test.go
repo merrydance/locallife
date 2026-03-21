@@ -920,3 +920,49 @@ func TestListAvailableRegionsForOperatorAPI(t *testing.T) {
 		})
 	}
 }
+
+// TestGetOperatorApplicationAPI_WithMediaAssetIDs — Phase 5.8
+// 当运营商申请草稿中已绑定证照媒体资产 ID 时，GET /v1/operator/application
+// 响应中应包含 business_license_asset_id 和 id_card_front_asset_id
+func TestGetOperatorApplicationAPI_WithMediaAssetIDs(t *testing.T) {
+	user, _ := randomUser(t)
+
+	app := randomOperatorApplicationDraft(user.ID, 1)
+	app.Status = "draft"
+	app.BusinessLicenseMediaAssetID = pgtype.Int8{Int64: 10, Valid: true}
+	app.IDCardFrontMediaAssetID = pgtype.Int8{Int64: 11, Valid: true}
+	app.IDCardBackMediaAssetID = pgtype.Int8{Int64: 12, Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetOperatorApplicationByUserID(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+	// getRegionName 内部调用 GetRegion：返回错误使其回退为空字符串
+	store.EXPECT().
+		GetRegion(gomock.Any(), gomock.Eq(int64(1))).
+		Times(1).
+		Return(db.Region{}, db.ErrRecordNotFound)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp operatorApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.BusinessLicenseAssetID)
+	require.Equal(t, int64(10), *resp.BusinessLicenseAssetID)
+	require.NotNil(t, resp.IDCardFrontAssetID)
+	require.Equal(t, int64(11), *resp.IDCardFrontAssetID)
+	require.NotNil(t, resp.IDCardBackAssetID)
+	require.Equal(t, int64(12), *resp.IDCardBackAssetID)
+}
