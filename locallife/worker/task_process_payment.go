@@ -459,6 +459,12 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 	if paymentOrder.BusinessType == "order" && result.OrderResult != nil {
 		processor.sendOrderPaidNotifications(ctx, *result.OrderResult)
 		if paymentOrder.PaymentType == "profit_sharing" && paymentOrder.OrderID.Valid {
+			// 外卖订单：发货信息上报后微信会冻结资金48小时，由微信结算事件
+			// (trade_manage_order_settlement) 在用户确认收货或 T+2 自动确认后回调触发分账。
+			// 堂食/打包订单：无配送环节，微信不会推送结算事件，需立即触发分账。
+			if result.OrderResult.Order.OrderType == "takeout" {
+				return nil
+			}
 			return processor.distributor.DistributeTaskProcessProfitSharing(ctx, &ProfitSharingPayload{
 				PaymentOrderID: paymentOrder.ID,
 				OrderID:        paymentOrder.OrderID.Int64,
