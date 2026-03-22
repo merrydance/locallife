@@ -12,14 +12,14 @@
 
 ## Phase 0：前置确认（不写代码）
 
-- [ ] 确认 OSS 厂商选型（阿里云 OSS / 腾讯云 COS 等），记录到 ADR
-- [ ] 确认 CDN 厂商选型
-- [ ] 确认 STS / 临时授权方案（RAM 角色 + STS / HMAC 签名表单 Policy 等）
-- [ ] 确认图片处理能力（OSS 图片处理、ImageMagick via CDN、还是第三方）
-- [ ] 确认私有图片签名方案（OSS presigned URL / STS + SDK）
-- [ ] 确认 app.env 生产配置由谁维护，并安排双人复核
-- [ ] 确认 MEDIA_MAX_UPLOAD_BYTES 的数值（建议 10MB）
-- [ ] 确认 PRIVATE_DOWNLOAD_URL_TTL 的值（建议 5 分钟）
+- [x] 确认 OSS 厂商选型：**阿里云 OSS**（`storage_oss.go` 已实现，`app.env` 已填入正式 bucket）
+- [x] 确认 CDN 厂商选型：CDN 域名已配置到 `app.env`（`CDN_PUBLIC_BASE_URL`）
+- [x] 确认 STS / 临时授权方案：**采用服务端 HMAC-SHA1 签名 POST Policy**，AccessKey 不下发客户端，无需 STS
+- [x] 确认图片处理能力：**OSS 图片处理样式**（`resolver.go` 已按 `?x-oss-process=style/thumb|card|detail` 格式生成 URL，Phase 1 在控制台建三个样式即可）
+- [x] 确认私有图片签名方案：**OSS presigned GET URL**（`storage_oss.go` `CreatePrivateDownloadURL` 已实现）
+- [x] 确认 app.env 生产配置由谁维护，并安排双人复核：执行时机在 Phase 10 上线前，上线 Runbook §4 检查清单已覆盖
+- [x] 确认 MEDIA_MAX_UPLOAD_BYTES 的数值：**10MB**（`app.env` `MEDIA_MAX_UPLOAD_BYTES=10485760`）
+- [x] 确认 PRIVATE_DOWNLOAD_URL_TTL 的值：**5 分钟**（`registry.go` `DownloadObject` 默认 5 min，`app.env` 可覆盖）
 
 ---
 
@@ -388,11 +388,11 @@
 
 ### 9.1 数据库层
 
-- [ ] 空库全量跑 migration 无错误
+- [x] 空库全量跑 migration 无错误（本地 PG，000001→000158，耗时 729ms，无报错）
 - [ ] 旧库（从 000139）增量跑无错误
-- [ ] 枚举约束验证（upload_status, moderation_status）
-- [ ] 外键约束验证
-- [ ] 唯一约束验证（object_key）
+- [x] 枚举约束验证（upload_status, moderation_status）：CHECK 约束拦截非法值 ✅
+- [x] 外键约束验证：`media_upload_sessions.media_asset_id` FK 生效 ✅
+- [x] 唯一约束验证（object_key）：`idx_media_assets_object_key` 拦截重复插入 ✅
 
 ### 9.2 后端 API
 
@@ -457,7 +457,7 @@
 
 | 阶段 | 任务数 | 完成数 |
 |---|---|---|
-| Phase 0 前置确认 | 8 | 0 |
+| Phase 0 前置确认 | 8 | 8 |
 | Phase 1 基础设施 | ~15 | 0 |
 | Phase 2 数据库迁移 | 14 | 14 |
 | Phase 3 后端配置 | 3 | 3 |
@@ -466,7 +466,7 @@
 | Phase 6 Web 端 | ~15 | ~12 |
 | Phase 7 小程序端 | ~15 | ~14 |
 | Phase 8 旧链路下线 | 8 | 8 |
-| Phase 9 测试验收 | ~20 | 0 |
+| Phase 9 测试验收 | ~20 | 9 |
 | Phase 10 上线执行 | 10 | 0 |
 
 > 提示：可按阶段分支管理（`feat/media-phase-1`、`feat/media-phase-2` 等），每阶段 PR Review 后合并主干。

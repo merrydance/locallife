@@ -1005,6 +1005,7 @@ func (server *Server) listGroupBrands(ctx *gin.Context) {
 type createGroupBrandRequest struct {
 	Name        string  `json:"name" binding:"required"`
 	Description *string `json:"description,omitempty"`
+	LogoAssetID *int64  `json:"logo_asset_id,omitempty"`
 }
 
 // createGroupBrand godoc
@@ -1042,7 +1043,7 @@ func (server *Server) createGroupBrand(ctx *gin.Context) {
 	brand, err := server.store.CreateMerchantBrand(ctx, db.CreateMerchantBrandParams{
 		GroupID:          groupID,
 		Name:             req.Name,
-		LogoMediaAssetID: pgtype.Int8{}, // TODO(media-service): accept logo_asset_id in request
+		LogoMediaAssetID: toPgInt8(req.LogoAssetID),
 		Description:      toPgText(req.Description),
 	})
 	if err != nil {

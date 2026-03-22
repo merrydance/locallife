@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
@@ -151,6 +152,11 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
+	// 解析媒体资产 URL 用于存档
+	bizLicenseURL := server.publicImageURL(ctx, pgInt8ToPtr(application.BusinessLicenseMediaAssetID), media.VariantOriginal)
+	idCardFrontURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardFrontMediaAssetID), media.VariantOriginal)
+	idCardBackURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardBackMediaAssetID), media.VariantOriginal)
+
 	// 创建进件记录
 	applyment, err := server.store.CreateEcommerceApplyment(ctx, db.CreateEcommerceApplymentParams{
 		SubjectType:           "merchant",
@@ -158,14 +164,14 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		OutRequestNo:          outRequestNo,
 		OrganizationType:      organizationType,
 		BusinessLicenseNumber: pgtype.Text{String: application.BusinessLicenseNumber, Valid: application.BusinessLicenseNumber != ""},
-		BusinessLicenseCopy:   pgtype.Text{}, // TODO(media-service): resolve URL from BusinessLicenseMediaAssetID
+		BusinessLicenseCopy:   pgtype.Text{String: bizLicenseURL, Valid: bizLicenseURL != ""},
 		MerchantName:          application.MerchantName,
 		LegalPerson:           application.LegalPersonName,
 		IDCardNumber:          encryptedIDCardNumber, // AES 加密存储
 		IDCardName:            application.LegalPersonName,
 		IDCardValidTime:       idCardValidTime,
-		IDCardFrontCopy:       "", // TODO(media-service): resolve URL from IDCardFrontMediaAssetID
-		IDCardBackCopy:        "", // TODO(media-service): resolve URL from IDCardBackMediaAssetID
+		IDCardFrontCopy:       idCardFrontURL,
+		IDCardBackCopy:        idCardBackURL,
 		AccountType:           req.AccountType,
 		AccountBank:           req.AccountBank,
 		BankAddressCode:       req.BankAddressCode,
@@ -208,12 +214,57 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
-	// ==================== 上传图片到微信获取 MediaID ====================
-	// TODO(media-service): 上传图片需从媒体资产ID解析URL，待媒体服务接入后实现。
-	// 当前省略微信进件图片上传，使用空字符串占位。
+	// ==================== 下载证件图片并上传到微信获取 MediaID ====================
 	idCardFrontMediaID := ""
+	if application.IDCardFrontMediaAssetID.Valid {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardFrontMediaAssetID.Int64)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Msg("下载商户身份证正面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Msg("上传商户身份证正面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
+			return
+		}
+		idCardFrontMediaID = upResp.MediaID
+	}
+
 	idCardBackMediaID := ""
+	if application.IDCardBackMediaAssetID.Valid {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardBackMediaAssetID.Int64)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Msg("下载商户身份证背面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Msg("上传商户身份证背面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
+			return
+		}
+		idCardBackMediaID = upResp.MediaID
+	}
+
 	var businessLicenseMediaID string
+	if application.BusinessLicenseMediaAssetID.Valid {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.BusinessLicenseMediaAssetID.Int64)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Msg("下载商户营业执照失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取营业执照图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Msg("上传商户营业执照到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
+			return
+		}
+		businessLicenseMediaID = upResp.MediaID
+	}
 
 	// ==================== 加密敏感信息（用于发送给微信） ====================
 	// 加密身份证姓名
@@ -696,12 +747,9 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	if application.LegalPersonIDNumber.Valid {
 		legalPersonIDNumber = application.LegalPersonIDNumber.String
 	}
-	idCardFrontURL := "" // TODO(media-service): resolve from IDCardFrontMediaAssetID
-	_ = application.IDCardFrontMediaAssetID
-	idCardBackURL := "" // TODO(media-service): resolve from IDCardBackMediaAssetID
-	_ = application.IDCardBackMediaAssetID
-	businessLicenseURL := "" // TODO(media-service): resolve from BusinessLicenseMediaAssetID
-	_ = application.BusinessLicenseMediaAssetID
+	idCardFrontURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardFrontMediaAssetID), media.VariantOriginal)
+	idCardBackURL := server.publicImageURL(ctx, pgInt8ToPtr(application.IDCardBackMediaAssetID), media.VariantOriginal)
+	businessLicenseURL := server.publicImageURL(ctx, pgInt8ToPtr(application.BusinessLicenseMediaAssetID), media.VariantOriginal)
 	businessLicenseNumber := ""
 	if application.BusinessLicenseNumber.Valid {
 		businessLicenseNumber = application.BusinessLicenseNumber.String
@@ -805,12 +853,57 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
-	// ==================== 上传图片到微信获取 MediaID ====================
-	// TODO(media-service): 上传图片需从媒体资产ID解析URL，待媒体服务接入后实现。
-	// 当前省略微信进件图片上传，使用空字符串占位。
+	// ==================== 下载证件图片并上传到微信获取 MediaID ====================
 	idCardFrontMediaID := ""
+	if application.IDCardFrontMediaAssetID.Valid {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardFrontMediaAssetID.Int64)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Msg("下载运营商身份证正面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Msg("上传运营商身份证正面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
+			return
+		}
+		idCardFrontMediaID = upResp.MediaID
+	}
+
 	idCardBackMediaID := ""
+	if application.IDCardBackMediaAssetID.Valid {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.IDCardBackMediaAssetID.Int64)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Msg("下载运营商身份证背面失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取身份证图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Msg("上传运营商身份证背面到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
+			return
+		}
+		idCardBackMediaID = upResp.MediaID
+	}
+
 	var businessLicenseMediaID string
+	if application.BusinessLicenseMediaAssetID.Valid {
+		fname, fdata, dlErr := server.mediaRegistry.DownloadObject(ctx, application.BusinessLicenseMediaAssetID.Int64)
+		if dlErr != nil {
+			log.Error().Err(dlErr).Msg("下载运营商营业执照失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("获取营业执照图片失败")))
+			return
+		}
+		upResp, upErr := server.ecommerceClient.UploadImage(ctx, fname, fdata)
+		if upErr != nil {
+			log.Error().Err(upErr).Msg("上传运营商营业执照到微信失败")
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("上传证件图片失败")))
+			return
+		}
+		businessLicenseMediaID = upResp.MediaID
+	}
 
 	// ==================== 加密敏感信息（用于发送给微信） ====================
 	// 加密身份证姓名
