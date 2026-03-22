@@ -188,6 +188,57 @@ func (q *Queries) GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrd
 	return total_refunded, err
 }
 
+const listEcommerceRefundOrdersForReconciliation = `-- name: ListEcommerceRefundOrdersForReconciliation :many
+SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
+FROM refund_orders r
+JOIN payment_orders p ON p.id = r.payment_order_id
+WHERE r.status = 'success'
+  AND r.refunded_at >= $1
+  AND r.refunded_at < $2
+  AND p.payment_type = 'profit_sharing'
+`
+
+type ListEcommerceRefundOrdersForReconciliationParams struct {
+	RefundedAt   pgtype.Timestamptz `json:"refunded_at"`
+	RefundedAt_2 pgtype.Timestamptz `json:"refunded_at_2"`
+}
+
+type ListEcommerceRefundOrdersForReconciliationRow struct {
+	ID           int64       `json:"id"`
+	OutRefundNo  string      `json:"out_refund_no"`
+	RefundID     pgtype.Text `json:"refund_id"`
+	RefundAmount int64       `json:"refund_amount"`
+	Status       string      `json:"status"`
+}
+
+// 获取指定日期范围内收付通退款成功记录（payment_type='profit_sharing'）
+// 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
+func (q *Queries) ListEcommerceRefundOrdersForReconciliation(ctx context.Context, arg ListEcommerceRefundOrdersForReconciliationParams) ([]ListEcommerceRefundOrdersForReconciliationRow, error) {
+	rows, err := q.db.Query(ctx, listEcommerceRefundOrdersForReconciliation, arg.RefundedAt, arg.RefundedAt_2)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListEcommerceRefundOrdersForReconciliationRow{}
+	for rows.Next() {
+		var i ListEcommerceRefundOrdersForReconciliationRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutRefundNo,
+			&i.RefundID,
+			&i.RefundAmount,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRefundOrdersByPaymentOrder = `-- name: ListRefundOrdersByPaymentOrder :many
 SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE payment_order_id = $1
@@ -278,9 +329,11 @@ func (q *Queries) ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOr
 const listRefundOrdersForReconciliation = `-- name: ListRefundOrdersForReconciliation :many
 SELECT r.id, r.out_refund_no, r.refund_id, r.refund_amount, r.status
 FROM refund_orders r
+JOIN payment_orders p ON p.id = r.payment_order_id
 WHERE r.status = 'success'
   AND r.refunded_at >= $1
   AND r.refunded_at < $2
+  AND p.payment_type != 'profit_sharing'
 `
 
 type ListRefundOrdersForReconciliationParams struct {
@@ -296,7 +349,8 @@ type ListRefundOrdersForReconciliationRow struct {
 	Status       string      `json:"status"`
 }
 
-// 获取指定日期范围内所有成功退款订单（用于每日对账）
+// 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
+// 通过 JOIN payment_orders 过滤 payment_type，排除收付通退款（已单独对账）
 func (q *Queries) ListRefundOrdersForReconciliation(ctx context.Context, arg ListRefundOrdersForReconciliationParams) ([]ListRefundOrdersForReconciliationRow, error) {
 	rows, err := q.db.Query(ctx, listRefundOrdersForReconciliation, arg.RefundedAt, arg.RefundedAt_2)
 	if err != nil {

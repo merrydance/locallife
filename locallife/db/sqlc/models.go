@@ -1815,6 +1815,28 @@ type Session struct {
 	CreatedAt             time.Time `json:"created_at"`
 }
 
+// 平台收付通补差订单；平台出资补贴给二级商户，对应微信支付 /v3/ecommerce/subsidies/create
+type SubsidyOrder struct {
+	ID               int64              `json:"id"`
+	PaymentOrderID   int64              `json:"payment_order_id"`
+	SubMchID         string             `json:"sub_mch_id"`
+	TransactionID    pgtype.Text        `json:"transaction_id"`
+	OutSubsidyNo     string             `json:"out_subsidy_no"`
+	PayerAmount      int64              `json:"payer_amount"`
+	Amount           int64              `json:"amount"`
+	Description      string             `json:"description"`
+	Status           string             `json:"status"`
+	WxpaySubsidyID   pgtype.Text        `json:"wxpay_subsidy_id"`
+	FailReason       pgtype.Text        `json:"fail_reason"`
+	OutReturnNo      pgtype.Text        `json:"out_return_no"`
+	ReturnAmount     pgtype.Int8        `json:"return_amount"`
+	ReturnStatus     pgtype.Text        `json:"return_status"`
+	ReturnWxpayID    pgtype.Text        `json:"return_wxpay_id"`
+	ReturnFailReason pgtype.Text        `json:"return_fail_reason"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Table struct {
 	ID                   int64              `json:"id"`
 	MerchantID           int64              `json:"merchant_id"`
@@ -2133,6 +2155,30 @@ type WechatAccessToken struct {
 	AccessToken string    `json:"access_token"`
 	ExpiresAt   time.Time `json:"expires_at"`
 	CreatedAt   time.Time `json:"created_at"`
+}
+
+// 微信支付用户投诉记录；由每日同步任务从微信拉取，商户可通过平台回复并完结
+type WechatComplaint struct {
+	ID                     int64              `json:"id"`
+	ComplaintID            string             `json:"complaint_id"`
+	ComplaintTime          time.Time          `json:"complaint_time"`
+	PayerOpenid            pgtype.Text        `json:"payer_openid"`
+	ComplaintDetail        string             `json:"complaint_detail"`
+	ComplaintState         string             `json:"complaint_state"`
+	TransactionID          pgtype.Text        `json:"transaction_id"`
+	OutTradeNo             pgtype.Text        `json:"out_trade_no"`
+	SubMchID               pgtype.Text        `json:"sub_mch_id"`
+	MerchantID             pgtype.Int8        `json:"merchant_id"`
+	PayerComplaintFullInfo bool               `json:"payer_complaint_full_info"`
+	Amount                 int64              `json:"amount"`
+	ResponseContent        pgtype.Text        `json:"response_content"`
+	RespondedAt            pgtype.Timestamptz `json:"responded_at"`
+	MediaIds               []byte             `json:"media_ids"`
+	CompletedAt            pgtype.Timestamptz `json:"completed_at"`
+	LastSyncedAt           pgtype.Timestamptz `json:"last_synced_at"`
+	WxpayUpdateTime        pgtype.Timestamptz `json:"wxpay_update_time"`
+	CreatedAt              time.Time          `json:"created_at"`
+	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
 }
 
 // 微信支付回调通知记录表，用于防止重复处理（幂等性）

@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	tradeBillAPIPath          = "/v3/bill/tradebill"
-	refundBillAPIPath         = "/v3/bill/refundbill"
-	ecommerceTradeBillAPIPath = "/v3/ecommerce/bill/tradebill"
-	wxPayBillAPIBase          = "https://api.mch.weixin.qq.com"
+	tradeBillAPIPath              = "/v3/bill/tradebill"
+	refundBillAPIPath             = "/v3/bill/refundbill"
+	ecommerceTradeBillAPIPath     = "/v3/ecommerce/bill/tradebill"
+	ecommerceRefundBillAPIPath    = "/v3/ecommerce/bill/refundbill"
+	wxPayBillAPIBase              = "https://api.mch.weixin.qq.com"
 )
 
 // BillDownloadURLResponse 微信支付账单下载地址响应
@@ -47,6 +48,10 @@ type BillClientInterface interface {
 	// DownloadEcommerceTradeBill 下载电商收付通合单交易账单（对账用）
 	// 返回 map[合单商户单号]BillRecord
 	DownloadEcommerceTradeBill(ctx context.Context, billDate time.Time) (map[string]BillRecord, error)
+	// DownloadEcommerceRefundBill 下载电商收付通退款账单（对账用）
+	// 对应通过 /v3/ecommerce/refunds/apply 产生的退款，区别于直连退款账单
+	// 返回 map[out_refund_no]BillRecord
+	DownloadEcommerceRefundBill(ctx context.Context, billDate time.Time) (map[string]BillRecord, error)
 }
 
 // DownloadTradeBill 下载指定日期的小程序直连支付交易账单
@@ -72,6 +77,15 @@ func (c *EcommerceClient) DownloadEcommerceTradeBill(ctx context.Context, billDa
 	apiPath := fmt.Sprintf("%s?bill_date=%s&account_type=ALL&tar_type=GZIP",
 		ecommerceTradeBillAPIPath, billDate.Format("2006-01-02"))
 	return c.fetchAndParseBill(ctx, apiPath, "合单商户单号", "合单微信单号", "合单应结订单金额")
+}
+
+// DownloadEcommerceRefundBill 下载指定日期的电商收付通退款账单
+// 对应通过 /v3/ecommerce/refunds/apply 产生的退款记录（区别于直连退款账单）
+// 注：列名基于微信支付 v3 电商退款账单格式，如与实际不符请参照真实账单调整
+func (c *EcommerceClient) DownloadEcommerceRefundBill(ctx context.Context, billDate time.Time) (map[string]BillRecord, error) {
+	apiPath := fmt.Sprintf("%s?bill_date=%s&account_type=ALL&tar_type=GZIP",
+		ecommerceRefundBillAPIPath, billDate.Format("2006-01-02"))
+	return c.fetchAndParseBill(ctx, apiPath, "商户退款单号", "微信退款单号", "退款金额")
 }
 
 // fetchAndParseBill 通用账单获取与解析流程：

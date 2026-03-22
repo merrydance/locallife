@@ -168,8 +168,29 @@ type EcommerceClientInterface interface {
 	// DecryptSettlementNotification 解密结算事件通知（trade_manage_order_settlement）
 	DecryptSettlementNotification(notification *PaymentNotification) (*SettlementNotificationResource, error)
 
+	// DecryptComplaintNotification 解密用户投诉通知
+	DecryptComplaintNotification(notification *PaymentNotification) (*ComplaintNotification, error)
+
 	// VerifyNotificationSignature 验证微信支付回调签名
 	VerifyNotificationSignature(signature, timestamp, nonce, body string) error
+
+	// ==================== 用户投诉 ====================
+	// ListComplaints 查询投诉单列表（分页）
+	ListComplaints(ctx context.Context, req ListComplaintsRequest) (*ListComplaintsResponse, error)
+	// GetComplaintDetail 查询投诉单详情
+	GetComplaintDetail(ctx context.Context, complaintID string) (*ComplaintDetail, error)
+	// RespondComplaint 回复投诉
+	RespondComplaint(ctx context.Context, req ComplaintResponseRequest) error
+	// CompleteComplaint 完结投诉
+	CompleteComplaint(ctx context.Context, complaintID string) error
+
+	// ==================== 补差 ====================
+	// CreateSubsidy 向二级商户发起补差（平台出资营销）
+	CreateSubsidy(ctx context.Context, req SubsidyRequest) (*SubsidyResponse, error)
+	// ReturnSubsidy 退回补差（退款时回收平台补贴款）
+	ReturnSubsidy(ctx context.Context, req SubsidyReturnRequest) (*SubsidyReturnResponse, error)
+	// CancelSubsidy 取消补差（尚未分账前可取消）
+	CancelSubsidy(ctx context.Context, req SubsidyCancelRequest) error
 }
 
 // 确保 *Client 实现了 WechatClient 接口

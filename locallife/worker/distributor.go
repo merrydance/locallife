@@ -168,6 +168,13 @@ type TaskDistributor interface {
 		payload *UploadShippingInfoPayload,
 		opts ...asynq.Option,
 	) error
+
+	// DistributeTaskSyncComplaints 分发微信投诉单同步任务（按日期范围批量拉取并写入 DB）
+	DistributeTaskSyncComplaints(
+		ctx context.Context,
+		payload *SyncComplaintsPayload,
+		opts ...asynq.Option,
+	) error
 }
 
 type RedisTaskDistributor struct {

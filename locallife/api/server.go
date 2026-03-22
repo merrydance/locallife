@@ -473,6 +473,8 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ecommerce/refund-notify", server.handleEcommerceRefundNotify)
 		webhooksGroup.POST("/wechat-ecommerce/applyment-notify", server.handleApplymentStateNotify)
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
+		// 微信用户投诉通知（合规要求，状态变更实时推送）
+		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
 		// 小程序「发货信息管理」结算事件（trade_manage_order_settlement）
 		webhooksGroup.POST("/wechat-miniprogram/settlement-notify", server.handleOrderSettlementNotify)
 	}
@@ -632,6 +634,16 @@ func (server *Server) setupRouter() {
 	{
 		merchantApplymentGroup.POST("/bindbank", server.merchantBindBank)        // 绑定银行卡开户
 		merchantApplymentGroup.GET("/status", server.getMerchantApplymentStatus) // 获取开户状态
+	}
+
+	// 商户端：用户投诉管理（合规要求，商户需在指定时效内回复）
+	merchantComplaintsGroup := authGroup.Group("/merchant/complaints")
+	merchantComplaintsGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
+	{
+		merchantComplaintsGroup.GET("", server.listMerchantComplaints)
+		merchantComplaintsGroup.GET("/:id", server.getMerchantComplaintDetail)
+		merchantComplaintsGroup.POST("/:id/response", server.respondToComplaint)
+		merchantComplaintsGroup.POST("/:id/complete", server.completeComplaint)
 	}
 
 	// M3.3: 员工绑定商户（任意登录用户）
@@ -1203,6 +1215,18 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/finance/withdrawals", server.listOperatorWithdrawals)
 		operatorsGroup.GET("/finance/withdrawals/:id", server.getOperatorWithdrawal)
 		operatorsGroup.GET("/profit-sharing/configs", server.listOperatorProfitSharingConfigs)
+
+		// 用户投诉管理（运营商视角：查看所有待处理投诉，可完结投诉）
+		operatorsGroup.GET("/complaints", server.listPendingComplaints)
+		operatorsGroup.POST("/complaints/:id/complete", server.completeComplaint)
+
+		// 补差管理（运营商发起/退回/取消平台补差）
+		operatorPaymentGroup := operatorsGroup.Group("/payment-orders/:id")
+		{
+			operatorPaymentGroup.POST("/subsidies", server.createSubsidy)
+			operatorPaymentGroup.POST("/subsidies/return", server.returnSubsidy)
+			operatorPaymentGroup.POST("/subsidies/cancel", server.cancelSubsidy)
+		}
 
 		operatorRulesProxyGroup := operatorsGroup.Group("/rules")
 		{

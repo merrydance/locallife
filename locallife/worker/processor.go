@@ -174,6 +174,9 @@ func (processor *RedisTaskProcessor) Start() error {
 	// 微信发货信息上报任务（合规）
 	mux.HandleFunc(TaskUploadShippingInfo, processor.ProcessTaskUploadShippingInfo)
 
+	// 微信投诉单同步任务
+	mux.HandleFunc(TaskSyncComplaints, processor.ProcessTaskSyncComplaints)
+
 	return processor.server.Start(mux)
 }
 

@@ -101,3 +101,7 @@ func (NoopTaskDistributor) DistributeTaskMerchantApplicationIDCardOCR(ctx contex
 func (NoopTaskDistributor) DistributeTaskUploadShippingInfo(ctx context.Context, payload *UploadShippingInfoPayload, opts ...asynq.Option) error {
 	return nil
 }
+
+func (NoopTaskDistributor) DistributeTaskSyncComplaints(ctx context.Context, payload *SyncComplaintsPayload, opts ...asynq.Option) error {
+	return nil
+}

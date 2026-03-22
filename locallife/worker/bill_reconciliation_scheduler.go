@@ -103,6 +103,7 @@ func (s *BillReconciliationScheduler) runAll() {
 	s.reconcileTrade(billDate)
 	s.reconcileEcommerceTrade(billDate)
 	s.reconcileRefund(billDate)
+	s.reconcileEcommerceRefund(billDate)
 
 	log.Info().Str("bill_date", billDate.Format("2006-01-02")).Msg("bill reconciliation finished")
 }
@@ -183,7 +184,7 @@ func (s *BillReconciliationScheduler) reconcileEcommerceTrade(billDate time.Time
 	s.saveReport(ctx, reportID, billDate, billType, len(wxRecords), len(localRows), missingLocal, missingWxpay, amountMismatch)
 }
 
-// reconcileRefund 对账退款账单（refund_orders WHERE status='success'）
+// reconcileRefund 对账小程序直连退款账单（refund_orders WHERE payment_type!='profit_sharing'）
 func (s *BillReconciliationScheduler) reconcileRefund(billDate time.Time) {
 	ctx, cancel := context.WithTimeout(context.Background(), reconciliationTimeout)
 	defer cancel()
@@ -206,6 +207,45 @@ func (s *BillReconciliationScheduler) reconcileRefund(billDate time.Time) {
 	end := pgtype.Timestamptz{Time: billDate.AddDate(0, 0, 1), Valid: true}
 	localRows, err := s.store.ListRefundOrdersForReconciliation(ctx,
 		db.ListRefundOrdersForReconciliationParams{RefundedAt: start, RefundedAt_2: end})
+	if err != nil {
+		s.failReport(ctx, reportID, "query local records: "+err.Error())
+		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: query local records failed")
+		return
+	}
+
+	localMap := make(map[string]int64, len(localRows))
+	for _, r := range localRows {
+		localMap[r.OutRefundNo] = r.RefundAmount
+	}
+
+	missingLocal, missingWxpay, amountMismatch := compareRecords(wxRecords, localMap)
+	s.saveReport(ctx, reportID, billDate, billType, len(wxRecords), len(localRows), missingLocal, missingWxpay, amountMismatch)
+}
+
+// reconcileEcommerceRefund 对账电商收付通退款账单（refund_orders WHERE payment_type='profit_sharing'）
+// 对应微信 /v3/ecommerce/bill/refundbill 账单
+func (s *BillReconciliationScheduler) reconcileEcommerceRefund(billDate time.Time) {
+	ctx, cancel := context.WithTimeout(context.Background(), reconciliationTimeout)
+	defer cancel()
+
+	const billType = "ecommerce_refund"
+	reportID, err := s.createReport(ctx, billDate, billType)
+	if err != nil {
+		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: create report failed")
+		return
+	}
+
+	wxRecords, err := s.billClient.DownloadEcommerceRefundBill(ctx, billDate)
+	if err != nil {
+		s.failReport(ctx, reportID, "download ecommerce refund bill: "+err.Error())
+		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: download bill failed")
+		return
+	}
+
+	start := pgtype.Timestamptz{Time: billDate, Valid: true}
+	end := pgtype.Timestamptz{Time: billDate.AddDate(0, 0, 1), Valid: true}
+	localRows, err := s.store.ListEcommerceRefundOrdersForReconciliation(ctx,
+		db.ListEcommerceRefundOrdersForReconciliationParams{RefundedAt: start, RefundedAt_2: end})
 	if err != nil {
 		s.failReport(ctx, reportID, "query local records: "+err.Error())
 		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: query local records failed")

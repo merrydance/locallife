@@ -238,6 +238,7 @@ type Querier interface {
 	// 统计用户近N天的外卖订单数（用于行为回溯）
 	CountUserRecentTakeoutOrders(ctx context.Context, arg CountUserRecentTakeoutOrdersParams) (int64, error)
 	CountUserVouchersByStatus(ctx context.Context, userID int64) (CountUserVouchersByStatusRow, error)
+	CountWechatComplaintsByMerchant(ctx context.Context, arg CountWechatComplaintsByMerchantParams) (int64, error)
 	CountWithdrawalRecords(ctx context.Context, userID int64) (int64, error)
 	// =====================================================================
 	// Appeal Queries - 申诉相关查询
@@ -417,6 +418,7 @@ type Querier interface {
 	CreateSafetyReport(ctx context.Context, arg CreateSafetyReportParams) (SafetyReport, error)
 	CreateSearchHistory(ctx context.Context, arg CreateSearchHistoryParams) (SearchHistory, error)
 	CreateSession(ctx context.Context, arg CreateSessionParams) (Session, error)
+	CreateSubsidyOrder(ctx context.Context, arg CreateSubsidyOrderParams) (SubsidyOrder, error)
 	CreateTable(ctx context.Context, arg CreateTableParams) (Table, error)
 	CreateTableReservation(ctx context.Context, arg CreateTableReservationParams) (TableReservation, error)
 	// 商户代客创建预订（无需支付，直接 confirmed 状态）
@@ -945,6 +947,11 @@ type Querier interface {
 	GetSessionByRefreshToken(ctx context.Context, arg GetSessionByRefreshTokenParams) (Session, error)
 	// P1-012 修复：加行锁防止并发刷新
 	GetSessionByRefreshTokenForUpdate(ctx context.Context, arg GetSessionByRefreshTokenForUpdateParams) (Session, error)
+	GetSubsidyOrder(ctx context.Context, id int64) (SubsidyOrder, error)
+	GetSubsidyOrderByOutSubsidyNo(ctx context.Context, outSubsidyNo string) (SubsidyOrder, error)
+	// 一个 payment_order 只应有一条补差
+	GetSubsidyOrderByPaymentOrderID(ctx context.Context, paymentOrderID int64) (SubsidyOrder, error)
+	GetSubsidyOrderForUpdate(ctx context.Context, id int64) (SubsidyOrder, error)
 	// 根据名称获取系统标签
 	GetSystemTagByName(ctx context.Context, name string) (Tag, error)
 	GetTable(ctx context.Context, id int64) (Table, error)
@@ -1022,6 +1029,9 @@ type Querier interface {
 	GetWebLoginSessionByCode(ctx context.Context, code string) (WebLoginSession, error)
 	GetWebLoginSessionByPollToken(ctx context.Context, pollToken pgtype.Text) (WebLoginSession, error)
 	GetWechatAccessToken(ctx context.Context, appType string) (WechatAccessToken, error)
+	GetWechatComplaint(ctx context.Context, id int64) (WechatComplaint, error)
+	GetWechatComplaintByComplaintID(ctx context.Context, complaintID string) (WechatComplaint, error)
+	GetWechatComplaintByComplaintIDForUpdate(ctx context.Context, complaintID string) (WechatComplaint, error)
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
 	GetWithdrawalRecord(ctx context.Context, id int64) (WithdrawalRecord, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
@@ -1037,6 +1047,8 @@ type Querier interface {
 	IncrementUserPlatformPayCount(ctx context.Context, arg IncrementUserPlatformPayCountParams) error
 	IncrementVoucherClaimedQuantity(ctx context.Context, id int64) (Voucher, error)
 	IncrementVoucherUsedQuantity(ctx context.Context, id int64) (Voucher, error)
+	// 发起补差退回，写入退回单号和金额
+	InitiateSubsidyReturn(ctx context.Context, arg InitiateSubsidyReturnParams) (SubsidyOrder, error)
 	IsDishFavorited(ctx context.Context, arg IsDishFavoritedParams) (bool, error)
 	IsMerchantFavorited(ctx context.Context, arg IsMerchantFavoritedParams) (bool, error)
 	LinkMerchantDishCategory(ctx context.Context, arg LinkMerchantDishCategoryParams) (MerchantDishCategory, error)
@@ -1125,6 +1137,9 @@ type Querier interface {
 	ListDueClaimRecoveries(ctx context.Context, arg ListDueClaimRecoveriesParams) ([]ClaimRecovery, error)
 	ListEcommerceApplymentsByStatus(ctx context.Context, arg ListEcommerceApplymentsByStatusParams) ([]EcommerceApplyment, error)
 	ListEcommerceApplymentsBySubject(ctx context.Context, arg ListEcommerceApplymentsBySubjectParams) ([]EcommerceApplyment, error)
+	// 获取指定日期范围内收付通退款成功记录（payment_type='profit_sharing'）
+	// 对应微信 /v3/ecommerce/refunds/apply 产生的退款账单
+	ListEcommerceRefundOrdersForReconciliation(ctx context.Context, arg ListEcommerceRefundOrdersForReconciliationParams) ([]ListEcommerceRefundOrdersForReconciliationRow, error)
 	// 列出已过期的运营商
 	ListExpiredOperators(ctx context.Context) ([]ListExpiredOperatorsRow, error)
 	ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
@@ -1257,6 +1272,8 @@ type Querier interface {
 	ListPendingRegionApplications(ctx context.Context, arg ListPendingRegionApplicationsParams) ([]ListPendingRegionApplicationsRow, error)
 	// Find pending reservations within N minutes of payment deadline (for reminder notifications)
 	ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]TableReservation, error)
+	// 运营商查看所有待处理投诉（按投诉时间倒序）
+	ListPendingWechatComplaints(ctx context.Context, arg ListPendingWechatComplaintsParams) ([]WechatComplaint, error)
 	ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error)
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
@@ -1274,7 +1291,8 @@ type Querier interface {
 	ListReconciliationReports(ctx context.Context, arg ListReconciliationReportsParams) ([]ReconciliationReport, error)
 	ListRefundOrdersByPaymentOrder(ctx context.Context, paymentOrderID int64) ([]RefundOrder, error)
 	ListRefundOrdersByStatus(ctx context.Context, arg ListRefundOrdersByStatusParams) ([]RefundOrder, error)
-	// 获取指定日期范围内所有成功退款订单（用于每日对账）
+	// 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
+	// 通过 JOIN payment_orders 过滤 payment_type，排除收付通退款（已单独对账）
 	ListRefundOrdersForReconciliation(ctx context.Context, arg ListRefundOrdersForReconciliationParams) ([]ListRefundOrdersForReconciliationRow, error)
 	ListRegionChildren(ctx context.Context, parentID pgtype.Int8) ([]Region, error)
 	// 列出管理某区域的所有运营商
@@ -1331,6 +1349,8 @@ type Querier interface {
 	ListSafetyReportsByRegionAndStatus(ctx context.Context, arg ListSafetyReportsByRegionAndStatusParams) ([]SafetyReport, error)
 	ListSearchHistory(ctx context.Context, arg ListSearchHistoryParams) ([]ListSearchHistoryRow, error)
 	ListStuckProcessingProfitSharingReturns(ctx context.Context, arg ListStuckProcessingProfitSharingReturnsParams) ([]ProfitSharingReturn, error)
+	// 批量查询（用于退款流程判断是否需要退回补差）
+	ListSubsidyOrdersByPaymentIDs(ctx context.Context, paymentOrderIds []int64) ([]SubsidyOrder, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
 	ListTableTags(ctx context.Context, tableID int64) ([]ListTableTagsRow, error)
@@ -1361,6 +1381,10 @@ type Querier interface {
 	ListUserVouchers(ctx context.Context, arg ListUserVouchersParams) ([]ListUserVouchersRow, error)
 	ListUsers(ctx context.Context, arg ListUsersParams) ([]User, error)
 	ListWeatherCoefficients(ctx context.Context, arg ListWeatherCoefficientsParams) ([]WeatherCoefficient, error)
+	// 商户侧查看自己收到的投诉（按投诉时间倒序）
+	ListWechatComplaintsByMerchant(ctx context.Context, arg ListWechatComplaintsByMerchantParams) ([]WechatComplaint, error)
+	// 通过 sub_mch_id 查询（运营商/平台使用）
+	ListWechatComplaintsBySubMchID(ctx context.Context, arg ListWechatComplaintsBySubMchIDParams) ([]WechatComplaint, error)
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
@@ -1676,6 +1700,11 @@ type Querier interface {
 	UpdateSafetyReportStatus(ctx context.Context, arg UpdateSafetyReportStatusParams) (SafetyReport, error)
 	UpdateSessionTokens(ctx context.Context, arg UpdateSessionTokensParams) (Session, error)
 	UpdateSubOrderProfitSharingStatus(ctx context.Context, arg UpdateSubOrderProfitSharingStatusParams) (CombinedPaymentSubOrder, error)
+	UpdateSubsidyOrderToCanceled(ctx context.Context, id int64) (SubsidyOrder, error)
+	UpdateSubsidyOrderToFailed(ctx context.Context, arg UpdateSubsidyOrderToFailedParams) (SubsidyOrder, error)
+	UpdateSubsidyOrderToSuccess(ctx context.Context, arg UpdateSubsidyOrderToSuccessParams) (SubsidyOrder, error)
+	UpdateSubsidyReturnToFailed(ctx context.Context, arg UpdateSubsidyReturnToFailedParams) (SubsidyOrder, error)
+	UpdateSubsidyReturnToSuccess(ctx context.Context, arg UpdateSubsidyReturnToSuccessParams) (SubsidyOrder, error)
 	UpdateTable(ctx context.Context, arg UpdateTableParams) (Table, error)
 	UpdateTableImage(ctx context.Context, arg UpdateTableImageParams) (TableImage, error)
 	UpdateTableStatus(ctx context.Context, arg UpdateTableStatusParams) (Table, error)
@@ -1685,6 +1714,12 @@ type Querier interface {
 	UpdateUserNotificationPreferences(ctx context.Context, arg UpdateUserNotificationPreferencesParams) (UserNotificationPreference, error)
 	UpdateUserRoleStatus(ctx context.Context, arg UpdateUserRoleStatusParams) (UserRole, error)
 	UpdateVoucher(ctx context.Context, arg UpdateVoucherParams) (Voucher, error)
+	// 标记投诉已完结
+	UpdateWechatComplaintCompleted(ctx context.Context, id int64) (WechatComplaint, error)
+	// 记录我方回复内容
+	UpdateWechatComplaintResponse(ctx context.Context, arg UpdateWechatComplaintResponseParams) (WechatComplaint, error)
+	// 同步状态变更（由微信通知或轮询驱动）
+	UpdateWechatComplaintState(ctx context.Context, arg UpdateWechatComplaintStateParams) (WechatComplaint, error)
 	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
@@ -1703,6 +1738,8 @@ type Querier interface {
 	// ==========================================
 	UpsertUserDevice(ctx context.Context, arg UpsertUserDeviceParams) (UserDevice, error)
 	UpsertWechatAccessToken(ctx context.Context, arg UpsertWechatAccessTokenParams) (WechatAccessToken, error)
+	// 插入或更新投诉记录（幂等，微信每日同步时使用 ON CONFLICT 更新）
+	UpsertWechatComplaint(ctx context.Context, arg UpsertWechatComplaintParams) (WechatComplaint, error)
 }
 
 var _ Querier = (*Queries)(nil)

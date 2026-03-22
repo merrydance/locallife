@@ -441,6 +441,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskSendNotification(ctx, p
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskSendNotification", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskSendNotification), varargs...)
 }
 
+// DistributeTaskSyncComplaints mocks base method.
+func (m *MockTaskDistributor) DistributeTaskSyncComplaints(ctx context.Context, payload *worker.SyncComplaintsPayload, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskSyncComplaints", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskSyncComplaints indicates an expected call of DistributeTaskSyncComplaints.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskSyncComplaints(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskSyncComplaints", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskSyncComplaints), varargs...)
+}
+
 // DistributeTaskUploadShippingInfo mocks base method.
 func (m *MockTaskDistributor) DistributeTaskUploadShippingInfo(ctx context.Context, payload *worker.UploadShippingInfoPayload, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()
