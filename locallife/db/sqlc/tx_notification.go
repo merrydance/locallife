@@ -1,0 +1,91 @@
+package db
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/jackc/pgx/v5/pgtype"
+)
+
+// TryClaimWechatNotification 原子性地尝试认领（占位）一个微信通知。
+//
+// 使用 INSERT ... ON CONFLICT (id) DO NOTHING 实现无锁竞争去重：
+// - 返回 true：成功占位，调用方可以安全地执行后续业务逻辑
+// - 返回 false：已被认领（重复通知），调用方应立即返回 SUCCESS 给微信
+//
+// 关键安全性保证：
+//   - 并发的两个相同 notification_id 请求中，只有一个会得到 true
+//   - 如果业务逻辑失败，调用方必须调用 ReleaseWechatNotificationClaim 释放占位，
+//     以允许微信的下一次重试正常处理
+func (store *SQLStore) TryClaimWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (bool, error) {
+	result, err := store.connPool.Exec(ctx,
+		`INSERT INTO wechat_notifications (id, event_type, resource_type, summary, out_trade_no, transaction_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)
+		 ON CONFLICT (id) DO NOTHING`,
+		arg.ID, arg.EventType, arg.ResourceType, arg.Summary, arg.OutTradeNo, arg.TransactionID,
+	)
+	if err != nil {
+		return false, err
+	}
+	return result.RowsAffected() == 1, nil
+}
+
+// ReleaseWechatNotificationClaim 删除一个已认领但未成功处理的通知占位记录。
+//
+// 仅在业务逻辑执行失败时调用，以允许微信下次重试进入处理流程。
+// 如果删除本身失败，打印错误日志即可——下次重试将因重复而直接返回 SUCCESS，
+// 此时 PaymentRecoveryScheduler 会兜底扫描并补偿。
+func (store *SQLStore) ReleaseWechatNotificationClaim(ctx context.Context, id string) error {
+	_, err := store.connPool.Exec(ctx, `DELETE FROM wechat_notifications WHERE id = $1`, id)
+	return err
+}
+
+// ===== 进件状态更新事务 (CB-4) =====
+
+// ApplymentSubMchActivationTxParams 进件开通二级商户号事务参数
+type ApplymentSubMchActivationTxParams struct {
+	ApplymentID int64
+	SubjectType string
+	SubjectID   int64
+	SubMchID    string
+}
+
+// ApplymentSubMchActivationTx 在单个事务中完成进件开通后的三步 DB 更新。
+//
+// 修复 CB-4：原先 handleApplymentStateNotify 中三步更新（UpdateEcommerceApplymentSubMchID,
+// UpdateMerchantPaymentConfig, UpdateMerchantStatus）是非原子分散调用，任意一步失败
+// 会导致数据不一致。此事务确保三步要么全部成功，要么全部回滚。
+func (store *SQLStore) ApplymentSubMchActivationTx(ctx context.Context, arg ApplymentSubMchActivationTxParams) error {
+	return store.execTx(ctx, func(q *Queries) error {
+		// step 1: 更新进件记录的 sub_mch_id
+		if _, err := q.UpdateEcommerceApplymentSubMchID(ctx, UpdateEcommerceApplymentSubMchIDParams{
+			ID:       arg.ApplymentID,
+			SubMchID: pgtype.Text{String: arg.SubMchID, Valid: true},
+		}); err != nil {
+			return fmt.Errorf("update applyment sub_mch_id: %w", err)
+		}
+
+		if arg.SubjectType != "merchant" {
+			return nil
+		}
+
+		// step 2: 更新商户支付配置
+		if _, err := q.UpdateMerchantPaymentConfig(ctx, UpdateMerchantPaymentConfigParams{
+			MerchantID: arg.SubjectID,
+			SubMchID:   pgtype.Text{String: arg.SubMchID, Valid: true},
+			Status:     pgtype.Text{String: "active", Valid: true},
+		}); err != nil {
+			return fmt.Errorf("update merchant payment config: %w", err)
+		}
+
+		// step 3: 更新商户状态为 active
+		if _, err := q.UpdateMerchantStatus(ctx, UpdateMerchantStatusParams{
+			ID:     arg.SubjectID,
+			Status: "active",
+		}); err != nil {
+			return fmt.Errorf("update merchant status: %w", err)
+		}
+
+		return nil
+	})
+}

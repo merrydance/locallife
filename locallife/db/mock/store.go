@@ -282,6 +282,20 @@ func (mr *MockStoreMockRecorder) AdjustMemberBalanceTx(ctx, arg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdjustMemberBalanceTx", reflect.TypeOf((*MockStore)(nil).AdjustMemberBalanceTx), ctx, arg)
 }
 
+// ApplymentSubMchActivationTx mocks base method.
+func (m *MockStore) ApplymentSubMchActivationTx(ctx context.Context, arg db.ApplymentSubMchActivationTxParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplymentSubMchActivationTx", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ApplymentSubMchActivationTx indicates an expected call of ApplymentSubMchActivationTx.
+func (mr *MockStoreMockRecorder) ApplymentSubMchActivationTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplymentSubMchActivationTx", reflect.TypeOf((*MockStore)(nil).ApplymentSubMchActivationTx), ctx, arg)
+}
+
 // ApproveGroupApplicationTx mocks base method.
 func (m *MockStore) ApproveGroupApplicationTx(ctx context.Context, arg db.ApproveGroupApplicationTxParams) (db.ApproveGroupApplicationTxResult, error) {
 	m.ctrl.T.Helper()
@@ -2404,6 +2418,21 @@ func (mr *MockStoreMockRecorder) CountWithdrawalRecords(ctx, userID any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWithdrawalRecords", reflect.TypeOf((*MockStore)(nil).CountWithdrawalRecords), ctx, userID)
 }
 
+// CreateAnomalyRefundRecord mocks base method.
+func (m *MockStore) CreateAnomalyRefundRecord(ctx context.Context, arg db.CreateAnomalyRefundRecordParams) (db.RefundOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateAnomalyRefundRecord", ctx, arg)
+	ret0, _ := ret[0].(db.RefundOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateAnomalyRefundRecord indicates an expected call of CreateAnomalyRefundRecord.
+func (mr *MockStoreMockRecorder) CreateAnomalyRefundRecord(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateAnomalyRefundRecord", reflect.TypeOf((*MockStore)(nil).CreateAnomalyRefundRecord), ctx, arg)
+}
+
 // CreateAppeal mocks base method.
 func (m *MockStore) CreateAppeal(ctx context.Context, arg db.CreateAppealParams) (db.Appeal, error) {
 	m.ctrl.T.Helper()
@@ -3602,6 +3631,21 @@ func (m *MockStore) CreateRefundOrder(ctx context.Context, arg db.CreateRefundOr
 func (mr *MockStoreMockRecorder) CreateRefundOrder(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRefundOrder", reflect.TypeOf((*MockStore)(nil).CreateRefundOrder), ctx, arg)
+}
+
+// CreateRefundOrderTx mocks base method.
+func (m *MockStore) CreateRefundOrderTx(ctx context.Context, arg db.CreateRefundOrderTxParams) (db.CreateRefundOrderTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRefundOrderTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateRefundOrderTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRefundOrderTx indicates an expected call of CreateRefundOrderTx.
+func (mr *MockStoreMockRecorder) CreateRefundOrderTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRefundOrderTx", reflect.TypeOf((*MockStore)(nil).CreateRefundOrderTx), ctx, arg)
 }
 
 // CreateRegion mocks base method.
@@ -14526,6 +14570,20 @@ func (mr *MockStoreMockRecorder) ReleaseReservedInventory(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseReservedInventory", reflect.TypeOf((*MockStore)(nil).ReleaseReservedInventory), ctx, arg)
 }
 
+// ReleaseWechatNotificationClaim mocks base method.
+func (m *MockStore) ReleaseWechatNotificationClaim(ctx context.Context, id string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReleaseWechatNotificationClaim", ctx, id)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ReleaseWechatNotificationClaim indicates an expected call of ReleaseWechatNotificationClaim.
+func (mr *MockStoreMockRecorder) ReleaseWechatNotificationClaim(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReleaseWechatNotificationClaim", reflect.TypeOf((*MockStore)(nil).ReleaseWechatNotificationClaim), ctx, id)
+}
+
 // RemoveAllComboDishes mocks base method.
 func (m *MockStore) RemoveAllComboDishes(ctx context.Context, comboID int64) error {
 	m.ctrl.T.Helper()
@@ -15634,6 +15692,21 @@ func (m *MockStore) TransferDiningSessionTableTx(ctx context.Context, arg db.Tra
 func (mr *MockStoreMockRecorder) TransferDiningSessionTableTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TransferDiningSessionTableTx", reflect.TypeOf((*MockStore)(nil).TransferDiningSessionTableTx), ctx, arg)
+}
+
+// TryClaimWechatNotification mocks base method.
+func (m *MockStore) TryClaimWechatNotification(ctx context.Context, arg db.CreateWechatNotificationParams) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TryClaimWechatNotification", ctx, arg)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TryClaimWechatNotification indicates an expected call of TryClaimWechatNotification.
+func (mr *MockStoreMockRecorder) TryClaimWechatNotification(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TryClaimWechatNotification", reflect.TypeOf((*MockStore)(nil).TryClaimWechatNotification), ctx, arg)
 }
 
 // UnfreezeUserBalance mocks base method.

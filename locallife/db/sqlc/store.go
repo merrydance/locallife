@@ -61,6 +61,15 @@ type Store interface {
 	ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error)
 	// Payment transactions
 	CreateCombinedPaymentTx(ctx context.Context, arg CreateCombinedPaymentTxParams) (CreateCombinedPaymentTxResult, error)
+	// Notification idempotency transactions
+	TryClaimWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (bool, error)
+	ReleaseWechatNotificationClaim(ctx context.Context, id string) error
+	// Applyment activation transaction (CB-4)
+	ApplymentSubMchActivationTx(ctx context.Context, arg ApplymentSubMchActivationTxParams) error
+	// Refund transactions
+	CreateRefundOrderTx(ctx context.Context, arg CreateRefundOrderTxParams) (CreateRefundOrderTxResult, error)
+	// CreateAnomalyRefundRecord 为已关闭/失败状态的支付单创建异常退款记录（跳过 status='paid' 校验）
+	CreateAnomalyRefundRecord(ctx context.Context, arg CreateAnomalyRefundRecordParams) (RefundOrder, error)
 	SyncReservationInventoryTx(ctx context.Context, arg SyncReservationInventoryTxParams) (SyncReservationInventoryTxResult, error)
 	ReleaseReservationInventoryTx(ctx context.Context, arg ReleaseReservationInventoryTxParams) error
 	// M15: Order status transactions

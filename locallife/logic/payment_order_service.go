@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/rs/zerolog/log"
 )
 
 const (
@@ -183,7 +184,11 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	var paymentOrder db.PaymentOrder
 	var outTradeNo string
 	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		outTradeNo = generateOutTradeNo()
+		var genErr error
+		outTradeNo, genErr = generateOutTradeNo()
+		if genErr != nil {
+			return result, fmt.Errorf("generate out trade no: %w", genErr)
+		}
 		createParams := db.CreatePaymentOrderParams{
 			UserID:       input.UserID,
 			PaymentType:  input.PaymentType,
@@ -251,6 +256,19 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 			PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
 		})
 		if err != nil {
+			// 微信下单已成功但本地更新失败。
+			// 策略：退出后调用分布式锁来临界区关闭本地支付单和微信单。
+			// 微信单不需要主动关闭：用户不会收到 prepay_id 故无法发起调起支付，
+			// 微信单会在 30 分钟后自动过期关闭。
+			// 本地支付单则需要由超时消费者除理（已有 payment_timeout 任务干赔）。
+			// 同时更新支付单为失败，避免卡在 pending 状态。
+			_, _ = svc.store.UpdatePaymentOrderToFailed(ctx, paymentOrder.ID)
+			// 尝试调用微信关单 API（如果微信单已存在）
+			if svc.paymentClient != nil {
+				if closeErr := svc.paymentClient.CloseOrder(ctx, outTradeNo); closeErr != nil {
+					log.Warn().Err(closeErr).Str("out_trade_no", outTradeNo).Msg("close wechat order after prepay_id update failure")
+				}
+			}
 			return result, fmt.Errorf("update prepay id: %w", err)
 		}
 
@@ -340,17 +358,20 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 	}
 
 	if svc.paymentClient != nil && paymentOrder.PrepayID.Valid {
-		_ = svc.paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo)
+		if err := svc.paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo); err != nil {
+			// 微信关单失败不阻断业务（订单会在 30 分钟后自动关闭），但必须记录
+			log.Warn().Err(err).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("close wechat order failed, order will auto-expire")
+		}
 	}
 
 	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
 }
 
-func generateOutTradeNo() string {
+func generateOutTradeNo() (string, error) {
 	return generateOutTradeNoWithPrefix("P")
 }
 
-func generateOutTradeNoWithPrefix(prefix string) string {
+func generateOutTradeNoWithPrefix(prefix string) (string, error) {
 	if prefix == "" {
 		prefix = "P"
 	}
@@ -358,11 +379,14 @@ func generateOutTradeNoWithPrefix(prefix string) string {
 	now := time.Now()
 	dateStr := now.Format("20060102150405")
 
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
+	// 使用 8 字节随机数（64位熵），大幅降低碰撞概率
+	b := make([]byte, 8)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	randomPart := fmt.Sprintf("%08x", b[:4]) // 8 位十六进制
 
-	return prefix + dateStr + randomNum[:8]
+	return prefix + dateStr + randomPart, nil
 }
 
 func isOutTradeNoConflict(err error) bool {

@@ -213,6 +213,25 @@ func (mr *MockTaskDistributorMockRecorder) DistributeTaskPaymentOrderTimeout(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskPaymentOrderTimeout", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskPaymentOrderTimeout), varargs...)
 }
 
+// DistributeTaskProcessAnomalyRefund mocks base method.
+func (m *MockTaskDistributor) DistributeTaskProcessAnomalyRefund(ctx context.Context, payload *worker.PayloadProcessAnomalyRefund, opts ...asynq.Option) error {
+	m.ctrl.T.Helper()
+	varargs := []any{ctx, payload}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DistributeTaskProcessAnomalyRefund", varargs...)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DistributeTaskProcessAnomalyRefund indicates an expected call of DistributeTaskProcessAnomalyRefund.
+func (mr *MockTaskDistributorMockRecorder) DistributeTaskProcessAnomalyRefund(ctx, payload any, opts ...any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]any{ctx, payload}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DistributeTaskProcessAnomalyRefund", reflect.TypeOf((*MockTaskDistributor)(nil).DistributeTaskProcessAnomalyRefund), varargs...)
+}
+
 // DistributeTaskProcessAppealResult mocks base method.
 func (m *MockTaskDistributor) DistributeTaskProcessAppealResult(ctx context.Context, payload *worker.ProcessAppealResultPayload, opts ...asynq.Option) error {
 	m.ctrl.T.Helper()

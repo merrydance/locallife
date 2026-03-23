@@ -719,9 +719,9 @@ func TestCreateRefundOrderAPI(t *testing.T) {
 					Return(order, nil)
 
 				store.EXPECT().
-					CreateRefundOrder(gomock.Any(), gomock.Any()).
+					CreateRefundOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(refundOrder, nil)
+					Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
 
 				store.EXPECT().
 					GetRefundOrder(gomock.Any(), refundOrder.ID).

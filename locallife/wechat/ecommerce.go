@@ -1172,7 +1172,10 @@ func (c *EcommerceClient) doRequest(ctx context.Context, method, path string, bo
 	}
 
 	// 生成请求ID（用于追踪和问题排查）
-	requestID := generateNonceStr()
+	requestID, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 
 	// 设置请求头
 	req.Header.Set("Content-Type", "application/json")
@@ -1181,7 +1184,10 @@ func (c *EcommerceClient) doRequest(ctx context.Context, method, path string, bo
 
 	// 生成签名
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	nonceStr := generateNonceStr()
+	nonceStr, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 	signature, err := c.generateSignature(method, path, timestamp, nonceStr, bodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("generate signature: %w", err)
@@ -1302,7 +1308,10 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 
 	// 生成签名（对于文件上传，body 使用 meta JSON）
 	timestamp := fmt.Sprintf("%d", time.Now().Unix())
-	nonceStr := generateNonceStr()
+	nonceStr, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 	signature, err := c.generateSignature(http.MethodPost, merchantMediaUploadURL, timestamp, nonceStr, metaBytes)
 	if err != nil {
 		return nil, fmt.Errorf("generate signature: %w", err)

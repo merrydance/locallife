@@ -2,8 +2,10 @@ package db
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -50,12 +52,12 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 		}
 		tempInfos := make([]tempOrderInfo, 0, len(arg.OrderIDs))
 
-		// 必须按顺序加锁防止死锁！虽然这里已经是切片，但建议调用前或这里排序
-		// 假设调用者已经去重，这里如果不排序，可能与其他事务死锁。
-		// 但 OrderIDs 通常很少，且是一个用户的操作，死锁概率低。为了严谨还是应该排序？
-		// 暂时略过排序，因为是用户维度的锁。
+		// 必须按升序加锁，防止并发事务以不同顺序持有锁导致死锁（PostgreSQL 40P01）。
+		sortedOrderIDs := make([]int64, len(arg.OrderIDs))
+		copy(sortedOrderIDs, arg.OrderIDs)
+		sort.Slice(sortedOrderIDs, func(i, j int) bool { return sortedOrderIDs[i] < sortedOrderIDs[j] })
 
-		for _, orderID := range arg.OrderIDs {
+		for _, orderID := range sortedOrderIDs {
 			// 加锁获取订单
 			order, err := q.GetOrderForUpdate(ctx, orderID)
 			if err != nil {
@@ -132,8 +134,8 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 
 		// 3. 创建子单记录
 		for _, info := range tempInfos {
-			// 生成 OutTradeNo
-			outTradeNo := fmt.Sprintf("%s%d%d", "CP", info.Order.ID, time.Now().UnixNano()%1000000)
+			// 使用带前缀的安全生成器，避免纳秒截断碰撞。
+			outTradeNo := generateSubOrderOutTradeNo(info.Order.ID)
 
 			po, err := q.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
 				OrderID:       pgtype.Int8{Int64: info.Order.ID, Valid: true},
@@ -186,4 +188,15 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 	})
 
 	return result, err
+}
+
+// generateSubOrderOutTradeNo 为合单子单生成安全的商户订单号。
+// 格式：CP + 订单ID(10位) + 时间戳秒(10位) + 随机数(6位)
+// 比起直接用纳秒截断，随机数部分确保同一订单快速重试时不碰撞。
+func generateSubOrderOutTradeNo(orderID int64) string {
+	now := time.Now()
+	b := make([]byte, 3)
+	_, _ = rand.Read(b)
+	randNum := uint32(b[0])<<16 | uint32(b[1])<<8 | uint32(b[2])
+	return fmt.Sprintf("CP%d%d%06d", orderID, now.Unix(), randNum%1000000)
 }

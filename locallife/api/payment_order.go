@@ -3,9 +3,9 @@ package api
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -18,6 +18,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 支付订单管理 ====================
@@ -134,30 +135,22 @@ func newPaymentOrderResponse(p db.PaymentOrder) paymentOrderResponse {
 }
 
 // generateOutTradeNo 生成商户订单号
+// 格式：P + yyyyMMddHHmmss(14位) + hex随机(8位) = 23位
 func generateOutTradeNo() string {
-	now := time.Now()
-	dateStr := now.Format("20060102150405")
-
-	// 生成8位随机数
+	dateStr := time.Now().Format("20060102150405")
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
-
-	return "P" + dateStr + randomNum[:8]
+	return "P" + dateStr + hex.EncodeToString(b)
 }
 
 func generateOutTradeNoWithPrefix(prefix string) string {
-	now := time.Now()
-	dateStr := now.Format("20060102150405")
-
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
-
 	if prefix == "" {
 		prefix = "P"
 	}
-	return prefix + dateStr + randomNum[:8]
+	dateStr := time.Now().Format("20060102150405")
+	b := make([]byte, 4)
+	_, _ = rand.Read(b)
+	return prefix + dateStr + hex.EncodeToString(b)
 }
 
 const (
@@ -262,11 +255,14 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	}
 
 	if server.taskDistributor != nil && result.PaymentOrder.ExpiresAt.Valid {
-		_ = server.taskDistributor.DistributeTaskPaymentOrderTimeout(
+		if enqErr := server.taskDistributor.DistributeTaskPaymentOrderTimeout(
 			ctx,
 			&worker.PayloadPaymentOrderTimeout{PaymentOrderNo: result.PaymentOrder.OutTradeNo},
 			asynq.ProcessAt(result.PaymentOrder.ExpiresAt.Time),
-		)
+		); enqErr != nil {
+			// 非严重错误：payment_recovery_scheduler 会兜底扫描 pending 超时单
+			log.Error().Err(enqErr).Str("out_trade_no", result.PaymentOrder.OutTradeNo).Msg("⚠️ failed to enqueue payment order timeout task")
+		}
 	}
 
 	ctx.JSON(http.StatusCreated, resp)
@@ -362,11 +358,13 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	}
 
 	if server.taskDistributor != nil && combinedPayment.ExpiresAt.Valid {
-		_ = server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(
+		if enqErr := server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(
 			ctx,
 			&worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combinedPayment.CombineOutTradeNo},
 			asynq.ProcessAt(combinedPayment.ExpiresAt.Time),
-		)
+		); enqErr != nil {
+			log.Error().Err(enqErr).Str("combine_out_trade_no", combinedPayment.CombineOutTradeNo).Msg("⚠️ failed to enqueue combined payment timeout task")
+		}
 	}
 
 	ctx.JSON(http.StatusCreated, resp)

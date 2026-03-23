@@ -153,7 +153,11 @@ func ReplaceReservationOrder(
 		expiresAt := time.Now().Add(30 * time.Minute)
 		var payOrder db.PaymentOrder
 		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-			outTradeNo := generateOutTradeNo()
+			var genErr error
+			outTradeNo, genErr := generateOutTradeNo()
+			if genErr != nil {
+				return ReplaceOrderResult{}, genErr
+			}
 			payOrder, err = store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
 				OrderID:      pgtype.Int8{Int64: replaceTx.NewOrder.ID, Valid: true},
 				UserID:       input.UserID,

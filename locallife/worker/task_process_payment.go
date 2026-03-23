@@ -166,6 +166,7 @@ const (
 	TaskProcessApplymentResult           = "payment:process_applyment_result"             // 进件结果处理
 	TaskProcessProfitSharingResult       = "payment:process_profit_sharing_result"        // 分账结果处理
 	TaskProcessProfitSharingReturnResult = "payment:process_profit_sharing_return_result" // 分账回退结果处理
+	TaskProcessAnomalyRefund             = "payment:process_anomaly_refund"               // 已关闭订单异常退款
 )
 
 // PaymentSuccessPayload 支付成功任务载荷
@@ -181,6 +182,14 @@ type PayloadProcessRefund struct {
 	OrderID        int64  `json:"order_id"`
 	RefundAmount   int64  `json:"refund_amount"`
 	Reason         string `json:"reason"`
+}
+
+// PayloadProcessAnomalyRefund 已关闭/失败订单异常退款任务载荷
+type PayloadProcessAnomalyRefund struct {
+	PaymentOrderID int64  `json:"payment_order_id"`
+	TransactionID  string `json:"transaction_id"` // 微信交易号，直接用于发起退款
+	RefundAmount   int64  `json:"refund_amount"`
+	OutRefundNo    string `json:"out_refund_no"` // 幂等键（"CRF{paymentOrderID}"）
 }
 
 // RefundResultPayload 退款结果任务载荷
@@ -277,6 +286,35 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessRefund(
 		Int64("order_id", payload.OrderID).
 		Int64("refund_amount", payload.RefundAmount).
 		Msg("enqueued refund task")
+
+	return nil
+}
+
+// DistributeTaskProcessAnomalyRefund 分发已关闭/失败订单异常退款任务
+func (distributor *RedisTaskDistributor) DistributeTaskProcessAnomalyRefund(
+	ctx context.Context,
+	payload *PayloadProcessAnomalyRefund,
+	opts ...asynq.Option,
+) error {
+	jsonPayload, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	task := asynq.NewTask(TaskProcessAnomalyRefund, jsonPayload, opts...)
+	info, err := distributor.enqueueTask(ctx, task)
+	if err != nil {
+		return fmt.Errorf("enqueue task: %w", err)
+	}
+
+	log.Info().
+		Str("type", task.Type()).
+		Str("queue", info.Queue).
+		Int64("payment_order_id", payload.PaymentOrderID).
+		Str("transaction_id", payload.TransactionID).
+		Int64("refund_amount", payload.RefundAmount).
+		Str("out_refund_no", payload.OutRefundNo).
+		Msg("enqueued anomaly refund task")
 
 	return nil
 }
@@ -1353,20 +1391,40 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		return fmt.Errorf("get merchant payment config: %w", err)
 	}
 
-	// 生成退款单号
-	outRefundNo := fmt.Sprintf("RF%d%d", payload.PaymentOrderID, payload.OrderID)
+	// 生成退款单号（下划线分隔符确保不同 ID 组合不产生相同字符串）
+	// 例: RF1_23 ≠ RF12_3，而 RF123 则无法区分
+	outRefundNo := fmt.Sprintf("RF%d_%d", payload.PaymentOrderID, payload.OrderID)
 
-	// 创建退款记录
-	refundOrder, err := processor.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-		PaymentOrderID: payload.PaymentOrderID,
-		RefundType:     "user_cancel",
-		RefundAmount:   payload.RefundAmount,
-		RefundReason:   pgtype.Text{String: payload.Reason, Valid: true},
-		OutRefundNo:    outRefundNo,
-		Status:         "pending",
-	})
-	if err != nil {
-		return fmt.Errorf("create refund order: %w", err)
+	// 幂等检查：该退款单号是否已存在
+	var refundOrder db.RefundOrder
+	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+	if findErr == nil {
+		// 已存在：复用已有记录，不重复创建
+		refundOrder = existingRefund
+		log.Info().
+			Str("out_refund_no", outRefundNo).
+			Int64("refund_order_id", refundOrder.ID).
+			Msg("refund order already exists, reusing")
+	} else if !errors.Is(findErr, db.ErrRecordNotFound) {
+		return fmt.Errorf("check existing refund order: %w", findErr)
+	} else {
+		// 不存在：通过事务原子性地校验累计退款额并创建退款单，防止并发超退（与人工退款链路对齐）
+		txResult, createErr := processor.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
+			PaymentOrderID: payload.PaymentOrderID,
+			RefundType:     "user_cancel",
+			RefundAmount:   payload.RefundAmount,
+			RefundReason:   payload.Reason,
+			OutRefundNo:    outRefundNo,
+		})
+		if createErr != nil {
+			if statusCode, ok := db.IsRefundRequestError(createErr); ok {
+				// 业务校验失败（超退、已退等）：不重试
+				log.Warn().Err(createErr).Int("status", statusCode).Msg("refund business validation failed, skip")
+				return nil
+			}
+			return fmt.Errorf("create refund order tx: %w", createErr)
+		}
+		refundOrder = txResult.RefundOrder
 	}
 
 	// 检查是否有微信支付客户端
@@ -1601,6 +1659,156 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		Str("out_refund_no", outRefundNo).
 		Str("status", string(refundResp.Status)).
 		Msg("refund request processed")
+
+	return nil
+}
+
+// ==================== 已关闭/失败订单异常退款 ====================
+
+// ProcessTaskAnomalyRefund 处理已关闭/失败状态支付单收到微信付款的自动退款任务。
+// 调用路径：支付回调竞态检测 → 入队 → 此处理器 → CreateEcommerceRefund（TransactionID）
+func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Context, task *asynq.Task) error {
+	var payload PayloadProcessAnomalyRefund
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal payload: %w", err)
+	}
+
+	log.Info().
+		Int64("payment_order_id", payload.PaymentOrderID).
+		Str("transaction_id", payload.TransactionID).
+		Int64("refund_amount", payload.RefundAmount).
+		Str("out_refund_no", payload.OutRefundNo).
+		Msg("processing anomaly refund task")
+
+	// 确认支付单仍处于 closed/failed（防止并发改状态后重复退款）
+	paymentOrder, err := processor.store.GetPaymentOrder(ctx, payload.PaymentOrderID)
+	if err != nil {
+		return fmt.Errorf("get payment order: %w", err)
+	}
+	if paymentOrder.Status != "closed" && paymentOrder.Status != "failed" {
+		log.Warn().
+			Int64("payment_order_id", payload.PaymentOrderID).
+			Str("status", paymentOrder.Status).
+			Msg("payment order no longer in closed/failed status, skip anomaly refund")
+		return nil
+	}
+
+	// 幂等检查 + 创建退款记录
+	refundOrder, err := processor.store.CreateAnomalyRefundRecord(ctx, db.CreateAnomalyRefundRecordParams{
+		PaymentOrderID: payload.PaymentOrderID,
+		RefundAmount:   payload.RefundAmount,
+		OutRefundNo:    payload.OutRefundNo,
+	})
+	if err != nil {
+		return fmt.Errorf("create anomaly refund record: %w", err)
+	}
+
+	// 跳过已完成的退款（幂等复用）
+	if refundOrder.Status == "success" || refundOrder.Status == "processing" {
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Str("status", refundOrder.Status).
+			Msg("anomaly refund already processed, skip")
+		return nil
+	}
+
+	// 解析商户 SubMchID
+	var subMchID string
+	if paymentOrder.OrderID.Valid {
+		order, orderErr := processor.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
+		if orderErr != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("get order for merchant lookup: %w", orderErr)
+		}
+		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
+		if cfgErr != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("get merchant payment config: %w", cfgErr)
+		}
+		subMchID = cfg.SubMchID
+	} else if paymentOrder.ReservationID.Valid {
+		reservation, resErr := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
+		if resErr != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("get reservation for merchant lookup: %w", resErr)
+		}
+		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
+		if cfgErr != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("get merchant payment config: %w", cfgErr)
+		}
+		subMchID = cfg.SubMchID
+	} else {
+		// 无法确定商户，标记失败并告警（不重试）
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		processor.publishAlert(ctx, AlertData{
+			AlertType:   AlertTypeRefundFailed,
+			Level:       AlertLevelCritical,
+			Title:       "⚠️ 异常退款无法确定商户",
+			Message:     fmt.Sprintf("支付单 %d 的异常退款无法确定 SubMchID（OrderID 和 ReservationID 均为空），请人工处理", payload.PaymentOrderID),
+			RelatedID:   payload.PaymentOrderID,
+			RelatedType: "payment_order",
+			Extra: map[string]interface{}{
+				"transaction_id": payload.TransactionID,
+				"refund_amount":  payload.RefundAmount,
+				"out_refund_no":  payload.OutRefundNo,
+			},
+		})
+		// 不可重试：返回 nil 防止 asynq 无限重试
+		return nil
+	}
+
+	if processor.ecommerceClient == nil {
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		return fmt.Errorf("ecommerce client not configured")
+	}
+
+	// 使用 TransactionID 直接发起退款（无需 OutTradeNo，绕过本地状态约束）
+	refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+		SubMchID:      subMchID,
+		TransactionID: payload.TransactionID,
+		OutRefundNo:   payload.OutRefundNo,
+		Reason:        "已关闭订单异常到账，系统自动退款",
+		RefundAmount:  payload.RefundAmount,
+		TotalAmount:   paymentOrder.Amount,
+	})
+	if err != nil {
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		return fmt.Errorf("call wechat refund API: %w", err)
+	}
+
+	switch refundResp.Status {
+	case wechat.RefundStatusSuccess:
+		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", payload.OutRefundNo).
+			Msg("anomaly refund completed successfully")
+	case wechat.RefundStatusProcessing:
+		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
+		})
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Str("refund_id", refundResp.RefundID).
+			Msg("anomaly refund in processing, will be updated via refund callback")
+	default:
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		processor.publishAlert(ctx, AlertData{
+			AlertType:   AlertTypeRefundFailed,
+			Level:       AlertLevelCritical,
+			Title:       "⚠️ 异常退款接口返回非预期状态",
+			Message:     fmt.Sprintf("退款单 %d（支付单 %d）收到微信退款状态 %q，请核查", refundOrder.ID, payload.PaymentOrderID, string(refundResp.Status)),
+			RelatedID:   refundOrder.ID,
+			RelatedType: "refund_order",
+			Extra: map[string]interface{}{
+				"transaction_id": payload.TransactionID,
+				"refund_id":      refundResp.RefundID,
+			},
+		})
+	}
 
 	return nil
 }

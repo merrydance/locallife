@@ -252,6 +252,20 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 						require.Len(t, req.SubOrders, 2)
 						return nil, nil, errors.New("wechat create combine failed")
 					})
+
+				// Cleanup: payment orders and combined order should be marked as closed
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), int64(7001)).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), int64(7002)).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
+				store.EXPECT().
+					UpdateCombinedPaymentOrderToClosed(gomock.Any(), int64(3001)).
+					Times(1).
+					Return(db.CombinedPaymentOrder{}, nil)
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
@@ -290,6 +304,15 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(&wechat.CombineOrderResponse{PrepayID: "   "}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil)
+				// Cleanup: payment order and combined order should be marked as closed
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), int64(7051)).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
+				store.EXPECT().
+					UpdateCombinedPaymentOrderToClosed(gomock.Any(), int64(3051)).
+					Times(1).
+					Return(db.CombinedPaymentOrder{}, nil)
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
@@ -328,6 +351,15 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil)
+				// Cleanup: payment order and combined order should be marked as closed
+				store.EXPECT().
+					UpdatePaymentOrderToClosed(gomock.Any(), int64(7052)).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
+				store.EXPECT().
+					UpdateCombinedPaymentOrderToClosed(gomock.Any(), int64(3052)).
+					Times(1).
+					Return(db.CombinedPaymentOrder{}, nil)
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)

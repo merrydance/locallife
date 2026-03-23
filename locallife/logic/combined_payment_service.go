@@ -166,9 +166,21 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		},
 	})
 	if err != nil {
+		// 微信下单失败：将本地创建的合单和子支付单标记为 closed，避免僵尸记录
+		// 超时任务（payment_timeout）会兜底，但主动清理能减少脏数据积压
+		cleanupCtx := context.Background() // 使用新 context，避免父 ctx 已取消时清理失败
+		for _, info := range txResult.OrderInfos {
+			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
+		}
+		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
 		return result, fmt.Errorf("create combine order: %w", err)
 	}
 	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
+		cleanupCtx := context.Background()
+		for _, info := range txResult.OrderInfos {
+			_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
+		}
+		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
 		return result, fmt.Errorf("create combine order: empty prepay id")
 	}
 

@@ -175,6 +175,13 @@ type TaskDistributor interface {
 		payload *SyncComplaintsPayload,
 		opts ...asynq.Option,
 	) error
+
+	// DistributeTaskProcessAnomalyRefund 分发已关闭/失败订单异常退款任务
+	DistributeTaskProcessAnomalyRefund(
+		ctx context.Context,
+		payload *PayloadProcessAnomalyRefund,
+		opts ...asynq.Option,
+	) error
 }
 
 type RedisTaskDistributor struct {

@@ -70,19 +70,31 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 		return fmt.Errorf("get combined payment order: %w", err)
 	}
 
-	if combined.Status != "pending" {
-		log.Info().
-			Str("combine_out_trade_no", payload.CombineOutTradeNo).
-			Str("status", combined.Status).
-			Msg("combined payment order is not pending, skip timeout processing")
-		return nil
-	}
-
+	// 检查是否已超时（在关闭之前先检查）
 	if combined.ExpiresAt.Valid && time.Now().Before(combined.ExpiresAt.Time) {
 		log.Info().
 			Str("combine_out_trade_no", payload.CombineOutTradeNo).
 			Time("expire_time", combined.ExpiresAt.Time).
 			Msg("combined payment order not expired yet")
+		return nil
+	}
+
+	// 状态机：
+	// - pending → 调用微信关单，关闭合单和子单
+	// - closed  → 合单已关闭（上次可能只完成了部分），继续关闭待关的子单
+	// - 其他    → 已由其他流程处理，幂等退出
+	switch combined.Status {
+	case "pending":
+		// 继续向下执行微信关单 + 本地关闭
+	case "closed":
+		log.Info().
+			Str("combine_out_trade_no", payload.CombineOutTradeNo).
+			Msg("combined payment order already closed, checking sub-order states")
+	default:
+		log.Info().
+			Str("combine_out_trade_no", payload.CombineOutTradeNo).
+			Str("status", combined.Status).
+			Msg("combined payment order in terminal state, skip timeout processing")
 		return nil
 	}
 
@@ -113,14 +125,18 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 		return fmt.Errorf("no sub orders to close")
 	}
 
-	if err := p.ecommerceClient.CloseCombineOrder(ctx, combined.CombineOutTradeNo, closeSubs); err != nil {
-		return fmt.Errorf("close combine order: %w", err)
+	// 只有 pending 状态才需要调用微信关单 API（closed 说明已经调用过了）
+	if combined.Status == "pending" {
+		if err := p.ecommerceClient.CloseCombineOrder(ctx, combined.CombineOutTradeNo, closeSubs); err != nil {
+			return fmt.Errorf("close combine order: %w", err)
+		}
+
+		if _, err := p.store.UpdateCombinedPaymentOrderToClosed(ctx, combined.ID); err != nil {
+			return fmt.Errorf("update combined payment order: %w", err)
+		}
 	}
 
-	if _, err := p.store.UpdateCombinedPaymentOrderToClosed(ctx, combined.ID); err != nil {
-		return fmt.Errorf("update combined payment order: %w", err)
-	}
-
+	// 逐个关闭仍处于 pending 状态的子支付单（重试安全：已 closed 的子单会被跳过）
 	for _, sub := range closeSubs {
 		paymentOrder, err := p.store.GetPaymentOrderByOutTradeNo(ctx, sub.OutTradeNo)
 		if err != nil {

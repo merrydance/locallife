@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -138,6 +139,11 @@ func NewPaymentClient(cfg PaymentClientConfig) (*PaymentClient, error) {
 		refundNotifyURL:     cfg.RefundNotifyURL,
 		httpClient: &http.Client{
 			Timeout: httpTimeout,
+			Transport: &http.Transport{
+				MaxIdleConns:        100,
+				MaxIdleConnsPerHost: 10,
+				IdleConnTimeout:     90 * time.Second,
+			},
 		},
 		httpTimeout: httpTimeout,
 	}, nil
@@ -297,7 +303,10 @@ func (c *PaymentClient) GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams
 
 // generateJSAPIPayParams 生成小程序调起支付的参数
 func (c *PaymentClient) generateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error) {
-	nonceStr := generateNonceStr()
+	nonceStr, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 	timeStamp := fmt.Sprintf("%d", time.Now().Unix())
 	packageStr := "prepay_id=" + prepayID
 
@@ -498,7 +507,10 @@ type TransferResponse struct {
 // CreateTransfer 发起转账（商家转账到零钱）
 func (c *PaymentClient) CreateTransfer(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
 	// 生成商户明细单号
-	outDetailNo := generateNonceStr()
+	outDetailNo, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 
 	// 加密敏感信息（用户真实姓名）
 	encryptedUserName, err := c.EncryptSensitiveData(req.UserName)
@@ -685,10 +697,23 @@ func (c *PaymentClient) DecryptNotificationRaw(notification *PaymentNotification
 	)
 }
 
+// notifyTimestampWindow 微信回调时间戳允许偏差（±5 分钟），防重放攻击
+const notifyTimestampWindow = 5 * 60 // seconds
+
 // VerifyNotificationSignature 验证回调通知签名
 // 参考: https://pay.weixin.qq.com/wiki/doc/apiv3/wechatpay/wechatpay4_1.shtml
 // 优先使用平台公钥（推荐），其次使用平台证书公钥（已弃用）
 func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+	// 0. 校验时间戳合法性，防止重放攻击（微信官方要求 ±5 分钟内）
+	ts, err := strconv.ParseInt(timestamp, 10, 64)
+	if err != nil {
+		return fmt.Errorf("invalid timestamp format: %w", err)
+	}
+	diff := time.Now().Unix() - ts
+	if diff > notifyTimestampWindow || diff < -notifyTimestampWindow {
+		return fmt.Errorf("timestamp out of allowed window: diff=%ds", diff)
+	}
+
 	// 获取用于验签的公钥
 	var publicKey *rsa.PublicKey
 	if c.platformPublicKey != nil {
@@ -792,7 +817,10 @@ func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path st
 	}
 
 	// 生成请求ID（用于追踪和问题排查）
-	requestID := generateNonceStr()
+	requestID, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 
 	// 设置请求头
 	req.Header.Set("Content-Type", "application/json")
@@ -804,7 +832,10 @@ func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path st
 
 	// 生成签名
 	timestamp := time.Now().Unix()
-	nonceStr := generateNonceStr()
+	nonceStr, err := generateNonceStr()
+	if err != nil {
+		return nil, err
+	}
 	signature, err := c.generateSignature(method, path, timestamp, nonceStr, bodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("generate signature: %w", err)
@@ -824,7 +855,7 @@ func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path st
 	}
 	defer resp.Body.Close()
 
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4MB上限，防止异常大响应耗尽内存
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
@@ -870,9 +901,11 @@ func (c *PaymentClient) signWithRSA(message string) (string, error) {
 	return base64.StdEncoding.EncodeToString(signature), nil
 }
 
-// generateNonceStr 生成随机字符串
-func generateNonceStr() string {
+// generateNonceStr 生成随机字符串。极少数情况下 crypto/rand 不可用时返回 error。
+func generateNonceStr() (string, error) {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
-	return fmt.Sprintf("%x", b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	return fmt.Sprintf("%x", b), nil
 }

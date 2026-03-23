@@ -37,9 +37,9 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 
 				// 幂等性检查：通知ID已存在
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(true, nil)
+					Return(false, nil)
 
 				// 不应该调用解密方法（因为幂等性检查发现已处理）
 				paymentClient.EXPECT().
@@ -91,7 +91,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 
 				// 签名失败直接返回，不会检查幂等性
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Any()).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
@@ -168,9 +168,9 @@ func TestHandleRefundNotifyIdempotency(t *testing.T) {
 
 				// 幂等性检查：通知ID已存在
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(true, nil)
+					Return(false, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -250,9 +250,9 @@ func TestHandleCombinePaymentNotifyIdempotency(t *testing.T) {
 
 				// 幂等性检查：通知ID已存在
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(true, nil)
+					Return(false, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -332,9 +332,9 @@ func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 
 				// 幂等性检查：通知ID已存在
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(true, nil)
+					Return(false, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -437,9 +437,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 
 				// 2. 幂等性检查：首次处理
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(false, nil)
+					Return(true, nil)
 
 				// 3. 解密通知
 				paymentClient.EXPECT().
@@ -483,11 +483,6 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 						UserID:       100,
 						BusinessType: "order",
 					}, nil)
-				// 6. 记录通知ID
-				store.EXPECT().
-					CreateWechatNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.WechatNotification{}, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -532,9 +527,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 					Return(nil)
 
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Any()).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(false, nil)
+					Return(true, nil)
 
 				// 解密后金额为200元，与订单金额不匹配
 				paymentClient.EXPECT().
@@ -566,10 +561,18 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 						BusinessType: "order",
 					}, nil)
 
-				// 金额不匹配，不应更新状态
+				// 金额不匹配，先标记为 paid 再触发退款
 				store.EXPECT().
 					UpdatePaymentOrderToPaid(gomock.Any(), gomock.Any()).
-					Times(0)
+					Times(1).
+					Return(db.PaymentOrder{
+						ID:           1,
+						OutTradeNo:   outTradeNo,
+						Amount:       100 * fenPerYuan,
+						Status:       "paid",
+						UserID:       100,
+						BusinessType: "order",
+					}, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -616,9 +619,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 					Return(nil)
 
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Any()).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(false, nil)
+					Return(true, nil)
 
 				paymentClient.EXPECT().
 					DecryptPaymentNotification(gomock.Any()).
@@ -698,7 +701,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 
 				// 非SUCCESS事件不检查幂等性
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Any()).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
@@ -807,9 +810,9 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 
 				// 幂等性检查：通知ID已存在
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(true, nil)
+					Return(false, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -855,7 +858,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 
 				// 非进件事件不检查幂等性
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Any()).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
@@ -932,9 +935,9 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 
 				// 幂等性检查：通知ID已存在
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(true, nil)
+					Return(false, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -980,9 +983,9 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 
 				// 幂等性检查：新通知
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(false, nil)
+					Return(true, nil)
 
 				// 解密通知
 				ecommerceClient.EXPECT().
@@ -1036,10 +1039,6 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					Return(db.ProfitSharingOrder{ID: 1, Status: "finished"}, nil)
 
 				// 记录通知
-				store.EXPECT().
-					CreateWechatNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.WechatNotification{ID: notificationID}, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -1084,9 +1083,9 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					Return(nil)
 
 				store.EXPECT().
-					CheckNotificationExists(gomock.Any(), gomock.Eq(notificationID)).
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(false, nil)
+					Return(true, nil)
 
 				ecommerceClient.EXPECT().
 					DecryptProfitSharingNotification(gomock.Any()).
@@ -1136,11 +1135,6 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					UpdateProfitSharingOrderToFailed(gomock.Any(), gomock.Eq(int64(1))).
 					Times(1).
 					Return(db.ProfitSharingOrder{ID: 1, Status: "failed"}, nil)
-
-				store.EXPECT().
-					CreateWechatNotification(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.WechatNotification{ID: notificationID}, nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{

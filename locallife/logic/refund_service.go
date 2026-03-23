@@ -86,17 +86,22 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 	}
 
 	outRefundNo := s.idGenerator.OutRefundNo(s.clock.Now())
-	refundOrder, err := s.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
+
+	// 使用事务原子性地校验累计退款额并创建退款单，消除并发超退竞态（#5）
+	txResult, err := s.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 		PaymentOrderID: input.PaymentOrderID,
 		RefundType:     input.RefundType,
 		RefundAmount:   input.RefundAmount,
-		RefundReason:   pgtype.Text{String: input.RefundReason, Valid: input.RefundReason != ""},
+		RefundReason:   input.RefundReason,
 		OutRefundNo:    outRefundNo,
-		Status:         "pending",
 	})
 	if err != nil {
-		return CreateRefundOrderResult{}, err
+		if statusCode, ok := db.IsRefundRequestError(err); ok {
+			return CreateRefundOrderResult{}, NewRequestError(statusCode, errors.Unwrap(err))
+		}
+		return CreateRefundOrderResult{}, fmt.Errorf("create refund order: %w", err)
 	}
+	refundOrder := txResult.RefundOrder
 
 	if paymentOrder.PaymentType == paymentTypeProfitSharing {
 		if err := s.processProfitSharingRefund(ctx, paymentOrder, order, refundOrder, input); err != nil {
@@ -348,6 +353,20 @@ func (s *RefundService) processProfitSharingRefund(
 
 	hasProcessing := false
 	processReturn := func(outReturnNo, returnAccountType, returnAccount, description string, amount int64, delay time.Duration) error {
+		// 幂等检查：如果该 outReturnNo 已有记录，且状态为 success/processing，直接跳过
+		// 这让 processProfitSharingRefund 在被重试时能从失败点继续，而非重新全量执行
+		existingReturn, lookupErr := s.store.GetProfitSharingReturnByOutReturnNo(ctx, outReturnNo)
+		if lookupErr == nil {
+			switch existingReturn.Status {
+			case "success":
+				return nil // 已完成，跳过
+			case "processing":
+				hasProcessing = true
+				return nil // 已在进行中，等待 recovery 跟踪
+				// pending/failed 状态：继续向下重试
+			}
+		}
+
 		returnRecord, createErr := s.store.CreateProfitSharingReturn(ctx, db.CreateProfitSharingReturnParams{
 			RefundOrderID:        refundOrder.ID,
 			ProfitSharingOrderID: profitSharingOrder.ID,
@@ -446,28 +465,35 @@ func (s *RefundService) processProfitSharingRefund(
 	if profitSharingOrder.PlatformCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, s.paymentFacade.SpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission, delay); returnErr != nil {
+			// 单方失败：记录到 profit_sharing_return 记录，整体退款单标记为 partial_failed
+			// ProfitSharingRecoveryScheduler 会扫描并重试失败的回退单
+			log.Error().Err(returnErr).Int64("refund_order_id", refundOrder.ID).Msg("platform profit sharing return failed")
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 			}
-			return NewRequestError(http.StatusInternalServerError, errors.New("profit sharing return failed"))
+			return NewRequestError(http.StatusInternalServerError, errors.New("platform profit sharing return failed"))
 		}
 	}
 	if profitSharingOrder.OperatorCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission, delay); returnErr != nil {
+			log.Error().Err(returnErr).Int64("refund_order_id", refundOrder.ID).Msg("operator profit sharing return failed")
+			// 平台回退可能已成功，不在这里标记整体为 failed；仅标记本次尝试失败
+			// 后续退款单维持 pending 等 recovery 扫描到 failed 的 profit_sharing_return 后重试
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 			}
-			return NewRequestError(http.StatusInternalServerError, errors.New("profit sharing return failed"))
+			return NewRequestError(http.StatusInternalServerError, errors.New("operator profit sharing return failed"))
 		}
 	}
 	if profitSharingOrder.RiderAmount > 0 {
 		outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypePersonal, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount, delay); returnErr != nil {
+			log.Error().Err(returnErr).Int64("refund_order_id", refundOrder.ID).Msg("rider profit sharing return failed")
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 			}
-			return NewRequestError(http.StatusInternalServerError, errors.New("profit sharing return failed"))
+			return NewRequestError(http.StatusInternalServerError, errors.New("rider profit sharing return failed"))
 		}
 	}
 

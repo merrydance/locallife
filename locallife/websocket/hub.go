@@ -941,11 +941,12 @@ func (h *Hub) GetOnlinePlatformCount() int {
 type AlertType string
 
 const (
-	AlertTypePaymentTimeout      AlertType = "PAYMENT_TIMEOUT"       // 支付超时
-	AlertTypeTaskEnqueueFailure  AlertType = "TASK_ENQUEUE_FAILURE"  // 任务入队失败
-	AlertTypeProfitSharingFailed AlertType = "PROFIT_SHARING_FAILED" // 分账失败
-	AlertTypeRefundFailed        AlertType = "REFUND_FAILED"         // 退款失败
-	AlertTypeSystemError         AlertType = "SYSTEM_ERROR"          // 系统错误
+	AlertTypePaymentTimeout        AlertType = "PAYMENT_TIMEOUT"         // 支付超时
+	AlertTypeTaskEnqueueFailure    AlertType = "TASK_ENQUEUE_FAILURE"    // 任务入队失败
+	AlertTypeProfitSharingFailed   AlertType = "PROFIT_SHARING_FAILED"   // 分账失败
+	AlertTypeRefundFailed          AlertType = "REFUND_FAILED"           // 退款失败
+	AlertTypeSystemError           AlertType = "SYSTEM_ERROR"            // 系统错误
+	AlertTypePaymentAmountMismatch AlertType = "PAYMENT_AMOUNT_MISMATCH" // 支付金额不符（疑似攻击）
 )
 
 // AlertLevel 告警级别

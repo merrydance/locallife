@@ -226,3 +226,12 @@ func (server *Server) sendNotificationInternal(ctx context.Context, params SendN
 		_ = server.store.MarkNotificationAsPushed(ctx, notification.ID)
 	}
 }
+
+// sendAlert 安全地发送运营告警，wsHub 未初始化时静默跳过。
+// 用于支付链路中需要人工介入的异常场景。
+func (server *Server) sendAlert(data websocket.AlertData) {
+	if server.wsHub == nil {
+		return
+	}
+	server.wsHub.SendAlert(data)
+}

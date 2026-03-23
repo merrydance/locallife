@@ -272,7 +272,11 @@ func createReservationAddonPaymentOrder(ctx context.Context, store db.Store, res
 	var err error
 
 	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		outTradeNo := generateOutTradeNoWithPrefix("RA")
+		var genErr error
+		outTradeNo, genErr := generateOutTradeNoWithPrefix("RA")
+		if genErr != nil {
+			return db.PaymentOrder{}, genErr
+		}
 		paymentOrder, err = store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
 			UserID:        userID,
 			ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
