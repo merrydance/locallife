@@ -74,7 +74,7 @@ func TestPaymentOrderServiceGetPaymentOrder(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			svc := NewPaymentOrderService(store, nil)
+				svc := NewPaymentOrderService(store, nil, nil)
 			result, err := svc.GetPaymentOrder(context.Background(), input)
 			tc.check(t, result, err)
 		})
@@ -190,7 +190,7 @@ func TestPaymentOrderServiceListPaymentOrders(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			svc := NewPaymentOrderService(store, nil)
+			svc := NewPaymentOrderService(store, nil, nil)
 			result, err := svc.ListPaymentOrders(context.Background(), tc.input)
 			tc.check(t, result, err)
 		})
@@ -304,7 +304,7 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 				clientInterface = paymentClient
 			}
 
-			svc := NewPaymentOrderService(store, clientInterface)
+				svc := NewPaymentOrderService(store, clientInterface, nil)
 			result, err := svc.ClosePaymentOrder(context.Background(), input)
 			tc.check(t, result, err)
 		})

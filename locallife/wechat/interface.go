@@ -88,6 +88,9 @@ type EcommerceClientInterface interface {
 	// GetPlatformCertificateSerial 获取微信支付平台证书序列号
 	GetPlatformCertificateSerial() string
 
+	// GenerateJSAPIPayParams 根据 prepay_id 重新生成小程序调起支付所需参数（用于幂等返回旧 pending 记录时重新签名）
+	GenerateJSAPIPayParams(prepayID string) (*JSAPIPayParams, error)
+
 	// EncryptSensitiveData 使用微信支付平台证书公钥加密敏感数据
 	EncryptSensitiveData(plaintext string) (string, error)
 
@@ -139,7 +142,7 @@ type EcommerceClientInterface interface {
 	QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*ProfitSharingReturnResponse, error)
 
 	// ==================== 退款 ====================
-	// CreateRefund 申请直连退款（用于预定等小程序直连支付场景的退款）
+	// CreateRefund 申请直连退款（仅用于骑手押金等平台直收业务场景的退款）
 	CreateRefund(ctx context.Context, req *RefundRequest) (*RefundResponse, error)
 
 	// CreateEcommerceRefund 申请电商退款

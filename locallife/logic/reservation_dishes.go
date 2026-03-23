@@ -21,10 +21,12 @@ const (
 
 // AddReservationDishesInput describes the add-dishes request.
 type AddReservationDishesInput struct {
-	UserID        int64
-	ReservationID int64
-	Items         []ReservationItemInput
-	Now           time.Time
+	UserID          int64
+	ReservationID   int64
+	Items           []ReservationItemInput
+	Now             time.Time
+	EcommerceClient wechat.EcommerceClientInterface
+	ClientIP        string
 }
 
 // AddReservationDishesResult returns the add-dishes outcome.
@@ -32,6 +34,7 @@ type AddReservationDishesResult struct {
 	Reservation db.TableReservation
 	AddedAmount int64
 	Payment     *db.PaymentOrder
+	PayParams   *wechat.JSAPIPayParams
 }
 
 // AddReservationDishes validates and appends reservation items, optionally creating a payment order.
@@ -88,11 +91,12 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 	result.AddedAmount = addedAmount
 
 	if reservation.PaymentMode == paymentModeFull {
-		paymentOrder, err := createReservationAddonPaymentOrder(ctx, store, reservation.ID, input.UserID, addedAmount, input.Now)
+		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.EcommerceClient, reservation, input.UserID, addedAmount, input.Now, input.ClientIP)
 		if err != nil {
 			return result, err
 		}
 		result.Payment = &paymentOrder
+		result.PayParams = payParams
 	}
 
 	return result, nil
@@ -100,10 +104,12 @@ func AddReservationDishes(ctx context.Context, store db.Store, input AddReservat
 
 // ModifyReservationDishesInput describes a modify-dishes request.
 type ModifyReservationDishesInput struct {
-	UserID        int64
-	ReservationID int64
-	Items         []ReservationItemInput
-	Now           time.Time
+	UserID          int64
+	ReservationID   int64
+	Items           []ReservationItemInput
+	Now             time.Time
+	EcommerceClient wechat.EcommerceClientInterface
+	ClientIP        string
 }
 
 // ModifyReservationDishesResult returns modify-dishes outcomes.
@@ -111,6 +117,7 @@ type ModifyReservationDishesResult struct {
 	Reservation     db.TableReservation
 	Delta           int64
 	Payment         *db.PaymentOrder
+	PayParams       *wechat.JSAPIPayParams
 	RefundAmount    int64
 	RefundInitiated bool
 }
@@ -119,7 +126,7 @@ type ModifyReservationDishesResult struct {
 func ModifyReservationDishes(
 	ctx context.Context,
 	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
+	ecommerceClient wechat.EcommerceClientInterface,
 	input ModifyReservationDishesInput,
 ) (ModifyReservationDishesResult, error) {
 	var result ModifyReservationDishesResult
@@ -192,11 +199,12 @@ func ModifyReservationDishes(
 	}
 
 	if delta > 0 {
-		paymentOrder, err := createReservationAddonPaymentOrder(ctx, store, reservation.ID, input.UserID, delta, input.Now)
+		paymentOrder, payParams, err := createReservationAddonPaymentOrder(ctx, store, input.EcommerceClient, reservation, input.UserID, delta, input.Now, input.ClientIP)
 		if err != nil {
 			return result, err
 		}
 		result.Payment = &paymentOrder
+		result.PayParams = payParams
 		return result, nil
 	}
 
@@ -204,7 +212,7 @@ func ModifyReservationDishes(
 	if refundAmount > reservation.PrepaidAmount {
 		refundAmount = reservation.PrepaidAmount
 	}
-	if refundAmount <= 0 || paymentClient == nil {
+	if refundAmount <= 0 || ecommerceClient == nil {
 		return result, nil
 	}
 
@@ -235,10 +243,11 @@ func ModifyReservationDishes(
 		return result, err
 	}
 
-	wxRefund, err := paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       "Reservation dish change refund",
+	wxRefund, err := ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+		SubMchID:    getSingleSubMchID(ctx, store, paymentOrder),
+		OutTradeNo:  paymentOrder.OutTradeNo,
+		OutRefundNo: outRefundNo,
+		Reason:      "Reservation dish change refund",
 		RefundAmount: refundAmount,
 		TotalAmount:  paymentOrder.Amount,
 	})
@@ -265,41 +274,127 @@ func ModifyReservationDishes(
 	return result, nil
 }
 
-func createReservationAddonPaymentOrder(ctx context.Context, store db.Store, reservationID, userID int64, amount int64, now time.Time) (db.PaymentOrder, error) {
+// getSingleSubMchID looks up the sub-merchant ID for an ecommerce refund on a reservation payment order.
+func getSingleSubMchID(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder) string {
+	if !paymentOrder.ReservationID.Valid {
+		return ""
+	}
+	reservation, err := store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
+	if err != nil {
+		return ""
+	}
+	cfg, err := store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
+	if err != nil {
+		return ""
+	}
+	return cfg.SubMchID
+}
+
+func createReservationAddonPaymentOrder(
+	ctx context.Context,
+	store db.Store,
+	ecommerceClient wechat.EcommerceClientInterface,
+	reservation db.TableReservation,
+	userID, amount int64,
+	now time.Time,
+	clientIP string,
+) (db.PaymentOrder, *wechat.JSAPIPayParams, error) {
 	if amount <= 0 {
-		return db.PaymentOrder{}, NewRequestError(http.StatusBadRequest, errors.New("payment amount must be greater than 0"))
+		return db.PaymentOrder{}, nil, NewRequestError(http.StatusBadRequest, errors.New("payment amount must be greater than 0"))
+	}
+	if ecommerceClient == nil {
+		return db.PaymentOrder{}, nil, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+	}
+
+	user, err := store.GetUser(ctx, userID)
+	if err != nil {
+		return db.PaymentOrder{}, nil, fmt.Errorf("get user: %w", err)
+	}
+	if user.WechatOpenid == "" {
+		return db.PaymentOrder{}, nil, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
 	}
 
 	expiresAt := now.Add(30 * time.Minute)
-	var paymentOrder db.PaymentOrder
-	var err error
 
+	combineOutTradeNo, err := generateCombineOutTradeNoForSingle("RA")
+	if err != nil {
+		return db.PaymentOrder{}, nil, fmt.Errorf("generate combine out trade no: %w", err)
+	}
+
+	var txResult db.CreateEcommercePaymentTxResult
 	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		var genErr error
 		outTradeNo, genErr := generateOutTradeNoWithPrefix("RA")
 		if genErr != nil {
-			return db.PaymentOrder{}, genErr
+			return db.PaymentOrder{}, nil, fmt.Errorf("generate out trade no: %w", genErr)
 		}
-		paymentOrder, err = store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-			UserID:        userID,
-			ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
-			PaymentType:   paymentTypeMiniProgram,
-			BusinessType:  reservationAddonBusiness,
-			Amount:        amount,
-			OutTradeNo:    outTradeNo,
-			ExpiresAt:     pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		txResult, err = store.CreateEcommercePaymentTx(ctx, db.CreateEcommercePaymentTxParams{
+			UserID:            userID,
+			MerchantID:        reservation.MerchantID,
+			Amount:            amount,
+			BusinessType:      reservationAddonBusiness,
+			ReservationID:     reservation.ID,
+			CombineOutTradeNo: combineOutTradeNo,
+			OutTradeNo:        outTradeNo,
+			ExpiresAt:         expiresAt,
+			Attach:            "",
 		})
 		if err == nil {
-			return paymentOrder, nil
+			break
 		}
 		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
 			if !sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
-				return db.PaymentOrder{}, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
+				return db.PaymentOrder{}, nil, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
 			}
 			continue
 		}
-		return db.PaymentOrder{}, err
+		return db.PaymentOrder{}, nil, mapReservationEcommerceError(err)
 	}
 
-	return paymentOrder, err
+	combineResp, payParams, err := ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.SubOrder{
+			{
+				MchID:       txResult.SubMchID,
+				Amount:      amount,
+				OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
+				Description: "Reservation add-on",
+				Attach:      "",
+			},
+		},
+		PayerOpenID: user.WechatOpenid,
+		ExpireTime:  expiresAt,
+		SceneInfo: &wechat.CombineSceneInfo{
+			PayerClientIP: clientIP,
+		},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
+		_, _ = store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		return db.PaymentOrder{}, nil, fmt.Errorf("create combine order: %w", err)
+	}
+	if combineResp == nil || combineResp.PrepayID == "" {
+		cleanupCtx := context.Background()
+		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
+		_, _ = store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		return db.PaymentOrder{}, nil, fmt.Errorf("create combine order: empty prepay id")
+	}
+
+	updatedPayment, err := store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txResult.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		_, _ = store.UpdatePaymentOrderToFailed(cleanupCtx, txResult.PaymentOrder.ID)
+		_, _ = store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		return db.PaymentOrder{}, nil, fmt.Errorf("update prepay id: %w", err)
+	}
+
+	_, _ = store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       txResult.CombinedPaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+
+	return updatedPayment, payParams, nil
 }

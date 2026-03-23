@@ -61,6 +61,7 @@ type Store interface {
 	ReplaceReservationItemsTx(ctx context.Context, arg ReplaceReservationItemsTxParams) (ReplaceReservationItemsTxResult, error)
 	// Payment transactions
 	CreateCombinedPaymentTx(ctx context.Context, arg CreateCombinedPaymentTxParams) (CreateCombinedPaymentTxResult, error)
+	CreateEcommercePaymentTx(ctx context.Context, arg CreateEcommercePaymentTxParams) (CreateEcommercePaymentTxResult, error)
 	CloseCombinedPaymentOrderTx(ctx context.Context, arg CloseCombinedPaymentOrderTxParams) (CloseCombinedPaymentOrderTxResult, error)
 	// Notification idempotency transactions
 	TryClaimWechatNotification(ctx context.Context, arg CreateWechatNotificationParams) (bool, error)

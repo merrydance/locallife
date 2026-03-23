@@ -1257,6 +1257,42 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 		Int("success_count", successCount).
 		Msg("all sub orders processed successfully")
 
+	// ✅ 更新合单主单状态为已支付，保证对账、恢复扫描、报表的 paid_at 正常落库。
+	// 合单层级无单一 transaction_id（每子单各持一个），主单 transaction_id 置 NULL 合规。
+	combinedOrder, err := server.store.GetCombinedPaymentOrderByOutTradeNo(ctx, resource.CombineOutTradeNo)
+	if err != nil {
+		log.Error().Err(err).
+			Str("combine_out_trade_no", resource.CombineOutTradeNo).
+			Msg("get combined payment order failed after sub orders paid")
+		server.releaseNotification(ctx, notification.ID)
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "get combined payment order failed",
+		})
+		return
+	}
+
+	if _, err := server.store.UpdateCombinedPaymentOrderToPaid(ctx, db.UpdateCombinedPaymentOrderToPaidParams{
+		ID:            combinedOrder.ID,
+		TransactionID: pgtype.Text{Valid: false},
+	}); err != nil {
+		log.Error().Err(err).
+			Int64("combined_payment_id", combinedOrder.ID).
+			Str("combine_out_trade_no", resource.CombineOutTradeNo).
+			Msg("update combined payment order to paid failed")
+		server.releaseNotification(ctx, notification.ID)
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "update combined payment order failed",
+		})
+		return
+	}
+
+	log.Info().
+		Int64("combined_payment_id", combinedOrder.ID).
+		Str("combine_out_trade_no", resource.CombineOutTradeNo).
+		Msg("combined payment order marked as paid")
+
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
 	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{

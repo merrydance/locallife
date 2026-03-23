@@ -113,10 +113,11 @@ type reservationDishSummaryDateResponse struct {
 }
 
 type addDishesPaymentResponse struct {
-	Message        string `json:"message"`
-	PaymentOrderID int64  `json:"payment_order_id"`
-	Amount         int64  `json:"amount"`
-	ItemsCount     int    `json:"items_count"`
+	Message        string                `json:"message"`
+	PaymentOrderID int64                 `json:"payment_order_id"`
+	Amount         int64                 `json:"amount"`
+	ItemsCount     int                   `json:"items_count"`
+	PayParams      *miniProgramPayParams `json:"pay_params,omitempty"`
 }
 
 type addDishesSuccessResponse struct {
@@ -127,10 +128,11 @@ type addDishesSuccessResponse struct {
 }
 
 type modifyDishesPaymentResponse struct {
-	Message        string `json:"message"`
-	PaymentOrderID int64  `json:"payment_order_id"`
-	Amount         int64  `json:"amount"`
-	ItemsCount     int    `json:"items_count"`
+	Message        string                `json:"message"`
+	PaymentOrderID int64                 `json:"payment_order_id"`
+	Amount         int64                 `json:"amount"`
+	ItemsCount     int                   `json:"items_count"`
+	PayParams      *miniProgramPayParams `json:"pay_params,omitempty"`
 }
 
 type modifyDishesRefundResponse struct {
@@ -1245,7 +1247,7 @@ func (server *Server) cancelReservation(ctx *gin.Context) {
 		MerchantBeforeDeadlinePercent: server.config.ReservationMerchantRefundPercentBeforeDeadline,
 		MerchantAfterDeadlinePercent:  server.config.ReservationMerchantRefundPercentAfterDeadline,
 	}
-	result, err := logic.CancelReservation(ctx, server.store, server.paymentClient, authPayload.UserID, uriReq.ID, req.Reason, policy, time.Now())
+	result, err := logic.CancelReservation(ctx, server.store, server.ecommerceClient, authPayload.UserID, uriReq.ID, req.Reason, policy, time.Now())
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
 			return
@@ -1404,10 +1406,12 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	}
 
 	result, err := logic.AddReservationDishes(ctx, server.store, logic.AddReservationDishesInput{
-		UserID:        authPayload.UserID,
-		ReservationID: uriReq.ID,
-		Items:         addItems,
-		Now:           time.Now(),
+		UserID:          authPayload.UserID,
+		ReservationID:   uriReq.ID,
+		Items:           addItems,
+		Now:             time.Now(),
+		EcommerceClient: server.ecommerceClient,
+		ClientIP:        ctx.ClientIP(),
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -1418,12 +1422,22 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	}
 
 	if result.Payment != nil {
-		ctx.JSON(http.StatusOK, addDishesPaymentResponse{
+		resp := addDishesPaymentResponse{
 			Message:        "additional dishes added, payment required",
 			PaymentOrderID: result.Payment.ID,
 			Amount:         result.AddedAmount,
 			ItemsCount:     len(req.Items),
-		})
+		}
+		if result.PayParams != nil {
+			resp.PayParams = &miniProgramPayParams{
+				TimeStamp: result.PayParams.TimeStamp,
+				NonceStr:  result.PayParams.NonceStr,
+				Package:   result.PayParams.Package,
+				SignType:  result.PayParams.SignType,
+				PaySign:   result.PayParams.PaySign,
+			}
+		}
+		ctx.JSON(http.StatusOK, resp)
 		return
 	}
 
@@ -1482,11 +1496,13 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 		}
 	}
 
-	result, err := logic.ModifyReservationDishes(ctx, server.store, server.paymentClient, logic.ModifyReservationDishesInput{
-		UserID:        authPayload.UserID,
-		ReservationID: uriReq.ID,
-		Items:         modifyItems,
-		Now:           time.Now(),
+	result, err := logic.ModifyReservationDishes(ctx, server.store, server.ecommerceClient, logic.ModifyReservationDishesInput{
+		UserID:          authPayload.UserID,
+		ReservationID:   uriReq.ID,
+		Items:           modifyItems,
+		Now:             time.Now(),
+		EcommerceClient: server.ecommerceClient,
+		ClientIP:        ctx.ClientIP(),
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {
@@ -1497,12 +1513,22 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 	}
 
 	if result.Payment != nil {
-		ctx.JSON(http.StatusOK, modifyDishesPaymentResponse{
+		resp := modifyDishesPaymentResponse{
 			Message:        "reservation modified, payment required",
 			PaymentOrderID: result.Payment.ID,
 			Amount:         result.Delta,
 			ItemsCount:     len(req.Items),
-		})
+		}
+		if result.PayParams != nil {
+			resp.PayParams = &miniProgramPayParams{
+				TimeStamp: result.PayParams.TimeStamp,
+				NonceStr:  result.PayParams.NonceStr,
+				Package:   result.PayParams.Package,
+				SignType:  result.PayParams.SignType,
+				PaySign:   result.PayParams.PaySign,
+			}
+		}
+		ctx.JSON(http.StatusOK, resp)
 		return
 	}
 

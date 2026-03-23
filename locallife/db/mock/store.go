@@ -2973,6 +2973,21 @@ func (mr *MockStoreMockRecorder) CreateEcommerceApplyment(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEcommerceApplyment", reflect.TypeOf((*MockStore)(nil).CreateEcommerceApplyment), ctx, arg)
 }
 
+// CreateEcommercePaymentTx mocks base method.
+func (m *MockStore) CreateEcommercePaymentTx(ctx context.Context, arg db.CreateEcommercePaymentTxParams) (db.CreateEcommercePaymentTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateEcommercePaymentTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreateEcommercePaymentTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateEcommercePaymentTx indicates an expected call of CreateEcommercePaymentTx.
+func (mr *MockStoreMockRecorder) CreateEcommercePaymentTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEcommercePaymentTx", reflect.TypeOf((*MockStore)(nil).CreateEcommercePaymentTx), ctx, arg)
+}
+
 // CreateFoodSafetyIncident mocks base method.
 func (m *MockStore) CreateFoodSafetyIncident(ctx context.Context, arg db.CreateFoodSafetyIncidentParams) (db.FoodSafetyIncident, error) {
 	m.ctrl.T.Helper()

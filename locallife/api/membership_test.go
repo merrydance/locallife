@@ -199,23 +199,39 @@ func TestRechargeMembershipAPI(t *testing.T) {
 					Times(1).
 					Return(user, nil)
 
-				// Mock idempotency check: no existing pending payment order
+				// Mock idempotency check: no existing pending payment order with prepay_id
 				store.EXPECT().
 					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 
-				// Mock CreatePaymentOrder
+				// Mock CreateEcommercePaymentTx
 				store.EXPECT().
-					CreatePaymentOrder(gomock.Any(), gomock.Any()).
+					CreateEcommercePaymentTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.PaymentOrder{
-						ID:           1,
-						UserID:       user.ID,
-						OutTradeNo:   gomock.Any().String(),
-						BusinessType: "membership_recharge",
-						Amount:       100 * fenPerYuan,
+					Return(db.CreateEcommercePaymentTxResult{
+						PaymentOrder: db.PaymentOrder{
+							ID:           1,
+							UserID:       user.ID,
+							OutTradeNo:   "MBRC123",
+							BusinessType: "membership_recharge",
+							Amount:       100 * fenPerYuan,
+						},
+						CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 1},
+						SubMchID:             "sub_mch_001",
 					}, nil)
+
+				// Mock UpdatePaymentOrderPrepayId
+				store.EXPECT().
+					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
+
+				// Mock UpdateCombinedPaymentOrderPrepay
+				store.EXPECT().
+					UpdateCombinedPaymentOrderPrepay(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CombinedPaymentOrder{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -314,22 +330,25 @@ func TestRechargeMembershipAPI(t *testing.T) {
 
 			// Create mock payment client
 			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+
+			// Create server with mock payment client
+			server := newTestServerWithPayment(t, store, paymentClient)
+
 			if tc.name == "OK" {
-				// Mock CreateJSAPIOrder for successful case
-				paymentClient.EXPECT().
-					CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+				// Mock ecommerce client with CreateCombineOrder for successful case
+				ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+				ecommerceClient.EXPECT().
+					CreateCombineOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(nil, &wechat.JSAPIPayParams{
+					Return(&wechat.CombineOrderResponse{PrepayID: "prepay_id_test"}, &wechat.JSAPIPayParams{
 						TimeStamp: "123456",
 						NonceStr:  "random",
 						Package:   "prepay_id=test",
 						SignType:  "RSA",
 						PaySign:   "sign",
 					}, nil)
+				server.SetEcommerceClientForTest(ecommerceClient)
 			}
-
-			// Create server with mock payment client
-			server := newTestServerWithPayment(t, store, paymentClient)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)

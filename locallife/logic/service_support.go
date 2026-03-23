@@ -110,7 +110,7 @@ func NewDefaultPaymentFacade(
 	return &DefaultPaymentFacade{
 		paymentClient:   paymentClient,
 		ecommerceClient: ecommerceClient,
-		paymentService:  NewPaymentOrderService(store, paymentClient),
+		paymentService:  NewPaymentOrderService(store, paymentClient, ecommerceClient),
 		combinedService: NewCombinedPaymentService(store, ecommerceClient),
 	}
 }

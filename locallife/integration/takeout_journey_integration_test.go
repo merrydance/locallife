@@ -1686,12 +1686,35 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
 	require.NoError(t, err)
+	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_reservation_c1",
+		Status:     "active",
+	})
+	require.NoError(t, err)
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	mockEcommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
+			TimeStamp: "1",
+			NonceStr:  "nonce",
+			Package:   "prepay_id=prepay_reservation_c1_001",
+			SignType:  "RSA",
+			PaySign:   "sign",
+		}, nil)
+	server.SetEcommerceClientForTest(mockEcommerceClient)
+	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订（定金模式）
 	var created reservationStatusResponse
@@ -1711,7 +1734,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单
+	// 2) 创建预订支付单（收付通合单支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -1728,40 +1751,40 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	po, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 
-	// 3) 走支付回调 + 任务入队
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
-	mockPaymentClient.EXPECT().
+	// 3) 走合单支付回调 + 任务入队
+	mockEcommerceClient.EXPECT().
 		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
-	mockPaymentClient.EXPECT().
-		DecryptPaymentNotification(gomock.Any()).
+	combinedPaymentOrder, err := store.GetCombinedPaymentOrder(ctx, po.CombinedPaymentID.Int64)
+	require.NoError(t, err)
+
+	mockEcommerceClient.EXPECT().
+		DecryptCombinePaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PaymentNotificationResource{
-			TransactionID: "integration_tx_reservation_001",
-			OutTradeNo:    po.OutTradeNo,
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
-				Total:         po.Amount,
-				PayerTotal:    po.Amount,
-				Currency:      "CNY",
-				PayerCurrency: "CNY",
+		Return(&wechat.CombinePaymentNotification{
+			CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo,
+			SubOrders: []wechat.CombineSubOrderResult{
+				{
+					OutTradeNo:    po.OutTradeNo,
+					TransactionID: "integration_tx_reservation_001",
+					TradeState:    "SUCCESS",
+					Amount: struct {
+						TotalAmount int64  `json:"total_amount"`
+						PayerAmount int64  `json:"payer_amount"`
+						Currency    string `json:"currency"`
+					}{
+						TotalAmount: po.Amount,
+						PayerAmount: po.Amount,
+						Currency:    "CNY",
+					},
+				},
 			},
 		}, nil)
 
 	distributor := &capturePaymentSuccessDistributor{}
-	server.SetPaymentClientForTest(mockPaymentClient)
 	server.SetTaskDistributorForTest(distributor)
-	defer server.SetPaymentClientForTest(nil)
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "notify_reservation_" + util.RandomString(8)
@@ -1782,7 +1805,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	bodyBytes, err := json.Marshal(body)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/notify", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/notify", bytes.NewReader(bodyBytes))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Wechatpay-Timestamp", "1234567890")
@@ -2056,12 +2079,35 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
 	require.NoError(t, err)
+	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_reservation_noshow",
+		Status:     "active",
+	})
+	require.NoError(t, err)
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	mockEcommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
+			TimeStamp: "1",
+			NonceStr:  "nonce",
+			Package:   "prepay_id=prepay_reservation_noshow_001",
+			SignType:  "RSA",
+			PaySign:   "sign",
+		}, nil)
+	server.SetEcommerceClientForTest(mockEcommerceClient)
+	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -2081,7 +2127,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单
+	// 2) 创建预订支付单（收付通合单支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -2098,40 +2144,40 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	po, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 
-	// 3) 走支付回调 + 任务入队
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
-	mockPaymentClient.EXPECT().
+	// 3) 走合单支付回调 + 任务入队
+	mockEcommerceClient.EXPECT().
 		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
-	mockPaymentClient.EXPECT().
-		DecryptPaymentNotification(gomock.Any()).
+	combinedPaymentOrder, err := store.GetCombinedPaymentOrder(ctx, po.CombinedPaymentID.Int64)
+	require.NoError(t, err)
+
+	mockEcommerceClient.EXPECT().
+		DecryptCombinePaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.PaymentNotificationResource{
-			TransactionID: "integration_tx_reservation_noshow_001",
-			OutTradeNo:    po.OutTradeNo,
-			TradeState:    "SUCCESS",
-			Amount: struct {
-				Total         int64  `json:"total"`
-				PayerTotal    int64  `json:"payer_total"`
-				Currency      string `json:"currency"`
-				PayerCurrency string `json:"payer_currency"`
-			}{
-				Total:         po.Amount,
-				PayerTotal:    po.Amount,
-				Currency:      "CNY",
-				PayerCurrency: "CNY",
+		Return(&wechat.CombinePaymentNotification{
+			CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo,
+			SubOrders: []wechat.CombineSubOrderResult{
+				{
+					OutTradeNo:    po.OutTradeNo,
+					TransactionID: "integration_tx_reservation_noshow_001",
+					TradeState:    "SUCCESS",
+					Amount: struct {
+						TotalAmount int64  `json:"total_amount"`
+						PayerAmount int64  `json:"payer_amount"`
+						Currency    string `json:"currency"`
+					}{
+						TotalAmount: po.Amount,
+						PayerAmount: po.Amount,
+						Currency:    "CNY",
+					},
+				},
 			},
 		}, nil)
 
 	distributor := &capturePaymentSuccessDistributor{}
-	server.SetPaymentClientForTest(mockPaymentClient)
 	server.SetTaskDistributorForTest(distributor)
-	defer server.SetPaymentClientForTest(nil)
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "notify_reservation_noshow_" + util.RandomString(8)
@@ -2152,7 +2198,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	bodyBytes, err := json.Marshal(body)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/notify", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/notify", bytes.NewReader(bodyBytes))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Wechatpay-Timestamp", "1234567890")
@@ -2213,12 +2259,35 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
 	require.NoError(t, err)
+	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_reservation_cancel",
+		Status:     "active",
+	})
+	require.NoError(t, err)
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	mockEcommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
+			TimeStamp: "1",
+			NonceStr:  "nonce",
+			Package:   "prepay_id=prepay_reservation_cancel_001",
+			SignType:  "RSA",
+			PaySign:   "sign",
+		}, nil)
+	server.SetEcommerceClientForTest(mockEcommerceClient)
+	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -2238,7 +2307,7 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单
+	// 2) 创建预订支付单（收付通合单支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -2277,17 +2346,11 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 	require.Equal(t, "paid", currentPayment.Status)
 	require.Greater(t, currentPayment.Amount, int64(0))
 
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
-	mockPaymentClient.EXPECT().
-		CreateRefund(gomock.Any(), gomock.Any()).
+	// 退款走收付通路径（payment_type = "profit_sharing"）
+	mockEcommerceClient.EXPECT().
+		CreateEcommerceRefund(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.RefundResponse{Status: wechat.RefundStatusSuccess, RefundID: "refund_001"}, nil)
-
-	server.SetPaymentClientForTest(mockPaymentClient)
-	defer server.SetPaymentClientForTest(nil)
+		Return(&wechat.EcommerceRefundResponse{Status: wechat.RefundStatusSuccess, RefundID: "refund_001"}, nil)
 
 	// 5) 取消预订（退款截止前）
 	{
@@ -2327,12 +2390,35 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
 	require.NoError(t, err)
+	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_reservation_cancel_deadline",
+		Status:     "active",
+	})
+	require.NoError(t, err)
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	mockEcommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
+			TimeStamp: "1",
+			NonceStr:  "nonce",
+			Package:   "prepay_id=prepay_reservation_cancel_deadline_001",
+			SignType:  "RSA",
+			PaySign:   "sign",
+		}, nil)
+	server.SetEcommerceClientForTest(mockEcommerceClient)
+	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -2352,7 +2438,7 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单
+	// 2) 创建预订支付单（收付通合单支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -2418,12 +2504,35 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	require.NoError(t, err)
 	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
 	require.NoError(t, err)
+	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_reservation_refund_notify",
+		Status:     "active",
+	})
+	require.NoError(t, err)
 
 	room := createIntegrationRoomTable(t, store, merchant.ID)
 	customer := createIntegrationUser(t, store)
 
 	reservationDate := time.Now().Add(24 * time.Hour).Format("2006-01-02")
 	reservationTime := "19:00"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	mockEcommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
+			TimeStamp: "1",
+			NonceStr:  "nonce",
+			Package:   "prepay_id=prepay_reservation_refund_notify_001",
+			SignType:  "RSA",
+			PaySign:   "sign",
+		}, nil)
+	server.SetEcommerceClientForTest(mockEcommerceClient)
+	defer server.SetEcommerceClientForTest(nil)
 
 	// 1) 创建预订
 	var created reservationStatusResponse
@@ -2443,7 +2552,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单并标记已支付
+	// 2) 创建预订支付单（收付通合单支付）并标记已支付
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -2482,20 +2591,16 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 3) 退款回调通知
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	mockPaymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
-	mockPaymentClient.EXPECT().
+	// 3) 退款回调通知（收付通渠道）
+	mockEcommerceClient.EXPECT().
 		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
-	mockPaymentClient.EXPECT().
-		DecryptRefundNotification(gomock.Any()).
+	mockEcommerceClient.EXPECT().
+		DecryptEcommerceRefundNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.RefundNotificationResource{
+		Return(&wechat.EcommerceRefundNotification{
 			OutTradeNo:   po.OutTradeNo,
 			OutRefundNo:  outRefundNo,
 			RefundID:     "refund_notify_id_001",
@@ -2514,9 +2619,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 		}, nil)
 
 	distributor := &captureRefundResultDistributor{}
-	server.SetPaymentClientForTest(mockPaymentClient)
 	server.SetTaskDistributorForTest(distributor)
-	defer server.SetPaymentClientForTest(nil)
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "refund_notify_" + util.RandomString(8)
@@ -2536,7 +2639,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	bodyBytes, err := json.Marshal(body)
 	require.NoError(t, err)
 
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/refund-notify", bytes.NewReader(bodyBytes))
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/refund-notify", bytes.NewReader(bodyBytes))
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Wechatpay-Timestamp", "1234567890")

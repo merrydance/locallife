@@ -527,6 +527,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) FinishProfitSharing(ctx, sub
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FinishProfitSharing", reflect.TypeOf((*MockEcommerceClientInterface)(nil).FinishProfitSharing), ctx, subMchID, transactionID, outOrderNo, description)
 }
 
+// GenerateJSAPIPayParams mocks base method.
+func (m *MockEcommerceClientInterface) GenerateJSAPIPayParams(prepayID string) (*wechat.JSAPIPayParams, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateJSAPIPayParams", prepayID)
+	ret0, _ := ret[0].(*wechat.JSAPIPayParams)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateJSAPIPayParams indicates an expected call of GenerateJSAPIPayParams.
+func (mr *MockEcommerceClientInterfaceMockRecorder) GenerateJSAPIPayParams(prepayID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateJSAPIPayParams", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GenerateJSAPIPayParams), prepayID)
+}
+
 // GetComplaintDetail mocks base method.
 func (m *MockEcommerceClientInterface) GetComplaintDetail(ctx context.Context, complaintID string) (*wechat.ComplaintDetail, error) {
 	m.ctrl.T.Helper()

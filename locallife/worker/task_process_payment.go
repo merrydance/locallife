@@ -1675,43 +1675,70 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		}
 	}
 
-	// 调用微信退款 API
-	refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-		SubMchID:     paymentConfig.SubMchID,
-		OutTradeNo:   paymentOrder.OutTradeNo,
-		OutRefundNo:  outRefundNo,
-		Reason:       payload.Reason,
-		RefundAmount: payload.RefundAmount,
-		TotalAmount:  paymentOrder.Amount,
-	})
-	if err != nil {
-		// 更新退款状态为失败
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-		return fmt.Errorf("call wechat refund API: %w", err)
-	}
-
-	// 根据微信返回状态更新退款订单
-	switch refundResp.Status {
-	case wechat.RefundStatusSuccess:
-		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		// 仅在全额退完时才将支付单标记为 refunded
-		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
-	case wechat.RefundStatusProcessing:
-		// 更新退款单为处理中
-		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-			ID:       refundOrder.ID,
-			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
+	// 根据支付渠道选择退款 API，与同步退款服务（refund_service.go）保持一致：
+	// - profit_sharing（收付通）→ CreateEcommerceRefund，需携带 SubMchID
+	// - miniprogram/native 等直连支付 → CreateRefund，直连退款 API
+	if paymentOrder.PaymentType == "profit_sharing" {
+		refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+			SubMchID:     paymentConfig.SubMchID,
+			OutTradeNo:   paymentOrder.OutTradeNo,
+			OutRefundNo:  outRefundNo,
+			Reason:       payload.Reason,
+			RefundAmount: payload.RefundAmount,
+			TotalAmount:  paymentOrder.Amount,
 		})
-	default:
-		// 其他状态标记为失败
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if err != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("call wechat ecommerce refund API: %w", err)
+		}
+		switch refundResp.Status {
+		case wechat.RefundStatusSuccess:
+			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+		case wechat.RefundStatusProcessing:
+			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+				ID:       refundOrder.ID,
+				RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
+			})
+		default:
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		}
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", outRefundNo).
+			Str("status", refundResp.Status).
+			Msg("ecommerce refund request processed")
+	} else {
+		// 直连支付退款（miniprogram/native 等）
+		wxRefund, err := processor.ecommerceClient.CreateRefund(ctx, &wechat.RefundRequest{
+			OutTradeNo:   paymentOrder.OutTradeNo,
+			OutRefundNo:  outRefundNo,
+			Reason:       payload.Reason,
+			RefundAmount: payload.RefundAmount,
+			TotalAmount:  paymentOrder.Amount,
+		})
+		if err != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("call wechat refund API: %w", err)
+		}
+		switch wxRefund.Status {
+		case wechat.RefundStatusSuccess:
+			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+		case wechat.RefundStatusProcessing:
+			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+				ID:       refundOrder.ID,
+				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
+			})
+		default:
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		}
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", outRefundNo).
+			Str("status", wxRefund.Status).
+			Msg("direct refund request processed")
 	}
-
-	log.Info().
-		Int64("refund_order_id", refundOrder.ID).
-		Str("out_refund_no", outRefundNo).
-		Str("status", string(refundResp.Status)).
-		Msg("refund request processed")
 
 	return nil
 }
@@ -1915,51 +1942,99 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 		return fmt.Errorf("ecommerce client not configured")
 	}
 
-	// 使用 TransactionID 直接发起退款（无需 OutTradeNo，绕过本地状态约束）
-	refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-		SubMchID:      subMchID,
-		TransactionID: payload.TransactionID,
-		OutRefundNo:   payload.OutRefundNo,
-		Reason:        "已关闭订单异常到账，系统自动退款",
-		RefundAmount:  payload.RefundAmount,
-		TotalAmount:   paymentOrder.Amount,
-	})
-	if err != nil {
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-		return fmt.Errorf("call wechat refund API: %w", err)
-	}
-
-	switch refundResp.Status {
-	case wechat.RefundStatusSuccess:
-		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
-		log.Info().
-			Int64("refund_order_id", refundOrder.ID).
-			Str("out_refund_no", payload.OutRefundNo).
-			Msg("anomaly refund completed successfully")
-	case wechat.RefundStatusProcessing:
-		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
-			ID:       refundOrder.ID,
-			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
+	// 根据支付渠道选择退款 API：
+	// - profit_sharing（收付通）→ CreateEcommerceRefund，使用 TransactionID 绕过本地状态约束
+	// - miniprogram/native 等直连支付 → CreateRefund，使用 OutTradeNo
+	if paymentOrder.PaymentType == "profit_sharing" {
+		refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+			SubMchID:      subMchID,
+			TransactionID: payload.TransactionID,
+			OutRefundNo:   payload.OutRefundNo,
+			Reason:        "已关闭订单异常到账，系统自动退款",
+			RefundAmount:  payload.RefundAmount,
+			TotalAmount:   paymentOrder.Amount,
 		})
-		log.Info().
-			Int64("refund_order_id", refundOrder.ID).
-			Str("refund_id", refundResp.RefundID).
-			Msg("anomaly refund in processing, will be updated via refund callback")
-	default:
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-		processor.publishAlert(ctx, AlertData{
-			AlertType:   AlertTypeRefundFailed,
-			Level:       AlertLevelCritical,
-			Title:       "⚠️ 异常退款接口返回非预期状态",
-			Message:     fmt.Sprintf("退款单 %d（支付单 %d）收到微信退款状态 %q，请核查", refundOrder.ID, payload.PaymentOrderID, string(refundResp.Status)),
-			RelatedID:   refundOrder.ID,
-			RelatedType: "refund_order",
-			Extra: map[string]interface{}{
-				"transaction_id": payload.TransactionID,
-				"refund_id":      refundResp.RefundID,
-			},
+		if err != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("call wechat ecommerce refund API: %w", err)
+		}
+		switch refundResp.Status {
+		case wechat.RefundStatusSuccess:
+			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", payload.OutRefundNo).
+				Msg("anomaly ecommerce refund completed successfully")
+		case wechat.RefundStatusProcessing:
+			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+				ID:       refundOrder.ID,
+				RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
+			})
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("refund_id", refundResp.RefundID).
+				Msg("anomaly ecommerce refund in processing, will be updated via refund callback")
+		default:
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			processor.publishAlert(ctx, AlertData{
+				AlertType:   AlertTypeRefundFailed,
+				Level:       AlertLevelCritical,
+				Title:       "⚠️ 异常退款接口返回非预期状态",
+				Message:     fmt.Sprintf("退款单 %d（支付单 %d）收到微信退款状态 %q，请核查", refundOrder.ID, payload.PaymentOrderID, refundResp.Status),
+				RelatedID:   refundOrder.ID,
+				RelatedType: "refund_order",
+				Extra: map[string]interface{}{
+					"transaction_id": payload.TransactionID,
+					"refund_id":      refundResp.RefundID,
+				},
+			})
+		}
+	} else {
+		// 直连支付退款（miniprogram/native 等），使用 OutTradeNo
+		wxRefund, err := processor.ecommerceClient.CreateRefund(ctx, &wechat.RefundRequest{
+			OutTradeNo:   paymentOrder.OutTradeNo,
+			OutRefundNo:  payload.OutRefundNo,
+			Reason:       "已关闭订单异常到账，系统自动退款",
+			RefundAmount: payload.RefundAmount,
+			TotalAmount:  paymentOrder.Amount,
 		})
+		if err != nil {
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			return fmt.Errorf("call wechat refund API: %w", err)
+		}
+		switch wxRefund.Status {
+		case wechat.RefundStatusSuccess:
+			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", payload.OutRefundNo).
+				Msg("anomaly direct refund completed successfully")
+		case wechat.RefundStatusProcessing:
+			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+				ID:       refundOrder.ID,
+				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
+			})
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("refund_id", wxRefund.RefundID).
+				Msg("anomaly direct refund in processing, will be updated via refund callback")
+		default:
+			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			processor.publishAlert(ctx, AlertData{
+				AlertType:   AlertTypeRefundFailed,
+				Level:       AlertLevelCritical,
+				Title:       "⚠️ 异常退款接口返回非预期状态",
+				Message:     fmt.Sprintf("退款单 %d（支付单 %d）收到微信退款状态 %q，请核查", refundOrder.ID, payload.PaymentOrderID, wxRefund.Status),
+				RelatedID:   refundOrder.ID,
+				RelatedType: "refund_order",
+				Extra: map[string]interface{}{
+					"transaction_id": payload.TransactionID,
+					"refund_id":      wxRefund.RefundID,
+				},
+			})
+		}
 	}
 
 	return nil

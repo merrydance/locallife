@@ -24,6 +24,7 @@ type OrderService struct {
 	taskScheduler         TaskScheduler
 	normalizer            DishCustomizationNormalizer
 	paymentClient         wechat.PaymentClientInterface
+	ecommerceClient       wechat.EcommerceClientInterface
 	clock                 Clock
 	idGenerator           IDGenerator
 	orderPolicy           OrderPolicy
@@ -37,6 +38,7 @@ func NewOrderService(
 	taskScheduler TaskScheduler,
 	normalizer DishCustomizationNormalizer,
 	paymentClient wechat.PaymentClientInterface,
+	ecommerceClient wechat.EcommerceClientInterface,
 	clock Clock,
 	idGenerator IDGenerator,
 	orderPolicy OrderPolicy,
@@ -59,6 +61,7 @@ func NewOrderService(
 		taskScheduler:         taskScheduler,
 		normalizer:            normalizer,
 		paymentClient:         paymentClient,
+		ecommerceClient:       ecommerceClient,
 		clock:                 clock,
 		idGenerator:           idGenerator,
 		orderPolicy:           orderPolicy,
@@ -509,9 +512,10 @@ func (s *OrderService) RejectMerchantOrder(ctx context.Context, input MerchantOr
 		})
 	}
 
-	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.paymentClient, MerchantRejectRefundInput{
-		OrderID: result.Order.ID,
-		Reason:  input.Reason,
+	refundResult, refundErr := ProcessMerchantRejectRefund(ctx, s.store, s.paymentClient, s.ecommerceClient, MerchantRejectRefundInput{
+		MerchantID: input.MerchantID,
+		OrderID:    result.Order.ID,
+		Reason:     input.Reason,
 	})
 	if refundErr != nil {
 		if refundResult.RefundOrder != nil {

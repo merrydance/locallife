@@ -144,7 +144,7 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 				OrderID:       pgtype.Int8{Int64: info.Order.ID, Valid: true},
 				ReservationID: pgtype.Int8{Valid: false},
 				UserID:        arg.UserID,
-				PaymentType:   "miniprogram", // Changed from "combined" to satisfy DB constraint
+				PaymentType:   "profit_sharing", // 合单支付走收付通渠道，子单必须标记为 profit_sharing
 				BusinessType:  "order",
 				Amount:        info.Order.TotalAmount,
 				OutTradeNo:    outTradeNo,

@@ -31,17 +31,19 @@ const (
 
 // PaymentOrderService encapsulates payment order creation logic.
 type PaymentOrderService struct {
-	store         db.Store
-	paymentClient wechat.PaymentClientInterface
-	now           func() time.Time
+	store           db.Store
+	paymentClient   wechat.PaymentClientInterface
+	ecommerceClient wechat.EcommerceClientInterface
+	now             func() time.Time
 }
 
 // NewPaymentOrderService creates a payment order service.
-func NewPaymentOrderService(store db.Store, paymentClient wechat.PaymentClientInterface) *PaymentOrderService {
+func NewPaymentOrderService(store db.Store, paymentClient wechat.PaymentClientInterface, ecommerceClient wechat.EcommerceClientInterface) *PaymentOrderService {
 	return &PaymentOrderService{
-		store:         store,
-		paymentClient: paymentClient,
-		now:           time.Now,
+		store:           store,
+		paymentClient:   paymentClient,
+		ecommerceClient: ecommerceClient,
+		now:             time.Now,
 	}
 }
 
@@ -181,8 +183,15 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 
 	expiresAt := svc.now().Add(30 * time.Minute)
 
+	// ==================== 预定走收付通合单支付 ====================
+	if input.BusinessType == businessTypeReservation {
+		return svc.createReservationEcommercePayment(ctx, input, merchantID, merchantName, amount, attach, expiresAt)
+	}
+
+	// ==================== 订单走直连或扫码支付 ====================
 	var paymentOrder db.PaymentOrder
 	var outTradeNo string
+	err = nil
 	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
 		var genErr error
 		outTradeNo, genErr = generateOutTradeNo()
@@ -197,11 +206,7 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 			OutTradeNo:   outTradeNo,
 			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
 		}
-		if input.BusinessType == businessTypeReservation {
-			createParams.ReservationID = pgtype.Int8{Int64: input.OrderID, Valid: true}
-		} else {
-			createParams.OrderID = pgtype.Int8{Int64: input.OrderID, Valid: true}
-		}
+		createParams.OrderID = pgtype.Int8{Int64: input.OrderID, Valid: true}
 		paymentOrder, err = svc.store.CreatePaymentOrder(ctx, createParams)
 		if err == nil {
 			break
@@ -231,11 +236,7 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 		if merchantID > 0 {
 			merchant, err := svc.store.GetMerchant(ctx, merchantID)
 			if err == nil {
-				if input.BusinessType == businessTypeReservation {
-					merchantName = merchant.Name + " - Reservation Deposit"
-				} else {
-					merchantName = merchant.Name + " - Order Payment"
-				}
+				merchantName = merchant.Name + " - Order Payment"
 			}
 		}
 
@@ -258,14 +259,7 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 			PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
 		})
 		if err != nil {
-			// 微信下单已成功但本地更新失败。
-			// 策略：退出后调用分布式锁来临界区关闭本地支付单和微信单。
-			// 微信单不需要主动关闭：用户不会收到 prepay_id 故无法发起调起支付，
-			// 微信单会在 30 分钟后自动过期关闭。
-			// 本地支付单则需要由超时消费者除理（已有 payment_timeout 任务干赔）。
-			// 同时更新支付单为失败，避免卡在 pending 状态。
 			_, _ = svc.store.UpdatePaymentOrderToFailed(ctx, paymentOrder.ID)
-			// 尝试调用微信关单 API（如果微信单已存在）
 			if svc.paymentClient != nil {
 				if closeErr := svc.paymentClient.CloseOrder(ctx, outTradeNo); closeErr != nil {
 					log.Warn().Err(closeErr).Str("out_trade_no", outTradeNo).Msg("close wechat order after prepay_id update failure")
@@ -279,6 +273,151 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	}
 
 	return result, nil
+}
+
+// createReservationEcommercePayment 通过收付通合单支付创建预定支付单
+// 预定金/全款皆走子商户收付通，确保资金进入商家的二级商户账户。
+func (svc *PaymentOrderService) createReservationEcommercePayment(
+	ctx context.Context,
+	input CreatePaymentOrderInput,
+	merchantID int64,
+	merchantName string,
+	amount int64,
+	attach string,
+	expiresAt time.Time,
+) (CreatePaymentOrderResult, error) {
+	var result CreatePaymentOrderResult
+
+	if svc.ecommerceClient == nil {
+		return result, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+	}
+
+	user, err := svc.store.GetUser(ctx, input.UserID)
+	if err != nil {
+		return result, fmt.Errorf("get user: %w", err)
+	}
+	if user.WechatOpenid == "" {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
+	}
+
+	if merchantID > 0 {
+		merchant, err := svc.store.GetMerchant(ctx, merchantID)
+		if err == nil {
+			merchantName = merchant.Name + " - Reservation Deposit"
+		}
+	}
+
+	// 生成合单主单号和子单号
+	combineOutTradeNo, err := generateCombineOutTradeNoForSingle("RS")
+	if err != nil {
+		return result, fmt.Errorf("generate combine out trade no: %w", err)
+	}
+
+	var txResult db.CreateEcommercePaymentTxResult
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		outTradeNo, genErr := generateOutTradeNoWithPrefix("RS")
+		if genErr != nil {
+			return result, fmt.Errorf("generate out trade no: %w", genErr)
+		}
+		txResult, err = svc.store.CreateEcommercePaymentTx(ctx, db.CreateEcommercePaymentTxParams{
+			UserID:            input.UserID,
+			MerchantID:        merchantID,
+			Amount:            amount,
+			BusinessType:      input.BusinessType,
+			ReservationID:     input.OrderID,
+			CombineOutTradeNo: combineOutTradeNo,
+			OutTradeNo:        outTradeNo,
+			ExpiresAt:         expiresAt,
+			Attach:            attach,
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			if !sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
+				return result, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
+			}
+			continue
+		}
+		// 非直连支付错误，检查是否为商户配置问题
+		return result, mapReservationEcommerceError(err)
+	}
+
+	result.PaymentOrder = txResult.PaymentOrder
+
+	// 调用收付通合单支付 API
+	combineResp, payParams, err := svc.ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.SubOrder{
+			{
+				MchID:       txResult.SubMchID,
+				Amount:      amount,
+				OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
+				Description: merchantName,
+				Attach:      attach,
+			},
+		},
+		PayerOpenID: user.WechatOpenid,
+		ExpireTime:  expiresAt,
+		SceneInfo: &wechat.CombineSceneInfo{
+			PayerClientIP: input.ClientIP,
+		},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
+		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		return result, fmt.Errorf("create combine order: %w", err)
+	}
+	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
+		cleanupCtx := context.Background()
+		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
+		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		return result, fmt.Errorf("create combine order: empty prepay id")
+	}
+
+	// 保存 prepay_id 到 payment_orders（供幂等查询重新签名）
+	updatedPayment, err := svc.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txResult.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		_, _ = svc.store.UpdatePaymentOrderToFailed(cleanupCtx, txResult.PaymentOrder.ID)
+		_, _ = svc.store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		if closeErr := svc.ecommerceClient.CloseCombineOrder(cleanupCtx, combineOutTradeNo, []wechat.SubOrderClose{
+			{MchID: txResult.SubMchID, OutTradeNo: txResult.PaymentOrder.OutTradeNo},
+		}); closeErr != nil {
+			log.Warn().Err(closeErr).Str("combine_out_trade_no", combineOutTradeNo).Msg("close combine order after prepay update failure")
+		}
+		return result, fmt.Errorf("update prepay id: %w", err)
+	}
+
+	// 同步 prepay_id 到合单主记录
+	_, _ = svc.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       txResult.CombinedPaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+
+	result.PaymentOrder = updatedPayment
+	result.PayParams = payParams
+	return result, nil
+}
+
+// generateCombineOutTradeNoForSingle 生成单子商户合单主单号
+func generateCombineOutTradeNoForSingle(prefix string) (string, error) {
+	return generateOutTradeNoWithPrefix(prefix + "C")
+}
+
+func mapReservationEcommerceError(err error) error {
+	if err == nil {
+		return nil
+	}
+	msg := err.Error()
+	if strings.Contains(msg, "payment config invalid") || strings.Contains(msg, "inactive") {
+		return NewRequestError(http.StatusBadRequest, errors.New("merchant payment config invalid or not activated"))
+	}
+	return fmt.Errorf("create ecommerce payment: %w", err)
 }
 
 func (svc *PaymentOrderService) GetPaymentOrder(ctx context.Context, input GetPaymentOrderInput) (GetPaymentOrderResult, error) {

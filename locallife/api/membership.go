@@ -673,14 +673,13 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	ruleID := rechargeCtx.RechargeRuleID
 
 	// 创建支付订单
-	var outTradeNo string
 	expireTime := time.Now().Add(5 * time.Minute) // 5分钟过期
 
 	if req.PaymentMethod != "wechat" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("unsupported payment method")))
 		return
 	}
-	if server.paymentClient == nil {
+	if server.ecommerceClient == nil {
 		ctx.JSON(http.StatusServiceUnavailable, errorResponse(errors.New("payment service not available")))
 		return
 	}
@@ -714,88 +713,110 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 	attachStr := string(attachBytes)
 
-	// 幂等保护：检查是否已有未过期的 pending 支付单（同用户、同业务类型、同金额）
-	var paymentOrder db.PaymentOrder
+	// 幂等保护：如已有未过期的 pending 支付单且已有 prepay_id，直接重新签名返回
 	existingPayment, findErr := server.store.GetPendingPaymentOrderByUserAndBusinessType(ctx, db.GetPendingPaymentOrderByUserAndBusinessTypeParams{
 		UserID:       authPayload.UserID,
 		BusinessType: BusinessTypeMembershipRecharge,
 		Amount:       req.RechargeAmount,
 	})
-	if findErr == nil {
-		// 已存在未过期的 pending 单，复用
-		outTradeNo = existingPayment.OutTradeNo
-
-		// 如果已有 prepay_id，重新签名返回支付参数
-		if existingPayment.PrepayID.Valid && server.paymentClient != nil {
-			if payParams, signErr := server.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
-				ctx.JSON(http.StatusOK, membershipPaymentResponse{
-					PaymentOrderID: existingPayment.ID,
-					OutTradeNo:     outTradeNo,
-					PayParams:      payParams,
-				})
-				return
-			}
-		}
-
-		// 没有 prepay_id，继续走微信下单流程（使用已有支付单）
-		paymentOrder = existingPayment
-	} else {
-		// 不存在或查询失败：创建新支付单
-		// 创建支付订单记录（out_trade_no 碰撞重试）
-		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-			var genErr error
-			outTradeNo, genErr = generateOutTradeNoWithPrefix("MBR")
-			if genErr != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
-				return
-			}
-			paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-				UserID:       authPayload.UserID,
-				PaymentType:  PaymentTypeMiniProgram,
-				BusinessType: BusinessTypeMembershipRecharge,
-				Amount:       req.RechargeAmount,
-				OutTradeNo:   outTradeNo,
-				ExpiresAt:    pgtype.Timestamptz{Time: expireTime, Valid: true},
-				Attach:       pgtype.Text{String: attachStr, Valid: true},
+	if findErr == nil && existingPayment.PrepayID.Valid {
+		if payParams, signErr := server.ecommerceClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+			ctx.JSON(http.StatusOK, membershipPaymentResponse{
+				PaymentOrderID: existingPayment.ID,
+				OutTradeNo:     existingPayment.OutTradeNo,
+				PayParams:      payParams,
 			})
-			if err == nil {
-				break
-			}
-			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-				if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
-					ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
-					return
-				}
-				continue
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create payment order: %w", err)))
 			return
 		}
 	}
 
-	// 调用微信支付API创建JSAPI订单
-	description := fmt.Sprintf("会员充值 - 商户ID:%d", membership.MerchantID)
-	jsapiReq := &wechat.JSAPIOrderRequest{
-		OutTradeNo:    outTradeNo,
-		Description:   description,
-		TotalAmount:   req.RechargeAmount,
-		OpenID:        user.WechatOpenid,
-		ExpireTime:    expireTime,
-		Attach:        attachStr,
-		PayerClientIP: ctx.ClientIP(),
-	}
-
-	_, payParams, err := server.paymentClient.CreateJSAPIOrder(ctx, jsapiReq)
+	// 生成合单主单号和子单号
+	combineOutTradeNo, err := generateOutTradeNoWithPrefix("MBRC")
 	if err != nil {
-		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create wechat order: %w", err)))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to generate combine out trade no: %w", err)))
 		return
 	}
 
+	description := fmt.Sprintf("会员充值 - 商户ID:%d", membership.MerchantID)
+
+	// 创建新支付单（含合单主记录）
+	var txResult db.CreateEcommercePaymentTxResult
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		var outTradeNo string
+		var genErr error
+		outTradeNo, genErr = generateOutTradeNoWithPrefix("MBR")
+		if genErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
+			return
+		}
+		txResult, err = server.store.CreateEcommercePaymentTx(ctx, db.CreateEcommercePaymentTxParams{
+			UserID:            authPayload.UserID,
+			MerchantID:        membership.MerchantID,
+			Amount:            req.RechargeAmount,
+			BusinessType:      BusinessTypeMembershipRecharge,
+			CombineOutTradeNo: combineOutTradeNo,
+			OutTradeNo:        outTradeNo,
+			ExpiresAt:         expireTime,
+			Attach:            attachStr,
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+				ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+				return
+			}
+			continue
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create payment order: %w", err)))
+		return
+	}
+
+	// 调用收付通合单支付 API
+	combineResp, payParams, err := server.ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.SubOrder{
+			{
+				MchID:       txResult.SubMchID,
+				Amount:      req.RechargeAmount,
+				OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
+				Description: description,
+				Attach:      attachStr,
+			},
+		},
+		PayerOpenID: user.WechatOpenid,
+		ExpireTime:  expireTime,
+		SceneInfo: &wechat.CombineSceneInfo{
+			PayerClientIP: ctx.ClientIP(),
+		},
+	})
+	if err != nil {
+		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, txResult.PaymentOrder.ID)
+		_, _ = server.store.UpdateCombinedPaymentOrderToClosed(ctx, txResult.CombinedPaymentOrder.ID)
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create wechat order: %w", err)))
+		return
+	}
+	if combineResp == nil || combineResp.PrepayID == "" {
+		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, txResult.PaymentOrder.ID)
+		_, _ = server.store.UpdateCombinedPaymentOrderToClosed(ctx, txResult.CombinedPaymentOrder.ID)
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create wechat order: empty prepay id")))
+		return
+	}
+
+	_, _ = server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       txResult.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+	_, _ = server.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       txResult.CombinedPaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+
 	// 返回支付参数给前端，前端调用wx.requestPayment进行支付
 	ctx.JSON(http.StatusOK, membershipPaymentResponse{
-		PaymentOrderID: paymentOrder.ID,
-		OutTradeNo:     outTradeNo,
+		PaymentOrderID: txResult.PaymentOrder.ID,
+		OutTradeNo:     txResult.PaymentOrder.OutTradeNo,
 		PayParams:      payParams,
 	})
 }

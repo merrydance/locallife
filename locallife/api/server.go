@@ -85,8 +85,16 @@ type Server struct {
 }
 
 // SetPaymentClientForTest injects a payment client in tests.
+// It rebuilds the cached order services immediately so they pick up the new
+// client; this prevents nil-pointer panics in handlers that access
+// orderCommandSvc / orderQuerySvc directly.
 func (server *Server) SetPaymentClientForTest(client wechat.PaymentClientInterface) {
 	server.paymentClient = client
+	newSvc := server.buildOrderCommandService()
+	server.orderCommandSvc = newSvc
+	if qs, ok := newSvc.(logic.OrderQueryService); ok {
+		server.orderQuerySvc = qs
+	}
 }
 
 // SetTaskDistributorForTest injects a task distributor in tests.
@@ -95,8 +103,12 @@ func (server *Server) SetTaskDistributorForTest(distributor worker.TaskDistribut
 }
 
 // SetEcommerceClientForTest injects an ecommerce client in tests.
+// It also clears the cached paymentFacade and refundOrchestrator so they are
+// rebuilt with the new client on the next request.
 func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInterface) {
 	server.ecommerceClient = client
+	server.paymentFacade = nil
+	server.refundOrchestrator = nil
 }
 
 // NewServer creates a new HTTP server and set up routing.

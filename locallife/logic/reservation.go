@@ -458,7 +458,7 @@ func CompleteReservation(ctx context.Context, store db.Store, userID, reservatio
 func CancelReservation(
 	ctx context.Context,
 	store db.Store,
-	paymentClient wechat.PaymentClientInterface,
+	ecommerceClient wechat.EcommerceClientInterface,
 	userID,
 	reservationID int64,
 	reason string,
@@ -519,7 +519,7 @@ func CancelReservation(
 		return ReservationStatusUpdateResult{}, err
 	}
 
-	if (reservation.Status == reservationStatusPaid || reservation.Status == reservationStatusConfirmed) && refundPercent > 0 && paymentClient != nil {
+	if (reservation.Status == reservationStatusPaid || reservation.Status == reservationStatusConfirmed) && refundPercent > 0 && ecommerceClient != nil {
 		paymentOrder, err := store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
 			ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
 			BusinessType:  businessTypeReservation,
@@ -536,6 +536,12 @@ func CancelReservation(
 			outRefundNo, err := generateOutRefundNo()
 			if err != nil {
 				return ReservationStatusUpdateResult{}, fmt.Errorf("generate out refund no: %w", err)
+			}
+
+			paymentConfig, err := store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
+			if err != nil {
+				log.Error().Err(err).Int64("merchant_id", reservation.MerchantID).Msg("get merchant payment config for reservation refund failed")
+				return ReservationStatusUpdateResult{}, fmt.Errorf("get merchant payment config: %w", err)
 			}
 
 			refundType := paymentOrder.PaymentType
@@ -558,7 +564,8 @@ func CancelReservation(
 				}
 			} else {
 				refundOrder := txResult.RefundOrder
-				wxRefund, err := paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
+				wxRefund, err := ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+					SubMchID:     paymentConfig.SubMchID,
 					OutTradeNo:   paymentOrder.OutTradeNo,
 					OutRefundNo:  outRefundNo,
 					Reason:       "预定取消退款",
@@ -567,7 +574,7 @@ func CancelReservation(
 				})
 				if err != nil {
 					// 微信API失败时保持pending状态，由恢复调度器自动补偿重试
-					log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat refund api failed for reservation, pending recovery")
+					log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat ecommerce refund api failed for reservation, pending recovery")
 				} else if wxRefund.Status == wechat.RefundStatusSuccess {
 					if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")

@@ -62,7 +62,7 @@ func TestCreateCombinedPaymentTx(t *testing.T) {
 	for _, po := range result.PaymentOrders {
 		require.NotEmpty(t, po)
 		require.Equal(t, user.ID, po.UserID)
-		require.Equal(t, "miniprogram", po.PaymentType)
+		require.Equal(t, "profit_sharing", po.PaymentType)
 		require.Equal(t, "order", po.BusinessType)
 		require.Equal(t, result.CombinedPaymentOrder.ID, po.CombinedPaymentID.Int64)
 		require.True(t, po.Attach.Valid)
