@@ -114,7 +114,10 @@ func ReplaceReservationOrder(
 		newFulfillment = "scheduled"
 	}
 
-	orderNo := generateOrderNo()
+	orderNo, err := generateOrderNo()
+	if err != nil {
+		return ReplaceOrderResult{}, fmt.Errorf("generate order no: %w", err)
+	}
 	createArgs := db.CreateOrderParams{
 		OrderNo:             orderNo,
 		UserID:              input.UserID,
@@ -190,7 +193,10 @@ func ReplaceReservationOrder(
 				return ReplaceOrderResult{}, err
 			}
 			if paymentOrder.Status == "paid" {
-				outRefundNo := generateOutRefundNo()
+				outRefundNo, err := generateOutRefundNo()
+				if err != nil {
+					return ReplaceOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
+				}
 				refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
 					PaymentOrderID: paymentOrder.ID,
 					RefundType:     "partial",
@@ -229,13 +235,15 @@ func ReplaceReservationOrder(
 	return result, nil
 }
 
-func generateOrderNo() string {
+func generateOrderNo() (string, error) {
 	now := time.Now()
 	dateStr := now.Format("20060102150405")
 
 	b := make([]byte, 3)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
 	randomNum := fmt.Sprintf("%06d", int(b[0])*10000+int(b[1])*100+int(b[2]))
 
-	return dateStr + randomNum[:6]
+	return dateStr + randomNum[:6], nil
 }

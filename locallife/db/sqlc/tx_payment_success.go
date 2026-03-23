@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
 )
 
 // ProcessPaymentSuccessTxParams contains the input parameters for processing payment success idempotently
@@ -87,16 +88,20 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 				return fmt.Errorf("reservation_id is required")
 			}
 			reservationID := paymentOrder.ReservationID.Int64
+			// 幂等检查：payment_order_id 有唯一约束，重试时 INSERT 会触发 23505，
+			// 而非 ErrRecordNotFound；必须先查后插，与 rider_deposit/membership_recharge 保持一致。
+			if _, err := q.GetReservationPaymentByPaymentOrderID(ctx, paymentOrder.ID); err == nil {
+				break // 已处理，幂等跳过
+			} else if !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("get reservation payment by payment order: %w", err)
+			}
 			if _, err := q.CreateReservationPayment(ctx, CreateReservationPaymentParams{
 				ReservationID:  reservationID,
 				PaymentOrderID: paymentOrder.ID,
 				Amount:         paymentOrder.Amount,
 				Type:           "reservation",
 			}); err != nil {
-				if !errors.Is(err, ErrRecordNotFound) {
-					return fmt.Errorf("create reservation payment: %w", err)
-				}
-				break
+				return fmt.Errorf("create reservation payment: %w", err)
 			}
 
 			if _, err := q.UpdateReservationStatus(ctx, UpdateReservationStatusParams{
@@ -114,16 +119,19 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 				return fmt.Errorf("reservation_id is required")
 			}
 			reservationID := paymentOrder.ReservationID.Int64
+			// 同 reservation case：先查后插，防止重试时唯一约束冲突导致任务卡死。
+			if _, err := q.GetReservationPaymentByPaymentOrderID(ctx, paymentOrder.ID); err == nil {
+				break // 已处理，幂等跳过
+			} else if !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("get reservation addon payment by payment order: %w", err)
+			}
 			if _, err := q.CreateReservationPayment(ctx, CreateReservationPaymentParams{
 				ReservationID:  reservationID,
 				PaymentOrderID: paymentOrder.ID,
 				Amount:         paymentOrder.Amount,
 				Type:           "addon",
 			}); err != nil {
-				if !errors.Is(err, ErrRecordNotFound) {
-					return fmt.Errorf("create reservation addon payment: %w", err)
-				}
-				break
+				return fmt.Errorf("create reservation addon payment: %w", err)
 			}
 
 			if _, err := q.AddReservationPrepaidAmount(ctx, AddReservationPrepaidAmountParams{
@@ -201,7 +209,15 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 
 		case "order":
 			if !paymentOrder.OrderID.Valid {
-				// 容错处理：如果 order_id 缺失，不返回错误以避免无限重试，直接跳过处理标记为已完成
+				// 容错处理：如果 order_id 缺失，不返回错误以避免无限重试，直接跳过处理标记为已完成。
+				// ⚠️ CRITICAL: 用户已付款但订单 ID 丢失，订单永远不会被激活，需人工干预。
+				log.Error().
+					Str("alert_type", "PAYMENT_ORDER_MISSING_ORDER_ID").
+					Str("level", "critical").
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", paymentOrder.OutTradeNo).
+					Str("business_type", paymentOrder.BusinessType).
+					Msg("⚠️ CRITICAL: payment_order.order_id is NULL for business_type=order — user charged but order will never be activated; manual intervention required")
 				return nil
 			}
 

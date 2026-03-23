@@ -2,7 +2,6 @@ package logic
 
 import (
 	"context"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"net/http"
@@ -12,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
@@ -368,25 +368,11 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 }
 
 func generateOutTradeNo() (string, error) {
-	return generateOutTradeNoWithPrefix("P")
+	return util.GenerateOutTradeNo("P")
 }
 
 func generateOutTradeNoWithPrefix(prefix string) (string, error) {
-	if prefix == "" {
-		prefix = "P"
-	}
-
-	now := time.Now()
-	dateStr := now.Format("20060102150405")
-
-	// 使用 8 字节随机数（64位熵），大幅降低碰撞概率
-	b := make([]byte, 8)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
-	}
-	randomPart := fmt.Sprintf("%08x", b[:4]) // 8 位十六进制
-
-	return prefix + dateStr + randomPart, nil
+	return util.GenerateOutTradeNo(prefix)
 }
 
 func isOutTradeNoConflict(err error) bool {

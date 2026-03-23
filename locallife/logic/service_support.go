@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"time"
 
@@ -18,38 +19,43 @@ func (SystemClock) Now() time.Time {
 
 type DefaultIDGenerator struct{}
 
-func (DefaultIDGenerator) OrderNo(now time.Time) string {
+func (DefaultIDGenerator) OrderNo(now time.Time) (string, error) {
 	dateStr := now.Format("20060102150405")
 	b := make([]byte, 3)
-	_, _ = rand.Read(b)
-	randomNum := fmt.Sprintf("%06d", int(b[0])*10000+int(b[1])*100+int(b[2]))
-	return dateStr + randomNum[:6]
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	return dateStr + hex.EncodeToString(b)[:6], nil
 }
 
-func (DefaultIDGenerator) PickupCode(_ time.Time) string {
+func (DefaultIDGenerator) PickupCode(_ time.Time) (string, error) {
 	b := make([]byte, 3)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
 	num := int(b[0])<<16 | int(b[1])<<8 | int(b[2])
-	return fmt.Sprintf("%06d", num%1000000)
+	return fmt.Sprintf("%06d", num%1000000), nil
 }
 
-func (DefaultIDGenerator) OutTradeNo(prefix string, now time.Time) string {
+func (DefaultIDGenerator) OutTradeNo(prefix string, now time.Time) (string, error) {
 	if prefix == "" {
 		prefix = "P"
 	}
 	dateStr := now.Format("20060102150405")
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
-	return prefix + dateStr + randomNum[:8]
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	return prefix + dateStr + hex.EncodeToString(b), nil
 }
 
-func (DefaultIDGenerator) OutRefundNo(now time.Time) string {
+func (DefaultIDGenerator) OutRefundNo(now time.Time) (string, error) {
 	dateStr := now.Format("20060102150405")
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	randomNum := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
-	return "R" + dateStr + randomNum[:8]
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
+	return "R" + dateStr + hex.EncodeToString(b), nil
 }
 
 type DefaultOrderPolicy struct{}

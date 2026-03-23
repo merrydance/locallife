@@ -64,7 +64,10 @@ func ProcessMerchantRejectRefund(
 	result.PaymentOrder = &paymentOrder
 
 	reason := fmt.Sprintf("商户拒单：%s", input.Reason)
-	outRefundNo := generateOutRefundNo()
+	outRefundNo, err := generateOutRefundNo()
+	if err != nil {
+		return result, fmt.Errorf("generate out refund no: %w", err)
+	}
 	refundType := paymentOrder.PaymentType
 	if refundType == paymentTypeNative {
 		refundType = paymentTypeMiniProgram

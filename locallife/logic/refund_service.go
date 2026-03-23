@@ -85,7 +85,10 @@ func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefun
 		return CreateRefundOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("refund amount exceeds payment amount"))
 	}
 
-	outRefundNo := s.idGenerator.OutRefundNo(s.clock.Now())
+	outRefundNo, err := s.idGenerator.OutRefundNo(s.clock.Now())
+	if err != nil {
+		return CreateRefundOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
+	}
 
 	// 使用事务原子性地校验累计退款额并创建退款单，消除并发超退竞态（#5）
 	txResult, err := s.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{

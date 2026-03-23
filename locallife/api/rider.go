@@ -304,12 +304,17 @@ func (server *Server) depositRider(ctx *gin.Context) {
 
 	// 创建支付订单
 	// 骑手押金充值使用单独的 business_type，回调时根据 user_id 找到对应骑手
-	outTradeNo := generateOutTradeNo()
 	expiresAt := time.Now().Add(30 * time.Minute)
 
+	var outTradeNo string
 	var paymentOrder db.PaymentOrder
 	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		outTradeNo = generateOutTradeNo()
+		var genErr error
+		outTradeNo, genErr = generateOutTradeNo()
+		if genErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
+			return
+		}
 		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
 			UserID:       authPayload.UserID,
 			PaymentType:  PaymentTypeMiniProgram,
@@ -363,11 +368,13 @@ func (server *Server) depositRider(ctx *gin.Context) {
 			return
 		}
 
-		// 更新 prepay_id
-		_, _ = server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		// 更新 prepay_id（非关键字段：为空不影响支付回调或退款，仅影响审计对账）
+		if _, err := server.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
 			ID:       paymentOrder.ID,
 			PrepayID: pgtype.Text{String: wxResp.PrepayID, Valid: true},
-		})
+		}); err != nil {
+			log.Warn().Err(err).Int64("payment_order_id", paymentOrder.ID).Msg("failed to update prepay_id, record will lack prepay_id for audit")
+		}
 
 		// 返回支付参数
 		resp["pay_params"] = map[string]string{

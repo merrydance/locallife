@@ -119,7 +119,10 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	}
 
 	expiresAt := svc.now().Add(30 * time.Minute)
-	combineOutTradeNo := generateCombinedOutTradeNo()
+	combineOutTradeNo, err := generateCombinedOutTradeNo()
+	if err != nil {
+		return result, fmt.Errorf("generate combine out trade no: %w", err)
+	}
 
 	txResult, err := svc.store.CreateCombinedPaymentTx(ctx, db.CreateCombinedPaymentTxParams{
 		UserID:            input.UserID,
@@ -299,14 +302,16 @@ func dedupePositiveIDs(ids []int64) []int64 {
 	return result
 }
 
-func generateCombinedOutTradeNo() string {
+func generateCombinedOutTradeNo() (string, error) {
 	now := time.Now()
 	dateStr := now.Format("20060102150405")
 
 	b := make([]byte, 4)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
 	buf := fmt.Sprintf("%08d", int(b[0])*1000000+int(b[1])*10000+int(b[2])*100+int(b[3]))
-	return combinedOutTradePrefix + dateStr + buf[:8]
+	return combinedOutTradePrefix + dateStr + buf[:8], nil
 }
 
 func mapCombinedPaymentError(err error) error {

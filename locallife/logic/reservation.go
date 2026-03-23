@@ -533,7 +533,10 @@ func CancelReservation(
 					RefundEligible: false,
 				}, nil
 			}
-			outRefundNo := generateOutRefundNo()
+			outRefundNo, err := generateOutRefundNo()
+			if err != nil {
+				return ReservationStatusUpdateResult{}, fmt.Errorf("generate out refund no: %w", err)
+			}
 
 			refundType := paymentOrder.PaymentType
 			if refundType == paymentTypeNative {

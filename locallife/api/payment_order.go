@@ -2,8 +2,6 @@ package api
 
 import (
 	"context"
-	"crypto/rand"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,6 +11,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -136,21 +135,12 @@ func newPaymentOrderResponse(p db.PaymentOrder) paymentOrderResponse {
 
 // generateOutTradeNo 生成商户订单号
 // 格式：P + yyyyMMddHHmmss(14位) + hex随机(8位) = 23位
-func generateOutTradeNo() string {
-	dateStr := time.Now().Format("20060102150405")
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return "P" + dateStr + hex.EncodeToString(b)
+func generateOutTradeNo() (string, error) {
+	return util.GenerateOutTradeNo("P")
 }
 
-func generateOutTradeNoWithPrefix(prefix string) string {
-	if prefix == "" {
-		prefix = "P"
-	}
-	dateStr := time.Now().Format("20060102150405")
-	b := make([]byte, 4)
-	_, _ = rand.Read(b)
-	return prefix + dateStr + hex.EncodeToString(b)
+func generateOutTradeNoWithPrefix(prefix string) (string, error) {
+	return util.GenerateOutTradeNo(prefix)
 }
 
 const (

@@ -233,7 +233,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		}
 	}
 
-	orderNo := s.idGenerator.OrderNo(s.clock.Now())
+	orderNo, err := s.idGenerator.OrderNo(s.clock.Now())
+	if err != nil {
+		return CreateOrderCommandResult{}, fmt.Errorf("generate order no: %w", err)
+	}
 	createParams := db.CreateOrderParams{
 		OrderNo:             orderNo,
 		UserID:              input.UserID,
@@ -251,7 +254,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	}
 
 	if input.OrderType == "takeout" || input.OrderType == "takeaway" {
-		createParams.PickupCode = pgtype.Text{String: s.idGenerator.PickupCode(s.clock.Now()), Valid: true}
+		pickupCode, err := s.idGenerator.PickupCode(s.clock.Now())
+		if err != nil {
+			return CreateOrderCommandResult{}, fmt.Errorf("generate pickup code: %w", err)
+		}
+		createParams.PickupCode = pgtype.Text{String: pickupCode, Valid: true}
 	}
 	if input.AddressID != nil {
 		createParams.AddressID = pgtype.Int8{Int64: *input.AddressID, Valid: true}

@@ -673,7 +673,7 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	ruleID := rechargeCtx.RechargeRuleID
 
 	// 创建支付订单
-	outTradeNo := generateOutTradeNoWithPrefix("MBR")
+	var outTradeNo string
 	expireTime := time.Now().Add(5 * time.Minute) // 5分钟过期
 
 	if req.PaymentMethod != "wechat" {
@@ -717,7 +717,12 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	// 创建支付订单记录（out_trade_no 碰撞重试）
 	var paymentOrder db.PaymentOrder
 	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		outTradeNo = generateOutTradeNoWithPrefix("MBR")
+		var genErr error
+		outTradeNo, genErr = generateOutTradeNoWithPrefix("MBR")
+		if genErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
+			return
+		}
 		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
 			UserID:       authPayload.UserID,
 			PaymentType:  PaymentTypeMiniProgram,
@@ -755,6 +760,7 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 
 	_, payParams, err := server.paymentClient.CreateJSAPIOrder(ctx, jsapiReq)
 	if err != nil {
+		_, _ = server.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create wechat order: %w", err)))
 		return
 	}

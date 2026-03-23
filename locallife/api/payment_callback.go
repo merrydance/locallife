@@ -649,6 +649,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	// 读取请求体用于验签
 	body, status, err := readWebhookBody(ctx)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "read_body").Inc()
 		log.Error().Err(err).Msg("read ecommerce refund notification body")
 		ctx.JSON(status, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -663,6 +664,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	nonce := ctx.GetHeader("Wechatpay-Nonce")
 
 	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "signature").Inc()
 		log.Error().Err(err).Msg("⚠️ invalid wechat signature for ecommerce refund notification")
 		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -674,6 +676,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	// 解析通知
 	var notification wechat.PaymentNotification
 	if err := json.Unmarshal(body, &notification); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "parse").Inc()
 		log.Error().Err(err).Msg("parse ecommerce refund notification")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
@@ -705,6 +708,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	// 解密通知内容（使用平台收付通专用解密方法）
 	resource, err := server.ecommerceClient.DecryptEcommerceRefundNotification(&notification)
 	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt ecommerce refund notification")
 		server.releaseNotification(ctx, notification.ID)
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
@@ -735,6 +739,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 			asynq.Queue(worker.QueueCritical),
 		)
 		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "enqueue").Inc()
 			log.Error().Err(err).
 				Str("out_refund_no", resource.OutRefundNo).
 				Str("sp_mchid", resource.SpMchID).

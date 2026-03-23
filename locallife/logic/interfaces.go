@@ -137,10 +137,10 @@ type Clock interface {
 }
 
 type IDGenerator interface {
-	OrderNo(now time.Time) string
-	PickupCode(now time.Time) string
-	OutTradeNo(prefix string, now time.Time) string
-	OutRefundNo(now time.Time) string
+	OrderNo(now time.Time) (string, error)
+	PickupCode(now time.Time) (string, error)
+	OutTradeNo(prefix string, now time.Time) (string, error)
+	OutRefundNo(now time.Time) (string, error)
 }
 
 type OrderPolicy interface {

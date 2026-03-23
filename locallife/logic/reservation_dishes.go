@@ -219,7 +219,10 @@ func ModifyReservationDishes(
 		return result, nil
 	}
 
-	outRefundNo := generateOutRefundNo()
+	outRefundNo, err := generateOutRefundNo()
+	if err != nil {
+		return result, fmt.Errorf("generate out refund no: %w", err)
+	}
 	refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
 		PaymentOrderID: paymentOrder.ID,
 		RefundType:     "partial",

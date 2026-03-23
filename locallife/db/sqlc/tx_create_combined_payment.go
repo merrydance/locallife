@@ -135,7 +135,10 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 		// 3. 创建子单记录
 		for _, info := range tempInfos {
 			// 使用带前缀的安全生成器，避免纳秒截断碰撞。
-			outTradeNo := generateSubOrderOutTradeNo(info.Order.ID)
+			outTradeNo, err := generateSubOrderOutTradeNo(info.Order.ID)
+			if err != nil {
+				return fmt.Errorf("generate sub order out trade no: %w", err)
+			}
 
 			po, err := q.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
 				OrderID:       pgtype.Int8{Int64: info.Order.ID, Valid: true},
@@ -193,10 +196,12 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 // generateSubOrderOutTradeNo 为合单子单生成安全的商户订单号。
 // 格式：CP + 订单ID(10位) + 时间戳秒(10位) + 随机数(6位)
 // 比起直接用纳秒截断，随机数部分确保同一订单快速重试时不碰撞。
-func generateSubOrderOutTradeNo(orderID int64) string {
+func generateSubOrderOutTradeNo(orderID int64) (string, error) {
 	now := time.Now()
 	b := make([]byte, 3)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return "", fmt.Errorf("crypto/rand.Read failed: %w", err)
+	}
 	randNum := uint32(b[0])<<16 | uint32(b[1])<<8 | uint32(b[2])
-	return fmt.Sprintf("CP%d%d%06d", orderID, now.Unix(), randNum%1000000)
+	return fmt.Sprintf("CP%d%d%06d", orderID, now.Unix(), randNum%1000000), nil
 }
