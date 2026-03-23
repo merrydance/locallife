@@ -819,6 +819,7 @@ type Querier interface {
 	GetPendingClaims(ctx context.Context, limit int32) ([]Claim, error)
 	// 检查区域是否有待审核或已通过的申请（用于区域独占检查）
 	GetPendingOperatorApplicationByRegion(ctx context.Context, regionID int64) (OperatorApplication, error)
+	GetPendingPaymentOrderByUserAndBusinessType(ctx context.Context, arg GetPendingPaymentOrderByUserAndBusinessTypeParams) (PaymentOrder, error)
 	GetPendingUploadSessionByIdempotencyKey(ctx context.Context, arg GetPendingUploadSessionByIdempotencyKeyParams) (MediaUploadSession, error)
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	// 平台日统计
@@ -1254,6 +1255,7 @@ type Querier interface {
 	ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error)
 	ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error)
 	ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
+	ListPaidUnrefundedReservationPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
 	ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOrdersByUserParams) ([]PaymentOrder, error)
 	ListPaymentOrdersByUserAndStatus(ctx context.Context, arg ListPaymentOrdersByUserAndStatusParams) ([]PaymentOrder, error)
 	ListPeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)

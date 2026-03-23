@@ -1126,6 +1126,36 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 			continue
 		}
 
+		// 🚨 检测已关闭/失败子单收到支付回调：与单笔支付回调保持一致的异常到账保护
+		if paymentOrder.Status == PaymentStatusClosed || paymentOrder.Status == PaymentStatusFailed {
+			log.Error().
+				Str("out_trade_no", subOrder.OutTradeNo).
+				Str("payment_status", paymentOrder.Status).
+				Str("transaction_id", subOrder.TransactionID).
+				Int64("payment_order_id", paymentOrder.ID).
+				Msg("⚠️ CRITICAL: combine sub-order payment received for closed/failed order — auto refund initiated")
+
+			outRefundNo := fmt.Sprintf("CRF%d", paymentOrder.ID)
+			if server.taskDistributor != nil {
+				if enqErr := server.taskDistributor.DistributeTaskProcessAnomalyRefund(ctx,
+					&worker.PayloadProcessAnomalyRefund{
+						PaymentOrderID: paymentOrder.ID,
+						TransactionID:  subOrder.TransactionID,
+						RefundAmount:   subOrder.Amount.TotalAmount,
+						OutRefundNo:    outRefundNo,
+					},
+					asynq.MaxRetry(5),
+					asynq.Queue(worker.QueueCritical),
+				); enqErr != nil {
+					log.Error().Err(enqErr).
+						Int64("payment_order_id", paymentOrder.ID).
+						Msg("failed to enqueue anomaly refund task for combine sub-order")
+				}
+			}
+			successCount++ // 不阻塞其他子单处理
+			continue
+		}
+
 		// 更新支付订单状态
 		_, err = server.store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
 			ID:            paymentOrder.ID,

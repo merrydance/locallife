@@ -374,6 +374,48 @@ func (q *Queries) GetPaymentOrdersByReservation(ctx context.Context, reservation
 	return items, nil
 }
 
+const getPendingPaymentOrderByUserAndBusinessType = `-- name: GetPendingPaymentOrderByUserAndBusinessType :one
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+WHERE user_id = $1
+    AND business_type = $2
+    AND amount = $3
+    AND status = 'pending'
+    AND expires_at > now()
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetPendingPaymentOrderByUserAndBusinessTypeParams struct {
+	UserID       int64  `json:"user_id"`
+	BusinessType string `json:"business_type"`
+	Amount       int64  `json:"amount"`
+}
+
+func (q *Queries) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Context, arg GetPendingPaymentOrderByUserAndBusinessTypeParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getPendingPaymentOrderByUserAndBusinessType, arg.UserID, arg.BusinessType, arg.Amount)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
 const listExpiredPaymentOrders = `-- name: ListExpiredPaymentOrders :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE status = 'pending' AND expires_at < now()
@@ -527,12 +569,73 @@ WHERE
     AND po.business_type = 'order' 
     AND o.status = 'cancelled'
     AND po.created_at > now() - INTERVAL '7 days'
+    AND NOT EXISTS (
+        SELECT 1 FROM refund_orders ro 
+        WHERE ro.payment_order_id = po.id 
+        AND ro.status IN ('pending', 'processing', 'success')
+    )
 ORDER BY po.created_at
 LIMIT $1
 `
 
 func (q *Queries) ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error) {
 	rows, err := q.db.Query(ctx, listPaidUnrefundedPaymentOrders, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []PaymentOrder{}
+	for rows.Next() {
+		var i PaymentOrder
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderID,
+			&i.ReservationID,
+			&i.UserID,
+			&i.PaymentType,
+			&i.BusinessType,
+			&i.Amount,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.PrepayID,
+			&i.Status,
+			&i.PaidAt,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.Attach,
+			&i.CombinedPaymentID,
+			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaidUnrefundedReservationPaymentOrders = `-- name: ListPaidUnrefundedReservationPaymentOrders :many
+SELECT po.id, po.order_id, po.reservation_id, po.user_id, po.payment_type, po.business_type, po.amount, po.out_trade_no, po.transaction_id, po.prepay_id, po.status, po.paid_at, po.created_at, po.expires_at, po.attach, po.combined_payment_id, po.processed_at
+FROM payment_orders po
+JOIN table_reservations r ON po.reservation_id = r.id
+WHERE 
+    po.status = 'paid' 
+    AND po.business_type = 'reservation' 
+    AND r.status = 'cancelled'
+    AND po.created_at > now() - INTERVAL '7 days'
+    AND NOT EXISTS (
+        SELECT 1 FROM refund_orders ro 
+        WHERE ro.payment_order_id = po.id 
+        AND ro.status IN ('pending', 'processing', 'success')
+    )
+ORDER BY po.created_at
+LIMIT $1
+`
+
+func (q *Queries) ListPaidUnrefundedReservationPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error) {
+	rows, err := q.db.Query(ctx, listPaidUnrefundedReservationPaymentOrders, limit)
 	if err != nil {
 		return nil, err
 	}

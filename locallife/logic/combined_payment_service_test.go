@@ -478,6 +478,20 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 					}).
 					Times(1).
 					Return(db.CombinedPaymentOrder{}, errors.New("update combined prepay failed"))
+
+				// 新增的补偿清理逻辑：标记子单和合单为 failed，尝试关闭微信合单
+				store.EXPECT().
+					UpdatePaymentOrderToFailed(gomock.Any(), int64(7201)).
+					Times(1).
+					Return(db.PaymentOrder{}, nil)
+				store.EXPECT().
+					UpdateCombinedPaymentOrderToFailed(gomock.Any(), int64(9101)).
+					Times(1).
+					Return(db.CombinedPaymentOrder{}, nil)
+				client.EXPECT().
+					CloseCombineOrder(gomock.Any(), gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil)
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)

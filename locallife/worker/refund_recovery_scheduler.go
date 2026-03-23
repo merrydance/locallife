@@ -143,4 +143,50 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 				Msg("refund recovery task enqueued")
 		}
 	}
+
+	// ==================== 预定退款恢复 ====================
+	reservationPaymentOrders, err := s.store.ListPaidUnrefundedReservationPaymentOrders(ctx, refundRecoveryBatchLimit)
+	if err != nil {
+		log.Error().Err(err).Msg("list paid unrefunded reservation payment orders failed")
+		return
+	}
+
+	if len(reservationPaymentOrders) > 0 {
+		log.Info().Int("count", len(reservationPaymentOrders)).Msg("found unrefunded reservation payment orders, triggering recovery")
+	}
+
+	for _, po := range reservationPaymentOrders {
+		if !po.ReservationID.Valid {
+			continue
+		}
+
+		reservation, err := s.store.GetTableReservation(ctx, po.ReservationID.Int64)
+		if err != nil {
+			log.Error().Err(err).Int64("reservation_id", po.ReservationID.Int64).Msg("get reservation failed during recovery")
+			continue
+		}
+
+		if reservation.Status != "cancelled" {
+			continue
+		}
+
+		err = s.distributor.DistributeTaskProcessRefund(ctx, &PayloadProcessRefund{
+			PaymentOrderID: po.ID,
+			ReservationID:  reservation.ID,
+			RefundAmount:   po.Amount,
+			Reason:         "系统自动退款补偿（预定取消）",
+		})
+
+		if err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", po.ID).
+				Int64("reservation_id", reservation.ID).
+				Msg("enqueue reservation refund recovery task failed")
+		} else {
+			log.Info().
+				Int64("payment_order_id", po.ID).
+				Int64("reservation_id", reservation.ID).
+				Msg("reservation refund recovery task enqueued")
+		}
+	}
 }

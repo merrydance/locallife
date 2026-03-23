@@ -308,33 +308,46 @@ func (server *Server) depositRider(ctx *gin.Context) {
 
 	var outTradeNo string
 	var paymentOrder db.PaymentOrder
-	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		var genErr error
-		outTradeNo, genErr = generateOutTradeNo()
-		if genErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
-			return
-		}
-		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-			UserID:       authPayload.UserID,
-			PaymentType:  PaymentTypeMiniProgram,
-			BusinessType: BusinessTypeRiderDeposit, // 骑手押金充值
-			Amount:       req.Amount,
-			OutTradeNo:   outTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
-		})
-		if err == nil {
-			break
-		}
-		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-			if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
-				ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+
+	// 幂等保护：检查是否已有未过期的 pending 支付单（同用户、同业务类型、同金额）
+	existingPayment, findErr := server.store.GetPendingPaymentOrderByUserAndBusinessType(ctx, db.GetPendingPaymentOrderByUserAndBusinessTypeParams{
+		UserID:       authPayload.UserID,
+		BusinessType: BusinessTypeRiderDeposit,
+		Amount:       req.Amount,
+	})
+	if findErr == nil {
+		// 已存在未过期的 pending 单，复用
+		paymentOrder = existingPayment
+		outTradeNo = existingPayment.OutTradeNo
+	} else {
+		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+			var genErr error
+			outTradeNo, genErr = generateOutTradeNo()
+			if genErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
 				return
 			}
-			continue
+			paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+				UserID:       authPayload.UserID,
+				PaymentType:  PaymentTypeMiniProgram,
+				BusinessType: BusinessTypeRiderDeposit, // 骑手押金充值
+				Amount:       req.Amount,
+				OutTradeNo:   outTradeNo,
+				ExpiresAt:    pgtype.Timestamptz{Time: expiresAt, Valid: true},
+			})
+			if err == nil {
+				break
+			}
+			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+				if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+					ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+					return
+				}
+				continue
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
 	}
 
 	// 构建响应

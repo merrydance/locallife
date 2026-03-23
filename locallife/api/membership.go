@@ -714,36 +714,63 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 	}
 	attachStr := string(attachBytes)
 
-	// 创建支付订单记录（out_trade_no 碰撞重试）
+	// 幂等保护：检查是否已有未过期的 pending 支付单（同用户、同业务类型、同金额）
 	var paymentOrder db.PaymentOrder
-	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
-		var genErr error
-		outTradeNo, genErr = generateOutTradeNoWithPrefix("MBR")
-		if genErr != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
-			return
-		}
-		paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
-			UserID:       authPayload.UserID,
-			PaymentType:  PaymentTypeMiniProgram,
-			BusinessType: BusinessTypeMembershipRecharge,
-			Amount:       req.RechargeAmount,
-			OutTradeNo:   outTradeNo,
-			ExpiresAt:    pgtype.Timestamptz{Time: expireTime, Valid: true},
-			Attach:       pgtype.Text{String: attachStr, Valid: true},
-		})
-		if err == nil {
-			break
-		}
-		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
-			if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
-				ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+	existingPayment, findErr := server.store.GetPendingPaymentOrderByUserAndBusinessType(ctx, db.GetPendingPaymentOrderByUserAndBusinessTypeParams{
+		UserID:       authPayload.UserID,
+		BusinessType: BusinessTypeMembershipRecharge,
+		Amount:       req.RechargeAmount,
+	})
+	if findErr == nil {
+		// 已存在未过期的 pending 单，复用
+		outTradeNo = existingPayment.OutTradeNo
+
+		// 如果已有 prepay_id，重新签名返回支付参数
+		if existingPayment.PrepayID.Valid && server.paymentClient != nil {
+			if payParams, signErr := server.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+				ctx.JSON(http.StatusOK, membershipPaymentResponse{
+					PaymentOrderID: existingPayment.ID,
+					OutTradeNo:     outTradeNo,
+					PayParams:      payParams,
+				})
 				return
 			}
-			continue
 		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create payment order: %w", err)))
-		return
+
+		// 没有 prepay_id，继续走微信下单流程（使用已有支付单）
+		paymentOrder = existingPayment
+	} else {
+		// 不存在或查询失败：创建新支付单
+		// 创建支付订单记录（out_trade_no 碰撞重试）
+		for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+			var genErr error
+			outTradeNo, genErr = generateOutTradeNoWithPrefix("MBR")
+			if genErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, genErr))
+				return
+			}
+			paymentOrder, err = server.store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+				UserID:       authPayload.UserID,
+				PaymentType:  PaymentTypeMiniProgram,
+				BusinessType: BusinessTypeMembershipRecharge,
+				Amount:       req.RechargeAmount,
+				OutTradeNo:   outTradeNo,
+				ExpiresAt:    pgtype.Timestamptz{Time: expireTime, Valid: true},
+				Attach:       pgtype.Text{String: attachStr, Valid: true},
+			})
+			if err == nil {
+				break
+			}
+			if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+				if !sleepWithContext(ctx.Request.Context(), outTradeNoRetryBaseBack*time.Duration(attempt)) {
+					ctx.JSON(http.StatusRequestTimeout, errorResponse(errors.New("request canceled")))
+					return
+				}
+				continue
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to create payment order: %w", err)))
+			return
+		}
 	}
 
 	// 调用微信支付API创建JSAPI订单

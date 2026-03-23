@@ -139,6 +139,9 @@ type EcommerceClientInterface interface {
 	QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*ProfitSharingReturnResponse, error)
 
 	// ==================== 退款 ====================
+	// CreateRefund 申请直连退款（用于预定等小程序直连支付场景的退款）
+	CreateRefund(ctx context.Context, req *RefundRequest) (*RefundResponse, error)
+
 	// CreateEcommerceRefund 申请电商退款
 	CreateEcommerceRefund(ctx context.Context, req *EcommerceRefundRequest) (*EcommerceRefundResponse, error)
 

@@ -8189,6 +8189,21 @@ func (mr *MockStoreMockRecorder) GetPendingOperatorApplicationByRegion(ctx, regi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingOperatorApplicationByRegion", reflect.TypeOf((*MockStore)(nil).GetPendingOperatorApplicationByRegion), ctx, regionID)
 }
 
+// GetPendingPaymentOrderByUserAndBusinessType mocks base method.
+func (m *MockStore) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Context, arg db.GetPendingPaymentOrderByUserAndBusinessTypeParams) (db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPendingPaymentOrderByUserAndBusinessType", ctx, arg)
+	ret0, _ := ret[0].(db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPendingPaymentOrderByUserAndBusinessType indicates an expected call of GetPendingPaymentOrderByUserAndBusinessType.
+func (mr *MockStoreMockRecorder) GetPendingPaymentOrderByUserAndBusinessType(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingPaymentOrderByUserAndBusinessType", reflect.TypeOf((*MockStore)(nil).GetPendingPaymentOrderByUserAndBusinessType), ctx, arg)
+}
+
 // GetPendingUploadSessionByIdempotencyKey mocks base method.
 func (m *MockStore) GetPendingUploadSessionByIdempotencyKey(ctx context.Context, arg db.GetPendingUploadSessionByIdempotencyKeyParams) (db.MediaUploadSession, error) {
 	m.ctrl.T.Helper()
@@ -12682,6 +12697,21 @@ func (m *MockStore) ListPaidUnrefundedPaymentOrders(ctx context.Context, limit i
 func (mr *MockStoreMockRecorder) ListPaidUnrefundedPaymentOrders(ctx, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaidUnrefundedPaymentOrders", reflect.TypeOf((*MockStore)(nil).ListPaidUnrefundedPaymentOrders), ctx, limit)
+}
+
+// ListPaidUnrefundedReservationPaymentOrders mocks base method.
+func (m *MockStore) ListPaidUnrefundedReservationPaymentOrders(ctx context.Context, limit int32) ([]db.PaymentOrder, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPaidUnrefundedReservationPaymentOrders", ctx, limit)
+	ret0, _ := ret[0].([]db.PaymentOrder)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPaidUnrefundedReservationPaymentOrders indicates an expected call of ListPaidUnrefundedReservationPaymentOrders.
+func (mr *MockStoreMockRecorder) ListPaidUnrefundedReservationPaymentOrders(ctx, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaidUnrefundedReservationPaymentOrders", reflect.TypeOf((*MockStore)(nil).ListPaidUnrefundedReservationPaymentOrders), ctx, limit)
 }
 
 // ListPaymentOrdersByUser mocks base method.

@@ -73,17 +73,20 @@ func ProcessMerchantRejectRefund(
 		refundType = paymentTypeMiniProgram
 	}
 
-	refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
+	txResult, err := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 		PaymentOrderID: paymentOrder.ID,
 		RefundType:     refundType,
 		RefundAmount:   paymentOrder.Amount,
-		RefundReason:   pgtype.Text{String: reason, Valid: true},
+		RefundReason:   reason,
 		OutRefundNo:    outRefundNo,
-		Status:         "pending",
 	})
 	if err != nil {
+		if _, ok := db.IsRefundRequestError(err); ok {
+			return result, fmt.Errorf("refund validation: %w", err)
+		}
 		return result, err
 	}
+	refundOrder := txResult.RefundOrder
 	result.RefundOrder = &refundOrder
 
 	if paymentClient == nil {

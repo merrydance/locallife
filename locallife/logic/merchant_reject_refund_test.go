@@ -73,12 +73,12 @@ func TestProcessMerchantRejectRefund_WechatSuccess(t *testing.T) {
 		Times(1).
 		Return(paymentOrder, nil)
 	store.EXPECT().
-		CreateRefundOrder(gomock.Any(), gomock.Any()).
+		CreateRefundOrderTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderParams) (db.RefundOrder, error) {
+		DoAndReturn(func(_ context.Context, arg db.CreateRefundOrderTxParams) (db.CreateRefundOrderTxResult, error) {
 			require.Equal(t, int64(1000), arg.RefundAmount)
 			require.Equal(t, int64(1), arg.PaymentOrderID)
-			return db.RefundOrder{ID: 99}, nil
+			return db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 99}}, nil
 		})
 	paymentClient.EXPECT().
 		CreateRefund(gomock.Any(), gomock.Any()).
@@ -118,9 +118,9 @@ func TestProcessMerchantRejectRefund_WechatProcessing(t *testing.T) {
 		Times(1).
 		Return(paymentOrder, nil)
 	store.EXPECT().
-		CreateRefundOrder(gomock.Any(), gomock.Any()).
+		CreateRefundOrderTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.RefundOrder{ID: 100}, nil)
+		Return(db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 100}}, nil)
 	paymentClient.EXPECT().
 		CreateRefund(gomock.Any(), gomock.Any()).
 		Times(1).
@@ -156,9 +156,9 @@ func TestProcessMerchantRejectRefund_WechatFailure(t *testing.T) {
 		Times(1).
 		Return(paymentOrder, nil)
 	store.EXPECT().
-		CreateRefundOrder(gomock.Any(), gomock.Any()).
+		CreateRefundOrderTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.RefundOrder{ID: 101}, nil)
+		Return(db.CreateRefundOrderTxResult{RefundOrder: db.RefundOrder{ID: 101}}, nil)
 	paymentClient.EXPECT().
 		CreateRefund(gomock.Any(), gomock.Any()).
 		Times(1).

@@ -84,6 +84,27 @@ func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert Ale
 	}
 }
 
+// maybeMarkPaymentOrderRefunded 仅在累计退款额 >= 支付金额时才将支付单标记为 refunded，
+// 避免部分退款错误终结支付单。
+func (processor *RedisTaskProcessor) maybeMarkPaymentOrderRefunded(ctx context.Context, paymentOrderID int64, paymentAmount int64) {
+	totalRefunded, err := processor.store.GetTotalRefundedByPaymentOrder(ctx, paymentOrderID)
+	if err != nil {
+		log.Error().Err(err).Int64("payment_order_id", paymentOrderID).Msg("failed to get total refunded amount")
+		return
+	}
+	if totalRefunded >= paymentAmount {
+		if _, dbErr := processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrderID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrderID).Msg("failed to mark payment order as refunded")
+		}
+	} else {
+		log.Info().
+			Int64("payment_order_id", paymentOrderID).
+			Int64("total_refunded", totalRefunded).
+			Int64("payment_amount", paymentAmount).
+			Msg("partial refund: payment order not yet fully refunded")
+	}
+}
+
 func (processor *RedisTaskProcessor) publishWSMessage(ctx context.Context, channel string, payload []byte) {
 	if processor.pubSubPublisher == nil {
 		log.Warn().Str("channel", channel).Msg("pubsub publisher not configured, skip ws publish")
@@ -180,6 +201,7 @@ type PaymentSuccessPayload struct {
 type PayloadProcessRefund struct {
 	PaymentOrderID int64  `json:"payment_order_id"`
 	OrderID        int64  `json:"order_id"`
+	ReservationID  int64  `json:"reservation_id,omitempty"` // 预定退款时使用
 	RefundAmount   int64  `json:"refund_amount"`
 	Reason         string `json:"reason"`
 }
@@ -480,6 +502,10 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 		if errors.Is(err, db.ErrRecordNotFound) {
 			log.Error().Int64("payment_order_id", payload.PaymentOrderID).Msg("payment order not found")
 			return fmt.Errorf("payment order not found: %w", asynq.SkipRetry)
+		}
+		if errors.Is(err, db.ErrPaymentMissingOrderID) {
+			log.Error().Int64("payment_order_id", payload.PaymentOrderID).Msg("payment order missing order_id, requires manual intervention")
+			return fmt.Errorf("payment order missing order_id: %w", asynq.SkipRetry)
 		}
 		return fmt.Errorf("process payment success: %w", err)
 	}
@@ -1354,6 +1380,11 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		return fmt.Errorf("unmarshal payload: %w", err)
 	}
 
+	// 预定退款走独立简化流程（直连支付，无分账）
+	if payload.ReservationID > 0 {
+		return processor.processReservationRefund(ctx, payload)
+	}
+
 	log.Info().
 		Int64("payment_order_id", payload.PaymentOrderID).
 		Int64("order_id", payload.OrderID).
@@ -1399,12 +1430,21 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	var refundOrder db.RefundOrder
 	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
 	if findErr == nil {
-		// 已存在：复用已有记录，不重复创建
+		// 已存在：如果已成功或处理中，直接短路返回，避免重复请求微信退款 API
 		refundOrder = existingRefund
+		if refundOrder.Status == "success" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("refund already succeeded, skip")
+			return nil
+		}
+		if refundOrder.Status == "processing" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("refund already processing, skip")
+			return nil
+		}
 		log.Info().
 			Str("out_refund_no", outRefundNo).
 			Int64("refund_order_id", refundOrder.ID).
-			Msg("refund order already exists, reusing")
+			Str("status", refundOrder.Status).
+			Msg("refund order already exists, retrying")
 	} else if !errors.Is(findErr, db.ErrRecordNotFound) {
 		return fmt.Errorf("check existing refund order: %w", findErr)
 	} else {
@@ -1503,6 +1543,20 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 
 		hasProcessing := false
 		processReturn := func(outReturnNo, returnAccountType, returnAccount, description string, amount int64) error {
+			// 幂等检查：如果该 outReturnNo 已有记录，且状态为 success/processing，直接跳过
+			// 这让 ProcessTaskInitiateRefund 在被重试时能从失败点继续，而非重新全量执行
+			existingReturn, lookupErr := processor.store.GetProfitSharingReturnByOutReturnNo(ctx, outReturnNo)
+			if lookupErr == nil {
+				switch existingReturn.Status {
+				case "success":
+					return nil // 已完成，跳过
+				case "processing":
+					hasProcessing = true
+					return nil // 已在进行中，等待 recovery 跟踪
+					// pending/failed 状态：继续向下重试
+				}
+			}
+
 			returnRecord, err := processor.store.CreateProfitSharingReturn(ctx, db.CreateProfitSharingReturnParams{
 				RefundOrderID:        refundOrder.ID,
 				ProfitSharingOrderID: profitSharingOrder.ID,
@@ -1641,8 +1695,8 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	switch refundResp.Status {
 	case wechat.RefundStatusSuccess:
 		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		// 更新支付订单状态为已退款
-		processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+		// 仅在全额退完时才将支付单标记为 refunded
+		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 	case wechat.RefundStatusProcessing:
 		// 更新退款单为处理中
 		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
@@ -1659,6 +1713,105 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		Str("out_refund_no", outRefundNo).
 		Str("status", string(refundResp.Status)).
 		Msg("refund request processed")
+
+	return nil
+}
+
+// processReservationRefund 处理预定退款（直连支付，无分账回退）
+func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Context, payload PayloadProcessRefund) error {
+	log.Info().
+		Int64("payment_order_id", payload.PaymentOrderID).
+		Int64("reservation_id", payload.ReservationID).
+		Int64("refund_amount", payload.RefundAmount).
+		Str("reason", payload.Reason).
+		Msg("processing reservation refund task")
+
+	paymentOrder, err := processor.store.GetPaymentOrder(ctx, payload.PaymentOrderID)
+	if err != nil {
+		return fmt.Errorf("get payment order: %w", err)
+	}
+
+	if paymentOrder.Status != "paid" {
+		log.Warn().
+			Int64("payment_order_id", payload.PaymentOrderID).
+			Str("status", paymentOrder.Status).
+			Msg("payment order not in paid status, skip reservation refund")
+		return nil
+	}
+
+	if processor.ecommerceClient == nil {
+		return fmt.Errorf("payment client not configured, cannot process reservation refund")
+	}
+
+	// 生成退款单号
+	outRefundNo := fmt.Sprintf("RF%d_R%d", payload.PaymentOrderID, payload.ReservationID)
+
+	// 幂等检查：退款单号是否已存在
+	var refundOrder db.RefundOrder
+	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+	if findErr == nil {
+		refundOrder = existingRefund
+		if refundOrder.Status == "success" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("reservation refund already succeeded")
+			return nil
+		}
+		if refundOrder.Status == "processing" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("reservation refund already processing")
+			return nil
+		}
+		log.Info().Str("out_refund_no", outRefundNo).Str("status", refundOrder.Status).Msg("reservation refund order exists, retrying")
+	} else if !errors.Is(findErr, db.ErrRecordNotFound) {
+		return fmt.Errorf("check existing refund order: %w", findErr)
+	} else {
+		txResult, createErr := processor.store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
+			PaymentOrderID: payload.PaymentOrderID,
+			RefundType:     "miniprogram",
+			RefundAmount:   payload.RefundAmount,
+			RefundReason:   payload.Reason,
+			OutRefundNo:    outRefundNo,
+		})
+		if createErr != nil {
+			if _, ok := db.IsRefundRequestError(createErr); ok {
+				log.Warn().Err(createErr).Msg("reservation refund business validation failed, skip")
+				return nil
+			}
+			return fmt.Errorf("create refund order tx: %w", createErr)
+		}
+		refundOrder = txResult.RefundOrder
+	}
+
+	// 直连支付退款（非电商退款）
+	wxRefund, err := processor.ecommerceClient.CreateRefund(ctx, &wechat.RefundRequest{
+		OutTradeNo:   paymentOrder.OutTradeNo,
+		OutRefundNo:  outRefundNo,
+		Reason:       payload.Reason,
+		RefundAmount: payload.RefundAmount,
+		TotalAmount:  paymentOrder.Amount,
+	})
+	if err != nil {
+		// 保持 pending 状态，由恢复调度器重试
+		log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat refund api failed for reservation")
+		return fmt.Errorf("call wechat refund API: %w", err)
+	}
+
+	switch wxRefund.Status {
+	case wechat.RefundStatusSuccess:
+		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+	case wechat.RefundStatusProcessing:
+		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
+		})
+	default:
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+	}
+
+	log.Info().
+		Int64("refund_order_id", refundOrder.ID).
+		Str("out_refund_no", outRefundNo).
+		Str("status", string(wxRefund.Status)).
+		Msg("reservation refund request processed")
 
 	return nil
 }
@@ -1780,7 +1933,7 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 	switch refundResp.Status {
 	case wechat.RefundStatusSuccess:
 		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID)
+		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 		log.Info().
 			Int64("refund_order_id", refundOrder.ID).
 			Str("out_refund_no", payload.OutRefundNo).
@@ -2305,9 +2458,7 @@ func (processor *RedisTaskProcessor) tryInitiateRefundAfterReturns(ctx context.C
 		if _, dbErr := processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
 		}
-		if _, dbErr := processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
-		}
+		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 	case wechat.RefundStatusProcessing:
 		if _, dbErr := processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,

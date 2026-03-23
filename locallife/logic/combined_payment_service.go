@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/rs/zerolog/log"
+
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/wechat"
 )
@@ -192,6 +194,23 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
 	})
 	if err != nil {
+		// 微信合单下单已成功但本地更新失败。
+		// 与普通支付链路保持一致：标记本地子单和合单为 failed，并尝试关闭微信合单。
+		// 微信合单即使不主动关闭，也会在过期后自动关闭（用户无 prepay_id 无法调起支付）。
+		cleanupCtx := context.Background()
+		for _, info := range txResult.OrderInfos {
+			_, _ = svc.store.UpdatePaymentOrderToFailed(cleanupCtx, info.PaymentOrder.ID)
+		}
+		_, _ = svc.store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		if svc.ecommerceClient != nil {
+			closeSubs := make([]wechat.SubOrderClose, 0, len(wechatSubOrders))
+			for _, sub := range wechatSubOrders {
+				closeSubs = append(closeSubs, wechat.SubOrderClose{MchID: sub.MchID, OutTradeNo: sub.OutTradeNo})
+			}
+			if closeErr := svc.ecommerceClient.CloseCombineOrder(cleanupCtx, combineOutTradeNo, closeSubs); closeErr != nil {
+				log.Warn().Err(closeErr).Str("combine_out_trade_no", combineOutTradeNo).Msg("close wechat combine order after prepay update failure")
+			}
+		}
 		return result, fmt.Errorf("update combined payment prepay: %w", err)
 	}
 

@@ -209,8 +209,8 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 
 		case "order":
 			if !paymentOrder.OrderID.Valid {
-				// 容错处理：如果 order_id 缺失，不返回错误以避免无限重试，直接跳过处理标记为已完成。
-				// ⚠️ CRITICAL: 用户已付款但订单 ID 丢失，订单永远不会被激活，需人工干预。
+				// 用户已付款但订单 ID 丢失，订单永远不会被激活，需人工干预。
+				// 返回 ErrPaymentMissingOrderID 以便 worker 层 SkipRetry 并保持 processed_at=NULL 让监控可见。
 				log.Error().
 					Str("alert_type", "PAYMENT_ORDER_MISSING_ORDER_ID").
 					Str("level", "critical").
@@ -218,7 +218,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 					Str("out_trade_no", paymentOrder.OutTradeNo).
 					Str("business_type", paymentOrder.BusinessType).
 					Msg("⚠️ CRITICAL: payment_order.order_id is NULL for business_type=order — user charged but order will never be activated; manual intervention required")
-				return nil
+				return ErrPaymentMissingOrderID
 			}
 
 			// 如果是预定关联的订单，需要先确保关联的会话信息正确

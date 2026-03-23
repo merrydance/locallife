@@ -543,15 +543,21 @@ func CancelReservation(
 				refundType = paymentTypeMiniProgram
 			}
 
-			refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
+			txResult, createErr := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
 				PaymentOrderID: paymentOrder.ID,
 				RefundType:     refundType,
 				RefundAmount:   refundAmount,
-				RefundReason:   pgtype.Text{String: "预定取消退款", Valid: true},
+				RefundReason:   "预定取消退款",
 				OutRefundNo:    outRefundNo,
-				Status:         "pending",
 			})
-			if err == nil {
+			if createErr != nil {
+				if _, ok := db.IsRefundRequestError(createErr); ok {
+					log.Warn().Err(createErr).Int64("payment_order_id", paymentOrder.ID).Msg("reservation refund validation failed")
+				} else {
+					log.Error().Err(createErr).Int64("payment_order_id", paymentOrder.ID).Msg("create reservation refund order tx failed")
+				}
+			} else {
+				refundOrder := txResult.RefundOrder
 				wxRefund, err := paymentClient.CreateRefund(ctx, &wechat.RefundRequest{
 					OutTradeNo:   paymentOrder.OutTradeNo,
 					OutRefundNo:  outRefundNo,
@@ -560,9 +566,8 @@ func CancelReservation(
 					TotalAmount:  paymentOrder.Amount,
 				})
 				if err != nil {
-					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-					}
+					// 微信API失败时保持pending状态，由恢复调度器自动补偿重试
+					log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat refund api failed for reservation, pending recovery")
 				} else if wxRefund.Status == wechat.RefundStatusSuccess {
 					if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")

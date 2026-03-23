@@ -137,8 +137,40 @@ WHERE
     AND po.business_type = 'order' 
     AND o.status = 'cancelled'
     AND po.created_at > now() - INTERVAL '7 days'
+    AND NOT EXISTS (
+        SELECT 1 FROM refund_orders ro 
+        WHERE ro.payment_order_id = po.id 
+        AND ro.status IN ('pending', 'processing', 'success')
+    )
 ORDER BY po.created_at
 LIMIT $1;
+
+-- name: ListPaidUnrefundedReservationPaymentOrders :many
+SELECT po.*
+FROM payment_orders po
+JOIN table_reservations r ON po.reservation_id = r.id
+WHERE 
+    po.status = 'paid' 
+    AND po.business_type = 'reservation' 
+    AND r.status = 'cancelled'
+    AND po.created_at > now() - INTERVAL '7 days'
+    AND NOT EXISTS (
+        SELECT 1 FROM refund_orders ro 
+        WHERE ro.payment_order_id = po.id 
+        AND ro.status IN ('pending', 'processing', 'success')
+    )
+ORDER BY po.created_at
+LIMIT $1;
+
+-- name: GetPendingPaymentOrderByUserAndBusinessType :one
+SELECT * FROM payment_orders
+WHERE user_id = $1
+    AND business_type = $2
+    AND amount = $3
+    AND status = 'pending'
+    AND expires_at > now()
+ORDER BY created_at DESC
+LIMIT 1;
 
 -- name: SetPaymentOrderCombinedID :one
 UPDATE payment_orders

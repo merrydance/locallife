@@ -377,6 +377,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateProfitSharingReturn(ct
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProfitSharingReturn", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreateProfitSharingReturn), ctx, req)
 }
 
+// CreateRefund mocks base method.
+func (m *MockEcommerceClientInterface) CreateRefund(ctx context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRefund", ctx, req)
+	ret0, _ := ret[0].(*wechat.RefundResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRefund indicates an expected call of CreateRefund.
+func (mr *MockEcommerceClientInterfaceMockRecorder) CreateRefund(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRefund", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreateRefund), ctx, req)
+}
+
 // CreateSubsidy mocks base method.
 func (m *MockEcommerceClientInterface) CreateSubsidy(ctx context.Context, req wechat.SubsidyRequest) (*wechat.SubsidyResponse, error) {
 	m.ctrl.T.Helper()

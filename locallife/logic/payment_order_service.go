@@ -220,9 +220,11 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	if svc.paymentClient != nil && input.PaymentType == paymentTypeMiniProgram {
 		user, err := svc.store.GetUser(ctx, input.UserID)
 		if err != nil {
+			_, _ = svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
 			return result, fmt.Errorf("get user: %w", err)
 		}
 		if user.WechatOpenid == "" {
+			_, _ = svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
 			return result, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
 		}
 

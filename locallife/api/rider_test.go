@@ -324,6 +324,12 @@ func TestDepositRiderAPI(t *testing.T) {
 					Times(1).
 					Return(rider, nil)
 
+				// 幂等检查：无已有 pending 支付单
+				store.EXPECT().
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
 				// 创建支付订单
 				store.EXPECT().
 					CreatePaymentOrder(gomock.Any(), gomock.Any()).

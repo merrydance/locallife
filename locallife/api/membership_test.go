@@ -199,6 +199,12 @@ func TestRechargeMembershipAPI(t *testing.T) {
 					Times(1).
 					Return(user, nil)
 
+				// Mock idempotency check: no existing pending payment order
+				store.EXPECT().
+					GetPendingPaymentOrderByUserAndBusinessType(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
+
 				// Mock CreatePaymentOrder
 				store.EXPECT().
 					CreatePaymentOrder(gomock.Any(), gomock.Any()).

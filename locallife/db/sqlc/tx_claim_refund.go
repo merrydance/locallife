@@ -53,10 +53,14 @@ func (store *SQLStore) ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParam
 		// 2. 获取或创建用户余额账户
 		balance, err := q.GetUserBalanceForUpdate(ctx, arg.UserID)
 		if err != nil {
-			// 不存在，创建新账户
-			balance, err = q.CreateUserBalance(ctx, arg.UserID)
+			// 不存在，原子性创建（ON CONFLICT 处理并发竞态）
+			if _, createErr := q.GetOrCreateUserBalance(ctx, arg.UserID); createErr != nil {
+				return fmt.Errorf("get or create user balance: %w", createErr)
+			}
+			// 重新获取并加锁
+			balance, err = q.GetUserBalanceForUpdate(ctx, arg.UserID)
 			if err != nil {
-				return fmt.Errorf("create user balance: %w", err)
+				return fmt.Errorf("get user balance for update after create: %w", err)
 			}
 			result.BalanceCreated = true
 		}
