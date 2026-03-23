@@ -1156,6 +1156,59 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 			continue
 		}
 
+		// ✅ P1-1: 验证子订单支付金额是否匹配（与单笔支付回调保持一致）
+		if subOrder.Amount.TotalAmount != paymentOrder.Amount {
+			log.Error().
+				Int64("expected_amount", paymentOrder.Amount).
+				Int64("actual_amount", subOrder.Amount.TotalAmount).
+				Str("out_trade_no", subOrder.OutTradeNo).
+				Int64("payment_order_id", paymentOrder.ID).
+				Msg("⚠️ combine sub-order amount mismatch detected")
+
+			// 先标记为 paid（记录实际到账）再触发退款
+			if _, updateErr := server.store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
+				ID:            paymentOrder.ID,
+				TransactionID: pgtype.Text{String: subOrder.TransactionID, Valid: true},
+			}); updateErr != nil {
+				log.Error().Err(updateErr).Int64("id", paymentOrder.ID).Msg("update combine sub-order to paid for mismatch refund failed")
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
+			}
+
+			if server.taskDistributor != nil && paymentOrder.OrderID.Valid {
+				if enqErr := server.taskDistributor.DistributeTaskProcessRefund(
+					ctx,
+					&worker.PayloadProcessRefund{
+						PaymentOrderID: paymentOrder.ID,
+						OrderID:        paymentOrder.OrderID.Int64,
+						RefundAmount:   subOrder.Amount.TotalAmount,
+						Reason:         "合单子订单金额异常，系统自动退款",
+					},
+					asynq.MaxRetry(5),
+					asynq.Queue(worker.QueueCritical),
+				); enqErr != nil {
+					log.Error().Err(enqErr).Int64("payment_order_id", paymentOrder.ID).Msg("combine sub-order mismatch refund task enqueue failed")
+				}
+			}
+
+			server.sendAlert(websocket.AlertData{
+				AlertType:   websocket.AlertTypePaymentAmountMismatch,
+				Level:       websocket.AlertLevelCritical,
+				Title:       "⚠️ 合单子订单金额异常",
+				Message:     fmt.Sprintf("合单子订单 %s（ID=%d）实收 %d 分与预期 %d 分不符，交易号 %s", subOrder.OutTradeNo, paymentOrder.ID, subOrder.Amount.TotalAmount, paymentOrder.Amount, subOrder.TransactionID),
+				RelatedID:   paymentOrder.ID,
+				RelatedType: "payment_order",
+				Extra: map[string]interface{}{
+					"out_trade_no":    subOrder.OutTradeNo,
+					"transaction_id":  subOrder.TransactionID,
+					"expected_amount": paymentOrder.Amount,
+					"actual_amount":   subOrder.Amount.TotalAmount,
+				},
+			})
+			successCount++
+			continue
+		}
+
 		// 更新支付订单状态
 		_, err = server.store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
 			ID:            paymentOrder.ID,

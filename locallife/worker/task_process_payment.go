@@ -226,6 +226,7 @@ type ProfitSharingPayload struct {
 	PaymentOrderID int64 `json:"payment_order_id"`
 	OrderID        int64 `json:"order_id,omitempty"`
 	ReservationID  int64 `json:"reservation_id,omitempty"`
+	RetryCount     int   `json:"retry_count,omitempty"`
 }
 
 // ApplymentResultPayload 进件结果处理任务载荷
@@ -889,9 +890,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 
 		paymentOrder, err := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
 		if err == nil {
-			if _, dbErr := processor.store.UpdatePaymentOrderToRefunded(ctx, paymentOrder.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to mark payment order as refunded")
-			}
+			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 			if processor.distributor != nil {
 				expiresAt := time.Now().Add(7 * 24 * time.Hour)
 				_ = processor.distributor.DistributeTaskSendNotification(ctx, &SendNotificationPayload{
@@ -1780,7 +1779,7 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 		refundOrder = txResult.RefundOrder
 	}
 
-	// 直连支付退款（非电商退款）
+	// 直连支付退款（EcommerceClient 内嵌 PaymentClient，CreateRefund 调用的是直连退款 API，非电商退款）
 	wxRefund, err := processor.ecommerceClient.CreateRefund(ctx, &wechat.RefundRequest{
 		OutTradeNo:   paymentOrder.OutTradeNo,
 		OutRefundNo:  outRefundNo,
@@ -2247,20 +2246,22 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 			},
 		})
 
-		// 自动重试队列（延迟执行，避免微信端短暂异常导致永久失败）
+		// 自动重试队列（指数退避延迟，避免微信端短暂异常导致永久失败）
 		if processor.distributor != nil {
 			paymentOrder, err := processor.store.GetPaymentOrder(ctx, profitSharingOrder.PaymentOrderID)
 			if err == nil && paymentOrder.OrderID.Valid {
+				// 首次从回调失败进入 → 5min 延迟；Unique 防止重复入队
 				_ = processor.distributor.DistributeTaskProcessProfitSharing(
 					ctx,
 					&ProfitSharingPayload{
 						PaymentOrderID: profitSharingOrder.PaymentOrderID,
 						OrderID:        paymentOrder.OrderID.Int64,
+						RetryCount:     1,
 					},
 					asynq.Queue(QueueCritical),
-					asynq.ProcessIn(30*time.Minute),
+					asynq.ProcessIn(5*time.Minute),
 					asynq.MaxRetry(5),
-					asynq.Unique(6*time.Hour),
+					asynq.Unique(6*time.Minute),
 				)
 			}
 		}

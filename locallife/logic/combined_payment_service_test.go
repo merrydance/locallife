@@ -745,9 +745,12 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(nil)
 
 				store.EXPECT().
-					UpdateCombinedPaymentOrderToClosed(gomock.Any(), input.CombinedPaymentID).
+					CloseCombinedPaymentOrderTx(gomock.Any(), db.CloseCombinedPaymentOrderTxParams{
+						CombinedPaymentOrderID: input.CombinedPaymentID,
+						SubOrderOutTradeNos:    []string{"P202001010000000001"},
+					}).
 					Times(1).
-					Return(db.CombinedPaymentOrder{}, errors.New("update combined failed"))
+					Return(db.CloseCombinedPaymentOrderTxResult{}, errors.New("update combined failed"))
 			},
 			check: func(t *testing.T, _ CloseCombinedPaymentOrderResult, err error) {
 				require.Error(t, err)
@@ -775,19 +778,14 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(nil)
 
 				store.EXPECT().
-					UpdateCombinedPaymentOrderToClosed(gomock.Any(), input.CombinedPaymentID).
+					CloseCombinedPaymentOrderTx(gomock.Any(), db.CloseCombinedPaymentOrderTxParams{
+						CombinedPaymentOrderID: input.CombinedPaymentID,
+						SubOrderOutTradeNos:    []string{"P202001010000000001"},
+					}).
 					Times(1).
-					Return(db.CombinedPaymentOrder{ID: input.CombinedPaymentID, Status: "closed", PrepayID: pgtype.Text{}}, nil)
-
-				store.EXPECT().
-					GetPaymentOrderByOutTradeNo(gomock.Any(), "P202001010000000001").
-					Times(1).
-					Return(db.PaymentOrder{ID: 22, Status: paymentStatusPending}, nil)
-
-				store.EXPECT().
-					UpdatePaymentOrderToClosed(gomock.Any(), int64(22)).
-					Times(1).
-					Return(db.PaymentOrder{ID: 22, Status: "closed"}, nil)
+					Return(db.CloseCombinedPaymentOrderTxResult{
+						CombinedPaymentOrder: db.CombinedPaymentOrder{ID: input.CombinedPaymentID, Status: "closed", PrepayID: pgtype.Text{}},
+					}, nil)
 			},
 			check: func(t *testing.T, result CloseCombinedPaymentOrderResult, err error) {
 				require.NoError(t, err)
@@ -818,14 +816,14 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(nil)
 
 				store.EXPECT().
-					UpdateCombinedPaymentOrderToClosed(gomock.Any(), input.CombinedPaymentID).
+					CloseCombinedPaymentOrderTx(gomock.Any(), db.CloseCombinedPaymentOrderTxParams{
+						CombinedPaymentOrderID: input.CombinedPaymentID,
+						SubOrderOutTradeNos:    []string{"P202001010000000001"},
+					}).
 					Times(1).
-					Return(db.CombinedPaymentOrder{ID: input.CombinedPaymentID, Status: "closed", PrepayID: pgtype.Text{}}, nil)
-
-				store.EXPECT().
-					GetPaymentOrderByOutTradeNo(gomock.Any(), "P202001010000000001").
-					Times(1).
-					Return(db.PaymentOrder{}, errors.New("payment order lookup failed"))
+					Return(db.CloseCombinedPaymentOrderTxResult{
+						CombinedPaymentOrder: db.CombinedPaymentOrder{ID: input.CombinedPaymentID, Status: "closed", PrepayID: pgtype.Text{}},
+					}, nil)
 			},
 			check: func(t *testing.T, result CloseCombinedPaymentOrderResult, err error) {
 				require.NoError(t, err)

@@ -2,7 +2,6 @@ package db
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,18 +19,9 @@ type CreateAnomalyRefundRecordParams struct {
 //
 // 与 CreateRefundOrderTx 不同，此函数跳过 status='paid' 校验，
 // 专用于"已关闭/失败订单收到微信付款"这一竞态场景。
-// 包含幂等检查：若该 OutRefundNo 的退款单已存在，则直接返回已有记录。
+// 幂等性由 out_refund_no UNIQUE 约束保证：INSERT 冲突时返回已有记录。
 func (store *SQLStore) CreateAnomalyRefundRecord(ctx context.Context, arg CreateAnomalyRefundRecordParams) (RefundOrder, error) {
-	// 幂等检查：避免重复创建
-	existing, err := store.GetRefundOrderByOutRefundNo(ctx, arg.OutRefundNo)
-	if err == nil {
-		return existing, nil
-	}
-	if !errors.Is(err, ErrRecordNotFound) {
-		return RefundOrder{}, fmt.Errorf("check existing refund record: %w", err)
-	}
-
-	return store.CreateRefundOrder(ctx, CreateRefundOrderParams{
+	refundOrder, err := store.CreateRefundOrder(ctx, CreateRefundOrderParams{
 		PaymentOrderID: arg.PaymentOrderID,
 		RefundType:     "closed_order_anomaly",
 		RefundAmount:   arg.RefundAmount,
@@ -39,4 +29,16 @@ func (store *SQLStore) CreateAnomalyRefundRecord(ctx context.Context, arg Create
 		OutRefundNo:    arg.OutRefundNo,
 		Status:         "pending",
 	})
+	if err != nil {
+		// UNIQUE 约束冲突 → 已存在，直接返回
+		if ErrorCode(err) == UniqueViolation {
+			existing, lookupErr := store.GetRefundOrderByOutRefundNo(ctx, arg.OutRefundNo)
+			if lookupErr != nil {
+				return RefundOrder{}, fmt.Errorf("lookup existing anomaly refund after conflict: %w", lookupErr)
+			}
+			return existing, nil
+		}
+		return RefundOrder{}, fmt.Errorf("create anomaly refund record: %w", err)
+	}
+	return refundOrder, nil
 }

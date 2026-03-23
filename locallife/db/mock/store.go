@@ -874,6 +874,21 @@ func (mr *MockStoreMockRecorder) ClearSearchHistory(ctx, userID any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearSearchHistory", reflect.TypeOf((*MockStore)(nil).ClearSearchHistory), ctx, userID)
 }
 
+// CloseCombinedPaymentOrderTx mocks base method.
+func (m *MockStore) CloseCombinedPaymentOrderTx(ctx context.Context, arg db.CloseCombinedPaymentOrderTxParams) (db.CloseCombinedPaymentOrderTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseCombinedPaymentOrderTx", ctx, arg)
+	ret0, _ := ret[0].(db.CloseCombinedPaymentOrderTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CloseCombinedPaymentOrderTx indicates an expected call of CloseCombinedPaymentOrderTx.
+func (mr *MockStoreMockRecorder) CloseCombinedPaymentOrderTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseCombinedPaymentOrderTx", reflect.TypeOf((*MockStore)(nil).CloseCombinedPaymentOrderTx), ctx, arg)
+}
+
 // CloseDiningSession mocks base method.
 func (m *MockStore) CloseDiningSession(ctx context.Context, id int64) (db.DiningSession, error) {
 	m.ctrl.T.Helper()

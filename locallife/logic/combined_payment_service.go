@@ -277,20 +277,25 @@ func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context
 		return CloseCombinedPaymentOrderResult{}, err
 	}
 
-	updatedCombined, err := svc.store.UpdateCombinedPaymentOrderToClosed(ctx, combinedRow.ID)
+	// 收集子单 OutTradeNo 用于事务关闭
+	subOutTradeNos := make([]string, 0, len(subPayloads))
+	for _, sub := range subPayloads {
+		if sub.OutTradeNo != "" {
+			subOutTradeNos = append(subOutTradeNos, sub.OutTradeNo)
+		}
+	}
+
+	// 在单个事务中原子关闭合单 + 所有子支付单
+	txResult, err := svc.store.CloseCombinedPaymentOrderTx(ctx, db.CloseCombinedPaymentOrderTxParams{
+		CombinedPaymentOrderID: combinedRow.ID,
+		SubOrderOutTradeNos:    subOutTradeNos,
+	})
 	if err != nil {
 		return CloseCombinedPaymentOrderResult{}, err
 	}
 
 	resultSubs := make([]CombinedSubOrder, 0, len(subPayloads))
 	for _, sub := range subPayloads {
-		if sub.OutTradeNo != "" {
-			paymentOrder, err := svc.store.GetPaymentOrderByOutTradeNo(ctx, sub.OutTradeNo)
-			if err == nil && paymentOrder.Status == paymentStatusPending {
-				_, _ = svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
-			}
-		}
-
 		resultSubs = append(resultSubs, CombinedSubOrder{
 			OrderID:        sub.OrderID,
 			PaymentOrderID: sub.PaymentOrderID,
@@ -302,7 +307,7 @@ func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context
 		})
 	}
 
-	return CloseCombinedPaymentOrderResult{CombinedPayment: updatedCombined, SubOrders: resultSubs}, nil
+	return CloseCombinedPaymentOrderResult{CombinedPayment: txResult.CombinedPaymentOrder, SubOrders: resultSubs}, nil
 }
 
 func dedupePositiveIDs(ids []int64) []int64 {
