@@ -101,6 +101,13 @@ func (s apiTaskScheduler) SchedulePaymentOrderTimeout(ctx context.Context, payme
 	return s.server.taskDistributor.DistributeTaskPaymentOrderTimeout(ctx, &worker.PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrderNo}, asynq.ProcessAt(at))
 }
 
+func (s apiTaskScheduler) ScheduleCombinedPaymentOrderTimeout(ctx context.Context, combineOutTradeNo string, at time.Time) error {
+	if s.server.taskDistributor == nil {
+		return nil
+	}
+	return s.server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(ctx, &worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combineOutTradeNo}, asynq.ProcessAt(at))
+}
+
 func (s apiTaskScheduler) ScheduleProcessRefund(ctx context.Context, input logic.ProcessRefundTaskInput) error {
 	if s.server.taskDistributor == nil {
 		return nil

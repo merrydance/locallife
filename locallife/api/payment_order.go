@@ -244,18 +244,42 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 		}
 	}
 
-	if server.taskDistributor != nil && result.PaymentOrder.ExpiresAt.Valid {
-		if enqErr := server.taskDistributor.DistributeTaskPaymentOrderTimeout(
-			ctx,
-			&worker.PayloadPaymentOrderTimeout{PaymentOrderNo: result.PaymentOrder.OutTradeNo},
-			asynq.ProcessAt(result.PaymentOrder.ExpiresAt.Time),
-		); enqErr != nil {
-			// 非严重错误：payment_recovery_scheduler 会兜底扫描 pending 超时单
-			log.Error().Err(enqErr).Str("out_trade_no", result.PaymentOrder.OutTradeNo).Msg("⚠️ failed to enqueue payment order timeout task")
-		}
-	}
+	server.scheduleTimeoutForPaymentOrder(ctx, result.PaymentOrder)
 
 	ctx.JSON(http.StatusCreated, resp)
+}
+
+func (server *Server) scheduleTimeoutForPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) {
+	if server.taskDistributor == nil || !paymentOrder.ExpiresAt.Valid {
+		return
+	}
+	if _, ok := server.taskDistributor.(worker.NoopTaskDistributor); ok {
+		return
+	}
+
+	if paymentOrder.CombinedPaymentID.Valid {
+		combinedPaymentOrder, getErr := server.store.GetCombinedPaymentOrder(ctx, paymentOrder.CombinedPaymentID.Int64)
+		if getErr != nil {
+			log.Error().Err(getErr).Int64("combined_payment_id", paymentOrder.CombinedPaymentID.Int64).Msg("failed to load combined payment order for timeout scheduling")
+			return
+		}
+		if enqErr := server.taskDistributor.DistributeTaskCombinedPaymentOrderTimeout(
+			ctx,
+			&worker.PayloadCombinedPaymentOrderTimeout{CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo},
+			asynq.ProcessAt(paymentOrder.ExpiresAt.Time),
+		); enqErr != nil {
+			log.Error().Err(enqErr).Str("combine_out_trade_no", combinedPaymentOrder.CombineOutTradeNo).Msg("failed to enqueue combined payment order timeout task")
+		}
+		return
+	}
+
+	if enqErr := server.taskDistributor.DistributeTaskPaymentOrderTimeout(
+		ctx,
+		&worker.PayloadPaymentOrderTimeout{PaymentOrderNo: paymentOrder.OutTradeNo},
+		asynq.ProcessAt(paymentOrder.ExpiresAt.Time),
+	); enqErr != nil {
+		log.Error().Err(enqErr).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("⚠️ failed to enqueue payment order timeout task")
+	}
 }
 
 func writeLogicRequestError(ctx *gin.Context, err error) bool {

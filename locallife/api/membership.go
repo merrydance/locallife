@@ -813,6 +813,12 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
 	})
 
+	updatedPayment := txResult.PaymentOrder
+	updatedPayment.CombinedPaymentID = pgtype.Int8{Int64: txResult.CombinedPaymentOrder.ID, Valid: true}
+	updatedPayment.PrepayID = pgtype.Text{String: combineResp.PrepayID, Valid: true}
+	updatedPayment.ExpiresAt = pgtype.Timestamptz{Time: expireTime, Valid: true}
+	server.scheduleTimeoutForPaymentOrder(ctx, updatedPayment)
+
 	// 返回支付参数给前端，前端调用wx.requestPayment进行支付
 	ctx.JSON(http.StatusOK, membershipPaymentResponse{
 		PaymentOrderID: txResult.PaymentOrder.ID,

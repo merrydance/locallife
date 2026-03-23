@@ -415,7 +415,36 @@ func (s *OrderService) UrgeOrder(ctx context.Context, input UrgeOrderInput) (Urg
 
 func (s *OrderService) ReplaceOrder(ctx context.Context, input ReplaceOrderInput) (ReplaceOrderResult, error) {
 	normalize := s.buildNormalizerFunc()
-	return ReplaceReservationOrder(ctx, s.store, s.paymentClient, input, normalize)
+	result, err := ReplaceReservationOrder(ctx, s.store, s.paymentClient, s.ecommerceClient, input, normalize)
+	if err != nil {
+		return ReplaceOrderResult{}, err
+	}
+
+	if s.taskScheduler != nil && result.PaymentOrderID != nil {
+		if scheduleErr := s.scheduleReplaceOrderPaymentTimeout(ctx, *result.PaymentOrderID); scheduleErr != nil {
+			log.Warn().Err(scheduleErr).Int64("payment_order_id", *result.PaymentOrderID).Msg("schedule replace-order payment timeout failed")
+		}
+	}
+
+	return result, nil
+}
+
+func (s *OrderService) scheduleReplaceOrderPaymentTimeout(ctx context.Context, paymentOrderID int64) error {
+	paymentOrder, err := s.store.GetPaymentOrder(ctx, paymentOrderID)
+	if err != nil {
+		return err
+	}
+	if paymentOrder.Status != paymentStatusPending || !paymentOrder.ExpiresAt.Valid {
+		return nil
+	}
+	if paymentOrder.CombinedPaymentID.Valid {
+		combinedPayment, err := s.store.GetCombinedPaymentOrder(ctx, paymentOrder.CombinedPaymentID.Int64)
+		if err != nil {
+			return err
+		}
+		return s.taskScheduler.ScheduleCombinedPaymentOrderTimeout(ctx, combinedPayment.CombineOutTradeNo, paymentOrder.ExpiresAt.Time)
+	}
+	return s.taskScheduler.SchedulePaymentOrderTimeout(ctx, paymentOrder.OutTradeNo, paymentOrder.ExpiresAt.Time)
 }
 
 func (s *OrderService) ConfirmOrder(ctx context.Context, input ConfirmOrderInput) (ConfirmOrderResult, error) {

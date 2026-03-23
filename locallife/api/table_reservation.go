@@ -1422,6 +1422,7 @@ func (server *Server) addDishesToReservation(ctx *gin.Context) {
 	}
 
 	if result.Payment != nil {
+		server.scheduleTimeoutForPaymentOrder(ctx, *result.Payment)
 		resp := addDishesPaymentResponse{
 			Message:        "additional dishes added, payment required",
 			PaymentOrderID: result.Payment.ID,
@@ -1513,6 +1514,7 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 	}
 
 	if result.Payment != nil {
+		server.scheduleTimeoutForPaymentOrder(ctx, *result.Payment)
 		resp := modifyDishesPaymentResponse{
 			Message:        "reservation modified, payment required",
 			PaymentOrderID: result.Payment.ID,

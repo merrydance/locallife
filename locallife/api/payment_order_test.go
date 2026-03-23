@@ -15,6 +15,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
+	mockwechat "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -77,12 +79,29 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 	order := randomPaymentTestOrder(user.ID, merchant.ID)
 	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
 	paymentOrder.Amount = order.TotalAmount
+	paymentOrder.PaymentType = PaymentTypeProfitShare
+	paymentOrder.CombinedPaymentID = pgtype.Int8{Int64: util.RandomInt(1, 1000), Valid: true}
+	combinedPaymentOrder := db.CombinedPaymentOrder{
+		ID:                paymentOrder.CombinedPaymentID.Int64,
+		UserID:            user.ID,
+		CombineOutTradeNo: "OC" + util.RandomString(21),
+		TotalAmount:       order.TotalAmount,
+		Status:            PaymentStatusPending,
+		ExpiresAt:         paymentOrder.ExpiresAt,
+	}
+	payParams := &wechat.JSAPIPayParams{
+		TimeStamp: "1234567890",
+		NonceStr:  "nonce",
+		Package:   "prepay_id=wx123",
+		SignType:  "RSA",
+		PaySign:   "signature",
+	}
 
 	testCases := []struct {
 		name          string
 		body          gin.H
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -95,7 +114,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -107,9 +126,46 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
-					CreatePaymentOrder(gomock.Any(), gomock.Any()).
+					GetUser(gomock.Any(), user.ID).
 					Times(1).
-					Return(paymentOrder, nil)
+					Return(user, nil)
+
+				store.EXPECT().
+					CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateCombinedPaymentTxResult{
+						CombinedPaymentOrder: combinedPaymentOrder,
+						PaymentOrders:        []db.PaymentOrder{paymentOrder},
+						OrderInfos: []db.CombinedPaymentOrderInfo{{
+							Order:        order,
+							PaymentOrder: paymentOrder,
+							PaymentConfig: db.MerchantPaymentConfig{
+								MerchantID: merchant.ID,
+								SubMchID:   "1900000109",
+								Status:     "active",
+							},
+							Merchant: merchant,
+						}},
+					}, nil)
+
+				ecommerceClient.EXPECT().
+					CreateCombineOrder(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(&wechat.CombineOrderResponse{PrepayID: "wx123"}, payParams, nil)
+
+				store.EXPECT().
+					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdatePaymentOrderPrepayIdParams) (db.PaymentOrder, error) {
+						updated := paymentOrder
+						updated.PrepayID = arg.PrepayID
+						return updated, nil
+					})
+
+				store.EXPECT().
+					UpdateCombinedPaymentOrderPrepay(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(combinedPaymentOrder, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -130,7 +186,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -150,7 +206,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -170,7 +226,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {
 				paidOrder := order
 				paidOrder.Status = "paid"
 				store.EXPECT().
@@ -192,7 +248,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				store.EXPECT().
 					GetOrder(gomock.Any(), order.ID).
 					Times(1).
@@ -204,10 +260,10 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					Times(1).
 					Return(paymentOrder, nil)
 
-				// 不应该创建新的支付订单
-				store.EXPECT().
-					CreatePaymentOrder(gomock.Any(), gomock.Any()).
-					Times(0)
+				ecommerceClient.EXPECT().
+					GenerateJSAPIPayParams(gomock.Any()).
+					Times(1).
+					Return(payParams, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -227,7 +283,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -242,7 +298,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -257,7 +313,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
@@ -270,7 +326,7 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 				"business_type": "order",
 			},
 			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
-			buildStubs: func(store *mockdb.MockStore) {},
+			buildStubs: func(store *mockdb.MockStore, _ *mockwechat.MockEcommerceClientInterface) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
@@ -285,9 +341,12 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+			tc.buildStubs(store, ecommerceClient)
 
 			server := newTestServer(t, store)
+			server.SetEcommerceClientForTest(ecommerceClient)
+			server.SetTaskDistributorForTest(nil)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)

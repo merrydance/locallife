@@ -74,7 +74,7 @@ func TestPaymentOrderServiceGetPaymentOrder(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-				svc := NewPaymentOrderService(store, nil, nil)
+			svc := NewPaymentOrderService(store, nil, nil)
 			result, err := svc.GetPaymentOrder(context.Background(), input)
 			tc.check(t, result, err)
 		})
@@ -203,7 +203,9 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 	testCases := []struct {
 		name             string
 		buildStubs       func(store *mockdb.MockStore, client *mockwechat.MockPaymentClientInterface)
+		buildEcomStubs   func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface)
 		usePaymentClient bool
+		useEcomClient    bool
 		check            func(t *testing.T, result ClosePaymentOrderResult, err error)
 	}{
 		{
@@ -287,6 +289,52 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 				require.Equal(t, "closed", result.PaymentOrder.Status)
 			},
 		},
+		{
+			name:          "Success_CombinedPayment_CloseCombineOrderCalled",
+			useEcomClient: true,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockPaymentClientInterface) {
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Times(1).
+					Return(db.PaymentOrder{
+						ID:                input.PaymentOrderID,
+						UserID:            input.UserID,
+						Status:            paymentStatusPending,
+						PaymentType:       "profit_sharing",
+						OutTradeNo:        "CP202001010000000003",
+						CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true},
+					}, nil)
+			},
+			buildEcomStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetCombinedPaymentOrder(gomock.Any(), int64(9001)).
+					Times(1).
+					Return(db.CombinedPaymentOrder{ID: 9001, CombineOutTradeNo: "OC123", Status: paymentStatusPending}, nil)
+				store.EXPECT().
+					ListCombinedPaymentSubOrders(gomock.Any(), int64(9001)).
+					Times(1).
+					Return([]db.CombinedPaymentSubOrder{{SubMchid: "1900000109", OutTradeNo: "CP202001010000000003"}}, nil)
+				client.EXPECT().
+					CloseCombineOrder(gomock.Any(), "OC123", []wechat.SubOrderClose{{MchID: "1900000109", OutTradeNo: "CP202001010000000003"}}).
+					Times(1).
+					Return(nil)
+				store.EXPECT().
+					CloseCombinedPaymentOrderTx(gomock.Any(), db.CloseCombinedPaymentOrderTxParams{
+						CombinedPaymentOrderID: 9001,
+						SubOrderOutTradeNos:    []string{"CP202001010000000003"},
+					}).
+					Times(1).
+					Return(db.CloseCombinedPaymentOrderTxResult{}, nil)
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), input.PaymentOrderID).
+					Times(1).
+					Return(db.PaymentOrder{ID: input.PaymentOrderID, UserID: input.UserID, Status: "closed"}, nil)
+			},
+			check: func(t *testing.T, result ClosePaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, "closed", result.PaymentOrder.Status)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -297,14 +345,22 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 
 			store := mockdb.NewMockStore(ctrl)
 			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient)
+			if tc.buildEcomStubs != nil {
+				tc.buildEcomStubs(store, ecommerceClient)
+			}
 
 			var clientInterface wechat.PaymentClientInterface
 			if tc.usePaymentClient {
 				clientInterface = paymentClient
 			}
+			var ecommerceInterface wechat.EcommerceClientInterface
+			if tc.useEcomClient {
+				ecommerceInterface = ecommerceClient
+			}
 
-				svc := NewPaymentOrderService(store, clientInterface, nil)
+			svc := NewPaymentOrderService(store, clientInterface, ecommerceInterface)
 			result, err := svc.ClosePaymentOrder(context.Background(), input)
 			tc.check(t, result, err)
 		})

@@ -173,9 +173,20 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 		result.PaymentOrder = existingPayment
 		// 干等返回时，若已有 prepay_id 则重新签名生成 pay_params，
 		// 避免前端因收到 null pay_params 而无法调起支付。
-		if svc.paymentClient != nil && existingPayment.PrepayID.Valid {
-			if payParams, signErr := svc.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
-				result.PayParams = payParams
+		if existingPayment.PrepayID.Valid {
+			switch existingPayment.PaymentType {
+			case "profit_sharing":
+				if svc.ecommerceClient != nil {
+					if payParams, signErr := svc.ecommerceClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+						result.PayParams = payParams
+					}
+				}
+			default:
+				if svc.paymentClient != nil {
+					if payParams, signErr := svc.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+						result.PayParams = payParams
+					}
+				}
 			}
 		}
 		return result, nil
@@ -186,6 +197,9 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	// ==================== 预定走收付通合单支付 ====================
 	if input.BusinessType == businessTypeReservation {
 		return svc.createReservationEcommercePayment(ctx, input, merchantID, merchantName, amount, attach, expiresAt)
+	}
+	if input.BusinessType == businessTypeOrder {
+		return svc.createOrderEcommercePayment(ctx, input, merchantName, expiresAt)
 	}
 
 	// ==================== 订单走直连或扫码支付 ====================
@@ -404,6 +418,109 @@ func (svc *PaymentOrderService) createReservationEcommercePayment(
 	return result, nil
 }
 
+func (svc *PaymentOrderService) createOrderEcommercePayment(
+	ctx context.Context,
+	input CreatePaymentOrderInput,
+	merchantName string,
+	expiresAt time.Time,
+) (CreatePaymentOrderResult, error) {
+	var result CreatePaymentOrderResult
+
+	if svc.ecommerceClient == nil {
+		return result, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+	}
+
+	user, err := svc.store.GetUser(ctx, input.UserID)
+	if err != nil {
+		return result, fmt.Errorf("get user: %w", err)
+	}
+	if user.WechatOpenid == "" {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("wechat openid not found"))
+	}
+
+	combineOutTradeNo, err := generateCombineOutTradeNoForSingle("OC")
+	if err != nil {
+		return result, fmt.Errorf("generate combine out trade no: %w", err)
+	}
+
+	txResult, err := svc.store.CreateCombinedPaymentTx(ctx, db.CreateCombinedPaymentTxParams{
+		UserID:            input.UserID,
+		OrderIDs:          []int64{input.OrderID},
+		CombineOutTradeNo: combineOutTradeNo,
+		ExpiresAt:         expiresAt,
+	})
+	if err != nil {
+		if mapped := mapCombinedPaymentError(err); mapped != nil {
+			return result, mapped
+		}
+		return result, fmt.Errorf("create combined payment: %w", err)
+	}
+	if len(txResult.OrderInfos) == 0 {
+		return result, fmt.Errorf("create combined payment: empty order infos")
+	}
+
+	info := txResult.OrderInfos[0]
+	if info.Merchant.Name != "" {
+		merchantName = info.Merchant.Name + " - Order Payment"
+	}
+
+	combineResp, payParams, err := svc.ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.SubOrder{
+			{
+				MchID:       info.PaymentConfig.SubMchID,
+				Amount:      info.PaymentOrder.Amount,
+				OutTradeNo:  info.PaymentOrder.OutTradeNo,
+				Description: merchantName,
+				Attach:      info.PaymentOrder.Attach.String,
+			},
+		},
+		PayerOpenID: user.WechatOpenid,
+		ExpireTime:  expiresAt,
+		SceneInfo: &wechat.CombineSceneInfo{
+			PayerClientIP: input.ClientIP,
+		},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
+		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		return result, fmt.Errorf("create combine order: %w", err)
+	}
+	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
+		cleanupCtx := context.Background()
+		_, _ = svc.store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
+		_, _ = svc.store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		return result, fmt.Errorf("create combine order: empty prepay id")
+	}
+
+	updatedPayment, err := svc.store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
+		ID:       info.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+	if err != nil {
+		cleanupCtx := context.Background()
+		_, _ = svc.store.UpdatePaymentOrderToFailed(cleanupCtx, info.PaymentOrder.ID)
+		_, _ = svc.store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
+		if closeErr := svc.ecommerceClient.CloseCombineOrder(cleanupCtx, combineOutTradeNo, []wechat.SubOrderClose{{
+			MchID:      info.PaymentConfig.SubMchID,
+			OutTradeNo: info.PaymentOrder.OutTradeNo,
+		}}); closeErr != nil {
+			log.Warn().Err(closeErr).Str("combine_out_trade_no", combineOutTradeNo).Msg("close combine order after prepay update failure")
+		}
+		return result, fmt.Errorf("update prepay id: %w", err)
+	}
+
+	_, _ = svc.store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
+		ID:       txResult.CombinedPaymentOrder.ID,
+		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+	})
+
+	result.PaymentOrder = updatedPayment
+	result.PayParams = payParams
+	return result, nil
+}
+
 // generateCombineOutTradeNoForSingle 生成单子商户合单主单号
 func generateCombineOutTradeNoForSingle(prefix string) (string, error) {
 	return generateOutTradeNoWithPrefix(prefix + "C")
@@ -492,6 +609,9 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 	if paymentOrder.Status != paymentStatusPending {
 		return ClosePaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("only pending payment orders can be closed"))
 	}
+	if paymentOrder.CombinedPaymentID.Valid && paymentOrder.PaymentType == "profit_sharing" {
+		return svc.closeCombinedPaymentOrder(ctx, paymentOrder)
+	}
 
 	updatedPayment, err := svc.store.UpdatePaymentOrderToClosed(ctx, input.PaymentOrderID)
 	if err != nil {
@@ -503,6 +623,55 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 			// 微信关单失败不阻断业务（订单会在 30 分钟后自动关闭），但必须记录
 			log.Warn().Err(err).Str("out_trade_no", paymentOrder.OutTradeNo).Msg("close wechat order failed, order will auto-expire")
 		}
+	}
+
+	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil
+}
+
+func (svc *PaymentOrderService) closeCombinedPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
+	if svc.ecommerceClient == nil {
+		return ClosePaymentOrderResult{}, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+	}
+
+	combinedPayment, err := svc.store.GetCombinedPaymentOrder(ctx, paymentOrder.CombinedPaymentID.Int64)
+	if err != nil {
+		return ClosePaymentOrderResult{}, err
+	}
+	if combinedPayment.Status != paymentStatusPending {
+		return ClosePaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("only pending payment orders can be closed"))
+	}
+
+	subOrders, err := svc.store.ListCombinedPaymentSubOrders(ctx, combinedPayment.ID)
+	if err != nil {
+		return ClosePaymentOrderResult{}, err
+	}
+	closeSubs := make([]wechat.SubOrderClose, 0, len(subOrders))
+	subOutTradeNos := make([]string, 0, len(subOrders))
+	for _, sub := range subOrders {
+		if sub.SubMchid == "" || sub.OutTradeNo == "" {
+			continue
+		}
+		closeSubs = append(closeSubs, wechat.SubOrderClose{MchID: sub.SubMchid, OutTradeNo: sub.OutTradeNo})
+		subOutTradeNos = append(subOutTradeNos, sub.OutTradeNo)
+	}
+	if len(closeSubs) == 0 {
+		return ClosePaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("no sub orders available to close"))
+	}
+
+	if err := svc.ecommerceClient.CloseCombineOrder(ctx, combinedPayment.CombineOutTradeNo, closeSubs); err != nil {
+		return ClosePaymentOrderResult{}, err
+	}
+
+	if _, err := svc.store.CloseCombinedPaymentOrderTx(ctx, db.CloseCombinedPaymentOrderTxParams{
+		CombinedPaymentOrderID: combinedPayment.ID,
+		SubOrderOutTradeNos:    subOutTradeNos,
+	}); err != nil {
+		return ClosePaymentOrderResult{}, err
+	}
+
+	updatedPayment, err := svc.store.GetPaymentOrder(ctx, paymentOrder.ID)
+	if err != nil {
+		return ClosePaymentOrderResult{}, err
 	}
 
 	return ClosePaymentOrderResult{PaymentOrder: updatedPayment}, nil

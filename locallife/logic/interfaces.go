@@ -123,6 +123,7 @@ type ProfitSharingReturnResultTaskInput struct {
 type TaskScheduler interface {
 	ScheduleOrderPaymentTimeout(ctx context.Context, orderID int64, at time.Time) error
 	SchedulePaymentOrderTimeout(ctx context.Context, paymentOrderNo string, at time.Time) error
+	ScheduleCombinedPaymentOrderTimeout(ctx context.Context, combineOutTradeNo string, at time.Time) error
 	ScheduleProcessRefund(ctx context.Context, input ProcessRefundTaskInput) error
 	ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error
 	ScheduleProfitSharingReturnResult(ctx context.Context, input ProfitSharingReturnResultTaskInput) error

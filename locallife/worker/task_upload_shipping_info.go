@@ -80,6 +80,11 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 			return nil
 		}
 
+		combinedPaymentOrder, err := processor.store.GetCombinedPaymentOrder(ctx, po.CombinedPaymentID.Int64)
+		if err != nil {
+			return fmt.Errorf("shipping upload: get combined payment order failed: %w", err)
+		}
+
 		subOrders, err := processor.store.GetCombinedPaymentSubOrdersByOrder(ctx, payload.OrderID)
 		if err != nil {
 			return fmt.Errorf("shipping upload: get combined sub orders failed: %w", err)
@@ -97,7 +102,7 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 		}
 
 		if err := processor.wechatClient.UploadCombinedShippingInfo(ctx, &wechat.UploadCombinedShippingInfoRequest{
-			CombineOutTradeNo: po.OutTradeNo,
+			CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo,
 			PayerOpenID:       user.WechatOpenid,
 			NotifyURL:         notifyURL,
 			UploadTime:        now,

@@ -1743,7 +1743,8 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	return nil
 }
 
-// processReservationRefund 处理预定退款（直连支付，无分账回退）
+// processReservationRefund 处理预定退款。
+// 预定支付已切到收付通，退款必须走电商退款接口，并携带子商户号。
 func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Context, payload PayloadProcessRefund) error {
 	log.Info().
 		Int64("payment_order_id", payload.PaymentOrderID).
@@ -1766,7 +1767,16 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	}
 
 	if processor.ecommerceClient == nil {
-		return fmt.Errorf("payment client not configured, cannot process reservation refund")
+		return fmt.Errorf("ecommerce client not configured, cannot process reservation refund")
+	}
+
+	reservation, err := processor.store.GetTableReservation(ctx, payload.ReservationID)
+	if err != nil {
+		return fmt.Errorf("get reservation: %w", err)
+	}
+	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
+	if err != nil {
+		return fmt.Errorf("get merchant payment config: %w", err)
 	}
 
 	// 生成退款单号
@@ -1806,8 +1816,8 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 		refundOrder = txResult.RefundOrder
 	}
 
-	// 直连支付退款（EcommerceClient 内嵌 PaymentClient，CreateRefund 调用的是直连退款 API，非电商退款）
-	wxRefund, err := processor.ecommerceClient.CreateRefund(ctx, &wechat.RefundRequest{
+	refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+		SubMchID:     paymentConfig.SubMchID,
 		OutTradeNo:   paymentOrder.OutTradeNo,
 		OutRefundNo:  outRefundNo,
 		Reason:       payload.Reason,
@@ -1816,18 +1826,18 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	})
 	if err != nil {
 		// 保持 pending 状态，由恢复调度器重试
-		log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat refund api failed for reservation")
-		return fmt.Errorf("call wechat refund API: %w", err)
+		log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat ecommerce refund api failed for reservation")
+		return fmt.Errorf("call wechat ecommerce refund API: %w", err)
 	}
 
-	switch wxRefund.Status {
+	switch refundResp.Status {
 	case wechat.RefundStatusSuccess:
 		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
 		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 	case wechat.RefundStatusProcessing:
 		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
-			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
+			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
 		})
 	default:
 		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
@@ -1836,7 +1846,7 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	log.Info().
 		Int64("refund_order_id", refundOrder.ID).
 		Str("out_refund_no", outRefundNo).
-		Str("status", string(wxRefund.Status)).
+		Str("status", string(refundResp.Status)).
 		Msg("reservation refund request processed")
 
 	return nil
