@@ -92,6 +92,14 @@ const PIE_COLORS = [
   CHART_COLORS.danger,
 ];
 
+function getTooltipValue(value: unknown) {
+  if (Array.isArray(value)) {
+    return value[0] ?? 0;
+  }
+
+  return value ?? 0;
+}
+
 // 日期范围选项
 const RANGE_OPTIONS = [
   { value: "today", label: "今日", days: 0 },
@@ -561,10 +569,16 @@ export function AnalyticsPageClient() {
                               border: "none",
                               boxShadow: "0 4px 12px rgb(0 0 0 / 0.1)",
                             }}
-                            formatter={(value?: number | string, name?: string) => [
-                              name === "sales" ? `¥${value ?? 0}` : `${value ?? 0}`,
-                              name === "sales" ? "销售额" : "订单量",
-                            ]}
+                            formatter={(value, name) => {
+                              const safeValue = getTooltipValue(value);
+
+                              return [
+                                name === "sales"
+                                  ? `¥${safeValue}`
+                                  : `${safeValue}`,
+                                name === "sales" ? "销售额" : "订单量",
+                              ];
+                            }}
                           />
                           <Bar
                             yAxisId="right"
@@ -623,7 +637,10 @@ export function AnalyticsPageClient() {
                             </Pie>
                             <Tooltip
                               contentStyle={{ borderRadius: "8px" }}
-                              formatter={(value) => [`${value ?? 0} 单`, "订单"]}
+                              formatter={(value) => [
+                                `${getTooltipValue(value)} 单`,
+                                "订单",
+                              ]}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -830,7 +847,10 @@ export function AnalyticsPageClient() {
                             </Pie>
                             <Tooltip
                               contentStyle={{ borderRadius: "8px" }}
-                              formatter={(value) => [`¥${value ?? 0}`, "销售额"]}
+                              formatter={(value) => [
+                                `¥${getTooltipValue(value)}`,
+                                "销售额",
+                              ]}
                             />
                           </PieChart>
                         </ResponsiveContainer>
@@ -915,7 +935,7 @@ export function AnalyticsPageClient() {
                         <Tooltip
                           contentStyle={{ borderRadius: "8px" }}
                           formatter={(value, name) => {
-                            const safeValue = value ?? 0;
+                            const safeValue = getTooltipValue(value);
 
                             return [
                               name === "order_count"
