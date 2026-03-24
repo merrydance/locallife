@@ -51,7 +51,7 @@ const (
 
 type createPaymentOrderRequest struct {
 	OrderID      int64  `json:"order_id" binding:"required,min=1"`
-	PaymentType  string `json:"payment_type" binding:"required,oneof=native miniprogram"`
+	PaymentType  string `json:"payment_type" binding:"omitempty,oneof=native miniprogram"`
 	BusinessType string `json:"business_type" binding:"required,oneof=order reservation"`
 }
 
@@ -177,11 +177,12 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 
 // createPaymentOrder godoc
 // @Summary 创建支付订单
-// @Description 为订单或预定创建支付订单，调用微信支付统一下单接口。
+// @Description 为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 // @Description
-// @Description **支付类型：**
-// @Description - native: 扫码支付(商户端扫用户付款码)
-// @Description - miniprogram: 小程序支付(返回调起支付所需参数)
+// @Description **兼容字段：**
+// @Description - `payment_type` 仅作为兼容保留字段，可不传。
+// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通合单支付。
+// @Description - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
 // @Description
 // @Description **业务类型：**
 // @Description - order: 订单支付
@@ -212,6 +213,7 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	server.normalizeCreatePaymentOrderRequest(&req, authPayload.UserID)
 
 	facade := server.paymentFacade
 	if facade == nil {
@@ -247,6 +249,30 @@ func (server *Server) createPaymentOrder(ctx *gin.Context) {
 	server.scheduleTimeoutForPaymentOrder(ctx, result.PaymentOrder)
 
 	ctx.JSON(http.StatusCreated, resp)
+}
+
+func (server *Server) normalizeCreatePaymentOrderRequest(req *createPaymentOrderRequest, userID int64) {
+	if req.PaymentType == "" {
+		req.PaymentType = PaymentTypeMiniProgram
+		return
+	}
+
+	entry := log.Info()
+	message := "legacy payment_type accepted for create payment order api"
+	if req.PaymentType == PaymentTypeNative {
+		entry = log.Warn()
+		message = "legacy native payment_type ignored for create payment order api"
+	}
+
+	entry.
+		Int64("user_id", userID).
+		Int64("order_id", req.OrderID).
+		Str("business_type", req.BusinessType).
+		Str("payment_type", req.PaymentType).
+		Bool("legacy_client_compat", true).
+		Msg(message)
+
+	req.PaymentType = PaymentTypeMiniProgram
 }
 
 func (server *Server) scheduleTimeoutForPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) {

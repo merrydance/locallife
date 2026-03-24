@@ -2,16 +2,22 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
+	"github.com/merrydance/locallife/worker"
+	mockwk "github.com/merrydance/locallife/worker/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -309,6 +315,320 @@ func TestHandleCombinePaymentNotifyIdempotency(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	notificationID := util.RandomString(32)
+	combineOutTradeNo := "COMB_" + util.RandomString(18)
+	outTradeNo := "SUB_" + util.RandomString(18)
+	transactionID := "WX_" + util.RandomString(18)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptCombinePaymentNotification(gomock.Any()).
+		Return(&wechat.CombinePaymentNotification{
+			CombineOutTradeNo: combineOutTradeNo,
+			SubOrders: []wechat.CombineSubOrderResult{
+				{
+					OutTradeNo:    outTradeNo,
+					TransactionID: transactionID,
+					TradeState:    "SUCCESS",
+					Amount: struct {
+						TotalAmount int64  `json:"total_amount"`
+						PayerAmount int64  `json:"payer_amount"`
+						Currency    string `json:"currency"`
+					}{
+						TotalAmount: 10000,
+						PayerAmount: 10000,
+						Currency:    "CNY",
+					},
+				},
+			},
+		}, nil)
+
+	store.EXPECT().
+		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
+		Return(db.PaymentOrder{
+			ID:         11,
+			OutTradeNo: outTradeNo,
+			Amount:     10000,
+			Status:     PaymentStatusClosed,
+		}, nil)
+
+	taskDistributor.EXPECT().
+		DistributeTaskProcessAnomalyRefund(gomock.Any(), gomock.AssignableToTypeOf(&worker.PayloadProcessAnomalyRefund{}), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.PayloadProcessAnomalyRefund, _ ...asynq.Option) error {
+			require.Equal(t, int64(11), payload.PaymentOrderID)
+			require.Equal(t, transactionID, payload.TransactionID)
+			require.Equal(t, int64(10000), payload.RefundAmount)
+			require.Equal(t, "CRF11", payload.OutRefundNo)
+			return nil
+		})
+
+	store.EXPECT().
+		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
+		Return(db.CombinedPaymentOrder{ID: 99, CombineOutTradeNo: combineOutTradeNo}, nil)
+
+	store.EXPECT().
+		UpdateCombinedPaymentOrderToPaid(gomock.Any(), gomock.Any()).
+		Return(db.CombinedPaymentOrder{ID: 99, Status: PaymentStatusPaid}, nil)
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	recorder := httptest.NewRecorder()
+	request := newCombinePaymentNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assertWechatSuccessResponse(t, recorder, "OK")
+}
+
+func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	notificationID := util.RandomString(32)
+	combineOutTradeNo := "COMB_" + util.RandomString(18)
+	outTradeNo := "SUB_" + util.RandomString(18)
+	transactionID := "WX_" + util.RandomString(18)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptCombinePaymentNotification(gomock.Any()).
+		Return(&wechat.CombinePaymentNotification{
+			CombineOutTradeNo: combineOutTradeNo,
+			SubOrders: []wechat.CombineSubOrderResult{
+				{
+					OutTradeNo:    outTradeNo,
+					TransactionID: transactionID,
+					TradeState:    "SUCCESS",
+					Amount: struct {
+						TotalAmount int64  `json:"total_amount"`
+						PayerAmount int64  `json:"payer_amount"`
+						Currency    string `json:"currency"`
+					}{
+						TotalAmount: 12000,
+						PayerAmount: 12000,
+						Currency:    "CNY",
+					},
+				},
+			},
+		}, nil)
+
+	store.EXPECT().
+		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
+		Return(db.PaymentOrder{
+			ID:           12,
+			OutTradeNo:   outTradeNo,
+			Amount:       10000,
+			Status:       PaymentStatusPending,
+			BusinessType: "order",
+			OrderID:      pgtype.Int8{Int64: 88, Valid: true},
+		}, nil)
+
+	store.EXPECT().
+		UpdatePaymentOrderToPaid(gomock.Any(), gomock.Any()).
+		Return(db.PaymentOrder{ID: 12, Status: PaymentStatusPaid}, nil)
+
+	taskDistributor.EXPECT().
+		DistributeTaskProcessRefund(gomock.Any(), gomock.AssignableToTypeOf(&worker.PayloadProcessRefund{}), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.PayloadProcessRefund, _ ...asynq.Option) error {
+			require.Equal(t, int64(12), payload.PaymentOrderID)
+			require.Equal(t, int64(88), payload.OrderID)
+			require.Equal(t, int64(12000), payload.RefundAmount)
+			require.Contains(t, payload.Reason, "金额异常")
+			return nil
+		})
+
+	store.EXPECT().
+		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
+		Return(db.CombinedPaymentOrder{ID: 100, CombineOutTradeNo: combineOutTradeNo}, nil)
+
+	store.EXPECT().
+		UpdateCombinedPaymentOrderToPaid(gomock.Any(), gomock.Any()).
+		Return(db.CombinedPaymentOrder{ID: 100, Status: PaymentStatusPaid}, nil)
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	recorder := httptest.NewRecorder()
+	request := newCombinePaymentNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assertWechatSuccessResponse(t, recorder, "OK")
+}
+
+func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureStillReturnsSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	notificationID := util.RandomString(32)
+	combineOutTradeNo := "COMB_" + util.RandomString(18)
+	outTradeNo := "SUB_" + util.RandomString(18)
+	transactionID := "WX_" + util.RandomString(18)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptCombinePaymentNotification(gomock.Any()).
+		Return(&wechat.CombinePaymentNotification{
+			CombineOutTradeNo: combineOutTradeNo,
+			SubOrders: []wechat.CombineSubOrderResult{
+				{
+					OutTradeNo:    outTradeNo,
+					TransactionID: transactionID,
+					TradeState:    "SUCCESS",
+					Amount: struct {
+						TotalAmount int64  `json:"total_amount"`
+						PayerAmount int64  `json:"payer_amount"`
+						Currency    string `json:"currency"`
+					}{
+						TotalAmount: 10000,
+						PayerAmount: 10000,
+						Currency:    "CNY",
+					},
+				},
+			},
+		}, nil)
+
+	store.EXPECT().
+		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
+		Return(db.PaymentOrder{
+			ID:           13,
+			OutTradeNo:   outTradeNo,
+			Amount:       10000,
+			Status:       PaymentStatusPending,
+			BusinessType: "order",
+		}, nil)
+
+	store.EXPECT().
+		UpdatePaymentOrderToPaid(gomock.Any(), gomock.Any()).
+		Return(db.PaymentOrder{ID: 13, Status: PaymentStatusPaid}, nil)
+
+	taskDistributor.EXPECT().
+		DistributeTaskProcessPaymentSuccess(gomock.Any(), gomock.AssignableToTypeOf(&worker.PaymentSuccessPayload{}), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.PaymentSuccessPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(13), payload.PaymentOrderID)
+			require.Equal(t, transactionID, payload.TransactionID)
+			require.Equal(t, "order", payload.BusinessType)
+			return errors.New("queue down")
+		})
+
+	store.EXPECT().
+		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
+		Return(db.CombinedPaymentOrder{ID: 101, CombineOutTradeNo: combineOutTradeNo}, nil)
+
+	store.EXPECT().
+		UpdateCombinedPaymentOrderToPaid(gomock.Any(), gomock.Any()).
+		Return(db.CombinedPaymentOrder{ID: 101, Status: PaymentStatusPaid}, nil)
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	recorder := httptest.NewRecorder()
+	request := newCombinePaymentNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assertWechatSuccessResponse(t, recorder, "OK")
+}
+
+func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSuccess(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	notificationID := util.RandomString(32)
+	merchantTradeNo := "SUB_" + util.RandomString(18)
+	transactionID := "WX_" + util.RandomString(18)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptSettlementNotification(gomock.Any()).
+		Return(&wechat.SettlementNotificationResource{
+			TransactionID:        transactionID,
+			MerchantTradeNo:      merchantTradeNo,
+			ConfirmReceiveMethod: 1,
+			SettlementTime:       "2026-03-24T12:00:00+08:00",
+		}, nil)
+
+	store.EXPECT().
+		GetCombinedPaymentSubOrderByOutTradeNo(gomock.Any(), merchantTradeNo).
+		Return(db.CombinedPaymentSubOrder{OutTradeNo: merchantTradeNo, OrderID: 77}, nil)
+
+	store.EXPECT().
+		GetPaymentOrderByOutTradeNo(gomock.Any(), merchantTradeNo).
+		Return(db.PaymentOrder{
+			ID:          21,
+			OutTradeNo:  merchantTradeNo,
+			Status:      PaymentStatusPaid,
+			PaymentType: "profit_sharing",
+		}, nil)
+
+	taskDistributor.EXPECT().
+		DistributeTaskProcessProfitSharing(gomock.Any(), gomock.AssignableToTypeOf(&worker.ProfitSharingPayload{}), gomock.Any(), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.ProfitSharingPayload, _ ...asynq.Option) error {
+			require.Equal(t, int64(21), payload.PaymentOrderID)
+			require.Equal(t, int64(77), payload.OrderID)
+			return errors.New("queue down")
+		})
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	recorder := httptest.NewRecorder()
+	request := newSettlementNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	assertWechatSuccessResponse(t, recorder, "OK")
 }
 
 // TestHandleEcommerceRefundNotifyIdempotency 测试平台收付通退款回调的幂等性检查
@@ -787,6 +1107,72 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func newCombinePaymentNotifyRequest(t *testing.T, notificationID string) *http.Request {
+	t.Helper()
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "transaction",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	return request
+}
+
+func newSettlementNotifyRequest(t *testing.T, notificationID string) *http.Request {
+	t.Helper()
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "trade_manage_order_settlement",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "settlement",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-miniprogram/settlement-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	return request
+}
+
+func assertWechatSuccessResponse(t *testing.T, recorder *httptest.ResponseRecorder, expectedMessage string) {
+	t.Helper()
+
+	var response map[string]string
+	err := json.NewDecoder(recorder.Body).Decode(&response)
+	require.NoError(t, err)
+	require.Equal(t, "SUCCESS", response["code"])
+	require.Equal(t, expectedMessage, response["message"])
 }
 
 // TestHandleApplymentStateNotifyIdempotency 测试进件回调的幂等性检查

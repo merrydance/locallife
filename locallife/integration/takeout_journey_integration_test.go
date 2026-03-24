@@ -2658,6 +2658,95 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 	require.Equal(t, "refund_notify_id_001", payloads[0].RefundID)
 }
 
+// TestRiderDepositRefundCallbackAccountingIntegration
+// 骑手押金退款回调落账链路：押金支付成功 -> 提现冻结 -> 退款结果任务成功结算。
+func TestRiderDepositRefundCallbackAccountingIntegration(t *testing.T) {
+	_, store := initIntegrationServer(t)
+	resetIntegrationData(t)
+
+	ctx := context.Background()
+
+	region := createIntegrationRegion(t, store)
+	riderUser := createIntegrationUser(t, store)
+	rider := createIntegrationRider(t, store, riderUser.ID, region.ID)
+
+	_, err := store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{ID: rider.ID, Status: "active"})
+	require.NoError(t, err)
+
+	paymentOrder, err := store.CreatePaymentOrder(ctx, db.CreatePaymentOrderParams{
+		UserID:       rider.UserID,
+		PaymentType:  "miniprogram",
+		BusinessType: "rider_deposit",
+		Amount:       30000,
+		OutTradeNo:   "rd_refund_notify_" + util.RandomString(10),
+		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = store.UpdatePaymentOrderToPaid(ctx, db.UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "tx_rider_refund_notify_001", Valid: true},
+	})
+	require.NoError(t, err)
+
+	payResult, err := store.ProcessPaymentSuccessTx(ctx, db.ProcessPaymentSuccessTxParams{
+		PaymentOrderID: paymentOrder.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, payResult.Processed)
+
+	prepareResult, err := store.PrepareRiderDepositRefundTx(ctx, db.PrepareRiderDepositRefundTxParams{
+		RiderID: rider.ID,
+		Amount:  30000,
+		Remark:  "骑手押金提现",
+	})
+	require.NoError(t, err)
+	require.Len(t, prepareResult.RefundPlans, 1)
+
+	refundOrder := prepareResult.RefundPlans[0].RefundOrder
+	processor := worker.NewTestTaskProcessor(store, nil, nil, nil)
+	payloadBytes, err := json.Marshal(&worker.RefundResultPayload{
+		OutRefundNo:  refundOrder.OutRefundNo,
+		RefundStatus: "SUCCESS",
+		RefundID:     "rider_refund_notify_id_001",
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessRefundResult, payloadBytes)
+	err = processor.ProcessTaskRefundResult(ctx, task)
+	require.NoError(t, err)
+
+	updatedRefund, err := store.GetRefundOrder(ctx, refundOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "success", updatedRefund.Status)
+	require.Equal(t, "rider_refund_notify_id_001", updatedRefund.RefundID.String)
+
+	updatedRider, err := store.GetRider(ctx, rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), updatedRider.DepositAmount)
+	require.Equal(t, int64(0), updatedRider.FrozenDeposit)
+
+	credit, err := store.GetRiderDepositCreditByPaymentOrderID(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "fully_refunded", credit.Status)
+	require.Equal(t, int64(0), credit.RefundableAmount)
+	require.Equal(t, int64(30000), credit.RefundedAmount)
+
+	updatedPaymentOrder, err := store.GetPaymentOrder(ctx, paymentOrder.ID)
+	require.NoError(t, err)
+	require.Equal(t, "refunded", updatedPaymentOrder.Status)
+
+	deposits, err := store.ListRiderDeposits(ctx, db.ListRiderDepositsParams{
+		RiderID: rider.ID,
+		Limit:   20,
+		Offset:  0,
+	})
+	require.NoError(t, err)
+	require.Len(t, deposits, 3)
+	types := []string{deposits[0].Type, deposits[1].Type, deposits[2].Type}
+	require.ElementsMatch(t, []string{"deposit", "freeze", "withdraw"}, types)
+}
+
 // TestClaimJourneyD1Integration
 // 索赔旅程（D1）端到端验收：完成订单后提交索赔并落库。
 func TestClaimJourneyD1Integration(t *testing.T) {

@@ -360,15 +360,27 @@ func (s *OrderService) CancelOrder(ctx context.Context, input CancelOrderInput) 
 		return CancelOrderResult{}, err
 	}
 
-	if result.Refund != nil && s.taskScheduler != nil {
-		scheduleErr := s.taskScheduler.ScheduleProcessRefund(ctx, ProcessRefundTaskInput{
-			PaymentOrderID: result.Refund.PaymentOrderID,
-			OrderID:        result.Order.ID,
-			RefundAmount:   result.Refund.Amount,
-			Reason:         result.Refund.Reason,
-		})
-		if scheduleErr != nil {
-			log.Error().Err(scheduleErr).Int64("order_id", result.Order.ID).Msg("failed to schedule refund task")
+	if result.Refund != nil {
+		if s.taskScheduler == nil {
+			log.Error().
+				Int64("order_id", result.Order.ID).
+				Int64("payment_order_id", result.Refund.PaymentOrderID).
+				Msg("refund task scheduler not configured after order cancellation")
+			s.recordCancelRefundSchedulingIssue(ctx, result.Order, *result.Refund, "task_scheduler_not_configured", nil)
+		} else {
+			scheduleErr := s.taskScheduler.ScheduleProcessRefund(ctx, ProcessRefundTaskInput{
+				PaymentOrderID: result.Refund.PaymentOrderID,
+				OrderID:        result.Order.ID,
+				RefundAmount:   result.Refund.Amount,
+				Reason:         result.Refund.Reason,
+			})
+			if scheduleErr != nil {
+				log.Error().Err(scheduleErr).
+					Int64("order_id", result.Order.ID).
+					Int64("payment_order_id", result.Refund.PaymentOrderID).
+					Msg("failed to schedule refund task")
+				s.recordCancelRefundSchedulingIssue(ctx, result.Order, *result.Refund, "schedule_process_refund_failed", scheduleErr)
+			}
 		}
 	}
 
@@ -377,6 +389,33 @@ func (s *OrderService) CancelOrder(ctx context.Context, input CancelOrderInput) 
 	}
 
 	return result, nil
+}
+
+func (s *OrderService) recordCancelRefundSchedulingIssue(ctx context.Context, order db.Order, refund RefundTask, issue string, scheduleErr error) {
+	if s.auditLogger == nil {
+		return
+	}
+
+	targetID := order.ID
+	metadata := map[string]interface{}{
+		"issue":                    issue,
+		"payment_order_id":         refund.PaymentOrderID,
+		"refund_amount":            refund.Amount,
+		"refund_reason":            refund.Reason,
+		"refund_recovery_expected": true,
+	}
+	if scheduleErr != nil {
+		metadata["error"] = scheduleErr.Error()
+	}
+
+	s.auditLogger.Write(ctx, AuditLogInput{
+		ActorUserID: order.UserID,
+		ActorRole:   "user",
+		Action:      "order_cancel_refund_schedule_issue",
+		TargetType:  "order",
+		TargetID:    &targetID,
+		Metadata:    metadata,
+	})
 }
 
 func (s *OrderService) UrgeOrder(ctx context.Context, input UrgeOrderInput) (UrgeOrderResult, error) {

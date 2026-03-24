@@ -17,7 +17,7 @@ WHERE id = $1 LIMIT 1;
 
 -- name: GetRiderDepositByPaymentOrderID :one
 SELECT * FROM rider_deposits
-WHERE payment_order_id = $1 LIMIT 1;
+WHERE payment_order_id = $1 AND type = 'deposit' LIMIT 1;
 
 -- name: ListRiderDeposits :many
 SELECT * FROM rider_deposits

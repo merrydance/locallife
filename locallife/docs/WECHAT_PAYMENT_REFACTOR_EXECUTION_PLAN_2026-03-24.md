@@ -59,7 +59,7 @@
 - [x] A3. 固定是否支持部分退款。
 - [x] A4. 固定押金过期后的处理策略。
 - [x] A5. 固定提醒节奏：30 天、7 天、1 天、当天。
-- [ ] A6. 固定订单支付 API 的对外语义，确认是否废弃 payment_type 的真实分流作用。
+- [x] A6. 固定订单支付 API 的对外语义，确认是否废弃 payment_type 的真实分流作用。
 
 当前已固定规则：
 
@@ -163,13 +163,13 @@
 
 ### 阶段 F：365 天到期提醒与过期管理
 
-- [ ] F1. 为每条押金凭证计算 `refundable_until`。
-- [ ] F2. 新建每日扫描任务。
-- [ ] F3. 在 30 天、7 天、1 天、当天发送提醒。
-- [ ] F4. 接入站内通知。
-- [ ] F5. 视情况接入订阅消息或运营告警。
-- [ ] F6. 过期后自动标记 `expired`。
-- [ ] F7. 实现过期后的提现策略。
+- [x] F1. 为每条押金凭证计算 `refundable_until`。
+- [x] F2. 新建每日扫描任务。
+- [x] F3. 在 30 天、7 天、1 天、当天发送提醒。
+- [x] F4. 接入站内通知。
+- [x] F5. 视情况接入订阅消息或运营告警。
+- [x] F6. 过期后自动标记 `expired`。
+- [x] F7. 实现过期后的提现策略。
 
 验收标准：
 
@@ -177,6 +177,8 @@
 - 过期后系统行为一致且可审计。
 
 ### 阶段 G：历史数据回填
+
+注：当前任务是上线前重构与生产级鲁棒性优化，不是线上存量系统升级；现阶段没有历史生产数据，因此阶段 G 默认不执行。
 
 - [ ] G1. 梳理历史骑手押金支付单与当前余额的映射规则。
 - [ ] G2. 编写可重复执行的回填脚本。
@@ -190,9 +192,9 @@
 
 ### 阶段 H：清理订单支付 API 歧义
 
-- [ ] H1. 调整订单支付 API 请求语义。
-- [ ] H2. 更新 Swagger 和设计文档。
-- [ ] H3. 对旧客户端兼容请求增加日志统计。
+- [x] H1. 调整订单支付 API 请求语义。
+- [x] H2. 更新 Swagger 和设计文档。
+- [x] H3. 对旧客户端兼容请求增加日志统计。
 
 验收标准：
 
@@ -200,10 +202,10 @@
 
 ### 阶段 I：收付通主链路鲁棒性补强
 
-- [ ] I1. 检查并补齐分账、退款、提现结果处理的统一告警字段。
-- [ ] I2. 审查任务入队失败后的补偿机制。
-- [ ] I3. 完善对账说明与运维操作说明。
-- [ ] I4. 补充异常到账、金额不一致等关键测试。
+- [x] I1. 检查并补齐分账、退款、提现结果处理的统一告警字段。
+- [x] I2. 审查任务入队失败后的补偿机制。
+- [x] I3. 完善对账说明与运维操作说明。
+- [x] I4. 补充异常到账、金额不一致等关键测试。
 
 验收标准：
 
@@ -211,14 +213,14 @@
 
 ### 阶段 J：测试、灰度与回滚
 
-- [ ] J1. 完成数据库层测试。
-- [ ] J2. 完成服务层测试。
-- [ ] J3. 完成退款回调落账集成测试。
-- [ ] J4. 完成到期提醒任务测试。
-- [ ] J5. 完成配置接线测试。
+- [x] J1. 完成数据库层测试。
+- [x] J2. 完成服务层测试。
+- [x] J3. 完成退款回调落账集成测试。
+- [x] J4. 完成到期提醒任务测试。
+- [x] J5. 完成配置接线测试。
 - [ ] J6. 在测试环境完成一次完整闭环联调。
-- [ ] J7. 准备生产发布顺序。
-- [ ] J8. 准备回滚方案和开关。
+- [x] J7. 准备生产发布顺序。
+- [x] J8. 准备回滚方案和开关。
 
 验收标准：
 
@@ -251,16 +253,16 @@
 - [x] 已确认骑手提现当前使用 `CreateTransfer`。
 - [x] 已确认订单和预订主支付已统一走收付通。
 - [x] 已确认收付通服务商配置尚未正式接线。
-- [x] 阶段 A 已完成 A1-A5 的规则固定，A6 的订单支付 API 语义清理待继续推进。
+- [x] 阶段 A 已完成 A1-A6 的规则固定。
 - [x] 阶段 B 已完成 B1-B4 的配置接线，B5 测试待补。
 - [x] 阶段 C 已完成 C1-C5 的表结构、迁移、sqlc 查询和状态枚举落地。
 - [x] 阶段 D 已完成 D1-D3 的支付成功凭证创建与事务幂等保护，D4 测试已编写但受测试库脏迁移阻塞。
 - [x] 阶段 E 已完成 E1-E8，旧转账主路径与事务入口已清理。
-- [ ] 阶段 F 未开始编码。
+- [x] 阶段 F 已完成 F1-F7；当前选择复用既有异步通知任务与平台运营告警通道，不额外新建微信订阅消息基础设施。
 - [ ] 阶段 G 未开始编码。
-- [ ] 阶段 H 未开始编码。
-- [ ] 阶段 I 未开始编码。
-- [ ] 阶段 J 未开始编码。
+- [x] 阶段 H 已完成 H1-H3。
+- [x] 阶段 I 已完成 I1-I4。
+- [ ] 阶段 J 已完成 J1-J5、J7-J8，J6 待测试环境执行。
 
 ## 9. 执行日志
 
@@ -284,4 +286,19 @@
 - 已删除旧的“直接扣骑手押金并给用户退款/余额补偿”事务，骑手责任赔付统一保留 `claim_recovery` 追偿单主路径。
 - 已修复本地 `locallife_test` 测试库的迁移元数据错位：确认 141/142 等媒体迁移存在“DDL 已落库但 `schema_migrations` 脏/失真”的历史状态后，补跑缺失的幂等迁移、对齐版本线，并恢复 `make migrateup` 为稳定 `no change`。
 - 已在 `Makefile` 增加 `migratestatus` 与 `migrateforce version=<n>` 辅助目标，便于后续诊断和修复本地迁移状态。
-- 下一步进入阶段 F/G 的规则固化与历史数据治理。
+- 已在 `DataCleanupScheduler` 中接入骑手押金退款窗口每日扫描：当前会按 30 天、7 天、1 天、当天四个窗口发送提醒，并在到期后自动将押金凭证标记为 `expired`。
+- 阶段 F5 已确定采用现有生产通道落地：用户提醒统一走异步 `TaskSendNotification` 链路，今日到期与已过期批次额外发布平台运营告警；当前不额外引入微信订阅消息发送体系。
+- 已完成阶段 I1：统一退款、分账、商户提现失败告警的关键标识字段，当前告警 extra 会稳定携带 payment_order / refund_order / profit_sharing_order / withdrawal_record 级别的排障上下文；商户提现失败与查询重试耗尽也已补发平台告警。
+- 已新增 worker 层测试，覆盖统一告警字段 helper 与商户提现失败告警发布。
+- 已完成阶段 I2：支付回调主链路已补齐关键任务入队失败的指标与平台告警，覆盖合单子单金额不一致退款入队失败、合单支付成功任务入队失败、结算触发分账任务入队失败三类高风险场景；对应恢复仍依赖 payment/refund/profit-sharing/merchant-withdraw recovery scheduler 或人工介入。
+- 已补充支付运行手册 `docs/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`，明确自动恢复链路、对账入口、核心告警类型与人工排障步骤，作为阶段 I3 交付物。
+- 已完成阶段 I4：为支付回调补充关键回归测试，覆盖合单异常到账自动异常退款、合单金额不一致自动退款、合单支付成功任务入队失败仍返回 SUCCESS、结算触发分账任务入队失败仍返回 SUCCESS 四类高风险分支；`go test ./api -run 'TestHandleCombinePaymentNotify_(ClosedOrderEnqueuesAnomalyRefund|AmountMismatchEnqueuesRefund|PaymentSuccessEnqueueFailureStillReturnsSuccess)|TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSuccess'` 已通过。
+- 已完成阶段 H：订单支付 API 的 `payment_type` 已降为兼容保留字段，请求可省略；Swagger 已改为说明“按业务类型自动选择真实支付链路”；后端会对显式传入旧 `payment_type` 的请求记录兼容日志，小程序支付调用也已去掉该冗余字段。
+- 已进一步收紧取消订单后的退款任务处理：当退款任务调度失败或未配置调度器时，`OrderService.CancelOrder` 会额外写入审计记录，明确标记依赖 refund recovery scheduler 继续补偿；新增 `go test ./logic -run 'TestOrderServiceCancelOrder_(RefundScheduleFailureWritesAudit|MissingSchedulerWritesAudit)'` 已通过。
+- 已完成阶段 J1：新增骑手押金退款事务数据库测试，覆盖 `PrepareRiderDepositRefundTx` 的冻结预留/跨凭证拆分以及 `ResolveRiderDepositRefundTx` 的成功结算/关闭回滚；测试过程中暴露 `refund_orders.refund_type` 约束未放开 `rider_deposit` 的真实缺口，已通过迁移 `000163_expand_refund_order_types` 修复；`go test ./db/sqlc -run 'TestPrepareRiderDepositRefundTx_(ReservesCreditAndFreezesBalance|SplitsAcrossCredits)$|TestResolveRiderDepositRefundTx_(SuccessSettlesFrozenBalance|ClosedRestoresCreditAndUnfreezesBalance)$'` 已通过。
+- 已完成阶段 J2：新增 `RiderDepositRefundService.SubmitWithdrawal` 服务层测试，覆盖“微信退款同步成功后更新 accepted/refunded 状态”和“微信退款申请失败后执行补偿回滚”两条关键编排路径；`go test ./logic -run 'TestRiderDepositRefundService_SubmitWithdrawal_(SynchronousSuccess|RefundRequestFailureCompensates)$'` 已通过。
+- 已完成阶段 J3：新增骑手押金退款回调落账集成测试，覆盖“押金支付成功 -> 提现冻结 -> 退款结果任务成功结算 -> 支付单/refund order/credit/rider balance/rider deposit logs 全量落账”闭环；在补测过程中进一步暴露并修复两处真实 schema 约束缺口：`rider_deposits.related_order_id` 不能承载 `refund_order.id`，现已改为退款流水统一关联 `payment_order_id`；`rider_deposits.payment_order_id` 唯一索引已收窄为仅约束 `type='deposit'`，并同步将 `GetRiderDepositByPaymentOrderID` 查询限定为充值流水；`make sqlc` 已重新生成代码，`go test ./integration -run 'TestRiderDepositRefundCallbackAccountingIntegration$' -count=1 -p 1` 已通过。
+- 已完成阶段 J4：现有 `DataCleanupScheduler` 已具备骑手押金到期提醒测试覆盖，包含“异步通知任务分发”“无 distributor 时直接通知 fallback 并发布平台告警”“到期凭证批量标记 expired 并发布告警”三类关键场景；`go test ./scheduler -run 'TestDataCleanupScheduler_(RemindExpiringRiderDepositCredits_DistributesNotificationTask|RemindExpiringRiderDepositCredits_FallbackDirectNotificationAndPublishAlert|MarkExpiredRiderDepositCredits)$'` 已通过。
+- 已完成阶段 J5：新增 `util.LoadConfig` 配置接线测试，覆盖默认值、Redis 密码引号清洗、数据库连接池默认参数以及微信支付/收付通新增配置字段读取，确保 `WECHAT_PAY_*`、`WECHAT_ECOMMERCE_*`、`REDIS_REQUIRED` 等关键变量能稳定进入运行时配置对象；`go test ./util -run 'TestLoadConfig_(DefaultsAndTrimQuotes|ReadsWechatPaymentAndEcommerceConfig)$'` 已通过。
+- 已完成阶段 J7/J8：已在 `docs/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md` 中补充测试环境闭环执行清单、生产发布顺序、回滚优先级、数据库回滚原则与回滚触发条件，后续上线按 runbook 执行即可。
+- 阶段 J6 仍需在真实测试环境执行一次闭环联调；阶段 G 因无历史数据暂不执行。

@@ -3,9 +3,11 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/worker"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
@@ -14,16 +16,24 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
+const (
+	riderDepositCreditReminderBatchLimit = int32(200)
+	riderDepositCreditExpireBatchLimit   = int32(200)
+)
+
+var riderDepositReminderOffsets = []int{30, 7, 1, 0}
+
 // DataCleanupScheduler 数据清理调度器
 // 处理各种业务数据的过期/超时清理
 type DataCleanupScheduler struct {
 	cron            *cron.Cron
 	store           db.Store
 	taskDistributor worker.TaskDistributor
+	publisher       websocket.PubSubPublisher
 }
 
 // NewDataCleanupScheduler 创建数据清理调度器
-func NewDataCleanupScheduler(store db.Store, taskDistributor worker.TaskDistributor) *DataCleanupScheduler {
+func NewDataCleanupScheduler(store db.Store, taskDistributor worker.TaskDistributor, publisher websocket.PubSubPublisher) *DataCleanupScheduler {
 	return &DataCleanupScheduler{
 		cron: cron.New(
 			cron.WithSeconds(),
@@ -34,6 +44,7 @@ func NewDataCleanupScheduler(store db.Store, taskDistributor worker.TaskDistribu
 		),
 		store:           store,
 		taskDistributor: taskDistributor,
+		publisher:       publisher,
 	}
 }
 
@@ -93,6 +104,18 @@ func (s *DataCleanupScheduler) Start() error {
 		return err
 	}
 
+	// 每天早上9点发送骑手押金退款窗口提醒
+	_, err = s.cron.AddFunc("0 0 9 * * *", s.remindExpiringRiderDepositCredits)
+	if err != nil {
+		return err
+	}
+
+	// 每天凌晨3点10分标记已过期的骑手押金退款凭证
+	_, err = s.cron.AddFunc("0 10 3 * * *", s.markExpiredRiderDepositCredits)
+	if err != nil {
+		return err
+	}
+
 	s.cron.Start()
 	log.Info().Msg("data cleanup scheduler started")
 	return nil
@@ -123,6 +146,251 @@ func (s *DataCleanupScheduler) cleanupExpiredWebLoginSessions() {
 		log.Info().Int64("count", count).Msg("expired web login sessions")
 	}
 
+}
+
+func startOfDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
+}
+
+func sameCalendarDay(a, b time.Time) bool {
+	a = a.In(b.Location())
+	return a.Year() == b.Year() && a.Month() == b.Month() && a.Day() == b.Day()
+}
+
+func fenToYuanText(amount int64) string {
+	return fmt.Sprintf("%.2f", float64(amount)/100)
+}
+
+func riderDepositReminderText(credit db.RiderDepositCredit, daysRemaining int) (string, string) {
+	amountText := fenToYuanText(credit.RefundableAmount)
+	deadlineText := credit.RefundableUntil.In(time.Local).Format("2006-01-02 15:04")
+
+	if daysRemaining == 0 {
+		return "骑手押金退款今日到期", fmt.Sprintf("你有 %s 元骑手押金可退款额度将在今天到期，请在 %s 前完成提现申请。", amountText, deadlineText)
+	}
+
+	return fmt.Sprintf("骑手押金退款还有 %d 天到期", daysRemaining), fmt.Sprintf("你有 %s 元骑手押金可退款额度将在 %d 天后到期，到期时间 %s，请及时处理。", amountText, daysRemaining, deadlineText)
+}
+
+func (s *DataCleanupScheduler) shouldUseNotificationTask() bool {
+	if s.taskDistributor == nil {
+		return false
+	}
+
+	_, isNoop := s.taskDistributor.(worker.NoopTaskDistributor)
+	return !isNoop
+}
+
+func (s *DataCleanupScheduler) sendRiderDepositReminderNotification(
+	ctx context.Context,
+	userID int64,
+	credit db.RiderDepositCredit,
+	daysRemaining int,
+	title string,
+	content string,
+) error {
+	extraData := map[string]any{
+		"credit_id":           credit.ID,
+		"payment_order_id":    credit.PaymentOrderID,
+		"rider_id":            credit.RiderID,
+		"days_remaining":      daysRemaining,
+		"refundable_amount":   credit.RefundableAmount,
+		"refundable_until":    credit.RefundableUntil,
+		"notification_source": "rider_deposit_credit_expiry",
+	}
+
+	if s.shouldUseNotificationTask() {
+		err := s.taskDistributor.DistributeTaskSendNotification(ctx, &worker.SendNotificationPayload{
+			UserID:            userID,
+			Type:              "system",
+			Title:             title,
+			Content:           content,
+			ExtraData:         extraData,
+			IgnorePreferences: true,
+		})
+		if err == nil {
+			return nil
+		}
+
+		log.Error().Err(err).Int64("credit_id", credit.ID).Int64("user_id", userID).Msg("failed to enqueue rider deposit expiry notification task, fallback to direct notification")
+	}
+
+	extraDataJSON, err := json.Marshal(extraData)
+	if err != nil {
+		return fmt.Errorf("marshal rider deposit reminder extra data: %w", err)
+	}
+
+	_, err = s.store.CreateNotification(ctx, db.CreateNotificationParams{
+		UserID:    userID,
+		Type:      "system",
+		Title:     title,
+		Content:   content,
+		ExtraData: extraDataJSON,
+	})
+	if err != nil {
+		return fmt.Errorf("create rider deposit reminder notification: %w", err)
+	}
+
+	return nil
+}
+
+func (s *DataCleanupScheduler) publishPlatformAlert(ctx context.Context, alert worker.AlertData) {
+	if s.publisher == nil {
+		return
+	}
+
+	alert.Timestamp = time.Now()
+	alertMsg := map[string]any{
+		"type":      "alert",
+		"data":      alert,
+		"timestamp": alert.Timestamp,
+	}
+
+	payload, err := json.Marshal(alertMsg)
+	if err != nil {
+		log.Error().Err(err).Str("alert_type", string(alert.AlertType)).Msg("failed to marshal rider deposit alert payload")
+		return
+	}
+
+	if err := s.publisher.Publish(ctx, worker.AlertChannel, payload); err != nil {
+		log.Error().Err(err).Str("alert_type", string(alert.AlertType)).Msg("failed to publish rider deposit alert")
+	}
+}
+
+func (s *DataCleanupScheduler) remindExpiringRiderDepositCredits() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	now := time.Now()
+	todayStart := startOfDay(now)
+	reminded := 0
+	todayDueCount := 0
+	todayDueAmount := int64(0)
+
+	for _, daysRemaining := range riderDepositReminderOffsets {
+		windowStart := todayStart.AddDate(0, 0, daysRemaining)
+		windowEnd := windowStart.Add(24 * time.Hour)
+
+		credits, err := s.store.ListRiderDepositCreditsForReminderWindow(ctx, db.ListRiderDepositCreditsForReminderWindowParams{
+			RefundableUntil:   windowStart,
+			RefundableUntil_2: windowEnd,
+			Limit:             riderDepositCreditReminderBatchLimit,
+		})
+		if err != nil {
+			log.Error().Err(err).Int("days_remaining", daysRemaining).Msg("failed to list rider deposit credits for reminder window")
+			continue
+		}
+
+		for _, credit := range credits {
+			if credit.LastRemindedAt.Valid && sameCalendarDay(credit.LastRemindedAt.Time, now) {
+				continue
+			}
+
+			rider, err := s.store.GetRider(ctx, credit.RiderID)
+			if err != nil {
+				log.Error().Err(err).Int64("credit_id", credit.ID).Int64("rider_id", credit.RiderID).Msg("failed to get rider for deposit credit reminder")
+				continue
+			}
+
+			title, content := riderDepositReminderText(credit, daysRemaining)
+			err = s.sendRiderDepositReminderNotification(ctx, rider.UserID, credit, daysRemaining, title, content)
+			if err != nil {
+				log.Error().Err(err).Int64("credit_id", credit.ID).Int64("user_id", rider.UserID).Msg("failed to create rider deposit expiry notification")
+				continue
+			}
+
+			_, err = s.store.TouchRiderDepositCreditReminder(ctx, db.TouchRiderDepositCreditReminderParams{
+				ID:             credit.ID,
+				LastRemindedAt: pgtype.Timestamptz{Time: now, Valid: true},
+			})
+			if err != nil {
+				log.Error().Err(err).Int64("credit_id", credit.ID).Msg("failed to touch rider deposit reminder timestamp")
+				continue
+			}
+
+			reminded++
+			if daysRemaining == 0 {
+				todayDueCount++
+				todayDueAmount += credit.RefundableAmount
+			}
+		}
+	}
+
+	if reminded > 0 {
+		log.Info().Int("count", reminded).Msg("sent rider deposit expiry reminders")
+	}
+
+	if todayDueCount > 0 {
+		s.publishPlatformAlert(ctx, worker.AlertData{
+			AlertType:   worker.AlertTypeRiderDepositExpiry,
+			Level:       worker.AlertLevelWarning,
+			Title:       "骑手押金退款今日到期提醒已发送",
+			Message:     fmt.Sprintf("今日共有 %d 笔骑手押金退款凭证到期，涉及 %.2f 元，请关注提现与客服咨询。", todayDueCount, float64(todayDueAmount)/100),
+			RelatedType: "payment",
+			Extra: map[string]interface{}{
+				"window":       "today",
+				"credit_count": todayDueCount,
+				"total_amount": todayDueAmount,
+			},
+		})
+	}
+}
+
+func (s *DataCleanupScheduler) markExpiredRiderDepositCredits() {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+
+	now := time.Now()
+	expiredCount := 0
+	expiredAmount := int64(0)
+
+	for {
+		credits, err := s.store.ListExpiredRiderDepositCredits(ctx, db.ListExpiredRiderDepositCreditsParams{
+			RefundableUntil: now,
+			Limit:           riderDepositCreditExpireBatchLimit,
+		})
+		if err != nil {
+			log.Error().Err(err).Msg("failed to list expired rider deposit credits")
+			return
+		}
+
+		if len(credits) == 0 {
+			break
+		}
+
+		for _, credit := range credits {
+			_, err := s.store.MarkRiderDepositCreditExpired(ctx, db.MarkRiderDepositCreditExpiredParams{
+				ID:        credit.ID,
+				ExpiredAt: pgtype.Timestamptz{Time: now, Valid: true},
+			})
+			if err != nil {
+				log.Error().Err(err).Int64("credit_id", credit.ID).Msg("failed to mark rider deposit credit expired")
+				continue
+			}
+			expiredCount++
+			expiredAmount += credit.RefundableAmount
+		}
+
+		if len(credits) < int(riderDepositCreditExpireBatchLimit) {
+			break
+		}
+	}
+
+	if expiredCount > 0 {
+		log.Info().Int("count", expiredCount).Msg("marked rider deposit credits as expired")
+		s.publishPlatformAlert(ctx, worker.AlertData{
+			AlertType:   worker.AlertTypeRiderDepositExpiry,
+			Level:       worker.AlertLevelWarning,
+			Title:       "骑手押金退款凭证已过期",
+			Message:     fmt.Sprintf("本次扫描已将 %d 笔骑手押金退款凭证标记为 expired，涉及 %.2f 元。", expiredCount, float64(expiredAmount)/100),
+			RelatedType: "payment",
+			Extra: map[string]interface{}{
+				"window":       "expired",
+				"credit_count": expiredCount,
+				"total_amount": expiredAmount,
+			},
+		})
+	}
 }
 
 type abnormalAlertThresholds struct {

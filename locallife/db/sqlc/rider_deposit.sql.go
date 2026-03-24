@@ -84,7 +84,7 @@ func (q *Queries) GetRiderDeposit(ctx context.Context, id int64) (RiderDeposit, 
 
 const getRiderDepositByPaymentOrderID = `-- name: GetRiderDepositByPaymentOrderID :one
 SELECT id, rider_id, amount, type, related_order_id, balance_after, remark, created_at, payment_order_id FROM rider_deposits
-WHERE payment_order_id = $1 LIMIT 1
+WHERE payment_order_id = $1 AND type = 'deposit' LIMIT 1
 `
 
 func (q *Queries) GetRiderDepositByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (RiderDeposit, error) {

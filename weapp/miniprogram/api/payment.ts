@@ -80,7 +80,7 @@ export interface CreateCombinedPaymentRequest {
 /** 创建支付请求 */
 export interface CreatePaymentRequest {
     order_id: number
-    payment_type: PaymentType
+    payment_type?: PaymentType
     business_type: BusinessType
 }
 
@@ -231,7 +231,6 @@ export async function createRefund(paymentId: number, refundData: CreateRefundRe
 export async function createOrderPayment(orderId: number): Promise<PaymentOrderResponse> {
     return createPayment({
         order_id: orderId,
-        payment_type: 'miniprogram',
         business_type: 'order'
     })
 }
@@ -243,7 +242,6 @@ export async function createOrderPayment(orderId: number): Promise<PaymentOrderR
 export async function createReservationPayment(reservationId: number): Promise<PaymentOrderResponse> {
     return createPayment({
         order_id: reservationId,
-        payment_type: 'miniprogram',
         business_type: 'reservation'
     })
 }
@@ -273,7 +271,6 @@ export async function processPayment(orderId: number, businessType: BusinessType
     // 1. 创建支付订单
     const payment = await createPayment({
         order_id: orderId,
-        payment_type: 'miniprogram',
         business_type: businessType
     })
 

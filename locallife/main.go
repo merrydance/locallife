@@ -197,7 +197,7 @@ func main() {
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
-	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor))
+	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
 	schedulerManager.Register("bill-reconciliation", worker.NewBillReconciliationScheduler(store, billClient, reconciliationPublisher))
 	schedulerManager.StartAll(ctx, waitGroup)
 

@@ -31,6 +31,7 @@ const (
 	AlertTypeRefundFailed        AlertType = "REFUND_FAILED"
 	AlertTypeSystemError         AlertType = "SYSTEM_ERROR"
 	AlertTypeBillMismatch        AlertType = "BILL_MISMATCH"
+	AlertTypeRiderDepositExpiry  AlertType = "RIDER_DEPOSIT_EXPIRY"
 )
 
 // AlertLevel 告警级别
@@ -896,6 +897,15 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 
 	paymentOrder, paymentErr := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
 	isRiderDepositRefund := paymentErr == nil && paymentOrder.BusinessType == "rider_deposit"
+	merchantID := int64(0)
+	if paymentErr == nil {
+		resolvedMerchantID, resolveErr := processor.resolveMerchantIDByPaymentOrder(ctx, paymentOrder)
+		if resolveErr != nil {
+			log.Warn().Err(resolveErr).Int64("payment_order_id", paymentOrder.ID).Msg("failed to resolve merchant for refund alert context")
+		} else {
+			merchantID = resolvedMerchantID
+		}
+	}
 	riderDepositRefundService := logic.NewRiderDepositRefundService(processor.store, nil)
 
 	// 根据退款状态更新
@@ -956,12 +966,9 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 			Message:     fmt.Sprintf("退款单 %s 状态异常(ABNORMAL)，微信退款ID: %s，请及时处理", payload.OutRefundNo, payload.RefundID),
 			RelatedID:   refundOrder.ID,
 			RelatedType: "refund_order",
-			Extra: map[string]interface{}{
-				"out_refund_no":    payload.OutRefundNo,
-				"refund_id":        payload.RefundID,
-				"payment_order_id": refundOrder.PaymentOrderID,
-				"refund_amount":    refundOrder.RefundAmount,
-			},
+			Extra: refundOrderAlertExtra(paymentOrder, refundOrder, merchantID, map[string]interface{}{
+				"refund_id": payload.RefundID,
+			}),
 		})
 
 	case "CLOSED":
@@ -1529,11 +1536,10 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 				Message:     fmt.Sprintf("退款单 %d 涉及骑手个人分账金额 %.2f 元，请关注分账回退与退款结果", refundOrder.ID, float64(profitSharingOrder.RiderAmount)/100),
 				RelatedID:   refundOrder.ID,
 				RelatedType: "refund_order",
-				Extra: map[string]interface{}{
-					"profit_sharing_order_id": profitSharingOrder.ID,
-					"rider_amount":            profitSharingOrder.RiderAmount,
-					"out_order_no":            profitSharingOrder.OutOrderNo,
-				},
+				Extra: mergeAlertExtra(
+					refundOrderAlertExtra(paymentOrder, refundOrder, profitSharingOrder.MerchantID, nil),
+					profitSharingOrderAlertExtra(profitSharingOrder, nil),
+				),
 			})
 		}
 		if !profitSharingOrder.SharingOrderID.Valid || profitSharingOrder.SharingOrderID.String == "" {
@@ -1941,12 +1947,14 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 
 	// 解析商户 SubMchID
 	var subMchID string
+	merchantID := int64(0)
 	if paymentOrder.OrderID.Valid {
 		order, orderErr := processor.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
 		if orderErr != nil {
 			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 			return fmt.Errorf("get order for merchant lookup: %w", orderErr)
 		}
+		merchantID = order.MerchantID
 		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
 		if cfgErr != nil {
 			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
@@ -1959,6 +1967,7 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 			return fmt.Errorf("get reservation for merchant lookup: %w", resErr)
 		}
+		merchantID = reservation.MerchantID
 		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
 		if cfgErr != nil {
 			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
@@ -1975,11 +1984,11 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 			Message:     fmt.Sprintf("支付单 %d 的异常退款无法确定 SubMchID（OrderID 和 ReservationID 均为空），请人工处理", payload.PaymentOrderID),
 			RelatedID:   payload.PaymentOrderID,
 			RelatedType: "payment_order",
-			Extra: map[string]interface{}{
+			Extra: mergeAlertExtra(paymentOrderAlertExtra(paymentOrder, 0), map[string]interface{}{
 				"transaction_id": payload.TransactionID,
 				"refund_amount":  payload.RefundAmount,
 				"out_refund_no":  payload.OutRefundNo,
-			},
+			}),
 		})
 		// 不可重试：返回 nil 防止 asynq 无限重试
 		return nil
@@ -2032,10 +2041,11 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 				Message:     fmt.Sprintf("退款单 %d（支付单 %d）收到微信退款状态 %q，请核查", refundOrder.ID, payload.PaymentOrderID, refundResp.Status),
 				RelatedID:   refundOrder.ID,
 				RelatedType: "refund_order",
-				Extra: map[string]interface{}{
+				Extra: refundOrderAlertExtra(paymentOrder, refundOrder, merchantID, map[string]interface{}{
 					"transaction_id": payload.TransactionID,
 					"refund_id":      refundResp.RefundID,
-				},
+					"wechat_status":  refundResp.Status,
+				}),
 			})
 		}
 	} else {
@@ -2077,10 +2087,11 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 				Message:     fmt.Sprintf("退款单 %d（支付单 %d）收到微信退款状态 %q，请核查", refundOrder.ID, payload.PaymentOrderID, wxRefund.Status),
 				RelatedID:   refundOrder.ID,
 				RelatedType: "refund_order",
-				Extra: map[string]interface{}{
+				Extra: refundOrderAlertExtra(paymentOrder, refundOrder, merchantID, map[string]interface{}{
 					"transaction_id": payload.TransactionID,
 					"refund_id":      wxRefund.RefundID,
-				},
+					"wechat_status":  wxRefund.Status,
+				}),
 			})
 		}
 	}
@@ -2362,11 +2373,10 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 			Message:     fmt.Sprintf("分账单 %s 分账失败，原因：%s，需要人工介入处理", payload.OutOrderNo, payload.FailReason),
 			RelatedID:   payload.ProfitSharingOrderID,
 			RelatedType: "profit_sharing_order",
-			Extra: map[string]interface{}{
-				"out_order_no": payload.OutOrderNo,
-				"merchant_id":  payload.MerchantID,
-				"fail_reason":  payload.FailReason,
-			},
+			Extra: profitSharingOrderAlertExtra(profitSharingOrder, map[string]interface{}{
+				"fail_reason": payload.FailReason,
+				"result":      payload.Result,
+			}),
 		})
 
 		// 自动重试队列（指数退避延迟，避免微信端短暂异常导致永久失败）

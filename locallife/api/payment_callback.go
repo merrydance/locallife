@@ -1187,7 +1187,23 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 					asynq.MaxRetry(5),
 					asynq.Queue(worker.QueueCritical),
 				); enqErr != nil {
-					log.Error().Err(enqErr).Int64("payment_order_id", paymentOrder.ID).Msg("combine sub-order mismatch refund task enqueue failed")
+					paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_mismatch_refund_task").Inc()
+					log.Error().Err(enqErr).Int64("payment_order_id", paymentOrder.ID).Str("out_trade_no", subOrder.OutTradeNo).Msg("combine sub-order mismatch refund task enqueue failed")
+					server.sendAlert(websocket.AlertData{
+						AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+						Level:       websocket.AlertLevelCritical,
+						Title:       "合单金额异常退款任务入队失败",
+						Message:     fmt.Sprintf("合单子订单 %s 金额异常后退款任务入队失败，支付单 %d 需要人工处理", subOrder.OutTradeNo, paymentOrder.ID),
+						RelatedID:   paymentOrder.ID,
+						RelatedType: "payment_order",
+						Extra: map[string]interface{}{
+							"out_trade_no":    subOrder.OutTradeNo,
+							"transaction_id":  subOrder.TransactionID,
+							"expected_amount": paymentOrder.Amount,
+							"actual_amount":   subOrder.Amount.TotalAmount,
+							"error":           enqErr.Error(),
+						},
+					})
 				}
 			}
 
@@ -1224,7 +1240,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 
 		// 分发异步任务处理后续业务
 		if server.taskDistributor != nil {
-			_ = server.taskDistributor.DistributeTaskProcessPaymentSuccess(
+			enqErr := server.taskDistributor.DistributeTaskProcessPaymentSuccess(
 				ctx,
 				&worker.PaymentSuccessPayload{
 					PaymentOrderID: paymentOrder.ID,
@@ -1235,6 +1251,27 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 				asynq.ProcessIn(1*time.Second),
 				asynq.Queue(worker.QueueCritical),
 			)
+			if enqErr != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_payment_success_task").Inc()
+				log.Error().Err(enqErr).
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", subOrder.OutTradeNo).
+					Msg("combine payment success task enqueue failed")
+				server.sendAlert(websocket.AlertData{
+					AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+					Level:       websocket.AlertLevelCritical,
+					Title:       "合单支付成功任务入队失败",
+					Message:     fmt.Sprintf("合单子订单 %s 已支付，但后续业务任务入队失败，需要人工确认订单推进状态", subOrder.OutTradeNo),
+					RelatedID:   paymentOrder.ID,
+					RelatedType: "payment_order",
+					Extra: map[string]interface{}{
+						"out_trade_no":   subOrder.OutTradeNo,
+						"transaction_id": subOrder.TransactionID,
+						"business_type":  paymentOrder.BusinessType,
+						"error":          enqErr.Error(),
+					},
+				})
+			}
 		}
 	}
 
@@ -1741,10 +1778,26 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 			asynq.Queue(worker.QueueCritical),
 		)
 		if err != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("settlement", "enqueue_profit_sharing_task").Inc()
 			log.Error().Err(err).
 				Int64("payment_order_id", po.ID).
 				Str("merchant_trade_no", resource.MerchantTradeNo).
 				Msg("⚠️ ALERT: settlement profit sharing task enqueue failed")
+			server.sendAlert(websocket.AlertData{
+				AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+				Level:       websocket.AlertLevelCritical,
+				Title:       "结算分账任务入队失败",
+				Message:     fmt.Sprintf("支付单 %d 已进入结算事件，但分账任务入队失败，需要人工介入确认商户结算", po.ID),
+				RelatedID:   po.ID,
+				RelatedType: "payment_order",
+				Extra: map[string]interface{}{
+					"merchant_trade_no": resource.MerchantTradeNo,
+					"out_trade_no":      subOrder.OutTradeNo,
+					"order_id":          subOrder.OrderID,
+					"payment_order_id":  po.ID,
+					"error":             err.Error(),
+				},
+			})
 		} else {
 			log.Info().
 				Int64("payment_order_id", po.ID).

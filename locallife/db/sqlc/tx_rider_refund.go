@@ -138,7 +138,8 @@ func (store *SQLStore) PrepareRiderDepositRefundTx(ctx context.Context, arg Prep
 				RiderID:        arg.RiderID,
 				Amount:         refundAmount,
 				Type:           "freeze",
-				RelatedOrderID: pgtype.Int8{Int64: refundOrder.ID, Valid: true},
+				RelatedOrderID: pgtype.Int8{},
+				PaymentOrderID: pgtype.Int8{Int64: sourcePaymentOrder.ID, Valid: true},
 				BalanceAfter:   availableAfter,
 				Remark:         pgtype.Text{String: riderDepositFreezeRemark, Valid: true},
 			})
@@ -249,7 +250,8 @@ func (store *SQLStore) ResolveRiderDepositRefundTx(ctx context.Context, arg Reso
 				RiderID:        lockedRider.ID,
 				Amount:         refundOrder.RefundAmount,
 				Type:           "withdraw",
-				RelatedOrderID: pgtype.Int8{Int64: refundOrder.ID, Valid: true},
+				RelatedOrderID: pgtype.Int8{},
+				PaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
 				BalanceAfter:   updatedRider.DepositAmount - updatedRider.FrozenDeposit,
 				Remark:         pgtype.Text{String: riderDepositWithdrawRemark, Valid: true},
 			})
@@ -313,7 +315,8 @@ func (store *SQLStore) ResolveRiderDepositRefundTx(ctx context.Context, arg Reso
 				RiderID:        lockedRider.ID,
 				Amount:         refundOrder.RefundAmount,
 				Type:           "unfreeze",
-				RelatedOrderID: pgtype.Int8{Int64: refundOrder.ID, Valid: true},
+				RelatedOrderID: pgtype.Int8{},
+				PaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
 				BalanceAfter:   updatedRider.DepositAmount - updatedRider.FrozenDeposit,
 				Remark:         pgtype.Text{String: riderDepositUnfreezeRemark, Valid: true},
 			})

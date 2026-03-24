@@ -116,6 +116,18 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 				Status: "failed",
 				Reason: pgtype.Text{String: fmt.Sprintf("query withdraw result failed: %v", err), Valid: true},
 			})
+			processor.publishAlert(ctx, AlertData{
+				AlertType:   AlertTypeRefundFailed,
+				Level:       AlertLevelCritical,
+				Title:       "商户提现结果查询失败",
+				Message:     fmt.Sprintf("提现记录 %d 连续查询失败，已标记为 failed，请人工核查。", record.ID),
+				RelatedID:   record.ID,
+				RelatedType: "withdrawal_record",
+				Extra: withdrawalAlertExtra(record, accountInfo, map[string]interface{}{
+					"retry_count": payload.RetryCount,
+					"fail_reason": err.Error(),
+				}),
+			})
 			return fmt.Errorf("query withdraw result failed after retries: %w", asynq.SkipRetry)
 		}
 
@@ -146,6 +158,21 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 		if err != nil {
 			return fmt.Errorf("update withdrawal status: %w", err)
 		}
+	}
+
+	if newStatus == "failed" {
+		processor.publishAlert(ctx, AlertData{
+			AlertType:   AlertTypeRefundFailed,
+			Level:       AlertLevelCritical,
+			Title:       "商户提现失败",
+			Message:     fmt.Sprintf("提现记录 %d 状态变为 failed，微信提现单号 %s，请人工介入处理。", record.ID, accountInfo.OutRequestNo),
+			RelatedID:   record.ID,
+			RelatedType: "withdrawal_record",
+			Extra: withdrawalAlertExtra(record, accountInfo, map[string]interface{}{
+				"wechat_status": resp.Status,
+				"fail_reason":   resp.FailReason,
+			}),
+		})
 	}
 
 	if newStatus == "pending" && payload.RetryCount < merchantWithdrawMaxRetry && processor.distributor != nil {
