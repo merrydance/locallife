@@ -147,6 +147,8 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+		var delivery Delivery
+		hasDelivery := false
 
 		// 0. 如果订单已扣减库存（paid状态），先准备恢复库存
 		var orderItems []OrderItem
@@ -155,6 +157,16 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 			if err != nil {
 				return fmt.Errorf("list order items for cancel: %w", err)
 			}
+		}
+
+		if delivery, err = q.GetDeliveryByOrderID(ctx, arg.OrderID); err == nil {
+			hasDelivery = true
+		} else if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get delivery by order id: %w", err)
+		}
+
+		if hasDelivery && deliveryBlocksOrderCancellation(delivery.Status) {
+			return ErrOrderCancellationBlockedByDeliveryState
 		}
 
 		// 1. 更新订单为已取消
@@ -183,6 +195,50 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 		})
 		if err != nil {
 			return fmt.Errorf("create order status log: %w", err)
+		}
+
+		if hasDelivery && delivery.Status != "cancelled" && delivery.Status != "completed" {
+			lockedDelivery, lockErr := q.GetDeliveryForUpdate(ctx, delivery.ID)
+			if lockErr != nil {
+				return fmt.Errorf("lock delivery for cancel: %w", lockErr)
+			}
+
+			if _, lockErr = q.UpdateDeliveryToCancelled(ctx, lockedDelivery.ID); lockErr != nil {
+				return fmt.Errorf("update delivery to cancelled: %w", lockErr)
+			}
+
+			if lockedDelivery.RiderID.Valid && deliveryRequiresRiderDepositUnfreeze(lockedDelivery.Status) {
+				rider, riderErr := q.GetRiderForUpdate(ctx, lockedDelivery.RiderID.Int64)
+				if riderErr != nil {
+					return fmt.Errorf("get rider for cancel unfreeze: %w", riderErr)
+				}
+
+				unfreezeAmount := orderFreezeAmount(result.Order)
+				if rider.FrozenDeposit < unfreezeAmount {
+					return fmt.Errorf("rider frozen deposit insufficient for order cancel unfreeze")
+				}
+
+				_, riderErr = q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
+					ID:            rider.ID,
+					DepositAmount: rider.DepositAmount,
+					FrozenDeposit: rider.FrozenDeposit - unfreezeAmount,
+				})
+				if riderErr != nil {
+					return fmt.Errorf("unfreeze rider deposit on order cancel: %w", riderErr)
+				}
+
+				_, riderErr = q.CreateRiderDeposit(ctx, CreateRiderDepositParams{
+					RiderID:        rider.ID,
+					Amount:         unfreezeAmount,
+					Type:           "unfreeze",
+					RelatedOrderID: pgtype.Int8{Int64: result.Order.ID, Valid: true},
+					BalanceAfter:   rider.DepositAmount - rider.FrozenDeposit + unfreezeAmount,
+					Remark:         pgtype.Text{String: "订单取消解冻押金", Valid: true},
+				})
+				if riderErr != nil {
+					return fmt.Errorf("create rider unfreeze log on order cancel: %w", riderErr)
+				}
+			}
 		}
 
 		// 2.1 取消订单时回滚优惠券使用状态（幂等）

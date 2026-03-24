@@ -127,6 +127,10 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	var paymentClient wechat.PaymentClientInterface
 	var ecommerceClient wechat.EcommerceClientInterface
 	if config.WechatPayMchID != "" && config.WechatPayPrivateKeyPath != "" {
+		if config.WechatEcommerceSpMchID == "" || config.WechatEcommerceSpAppID == "" {
+			return nil, fmt.Errorf("WECHAT_ECOMMERCE_SP_MCHID and WECHAT_ECOMMERCE_SP_APPID are required when wechat pay is enabled")
+		}
+
 		// 小程序直连支付客户端（用于押金、充值等）
 		paymentClient, err = wechat.NewPaymentClient(wechat.PaymentClientConfig{
 			MchID:                   config.WechatPayMchID,
@@ -160,7 +164,8 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 				PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
 				PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
 			},
-			// SpMchID 和 SpAppID 默认与 MchID/AppID 相同
+			SpMchID: config.WechatEcommerceSpMchID,
+			SpAppID: config.WechatEcommerceSpAppID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)

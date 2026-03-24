@@ -9,6 +9,7 @@ import (
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
 
@@ -880,16 +881,39 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 		return fmt.Errorf("get refund order: %w", err)
 	}
 
+	if payload.RefundStatus == "SUCCESS" && refundOrder.Status == "success" {
+		log.Info().Str("out_refund_no", payload.OutRefundNo).Msg("refund already succeeded, skip duplicate callback")
+		return nil
+	}
+	if payload.RefundStatus == "ABNORMAL" && refundOrder.Status == "failed" {
+		log.Info().Str("out_refund_no", payload.OutRefundNo).Msg("refund already failed, skip duplicate callback")
+		return nil
+	}
+	if payload.RefundStatus == "CLOSED" && refundOrder.Status == "closed" {
+		log.Info().Str("out_refund_no", payload.OutRefundNo).Msg("refund already closed, skip duplicate callback")
+		return nil
+	}
+
+	paymentOrder, paymentErr := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+	isRiderDepositRefund := paymentErr == nil && paymentOrder.BusinessType == "rider_deposit"
+	riderDepositRefundService := logic.NewRiderDepositRefundService(processor.store, nil)
+
 	// 根据退款状态更新
 	switch payload.RefundStatus {
 	case "SUCCESS":
-		_, err = processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
-		if err != nil {
-			return fmt.Errorf("update refund order to success: %w", err)
+		if isRiderDepositRefund {
+			err = riderDepositRefundService.ResolveRefund(ctx, refundOrder.ID, paymentOrder, "SUCCESS", payload.RefundID)
+			if err != nil {
+				return fmt.Errorf("resolve rider deposit refund success: %w", err)
+			}
+		} else {
+			_, err = processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			if err != nil {
+				return fmt.Errorf("update refund order to success: %w", err)
+			}
 		}
 
-		paymentOrder, err := processor.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
-		if err == nil {
+		if paymentErr == nil {
 			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 			if processor.distributor != nil {
 				expiresAt := time.Now().Add(7 * 24 * time.Hour)
@@ -911,9 +935,16 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 		}
 
 	case "ABNORMAL":
-		_, err = processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
-		if err != nil {
-			return fmt.Errorf("update refund order to failed: %w", err)
+		if isRiderDepositRefund {
+			err = riderDepositRefundService.ResolveRefund(ctx, refundOrder.ID, paymentOrder, "ABNORMAL", payload.RefundID)
+			if err != nil {
+				return fmt.Errorf("resolve rider deposit refund abnormal: %w", err)
+			}
+		} else {
+			_, err = processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if err != nil {
+				return fmt.Errorf("update refund order to failed: %w", err)
+			}
 		}
 		log.Warn().Str("out_refund_no", payload.OutRefundNo).Msg("refund abnormal")
 
@@ -934,9 +965,16 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 		})
 
 	case "CLOSED":
-		_, err = processor.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
-		if err != nil {
-			return fmt.Errorf("update refund order to closed: %w", err)
+		if isRiderDepositRefund {
+			err = riderDepositRefundService.ResolveRefund(ctx, refundOrder.ID, paymentOrder, "CLOSED", payload.RefundID)
+			if err != nil {
+				return fmt.Errorf("resolve rider deposit refund closed: %w", err)
+			}
+		} else {
+			_, err = processor.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
+			if err != nil {
+				return fmt.Errorf("update refund order to closed: %w", err)
+			}
 		}
 		log.Info().Str("out_refund_no", payload.OutRefundNo).Msg("refund closed")
 	}

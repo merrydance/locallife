@@ -104,6 +104,7 @@ type Querier interface {
 	// 确认提现完成（冻结余额转为已提现）
 	ConfirmUserWithdraw(ctx context.Context, arg ConfirmUserWithdrawParams) (UserBalance, error)
 	ConfirmWebLoginSession(ctx context.Context, arg ConfirmWebLoginSessionParams) (WebLoginSession, error)
+	ConsumeRiderDepositCredit(ctx context.Context, arg ConsumeRiderDepositCreditParams) (RiderDepositCredit, error)
 	ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	CountActiveDiscountRules(ctx context.Context, merchantID int64) (int64, error)
 	// 管理后台：统计区域扩展申请数量（支持状态过滤，NULL 表示不过滤）
@@ -402,6 +403,7 @@ type Querier interface {
 	// 创建骑手申请草稿
 	CreateRiderApplication(ctx context.Context, userID int64) (RiderApplication, error)
 	CreateRiderDeposit(ctx context.Context, arg CreateRiderDepositParams) (RiderDeposit, error)
+	CreateRiderDepositCredit(ctx context.Context, arg CreateRiderDepositCreditParams) (RiderDepositCredit, error)
 	CreateRiderLocation(ctx context.Context, arg CreateRiderLocationParams) (RiderLocation, error)
 	// 创建高值单资格积分变更日志
 	CreateRiderPremiumScoreLog(ctx context.Context, arg CreateRiderPremiumScoreLogParams) (RiderPremiumScoreLog, error)
@@ -917,6 +919,9 @@ type Querier interface {
 	GetRiderDeliveryStats(ctx context.Context, arg GetRiderDeliveryStatsParams) (GetRiderDeliveryStatsRow, error)
 	GetRiderDeposit(ctx context.Context, id int64) (RiderDeposit, error)
 	GetRiderDepositByPaymentOrderID(ctx context.Context, paymentOrderID pgtype.Int8) (RiderDeposit, error)
+	GetRiderDepositCredit(ctx context.Context, id int64) (RiderDepositCredit, error)
+	GetRiderDepositCreditByPaymentOrderID(ctx context.Context, paymentOrderID int64) (RiderDepositCredit, error)
+	GetRiderDepositCreditForUpdate(ctx context.Context, id int64) (RiderDepositCredit, error)
 	GetRiderDepositStats(ctx context.Context, riderID int64) (GetRiderDepositStatsRow, error)
 	GetRiderEarnings(ctx context.Context, riderID pgtype.Int8) (interface{}, error)
 	// 获取骑手押金信息（用于扣款前检查）
@@ -1063,6 +1068,7 @@ type Querier interface {
 	ListActiveDiscountRules(ctx context.Context, merchantID int64) ([]DiscountRule, error)
 	ListActivePeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)
 	ListActiveRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
+	ListActiveRiderDepositCreditsByRiderID(ctx context.Context, riderID int64) ([]RiderDepositCredit, error)
 	ListActiveRuleVersions(ctx context.Context) ([]RuleVersion, error)
 	ListActiveVouchers(ctx context.Context, arg ListActiveVouchersParams) ([]Voucher, error)
 	ListAllDishIDs(ctx context.Context) ([]int64, error)
@@ -1146,6 +1152,7 @@ type Querier interface {
 	ListExpiredPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
 	// Find pending reservations that have passed their payment deadline
 	ListExpiredPendingReservations(ctx context.Context) ([]TableReservation, error)
+	ListExpiredRiderDepositCredits(ctx context.Context, arg ListExpiredRiderDepositCreditsParams) ([]RiderDepositCredit, error)
 	// 列出即将到期的运营商（用于提前通知续约）
 	ListExpiringOperators(ctx context.Context, dollar_1 int32) ([]ListExpiringOperatorsRow, error)
 	ListFavoriteDishes(ctx context.Context, arg ListFavoriteDishesParams) ([]ListFavoriteDishesRow, error)
@@ -1330,6 +1337,7 @@ type Querier interface {
 	ListRiderClaims(ctx context.Context, arg ListRiderClaimsParams) ([]Claim, error)
 	// 骑手查看收到的索赔列表（通过配送单关联）
 	ListRiderClaimsForRider(ctx context.Context, arg ListRiderClaimsForRiderParams) ([]ListRiderClaimsForRiderRow, error)
+	ListRiderDepositCreditsForReminderWindow(ctx context.Context, arg ListRiderDepositCreditsForReminderWindowParams) ([]RiderDepositCredit, error)
 	ListRiderDeposits(ctx context.Context, arg ListRiderDepositsParams) ([]RiderDeposit, error)
 	ListRiderDepositsByType(ctx context.Context, arg ListRiderDepositsByTypeParams) ([]RiderDeposit, error)
 	ListRiderLocations(ctx context.Context, arg ListRiderLocationsParams) ([]RiderLocation, error)
@@ -1398,6 +1406,7 @@ type Querier interface {
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
+	MarkRiderDepositCreditExpired(ctx context.Context, arg MarkRiderDepositCreditExpiredParams) (RiderDepositCredit, error)
 	MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error)
 	MarkUserVoucherAsUnused(ctx context.Context, arg MarkUserVoucherAsUnusedParams) (UserVoucher, error)
 	MarkUserVoucherAsUsed(ctx context.Context, arg MarkUserVoucherAsUsedParams) (UserVoucher, error)
@@ -1442,6 +1451,7 @@ type Querier interface {
 	// 重置申请为草稿状态（被拒绝后可重新编辑）
 	ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error)
 	ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error
+	RestoreRiderDepositCreditByPaymentOrderID(ctx context.Context, arg RestoreRiderDepositCreditByPaymentOrderIDParams) (RiderDepositCredit, error)
 	// 审核申诉
 	ReviewAppeal(ctx context.Context, arg ReviewAppealParams) (Appeal, error)
 	// 运营商审核索赔
@@ -1509,6 +1519,7 @@ type Querier interface {
 	SuspendMerchantTakeout(ctx context.Context, arg SuspendMerchantTakeoutParams) error
 	SuspendRegion(ctx context.Context, id int64) error
 	SuspendRider(ctx context.Context, arg SuspendRiderParams) error
+	TouchRiderDepositCreditReminder(ctx context.Context, arg TouchRiderDepositCreditReminderParams) (RiderDepositCredit, error)
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
 	UnlinkMerchantDishCategory(ctx context.Context, arg UnlinkMerchantDishCategoryParams) error

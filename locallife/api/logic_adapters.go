@@ -337,3 +337,7 @@ func (server *Server) buildRefundOrchestrator() logic.RefundOrchestrator {
 		nil,
 	)
 }
+
+func (server *Server) buildRiderDepositRefundService() *logic.RiderDepositRefundService {
+	return logic.NewRiderDepositRefundService(server.store, server.paymentClient)
+}

@@ -1644,6 +1644,26 @@ type RiderDeposit struct {
 	PaymentOrderID pgtype.Int8 `json:"payment_order_id"`
 }
 
+// 骑手押金可退款凭证，记录每笔押金支付单在微信退款窗口内的可退款状态
+type RiderDepositCredit struct {
+	ID      int64 `json:"id"`
+	RiderID int64 `json:"rider_id"`
+	// 原始押金支付单 ID，后续提现应基于该支付单走退款
+	PaymentOrderID   int64 `json:"payment_order_id"`
+	OriginalAmount   int64 `json:"original_amount"`
+	RefundableAmount int64 `json:"refundable_amount"`
+	RefundedAmount   int64 `json:"refunded_amount"`
+	// active=可退款, partially_refunded=部分退款, fully_refunded=已全部退款, expired=已过期, legacy=历史兼容数据
+	Status string    `json:"status"`
+	PaidAt time.Time `json:"paid_at"`
+	// 微信退款有效截止时间，通常为支付成功后 365 天
+	RefundableUntil time.Time          `json:"refundable_until"`
+	LastRemindedAt  pgtype.Timestamptz `json:"last_reminded_at"`
+	ExpiredAt       pgtype.Timestamptz `json:"expired_at"`
+	CreatedAt       time.Time          `json:"created_at"`
+	UpdatedAt       time.Time          `json:"updated_at"`
+}
+
 // 骑手位置记录
 type RiderLocation struct {
 	ID         int64          `json:"id"`

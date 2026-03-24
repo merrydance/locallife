@@ -5,9 +5,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
+)
+
+const (
+	riderDepositCreditStatusActive  = "active"
+	riderDepositCreditStatusPartial = "partially_refunded"
+	riderDepositRefundWindow        = 365 * 24 * time.Hour
 )
 
 // ProcessPaymentSuccessTxParams contains the input parameters for processing payment success idempotently
@@ -45,42 +52,78 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 
 		switch paymentOrder.BusinessType {
 		case "rider_deposit":
+			hasDepositLog := false
 			if _, err := q.GetRiderDepositByPaymentOrderID(ctx, pgtype.Int8{Int64: paymentOrder.ID, Valid: true}); err == nil {
-				break
+				hasDepositLog = true
 			} else if !errors.Is(err, ErrRecordNotFound) {
 				return fmt.Errorf("get rider deposit by payment order: %w", err)
+			}
+
+			hasDepositCredit := false
+			if _, err := q.GetRiderDepositCreditByPaymentOrderID(ctx, paymentOrder.ID); err == nil {
+				hasDepositCredit = true
+			} else if !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("get rider deposit credit by payment order: %w", err)
+			}
+
+			if hasDepositLog && hasDepositCredit {
+				break
 			}
 
 			rider, err := q.GetRiderByUserID(ctx, paymentOrder.UserID)
 			if err != nil {
 				return fmt.Errorf("get rider: %w", err)
 			}
-			lockedRider, err := q.GetRiderForUpdate(ctx, rider.ID)
-			if err != nil {
-				return fmt.Errorf("lock rider: %w", err)
+
+			if !hasDepositLog {
+				lockedRider, err := q.GetRiderForUpdate(ctx, rider.ID)
+				if err != nil {
+					return fmt.Errorf("lock rider: %w", err)
+				}
+
+				newBalance := lockedRider.DepositAmount + paymentOrder.Amount
+
+				_, err = q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
+					ID:            lockedRider.ID,
+					DepositAmount: newBalance,
+					FrozenDeposit: lockedRider.FrozenDeposit,
+				})
+				if err != nil {
+					return fmt.Errorf("update rider deposit: %w", err)
+				}
+
+				_, err = q.CreateRiderDeposit(ctx, CreateRiderDepositParams{
+					RiderID:        lockedRider.ID,
+					Amount:         paymentOrder.Amount,
+					Type:           "deposit",
+					BalanceAfter:   newBalance,
+					PaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
+					Remark:         pgtype.Text{String: "微信支付充值", Valid: true},
+				})
+				if err != nil {
+					return fmt.Errorf("create rider deposit: %w", err)
+				}
 			}
 
-			newBalance := lockedRider.DepositAmount + paymentOrder.Amount
+			if !hasDepositCredit {
+				if !paymentOrder.PaidAt.Valid {
+					return fmt.Errorf("paid_at is required for rider deposit credit")
+				}
 
-			_, err = q.UpdateRiderDeposit(ctx, UpdateRiderDepositParams{
-				ID:            lockedRider.ID,
-				DepositAmount: newBalance,
-				FrozenDeposit: lockedRider.FrozenDeposit,
-			})
-			if err != nil {
-				return fmt.Errorf("update rider deposit: %w", err)
-			}
-
-			_, err = q.CreateRiderDeposit(ctx, CreateRiderDepositParams{
-				RiderID:        lockedRider.ID,
-				Amount:         paymentOrder.Amount,
-				Type:           "deposit",
-				BalanceAfter:   newBalance,
-				PaymentOrderID: pgtype.Int8{Int64: paymentOrder.ID, Valid: true},
-				Remark:         pgtype.Text{String: "微信支付充值", Valid: true},
-			})
-			if err != nil {
-				return fmt.Errorf("create rider deposit: %w", err)
+				paidAt := paymentOrder.PaidAt.Time
+				_, err = q.CreateRiderDepositCredit(ctx, CreateRiderDepositCreditParams{
+					RiderID:          rider.ID,
+					PaymentOrderID:   paymentOrder.ID,
+					OriginalAmount:   paymentOrder.Amount,
+					RefundableAmount: paymentOrder.Amount,
+					RefundedAmount:   0,
+					Status:           riderDepositCreditStatusActive,
+					PaidAt:           paidAt,
+					RefundableUntil:  paidAt.Add(riderDepositRefundWindow),
+				})
+				if err != nil {
+					return fmt.Errorf("create rider deposit credit: %w", err)
+				}
 			}
 
 		case "reservation":

@@ -54,7 +54,7 @@ UPDATE refund_orders
 SET
     status = 'success',
     refunded_at = now()
-WHERE id = $1 AND status = 'processing'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING *;
 
 -- name: UpdateRefundOrderToFailed :one
@@ -68,7 +68,7 @@ RETURNING *;
 UPDATE refund_orders
 SET
     status = 'closed'
-WHERE id = $1 AND status = 'pending'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING *;
 
 -- name: GetTotalRefundedByPaymentOrder :one

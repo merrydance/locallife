@@ -46,6 +46,8 @@ type Config struct {
 	WechatPayPlatformPublicKeyPath   string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`  // 微信支付平台公钥路径（推荐）
 	WechatPayPlatformPublicKeyID     string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`    // 微信支付平台公钥ID
 	WechatPayHTTPTimeout             time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`              // HTTP请求超时时间
+	WechatEcommerceSpMchID           string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`            // 收付通服务商商户号
+	WechatEcommerceSpAppID           string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`            // 收付通服务商 AppID
 
 	// 数据加密配置
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）

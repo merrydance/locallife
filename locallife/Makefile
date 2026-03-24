@@ -24,6 +24,13 @@ migratedown:
 migratedown1:
 	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" -verbose down 1
 
+migratestatus:
+	psql "$(DB_URL)" -c "SELECT version, dirty FROM schema_migrations;"
+
+migrateforce:
+	@test -n "$(version)" || (echo "usage: make migrateforce version=<migration_version>" && exit 1)
+	$(HOME)/go/bin/migrate -path db/migration -database "$(DB_URL)" force $(version)
+
 new_migration:
 	$(HOME)/go/bin/migrate create -ext sql -dir db/migration -seq $(name)
 

@@ -49,9 +49,8 @@ type Store interface {
 	UpdateDeliveryToDeliveringTx(ctx context.Context, arg UpdateDeliveryToDeliveringTxParams) (UpdateDeliveryToDeliveringTxResult, error)
 	CompleteDeliveryTx(ctx context.Context, arg CompleteDeliveryTxParams) (CompleteDeliveryTxResult, error)
 	// M15: Rider transactions
-	WithdrawDepositTx(ctx context.Context, arg WithdrawDepositTxParams) (WithdrawDepositTxResult, error)
-	RollbackWithdrawTx(ctx context.Context, arg RollbackWithdrawTxParams) error
-	DeductRiderDepositTx(ctx context.Context, arg DeductRiderDepositTxParams) (DeductRiderDepositTxResult, error)
+	PrepareRiderDepositRefundTx(ctx context.Context, arg PrepareRiderDepositRefundTxParams) (PrepareRiderDepositRefundTxResult, error)
+	ResolveRiderDepositRefundTx(ctx context.Context, arg ResolveRiderDepositRefundTxParams) (ResolveRiderDepositRefundTxResult, error)
 	// M15: Reservation transactions
 	CancelReservationTx(ctx context.Context, arg CancelReservationTxParams) (CancelReservationTxResult, error)
 	MarkNoShowTx(ctx context.Context, arg MarkNoShowTxParams) (MarkNoShowTxResult, error)
@@ -87,7 +86,6 @@ type Store interface {
 	// Claim refund transactions（索赔退款）
 	ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParams) (ClaimRefundTxResult, error)
 	ClaimRefundRollbackTx(ctx context.Context, arg ClaimRefundRollbackTxParams) (ClaimRefundRollbackTxResult, error)
-	DeductRiderDepositAndRefundTx(ctx context.Context, arg DeductRiderDepositAndRefundTxParams) (DeductRiderDepositAndRefundTxResult, error)
 	// Behavior trace transactions
 	CreateClaimWithBehaviorTx(ctx context.Context, arg CreateClaimWithBehaviorTxParams) (CreateClaimWithBehaviorTxResult, error)
 	// Group multi-store transactions

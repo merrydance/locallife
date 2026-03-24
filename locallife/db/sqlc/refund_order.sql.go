@@ -381,7 +381,7 @@ const updateRefundOrderToClosed = `-- name: UpdateRefundOrderToClosed :one
 UPDATE refund_orders
 SET
     status = 'closed'
-WHERE id = $1 AND status = 'pending'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at
 `
 
@@ -475,7 +475,7 @@ UPDATE refund_orders
 SET
     status = 'success',
     refunded_at = now()
-WHERE id = $1 AND status = 'processing'
+WHERE id = $1 AND status IN ('pending', 'processing')
 RETURNING id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at
 `
 

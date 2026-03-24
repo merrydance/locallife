@@ -13,6 +13,8 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
+	wechatmock "github.com/merrydance/locallife/wechat/mock"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
@@ -110,7 +112,7 @@ func TestGoOnlineAPI(t *testing.T) {
 		name          string
 		body          map[string]interface{}
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -122,7 +124,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -148,7 +150,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				insufficientRider := rider
 				insufficientRider.DepositAmount = 0
 				store.EXPECT().
@@ -169,7 +171,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				pendingRider := rider
 				pendingRider.Status = "pending"
 				store.EXPECT().
@@ -191,9 +193,10 @@ func TestGoOnlineAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+			tc.buildStubs(store, paymentClient)
 
-			server := newTestServer(t, store)
+			server := newTestServerWithPayment(t, store, paymentClient)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)
@@ -533,13 +536,13 @@ func TestWithdrawRiderAPI(t *testing.T) {
 	rider := randomRider(user.ID)
 	rider.Status = "active"
 	rider.DepositAmount = 500 * fenPerYuan
-	rider.FrozenDeposit = 50 * fenPerYuan
+	rider.FrozenDeposit = 0
 
 	testCases := []struct {
 		name          string
 		body          map[string]interface{}
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -551,7 +554,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -563,31 +566,37 @@ func TestWithdrawRiderAPI(t *testing.T) {
 					Times(1).
 					Return([]db.Delivery{}, nil)
 
-				// 执行提现事务
 				store.EXPECT().
-					WithdrawDepositTx(gomock.Any(), gomock.Any()).
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.WithdrawDepositTxResult{
+					Return(db.PrepareRiderDepositRefundTxResult{
 						Rider: db.Rider{
 							ID:            rider.ID,
-							DepositAmount: 400 * fenPerYuan,
-							FrozenDeposit: 50 * fenPerYuan,
+							DepositAmount: 500 * fenPerYuan,
+							FrozenDeposit: 150 * fenPerYuan,
 						},
-						DepositLog: db.RiderDeposit{
-							ID:           1,
-							RiderID:      rider.ID,
-							Amount:       100 * fenPerYuan,
-							Type:         "withdraw",
-							BalanceAfter: 400 * fenPerYuan,
-						},
+						RefundPlans: []db.RiderDepositRefundPlan{{
+							RefundOrder:        db.RefundOrder{ID: 1, PaymentOrderID: 91, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST123"},
+							SourcePaymentOrder: db.PaymentOrder{ID: 91, OutTradeNo: "PTEST123", Amount: 100 * fenPerYuan},
+						}},
 					}, nil)
+
+				paymentClient.EXPECT().
+					CreateRefund(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(&wechat.RefundResponse{RefundID: "wx_refund_1", Status: wechat.RefundStatusProcessing}, nil)
+
+				store.EXPECT().
+					UpdateRefundOrderToProcessing(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.RefundOrder{ID: 1, RefundAmount: 100 * fenPerYuan, OutRefundNo: "RTEST123", Status: "processing"}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-				var resp depositResponse
+				require.Equal(t, http.StatusAccepted, recorder.Code)
+				var resp riderWithdrawResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, int64(100*fenPerYuan), resp.Amount)
-				require.Equal(t, "withdraw", resp.Type)
+				require.Equal(t, int64(100*fenPerYuan), resp.AcceptedAmount)
+				require.Equal(t, riderWithdrawProcessingStatus, resp.Status)
 			},
 		},
 		{
@@ -599,7 +608,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				// 不应该调用任何 store 方法
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
@@ -618,7 +627,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -636,7 +645,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				pendingRider := rider
 				pendingRider.Status = "pending"
 				store.EXPECT().
@@ -651,13 +660,13 @@ func TestWithdrawRiderAPI(t *testing.T) {
 		{
 			name: "InsufficientBalance",
 			body: map[string]interface{}{
-				"amount": 1000 * fenPerYuan, // 超过可用余额 450元
+				"amount": 1000 * fenPerYuan,
 				"remark": "提现押金",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -665,6 +674,34 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "FrozenDepositBlocked",
+			body: map[string]interface{}{
+				"amount": 100 * fenPerYuan,
+				"remark": "提现押金",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+				frozenRider := rider
+				frozenRider.FrozenDeposit = 50 * fenPerYuan
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(frozenRider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					PrepareRiderDepositRefundTx(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
 		{
@@ -676,7 +713,7 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -701,9 +738,10 @@ func TestWithdrawRiderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
-			tc.buildStubs(store)
+			paymentClient := wechatmock.NewMockPaymentClientInterface(ctrl)
+			tc.buildStubs(store, paymentClient)
 
-			server := newTestServer(t, store)
+			server := newTestServerWithPayment(t, store, paymentClient)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)

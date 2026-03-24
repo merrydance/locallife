@@ -10,10 +10,28 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
+
+const riderWithdrawProcessingStatus = "processing"
+
+type riderWithdrawRefundItemResponse struct {
+	RefundOrderID  int64  `json:"refund_order_id"`
+	PaymentOrderID int64  `json:"payment_order_id"`
+	OutRefundNo    string `json:"out_refund_no"`
+	Amount         int64  `json:"amount"`
+	Status         string `json:"status"`
+}
+
+type riderWithdrawResponse struct {
+	Status          string                            `json:"status"`
+	RequestedAmount int64                             `json:"requested_amount"`
+	AcceptedAmount  int64                             `json:"accepted_amount"`
+	Refunds         []riderWithdrawRefundItemResponse `json:"refunds"`
+}
 
 // ==================== 骑手申请 ====================
 
@@ -409,7 +427,7 @@ func (server *Server) depositRider(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param request body withdrawRequest true "提现金额（单位：分）"
-// @Success 200 {object} depositResponse "提现成功"
+// @Success 200 {object} riderWithdrawResponse "提现已提交或完成"
 // @Failure 400 {object} ErrorResponse "余额不足、有进行中订单或账号未激活"
 // @Failure 401 {object} ErrorResponse "未登录"
 // @Failure 404 {object} ErrorResponse "未注册骑手"
@@ -424,99 +442,58 @@ func (server *Server) withdrawRider(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	rider, err := server.store.GetRiderByUserID(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 检查骑手状态：只有 active 状态才能提现
-	if rider.Status != "active" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotActivated))
-		return
-	}
-
-	// 检查可用余额
-	availableBalance := rider.DepositAmount - rider.FrozenDeposit
-	if req.Amount > availableBalance {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderInsufficientBalance))
-		return
-	}
-
-	// 检查是否有进行中的订单
-	activeDeliveries, err := server.store.ListRiderActiveDeliveries(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-	if len(activeDeliveries) > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderHasActiveOrders))
-		return
-	}
-
-	// 使用事务执行提现操作：锁定骑手行 + 验证余额 + 更新余额 + 创建流水
-	result, err := server.store.WithdrawDepositTx(ctx, db.WithdrawDepositTxParams{
-		RiderID: rider.ID,
-		Amount:  req.Amount,
-		Remark:  req.Remark,
+	service := server.buildRiderDepositRefundService()
+	result, err := service.SubmitWithdrawal(ctx, logic.SubmitRiderDepositWithdrawalInput{
+		UserID: authPayload.UserID,
+		Amount: req.Amount,
+		Remark: req.Remark,
 	})
 	if err != nil {
-		if errors.Is(err, db.ErrInsufficientDeposit) {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderInsufficientBalance))
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) {
+			switch {
+			case errors.Is(reqErr.Err, logic.ErrRiderProfileNotFound):
+				ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotRegistered))
+			case errors.Is(reqErr.Err, logic.ErrRiderAccountNotActivated):
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotActivated))
+			case errors.Is(reqErr.Err, logic.ErrRiderDepositFrozen):
+				ctx.JSON(http.StatusConflict, errorResponse(ErrRiderDepositFrozen))
+			case errors.Is(reqErr.Err, logic.ErrRiderAvailableDepositInsufficient):
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderInsufficientBalance))
+			case errors.Is(reqErr.Err, logic.ErrRiderHasActiveDeliveries):
+				ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderHasActiveOrders))
+			default:
+				ctx.JSON(reqErr.Status, errorResponse(reqErr.Err))
+			}
 			return
 		}
+
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 调用微信提现 API（商家转账到零钱）
-	if server.paymentClient != nil {
-		user, err := server.store.GetUser(ctx, authPayload.UserID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get user: %w", err)))
-			return
-		}
-
-		// 生成批次单号
-		outBatchNo := fmt.Sprintf("WD%s%d", time.Now().Format("20060102150405"), result.DepositLog.ID)
-
-		_, err = server.paymentClient.CreateTransfer(ctx, &wechat.TransferRequest{
-			OutBatchNo:     outBatchNo,
-			BatchName:      "骑手押金提现",
-			BatchRemark:    req.Remark,
-			TransferAmount: req.Amount,
-			OpenID:         user.WechatOpenid,
-			UserName:       rider.RealName,
-			TransferRemark: "骑手押金提现",
+	response := riderWithdrawResponse{
+		Status:          result.Status,
+		RequestedAmount: result.RequestedAmount,
+		AcceptedAmount:  result.AcceptedAmount,
+		Refunds:         make([]riderWithdrawRefundItemResponse, 0, len(result.Refunds)),
+	}
+	for _, item := range result.Refunds {
+		response.Refunds = append(response.Refunds, riderWithdrawRefundItemResponse{
+			RefundOrderID:  item.RefundOrder.ID,
+			PaymentOrderID: item.PaymentOrder.ID,
+			OutRefundNo:    item.RefundOrder.OutRefundNo,
+			Amount:         item.RefundOrder.RefundAmount,
+			Status:         item.Status,
 		})
-		if err != nil {
-			// 提现失败，使用事务回滚押金变更
-			rollbackErr := server.store.RollbackWithdrawTx(ctx, db.RollbackWithdrawTxParams{
-				RiderID: rider.ID,
-				Amount:  req.Amount,
-			})
-			if rollbackErr != nil {
-				// 记录回滚失败日志，需要人工介入
-				log.Error().
-					Err(err).
-					Int64("rider_id", rider.ID).
-					Int64("amount", req.Amount).
-					Err(rollbackErr).
-					Msg("withdraw rollback failed, need manual intervention")
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("提现失败且回滚失败，请联系客服处理")))
-				return
-			}
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("提现失败: %w", err)))
-			return
-		}
 	}
 
-	ctx.JSON(http.StatusOK, newDepositResponse(result.DepositLog))
+	if response.Status == "success" {
+		ctx.JSON(http.StatusOK, response)
+		return
+	}
+
+	ctx.JSON(http.StatusAccepted, response)
 }
 
 // getRiderDepositBalance godoc

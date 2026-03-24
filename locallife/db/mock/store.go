@@ -1083,6 +1083,21 @@ func (mr *MockStoreMockRecorder) ConfirmWebLoginSession(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConfirmWebLoginSession", reflect.TypeOf((*MockStore)(nil).ConfirmWebLoginSession), ctx, arg)
 }
 
+// ConsumeRiderDepositCredit mocks base method.
+func (m *MockStore) ConsumeRiderDepositCredit(ctx context.Context, arg db.ConsumeRiderDepositCreditParams) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ConsumeRiderDepositCredit", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ConsumeRiderDepositCredit indicates an expected call of ConsumeRiderDepositCredit.
+func (mr *MockStoreMockRecorder) ConsumeRiderDepositCredit(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConsumeRiderDepositCredit", reflect.TypeOf((*MockStore)(nil).ConsumeRiderDepositCredit), ctx, arg)
+}
+
 // ConsumeTx mocks base method.
 func (m *MockStore) ConsumeTx(ctx context.Context, arg db.ConsumeTxParams) (db.ConsumeTxResult, error) {
 	m.ctrl.T.Helper()
@@ -3798,6 +3813,21 @@ func (mr *MockStoreMockRecorder) CreateRiderDeposit(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderDeposit", reflect.TypeOf((*MockStore)(nil).CreateRiderDeposit), ctx, arg)
 }
 
+// CreateRiderDepositCredit mocks base method.
+func (m *MockStore) CreateRiderDepositCredit(ctx context.Context, arg db.CreateRiderDepositCreditParams) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateRiderDepositCredit", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateRiderDepositCredit indicates an expected call of CreateRiderDepositCredit.
+func (mr *MockStoreMockRecorder) CreateRiderDepositCredit(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderDepositCredit", reflect.TypeOf((*MockStore)(nil).CreateRiderDepositCredit), ctx, arg)
+}
+
 // CreateRiderLocation mocks base method.
 func (m *MockStore) CreateRiderLocation(ctx context.Context, arg db.CreateRiderLocationParams) (db.RiderLocation, error) {
 	m.ctrl.T.Helper()
@@ -4306,36 +4336,6 @@ func (m *MockStore) DeductRiderDeposit(ctx context.Context, arg db.DeductRiderDe
 func (mr *MockStoreMockRecorder) DeductRiderDeposit(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeductRiderDeposit", reflect.TypeOf((*MockStore)(nil).DeductRiderDeposit), ctx, arg)
-}
-
-// DeductRiderDepositAndRefundTx mocks base method.
-func (m *MockStore) DeductRiderDepositAndRefundTx(ctx context.Context, arg db.DeductRiderDepositAndRefundTxParams) (db.DeductRiderDepositAndRefundTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeductRiderDepositAndRefundTx", ctx, arg)
-	ret0, _ := ret[0].(db.DeductRiderDepositAndRefundTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DeductRiderDepositAndRefundTx indicates an expected call of DeductRiderDepositAndRefundTx.
-func (mr *MockStoreMockRecorder) DeductRiderDepositAndRefundTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeductRiderDepositAndRefundTx", reflect.TypeOf((*MockStore)(nil).DeductRiderDepositAndRefundTx), ctx, arg)
-}
-
-// DeductRiderDepositTx mocks base method.
-func (m *MockStore) DeductRiderDepositTx(ctx context.Context, arg db.DeductRiderDepositTxParams) (db.DeductRiderDepositTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeductRiderDepositTx", ctx, arg)
-	ret0, _ := ret[0].(db.DeductRiderDepositTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// DeductRiderDepositTx indicates an expected call of DeductRiderDepositTx.
-func (mr *MockStoreMockRecorder) DeductRiderDepositTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeductRiderDepositTx", reflect.TypeOf((*MockStore)(nil).DeductRiderDepositTx), ctx, arg)
 }
 
 // DeductUserBalance mocks base method.
@@ -9119,6 +9119,51 @@ func (mr *MockStoreMockRecorder) GetRiderDepositByPaymentOrderID(ctx, paymentOrd
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderDepositByPaymentOrderID", reflect.TypeOf((*MockStore)(nil).GetRiderDepositByPaymentOrderID), ctx, paymentOrderID)
 }
 
+// GetRiderDepositCredit mocks base method.
+func (m *MockStore) GetRiderDepositCredit(ctx context.Context, id int64) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRiderDepositCredit", ctx, id)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRiderDepositCredit indicates an expected call of GetRiderDepositCredit.
+func (mr *MockStoreMockRecorder) GetRiderDepositCredit(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderDepositCredit", reflect.TypeOf((*MockStore)(nil).GetRiderDepositCredit), ctx, id)
+}
+
+// GetRiderDepositCreditByPaymentOrderID mocks base method.
+func (m *MockStore) GetRiderDepositCreditByPaymentOrderID(ctx context.Context, paymentOrderID int64) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRiderDepositCreditByPaymentOrderID", ctx, paymentOrderID)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRiderDepositCreditByPaymentOrderID indicates an expected call of GetRiderDepositCreditByPaymentOrderID.
+func (mr *MockStoreMockRecorder) GetRiderDepositCreditByPaymentOrderID(ctx, paymentOrderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderDepositCreditByPaymentOrderID", reflect.TypeOf((*MockStore)(nil).GetRiderDepositCreditByPaymentOrderID), ctx, paymentOrderID)
+}
+
+// GetRiderDepositCreditForUpdate mocks base method.
+func (m *MockStore) GetRiderDepositCreditForUpdate(ctx context.Context, id int64) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRiderDepositCreditForUpdate", ctx, id)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRiderDepositCreditForUpdate indicates an expected call of GetRiderDepositCreditForUpdate.
+func (mr *MockStoreMockRecorder) GetRiderDepositCreditForUpdate(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderDepositCreditForUpdate", reflect.TypeOf((*MockStore)(nil).GetRiderDepositCreditForUpdate), ctx, id)
+}
+
 // GetRiderDepositStats mocks base method.
 func (m *MockStore) GetRiderDepositStats(ctx context.Context, riderID int64) (db.GetRiderDepositStatsRow, error) {
 	m.ctrl.T.Helper()
@@ -10719,6 +10764,21 @@ func (mr *MockStoreMockRecorder) ListActiveRechargeRules(ctx, merchantID any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveRechargeRules", reflect.TypeOf((*MockStore)(nil).ListActiveRechargeRules), ctx, merchantID)
 }
 
+// ListActiveRiderDepositCreditsByRiderID mocks base method.
+func (m *MockStore) ListActiveRiderDepositCreditsByRiderID(ctx context.Context, riderID int64) ([]db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListActiveRiderDepositCreditsByRiderID", ctx, riderID)
+	ret0, _ := ret[0].([]db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListActiveRiderDepositCreditsByRiderID indicates an expected call of ListActiveRiderDepositCreditsByRiderID.
+func (mr *MockStoreMockRecorder) ListActiveRiderDepositCreditsByRiderID(ctx, riderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListActiveRiderDepositCreditsByRiderID", reflect.TypeOf((*MockStore)(nil).ListActiveRiderDepositCreditsByRiderID), ctx, riderID)
+}
+
 // ListActiveRuleVersions mocks base method.
 func (m *MockStore) ListActiveRuleVersions(ctx context.Context) ([]db.RuleVersion, error) {
 	m.ctrl.T.Helper()
@@ -11587,6 +11647,21 @@ func (m *MockStore) ListExpiredPendingReservations(ctx context.Context) ([]db.Ta
 func (mr *MockStoreMockRecorder) ListExpiredPendingReservations(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExpiredPendingReservations", reflect.TypeOf((*MockStore)(nil).ListExpiredPendingReservations), ctx)
+}
+
+// ListExpiredRiderDepositCredits mocks base method.
+func (m *MockStore) ListExpiredRiderDepositCredits(ctx context.Context, arg db.ListExpiredRiderDepositCreditsParams) ([]db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListExpiredRiderDepositCredits", ctx, arg)
+	ret0, _ := ret[0].([]db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListExpiredRiderDepositCredits indicates an expected call of ListExpiredRiderDepositCredits.
+func (mr *MockStoreMockRecorder) ListExpiredRiderDepositCredits(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListExpiredRiderDepositCredits", reflect.TypeOf((*MockStore)(nil).ListExpiredRiderDepositCredits), ctx, arg)
 }
 
 // ListExpiringOperators mocks base method.
@@ -13539,6 +13614,21 @@ func (mr *MockStoreMockRecorder) ListRiderClaimsForRider(ctx, arg any) *gomock.C
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRiderClaimsForRider", reflect.TypeOf((*MockStore)(nil).ListRiderClaimsForRider), ctx, arg)
 }
 
+// ListRiderDepositCreditsForReminderWindow mocks base method.
+func (m *MockStore) ListRiderDepositCreditsForReminderWindow(ctx context.Context, arg db.ListRiderDepositCreditsForReminderWindowParams) ([]db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListRiderDepositCreditsForReminderWindow", ctx, arg)
+	ret0, _ := ret[0].([]db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListRiderDepositCreditsForReminderWindow indicates an expected call of ListRiderDepositCreditsForReminderWindow.
+func (mr *MockStoreMockRecorder) ListRiderDepositCreditsForReminderWindow(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRiderDepositCreditsForReminderWindow", reflect.TypeOf((*MockStore)(nil).ListRiderDepositCreditsForReminderWindow), ctx, arg)
+}
+
 // ListRiderDeposits mocks base method.
 func (m *MockStore) ListRiderDeposits(ctx context.Context, arg db.ListRiderDepositsParams) ([]db.RiderDeposit, error) {
 	m.ctrl.T.Helper()
@@ -14377,6 +14467,21 @@ func (mr *MockStoreMockRecorder) MarkOrderReplaced(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOrderReplaced", reflect.TypeOf((*MockStore)(nil).MarkOrderReplaced), ctx, arg)
 }
 
+// MarkRiderDepositCreditExpired mocks base method.
+func (m *MockStore) MarkRiderDepositCreditExpired(ctx context.Context, arg db.MarkRiderDepositCreditExpiredParams) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkRiderDepositCreditExpired", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkRiderDepositCreditExpired indicates an expected call of MarkRiderDepositCreditExpired.
+func (mr *MockStoreMockRecorder) MarkRiderDepositCreditExpired(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkRiderDepositCreditExpired", reflect.TypeOf((*MockStore)(nil).MarkRiderDepositCreditExpired), ctx, arg)
+}
+
 // MarkUserVoucherAsExpiredOnRollback mocks base method.
 func (m *MockStore) MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg db.MarkUserVoucherAsExpiredOnRollbackParams) (db.UserVoucher, error) {
 	m.ctrl.T.Helper()
@@ -14449,6 +14554,21 @@ func (m *MockStore) Ping(ctx context.Context) error {
 func (mr *MockStoreMockRecorder) Ping(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockStore)(nil).Ping), ctx)
+}
+
+// PrepareRiderDepositRefundTx mocks base method.
+func (m *MockStore) PrepareRiderDepositRefundTx(ctx context.Context, arg db.PrepareRiderDepositRefundTxParams) (db.PrepareRiderDepositRefundTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PrepareRiderDepositRefundTx", ctx, arg)
+	ret0, _ := ret[0].(db.PrepareRiderDepositRefundTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PrepareRiderDepositRefundTx indicates an expected call of PrepareRiderDepositRefundTx.
+func (mr *MockStoreMockRecorder) PrepareRiderDepositRefundTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PrepareRiderDepositRefundTx", reflect.TypeOf((*MockStore)(nil).PrepareRiderDepositRefundTx), ctx, arg)
 }
 
 // ProcessOrderPaymentTx mocks base method.
@@ -15046,6 +15166,36 @@ func (mr *MockStoreMockRecorder) ResetStaleMerchantOCRStatus(ctx, updatedAt any)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetStaleMerchantOCRStatus", reflect.TypeOf((*MockStore)(nil).ResetStaleMerchantOCRStatus), ctx, updatedAt)
 }
 
+// ResolveRiderDepositRefundTx mocks base method.
+func (m *MockStore) ResolveRiderDepositRefundTx(ctx context.Context, arg db.ResolveRiderDepositRefundTxParams) (db.ResolveRiderDepositRefundTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveRiderDepositRefundTx", ctx, arg)
+	ret0, _ := ret[0].(db.ResolveRiderDepositRefundTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveRiderDepositRefundTx indicates an expected call of ResolveRiderDepositRefundTx.
+func (mr *MockStoreMockRecorder) ResolveRiderDepositRefundTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveRiderDepositRefundTx", reflect.TypeOf((*MockStore)(nil).ResolveRiderDepositRefundTx), ctx, arg)
+}
+
+// RestoreRiderDepositCreditByPaymentOrderID mocks base method.
+func (m *MockStore) RestoreRiderDepositCreditByPaymentOrderID(ctx context.Context, arg db.RestoreRiderDepositCreditByPaymentOrderIDParams) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RestoreRiderDepositCreditByPaymentOrderID", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RestoreRiderDepositCreditByPaymentOrderID indicates an expected call of RestoreRiderDepositCreditByPaymentOrderID.
+func (mr *MockStoreMockRecorder) RestoreRiderDepositCreditByPaymentOrderID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RestoreRiderDepositCreditByPaymentOrderID", reflect.TypeOf((*MockStore)(nil).RestoreRiderDepositCreditByPaymentOrderID), ctx, arg)
+}
+
 // ReviewAppeal mocks base method.
 func (m *MockStore) ReviewAppeal(ctx context.Context, arg db.ReviewAppealParams) (db.Appeal, error) {
 	m.ctrl.T.Helper()
@@ -15117,20 +15267,6 @@ func (m *MockStore) RevokeUserSessions(ctx context.Context, userID int64) error 
 func (mr *MockStoreMockRecorder) RevokeUserSessions(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RevokeUserSessions", reflect.TypeOf((*MockStore)(nil).RevokeUserSessions), ctx, userID)
-}
-
-// RollbackWithdrawTx mocks base method.
-func (m *MockStore) RollbackWithdrawTx(ctx context.Context, arg db.RollbackWithdrawTxParams) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RollbackWithdrawTx", ctx, arg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RollbackWithdrawTx indicates an expected call of RollbackWithdrawTx.
-func (mr *MockStoreMockRecorder) RollbackWithdrawTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RollbackWithdrawTx", reflect.TypeOf((*MockStore)(nil).RollbackWithdrawTx), ctx, arg)
 }
 
 // SearchComboIDsGlobal mocks base method.
@@ -15737,6 +15873,21 @@ func (m *MockStore) SyncReservationInventoryTx(ctx context.Context, arg db.SyncR
 func (mr *MockStoreMockRecorder) SyncReservationInventoryTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncReservationInventoryTx", reflect.TypeOf((*MockStore)(nil).SyncReservationInventoryTx), ctx, arg)
+}
+
+// TouchRiderDepositCreditReminder mocks base method.
+func (m *MockStore) TouchRiderDepositCreditReminder(ctx context.Context, arg db.TouchRiderDepositCreditReminderParams) (db.RiderDepositCredit, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TouchRiderDepositCreditReminder", ctx, arg)
+	ret0, _ := ret[0].(db.RiderDepositCredit)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// TouchRiderDepositCreditReminder indicates an expected call of TouchRiderDepositCreditReminder.
+func (mr *MockStoreMockRecorder) TouchRiderDepositCreditReminder(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TouchRiderDepositCreditReminder", reflect.TypeOf((*MockStore)(nil).TouchRiderDepositCreditReminder), ctx, arg)
 }
 
 // TransferDiningSessionTableTx mocks base method.
@@ -18679,21 +18830,6 @@ func (m *MockStore) UseVoucherTx(ctx context.Context, arg db.UseVoucherTxParams)
 func (mr *MockStoreMockRecorder) UseVoucherTx(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UseVoucherTx", reflect.TypeOf((*MockStore)(nil).UseVoucherTx), ctx, arg)
-}
-
-// WithdrawDepositTx mocks base method.
-func (m *MockStore) WithdrawDepositTx(ctx context.Context, arg db.WithdrawDepositTxParams) (db.WithdrawDepositTxResult, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "WithdrawDepositTx", ctx, arg)
-	ret0, _ := ret[0].(db.WithdrawDepositTxResult)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// WithdrawDepositTx indicates an expected call of WithdrawDepositTx.
-func (mr *MockStoreMockRecorder) WithdrawDepositTx(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "WithdrawDepositTx", reflect.TypeOf((*MockStore)(nil).WithdrawDepositTx), ctx, arg)
 }
 
 // WithdrawOperatorTx mocks base method.

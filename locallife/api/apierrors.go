@@ -145,6 +145,7 @@ var (
 	ErrRiderDepositInsufficient = apierr(40014, "insufficient deposit, please top up first")
 	ErrRiderHasActiveOrders     = apierr(40015, "cannot perform this action while you have active delivery orders")
 	ErrRiderNoRegionAssigned    = apierr(40016, "rider has no region assigned")
+	ErrRiderDepositFrozen       = apierr(40971, "cannot withdraw while deposit is frozen")
 )
 
 // ==================== 金融/金额 (Finance) ====================
