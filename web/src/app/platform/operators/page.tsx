@@ -48,7 +48,7 @@ import {
 } from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { apiGet, apiPost, resolveProtectedMediaCandidates } from "@/lib/api";
+import { apiGet, apiPost, getPrivateMediaUrl } from "@/lib/api";
 import type {
   AdminOperatorApplicationItem,
   AdminOperatorApplicationsResponse,
@@ -84,8 +84,6 @@ export default function PlatformOperatorApplicationsPage() {
       {
         url: string;
         state: "loading" | "ready" | "failed";
-        candidates: string[];
-        candidateIndex: number;
       }
     >
   >({});
@@ -148,10 +146,10 @@ export default function PlatformOperatorApplicationsPage() {
       if (!detailOpen || !detail) return;
 
       const targets = [
-        detail.business_license_url,
-        detail.id_card_front_url,
-        detail.id_card_back_url,
-      ].filter(Boolean) as string[];
+        detail.business_license_asset_id,
+        detail.id_card_front_asset_id,
+        detail.id_card_back_asset_id,
+      ].filter((assetId): assetId is number => typeof assetId === "number" && assetId > 0);
       const uniqueTargets = Array.from(new Set(targets));
 
       if (uniqueTargets.length === 0) {
@@ -161,31 +159,33 @@ export default function PlatformOperatorApplicationsPage() {
 
       setSignedAssetUrls(
         Object.fromEntries(
-          uniqueTargets.map((url) => [
-            url,
-            { url: "", state: "loading" as const, candidates: [], candidateIndex: 0 },
+          uniqueTargets.map((assetId) => [
+            String(assetId),
+            { url: "", state: "loading" as const },
           ])
         )
       );
 
       const entries = await Promise.all(
-        uniqueTargets.map(async (rawUrl) => {
-          const candidates = await resolveProtectedMediaCandidates(rawUrl);
-          const resolvedUrl = candidates[0] || "";
-          if (resolvedUrl && candidates.length > 0) {
-            return [
-              rawUrl,
-              {
-                url: resolvedUrl,
-                state: "ready" as const,
-                candidates,
-                candidateIndex: 0,
-              },
-            ] as const;
+        uniqueTargets.map(async (assetId) => {
+          try {
+            const resolvedUrl = await getPrivateMediaUrl(assetId);
+            if (resolvedUrl) {
+              return [
+                String(assetId),
+                {
+                  url: resolvedUrl,
+                  state: "ready" as const,
+                },
+              ] as const;
+            }
+          } catch {
+            // fall through to failed state
           }
+
           return [
-            rawUrl,
-            { url: "", state: "failed" as const, candidates: [], candidateIndex: 0 },
+            String(assetId),
+            { url: "", state: "failed" as const },
           ] as const;
         })
       );
@@ -270,13 +270,22 @@ export default function PlatformOperatorApplicationsPage() {
 
   const qualificationItems = detail
     ? [
-        { label: "营业执照", url: detail.business_license_url },
-        { label: "身份证正面", url: detail.id_card_front_url },
-        { label: "身份证背面", url: detail.id_card_back_url },
+        {
+          label: "营业执照",
+          assetId: detail.business_license_asset_id,
+        },
+        {
+          label: "身份证正面",
+          assetId: detail.id_card_front_asset_id,
+        },
+        {
+          label: "身份证背面",
+          assetId: detail.id_card_back_asset_id,
+        },
       ]
     : [];
 
-  const missingQualificationCount = qualificationItems.filter((item) => !item.url).length;
+  const missingQualificationCount = qualificationItems.filter((item) => !item.assetId).length;
 
   return (
     <PageShell>
@@ -509,41 +518,43 @@ export default function PlatformOperatorApplicationsPage() {
                     </CardHeader>
                     <CardContent className="space-y-3">
                       {qualificationItems.map((item) => {
-                        const asset = item.url ? signedAssetUrls[item.url] : undefined;
+                        const assetKey = item.assetId ? String(item.assetId) : "";
+                        const asset = assetKey ? signedAssetUrls[assetKey] : undefined;
+                        const hasMaterial = !!item.assetId;
 
                         return (
                           <div
                             key={item.label}
                             className={`space-y-3 rounded-md border p-3 ${
-                              item.url ? "bg-background" : "border-destructive/50 bg-destructive/5"
+                              hasMaterial ? "bg-background" : "border-destructive/50 bg-destructive/5"
                             }`}
                           >
                             <div className="flex items-center justify-between">
                               <div className="flex items-center gap-2 text-sm">
                                 <FileText className="h-4 w-4 text-muted-foreground" />
                                 <span>{item.label}</span>
-                                {item.url ? (
+                                {hasMaterial ? (
                                   <Badge variant="secondary">已上传</Badge>
                                 ) : (
                                   <Badge variant="destructive">缺失</Badge>
                                 )}
                               </div>
-                              {item.url && asset?.state === "ready" && asset.url ? (
+                              {hasMaterial && asset?.state === "ready" && asset.url ? (
                                 <Button variant="outline" size="sm" asChild>
                                   <a href={asset.url} target="_blank" rel="noreferrer">
                                     <ExternalLink className="mr-1 h-4 w-4" /> 查看原图
                                   </a>
                                 </Button>
-                              ) : item.url && asset?.state === "failed" ? (
-                                <span className="text-xs text-destructive">签名/加载失败</span>
-                              ) : item.url ? (
+                              ) : hasMaterial && asset?.state === "failed" ? (
+                                <span className="text-xs text-destructive">私有访问地址生成失败</span>
+                              ) : hasMaterial ? (
                                 <span className="text-xs text-muted-foreground">链接生成中</span>
                               ) : (
                                 <span className="text-xs text-muted-foreground">无文件</span>
                               )}
                             </div>
 
-                            {item.url ? (
+                            {hasMaterial ? (
                               asset?.state === "ready" && asset.url ? (
                                 <div className="overflow-hidden rounded-md border bg-muted/30">
                                   <Image
@@ -554,36 +565,17 @@ export default function PlatformOperatorApplicationsPage() {
                                     unoptimized
                                     className="h-52 w-full object-contain"
                                     onError={() => {
-                                      const key = item.url;
-                                      if (!key) return;
-                                      setSignedAssetUrls((prev) => {
-                                        const current = prev[key];
-                                        if (!current || current.state === "failed") return prev;
-
-                                        const nextIndex = current.candidateIndex + 1;
-                                        if (nextIndex < current.candidates.length) {
-                                          return {
-                                            ...prev,
-                                            [key]: {
-                                              ...current,
-                                              url: current.candidates[nextIndex],
-                                              candidateIndex: nextIndex,
-                                              state: "ready",
-                                            },
-                                          };
-                                        }
-
-                                        return {
-                                          ...prev,
-                                          [key]: { ...current, state: "failed" },
-                                        };
-                                      });
+                                      if (!assetKey) return;
+                                      setSignedAssetUrls((prev) => ({
+                                        ...prev,
+                                        [assetKey]: { ...(prev[assetKey] ?? { url: "" }), state: "failed" },
+                                      }));
                                     }}
                                   />
                                 </div>
                               ) : asset?.state === "failed" ? (
                                 <div className="flex h-52 items-center justify-center rounded-md border border-dashed border-destructive/50 px-4 text-xs text-destructive">
-                                  图片加载失败，请检查签名权限或文件是否存在
+                                  图片加载失败，请检查私有访问权限或文件是否存在
                                 </div>
                               ) : (
                                 <Skeleton className="h-52 w-full" />

@@ -19,6 +19,14 @@ import (
 // ptr64 returns a pointer to the given int64 value.
 func ptr64(v int64) *int64 { return &v }
 
+func approvedAsset(id int64, objectKey string) db.MediaAsset {
+	return db.MediaAsset{ID: id, ObjectKey: objectKey, Visibility: string(media.VisibilityPublic), ModerationStatus: "approved"}
+}
+
+func approvedAssetRow(id int64, objectKey string) db.ListMediaAssetsByIDsRow {
+	return db.ListMediaAssetsByIDsRow{ID: id, ObjectKey: objectKey, Visibility: string(media.VisibilityPublic), ModerationStatus: "approved"}
+}
+
 // ==================== batchPublicImageURLs ====================
 
 func TestBatchPublicImageURLs(t *testing.T) {
@@ -42,8 +50,8 @@ func TestBatchPublicImageURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{42})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 42, ObjectKey: "merchant/dish/1/20260318/img.jpg"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(42, "merchant/dish/1/20260318/img.jpg"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -63,8 +71,8 @@ func TestBatchPublicImageURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{5})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 5, ObjectKey: "merchant/logo/1/20260318/logo.png"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(5, "merchant/logo/1/20260318/logo.png"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -82,10 +90,10 @@ func TestBatchPublicImageURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{1, 2, 3})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 1, ObjectKey: "merchant/dish/1/a.jpg"},
-				{ID: 2, ObjectKey: "merchant/dish/1/b.jpg"},
-				{ID: 3, ObjectKey: "merchant/dish/1/c.jpg"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(1, "merchant/dish/1/a.jpg"),
+				approvedAssetRow(2, "merchant/dish/1/b.jpg"),
+				approvedAssetRow(3, "merchant/dish/1/c.jpg"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -113,6 +121,46 @@ func TestBatchPublicImageURLs(t *testing.T) {
 		result := server.batchPublicImageURLs(context.Background(), []int64{99}, media.VariantCard)
 		require.Empty(t, result)
 	})
+
+	t.Run("non-approved assets are filtered out", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		store.EXPECT().
+			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{7, 8})).
+			Times(1).
+			Return([]db.ListMediaAssetsByIDsRow{
+				{ID: 7, ObjectKey: "merchant/dish/1/pending.jpg", Visibility: string(media.VisibilityPublic), ModerationStatus: "pending"},
+				{ID: 8, ObjectKey: "merchant/dish/1/rejected.jpg", Visibility: string(media.VisibilityPublic), ModerationStatus: "rejected"},
+			}, nil)
+
+		server, _ := newTestServerForMedia(t, store)
+
+		result := server.batchPublicImageURLs(context.Background(), []int64{7, 8}, media.VariantCard)
+		require.Empty(t, result)
+	})
+
+	t.Run("approved private assets are filtered out", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		store.EXPECT().
+			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{9})).
+			Times(1).
+			Return([]db.ListMediaAssetsByIDsRow{{
+				ID:               9,
+				ObjectKey:        "id_card/front/1/20260318/secret.jpg",
+				Visibility:       string(media.VisibilityPrivate),
+				ModerationStatus: "approved",
+			}}, nil)
+
+		server, _ := newTestServerForMedia(t, store)
+
+		result := server.batchPublicImageURLs(context.Background(), []int64{9}, media.VariantCard)
+		require.Empty(t, result)
+	})
 }
 
 // ==================== publicImageURL ====================
@@ -137,7 +185,7 @@ func TestPublicImageURL(t *testing.T) {
 		store.EXPECT().
 			GetMediaAssetByID(gomock.Any(), int64(7)).
 			Times(1).
-			Return(db.MediaAsset{ID: 7, ObjectKey: "merchant/dish/1/20260318/d.jpg"}, nil)
+			Return(approvedAsset(7, "merchant/dish/1/20260318/d.jpg"), nil)
 
 		server, _ := newTestServerForMedia(t, store)
 
@@ -160,6 +208,76 @@ func TestPublicImageURL(t *testing.T) {
 
 		url := server.publicImageURL(context.Background(), ptr64(999), media.VariantCard)
 		require.Empty(t, url)
+	})
+
+	t.Run("non-approved asset returns empty string", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		store.EXPECT().
+			GetMediaAssetByID(gomock.Any(), int64(8)).
+			Times(1).
+			Return(db.MediaAsset{ID: 8, ObjectKey: "merchant/dish/1/20260318/p.jpg", ModerationStatus: "pending"}, nil)
+
+		server, _ := newTestServerForMedia(t, store)
+
+		url := server.publicImageURL(context.Background(), ptr64(8), media.VariantCard)
+		require.Empty(t, url)
+	})
+
+	t.Run("approved private asset returns empty string", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		store.EXPECT().
+			GetMediaAssetByID(gomock.Any(), int64(10)).
+			Times(1).
+			Return(db.MediaAsset{ID: 10, ObjectKey: "id_card/front/1/20260318/private.jpg", Visibility: string(media.VisibilityPrivate), ModerationStatus: "approved"}, nil)
+
+		server, _ := newTestServerForMedia(t, store)
+
+		url := server.publicImageURL(context.Background(), ptr64(10), media.VariantCard)
+		require.Empty(t, url)
+	})
+}
+
+func TestResolvePublicUploadURLForClient(t *testing.T) {
+	t.Run("oss mode rewrites legacy public upload path to CDN URL", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		server, _ := newTestServerForMedia(t, store)
+		server.config.FileStorageProvider = "oss"
+
+		url := server.resolvePublicUploadURLForClient("uploads/merchants/12/storefront/cover.jpg")
+		require.Contains(t, url, "cdn.test.example.com/uploads/merchants/12/storefront/cover.jpg")
+	})
+
+	t.Run("oss mode rejects non-public upload path", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		server, _ := newTestServerForMedia(t, store)
+		server.config.FileStorageProvider = "oss"
+
+		url := server.resolvePublicUploadURLForClient("uploads/operators/7/license/front.jpg")
+		require.Empty(t, url)
+	})
+
+	t.Run("local mode rewrites public upload path to dev route", func(t *testing.T) {
+		ctrl := gomock.NewController(t)
+		defer ctrl.Finish()
+
+		store := mockdb.NewMockStore(ctrl)
+		server, _ := newTestServerForMedia(t, store)
+		server.config.FileStorageProvider = "local"
+
+		url := server.resolvePublicUploadURLForClient("uploads/public/merchant/logo.jpg")
+		require.Equal(t, "/dev/uploads/public/merchant/logo.jpg", url)
 	})
 }
 
@@ -191,9 +309,9 @@ func TestEnrichCartImageURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{10, 20})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 10, ObjectKey: "merchant/dish/1/20260318/a.jpg"},
-				{ID: 20, ObjectKey: "merchant/dish/1/20260318/b.jpg"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(10, "merchant/dish/1/20260318/a.jpg"),
+				approvedAssetRow(20, "merchant/dish/1/20260318/b.jpg"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -241,9 +359,9 @@ func TestEnrichSearchDishURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{1, 2})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 1, ObjectKey: "merchant/dish/1/20260318/img.jpg"},
-				{ID: 2, ObjectKey: "merchant/logo/1/20260318/logo.jpg"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(1, "merchant/dish/1/20260318/img.jpg"),
+				approvedAssetRow(2, "merchant/logo/1/20260318/logo.jpg"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -266,10 +384,10 @@ func TestEnrichSearchDishURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{10, 20, 30})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 10, ObjectKey: "d/10.jpg"},
-				{ID: 20, ObjectKey: "d/20.jpg"},
-				{ID: 30, ObjectKey: "d/30.jpg"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(10, "d/10.jpg"),
+				approvedAssetRow(20, "d/20.jpg"),
+				approvedAssetRow(30, "d/30.jpg"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -312,8 +430,8 @@ func TestEnrichSearchMerchantURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{55})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 55, ObjectKey: "merchant/logo/1/20260318/logo.png"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(55, "merchant/logo/1/20260318/logo.png"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -339,9 +457,9 @@ func TestEnrichSearchComboURLs(t *testing.T) {
 		store.EXPECT().
 			ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{100, 200})).
 			Times(1).
-			Return([]db.MediaAsset{
-				{ID: 100, ObjectKey: "combo/100.jpg"},
-				{ID: 200, ObjectKey: "merchant/200.jpg"},
+			Return([]db.ListMediaAssetsByIDsRow{
+				approvedAssetRow(100, "combo/100.jpg"),
+				approvedAssetRow(200, "merchant/200.jpg"),
 			}, nil)
 
 		server, _ := newTestServerForMedia(t, store)
@@ -382,7 +500,7 @@ func TestListDishesByMerchantWithImageURLs(t *testing.T) {
 	store.EXPECT().
 		ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{assetID})).
 		Times(1).
-		Return([]db.MediaAsset{{ID: assetID, ObjectKey: "merchant/dish/1/20260318/t.jpg"}}, nil)
+		Return([]db.ListMediaAssetsByIDsRow{approvedAssetRow(assetID, "merchant/dish/1/20260318/t.jpg")}, nil)
 
 	server, _ := newTestServerForMedia(t, store)
 	recorder := httptest.NewRecorder()
@@ -428,7 +546,7 @@ func TestGetDishWithImageURL(t *testing.T) {
 	store.EXPECT().
 		GetMediaAssetByID(gomock.Any(), gomock.Eq(assetID)).
 		Times(1).
-		Return(db.MediaAsset{ID: assetID, ObjectKey: "merchant/dish/1/20260318/get.jpg"}, nil)
+		Return(approvedAsset(assetID, "merchant/dish/1/20260318/get.jpg"), nil)
 
 	server, _ := newTestServerForMedia(t, store)
 	recorder := httptest.NewRecorder()

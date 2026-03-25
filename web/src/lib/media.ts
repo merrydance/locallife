@@ -209,15 +209,14 @@ export async function uploadMedia(
 const PLACEHOLDER = "/assets/placeholder.png";
 
 /**
- * 兼容旧的 image_url 字符串（以 uploads/ 或 http 开头）的 URL 规范化。
- * 新格式 CDN URL（http/https）直接透传；旧格式补全为绝对路径。
+ * 公共展示图片 URL 解析。
+ * 仅接受后端已返回的绝对 URL，或浏览器本地预览 URL。
+ * 不再为旧 uploads 相对路径补全访问地址。
  */
 export function getMediaDisplayUrl(url?: string): string {
   if (!url) return PLACEHOLDER;
-  if (url.startsWith("http")) return url;
-  if (url.startsWith("uploads/") || url.startsWith("/uploads/")) {
-    return url.startsWith("/") ? url : `/${url}`;
-  }
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  if (url.startsWith("data:") || url.startsWith("blob:")) return url;
   return PLACEHOLDER;
 }
 

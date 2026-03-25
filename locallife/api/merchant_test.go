@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"testing"
 	"time"
 
@@ -314,4 +315,69 @@ func TestGetCurrentMerchantAPI_WithLogoURL(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Contains(t, resp.LogoURL, "https://cdn.test.example.com", "logo_url 应指向 CDN 域名")
 	require.Contains(t, resp.LogoURL, logoAsset.ObjectKey, "logo_url 应包含 object key")
+}
+
+func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+	storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/cover.jpg"})
+	require.NoError(t, err)
+	application := randomMerchantAppDraft(merchant.OwnerUserID)
+	application.StorefrontImages = storefrontImages
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), merchant.OwnerUserID).
+		Times(1).
+		Return(application, nil)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.CoverImage)
+	require.Equal(t, "/dev/uploads/merchants/12/storefront/cover.jpg", *resp.CoverImage)
 }

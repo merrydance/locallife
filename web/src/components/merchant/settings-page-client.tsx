@@ -28,10 +28,9 @@ import {
   apiPost, 
   apiPatch,
   apiPut, 
-  apiDelete, 
-  getMediaUrl
+  apiDelete
 } from "@/lib/api";
-import { uploadMedia } from "@/lib/media";
+import { getMediaDisplayUrl, uploadMedia } from "@/lib/media";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
@@ -590,7 +589,7 @@ export function MerchantSettingsPageClient() {
                     <div className="relative w-32 h-32 rounded-xl border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden group">
                       {profile?.logo_url ? (
                         <Image 
-                          src={getMediaUrl(profile.logo_url)} 
+                          src={getMediaDisplayUrl(profile.logo_url)} 
                           alt="店铺 Logo" 
                           width={128}
                           height={128}

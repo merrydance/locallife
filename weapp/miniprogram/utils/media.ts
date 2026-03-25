@@ -41,23 +41,11 @@ export interface MediaUploadResult {
 
 // ==================== 内部工具 ====================
 
-/** 将十六进制 SHA-256 转换为 base64 */
-function hexToBase64(hex: string): string {
-  const bytes = new Uint8Array(hex.length / 2)
-  for (let i = 0; i < hex.length; i += 2) {
-    bytes[i / 2] = parseInt(hex.substr(i, 2), 16)
-  }
-  let binary = ''
-  for (let i = 0; i < bytes.byteLength; i++) {
-    binary += String.fromCharCode(bytes[i])
-  }
-  return btoa(binary)
-}
 
 /** 获取临时文件的 SHA-256（base64）及文件大小 */
 function getFileSHA256AndSize(
   filePath: string
-): Promise<{ sha256Base64: string, size: number }> {
+): Promise<{ checksumSha256: string, size: number }> {
   return new Promise((resolve) => {
     let size = 0
     try {
@@ -78,8 +66,8 @@ function getFileSHA256AndSize(
     (wx as WxWithFileInfo).getFileInfo({
       filePath,
       digestAlgorithm: 'sha256',
-      success: (res) => resolve({ sha256Base64: hexToBase64(res.digest), size }),
-      fail: () => resolve({ sha256Base64: '', size })
+      success: (res) => resolve({ checksumSha256: res.digest, size }),
+      fail: () => resolve({ checksumSha256: '', size })
     })
   })
 }
@@ -266,7 +254,7 @@ export async function uploadMedia(
   const compress = options.compress !== false
 
   const uploadPath = await compressIfNeeded(filePath, compress)
-  const { sha256Base64, size } = await getFileSHA256AndSize(uploadPath)
+  const { checksumSha256, size } = await getFileSHA256AndSize(uploadPath)
 
   logger.debug('uploadMedia: 开始创建上传会话', { options }, 'uploadMedia')
 
@@ -275,7 +263,7 @@ export async function uploadMedia(
     media_category: options.mediaCategory,
     content_type: contentType,
     content_length: size,
-    checksum_sha256: sha256Base64
+    checksum_sha256: checksumSha256
   })
 
   await ossDirectUpload(session.upload_host, session.form, uploadPath)
@@ -348,10 +336,12 @@ export function postFormData<T = unknown>(
 /**
  * 规范化媒体 URL：
  *   - http/https URL 原样返回
- *   - 旧式相对路径 (uploads/...) 添加 API_BASE 前缀
+ *   - 本地临时文件路径原样返回
+ *   - 不再为旧式 uploads 相对路径补全 API_BASE
  */
 export function getMediaDisplayUrl(url?: string): string {
   if (!url) return ''
   if (url.startsWith('http://') || url.startsWith('https://')) return url
-  return `${API_BASE}/${url.replace(/^\//, '')}`
+  if (url.includes('://')) return url
+  return ''
 }

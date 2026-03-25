@@ -25,7 +25,6 @@ type createTableRequest struct {
 	Capacity     int16   `json:"capacity" binding:"required,min=1,max=100"`
 	Description  *string `json:"description" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
-	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
 	AccessCode   *string `json:"access_code,omitempty" binding:"omitempty,min=4,max=32"`
 	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
 }
@@ -72,7 +71,7 @@ type tableImagesListResponse struct {
 	Images []tableImageResponse `json:"images"`
 }
 
-func newTableResponse(t db.Table) tableResponse {
+func (server *Server) newTableResponse(t db.Table) tableResponse {
 	resp := tableResponse{
 		ID:         t.ID,
 		MerchantID: t.MerchantID,
@@ -90,7 +89,7 @@ func newTableResponse(t db.Table) tableResponse {
 		resp.MinimumSpend = &t.MinimumSpend.Int64
 	}
 	if t.QrCodeUrl.Valid {
-		qrCodeURL := normalizeUploadURLForClient(t.QrCodeUrl.String)
+		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
 		resp.QrCodeUrl = &qrCodeURL
 	}
 	if t.CurrentReservationID.Valid {
@@ -166,9 +165,6 @@ func (server *Server) createTable(ctx *gin.Context) {
 	if req.MinimumSpend != nil {
 		arg.MinimumSpend = pgtype.Int8{Int64: *req.MinimumSpend, Valid: true}
 	}
-	if req.QrCodeUrl != nil {
-		arg.QrCodeUrl = pgtype.Text{String: *req.QrCodeUrl, Valid: true}
-	}
 	if req.AccessCode != nil {
 		hashedCode, err := util.HashPassword(*req.AccessCode)
 		if err != nil {
@@ -198,7 +194,7 @@ func (server *Server) createTable(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusCreated, newTableResponse(table))
+	ctx.JSON(http.StatusCreated, server.newTableResponse(table))
 }
 
 type getTableRequest struct {
@@ -255,7 +251,7 @@ func (server *Server) getTable(ctx *gin.Context) {
 	}
 
 	// 获取标签
-	resp := newTableResponse(table)
+	resp := server.newTableResponse(table)
 	tags, err := server.store.ListTableTags(ctx, table.ID)
 	if err == nil && len(tags) > 0 {
 		tableTagInfos := make([]tableTagInfo, len(tags))
@@ -340,7 +336,7 @@ func (server *Server) listTables(ctx *gin.Context) {
 		Total:  int64(len(tables)),
 	}
 	for i, t := range tables {
-		resp.Tables[i] = newTableResponse(t)
+		resp.Tables[i] = server.newTableResponse(t)
 
 		// 加载每个桌台的标签
 		tags, err := server.store.ListTableTags(ctx, t.ID)
@@ -514,7 +510,6 @@ type updateTableRequest struct {
 	Capacity     *int16  `json:"capacity,omitempty" binding:"omitempty,min=1,max=100"`
 	Description  *string `json:"description,omitempty" binding:"omitempty,max=500"`
 	MinimumSpend *int64  `json:"minimum_spend,omitempty" binding:"omitempty,min=0,max=100000000"`
-	QrCodeUrl    *string `json:"qr_code_url,omitempty" binding:"omitempty,url,max=500"`
 	AccessCode   *string `json:"access_code,omitempty" binding:"omitempty,min=4,max=32"`
 	Status       *string `json:"status,omitempty" binding:"omitempty,oneof=available occupied disabled"`
 	TagIds       []int64 `json:"tag_ids,omitempty"` // 标签ID列表
@@ -598,9 +593,6 @@ func (server *Server) updateTable(ctx *gin.Context) {
 	if req.MinimumSpend != nil {
 		arg.MinimumSpend = pgtype.Int8{Int64: *req.MinimumSpend, Valid: true}
 	}
-	if req.QrCodeUrl != nil {
-		arg.QrCodeUrl = pgtype.Text{String: *req.QrCodeUrl, Valid: true}
-	}
 	if req.AccessCode != nil {
 		hashedCode, err := util.HashPassword(*req.AccessCode)
 		if err != nil {
@@ -641,7 +633,7 @@ func (server *Server) updateTable(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newTableResponse(updatedTable))
+	ctx.JSON(http.StatusOK, server.newTableResponse(updatedTable))
 }
 
 type updateTableStatusRequest struct {
@@ -734,7 +726,7 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 							Timestamp: time.Now(),
 						})
 					}
-					ctx.JSON(http.StatusOK, newTableResponse(updatedTable))
+					ctx.JSON(http.StatusOK, server.newTableResponse(updatedTable))
 					return
 				}
 			}
@@ -779,7 +771,7 @@ func (server *Server) updateTableStatus(ctx *gin.Context) {
 		})
 	}
 
-	ctx.JSON(http.StatusOK, newTableResponse(updatedTable))
+	ctx.JSON(http.StatusOK, server.newTableResponse(updatedTable))
 }
 
 type deleteTableRequest struct {

@@ -81,6 +81,7 @@ type Server struct {
 	orderQuerySvc      logic.OrderQueryService
 	paymentFacade      logic.PaymentFacade
 	refundOrchestrator logic.RefundOrchestrator
+	mediaStorage       media.ObjectStorage
 	router             *gin.Engine
 }
 
@@ -316,6 +317,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		mediaStorage = media.NewLocalStorage(config.ExternalBaseURL, "uploads/dev")
 		log.Info().Msg("✅ Media storage initialized with local fallback")
 	}
+	server.mediaStorage = mediaStorage
 	server.mediaRegistry = media.NewRegistry(store, mediaStorage)
 	server.mediaResolver = media.NewURLResolver(media.ResolverConfig{
 		CDNPublicBaseURL: config.CDNPublicBaseURL,
@@ -401,11 +403,10 @@ func (server *Server) setupRouter() {
 	router.MaxMultipartMemory = 8 << 20 // 8 MiB
 
 	// 🖼️ 上传文件访问（仅本地开发模式启用）
-	// 生产环境使用 OSS presigned URL，此路由无需开放。
-	// 安全策略：证件照/营业执照等敏感图片不允许匿名直出；
-	// 通过 /v1/uploads/sign 生成短期签名URL，再由 /uploads/*filepath 校验签名后提供下载。
+	// 生产环境使用对象存储直链/短期访问地址，此路由无需开放。
+	// local 模式下仅通过 dev-only 路由暴露调试读路径，不再复用 /uploads/* 公共契约。
 	if server.config.FileStorageProvider == "local" {
-		router.GET("/uploads/*filepath", server.getSignedUpload)
+		router.GET(devUploadsRoutePrefix+"*filepath", server.serveDevUploadFile)
 	}
 
 	// 📝 注册自定义验证器
@@ -482,6 +483,8 @@ func (server *Server) setupRouter() {
 	// 微信支付回调路由（无需认证，微信服务器调用）
 	webhooksGroup := v1.Group("/webhooks")
 	{
+		webhooksGroup.GET("/wechat-miniprogram/media-check", server.verifyMiniProgramMediaCheckWebhook)
+		webhooksGroup.POST("/wechat-miniprogram/media-check", server.handleMiniProgramMediaCheckNotify)
 		// 小程序直连支付回调
 		webhooksGroup.POST("/wechat-pay/notify", server.handlePaymentNotify)
 		webhooksGroup.POST("/wechat-pay/refund-notify", server.handleRefundNotify)
@@ -499,9 +502,6 @@ func (server *Server) setupRouter() {
 	// 需要认证的路由
 	authGroup := v1.Group("")
 	authGroup.Use(authMiddleware(server.tokenMaker))
-	if server.config.FileStorageProvider == "local" {
-		authGroup.POST("/uploads/sign", server.signUploadURL)
-	}
 	authClientLogGroup := authGroup.Group("/logs")
 	if rateLimiter != nil {
 		authClientLogGroup.Use(rateLimiter.SensitiveAPIMiddleware(20)) // 客户端错误上报限流：每分钟 20 次/客户端

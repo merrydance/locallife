@@ -455,7 +455,7 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 		var images []string
 		if json.Unmarshal(updatedApp.StorefrontImages, &images) == nil {
 			for i, img := range images {
-				images[i] = normalizeUploadURLForClient(img)
+				images[i] = server.resolvePublicUploadURLForClient(img)
 			}
 			resp.StorefrontImages = images
 		}
@@ -464,7 +464,7 @@ func (server *Server) updateCurrentMerchantShopImages(ctx *gin.Context) {
 		var images []string
 		if json.Unmarshal(updatedApp.EnvironmentImages, &images) == nil {
 			for i, img := range images {
-				images[i] = normalizeUploadURLForClient(img)
+				images[i] = server.resolvePublicUploadURLForClient(img)
 			}
 			resp.EnvironmentImages = images
 		}
@@ -1157,7 +1157,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		if appErr == nil && len(application.StorefrontImages) > 0 {
 			var storefrontImages []string
 			if json.Unmarshal(application.StorefrontImages, &storefrontImages) == nil && len(storefrontImages) > 0 {
-				url := storefrontImages[0]
+				url := server.resolvePublicUploadURLForClient(storefrontImages[0])
 				if url != "" {
 					resp.CoverImage = &url
 				}

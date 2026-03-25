@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"io"
 	"time"
 )
 
@@ -44,6 +45,9 @@ type ObjectStorage interface {
 
 	// DeleteObject 删除指定对象。通常由异步任务调用。
 	DeleteObject(ctx context.Context, bucket, objectKey string) error
+
+	// PutObject 由服务端直接写入对象存储，适用于二维码等后端生成文件。
+	PutObject(ctx context.Context, bucket, objectKey string, contentType string, body io.Reader, contentLength int64) error
 
 	// PublicBucket 返回公共桶名称。
 	PublicBucket() string

@@ -56,8 +56,8 @@ Component({
                 return
             }
 
-            // 兜底：对于未签名的 uploads 相对路径，不直接渲染，避免组件相对路径误加载
-            if (next.startsWith('uploads/') || next.startsWith('/uploads/')) {
+            // 兜底：对于未签名的旧 uploads 路径或 dev-only 公共调试路径，不直接渲染，避免误把私有材料当公开图展示
+            if (next.startsWith('uploads/') || next.startsWith('/uploads/') || next.startsWith('/dev/uploads/')) {
                 this.setData({ displayValue: '' })
                 return
             }

@@ -100,28 +100,28 @@
 公共图片示例：
 
 ```text
-uploads/public/merchants/{merchant_id}/logo/{sha256}.jpg
-uploads/public/merchants/{merchant_id}/storefront/{sha256}.jpg
-uploads/public/merchants/{merchant_id}/environment/{sha256}.jpg
-uploads/public/merchants/{merchant_id}/dishes/{sha256}.jpg
-uploads/public/merchants/{merchant_id}/tables/{sha256}.jpg
-uploads/public/reviews/{user_id}/{sha256}.jpg
-uploads/public/avatars/{user_id}/{sha256}.jpg
-uploads/public/qrcodes/{merchant_id}/{sha256}.png
+merchant/logo/{merchant_id}/{sha256}.jpg
+merchant/storefront/{merchant_id}/{sha256}.jpg
+merchant/environment/{merchant_id}/{sha256}.jpg
+merchant/dish/{merchant_id}/{sha256}.jpg
+merchant/table/{merchant_id}/{sha256}.jpg
+review/{user_id}/{sha256}.jpg
+avatar/{user_id}/{sha256}.jpg
+merchant/table/{merchant_id}/qrcodes/{sha256}.png
 ```
 
 私有图片示例：
 
 ```text
-uploads/private/merchants/{user_id}/business_license/{sha256}.jpg
-uploads/private/merchants/{user_id}/food_permit/{sha256}.jpg
-uploads/private/merchants/{user_id}/id_front/{sha256}.jpg
-uploads/private/merchants/{user_id}/id_back/{sha256}.jpg
-uploads/private/riders/{user_id}/idcard/{sha256}.jpg
-uploads/private/riders/{user_id}/healthcert/{sha256}.jpg
-uploads/private/operators/{user_id}/license/{sha256}.jpg
-uploads/private/operators/{user_id}/idcard_front/{sha256}.jpg
-uploads/private/operators/{user_id}/idcard_back/{sha256}.jpg
+merchant/document/{user_id}/business_license/{sha256}.jpg
+merchant/document/{user_id}/food_permit/{sha256}.jpg
+merchant/document/{user_id}/id_front/{sha256}.jpg
+merchant/document/{user_id}/id_back/{sha256}.jpg
+rider/document/{user_id}/idcard/{sha256}.jpg
+rider/document/{user_id}/healthcert/{sha256}.jpg
+operator/document/{user_id}/license/{sha256}.jpg
+operator/document/{user_id}/idcard_front/{sha256}.jpg
+operator/document/{user_id}/idcard_back/{sha256}.jpg
 ```
 
 ### 4.3 命名规则
@@ -390,7 +390,7 @@ POST /v1/media/upload-sessions
 ```json
 {
   "upload_id": "up_01J...",
-  "object_key": "uploads/public/merchants/1001/dishes/abc123.jpg",
+  "object_key": "merchant/dish/1001/abc123.jpg",
   "bucket_type": "public",
   "upload_host": "https://oss-direct.example.com",
   "expire_at": "2026-03-18T10:00:00Z",
@@ -398,7 +398,7 @@ POST /v1/media/upload-sessions
     "policy": "...",
     "signature": "...",
     "access_key_id": "...",
-    "dir": "uploads/public/merchants/1001/dishes/"
+    "dir": "merchant/dish/1001/"
   }
 }
 ```
@@ -422,7 +422,7 @@ POST /v1/media/complete
 ```json
 {
   "upload_id": "up_01J...",
-  "object_key": "uploads/public/merchants/1001/dishes/abc123.jpg",
+  "object_key": "merchant/dish/1001/abc123.jpg",
   "etag": "...",
   "bind": {
     "resource_type": "dish",

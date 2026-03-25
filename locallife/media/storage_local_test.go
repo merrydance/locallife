@@ -83,7 +83,7 @@ func TestLocalStorage_CreatePrivateDownloadURL(t *testing.T) {
 	ls := NewLocalStorage("http://localhost:8080", "/tmp/test")
 	url, err := ls.CreatePrivateDownloadURL(context.Background(), "local-private", "id_card/front/1/file.jpg", 5*time.Minute)
 	require.NoError(t, err)
-	require.Equal(t, "http://localhost:8080/uploads/id_card/front/1/file.jpg", url)
+	require.Equal(t, "http://localhost:8080/dev/uploads/id_card/front/1/file.jpg", url)
 }
 
 func TestLocalStorage_DevUploadHandler(t *testing.T) {

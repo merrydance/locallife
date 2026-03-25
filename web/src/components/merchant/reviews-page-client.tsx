@@ -33,7 +33,8 @@ import {
   TabsTrigger 
 } from "@/components/ui/tabs";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
-import { apiGet, apiPost, getMediaUrl } from "@/lib/api";
+import { apiGet, apiPost } from "@/lib/api";
+import { getMediaDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
 import type { ReviewResponse, ReviewListResponse } from "@/types/review";
@@ -236,7 +237,7 @@ export function ReviewsPageClient() {
                                 className="relative w-24 h-24 rounded-2xl overflow-hidden border-2 border-white shadow-sm ring-1 ring-slate-100 cursor-zoom-in group/img"
                               >
                                 <Image 
-                                  src={getMediaUrl(url)} 
+                                  src={getMediaDisplayUrl(url)} 
                                   alt={`评价图片 ${index + 1}`} 
                                   width={96}
                                   height={96}

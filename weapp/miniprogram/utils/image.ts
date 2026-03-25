@@ -161,19 +161,22 @@ import { API_BASE } from './request'
 
 /**
  * 获取公共图片完整URL
- * 如果是相对路径（以/开头），则拼接API_BASE
+ * 如果是相对路径（以/开头），则拼接 API_BASE。
+ * local 开发模式下，后端公共素材会返回 /dev/uploads/...。
  */
 export function getPublicImageUrl(path: string | undefined | null): string {
   if (!path) return ''
   if (/^https?:\/\//.test(path)) return path
   if (path.startsWith('data:')) return path
 
+  if (path.startsWith('/uploads/') || path.startsWith('uploads/')) {
+    return ''
+  }
+
   if (path.startsWith('/')) {
     const baseUrl = API_BASE.endsWith('/') ? API_BASE.slice(0, -1) : API_BASE
     return `${baseUrl}${path}`
   }
 
-  // 处理没有领先斜杠的相对路径 (如 "uploads/...")
-  const baseUrl = API_BASE.endsWith('/') ? API_BASE : `${API_BASE}/`
-  return `${baseUrl}${path}`
+  return ''
 }

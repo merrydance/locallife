@@ -371,188 +371,35 @@ export function getMediaUrl(path?: string) {
   if (path.startsWith("http")) return path;
   if (path.startsWith("data:")) return path;
 
-  if (path.startsWith("/uploads/")) {
+  if (path.startsWith("/dev/uploads/")) {
     return path;
   }
 
-  if (path.startsWith("uploads/")) {
-    return "/" + path;
+  if (path.startsWith("/uploads/") || path.startsWith("uploads/")) {
+    return "";
   }
 
   return path;
 }
+const privateAccessCache = new Map<number, { url: string; expireAt: number }>();
 
-const protectedMediaUrlCache = new Map<string, string>();
-const protectedMediaCandidatesCache = new Map<string, string[]>();
+export async function getPrivateMediaUrl(mediaId: number): Promise<string> {
+  if (!mediaId) return "";
 
-function buildSignedMediaUrlCandidates(rawUrl: string): string[] {
-  if (!rawUrl) return [];
-
-  const secureCandidates: string[] = [];
-  const fallbackCandidates: string[] = [];
-  const candidates: string[] = [];
-  const pushCandidate = (value: string) => {
-    if (!value) return;
-    if (!fallbackCandidates.includes(value)) {
-      fallbackCandidates.push(value);
-    }
-  };
-
-  const pushSecureCandidate = (value: string) => {
-    if (!value) return;
-    if (!secureCandidates.includes(value)) {
-      secureCandidates.push(value);
-    }
-  };
-
-  pushCandidate(rawUrl);
-
-  if (typeof window === "undefined") {
-    return candidates;
+  const now = Math.floor(Date.now() / 1000);
+  const cached = privateAccessCache.get(mediaId);
+  if (cached && cached.expireAt > now + 60) {
+    return cached.url;
   }
 
-  try {
-    const parsed = new URL(rawUrl, window.location.origin);
-    if (parsed.protocol === "http:") {
-      pushSecureCandidate(`https://${parsed.host}${parsed.pathname}${parsed.search}`);
-    }
-    if (parsed.pathname.startsWith("/uploads/")) {
-      const pathWithQuery = `${parsed.pathname}${parsed.search}`;
-      if (typeof window !== "undefined" && window.location.protocol === "https:") {
-        pushSecureCandidate(`https://${window.location.host}${pathWithQuery}`);
-      }
-      pushCandidate(pathWithQuery);
-      pushCandidate(`${window.location.origin}${pathWithQuery}`);
+  const response = await apiPost<{ download_url: string; expire_at: string }>(
+    "/media/private-access",
+    { media_id: mediaId }
+  );
 
-      try {
-        const apiBaseUrl = new URL(API_BASE, window.location.origin);
-        if (apiBaseUrl.protocol === "https:") {
-          pushSecureCandidate(`${apiBaseUrl.origin}${pathWithQuery}`);
-        }
-        pushCandidate(`${apiBaseUrl.origin}${pathWithQuery}`);
-      } catch {
-        // ignore invalid API_BASE URL parsing
-      }
-    }
-  } catch {
-    // keep original only
-  }
-
-  for (const value of secureCandidates) {
-    if (!candidates.includes(value)) {
-      candidates.push(value);
-    }
-  }
-
-  for (const value of fallbackCandidates) {
-    if (!candidates.includes(value)) {
-      candidates.push(value);
-    }
-  }
-
-  return candidates;
-}
-
-function normalizeUploadPathForSign(path?: string) {
-  if (!path) return "";
-  const trimmed = path.trim();
-  if (!trimmed) return "";
-  if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
-    try {
-      const parsed = new URL(trimmed);
-      if (parsed.pathname.startsWith("/uploads/")) {
-        return parsed.pathname.slice(1);
-      }
-      const uploadsIndex = parsed.pathname.indexOf("/uploads/");
-      if (uploadsIndex >= 0) {
-        return parsed.pathname.slice(uploadsIndex + 1);
-      }
-      return "";
-    } catch {
-      return "";
-    }
-  }
-  if (trimmed.startsWith("data:")) return "";
-
-  if (trimmed.startsWith("uploads/")) return trimmed;
-  if (trimmed.startsWith("/uploads/")) return trimmed.slice(1);
-
-  const uploadsIndex = trimmed.indexOf("/uploads/");
-  if (uploadsIndex >= 0) {
-    return trimmed.slice(uploadsIndex + 1);
-  }
-
-  return trimmed;
-}
-
-function isPublicUploadPath(path: string) {
-  if (!path.startsWith("uploads/")) return false;
-  if (path.startsWith("uploads/public/")) return true;
-  if (path.startsWith("uploads/reviews/")) return true;
-
-  const segments = path.split("/");
-  if (segments.length >= 4 && segments[0] === "uploads" && segments[1] === "merchants") {
-    const category = segments[3];
-    return category === "logo" || category === "storefront" || category === "environment";
-  }
-
-  return false;
-}
-
-export async function resolveProtectedMediaUrl(path?: string): Promise<string> {
-  if (!path) return "";
-  if (path.startsWith("data:")) {
-    return path;
-  }
-
-  const normalized = normalizeUploadPathForSign(path);
-  if (!normalized) {
-    return getMediaUrl(path);
-  }
-
-  if (isPublicUploadPath(normalized)) {
-    return getMediaUrl(normalized);
-  }
-
-  const cached = protectedMediaUrlCache.get(normalized);
-  if (cached) return cached;
-
-  try {
-    const response = await apiPost<{ url: string }>("/uploads/sign", { path: `/${normalized}` });
-    const candidates = buildSignedMediaUrlCandidates(response?.url || "");
-    const preferred = candidates[0] || "";
-    if (preferred) {
-      protectedMediaCandidatesCache.set(normalized, candidates);
-      protectedMediaUrlCache.set(normalized, preferred);
-      return preferred;
-    }
-    return getMediaUrl(path);
-  } catch {
-    return getMediaUrl(path);
-  }
-}
-
-export async function resolveProtectedMediaCandidates(path?: string): Promise<string[]> {
-  if (!path) return [];
-
-  const normalized = normalizeUploadPathForSign(path);
-  if (!normalized) {
-    const fallback = getMediaUrl(path);
-    return fallback ? [fallback] : [];
-  }
-
-  const cached = protectedMediaCandidatesCache.get(normalized);
-  if (cached && cached.length > 0) {
-    return cached;
-  }
-
-  const preferred = await resolveProtectedMediaUrl(path);
-  const fromCache = protectedMediaCandidatesCache.get(normalized);
-  if (fromCache && fromCache.length > 0) {
-    return fromCache;
-  }
-
-  return preferred ? [preferred] : [];
+  const expireAt = Math.floor(new Date(response.expire_at).getTime() / 1000);
+  privateAccessCache.set(mediaId, { url: response.download_url, expireAt });
+  return response.download_url;
 }
 
 export function formatImageUrl(url?: string, _size?: number) {

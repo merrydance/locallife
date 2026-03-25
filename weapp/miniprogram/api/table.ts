@@ -193,41 +193,6 @@ export async function getTableDetail(tableId: number): Promise<TableResponse> {
 // 商户端桌台管理功能已迁移到 table-device-management.ts
 // 包括：桌台CRUD、状态管理、二维码管理、图片管理、标签管理等
 
-// ==================== 便捷方法 ====================
-
-/**
- * 通过二维码URL解析商户和桌台信息
- * @param qrCodeUrl 二维码URL
- */
-export function parseQRCodeUrl(qrCodeUrl: string): { merchantId: number, tableNo: string } | null {
-    try {
-        const url = new URL(qrCodeUrl)
-        const merchantId = url.searchParams.get('merchant_id')
-        const tableNo = url.searchParams.get('table_no')
-
-        if (merchantId && tableNo) {
-            return {
-                merchantId: parseInt(merchantId),
-                tableNo
-            }
-        }
-    } catch (error) {
-        console.error('Invalid QR code URL:', error)
-    }
-
-    return null
-}
-
-/**
- * 生成桌台二维码URL
- * @param merchantId 商户ID
- * @param tableNo 桌台编号
- * @param baseUrl 基础URL
- */
-export function generateQRCodeUrl(merchantId: number, tableNo: string, baseUrl: string = 'https://api.example.com'): string {
-    return `${baseUrl}/v1/scan/table?merchant_id=${merchantId}&table_no=${encodeURIComponent(tableNo)}`
-}
-
 // ==================== 便捷函数已迁移 ====================
 // getAvailableTables 和 getPrivateRooms 等商户端功能
 // 已迁移到 table-device-management.ts

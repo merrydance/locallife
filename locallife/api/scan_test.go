@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -10,9 +11,6 @@ import (
 	"image/png"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 	"time"
 
@@ -655,6 +653,19 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 					Return(qrCodeData, nil)
 
 				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "pending"}, nil)
+
+				store.EXPECT().
+					SetMediaAssetModerationStatus(gomock.Any(), gomock.AssignableToTypeOf(db.SetMediaAssetModerationStatusParams{})).
+					DoAndReturn(func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+						require.Equal(t, "approved", arg.ModerationStatus)
+						return db.MediaAsset{ID: arg.ID, ModerationStatus: arg.ModerationStatus}, nil
+					}).
+					Times(1)
+
+				store.EXPECT().
 					UpdateTable(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(table, nil)
@@ -664,13 +675,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				var response generateTableQRCodeResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.NotEmpty(t, response.QrCodeUrl)
-				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("uploads/public/merchants/%d/qrcodes/", merchant.ID))
-				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("qrcode_m%d_t%d_labeled.png", merchant.ID, table.ID))
+				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("merchant/table/%d/qrcodes/", merchant.ID))
+				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("qrcode_m%d_t%d_", merchant.ID, table.ID))
+				require.Contains(t, response.QrCodeUrl, labeledQRCodeFilenameSuffix)
 				require.Equal(t, table.TableNo, response.TableNo)
 				require.Equal(t, merchant.ID, response.MerchantID)
-
-				_ = os.Remove(strings.TrimPrefix(response.QrCodeUrl, "/"))
-				_ = os.RemoveAll(filepath.Join("uploads", "public", "merchants", fmt.Sprintf("%d", merchant.ID), "qrcodes"))
 			},
 		},
 		{
@@ -819,6 +828,19 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(qrCodeData, nil)
+
+				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "pending"}, nil)
+
+				store.EXPECT().
+					SetMediaAssetModerationStatus(gomock.Any(), gomock.AssignableToTypeOf(db.SetMediaAssetModerationStatusParams{})).
+					DoAndReturn(func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+						require.Equal(t, "approved", arg.ModerationStatus)
+						return db.MediaAsset{ID: arg.ID, ModerationStatus: arg.ModerationStatus}, nil
+					}).
+					Times(1)
 
 				store.EXPECT().
 					UpdateTable(gomock.Any(), gomock.Any()).

@@ -36,7 +36,6 @@ func TestCreateReviewAPI(t *testing.T) {
 			body: map[string]interface{}{
 				"order_id": order.ID,
 				"content":  "Great food and service!",
-				"images":   []string{fmt.Sprintf("uploads/reviews/%d/image1.jpg", user.ID)},
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)

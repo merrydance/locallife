@@ -86,6 +86,21 @@ func (mr *MockWechatClientMockRecorder) ImgSecCheck(ctx, imgFile any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ImgSecCheck", reflect.TypeOf((*MockWechatClient)(nil).ImgSecCheck), ctx, imgFile)
 }
 
+// MediaCheckAsync mocks base method.
+func (m *MockWechatClient) MediaCheckAsync(ctx context.Context, req wechat.MediaCheckAsyncRequest) (*wechat.MediaCheckAsyncResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MediaCheckAsync", ctx, req)
+	ret0, _ := ret[0].(*wechat.MediaCheckAsyncResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MediaCheckAsync indicates an expected call of MediaCheckAsync.
+func (mr *MockWechatClientMockRecorder) MediaCheckAsync(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MediaCheckAsync", reflect.TypeOf((*MockWechatClient)(nil).MediaCheckAsync), ctx, req)
+}
+
 // MsgSecCheck mocks base method.
 func (m *MockWechatClient) MsgSecCheck(ctx context.Context, openid string, scene int, content string) error {
 	m.ctrl.T.Helper()

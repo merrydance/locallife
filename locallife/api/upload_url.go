@@ -6,30 +6,48 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/merrydance/locallife/media"
 	"github.com/rs/zerolog/log"
 )
 
-// normalizeUploadURLForClient converts stored upload paths (e.g. "uploads/..." or "/uploads/...")
-// into a URL path that can be used directly by browsers.
-//
-// - For local uploads stored as "uploads/...", it returns "/uploads/...".
-// - For already-normalized "/uploads/...", it returns as-is.
-// - For external URLs (http/https), it returns as-is.
-func normalizeUploadURLForClient(p string) string {
+const devUploadsRoutePrefix = "/dev/uploads/"
+
+// resolvePublicUploadURLForClient returns the client-facing URL for legacy public
+// upload strings persisted in old rows. In OSS mode, known public uploads are
+// rewritten to CDN URLs; in local mode, they are exposed only through the
+// dev-only /dev/uploads/... route.
+func (server *Server) resolvePublicUploadURLForClient(p string) string {
 	p = strings.TrimSpace(p)
 	if p == "" {
 		return ""
 	}
-	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") {
+	if strings.HasPrefix(p, "http://") || strings.HasPrefix(p, "https://") || strings.HasPrefix(p, devUploadsRoutePrefix) {
 		return p
 	}
-	if strings.HasPrefix(p, "/uploads/") {
-		return p
+
+	storedPath := normalizeStoredUploadPath(p)
+	if !isPubliclyAccessibleUploadPath(storedPath) {
+		return ""
 	}
-	if strings.HasPrefix(p, "uploads/") {
-		return "/" + p
+
+	if server.config.FileStorageProvider == "local" && isPubliclyAccessibleUploadPath(storedPath) {
+		return devUploadURLForStoredPath(storedPath)
 	}
-	return p
+
+	if server.config.FileStorageProvider != "oss" {
+		return ""
+	}
+
+	return server.mediaResolver.PublicURL(storedPath, media.VariantCard)
+}
+
+func devUploadURLForStoredPath(storedPath string) string {
+	trimmed := strings.TrimPrefix(strings.TrimSpace(storedPath), "/")
+	trimmed = strings.TrimPrefix(trimmed, "uploads/")
+	if trimmed == "" {
+		return devUploadsRoutePrefix
+	}
+	return devUploadsRoutePrefix + trimmed
 }
 
 // normalizeImageURLForStorage 规范化图片URL用于存储。

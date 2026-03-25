@@ -50,16 +50,16 @@
 3. dishes.image_url
 4. combo_sets.image_url
 5. tables.qr_code_url
-6. merchant_applications.business_license_image_url
-7. merchant_applications.legal_person_id_front_url
-8. merchant_applications.legal_person_id_back_url
-9. merchant_applications.food_permit_url
-10. rider_applications.id_card_front_url
-11. rider_applications.id_card_back_url
-12. rider_applications.health_cert_url
-13. operator_applications.business_license_url
-14. operator_applications.id_card_front_url
-15. operator_applications.id_card_back_url
+6. merchant_applications.business_license_image_url（历史字段，现已迁移为 business_license_media_asset_id）
+7. merchant_applications.legal_person_id_front_url（历史字段，现已迁移为 id_card_front_media_asset_id）
+8. merchant_applications.legal_person_id_back_url（历史字段，现已迁移为 id_card_back_media_asset_id）
+9. merchant_applications.food_permit_url（历史字段，现已迁移为 food_permit_media_asset_id）
+10. rider_applications.id_card_front_url（历史字段，现已迁移为 id_card_front_media_asset_id）
+11. rider_applications.id_card_back_url（历史字段，现已迁移为 id_card_back_media_asset_id）
+12. rider_applications.health_cert_url（历史字段，现已迁移为 health_cert_media_asset_id）
+13. operator_applications.business_license_url（历史字段，现已迁移为 business_license_media_asset_id）
+14. operator_applications.id_card_front_url（历史字段，现已迁移为 id_card_front_media_asset_id）
+15. operator_applications.id_card_back_url（历史字段，现已迁移为 id_card_back_media_asset_id）
 16. merchant_group_applications.license_image_url
 17. merchant_groups.license_image_url
 18. merchant_brands.logo_url
@@ -256,31 +256,31 @@ status 建议值：
 
 ### 7.1 users
 
-当前字段：
+当前字段（历史）：
 
 1. avatar_url
 
-目标字段：
+当前线上目标字段：
 
 1. avatar_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
 
 ### 7.2 merchants
 
-当前字段：
+当前字段（历史）：
 
 1. logo_url
 
-目标字段：
+当前线上目标字段：
 
 1. logo_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
 
 ### 7.3 dishes
 
-当前字段：
+当前字段（历史）：
 
 1. image_url
 
-目标字段：
+当前线上目标字段：
 
 1. image_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
 
@@ -306,14 +306,14 @@ status 建议值：
 
 ### 7.6 merchant_applications
 
-当前字段：
+当前字段（历史）：
 
 1. business_license_image_url
 2. legal_person_id_front_url
 3. legal_person_id_back_url
 4. food_permit_url
 
-目标字段：
+当前线上目标字段：
 
 1. business_license_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
 2. legal_person_id_front_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
@@ -322,13 +322,13 @@ status 建议值：
 
 ### 7.7 rider_applications
 
-当前字段：
+当前字段（历史）：
 
 1. id_card_front_url
 2. id_card_back_url
 3. health_cert_url
 
-目标字段：
+当前线上目标字段：
 
 1. id_card_front_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
 2. id_card_back_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
@@ -336,13 +336,13 @@ status 建议值：
 
 ### 7.8 operator_applications
 
-当前字段：
+当前字段（历史）：
 
 1. business_license_url
 2. id_card_front_url
 3. id_card_back_url
 
-目标字段：
+当前线上目标字段：
 
 1. business_license_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL
 2. id_card_front_media_asset_id BIGINT REFERENCES media_assets(id) ON DELETE SET NULL

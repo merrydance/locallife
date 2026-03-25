@@ -28,6 +28,10 @@ WHERE id = $1 AND deleted_at IS NULL;
 SELECT * FROM media_assets
 WHERE object_key = $1 AND deleted_at IS NULL;
 
+-- name: GetMediaAssetByModerationTraceID :one
+SELECT * FROM media_assets
+WHERE moderation_trace_id = $1 AND deleted_at IS NULL;
+
 -- name: ConfirmMediaAssetUploaded :one
 UPDATE media_assets
 SET
@@ -50,6 +54,18 @@ RETURNING *;
 UPDATE media_assets
 SET moderation_status = $2, updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: SetMediaAssetModerationTraceID :one
+UPDATE media_assets
+SET moderation_trace_id = $2, updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING *;
+
+-- name: SetMediaAssetModerationStatusByTraceID :one
+UPDATE media_assets
+SET moderation_status = $2, updated_at = now()
+WHERE moderation_trace_id = $1 AND deleted_at IS NULL
 RETURNING *;
 
 -- name: SoftDeleteMediaAsset :one
@@ -124,7 +140,8 @@ RETURNING *;
 
 -- name: ListMediaAssetsByIDs :many
 SELECT id, object_key, visibility, media_category, mime_type, file_size,
-       width, height, checksum_sha256, upload_status, moderation_status,
+  width, height, checksum_sha256, upload_status, moderation_status,
+  moderation_trace_id,
        uploaded_by, source_client, created_at, updated_at, deleted_at
 FROM media_assets
 WHERE id = ANY(@ids::bigint[])

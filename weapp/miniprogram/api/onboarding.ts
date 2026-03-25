@@ -58,16 +58,16 @@ export interface MerchantApplicationDraftResponse {
   longitude: string | null
   latitude: string | null
   region_id: number | null
-  business_license_image_url: string
+  business_license_media_asset_id?: number | null
   business_license_number: string
   business_scope: string | null
   business_license_ocr: BusinessLicenseOCRData | null
-  food_permit_url: string | null
+  food_permit_media_asset_id?: number | null
   food_permit_ocr: FoodPermitOCRData | null
   legal_person_name: string
   legal_person_id_number: string
-  legal_person_id_front_url: string
-  legal_person_id_back_url: string
+  id_card_front_media_asset_id?: number | null
+  id_card_back_media_asset_id?: number | null
   id_card_front_ocr: IDCardOCRData | null
   id_card_back_ocr: IDCardOCRData | null
   storefront_images?: string[] | null  // 门头照 URL 数组，最多3张
@@ -91,7 +91,7 @@ export interface UpdateMerchantImagesRequest {
 
 // ==================== Request Types ====================
 
-// 对齐 api/merchant-application.ts 中的定义，支持更完整的字段更新
+// 兼容当前商户入驻基础信息更新请求定义。
 export interface UpdateMerchantBasicInfoRequest {
   merchant_name?: string
   contact_phone?: string
@@ -100,13 +100,9 @@ export interface UpdateMerchantBasicInfoRequest {
   latitude?: string
   region_id?: number
   business_license_number?: string
-  business_license_image_url?: string
   business_scope?: string
   legal_person_name?: string
   legal_person_id_number?: string
-  legal_person_id_front_url?: string
-  legal_person_id_back_url?: string
-  food_permit_url?: string
   storefront_images?: string[] // 虽然有单独接口，但API也可能支持
   environment_images?: string[]
 }

@@ -21,7 +21,8 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { apiGet, apiPost, apiPut, apiDelete, formatAmount, getMediaUrl, formatImageUrl } from "@/lib/api";
+import { apiGet, apiPost, apiPut, apiDelete, formatAmount, formatImageUrl } from "@/lib/api";
+import { getMediaDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 
@@ -428,7 +429,7 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
                                   <div className="h-12 w-12 rounded bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
                                      {item.dish_image_url ? (
                                         <Image 
-                                          src={formatImageUrl(getMediaUrl(item.dish_image_url))} 
+                                          src={formatImageUrl(getMediaDisplayUrl(item.dish_image_url))} 
                                           alt={item.dish_name} 
                                           width={48}
                                           height={48}
@@ -553,7 +554,7 @@ export function CombosPageClient({ initialData }: CombosPageClientProps) {
                         <div className="h-10 w-10 rounded bg-slate-100 flex items-center justify-center shrink-0 overflow-hidden border border-slate-200">
                            {dish.image_url ? (
                               <Image 
-                                src={formatImageUrl(getMediaUrl(dish.image_url))} 
+                                src={formatImageUrl(getMediaDisplayUrl(dish.image_url))} 
                                 alt={dish.name} 
                                 width={40}
                                 height={40}

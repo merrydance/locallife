@@ -308,7 +308,7 @@ export function getMediaDisplayUrl(input: MediaLike | string | undefined, varian
 文件：
 
 1. weapp/miniprogram/api/onboarding.ts
-2. weapp/miniprogram/api/merchant-application.ts
+2. 历史上还存在 weapp/miniprogram/api/merchant-application.ts，现已删除并收敛到 onboarding.ts
 3. weapp/miniprogram/api/ocr.ts
 
 目标改造：
@@ -417,6 +417,8 @@ business_license_media_asset_id?: number
 business_license_media?: MediaAssetResponse
 ```
 
+补充说明：运营商、商户、骑手三条私有材料主申请链路现已在前端运行时代码中切到 asset_id 模式；本文中出现的旧 URL 字段示例仅用于解释迁移背景，不应继续作为当前契约实现。
+
 ### 12.2 多图场景
 
 旧：
@@ -450,6 +452,12 @@ images: Array<{
 2. logo_url
 3. avatar_url
 4. business_license_image_url
+5. food_permit_url
+6. legal_person_id_front_url
+7. legal_person_id_back_url
+8. id_card_front_url
+9. id_card_back_url
+10. health_cert_url
 
 ### 13.2 OCR 兼容策略
 
@@ -531,7 +539,7 @@ images: Array<{
 5. weapp/miniprogram/api/review.ts
 6. weapp/miniprogram/api/table-device-management.ts
 7. weapp/miniprogram/api/onboarding.ts
-8. weapp/miniprogram/api/merchant-application.ts
+8. 历史旧封装 weapp/miniprogram/api/merchant-application.ts（现已删除）
 9. weapp/miniprogram/adapters/dish.ts
 10. weapp/miniprogram/adapters/order.ts
 11. weapp/miniprogram/adapters/order-card.ts

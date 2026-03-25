@@ -6854,6 +6854,21 @@ func (mr *MockStoreMockRecorder) GetMediaAssetByID(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMediaAssetByID", reflect.TypeOf((*MockStore)(nil).GetMediaAssetByID), ctx, id)
 }
 
+// GetMediaAssetByModerationTraceID mocks base method.
+func (m *MockStore) GetMediaAssetByModerationTraceID(ctx context.Context, moderationTraceID pgtype.Text) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMediaAssetByModerationTraceID", ctx, moderationTraceID)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMediaAssetByModerationTraceID indicates an expected call of GetMediaAssetByModerationTraceID.
+func (mr *MockStoreMockRecorder) GetMediaAssetByModerationTraceID(ctx, moderationTraceID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMediaAssetByModerationTraceID", reflect.TypeOf((*MockStore)(nil).GetMediaAssetByModerationTraceID), ctx, moderationTraceID)
+}
+
 // GetMediaAssetByObjectKey mocks base method.
 func (m *MockStore) GetMediaAssetByObjectKey(ctx context.Context, objectKey string) (db.MediaAsset, error) {
 	m.ctrl.T.Helper()
@@ -11785,10 +11800,10 @@ func (mr *MockStoreMockRecorder) ListIngredients(ctx, arg any) *gomock.Call {
 }
 
 // ListMediaAssetsByIDs mocks base method.
-func (m *MockStore) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]db.MediaAsset, error) {
+func (m *MockStore) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]db.ListMediaAssetsByIDsRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListMediaAssetsByIDs", ctx, ids)
-	ret0, _ := ret[0].([]db.MediaAsset)
+	ret0, _ := ret[0].([]db.ListMediaAssetsByIDsRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -15551,6 +15566,36 @@ func (m *MockStore) SetMediaAssetModerationStatus(ctx context.Context, arg db.Se
 func (mr *MockStoreMockRecorder) SetMediaAssetModerationStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMediaAssetModerationStatus", reflect.TypeOf((*MockStore)(nil).SetMediaAssetModerationStatus), ctx, arg)
+}
+
+// SetMediaAssetModerationStatusByTraceID mocks base method.
+func (m *MockStore) SetMediaAssetModerationStatusByTraceID(ctx context.Context, arg db.SetMediaAssetModerationStatusByTraceIDParams) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetMediaAssetModerationStatusByTraceID", ctx, arg)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetMediaAssetModerationStatusByTraceID indicates an expected call of SetMediaAssetModerationStatusByTraceID.
+func (mr *MockStoreMockRecorder) SetMediaAssetModerationStatusByTraceID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMediaAssetModerationStatusByTraceID", reflect.TypeOf((*MockStore)(nil).SetMediaAssetModerationStatusByTraceID), ctx, arg)
+}
+
+// SetMediaAssetModerationTraceID mocks base method.
+func (m *MockStore) SetMediaAssetModerationTraceID(ctx context.Context, arg db.SetMediaAssetModerationTraceIDParams) (db.MediaAsset, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetMediaAssetModerationTraceID", ctx, arg)
+	ret0, _ := ret[0].(db.MediaAsset)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetMediaAssetModerationTraceID indicates an expected call of SetMediaAssetModerationTraceID.
+func (mr *MockStoreMockRecorder) SetMediaAssetModerationTraceID(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetMediaAssetModerationTraceID", reflect.TypeOf((*MockStore)(nil).SetMediaAssetModerationTraceID), ctx, arg)
 }
 
 // SetMediaAssetUploadStatus mocks base method.

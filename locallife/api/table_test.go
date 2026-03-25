@@ -54,6 +54,22 @@ func randomRoom(merchantID int64) db.Table {
 	}
 }
 
+func TestNewTableResponse_RewritesLegacyQRCodeURLInOSSMode(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server, _ := newTestServerForMedia(t, store)
+	server.config.FileStorageProvider = "oss"
+
+	table := randomTable(util.RandomInt(1, 1000))
+	table.QrCodeUrl = pgtype.Text{String: "uploads/public/merchants/12/qrcodes/qrcode_m12_t3_labeled.png", Valid: true}
+
+	resp := server.newTableResponse(table)
+	require.NotNil(t, resp.QrCodeUrl)
+	require.Contains(t, *resp.QrCodeUrl, "cdn.test.example.com/uploads/public/merchants/12/qrcodes/qrcode_m12_t3_labeled.png")
+}
+
 // ==================== 创建桌台测试 ====================
 
 func TestCreateTableAPI(t *testing.T) {

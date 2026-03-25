@@ -62,7 +62,7 @@ import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
-import { apiGet, apiPost, apiPatch, apiPut, apiDelete, getMediaUrl, getAuthToken } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete, getAuthToken } from "@/lib/api";
 import { uploadMedia } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import type { TableResponse, TableType, TableStatus, TableTag, CreateTableRequest, TableImageResponse } from "@/types/table";
@@ -764,7 +764,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
                 </div>
               ) : qrCodeDialog.table?.qr_code_url ? (
                 <Image 
-                  src={getMediaUrl(qrCodeDialog.table.qr_code_url)} 
+                  src={qrCodeDialog.table.qr_code_url} 
                   alt="桌台二维码" 
                   width={256}
                   height={256}
@@ -784,7 +784,7 @@ export function TablesPageClient({ initialData }: TablesPageClientProps) {
           <DialogFooter className="flex-col sm:flex-col gap-2">
             {qrCodeDialog.table?.qr_code_url ? (
               <Button className="w-full" asChild>
-                <a href={getMediaUrl(qrCodeDialog.table.qr_code_url)} target="_blank" rel="noreferrer">
+                <a href={qrCodeDialog.table.qr_code_url} target="_blank" rel="noreferrer">
                   <Download className="h-4 w-4 mr-2" />
                   下载打印图片
                 </a>

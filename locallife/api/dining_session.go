@@ -378,8 +378,8 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 	if result.SameTable {
 		ctx.JSON(http.StatusOK, transferDiningSessionResponse{
 			Session:   newDiningSessionResponse(result.Session),
-			FromTable: newTableResponse(result.FromTable),
-			ToTable:   newTableResponse(result.ToTable),
+			FromTable: server.newTableResponse(result.FromTable),
+			ToTable:   server.newTableResponse(result.ToTable),
 		})
 		return
 	}
@@ -422,8 +422,8 @@ func (server *Server) transferDiningSessionTable(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, transferDiningSessionResponse{
 		Session:   newDiningSessionResponse(result.Session),
-		FromTable: newTableResponse(result.FromTable),
-		ToTable:   newTableResponse(result.ToTable),
+		FromTable: server.newTableResponse(result.FromTable),
+		ToTable:   server.newTableResponse(result.ToTable),
 	})
 }
 

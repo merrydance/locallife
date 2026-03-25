@@ -2125,42 +2125,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/uploads/sign": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "用于访问 uploads 下的敏感图片（证照/身份证/健康证等）。\n\n说明：\n- 公共展示素材通常可直接访问 /uploads/...（无需签名）。\n- 私有/敏感图片必须先调用本接口获取短期签名URL，再使用该URL下载。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "summary": "生成上传文件的签名下载URL",
-                "parameters": [
-                    {
-                        "description": "签名请求（path 为 uploads 相对路径，如 uploads/merchants/1/licenses/xxx.jpg 或 merchants/1/licenses/xxx.jpg）",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.signUploadURLRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "签名URL与过期时间（Unix秒）",
-                        "schema": {
-                            "$ref": "#/definitions/api.signUploadURLResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/addresses": {
             "get": {
                 "security": [
@@ -28984,10 +28948,6 @@ const docTemplate = `{
                     "maximum": 100000000,
                     "minimum": 0
                 },
-                "qr_code_url": {
-                    "type": "string",
-                    "maxLength": 500
-                },
                 "table_no": {
                     "type": "string",
                     "maxLength": 50
@@ -30065,7 +30025,7 @@ const docTemplate = `{
                 },
                 "qr_code_url": {
                     "type": "string",
-                    "example": "https://api.example.com/uploads/qrcodes/m1_t123.png"
+                    "example": "https://cdn.example.com/qrcodes/m1_t123.png"
                 },
                 "table_no": {
                     "type": "string",
@@ -31327,8 +31287,8 @@ const docTemplate = `{
                 "business_address": {
                     "type": "string"
                 },
-                "business_license_image_url": {
-                    "type": "string"
+                "business_license_media_asset_id": {
+                    "type": "integer"
                 },
                 "business_license_number": {
                     "type": "string"
@@ -31354,8 +31314,8 @@ const docTemplate = `{
                 "food_permit_ocr": {
                     "$ref": "#/definitions/api.FoodPermitOCRData"
                 },
-                "food_permit_url": {
-                    "type": "string"
+                "food_permit_media_asset_id": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "integer"
@@ -31369,11 +31329,11 @@ const docTemplate = `{
                 "latitude": {
                     "type": "string"
                 },
-                "legal_person_id_back_url": {
-                    "type": "string"
+                "id_card_back_media_asset_id": {
+                    "type": "integer"
                 },
-                "legal_person_id_front_url": {
-                    "type": "string"
+                "id_card_front_media_asset_id": {
+                    "type": "integer"
                 },
                 "legal_person_id_number": {
                     "type": "string"
@@ -32149,8 +32109,8 @@ const docTemplate = `{
                 "business_license_ocr": {
                     "$ref": "#/definitions/api.BusinessLicenseOCRData"
                 },
-                "business_license_url": {
-                    "type": "string"
+                "business_license_asset_id": {
+                    "type": "integer"
                 },
                 "contact_name": {
                     "type": "string"
@@ -32167,14 +32127,14 @@ const docTemplate = `{
                 "id_card_back_ocr": {
                     "$ref": "#/definitions/api.OperatorIDCardBackOCR"
                 },
-                "id_card_back_url": {
-                    "type": "string"
+                "id_card_back_asset_id": {
+                    "type": "integer"
                 },
                 "id_card_front_ocr": {
                     "$ref": "#/definitions/api.OperatorIDCardOCRData"
                 },
-                "id_card_front_url": {
-                    "type": "string"
+                "id_card_front_asset_id": {
+                    "type": "integer"
                 },
                 "legal_person_id_number": {
                     "type": "string"
@@ -34526,20 +34486,20 @@ const docTemplate = `{
                 "created_at": {
                     "type": "string"
                 },
+                "health_cert_asset_id": {
+                    "type": "integer"
+                },
                 "health_cert_ocr": {
                     "$ref": "#/definitions/api.HealthCertOCRData"
-                },
-                "health_cert_url": {
-                    "type": "string"
                 },
                 "id": {
                     "type": "integer"
                 },
-                "id_card_back_url": {
-                    "type": "string"
+                "id_card_back_asset_id": {
+                    "type": "integer"
                 },
-                "id_card_front_url": {
-                    "type": "string"
+                "id_card_front_asset_id": {
+                    "type": "integer"
                 },
                 "id_card_ocr": {
                     "$ref": "#/definitions/api.IDCardOCRData"
@@ -35189,30 +35149,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.customizationGroupInput"
                     }
-                }
-            }
-        },
-        "api.signUploadURLRequest": {
-            "type": "object",
-            "required": [
-                "path"
-            ],
-            "properties": {
-                "path": {
-                    "type": "string",
-                    "maxLength": 2048,
-                    "minLength": 1
-                }
-            }
-        },
-        "api.signUploadURLResponse": {
-            "type": "object",
-            "properties": {
-                "expires": {
-                    "type": "integer"
-                },
-                "url": {
-                    "type": "string"
                 }
             }
         },
@@ -36239,10 +36175,6 @@ const docTemplate = `{
                     "maximum": 100000000,
                     "minimum": 0
                 },
-                "qr_code_url": {
-                    "type": "string",
-                    "maxLength": 500
-                },
                 "status": {
                     "type": "string",
                     "enum": [
@@ -37133,7 +37065,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/v1",
 	Schemes:          []string{},
 	Title:            "LocalLife API",
-	Description:      "本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。\n\n【图片URL约定】API 中的图片字段（如 image_url / avatar_url / logo_url）通常返回以 /uploads/ 开头的路径。\n- 公共展示素材（例如菜品/桌台/包间/评价图片、商户logo等）可直接通过 GET /uploads/... 访问。\n- 敏感材料（证照、身份证、健康证等）必须先调用 POST /v1/uploads/sign 获取短期签名URL，再用该URL下载。",
+	Description:      "本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。\n\n【图片URL约定】公共展示图片字段（如 image_url / avatar_url / logo_url）应返回可直接访问的绝对 URL（通常为 CDN 地址）。\n- 公共展示素材不应再依赖客户端拼接 /uploads/... 路径。\n- 敏感材料应使用 media_asset_id + POST /v1/media/private-access 获取短期访问地址。",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

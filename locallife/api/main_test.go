@@ -188,20 +188,11 @@ func newTestServerWithWechat(t *testing.T, store db.Store, wechatClient interfac
 		AccessTokenDuration: time.Minute,
 	}
 
-	tokenMaker, err := token.NewPasetoMaker(config.TokenSymmetricKey)
+	server, err := NewServer(config, store, nil, nil, NewNoopAuditWriter())
 	require.NoError(t, err)
-
-	server := &Server{
-		config:          config,
-		store:           store,
-		tokenMaker:      tokenMaker,
-		auditWriter:     NewNoopAuditWriter(),
-		wechatClient:    wechatClient.(wechat.WechatClient),
-		weatherCache:    nil,
-		taskDistributor: nil,
-	}
-
-	server.setupRouter()
+	server.wechatClient = wechatClient.(wechat.WechatClient)
+	server.wsHub = nil
+	server.wsPubSub = nil
 	return server
 }
 

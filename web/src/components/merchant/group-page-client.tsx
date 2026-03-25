@@ -24,9 +24,9 @@ import { toast } from "sonner";
 import { 
   apiGet, 
   apiPost, 
-  apiPut, 
-  getMediaUrl
+  apiPut
 } from "@/lib/api";
+import { getMediaDisplayUrl } from "@/lib/media";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -375,7 +375,7 @@ export function GroupPageClient() {
                     <div className="flex items-center gap-4">
                       <div className="w-12 h-12 rounded-lg border overflow-hidden bg-slate-100 shrink-0">
                         {merchant.logo_url ? (
-                          <Image src={getMediaUrl(merchant.logo_url)} alt={merchant.name} width={48} height={48} className="w-full h-full object-cover" />
+                          <Image src={getMediaDisplayUrl(merchant.logo_url)} alt={merchant.name} width={48} height={48} className="w-full h-full object-cover" />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center text-slate-400">
                             <Store className="h-6 w-6" />
@@ -510,7 +510,7 @@ export function GroupPageClient() {
                         <div className="flex items-center gap-3">
                           <div className="w-10 h-10 rounded-lg bg-slate-100 flex items-center justify-center border overflow-hidden">
                             {brand.logo_url ? (
-                              <Image src={getMediaUrl(brand.logo_url)} alt={brand.name} width={40} height={40} className="w-full h-full object-cover" />
+                              <Image src={getMediaDisplayUrl(brand.logo_url)} alt={brand.name} width={40} height={40} className="w-full h-full object-cover" />
                             ) : (
                               <Tag className="h-5 w-5 text-slate-400" />
                             )}

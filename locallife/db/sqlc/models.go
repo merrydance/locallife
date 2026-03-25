@@ -694,6 +694,8 @@ type MediaAsset struct {
 	CreatedAt    time.Time          `json:"created_at"`
 	UpdatedAt    time.Time          `json:"updated_at"`
 	DeletedAt    pgtype.Timestamptz `json:"deleted_at"`
+	// 微信异步图审 trace_id，用于回调结果关联
+	ModerationTraceID pgtype.Text `json:"moderation_trace_id"`
 }
 
 // 媒体上传会话表，每次申请直传 OSS 创建一条记录

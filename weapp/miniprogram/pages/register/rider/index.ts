@@ -7,11 +7,17 @@ import {
   resetRiderApplication,
   type RiderApplicationResponse
 } from '../../../api/rider-application'
+import { getPrivateMediaUrl } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 
 type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
+
+type UploadFieldValue = {
+  url: string
+  assetId?: number
+}
 
 function getErrorMessage(error: unknown, fallback: string): string {
   if (error && typeof error === 'object' && 'message' in error) {
@@ -26,9 +32,9 @@ Page({
     navBarHeight: 88,
     currentStep: 0,
     isSubmitting: false,
-    idFront: { url: '', rawUrl: '' },
-    idBack: { url: '', rawUrl: '' },
-    healthCert: { url: '', rawUrl: '' },
+    idFront: { url: '', assetId: undefined } as UploadFieldValue,
+    idBack: { url: '', assetId: undefined } as UploadFieldValue,
+    healthCert: { url: '', assetId: undefined } as UploadFieldValue,
     formData: {
       realName: '',
       phone: '',
@@ -91,10 +97,42 @@ Page({
       'formData.idValidity': res.id_card_ocr?.valid_end || '',
       'formData.healthCertNo': res.health_cert_ocr?.cert_number || '',
       'formData.healthCertDate': res.health_cert_ocr?.valid_end || '',
-      idFront: { url: res.id_card_front_url || '', rawUrl: res.id_card_front_url || '' },
-      idBack: { url: res.id_card_back_url || '', rawUrl: res.id_card_back_url || '' },
-      healthCert: { url: res.health_cert_url || '', rawUrl: res.health_cert_url || '' }
+      idFront: { url: '', assetId: res.id_card_front_asset_id },
+      idBack: { url: '', assetId: res.id_card_back_asset_id },
+      healthCert: { url: '', assetId: res.health_cert_asset_id }
+    }, () => {
+      void this.refreshUploadPreviewURLs()
     })
+  },
+
+  async resolveUploadPreviewURL(assetId?: number): Promise<string> {
+    if (assetId && assetId > 0) {
+      try {
+        return await getPrivateMediaUrl(assetId)
+      } catch (_e) {
+        return ''
+      }
+    }
+
+    return ''
+  },
+
+  async refreshUploadPreviewURLs() {
+    const uploads: Array<{ key: 'idFront' | 'idBack' | 'healthCert', value: UploadFieldValue }> = [
+      { key: 'idFront', value: this.data.idFront },
+      { key: 'idBack', value: this.data.idBack },
+      { key: 'healthCert', value: this.data.healthCert }
+    ]
+
+    for (const item of uploads) {
+      const assetId = item.value?.assetId
+      if (!assetId) continue
+
+      const resolved = await this.resolveUploadPreviewURL(assetId)
+      if (resolved && resolved !== item.value.url) {
+        this.setData({ [`${item.key}.url`]: resolved })
+      }
+    }
   },
 
   async onIdFrontUpload(e: UploadEvent) {

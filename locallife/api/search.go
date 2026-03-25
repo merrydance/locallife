@@ -444,7 +444,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		repurchaseRates := make([]float64, len(merchants))
 		orderCounts := make([]int32, len(merchants))
 		for i, m := range merchants {
-			response[i] = newSearchMerchantResponseFromTagRow(m)
+			response[i] = server.newSearchMerchantResponseFromTagRow(m)
 			repurchaseRates[i] = m.AvgRepurchaseRate
 			orderCounts[i] = m.TotalOrders
 		}
@@ -475,7 +475,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		repurchaseRates := make([]float64, len(merchants))
 		orderCounts := make([]int32, len(merchants))
 		for i, merchant := range merchants {
-			response[i] = newSearchMerchantResponseFromRow(merchant)
+			response[i] = server.newSearchMerchantResponseFromRow(merchant)
 			repurchaseRates[i] = merchant.AvgRepurchaseRate
 			orderCounts[i] = merchant.TotalOrders
 		}
@@ -785,7 +785,7 @@ func assignMerchantLabels(merchants []searchMerchantResponse, repurchaseRates []
 	}
 }
 
-func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) searchMerchantResponse {
+func (server *Server) newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) searchMerchantResponse {
 	resp := searchMerchantResponse{
 		ID:          merchant.ID,
 		Name:        merchant.Name,
@@ -797,7 +797,7 @@ func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) se
 		TotalOrders: merchant.TotalOrders,
 		CreatedAt:   merchant.CreatedAt,
 	}
-	if cover := extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
+	if cover := server.extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover
 	}
 	if merchant.Tags != nil {
@@ -825,7 +825,7 @@ func newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) se
 	return resp
 }
 
-func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerchantResponse {
+func (server *Server) newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerchantResponse {
 	resp := searchMerchantResponse{
 		ID:          merchant.ID,
 		Name:        merchant.Name,
@@ -837,7 +837,7 @@ func newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerc
 		TotalOrders: merchant.TotalOrders,
 		CreatedAt:   merchant.CreatedAt,
 	}
-	if cover := extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
+	if cover := server.extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover
 	}
 
@@ -904,7 +904,7 @@ type searchRoomResponse struct {
 	MerchantAddress     string  `json:"merchant_address"`
 	MerchantLatitude    float64 `json:"merchant_latitude"`
 	MerchantLongitude   float64 `json:"merchant_longitude"`
-	PrimaryImageAssetID *int64  `json:"-"`                                // 包间主图
+	PrimaryImageAssetID *int64  `json:"-"` // 包间主图
 	ImageURL            string  `json:"image_url,omitempty"`
 }
 
@@ -1636,7 +1636,7 @@ func (server *Server) searchCategories(ctx *gin.Context) {
 }
 
 // extractCoverImageFromStorefrontImages 从 merchant_applications.storefront_images JSONB 字段提取第一张门头照 URL。
-func extractCoverImageFromStorefrontImages(data []byte) string {
+func (server *Server) extractCoverImageFromStorefrontImages(data []byte) string {
 	if len(data) == 0 {
 		return ""
 	}
@@ -1644,5 +1644,5 @@ func extractCoverImageFromStorefrontImages(data []byte) string {
 	if err := json.Unmarshal(data, &images); err != nil || len(images) == 0 {
 		return ""
 	}
-	return normalizeUploadURLForClient(images[0])
+	return server.resolvePublicUploadURLForClient(images[0])
 }

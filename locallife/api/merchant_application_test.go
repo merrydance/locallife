@@ -782,3 +782,40 @@ func TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs(t *testing.T) {
 	require.NotNil(t, resp.IDCardBackMediaAssetID)
 	require.Equal(t, int64(4), *resp.IDCardBackMediaAssetID)
 }
+
+func TestGetOrCreateMerchantApplicationDraft_RewritesPublicImageArraysInLocalMode(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/cover.jpg"})
+	require.NoError(t, err)
+	environmentImages, err := json.Marshal([]string{"uploads/merchants/12/environment/room.jpg"})
+	require.NoError(t, err)
+	app.StorefrontImages = storefrontImages
+	app.EnvironmentImages = environmentImages
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	server.config.FileStorageProvider = "local"
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, []string{"/dev/uploads/merchants/12/storefront/cover.jpg"}, resp.StorefrontImages)
+	require.Equal(t, []string{"/dev/uploads/merchants/12/environment/room.jpg"}, resp.EnvironmentImages)
+}

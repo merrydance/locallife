@@ -162,13 +162,11 @@ func (server *Server) completeMediaUpload(ctx *gin.Context) {
 	}
 
 	asset := result.Asset
-	variants := make(map[string]string)
-	if asset.Visibility == string(media.VisibilityPublic) {
-		variants["thumb"] = server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantThumb)
-		variants["card"] = server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantCard)
-		variants["detail"] = server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantDetail)
-		variants["original"] = server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantOriginal)
+	if err := server.triggerMediaModeration(ctx, &asset, authPayload.UserID); err != nil {
+		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
+		return
 	}
+	variants := server.publicVariantsForAsset(asset)
 
 	ctx.JSON(http.StatusOK, completeUploadResponse{
 		MediaID:  asset.ID,
@@ -206,6 +204,11 @@ func (server *Server) getMediaPrivateAccess(ctx *gin.Context) {
 	}
 
 	if asset.UploadedBy != authPayload.UserID {
+		if isOwnerOnlyPrivateMedia(asset.MediaCategory) {
+			ctx.JSON(http.StatusForbidden, errorResponse(media.ErrUnauthorized))
+			return
+		}
+
 		// 平台管理员可以访问任意私有资产（用于审核场景）
 		isAdmin, err := server.hasActiveRole(ctx, authPayload.UserID, RoleAdmin)
 		if err != nil || !isAdmin {
@@ -229,6 +232,15 @@ func (server *Server) getMediaPrivateAccess(ctx *gin.Context) {
 		DownloadURL: downloadURL,
 		ExpireAt:    time.Now().Add(ttl),
 	})
+}
+
+func isOwnerOnlyPrivateMedia(category string) bool {
+	switch category {
+	case string(media.CategoryIDCardFront), string(media.CategoryIDCardBack):
+		return true
+	default:
+		return false
+	}
 }
 
 // deleteMediaAsset godoc
@@ -303,14 +315,7 @@ func (server *Server) getMediaAsset(ctx *gin.Context) {
 		UploadStatus:     asset.UploadStatus,
 		ModerationStatus: asset.ModerationStatus,
 	}
-	if asset.Visibility == string(media.VisibilityPublic) {
-		resp.Variants = map[string]string{
-			"thumb":    server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantThumb),
-			"card":     server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantCard),
-			"detail":   server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantDetail),
-			"original": server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantOriginal),
-		}
-	}
+	resp.Variants = server.publicVariantsForAsset(asset)
 
 	ctx.JSON(http.StatusOK, resp)
 }

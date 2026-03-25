@@ -308,7 +308,7 @@
 
 ### 6.2 图片展示组件
 
-- [x] 新增 `web/src/components/ui/media-image.tsx`：`<MediaImage>` 组件，封装 Next.js `<Image>`，自动兼容旧 uploads/ 路径和新 CDN 地址，加载出错时回退占位图
+- [x] 新增 `web/src/components/ui/media-image.tsx`：`<MediaImage>` 组件，封装 Next.js `<Image>`，优先直接消费后端返回的 CDN / 绝对 URL；开发态仅识别 dev-only `/dev/uploads/...` 路径，不再对历史 `uploads/...` 字符串做自动补全，加载出错时回退占位图
 - [x] 列表页后端已通过 `MediaURLResolver` 返回 CDN 低规格图（`card`/`thumb`），前端直接使用 `image_url` 字段无需客户端变体选择
 - [x] 详情页后端已返回 `detail` 规格图
 - [x] 放大预览按需在调用处使用 `original` 变体（后端直接返回对应 URL）
@@ -345,8 +345,8 @@
 
 ### 7.2 图片读取
 
-- [x] `weapp/miniprogram/utils/media.ts`：已实现 `getMediaDisplayUrl(url)` — 兼容 CDN URL 和旧 uploads/ 路径
-- [x] `getPublicImageUrl`（`utils/image.ts`）已通过"http 开头直传"逻辑兼容 CDN URL，功能等价于兼容层
+- [x] `weapp/miniprogram/utils/media.ts`：已实现 `getMediaDisplayUrl(url)` — 优先消费 CDN / 绝对 URL，开发态仅识别 dev-only `/dev/uploads/...` 路径，不再对历史 `uploads/...` 字符串做自动补全
+- [x] `getPublicImageUrl`（`utils/image.ts`）已通过“http 开头直传”逻辑优先消费 CDN URL，并对开发态相对路径做补全，功能等价于兼容层
 - [x] 菜单页、购物车页、订单确认页、预约页均经由 `getPublicImageUrl(item.image_url)` 读取，`image_url` 由后端通过 `MediaURLResolver` 注入 CDN 地址
 
 ### 7.3 各页面表单改造
@@ -375,7 +375,7 @@
 - [x] 在后端禁用 `POST /v1/tables/images/upload`（返回 410 Gone）
 - [x] 在后端禁用 `POST /v1/reviews/images/upload`（返回 410 Gone）
 - [x] 在后端禁用 `POST /v1/merchants/images/upload`（返回 410 Gone）
-- [x] 关闭 `/uploads/*filepath` 本地文件服务主路由（仅 `FileStorageProvider=local` 时注册）
+- [x] 关闭 `/uploads/*filepath` 本地文件服务主路由（现已替换为仅供开发调试的 `/dev/uploads/*filepath`）
 - [x] 将 `util/upload.go` 标记为 Deprecated，仅保留 local fallback 供开发环境
 - [x] 将 `util/image.go` 标记为 Deprecated
 - [x] 生产配置确认不再有 `UPLOADS_BASE_DIR` 依赖（app.env 注释已更新：旧链路已下线，生产无需填写）

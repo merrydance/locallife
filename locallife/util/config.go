@@ -10,25 +10,26 @@ import (
 // Config stores all configuration of the application.
 // The values are read by viper from a config file or environment variable.
 type Config struct {
-	Environment          string        `mapstructure:"ENVIRONMENT"`
-	LogLevel             string        `mapstructure:"LOG_LEVEL"`
-	AllowedOrigins       []string      `mapstructure:"ALLOWED_ORIGINS"`
-	LBSProvider          string        `mapstructure:"LBS_PROVIDER"`        // 运行时统一使用 "tencent"（兼容旧配置保留）
-	OSMBaseURL           string        `mapstructure:"OSM_BASE_URL"`        // 已废弃（历史 OSM 配置，保留兼容）
-	OSMBaseURLBackup     string        `mapstructure:"OSM_BASE_URL_BACKUP"` // 已废弃（历史 OSM 备用配置，保留兼容）
-	DBSource             string        `mapstructure:"DB_SOURCE"`
-	MigrationURL         string        `mapstructure:"MIGRATION_URL"`
-	AutoMigrate          bool          `mapstructure:"AUTO_MIGRATE"`
-	RedisAddress         string        `mapstructure:"REDIS_ADDRESS"`
-	RedisPassword        string        `mapstructure:"REDIS_PASSWORD"`
-	RedisRequired        bool          `mapstructure:"REDIS_REQUIRED"`
-	HTTPServerAddress    string        `mapstructure:"HTTP_SERVER_ADDRESS"`
-	GRPCServerAddress    string        `mapstructure:"GRPC_SERVER_ADDRESS"`
-	TokenSymmetricKey    string        `mapstructure:"TOKEN_SYMMETRIC_KEY"`
-	AccessTokenDuration  time.Duration `mapstructure:"ACCESS_TOKEN_DURATION"`
-	RefreshTokenDuration time.Duration `mapstructure:"REFRESH_TOKEN_DURATION"`
-	WechatMiniAppID      string        `mapstructure:"WECHAT_MINI_APP_ID"`
-	WechatMiniAppSecret  string        `mapstructure:"WECHAT_MINI_APP_SECRET"`
+	Environment               string        `mapstructure:"ENVIRONMENT"`
+	LogLevel                  string        `mapstructure:"LOG_LEVEL"`
+	AllowedOrigins            []string      `mapstructure:"ALLOWED_ORIGINS"`
+	LBSProvider               string        `mapstructure:"LBS_PROVIDER"`        // 运行时统一使用 "tencent"（兼容旧配置保留）
+	OSMBaseURL                string        `mapstructure:"OSM_BASE_URL"`        // 已废弃（历史 OSM 配置，保留兼容）
+	OSMBaseURLBackup          string        `mapstructure:"OSM_BASE_URL_BACKUP"` // 已废弃（历史 OSM 备用配置，保留兼容）
+	DBSource                  string        `mapstructure:"DB_SOURCE"`
+	MigrationURL              string        `mapstructure:"MIGRATION_URL"`
+	AutoMigrate               bool          `mapstructure:"AUTO_MIGRATE"`
+	RedisAddress              string        `mapstructure:"REDIS_ADDRESS"`
+	RedisPassword             string        `mapstructure:"REDIS_PASSWORD"`
+	RedisRequired             bool          `mapstructure:"REDIS_REQUIRED"`
+	HTTPServerAddress         string        `mapstructure:"HTTP_SERVER_ADDRESS"`
+	GRPCServerAddress         string        `mapstructure:"GRPC_SERVER_ADDRESS"`
+	TokenSymmetricKey         string        `mapstructure:"TOKEN_SYMMETRIC_KEY"`
+	AccessTokenDuration       time.Duration `mapstructure:"ACCESS_TOKEN_DURATION"`
+	RefreshTokenDuration      time.Duration `mapstructure:"REFRESH_TOKEN_DURATION"`
+	WechatMiniAppID           string        `mapstructure:"WECHAT_MINI_APP_ID"`
+	WechatMiniAppSecret       string        `mapstructure:"WECHAT_MINI_APP_SECRET"`
+	WechatMiniAppMessageToken string        `mapstructure:"WECHAT_MINI_APP_MESSAGE_TOKEN"`
 
 	// 和风天气 API 配置
 	QweatherAPIKey  string `mapstructure:"QWEATHER_API_KEY"`

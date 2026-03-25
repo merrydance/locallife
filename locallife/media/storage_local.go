@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -16,7 +17,7 @@ import (
 //   - 后端在 api/server.go 中（仅 FILE_STORAGE_PROVIDER=local 时）注册该路由，
 //     接收文件并保存到本地 uploads/dev/ 目录。
 //   - StatObject、DeleteObject 直接操作本地文件系统。
-//   - CreatePrivateDownloadURL 复用现有的本地签名 URL 机制。
+//   - CreatePrivateDownloadURL 返回本地开发访问 URL，由 /dev/uploads/* 路由直接读取文件。
 //
 // 注意：
 //   - 此实现绝对不会出现在生产配置中（FILE_STORAGE_PROVIDER=oss 时不会创建此实例）。
@@ -66,10 +67,10 @@ func (s *LocalStorage) StatObject(_ context.Context, _ string, objectKey string)
 	}, nil
 }
 
-// CreatePrivateDownloadURL 返回后端签名的本地访问 URL（复用现有的签名 URL 机制）。
-// 本地模式下 TTL 仅作展示用，不强制验证过期（开发环境不需要严格过期控制）。
+// CreatePrivateDownloadURL 返回本地开发访问 URL。
+// 本地模式下 TTL 仅用于保持与生产签名接口一致的调用约定；实际不做过期校验。
 func (s *LocalStorage) CreatePrivateDownloadURL(_ context.Context, _ string, objectKey string, _ time.Duration) (string, error) {
-	return fmt.Sprintf("%s/uploads/%s", s.serverBaseURL, objectKey), nil
+	return fmt.Sprintf("%s/dev/uploads/%s", s.serverBaseURL, objectKey), nil
 }
 
 // DeleteObject 删除本地文件。
@@ -77,6 +78,25 @@ func (s *LocalStorage) DeleteObject(_ context.Context, _ string, objectKey strin
 	localPath := filepath.Join(s.baseDir, filepath.FromSlash(objectKey))
 	if err := os.Remove(localPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("media: delete local file %s: %w", localPath, err)
+	}
+	return nil
+}
+
+// PutObject 将服务端生成的对象直接写入本地开发存储。
+func (s *LocalStorage) PutObject(_ context.Context, _ string, objectKey string, _ string, body io.Reader, _ int64) error {
+	destPath := filepath.Join(s.baseDir, filepath.FromSlash(objectKey))
+	if err := os.MkdirAll(filepath.Dir(destPath), 0750); err != nil {
+		return fmt.Errorf("media: create local object dir %s: %w", filepath.Dir(destPath), err)
+	}
+
+	dest, err := os.Create(destPath) //nolint:gosec // objectKey is generated server-side
+	if err != nil {
+		return fmt.Errorf("media: create local object %s: %w", destPath, err)
+	}
+	defer dest.Close()
+
+	if _, err := io.Copy(dest, body); err != nil {
+		return fmt.Errorf("media: write local object %s: %w", destPath, err)
 	}
 	return nil
 }

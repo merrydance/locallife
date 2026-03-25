@@ -47,6 +47,9 @@ func (server *Server) batchPublicImageURLs(ctx context.Context, assetIDs []int64
 	}
 
 	for _, a := range assets {
+		if a.Visibility != string(media.VisibilityPublic) || a.ModerationStatus != "approved" {
+			continue
+		}
 		result[a.ID] = server.mediaResolver.PublicURL(a.ObjectKey, variant)
 	}
 	return result
@@ -60,6 +63,9 @@ func (server *Server) publicImageURL(ctx context.Context, assetID *int64, varian
 	}
 	m, err := server.store.GetMediaAssetByID(ctx, *assetID)
 	if err != nil {
+		return ""
+	}
+	if m.Visibility != string(media.VisibilityPublic) || m.ModerationStatus != "approved" {
 		return ""
 	}
 	return server.mediaResolver.PublicURL(m.ObjectKey, variant)

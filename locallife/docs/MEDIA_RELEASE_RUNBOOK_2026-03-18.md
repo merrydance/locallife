@@ -252,7 +252,7 @@ make migrateup1
 2. /v1/tables/images/upload
 3. /v1/reviews/images/upload
 4. /v1/merchants/images/upload
-5. /uploads/*filepath 本地主链路
+5. /uploads/*filepath 本地主链路（已由 dev-only 的 /dev/uploads/*filepath 调试路由替代）
 6. util/upload.go 生产主用途
 7. util/image.go 生产主用途
 

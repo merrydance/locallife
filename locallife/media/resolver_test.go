@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -130,5 +131,8 @@ func (ossStorageStub) CreatePrivateDownloadURL(_ context.Context, _, _ string, _
 	return "", nil
 }
 func (ossStorageStub) DeleteObject(_ context.Context, _, _ string) error { return nil }
-func (ossStorageStub) PublicBucket() string                              { return "pub" }
-func (ossStorageStub) PrivateBucket() string                             { return "priv" }
+func (ossStorageStub) PutObject(_ context.Context, _, _, _ string, _ io.Reader, _ int64) error {
+	return nil
+}
+func (ossStorageStub) PublicBucket() string  { return "pub" }
+func (ossStorageStub) PrivateBucket() string { return "priv" }

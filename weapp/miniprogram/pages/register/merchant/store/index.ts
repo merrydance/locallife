@@ -15,7 +15,8 @@ import {
   updateMerchantImages,
   type MerchantApplicationDraftResponse
 } from '../../../../api/onboarding'
-import { resolveImageURL } from '../../../../utils/image-security'
+import { getPrivateMediaUrl } from '../../../../utils/image-security'
+import { getMediaDisplayUrl } from '../../../../utils/media'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 
@@ -47,16 +48,26 @@ type MerchantDraftExt = MerchantApplicationDraftResponse & {
   bank_account_name?: string
 }
 
+type ImageFieldItem = {
+  url: string
+  rawUrl?: string
+  assetId?: number
+}
+
+function buildPrivateAssetKey(assetId?: number | null): string | undefined {
+  return assetId && assetId > 0 ? `asset:${assetId}` : undefined
+}
+
 type DraftData = {
   formData?: Record<string, unknown>
-  licenseImages?: Array<{ url: string, rawUrl?: string }>
-  foodLicenseImages?: Array<{ url: string, rawUrl?: string }>
-  idCardFrontImages?: Array<{ url: string, rawUrl?: string }>
-  idCardBackImages?: Array<{ url: string, rawUrl?: string }>
-  accountPermitImages?: Array<{ url: string, rawUrl?: string }>
-  storefrontImages?: Array<{ url: string, rawUrl?: string }>
-  environmentImages?: Array<{ url: string, rawUrl?: string }>
-  shopImages?: Array<{ url: string, rawUrl?: string }>
+  licenseImages?: ImageFieldItem[]
+  foodLicenseImages?: ImageFieldItem[]
+  idCardFrontImages?: ImageFieldItem[]
+  idCardBackImages?: ImageFieldItem[]
+  accountPermitImages?: ImageFieldItem[]
+  storefrontImages?: ImageFieldItem[]
+  environmentImages?: ImageFieldItem[]
+  shopImages?: ImageFieldItem[]
   ocrResults?: {
     license: OCRResult | null
     idCard: OCRResult | null
@@ -112,13 +123,13 @@ Page({
       accountName: ''
     },
     // 图片 (包含 url 和 rawUrl)
-    licenseImages: [] as Array<{ url: string, rawUrl?: string }>,
-    foodLicenseImages: [] as Array<{ url: string, rawUrl?: string }>,
-    idCardFrontImages: [] as Array<{ url: string, rawUrl?: string }>,
-    idCardBackImages: [] as Array<{ url: string, rawUrl?: string }>,
-    accountPermitImages: [] as Array<{ url: string, rawUrl?: string }>,
-    storefrontImages: [] as Array<{ url: string, rawUrl?: string }>,  // 门头照，最多3张
-    environmentImages: [] as Array<{ url: string, rawUrl?: string }>, // 环境照，最多5张
+    licenseImages: [] as ImageFieldItem[],
+    foodLicenseImages: [] as ImageFieldItem[],
+    idCardFrontImages: [] as ImageFieldItem[],
+    idCardBackImages: [] as ImageFieldItem[],
+    accountPermitImages: [] as ImageFieldItem[],
+    storefrontImages: [] as ImageFieldItem[],  // 门头照，最多3张
+    environmentImages: [] as ImageFieldItem[], // 环境照，最多5张
 
     // OCR原始结果 (用于一致性校验)
     ocrResults: {
@@ -237,29 +248,30 @@ Page({
       }
 
       // 解析图片 URL
-      // 184 require REMOVED
-      const safeResolve = async (url: string): Promise<string> => {
-        if (!url) return ''
-        try { return await resolveImageURL(url) } catch { return '' }
+      const safeResolve = async (assetId?: number | null): Promise<string> => {
+        if (assetId && assetId > 0) {
+          try { return await getPrivateMediaUrl(assetId) } catch { return '' }
+        }
+        return ''
       }
 
-      const licenseUrl = await safeResolve(data.business_license_image_url || '')
-      const foodLicenseUrl = await safeResolve(data.food_permit_url || '')
-      const idCardFrontUrl = await safeResolve(data.legal_person_id_front_url || '')
-      const idCardBackUrl = await safeResolve(data.legal_person_id_back_url || '')
+      const licenseUrl = await safeResolve(data.business_license_media_asset_id)
+      const foodLicenseUrl = await safeResolve(data.food_permit_media_asset_id)
+      const idCardFrontUrl = await safeResolve(data.id_card_front_media_asset_id)
+      const idCardBackUrl = await safeResolve(data.id_card_back_media_asset_id)
 
-      // 确保所有数组都是数组，绝不为 null，同时保存 rawUrl 用于重试
-      const licenseImages = licenseUrl ? [{ url: licenseUrl, rawUrl: data.business_license_image_url }] : []
-      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, rawUrl: data.food_permit_url || undefined }] : []
-      const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: data.legal_person_id_front_url }] : []
-      const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: data.legal_person_id_back_url }] : []
+      // 私有材料保留稳定标识用于失败重试，但不再依赖旧 URL 字段。
+      const licenseImages = licenseUrl ? [{ url: licenseUrl, rawUrl: buildPrivateAssetKey(data.business_license_media_asset_id), assetId: data.business_license_media_asset_id ?? undefined }] : []
+      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, rawUrl: buildPrivateAssetKey(data.food_permit_media_asset_id), assetId: data.food_permit_media_asset_id ?? undefined }] : []
+      const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: buildPrivateAssetKey(data.id_card_front_media_asset_id), assetId: data.id_card_front_media_asset_id ?? undefined }] : []
+      const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: buildPrivateAssetKey(data.id_card_back_media_asset_id), assetId: data.id_card_back_media_asset_id ?? undefined }] : []
       const accountPermitImages: Array<{ url: string }> = []
 
       // 门头照
       const storefrontRaw: string[] = Array.isArray(data.storefront_images) ? data.storefront_images : []
       const storefrontImages: Array<{ url: string, rawUrl?: string }> = []
       for (const url of storefrontRaw) {
-        const resolved = await safeResolve(url)
+        const resolved = getMediaDisplayUrl(url)
         if (resolved) storefrontImages.push({ url: resolved, rawUrl: url })
       }
 
@@ -267,7 +279,7 @@ Page({
       const environmentRaw: string[] = Array.isArray(data.environment_images) ? data.environment_images : []
       const environmentImages: Array<{ url: string, rawUrl?: string }> = []
       for (const url of environmentRaw) {
-        const resolved = await safeResolve(url)
+        const resolved = getMediaDisplayUrl(url)
         if (resolved) environmentImages.push({ url: resolved, rawUrl: url })
       }
 
@@ -822,15 +834,15 @@ Page({
     console.log('[MerchantRegister] 图片加载失败，重新签名:', rawUrl, 'retryCount:', retryCount)
 
     try {
-      // 744 require REMOVED
-      const newSignedUrl = await resolveImageURL(rawUrl)
-
       // 根据 rawUrl 找到对应的图片数组并更新
       const imageArrays = ['licenseImages', 'foodLicenseImages', 'idCardFrontImages', 'idCardBackImages'] as const
       for (const arrayName of imageArrays) {
-        const arr = this.data[arrayName] as Array<{ url: string, rawUrl?: string }>
+        const arr = this.data[arrayName] as ImageFieldItem[]
         for (let i = 0; i < arr.length; i++) {
           if (arr[i].rawUrl === rawUrl) {
+            const newSignedUrl = arr[i].assetId
+              ? await getPrivateMediaUrl(arr[i].assetId)
+              : ''
             const newArr = [...arr]
             newArr[i] = { ...newArr[i], url: newSignedUrl }
             this.setData({ [arrayName]: newArr } as Record<string, unknown>)
@@ -854,7 +866,8 @@ Page({
       const img = storefrontImages[i]
       if (img.rawUrl) {
         try {
-          const newUrl = await resolveImageURL(img.rawUrl)
+          const newUrl = getMediaDisplayUrl(img.rawUrl)
+          if (!newUrl) continue
           storefrontImages[i] = { ...img, url: newUrl }
         } catch (e) {
           console.warn('[MerchantRegister] 刷新门头照签名失败:', img.rawUrl)
@@ -868,7 +881,8 @@ Page({
       const img = environmentImages[i]
       if (img.rawUrl) {
         try {
-          const newUrl = await resolveImageURL(img.rawUrl)
+          const newUrl = getMediaDisplayUrl(img.rawUrl)
+          if (!newUrl) continue
           environmentImages[i] = { ...img, url: newUrl }
         } catch (e) {
           console.warn('[MerchantRegister] 刷新环境照签名失败:', img.rawUrl)

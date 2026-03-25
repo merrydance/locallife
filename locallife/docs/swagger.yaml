@@ -1948,9 +1948,6 @@ definitions:
         maximum: 100000000
         minimum: 0
         type: integer
-      qr_code_url:
-        maxLength: 500
-        type: string
       table_no:
         maxLength: 50
         type: string
@@ -2690,7 +2687,7 @@ definitions:
         example: 1
         type: integer
       qr_code_url:
-        example: https://api.example.com/uploads/qrcodes/m1_t123.png
+        example: https://cdn.example.com/qrcodes/m1_t123.png
         type: string
       table_no:
         example: T01
@@ -3531,8 +3528,8 @@ definitions:
     properties:
       business_address:
         type: string
-      business_license_image_url:
-        type: string
+      business_license_media_asset_id:
+        type: integer
       business_license_number:
         type: string
       business_license_ocr:
@@ -3549,19 +3546,19 @@ definitions:
         type: array
       food_permit_ocr:
         $ref: '#/definitions/api.FoodPermitOCRData'
-      food_permit_url:
-        type: string
+      food_permit_media_asset_id:
+        type: integer
       id:
         type: integer
       id_card_back_ocr:
         $ref: '#/definitions/api.MerchantIDCardOCRData'
+      id_card_back_media_asset_id:
+        type: integer
       id_card_front_ocr:
         $ref: '#/definitions/api.MerchantIDCardOCRData'
+      id_card_front_media_asset_id:
+        type: integer
       latitude:
-        type: string
-      legal_person_id_back_url:
-        type: string
-      legal_person_id_front_url:
         type: string
       legal_person_id_number:
         type: string
@@ -4090,12 +4087,12 @@ definitions:
     type: object
   api.operatorApplicationResponse:
     properties:
+      business_license_asset_id:
+        type: integer
       business_license_number:
         type: string
       business_license_ocr:
         $ref: '#/definitions/api.BusinessLicenseOCRData'
-      business_license_url:
-        type: string
       contact_name:
         type: string
       contact_phone:
@@ -4106,12 +4103,12 @@ definitions:
         type: integer
       id_card_back_ocr:
         $ref: '#/definitions/api.OperatorIDCardBackOCR'
-      id_card_back_url:
-        type: string
+      id_card_back_asset_id:
+        type: integer
       id_card_front_ocr:
         $ref: '#/definitions/api.OperatorIDCardOCRData'
-      id_card_front_url:
-        type: string
+      id_card_front_asset_id:
+        type: integer
       legal_person_id_number:
         type: string
       legal_person_name:
@@ -5740,16 +5737,16 @@ definitions:
     properties:
       created_at:
         type: string
+      health_cert_asset_id:
+        type: integer
       health_cert_ocr:
         $ref: '#/definitions/api.HealthCertOCRData'
-      health_cert_url:
-        type: string
       id:
         type: integer
-      id_card_back_url:
-        type: string
-      id_card_front_url:
-        type: string
+      id_card_back_asset_id:
+        type: integer
+      id_card_front_asset_id:
+        type: integer
       id_card_ocr:
         $ref: '#/definitions/api.IDCardOCRData'
       phone:
@@ -6185,22 +6182,6 @@ definitions:
           $ref: '#/definitions/api.customizationGroupInput'
         maxItems: 20
         type: array
-    type: object
-  api.signUploadURLRequest:
-    properties:
-      path:
-        maxLength: 2048
-        minLength: 1
-        type: string
-    required:
-    - path
-    type: object
-  api.signUploadURLResponse:
-    properties:
-      expires:
-        type: integer
-      url:
-        type: string
     type: object
   api.staffResponse:
     properties:
@@ -6908,9 +6889,6 @@ definitions:
         maximum: 100000000
         minimum: 0
         type: integer
-      qr_code_url:
-        maxLength: 500
-        type: string
       status:
         enum:
         - available
@@ -7512,9 +7490,9 @@ info:
   description: |-
     本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。
 
-    【图片URL约定】API 中的图片字段（如 image_url / avatar_url / logo_url）通常返回以 /uploads/ 开头的路径。
-    - 公共展示素材（例如菜品/桌台/包间/评价图片、商户logo等）可直接通过 GET /uploads/... 访问。
-    - 敏感材料（证照、身份证、健康证等）必须先调用 POST /v1/uploads/sign 获取短期签名URL，再用该URL下载。
+    【图片URL约定】公共展示图片字段（如 image_url / avatar_url / logo_url）应返回可直接访问的绝对 URL（通常为 CDN 地址）。
+    - 公共展示素材不应再依赖客户端拼接 /uploads/... 路径。
+    - 敏感材料应使用 media_asset_id + POST /v1/media/private-access 获取短期访问地址。
   license:
     name: Apache 2.0
     url: http://www.apache.org/licenses/LICENSE-2.0.html
@@ -8894,34 +8872,6 @@ paths:
       summary: 获取骑手绩效排行榜
       tags:
       - Platform
-  /uploads/sign:
-    post:
-      consumes:
-      - application/json
-      description: |-
-        用于访问 uploads 下的敏感图片（证照/身份证/健康证等）。
-
-        说明：
-        - 公共展示素材通常可直接访问 /uploads/...（无需签名）。
-        - 私有/敏感图片必须先调用本接口获取短期签名URL，再使用该URL下载。
-      parameters:
-      - description: 签名请求（path 为 uploads 相对路径，如 uploads/merchants/1/licenses/xxx.jpg
-          或 merchants/1/licenses/xxx.jpg）
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.signUploadURLRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 签名URL与过期时间（Unix秒）
-          schema:
-            $ref: '#/definitions/api.signUploadURLResponse'
-      security:
-      - BearerAuth: []
-      summary: 生成上传文件的签名下载URL
   /v1/addresses:
     get:
       consumes:

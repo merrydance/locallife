@@ -184,7 +184,7 @@
 ```json
 {
   "id": 123,
-  "object_key": "uploads/public/merchants/1001/dishes/abc123.jpg",
+  "object_key": "merchant/dish/1001/abc123.jpg",
   "bucket_type": "public",
   "visibility": "public",
   "media_kind": "image",
@@ -212,7 +212,7 @@
 
 ```json
 {
-  "key": "uploads/public/merchants/1001/dishes/abc123.jpg",
+  "key": "merchant/dish/1001/abc123.jpg",
   "policy": "...",
   "signature": "...",
   "access_key_id": "...",
@@ -273,13 +273,13 @@
 ```json
 {
   "upload_id": "up_01JABCDEF1234567890",
-  "object_key": "uploads/public/merchants/1001/dishes/1d3f....jpg",
+  "object_key": "merchant/dish/1001/1d3f....jpg",
   "bucket_type": "public",
   "visibility": "public",
   "upload_host": "https://oss-direct.example.com",
   "expire_at": "2026-03-18T10:05:00Z",
   "form": {
-    "key": "uploads/public/merchants/1001/dishes/1d3f....jpg",
+    "key": "merchant/dish/1001/1d3f....jpg",
     "policy": "...",
     "signature": "...",
     "access_key_id": "...",
@@ -328,7 +328,7 @@
 ```json
 {
   "upload_id": "up_01JABCDEF1234567890",
-  "object_key": "uploads/public/merchants/1001/dishes/1d3f....jpg",
+  "object_key": "merchant/dish/1001/1d3f....jpg",
   "etag": "\"5d41402abc4b2a76b9719d911017c592\"",
   "resource_bind": {
     "resource_type": "dish",
@@ -353,7 +353,7 @@
 {
   "media_asset": {
     "id": 123,
-    "object_key": "uploads/public/merchants/1001/dishes/1d3f....jpg",
+    "object_key": "merchant/dish/1001/1d3f....jpg",
     "bucket_type": "public",
     "visibility": "public",
     "media_kind": "image",

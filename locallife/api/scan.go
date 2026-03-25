@@ -2,6 +2,9 @@ package api
 
 import (
 	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"image"
 	"image/color"
@@ -14,8 +17,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/wechat"
 	"golang.org/x/image/font"
 	"golang.org/x/image/font/basicfont"
@@ -397,7 +400,7 @@ func formatDiscountDesc(minAmount, discountValue int64) string {
 
 // generateTableQRCodeResponse 生成二维码响应
 type generateTableQRCodeResponse struct {
-	QrCodeUrl  string `json:"qr_code_url" example:"https://api.example.com/uploads/qrcodes/m1_t123.png"`
+	QrCodeUrl  string `json:"qr_code_url" example:"https://cdn.example.com/qrcodes/m1_t123.png"`
 	TableNo    string `json:"table_no" example:"T01"`
 	MerchantID int64  `json:"merchant_id" example:"1"`
 }
@@ -415,6 +418,54 @@ func tableTypeLabel(tableType string) string {
 
 func buildTableQRCodeLabel(merchantID int64, table db.Table) string {
 	return fmt.Sprintf("商户#%d | 桌号:%s | %s", merchantID, table.TableNo, tableTypeLabel(table.TableType))
+}
+
+func buildTableQRCodeObjectKey(merchantID, tableID int64, checksum string) string {
+	shortChecksum := checksum
+	if len(shortChecksum) > 12 {
+		shortChecksum = shortChecksum[:12]
+	}
+	filename := fmt.Sprintf("qrcode_m%d_t%d_%s%s", merchantID, tableID, shortChecksum, labeledQRCodeFilenameSuffix)
+	return fmt.Sprintf("merchant/table/%d/qrcodes/%s", merchantID, filename)
+}
+
+func (server *Server) storeTableQRCode(ctx context.Context, uploaderID int64, merchantID, tableID int64, pngData []byte) (string, error) {
+	if server.mediaStorage == nil {
+		return "", fmt.Errorf("media storage is not initialized")
+	}
+
+	checksumBytes := sha256.Sum256(pngData)
+	checksum := hex.EncodeToString(checksumBytes[:])
+	objectKey := buildTableQRCodeObjectKey(merchantID, tableID, checksum)
+
+	if err := server.mediaStorage.PutObject(ctx, server.mediaStorage.PublicBucket(), objectKey, "image/png", bytes.NewReader(pngData), int64(len(pngData))); err != nil {
+		return "", err
+	}
+
+	asset, err := server.store.CreateMediaAsset(ctx, db.CreateMediaAssetParams{
+		ObjectKey:      objectKey,
+		Visibility:     string(media.VisibilityPublic),
+		MediaCategory:  string(media.CategoryTableImage),
+		MimeType:       "image/png",
+		FileSize:       int64(len(pngData)),
+		ChecksumSha256: checksum,
+		UploadedBy:     uploaderID,
+		SourceClient:   "server",
+	})
+	if err != nil {
+		return "", err
+	}
+
+	if asset.ModerationStatus != "approved" {
+		if _, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
+			ID:               asset.ID,
+			ModerationStatus: "approved",
+		}); err != nil {
+			return "", err
+		}
+	}
+
+	return server.mediaResolver.PublicURL(objectKey, media.VariantOriginal), nil
 }
 
 func fitLabelTextForWidth(text string, maxWidth int) string {
@@ -528,10 +579,10 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
-	// 如果已有已打标二维码，直接返回；历史未打标二维码走重新生成流程
+	// 如果已有已打标二维码，直接返回；未打标二维码走重新生成流程
 	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" && isLabeledQRCodePath(table.QrCodeUrl.String) {
 		ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
-			QrCodeUrl:  normalizeUploadURLForClient(table.QrCodeUrl.String),
+			QrCodeUrl:  table.QrCodeUrl.String,
 			TableNo:    table.TableNo,
 			MerchantID: merchant.ID,
 		})
@@ -568,10 +619,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
-	// 保存PNG图片到文件系统
-	filename := fmt.Sprintf("qrcode_m%d_t%d%s", merchant.ID, tableID, labeledQRCodeFilenameSuffix)
-	uploader := util.NewFileUploader("uploads")
-	relativePath, err := uploader.SaveQRCodeImage(merchant.ID, filename, labeledPNG)
+	qrCodeURL, err := server.storeTableQRCode(ctx, authPayload.UserID, merchant.ID, tableID, labeledPNG)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("保存二维码图片失败: %w", err)))
 		return
@@ -580,7 +628,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	// 更新桌台的二维码URL
 	_, err = server.store.UpdateTable(ctx, db.UpdateTableParams{
 		ID:        tableID,
-		QrCodeUrl: pgtype.Text{String: relativePath, Valid: true},
+		QrCodeUrl: pgtype.Text{String: qrCodeURL, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -588,7 +636,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
-		QrCodeUrl:  normalizeUploadURLForClient(relativePath),
+		QrCodeUrl:  qrCodeURL,
 		TableNo:    table.TableNo,
 		MerchantID: merchant.ID,
 	})

@@ -44,7 +44,8 @@ import {
   DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
-import { apiGet, apiPost, apiPatch, apiDelete, getMediaUrl } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiDelete } from "@/lib/api";
+import { getMediaDisplayUrl } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useMerchantSession } from "@/components/providers/merchant-session-provider";
@@ -251,7 +252,7 @@ export function StaffPageClient() {
                       <div className="relative">
                         <div className="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center overflow-hidden border-2 border-white shadow-sm ring-1 ring-slate-100">
                             {member.avatar_url ? (
-                              <Image src={getMediaUrl(member.avatar_url)} alt={member.full_name || "员工头像"} width={40} height={40} className="w-full h-full object-cover" />
+                              <Image src={getMediaDisplayUrl(member.avatar_url)} alt={member.full_name || "员工头像"} width={40} height={40} className="w-full h-full object-cover" />
                             ) : (
                              <User className="h-8 w-8 text-slate-300" />
                            )}

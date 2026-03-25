@@ -12,7 +12,7 @@ import {
 import { getCurrentRegion, type CurrentRegionResponse } from '../../../api/location'
 import { logger } from '../../../utils/logger'
 import { locationService, type LocationInfo } from '../../../utils/location'
-import { resolveImageURL } from '../../../utils/image-security'
+import { getPrivateMediaUrl } from '../../../utils/image-security'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 
@@ -41,7 +41,7 @@ type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
 type UploadFieldValue = {
   url: string
-  rawUrl: string
+  assetId?: number
 }
 
 function getErrorText(error: unknown, fallback: string): string {
@@ -425,15 +425,17 @@ Page({
     }
   },
 
-  async resolveUploadPreviewURL(rawUrl: string): Promise<string> {
-    if (!rawUrl) return ''
-    if (/^(https?:\/\/|wxfile:|data:)/.test(rawUrl)) return rawUrl
-
-    try {
-      return await resolveImageURL(rawUrl)
-    } catch (_e) {
-      return ''
+  async resolveUploadPreviewURL(rawUrl: string, assetId?: number): Promise<string> {
+  async resolveUploadPreviewURL(assetId?: number): Promise<string> {
+    if (assetId && assetId > 0) {
+      try {
+        return await getPrivateMediaUrl(assetId)
+      } catch (_e) {
+        return ''
+      }
     }
+
+    return ''
   },
 
   async refreshUploadPreviewURLs() {
@@ -444,10 +446,10 @@ Page({
     ]
 
     for (const item of uploads) {
-      const rawUrl = item.value?.rawUrl || ''
-      if (!rawUrl) continue
+      const assetId = item.value?.assetId
+      if (!assetId) continue
 
-      const resolved = await this.resolveUploadPreviewURL(rawUrl)
+      const resolved = await this.resolveUploadPreviewURL(assetId)
       if (resolved && resolved !== item.value.url) {
         this.setData({ [`${item.key}.url`]: resolved })
       }
@@ -460,19 +462,15 @@ Page({
   mapResponseToData(res: OperatorApplicationResponse) {
     if (!res) return
 
-    const licenseRawUrl = String(res.business_license_url || '')
-    const idFrontRawUrl = String(res.id_card_front_url || '')
-    const idBackRawUrl = String(res.id_card_back_url || '')
-
     const newData: Record<string, unknown> = {
       'formData.regionId': Number(res.region_id || 0),
       'formData.name': String(res.name || ''),
       'formData.contactName': String(res.contact_name || ''),
       'formData.contactPhone': String(res.contact_phone || ''),
       'formData.years': Number(res.requested_contract_years || 3),
-      idFront: { url: '', rawUrl: idFrontRawUrl },
-      idBack: { url: '', rawUrl: idBackRawUrl },
-      license: { url: '', rawUrl: licenseRawUrl }
+      idFront: { url: '', assetId: res.id_card_front_asset_id },
+      idBack: { url: '', assetId: res.id_card_back_asset_id },
+      license: { url: '', assetId: res.business_license_asset_id }
     }
 
     // 优先使用后端返回的名称，否则尝试从本地 Options 中反查

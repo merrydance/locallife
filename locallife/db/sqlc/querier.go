@@ -681,6 +681,7 @@ type Querier interface {
 	GetMaliciousClaims(ctx context.Context, createdAt time.Time) ([]Claim, error)
 	GetMatchingRechargeRule(ctx context.Context, arg GetMatchingRechargeRuleParams) (RechargeRule, error)
 	GetMediaAssetByID(ctx context.Context, id int64) (MediaAsset, error)
+	GetMediaAssetByModerationTraceID(ctx context.Context, moderationTraceID pgtype.Text) (MediaAsset, error)
 	GetMediaAssetByObjectKey(ctx context.Context, objectKey string) (MediaAsset, error)
 	GetMembershipByMerchantAndUser(ctx context.Context, arg GetMembershipByMerchantAndUserParams) (MerchantMembership, error)
 	GetMembershipByMerchantAndUserForUpdate(ctx context.Context, arg GetMembershipByMerchantAndUserForUpdateParams) (MerchantMembership, error)
@@ -1163,7 +1164,7 @@ type Querier interface {
 	// Group merchants
 	ListGroupMerchants(ctx context.Context, groupID pgtype.Int8) ([]ListGroupMerchantsRow, error)
 	ListIngredients(ctx context.Context, arg ListIngredientsParams) ([]Ingredient, error)
-	ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]MediaAsset, error)
+	ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]ListMediaAssetsByIDsRow, error)
 	ListMediaAssetsByUploader(ctx context.Context, arg ListMediaAssetsByUploaderParams) ([]MediaAsset, error)
 	ListMembershipTransactions(ctx context.Context, arg ListMembershipTransactionsParams) ([]MembershipTransaction, error)
 	ListMembershipTransactionsByType(ctx context.Context, arg ListMembershipTransactionsByTypeParams) ([]MembershipTransaction, error)
@@ -1490,6 +1491,8 @@ type Querier interface {
 	// 先将用户的所有地址设为非默认
 	SetDefaultAddress(ctx context.Context, userID int64) error
 	SetMediaAssetModerationStatus(ctx context.Context, arg SetMediaAssetModerationStatusParams) (MediaAsset, error)
+	SetMediaAssetModerationStatusByTraceID(ctx context.Context, arg SetMediaAssetModerationStatusByTraceIDParams) (MediaAsset, error)
+	SetMediaAssetModerationTraceID(ctx context.Context, arg SetMediaAssetModerationTraceIDParams) (MediaAsset, error)
 	SetMediaAssetUploadStatus(ctx context.Context, arg SetMediaAssetUploadStatusParams) (MediaAsset, error)
 	SetOperatorWallet(ctx context.Context, arg SetOperatorWalletParams) error
 	SetPaymentOrderCombinedID(ctx context.Context, arg SetPaymentOrderCombinedIDParams) (PaymentOrder, error)

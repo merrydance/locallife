@@ -150,7 +150,7 @@ func checkApplicationEditable(status string) (editable bool, needReset bool, err
 	}
 }
 
-func newMerchantApplicationDraftResponse(app db.MerchantApplication) merchantApplicationDraftResponse {
+func (server *Server) newMerchantApplicationDraftResponse(app db.MerchantApplication) merchantApplicationDraftResponse {
 	resp := merchantApplicationDraftResponse{
 		ID:                          app.ID,
 		UserID:                      app.UserID,
@@ -255,12 +255,18 @@ func newMerchantApplicationDraftResponse(app db.MerchantApplication) merchantApp
 	if len(app.StorefrontImages) > 0 {
 		var images []string
 		if json.Unmarshal(app.StorefrontImages, &images) == nil {
+			for i, img := range images {
+				images[i] = server.resolvePublicUploadURLForClient(img)
+			}
 			resp.StorefrontImages = images
 		}
 	}
 	if len(app.EnvironmentImages) > 0 {
 		var images []string
 		if json.Unmarshal(app.EnvironmentImages, &images) == nil {
+			for i, img := range images {
+				images[i] = server.resolvePublicUploadURLForClient(img)
+			}
 			resp.EnvironmentImages = images
 		}
 	}
@@ -296,14 +302,14 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
-			ctx.JSON(http.StatusCreated, newMerchantApplicationDraftResponse(newApp))
+			ctx.JSON(http.StatusCreated, server.newMerchantApplicationDraftResponse(newApp))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(app))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(app))
 }
 
 // ==================== 更新基础信息 ====================
@@ -451,7 +457,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(updatedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(updatedApp))
 }
 
 // ==================== 更新门头照和环境照 ====================
@@ -586,7 +592,7 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(updatedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(updatedApp))
 }
 
 // ==================== 上传营业执照并OCR识别 ====================
@@ -718,7 +724,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 
 	// 未上传新文件且没有新资产 ID 且已有OCR：直接返回（避免重复OCR）
 	if !fromUpload && !fromAssetID && hasExistingOCR {
-		ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(app))
+		ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(app))
 		return
 	}
 
@@ -813,7 +819,7 @@ func (server *Server) uploadMerchantBusinessLicenseOCR(ctx *gin.Context) {
 	}
 	log.Info().Str("request_id", requestID).Msg("merchant OCR: task distributed successfully")
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(updatedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(updatedApp))
 	log.Info().Str("request_id", requestID).Msg("merchant OCR: response sent")
 }
 
@@ -904,7 +910,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 
 	// 未上传新文件且没有新资产 ID 且已有OCR：直接返回（避免重复OCR）
 	if !fromUpload && !fromAssetID && hasExistingOCR {
-		ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(app))
+		ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(app))
 		return
 	}
 
@@ -992,7 +998,7 @@ func (server *Server) uploadMerchantFoodPermitOCR(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(updatedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(updatedApp))
 }
 
 // parseFoodPermitOCRText 从OCR文本中解析食品经营许可证信息
@@ -1104,7 +1110,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 
 	// 未上传新文件且没有新资产 ID 且已有OCR：直接返回（避免重复OCR）
 	if !fromUpload && !fromAssetID && hasExistingOCR {
-		ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(app))
+		ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(app))
 		return
 	}
 
@@ -1232,7 +1238,7 @@ func (server *Server) uploadMerchantIDCardOCR(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(updatedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(updatedApp))
 }
 
 // ==================== 提交申请 ====================
@@ -1358,7 +1364,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 			Int64("user_role_id", txResult.UserRole.ID).
 			Msg("商户审核通过事务完成")
 
-		ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(txResult.Application))
+		ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(txResult.Application))
 		return
 	}
 
@@ -1372,7 +1378,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(rejectedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(rejectedApp))
 }
 
 // validateMerchantApplicationRequired 验证必填字段
@@ -2273,5 +2279,5 @@ func (server *Server) resetMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newMerchantApplicationDraftResponse(resetResult.Application))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(resetResult.Application))
 }

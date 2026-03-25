@@ -2,6 +2,7 @@ package api
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -241,6 +242,38 @@ func TestSearchMerchantsAPI(t *testing.T) {
 				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
+		{
+			name:  "RewritesLegacyCoverImageInLocalMode",
+			query: "?keyword=火锅&region_id=1&page_id=1&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				storefrontImages, err := json.Marshal([]string{"uploads/merchants/12/storefront/cover.jpg"})
+				require.NoError(t, err)
+
+				store.EXPECT().
+					SearchMerchants(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.SearchMerchantsRow{{
+						ID:               12,
+						Name:             "测试商户",
+						Status:           "approved",
+						RegionID:         1,
+						IsOpen:           true,
+						StorefrontImages: storefrontImages,
+					}}, nil)
+
+				store.EXPECT().
+					CountSearchMerchants(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp searchMerchantListResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Merchants, 1)
+				require.Equal(t, "/dev/uploads/merchants/12/storefront/cover.jpg", resp.Merchants[0].CoverImage)
+			},
+		},
 	}
 
 	for i := range testCases {
@@ -254,6 +287,9 @@ func TestSearchMerchantsAPI(t *testing.T) {
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
+			if tc.name == "RewritesLegacyCoverImageInLocalMode" {
+				server.config.FileStorageProvider = "local"
+			}
 			recorder := httptest.NewRecorder()
 
 			url := "/v1/search/merchants" + tc.query

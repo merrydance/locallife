@@ -128,8 +128,8 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: map[string]interface{}{
-				"full_name":  "New Name",
-				"avatar_url": "/uploads/avatars/new-avatar.jpg",
+				"full_name":             "New Name",
+				"avatar_media_asset_id": int64(101),
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -137,7 +137,7 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				updatedUser := user
 				updatedUser.FullName = "Updated Name"
-				updatedUser.AvatarUrl = pgtype.Text{String: "uploads/avatars/new-avatar.jpg", Valid: true}
+				updatedUser.AvatarMediaAssetID = pgtype.Int8{Int64: 101, Valid: true}
 
 				store.EXPECT().
 					UpdateUser(gomock.Any(), gomock.Any()).
@@ -147,6 +147,10 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return([]db.UserRole{}, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), gomock.Eq(int64(101))).
+					Times(1).
+					Return(db.MediaAsset{ID: 101, ObjectKey: "user/avatar/101/profile.jpg", Visibility: "public"}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

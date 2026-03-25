@@ -28,9 +28,9 @@ import {
   apiPost,
   apiPut,
   formatAmount,
-  getMediaUrl,
   formatImageUrl
 } from "@/lib/api";
+import { getMediaDisplayUrl } from "@/lib/media";
 import { DishResponse, DishCategory } from "@/types/dish";
 import { InventoryItem, InventoryStats, ListInventoryResponse } from "@/types/inventory";
 import { cn } from "@/lib/utils";
@@ -405,7 +405,7 @@ export function InventoryPageClient() {
                         <div className="flex-1 flex items-center gap-4 min-w-0">
                           <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden shrink-0">
                              {dish.image_url ? (
-                               <Image src={formatImageUrl(getMediaUrl(dish.image_url))} alt={dish.name} width={48} height={48} className="w-full h-full object-cover" />
+                               <Image src={formatImageUrl(getMediaDisplayUrl(dish.image_url))} alt={dish.name} width={48} height={48} className="w-full h-full object-cover" />
                              ) : (
                                <div className="w-full h-full flex items-center justify-center text-slate-300">
                                  <Package className="h-6 w-6" />

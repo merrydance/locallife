@@ -1,8 +1,8 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { logger } from '../../../utils/logger'
-import { resolveImageURL } from '../../../utils/image-security'
 import { uploadMerchantImage, getMerchantApplication, updateShopImages } from '../../../api/onboarding'
 import { getMyMerchantProfile, updateMyMerchantLogo } from '../../../api/merchant'
+import { getMediaDisplayUrl } from '../../../utils/media'
 
 type ImageItem = { url: string, rawUrl?: string }
 
@@ -52,27 +52,29 @@ Page({
       // Logo
       let logoImage: ImageItem | null = null
       if (merchant.logo_url) {
-        const displayUrl = await resolveImageURL(merchant.logo_url)
-        logoImage = { url: displayUrl, rawUrl: merchant.logo_url }
+        const displayUrl = getMediaDisplayUrl(merchant.logo_url)
+        if (displayUrl) {
+          logoImage = { url: displayUrl, rawUrl: merchant.logo_url }
+        }
       }
 
       // 门头照
       const storefrontRaw: string[] = application?.storefront_images || []
-      const storefrontImages: ImageItem[] = await Promise.all(
-        storefrontRaw.map(async (rawUrl) => ({
-          url: await resolveImageURL(rawUrl),
+      const storefrontImages: ImageItem[] = storefrontRaw
+        .map((rawUrl) => ({
+          url: getMediaDisplayUrl(rawUrl),
           rawUrl
         }))
-      )
+        .filter((item) => !!item.url)
 
       // 环境照
       const environmentRaw: string[] = application?.environment_images || []
-      const environmentImages: ImageItem[] = await Promise.all(
-        environmentRaw.map(async (rawUrl) => ({
-          url: await resolveImageURL(rawUrl),
+      const environmentImages: ImageItem[] = environmentRaw
+        .map((rawUrl) => ({
+          url: getMediaDisplayUrl(rawUrl),
           rawUrl
         }))
-      )
+        .filter((item) => !!item.url)
 
       this.setData({
         logoImage,

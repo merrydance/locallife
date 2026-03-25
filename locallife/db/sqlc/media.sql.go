@@ -57,7 +57,7 @@ SET
     height        = COALESCE($5, height),
     updated_at    = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at
+RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id
 `
 
 type ConfirmMediaAssetUploadedParams struct {
@@ -94,6 +94,7 @@ func (q *Queries) ConfirmMediaAssetUploaded(ctx context.Context, arg ConfirmMedi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ModerationTraceID,
 	)
 	return i, err
 }
@@ -115,7 +116,7 @@ INSERT INTO media_assets (
     $1, $2, $3, $4, $5, $6,
     'pending', 'pending',
     $7, $8
-) RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at
+) RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id
 `
 
 type CreateMediaAssetParams struct {
@@ -161,6 +162,7 @@ func (q *Queries) CreateMediaAsset(ctx context.Context, arg CreateMediaAssetPara
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ModerationTraceID,
 	)
 	return i, err
 }
@@ -305,7 +307,7 @@ func (q *Queries) ExpireUploadSession(ctx context.Context, id string) (MediaUplo
 }
 
 const getMediaAssetByID = `-- name: GetMediaAssetByID :one
-SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at FROM media_assets
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
 WHERE id = $1 AND deleted_at IS NULL
 `
 
@@ -329,12 +331,43 @@ func (q *Queries) GetMediaAssetByID(ctx context.Context, id int64) (MediaAsset, 
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ModerationTraceID,
+	)
+	return i, err
+}
+
+const getMediaAssetByModerationTraceID = `-- name: GetMediaAssetByModerationTraceID :one
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
+WHERE moderation_trace_id = $1 AND deleted_at IS NULL
+`
+
+func (q *Queries) GetMediaAssetByModerationTraceID(ctx context.Context, moderationTraceID pgtype.Text) (MediaAsset, error) {
+	row := q.db.QueryRow(ctx, getMediaAssetByModerationTraceID, moderationTraceID)
+	var i MediaAsset
+	err := row.Scan(
+		&i.ID,
+		&i.ObjectKey,
+		&i.Visibility,
+		&i.MediaCategory,
+		&i.MimeType,
+		&i.FileSize,
+		&i.Width,
+		&i.Height,
+		&i.ChecksumSha256,
+		&i.UploadStatus,
+		&i.ModerationStatus,
+		&i.UploadedBy,
+		&i.SourceClient,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ModerationTraceID,
 	)
 	return i, err
 }
 
 const getMediaAssetByObjectKey = `-- name: GetMediaAssetByObjectKey :one
-SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at FROM media_assets
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
 WHERE object_key = $1 AND deleted_at IS NULL
 `
 
@@ -358,6 +391,7 @@ func (q *Queries) GetMediaAssetByObjectKey(ctx context.Context, objectKey string
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ModerationTraceID,
 	)
 	return i, err
 }
@@ -424,22 +458,43 @@ func (q *Queries) GetUploadSession(ctx context.Context, id string) (MediaUploadS
 
 const listMediaAssetsByIDs = `-- name: ListMediaAssetsByIDs :many
 SELECT id, object_key, visibility, media_category, mime_type, file_size,
-       width, height, checksum_sha256, upload_status, moderation_status,
+  width, height, checksum_sha256, upload_status, moderation_status,
+  moderation_trace_id,
        uploaded_by, source_client, created_at, updated_at, deleted_at
 FROM media_assets
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL
 `
 
-func (q *Queries) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]MediaAsset, error) {
+type ListMediaAssetsByIDsRow struct {
+	ID                int64              `json:"id"`
+	ObjectKey         string             `json:"object_key"`
+	Visibility        string             `json:"visibility"`
+	MediaCategory     string             `json:"media_category"`
+	MimeType          string             `json:"mime_type"`
+	FileSize          int64              `json:"file_size"`
+	Width             pgtype.Int4        `json:"width"`
+	Height            pgtype.Int4        `json:"height"`
+	ChecksumSha256    string             `json:"checksum_sha256"`
+	UploadStatus      string             `json:"upload_status"`
+	ModerationStatus  string             `json:"moderation_status"`
+	ModerationTraceID pgtype.Text        `json:"moderation_trace_id"`
+	UploadedBy        int64              `json:"uploaded_by"`
+	SourceClient      string             `json:"source_client"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         time.Time          `json:"updated_at"`
+	DeletedAt         pgtype.Timestamptz `json:"deleted_at"`
+}
+
+func (q *Queries) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]ListMediaAssetsByIDsRow, error) {
 	rows, err := q.db.Query(ctx, listMediaAssetsByIDs, ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []MediaAsset{}
+	items := []ListMediaAssetsByIDsRow{}
 	for rows.Next() {
-		var i MediaAsset
+		var i ListMediaAssetsByIDsRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.ObjectKey,
@@ -452,6 +507,7 @@ func (q *Queries) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]Medi
 			&i.ChecksumSha256,
 			&i.UploadStatus,
 			&i.ModerationStatus,
+			&i.ModerationTraceID,
 			&i.UploadedBy,
 			&i.SourceClient,
 			&i.CreatedAt,
@@ -469,7 +525,7 @@ func (q *Queries) ListMediaAssetsByIDs(ctx context.Context, ids []int64) ([]Medi
 }
 
 const listMediaAssetsByUploader = `-- name: ListMediaAssetsByUploader :many
-SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at FROM media_assets
+SELECT id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id FROM media_assets
 WHERE uploaded_by = $1
   AND deleted_at IS NULL
 ORDER BY created_at DESC
@@ -508,6 +564,7 @@ func (q *Queries) ListMediaAssetsByUploader(ctx context.Context, arg ListMediaAs
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
+			&i.ModerationTraceID,
 		); err != nil {
 			return nil, err
 		}
@@ -523,7 +580,7 @@ const setMediaAssetModerationStatus = `-- name: SetMediaAssetModerationStatus :o
 UPDATE media_assets
 SET moderation_status = $2, updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at
+RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id
 `
 
 type SetMediaAssetModerationStatusParams struct {
@@ -551,6 +608,81 @@ func (q *Queries) SetMediaAssetModerationStatus(ctx context.Context, arg SetMedi
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ModerationTraceID,
+	)
+	return i, err
+}
+
+const setMediaAssetModerationStatusByTraceID = `-- name: SetMediaAssetModerationStatusByTraceID :one
+UPDATE media_assets
+SET moderation_status = $2, updated_at = now()
+WHERE moderation_trace_id = $1 AND deleted_at IS NULL
+RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id
+`
+
+type SetMediaAssetModerationStatusByTraceIDParams struct {
+	ModerationTraceID pgtype.Text `json:"moderation_trace_id"`
+	ModerationStatus  string      `json:"moderation_status"`
+}
+
+func (q *Queries) SetMediaAssetModerationStatusByTraceID(ctx context.Context, arg SetMediaAssetModerationStatusByTraceIDParams) (MediaAsset, error) {
+	row := q.db.QueryRow(ctx, setMediaAssetModerationStatusByTraceID, arg.ModerationTraceID, arg.ModerationStatus)
+	var i MediaAsset
+	err := row.Scan(
+		&i.ID,
+		&i.ObjectKey,
+		&i.Visibility,
+		&i.MediaCategory,
+		&i.MimeType,
+		&i.FileSize,
+		&i.Width,
+		&i.Height,
+		&i.ChecksumSha256,
+		&i.UploadStatus,
+		&i.ModerationStatus,
+		&i.UploadedBy,
+		&i.SourceClient,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ModerationTraceID,
+	)
+	return i, err
+}
+
+const setMediaAssetModerationTraceID = `-- name: SetMediaAssetModerationTraceID :one
+UPDATE media_assets
+SET moderation_trace_id = $2, updated_at = now()
+WHERE id = $1 AND deleted_at IS NULL
+RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id
+`
+
+type SetMediaAssetModerationTraceIDParams struct {
+	ID                int64       `json:"id"`
+	ModerationTraceID pgtype.Text `json:"moderation_trace_id"`
+}
+
+func (q *Queries) SetMediaAssetModerationTraceID(ctx context.Context, arg SetMediaAssetModerationTraceIDParams) (MediaAsset, error) {
+	row := q.db.QueryRow(ctx, setMediaAssetModerationTraceID, arg.ID, arg.ModerationTraceID)
+	var i MediaAsset
+	err := row.Scan(
+		&i.ID,
+		&i.ObjectKey,
+		&i.Visibility,
+		&i.MediaCategory,
+		&i.MimeType,
+		&i.FileSize,
+		&i.Width,
+		&i.Height,
+		&i.ChecksumSha256,
+		&i.UploadStatus,
+		&i.ModerationStatus,
+		&i.UploadedBy,
+		&i.SourceClient,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.ModerationTraceID,
 	)
 	return i, err
 }
@@ -559,7 +691,7 @@ const setMediaAssetUploadStatus = `-- name: SetMediaAssetUploadStatus :one
 UPDATE media_assets
 SET upload_status = $2, updated_at = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at
+RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id
 `
 
 type SetMediaAssetUploadStatusParams struct {
@@ -587,6 +719,7 @@ func (q *Queries) SetMediaAssetUploadStatus(ctx context.Context, arg SetMediaAss
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ModerationTraceID,
 	)
 	return i, err
 }
@@ -598,7 +731,7 @@ SET
     upload_status = 'deleted',
     updated_at    = now()
 WHERE id = $1 AND deleted_at IS NULL
-RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at
+RETURNING id, object_key, visibility, media_category, mime_type, file_size, width, height, checksum_sha256, upload_status, moderation_status, uploaded_by, source_client, created_at, updated_at, deleted_at, moderation_trace_id
 `
 
 func (q *Queries) SoftDeleteMediaAsset(ctx context.Context, id int64) (MediaAsset, error) {
@@ -621,6 +754,7 @@ func (q *Queries) SoftDeleteMediaAsset(ctx context.Context, id int64) (MediaAsse
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
+		&i.ModerationTraceID,
 	)
 	return i, err
 }

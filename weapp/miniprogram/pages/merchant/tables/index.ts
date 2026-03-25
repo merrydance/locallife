@@ -54,6 +54,14 @@ function normalizeMediaUrl(path?: string): string {
   return `${API_BASE}/${path}`
 }
 
+function normalizeQRCodeUrl(path?: string): string {
+  if (!path) return ''
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path
+  }
+  return ''
+}
+
 function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
 }
@@ -231,7 +239,7 @@ Page({
     if (id) {
       tableManagementService.getTableQRCode(id)
         .then((res) => {
-          const qrCodeUrl = normalizeMediaUrl(res?.qr_code_url)
+          const qrCodeUrl = normalizeQRCodeUrl(res?.qr_code_url)
           if (!qrCodeUrl) {
             wx.showToast({ title: '暂无二维码', icon: 'none' })
             return
@@ -249,7 +257,10 @@ Page({
       return wx.showToast({ title: '暂无二维码', icon: 'none' })
     }
 
-    const finalUrl = normalizeMediaUrl(url)
+    const finalUrl = normalizeQRCodeUrl(url)
+    if (!finalUrl) {
+      return wx.showToast({ title: '暂无二维码', icon: 'none' })
+    }
     wx.previewImage({
       urls: [finalUrl],
       current: finalUrl

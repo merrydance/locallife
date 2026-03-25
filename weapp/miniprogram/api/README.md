@@ -274,12 +274,10 @@ getMerchantReservationStats()  // 商户查看预定统计
 ```typescript
 // 顾客端扫码点餐功能
 scanTable(merchantId, tableNo) // 顾客扫码获取菜单
-parseQRCodeUrl(url)            // 解析二维码URL
 // 商户端桌台管理功能
 getTableDetail(id)             // 获取桌台详情
 updateTableStatus()            // 更新桌台状态
 getTableQRCode(id)             // 获取桌台二维码
-generateQRCodeUrl()            // 生成二维码URL
 ```
 
 #### 15. 包间接口重构 (`miniprogram/api/room.ts`)
@@ -362,7 +360,7 @@ claimVoucher(voucherId)        // 领取优惠券
 getPersonalCenterOverview()    // 获取个人中心概览
 ```
 
-#### 17. 商户入驻申请接口重构 (`miniprogram/api/merchant-application.ts`)
+#### 17. 商户入驻申请接口重构 (`miniprogram/api/onboarding.ts`)
 - ✅ 重构商户申请：`/v1/merchants/applications`, `/v1/merchants/applications/me`
 - ✅ 重构申请流程：`/v1/merchant/application/*`, `/v1/merchant/application/submit`
 - ✅ 重构OCR识别和数据回填：
@@ -370,6 +368,8 @@ getPersonalCenterOverview()    // 获取个人中心概览
   * 营业执照OCR：`/v1/merchant/application/license/ocr` → 自动回填企业名称、统一社会信用代码、法定代表人、经营范围、地址等
   * 食品经营许可证OCR：`/v1/merchant/application/foodpermit/ocr` → 自动回填许可证编号、有效期等
 - ✅ 重构银行绑定：`/v1/merchant/bindbank`, `/v1/merchant/applyment/status`
+
+说明：旧封装 `miniprogram/api/merchant-application.ts` 已移除，当前运行时主链路统一以 `miniprogram/api/onboarding.ts` 为准。
 
 **核心功能**:
 ```typescript

@@ -35,9 +35,9 @@ import (
 // @version         1.0
 // @description     本地生活服务平台 API 文档，包含用户、商户、订单、配送、支付等完整业务功能。
 // @description
-// @description     【图片URL约定】API 中的图片字段（如 image_url / avatar_url / logo_url）通常返回以 /uploads/ 开头的路径。
-// @description     - 公共展示素材（例如菜品/桌台/包间/评价图片、商户logo等）可直接通过 GET /uploads/... 访问。
-// @description     - 敏感材料（证照、身份证、健康证等）必须先调用 POST /v1/uploads/sign 获取短期签名URL，再用该URL下载。
+// @description     【图片URL约定】公共展示图片字段（如 image_url / avatar_url / logo_url）应返回可直接访问的绝对 URL（通常为 CDN 地址）。
+// @description     - 公共展示素材不应再依赖客户端拼接 /uploads/... 路径。
+// @description     - 敏感材料应使用 media_asset_id + POST /v1/media/private-access 获取短期访问地址。
 // @termsOfService  http://swagger.io/terms/
 
 // @contact.name   API Support

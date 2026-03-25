@@ -8,8 +8,8 @@ export interface RiderApplicationResponse {
   user_id: number
   real_name?: string
   phone?: string
-  id_card_front_url?: string
-  id_card_back_url?: string
+  id_card_front_asset_id?: number
+  id_card_back_asset_id?: number
   id_card_ocr?: {
     name?: string
     id_number?: string
@@ -20,7 +20,7 @@ export interface RiderApplicationResponse {
     valid_end?: string
     ocr_at?: string
   }
-  health_cert_url?: string
+  health_cert_asset_id?: number
   health_cert_ocr?: {
     name?: string
     id_number?: string

@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"io"
 	"testing"
 	"time"
 
@@ -38,8 +39,11 @@ func (s *stubStorage) CreatePrivateDownloadURL(_ context.Context, _, _ string, _
 }
 
 func (s *stubStorage) DeleteObject(_ context.Context, _, _ string) error { return nil }
-func (s *stubStorage) PublicBucket() string                              { return "test-public" }
-func (s *stubStorage) PrivateBucket() string                             { return "test-private" }
+func (s *stubStorage) PutObject(_ context.Context, _, _, _ string, _ io.Reader, _ int64) error {
+	return nil
+}
+func (s *stubStorage) PublicBucket() string  { return "test-public" }
+func (s *stubStorage) PrivateBucket() string { return "test-private" }
 
 // ==================== CreateUploadSession ====================
 

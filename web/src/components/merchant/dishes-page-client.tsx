@@ -37,10 +37,9 @@ import {
   apiDelete,
   apiPatch,
   formatAmount,
-  getMediaUrl,
   formatImageUrl 
 } from "@/lib/api";
-import { uploadMedia } from "@/lib/media";
+import { getMediaDisplayUrl, uploadMedia } from "@/lib/media";
 import { 
   DishResponse, 
   DishCategory, 
@@ -425,7 +424,7 @@ export function DishesPageClient() {
                       <div className="relative w-32 shrink-0 bg-muted border-r border-muted/50 overflow-hidden">
                         {dish.image_url ? (
                           <Image 
-                            src={formatImageUrl(getMediaUrl(dish.image_url))} 
+                            src={formatImageUrl(getMediaDisplayUrl(dish.image_url))} 
                             alt={dish.name} 
                             width={128}
                             height={112}
@@ -528,7 +527,7 @@ export function DishesPageClient() {
                 >
                   {editDish.image_url ? (
                     <>
-                      <Image src={formatImageUrl(getMediaUrl(editDish.image_url))} alt="菜品图片" width={800} height={450} className="w-full h-full object-cover" />
+                      <Image src={formatImageUrl(getMediaDisplayUrl(editDish.image_url))} alt="菜品图片" width={800} height={450} className="w-full h-full object-cover" />
                       <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover/img:opacity-100 transition-opacity">
                         <span className="text-white text-sm font-medium flex items-center gap-2">
                           <Upload className="h-4 w-4" /> 更换图片

@@ -5,6 +5,23 @@ import (
 	"mime/multipart"
 )
 
+const (
+	SecCheckMediaTypeVoice = 1
+	SecCheckMediaTypeImage = 2
+)
+
+type MediaCheckAsyncRequest struct {
+	MediaURL  string
+	MediaType int
+	Version   int
+	OpenID    string
+	Scene     int
+}
+
+type MediaCheckAsyncResponse struct {
+	TraceID string `json:"trace_id"`
+}
+
 // WechatClient 微信客户端接口，便于测试mock
 type WechatClient interface {
 	// Code2Session 使用code换取openid和session_key
@@ -16,6 +33,9 @@ type WechatClient interface {
 	// MsgSecCheck 文本内容安全检测（msg_sec_check v2）
 	// 返回 nil 表示通过；返回 ErrRiskyTextContent 表示不通过；其他 error 表示调用失败。
 	MsgSecCheck(ctx context.Context, openid string, scene int, content string) error
+
+	// MediaCheckAsync 异步检测图片/音频内容安全。
+	MediaCheckAsync(ctx context.Context, req MediaCheckAsyncRequest) (*MediaCheckAsyncResponse, error)
 
 	// OCRBusinessLicense 识别营业执照
 	OCRBusinessLicense(ctx context.Context, imgFile multipart.File) (*BusinessLicenseOCRResponse, error)

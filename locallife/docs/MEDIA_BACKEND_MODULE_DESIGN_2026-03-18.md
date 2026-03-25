@@ -341,7 +341,7 @@ server := &Server{
 5. api/table_upload.go
 6. api/merchant.go 中 uploadMerchantImage handler
 7. api/upload_signed.go 中本地文件签名读取主流程
-8. router.GET("/uploads/*filepath", ...)
+8. 历史的 router.GET("/uploads/*filepath", ...) 公共读路由（现已改为 dev-only 的 /dev/uploads/*filepath）
 
 ### 10.2 第二类：需要改写后保留的代码
 

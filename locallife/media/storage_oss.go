@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/aliyun/alibabacloud-oss-go-sdk-v2/oss"
@@ -157,6 +158,21 @@ func (s *OSSStorage) DeleteObject(ctx context.Context, bucket, objectKey string)
 	})
 	if err != nil {
 		return fmt.Errorf("media: delete object %s: %w", objectKey, err)
+	}
+	return nil
+}
+
+// PutObject 由服务端直接写入 OSS 对象，适用于二维码等后端生成文件。
+func (s *OSSStorage) PutObject(ctx context.Context, bucket, objectKey string, contentType string, body io.Reader, contentLength int64) error {
+	_, err := s.client.PutObject(ctx, &oss.PutObjectRequest{
+		Bucket:        oss.Ptr(bucket),
+		Key:           oss.Ptr(objectKey),
+		ContentType:   oss.Ptr(contentType),
+		ContentLength: oss.Ptr(contentLength),
+		Body:          body,
+	})
+	if err != nil {
+		return fmt.Errorf("media: put object %s: %w", objectKey, err)
 	}
 	return nil
 }

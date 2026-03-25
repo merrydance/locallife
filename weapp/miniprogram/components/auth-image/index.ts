@@ -1,5 +1,4 @@
-
-import { resolveImageURL } from '../../utils/image-security'
+import { getMediaDisplayUrl } from '../../utils/media'
 
 Component({
     externalClasses: ['class', 'custom-class'],
@@ -52,8 +51,10 @@ Component({
             this.setData({ loading: true, error: false })
 
             try {
-                // Determine if we need to sign it
-                const resolvedUrl = await resolveImageURL(url)
+                const resolvedUrl = getMediaDisplayUrl(url)
+                if (!resolvedUrl) {
+                    throw new Error('invalid public media url')
+                }
 
                 this.setData({
                     localPath: resolvedUrl, // Use localPath to store the displayable URL
