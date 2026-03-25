@@ -32,6 +32,8 @@ const (
 	AlertTypeSystemError         AlertType = "SYSTEM_ERROR"
 	AlertTypeBillMismatch        AlertType = "BILL_MISMATCH"
 	AlertTypeRiderDepositExpiry  AlertType = "RIDER_DEPOSIT_EXPIRY"
+	AlertTypeOCRJobFailed        AlertType = "OCR_JOB_FAILED"
+	AlertTypeOCRRetryExhausted   AlertType = "OCR_RETRY_EXHAUSTED"
 )
 
 // AlertLevel 告警级别

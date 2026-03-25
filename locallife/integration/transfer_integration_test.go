@@ -189,6 +189,10 @@ func resetIntegrationData(t *testing.T) {
 	for attempt := 0; attempt < 5; attempt++ {
 		_, err = integrationPool.Exec(context.Background(), `
 			TRUNCATE TABLE
+				ocr_jobs,
+				operator_applications,
+				rider_applications,
+				merchant_applications,
 				notifications,
 				user_notification_preferences,
 				order_status_logs,

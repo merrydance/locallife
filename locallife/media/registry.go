@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"io"
 	"mime"
-	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
@@ -307,12 +304,39 @@ func extFromContentType(ct string) string {
 	return exts[0]
 }
 
-// downloadHTTPClient 用于从 OSS 下载对象内容，设置了超时以防止 goroutine 泄漏。
-var downloadHTTPClient = &http.Client{Timeout: 30 * time.Second}
-
-// maxDownloadBytes 是 DownloadObject 允许读取的最大字节数（10 MB）。
+// maxDownloadBytes 是服务端内部读取媒体对象允许读取的最大字节数（10 MB）。
 // 超过此限制视为异常，拒绝继续读取以防止 OOM。
 const maxDownloadBytes = 10 << 20
+
+// ReadMediaAsset 以服务端内部方式读取媒体资产字节流，不通过公开 URL 回读。
+// 返回数据库中记录的 mime_type 与对象字节流，供 OCR 等内部处理场景使用。
+func (r *Registry) ReadMediaAsset(ctx context.Context, assetID int64) ([]byte, string, error) {
+	asset, err := r.GetAsset(ctx, assetID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	bucket := r.storage.PublicBucket()
+	if asset.Visibility == string(VisibilityPrivate) {
+		bucket = r.storage.PrivateBucket()
+	}
+
+	body, err := r.storage.ReadObject(ctx, bucket, asset.ObjectKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("read media asset %d: %w", assetID, err)
+	}
+	defer body.Close()
+
+	data, err := io.ReadAll(io.LimitReader(body, maxDownloadBytes+1))
+	if err != nil {
+		return nil, "", fmt.Errorf("read media asset %d body: %w", assetID, err)
+	}
+	if int64(len(data)) > maxDownloadBytes {
+		return nil, "", fmt.Errorf("media asset %d exceeds max download size (%d bytes)", assetID, maxDownloadBytes)
+	}
+
+	return data, asset.MimeType, nil
+}
 
 // DownloadObject 下载指定媒体资产的原始内容。
 // 返回推荐文件名（object_key 末段）和文件字节流。
@@ -327,49 +351,9 @@ func (r *Registry) DownloadObject(ctx context.Context, assetID int64) (filename 
 	if idx := strings.LastIndex(name, "/"); idx >= 0 {
 		name = name[idx+1:]
 	}
-
-	// 本地开发模式：直接读磁盘，无需 HTTP 回环调用自身。
-	if ls, ok := r.storage.(*LocalStorage); ok {
-		localPath := filepath.Join(ls.baseDir, filepath.FromSlash(asset.ObjectKey))
-		data, err = os.ReadFile(localPath)
-		if err != nil {
-			return "", nil, fmt.Errorf("read local asset %d (%s): %w", assetID, localPath, err)
-		}
-		return name, data, nil
-	}
-
-	// OSS 或其他生产存储：生成签名 URL 后 HTTP 下载。
-	bucket := r.storage.PublicBucket()
-	if asset.Visibility == "private" {
-		bucket = r.storage.PrivateBucket()
-	}
-
-	signedURL, err := r.storage.CreatePrivateDownloadURL(ctx, bucket, asset.ObjectKey, 5*time.Minute)
+	data, _, err = r.ReadMediaAsset(ctx, assetID)
 	if err != nil {
-		return "", nil, fmt.Errorf("create download URL for asset %d: %w", assetID, err)
+		return "", nil, err
 	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, signedURL, nil)
-	if err != nil {
-		return "", nil, fmt.Errorf("build download request for asset %d: %w", assetID, err)
-	}
-	resp, err := downloadHTTPClient.Do(req)
-	if err != nil {
-		return "", nil, fmt.Errorf("download asset %d: %w", assetID, err)
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return "", nil, fmt.Errorf("download asset %d: unexpected status %d", assetID, resp.StatusCode)
-	}
-
-	// LimitReader 防止超大响应体导致 OOM。
-	data, err = io.ReadAll(io.LimitReader(resp.Body, maxDownloadBytes+1))
-	if err != nil {
-		return "", nil, fmt.Errorf("read asset %d body: %w", assetID, err)
-	}
-	if int64(len(data)) > maxDownloadBytes {
-		return "", nil, fmt.Errorf("asset %d exceeds max download size (%d bytes)", assetID, maxDownloadBytes)
-	}
-
 	return name, data, nil
 }

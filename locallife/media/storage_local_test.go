@@ -57,6 +57,31 @@ func TestLocalStorage_StatObject(t *testing.T) {
 	})
 }
 
+func TestLocalStorage_ReadObject(t *testing.T) {
+	dir := t.TempDir()
+	ls := NewLocalStorage("http://localhost:8080", dir)
+
+	objectKey := "merchant/dish/1/file.jpg"
+	localPath := filepath.Join(dir, filepath.FromSlash(objectKey))
+	require.NoError(t, os.MkdirAll(filepath.Dir(localPath), 0750))
+	require.NoError(t, os.WriteFile(localPath, []byte("fake image content"), 0600))
+
+	t.Run("existing file returns readable stream", func(t *testing.T) {
+		reader, err := ls.ReadObject(context.Background(), "local-public", objectKey)
+		require.NoError(t, err)
+		defer reader.Close()
+
+		data, readErr := io.ReadAll(reader)
+		require.NoError(t, readErr)
+		require.Equal(t, []byte("fake image content"), data)
+	})
+
+	t.Run("missing file returns ErrObjectNotFound", func(t *testing.T) {
+		_, err := ls.ReadObject(context.Background(), "local-public", "nonexistent/path.jpg")
+		require.ErrorIs(t, err, ErrObjectNotFound)
+	})
+}
+
 func TestLocalStorage_DeleteObject(t *testing.T) {
 	dir := t.TempDir()
 	ls := NewLocalStorage("http://localhost:8080", dir)

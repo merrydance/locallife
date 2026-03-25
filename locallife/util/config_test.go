@@ -72,3 +72,42 @@ func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
 	require.Equal(t, "service-appid-001", config.WechatEcommerceSpAppID)
 	require.True(t, config.RedisRequired)
 }
+
+func TestLoadConfig_ReadsAliyunOCRConfig(t *testing.T) {
+	configDir := writeTestConfigFile(t, "ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nALIYUN_OCR_ENABLED=true\nALIYUN_OCR_ENDPOINT=https://ocr-api.cn-hangzhou.aliyuncs.com\nALIYUN_OCR_REGION=cn-hangzhou\nALIYUN_OCR_ACCESS_KEY_ID=test-ak\nALIYUN_OCR_ACCESS_KEY_SECRET=test-sk\nALIYUN_OCR_HTTP_TIMEOUT=45s\n")
+
+	config, err := LoadConfig(configDir)
+	require.NoError(t, err)
+	require.True(t, config.AliyunOCREnabled)
+	require.Equal(t, "https://ocr-api.cn-hangzhou.aliyuncs.com", config.AliyunOCREndpoint)
+	require.Equal(t, "cn-hangzhou", config.AliyunOCRRegion)
+	require.Equal(t, "test-ak", config.AliyunOCRAccessKeyID)
+	require.Equal(t, "test-sk", config.AliyunOCRAccessKeySecret)
+	require.Equal(t, 45*time.Second, config.AliyunOCRHTTPTimeout)
+	require.NoError(t, config.ValidateAliyunOCRConfig())
+}
+
+func TestValidateAliyunOCRConfig(t *testing.T) {
+	tests := []struct {
+		name   string
+		config Config
+		want   string
+	}{
+		{name: "disabled skips validation", config: Config{}, want: ""},
+		{name: "missing endpoint", config: Config{AliyunOCREnabled: true, AliyunOCRRegion: "cn-hangzhou", AliyunOCRAccessKeyID: "ak", AliyunOCRAccessKeySecret: "sk", AliyunOCRHTTPTimeout: time.Second}, want: "ALIYUN_OCR_ENDPOINT"},
+		{name: "missing region", config: Config{AliyunOCREnabled: true, AliyunOCREndpoint: "https://ocr-api.cn-hangzhou.aliyuncs.com", AliyunOCRAccessKeyID: "ak", AliyunOCRAccessKeySecret: "sk", AliyunOCRHTTPTimeout: time.Second}, want: "ALIYUN_OCR_REGION"},
+		{name: "missing access key", config: Config{AliyunOCREnabled: true, AliyunOCREndpoint: "https://ocr-api.cn-hangzhou.aliyuncs.com", AliyunOCRRegion: "cn-hangzhou", AliyunOCRHTTPTimeout: time.Second}, want: "ALIYUN_OCR_ACCESS_KEY_ID"},
+		{name: "sts missing role arn", config: Config{AliyunOCREnabled: true, AliyunOCREndpoint: "https://ocr-api.cn-hangzhou.aliyuncs.com", AliyunOCRRegion: "cn-hangzhou", AliyunOCRSTSEnabled: true, AliyunOCRHTTPTimeout: time.Second}, want: "ALIYUN_OCR_ROLE_ARN"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.config.ValidateAliyunOCRConfig()
+			if tc.want == "" {
+				require.NoError(t, err)
+				return
+			}
+			require.Error(t, err)
+			require.Contains(t, err.Error(), tc.want)
+		})
+	}
+}

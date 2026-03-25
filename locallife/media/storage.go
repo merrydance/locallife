@@ -40,6 +40,10 @@ type ObjectStorage interface {
 	// complete 阶段用于验证客户端确实已上传到 OSS。
 	StatObject(ctx context.Context, bucket, objectKey string) (ObjectMetadata, error)
 
+	// ReadObject 由服务端直接读取对象内容，适用于 OCR 等内部处理场景。
+	// 调用方负责结合数据库中的 mime_type 与业务权限进行约束。
+	ReadObject(ctx context.Context, bucket, objectKey string) (io.ReadCloser, error)
+
 	// CreatePrivateDownloadURL 为私有桶对象签发短期访问地址。
 	CreatePrivateDownloadURL(ctx context.Context, bucket, objectKey string, ttl time.Duration) (string, error)
 

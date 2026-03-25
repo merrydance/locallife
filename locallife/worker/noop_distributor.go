@@ -86,15 +86,35 @@ func (NoopTaskDistributor) DistributeTaskClaimRefund(ctx context.Context, payloa
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, imagePath string, opts ...asynq.Option) error {
+func (NoopTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskMerchantApplicationFoodPermitOCR(ctx context.Context, applicationID int64, imagePath string, opts ...asynq.Option) error {
+func (NoopTaskDistributor) DistributeTaskMerchantApplicationFoodPermitOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
 	return nil
 }
 
-func (NoopTaskDistributor) DistributeTaskMerchantApplicationIDCardOCR(ctx context.Context, applicationID int64, imagePath string, side string, opts ...asynq.Option) error {
+func (NoopTaskDistributor) DistributeTaskMerchantApplicationIDCardOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, side string, opts ...asynq.Option) error {
+	return nil
+}
+
+func (NoopTaskDistributor) DistributeTaskOperatorApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
+	return nil
+}
+
+func (NoopTaskDistributor) DistributeTaskOperatorApplicationIDCardOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, side string, opts ...asynq.Option) error {
+	return nil
+}
+
+func (NoopTaskDistributor) DistributeTaskRiderApplicationIDCardOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, side string, opts ...asynq.Option) error {
+	return nil
+}
+
+func (NoopTaskDistributor) DistributeTaskRiderApplicationHealthCertOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
+	return nil
+}
+
+func (NoopTaskDistributor) DistributeTaskGroupApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {
 	return nil
 }
 

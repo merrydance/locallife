@@ -107,13 +107,11 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 没有草稿
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(db.MerchantApplication{}, db.ErrRecordNotFound)
 
-				// 创建新草稿
 				newApp := randomMerchantAppDraft(user.ID)
 				store.EXPECT().
 					CreateMerchantApplicationDraft(gomock.Any(), user.ID).
@@ -130,7 +128,6 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 有草稿
 				existingApp := randomMerchantAppDraft(user.ID)
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
@@ -147,7 +144,6 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 已有通过的申请，现在允许获取并编辑
 				approvedApp := randomMerchantAppDraft(user.ID)
 				approvedApp.Status = "approved"
 				store.EXPECT().
@@ -160,13 +156,9 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 			},
 		},
 		{
-			name: "NoAuth",
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				// 不添加认证
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				// 不应该调用任何方法
-			},
+			name:       "NoAuth",
+			setupAuth:  func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			buildStubs: func(store *mockdb.MockStore) {},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusUnauthorized, recorder.Code)
 			},
@@ -360,7 +352,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 营业执照经营范围不包含餐饮
 				app := randomMerchantAppDraftWithData(user.ID)
 				licenseOCR, _ := json.Marshal(BusinessLicenseOCRData{
 					EnterpriseName: "测试科技有限公司",
@@ -382,8 +373,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					SubmitMerchantApplication(gomock.Any(), app.ID).
 					Times(1).
 					Return(submittedApp, nil)
-
-				// 因为经营范围检查在地址检查之前失败，所以不会调用地址检查
 
 				store.EXPECT().
 					RejectMerchantApplication(gomock.Any(), gomock.Any()).
@@ -410,8 +399,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
-				app.FoodPermitMediaAssetID = pgtype.Int8{} // 没有食品许可证
-
+				app.FoodPermitMediaAssetID = pgtype.Int8{}
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
@@ -428,8 +416,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
-				app.RegionID = pgtype.Int8{Valid: false} // 没有区域ID
-
+				app.RegionID = pgtype.Int8{Valid: false}
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
@@ -504,7 +491,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(submittedApp, nil)
 
-				// GPS 坐标重复 → 拒绝
 				store.EXPECT().
 					ListMerchantLocationsInRegion(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -781,6 +767,83 @@ func TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs(t *testing.T) {
 	require.Equal(t, int64(3), *resp.IDCardFrontMediaAssetID)
 	require.NotNil(t, resp.IDCardBackMediaAssetID)
 	require.Equal(t, int64(4), *resp.IDCardBackMediaAssetID)
+}
+
+func TestGetOrCreateMerchantApplicationDraft_ReturnsAsyncOCRFields(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	ocrJobID := int64(9001)
+
+	businessLicenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+		Status:         "processing",
+		ErrorCode:      "ocr_rate_limited",
+		AlertEmittedAt: "2026-03-25T16:00:00Z",
+		QueuedAt:       "2026-03-25T15:59:00Z",
+		StartedAt:      "2026-03-25T15:59:05Z",
+		OCRJobID:       &ocrJobID,
+	})
+	require.NoError(t, err)
+	foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+		Status:    "done",
+		QueuedAt:  "2026-03-25T15:58:00Z",
+		StartedAt: "2026-03-25T15:58:03Z",
+		OCRJobID:  &ocrJobID,
+	})
+	require.NoError(t, err)
+	idCardFrontOCR, err := json.Marshal(MerchantIDCardOCRData{
+		Status:         "failed",
+		ErrorCode:      "ocr_bad_request",
+		AlertEmittedAt: "2026-03-25T16:01:00Z",
+		QueuedAt:       "2026-03-25T16:00:30Z",
+		StartedAt:      "2026-03-25T16:00:31Z",
+		OCRJobID:       &ocrJobID,
+	})
+	require.NoError(t, err)
+
+	app.BusinessLicenseOcr = businessLicenseOCR
+	app.FoodPermitOcr = foodPermitOCR
+	app.IDCardFrontOcr = idCardFrontOCR
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantApplicationDraft(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantApplicationDraftResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.BusinessLicenseOCR)
+	require.Equal(t, "processing", resp.BusinessLicenseOCR.Status)
+	require.Equal(t, "ocr_rate_limited", resp.BusinessLicenseOCR.ErrorCode)
+	require.Equal(t, "2026-03-25T16:00:00Z", resp.BusinessLicenseOCR.AlertEmittedAt)
+	require.Equal(t, "2026-03-25T15:59:00Z", resp.BusinessLicenseOCR.QueuedAt)
+	require.Equal(t, "2026-03-25T15:59:05Z", resp.BusinessLicenseOCR.StartedAt)
+	require.NotNil(t, resp.BusinessLicenseOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.BusinessLicenseOCR.OCRJobID)
+	require.NotNil(t, resp.FoodPermitOCR)
+	require.Equal(t, "2026-03-25T15:58:00Z", resp.FoodPermitOCR.QueuedAt)
+	require.Equal(t, "2026-03-25T15:58:03Z", resp.FoodPermitOCR.StartedAt)
+	require.NotNil(t, resp.FoodPermitOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.FoodPermitOCR.OCRJobID)
+	require.NotNil(t, resp.IDCardFrontOCR)
+	require.Equal(t, "failed", resp.IDCardFrontOCR.Status)
+	require.Equal(t, "ocr_bad_request", resp.IDCardFrontOCR.ErrorCode)
+	require.Equal(t, "2026-03-25T16:01:00Z", resp.IDCardFrontOCR.AlertEmittedAt)
+	require.NotNil(t, resp.IDCardFrontOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.IDCardFrontOCR.OCRJobID)
 }
 
 func TestGetOrCreateMerchantApplicationDraft_RewritesPublicImageArraysInLocalMode(t *testing.T) {

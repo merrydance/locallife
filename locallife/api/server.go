@@ -569,14 +569,12 @@ func (server *Server) setupRouter() {
 	// 分享功能由小程序前端 share 属性实现，无需后端API
 
 	// M5.1: 运营商入驻申请路由（草稿模式+人工审核）
-	authGroup.POST("/operator/application", server.getOrCreateOperatorApplicationDraft)          // 创建或获取申请草稿
-	authGroup.GET("/operator/application", server.getOperatorApplication)                        // 获取申请状态
-	authGroup.PUT("/operator/application/region", server.updateOperatorApplicationRegion)        // 更新申请区域
-	authGroup.PUT("/operator/application/basic", server.updateOperatorApplicationBasicInfo)      // 更新基础信息
-	authGroup.POST("/operator/application/license/ocr", server.uploadOperatorBusinessLicenseOCR) // 上传营业执照OCR
-	authGroup.POST("/operator/application/idcard/ocr", server.uploadOperatorIDCardOCR)           // 上传身份证OCR
-	authGroup.POST("/operator/application/submit", server.submitOperatorApplication)             // 提交申请
-	authGroup.POST("/operator/application/reset", server.resetOperatorApplicationToDraft)        // 重置为草稿
+	authGroup.POST("/operator/application", server.getOrCreateOperatorApplicationDraft)     // 创建或获取申请草稿
+	authGroup.GET("/operator/application", server.getOperatorApplication)                   // 获取申请状态
+	authGroup.PUT("/operator/application/region", server.updateOperatorApplicationRegion)   // 更新申请区域
+	authGroup.PUT("/operator/application/basic", server.updateOperatorApplicationBasicInfo) // 更新基础信息
+	authGroup.POST("/operator/application/submit", server.submitOperatorApplication)        // 提交申请
+	authGroup.POST("/operator/application/reset", server.resetOperatorApplicationToDraft)   // 重置为草稿
 
 	// M5.2: 运营商开户（微信支付二级商户进件）
 	operatorApplymentGroup := authGroup.Group("/operator/applyment")
@@ -599,6 +597,16 @@ func (server *Server) setupRouter() {
 		mediaGroup.POST("/private-access", server.getMediaPrivateAccess)
 		mediaGroup.GET("/:id", server.getMediaAsset)
 		mediaGroup.DELETE("/:id", server.deleteMediaAsset)
+	}
+
+	ocrGroup := authGroup.Group("/ocr")
+	{
+		ocrGroup.POST("/jobs", server.createOCRJob)
+		ocrGroup.GET("/jobs/dead-letter", server.listOCRDeadLetterJobs)
+		ocrGroup.GET("/jobs/:id", server.getOCRJob)
+		ocrGroup.GET("/jobs/:id/result", server.getOCRJobResult)
+		ocrGroup.POST("/jobs/:id/retry", server.retryOCRJob)
+		ocrGroup.POST("/jobs/batch-query", server.batchQueryOCRJobs)
 	}
 
 	// M2: 用户地址路由
@@ -636,14 +644,11 @@ func (server *Server) setupRouter() {
 	// M3.1: 商户入驻申请（新版 - 自动审核）
 	merchantAppGroup := authGroup.Group("/merchant/application")
 	{
-		merchantAppGroup.GET("", server.getOrCreateMerchantApplicationDraft)           // 创建/获取草稿
-		merchantAppGroup.PUT("/basic", server.updateMerchantApplicationBasicInfo)      // 更新基础信息
-		merchantAppGroup.PUT("/images", server.updateMerchantApplicationImages)        // 更新门头照/环境照
-		merchantAppGroup.POST("/license/ocr", server.uploadMerchantBusinessLicenseOCR) // 上传营业执照OCR
-		merchantAppGroup.POST("/foodpermit/ocr", server.uploadMerchantFoodPermitOCR)   // 上传食品许可证OCR
-		merchantAppGroup.POST("/idcard/ocr", server.uploadMerchantIDCardOCR)           // 上传身份证OCR
-		merchantAppGroup.POST("/submit", server.submitMerchantApplication)             // 提交申请（自动审核）
-		merchantAppGroup.POST("/reset", server.resetMerchantApplication)               // 重置申请（被拒后）
+		merchantAppGroup.GET("", server.getOrCreateMerchantApplicationDraft)      // 创建/获取草稿
+		merchantAppGroup.PUT("/basic", server.updateMerchantApplicationBasicInfo) // 更新基础信息
+		merchantAppGroup.PUT("/images", server.updateMerchantApplicationImages)   // 更新门头照/环境照
+		merchantAppGroup.POST("/submit", server.submitMerchantApplication)        // 提交申请（自动审核）
+		merchantAppGroup.POST("/reset", server.resetMerchantApplication)          // 重置申请（被拒后）
 	}
 
 	// M3.2: 商户开户（微信支付二级商户进件）
@@ -689,7 +694,6 @@ func (server *Server) setupRouter() {
 		groupAppGroup.POST("", server.createGroupApplicationDraft)
 		groupAppGroup.GET("/me", server.getOrCreateGroupApplicationDraft)
 		groupAppGroup.PUT("/basic", server.updateGroupApplicationBasic)
-		groupAppGroup.POST("/license/ocr", server.uploadGroupBusinessLicenseOCR)
 		groupAppGroup.POST("/submit", server.submitGroupApplication)
 		groupAppGroup.POST("/:id/review", server.CasbinRoleMiddleware(RoleAdmin), server.reviewGroupApplication)
 	}
@@ -979,8 +983,6 @@ func (server *Server) setupRouter() {
 		// 骑手申请流程（新版）
 		riderGroup.GET("/application", server.createOrGetRiderApplicationDraft)  // 创建/获取草稿
 		riderGroup.PUT("/application/basic", server.updateRiderApplicationBasic) // 更新基础信息
-		riderGroup.POST("/application/idcard/ocr", server.uploadRiderIDCardOCR)  // 上传身份证OCR
-		riderGroup.POST("/application/healthcert", server.uploadRiderHealthCert) // 上传健康证
 		riderGroup.POST("/application/submit", server.submitRiderApplication)    // 提交申请
 		riderGroup.POST("/application/reset", server.resetRiderApplication)      // 重置申请（被拒后）
 		riderGroup.GET("/me", server.getRiderMe)

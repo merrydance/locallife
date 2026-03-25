@@ -67,12 +67,11 @@
 
 ### 3.2 当前 OCR 现状
 
-- 微信 OCR 已有实现，位于 `wechat/ocr.go`。
-- 商户、运营商、骑手三条申请线的 OCR 入口分散在各自 handler 中。
-- 当前 OCR 仍是双入口混用：`multipart file` 与 `media_asset_id` 并存。
-- 当前 OCR 执行模型不统一：部分同步请求内执行，部分异步任务执行。
-- 当前多个 OCR 链路仍通过 `mediaAssetLocalPath` 或本地文件路径取图。
-- food permit OCR 已有异步雏形，但任务边界仍偏旧。
+- 微信 OCR 保留为第二 provider 预留实现，位于 `wechat/ocr.go` 与 `ocr/provider_wechat.go`。
+- 统一 OCR 接口族 `/v1/ocr/jobs*`、`ocr_jobs`、`ocr.Service` 和 provider/router 骨架已落地。
+- 商户、运营商、骑手、集团的运行时 OCR 主链路已切到 `ocr_job_id` + `media_asset_id` 异步模型。
+- 运行时代码中的旧 multipart OCR 主入口、旧 worker payload、`mediaAssetLocalPath` 读取依赖与旧业务侧 OCR 路由已删除。
+- 当前剩余的 OCR 收尾项主要是文档/权限产物清理与生产级质量补强，而不是继续保留双轨运行时链路。
 
 ### 3.3 当前主要问题
 
@@ -127,6 +126,15 @@
 - 食品经营许可证 / 小餐饮小作坊登记证：优先阿里云企业资质识别或通用文字识别能力。
 - 健康证：优先阿里云通用文字识别能力。
 - 微信 provider 不参与当前主链路路由；若后续启用，只作为显式配置的第二 provider，而不是隐式兼容回退。
+
+当前已在代码骨架中固定的主路由映射如下：
+
+- `business_license -> aliyun.business_license`
+- `id_card -> aliyun.id_card`
+- `food_permit -> aliyun.food_permit`
+- `health_cert -> aliyun.health_cert`
+
+上述映射当前落在 `ocr/router.go` 的静态路由表中，后续接入第二 provider 时只能通过 router 扩展，不能回退到 handler 内手写分支。
 
 ### 4.4 阿里云 OCR 接入与配置原则
 
@@ -280,7 +288,7 @@ type BinaryReader interface {
 - `POST /v1/ocr/jobs/:id/retry`
     - 用途：对失败且允许重试的任务发起重试。
     - 限制：只允许任务所有者或具备审核权限的后台调用。
-- `POST /v1/ocr/jobs:batch-query`
+- `POST /v1/ocr/jobs/batch-query`
     - 用途：批量查询多个 OCR 任务状态，减少列表页逐条轮询。
 
 业务线对外接口的长期形态应为：
@@ -345,13 +353,13 @@ type BinaryReader interface {
 
 ## 阶段 B：建立 OCR 基础设施
 
-- [ ] B1. 新增 `ocr_jobs` migration。
-- [ ] B2. 新增 sqlc 查询与模型。
-- [ ] B3. 新增 `ocr` 包基础目录与接口。
-- [ ] B4. 定义 provider 接口、router、service 基础结构。
-- [ ] B5. 定义统一 normalized result 结构。
-- [ ] B6. 定义 document type 枚举与 owner type 枚举。
-- [ ] B7. 增加基础单元测试。
+- [x] B1. 新增 `ocr_jobs` migration。
+- [x] B2. 新增 sqlc 查询与模型。
+- [x] B3. 新增 `ocr` 包基础目录与接口。
+- [x] B4. 定义 provider 接口、router、service 基础结构。
+- [x] B5. 定义统一 normalized result 结构。
+- [x] B6. 定义 document type 枚举与 owner type 枚举。
+- [x] B7. 增加基础单元测试。
 
 验收标准：
 
@@ -359,11 +367,11 @@ type BinaryReader interface {
 
 ## 阶段 C：统一媒体读取能力
 
-- [ ] C1. 在媒体层补充服务端内部二进制读取能力。
-- [ ] C2. 优先复用对象存储下载能力，而非本地路径拼接。
-- [ ] C3. 为 local / OSS 两种环境补齐一致实现。
-- [ ] C4. 为 private 证件读取补充权限边界与内部调用约束。
-- [ ] C5. 增加读取能力测试。
+- [x] C1. 在媒体层补充服务端内部二进制读取能力。
+- [x] C2. 优先复用对象存储下载能力，而非本地路径拼接。
+- [x] C3. 为 local / OSS 两种环境补齐一致实现。
+- [x] C4. 为 private 证件读取补充权限边界与内部调用约束。
+- [x] C5. 增加读取能力测试。
 
 验收标准：
 
@@ -371,13 +379,13 @@ type BinaryReader interface {
 
 ## 阶段 D：接入阿里云 Primary Provider
 
-- [ ] D1. 实现 `ocr/provider_aliyun.go`。
-- [ ] D2. 接入营业执照识别能力。
-- [ ] D3. 接入身份证识别能力。
-- [ ] D4. 接入食品经营许可证 / 健康证所需的通用识别能力。
-- [ ] D5. 统一阿里云 provider 错误映射。
-- [ ] D6. 保留原始响应，输出 normalized result。
-- [ ] D7. 增加 provider 级测试。
+- [x] D1. 实现 `ocr/provider_aliyun.go`。
+- [x] D2. 接入营业执照识别能力。
+- [x] D3. 接入身份证识别能力。
+- [x] D4. 接入食品经营许可证 / 健康证所需的通用识别能力。
+- [x] D5. 统一阿里云 provider 错误映射。
+- [x] D6. 保留原始响应，输出 normalized result。
+- [x] D7. 增加 provider 级测试。
 
 验收标准：
 
@@ -385,13 +393,13 @@ type BinaryReader interface {
 
 ## 阶段 E：先迁移商户食品经营许可证 OCR
 
-- [ ] E1. 将商户 food permit OCR 改为“创建 `ocr_job`”。
-- [ ] E2. worker 改为消费 `ocr_job_id` 而不是旧路径参数。
-- [ ] E3. 在 worker 中通过媒体读取能力拉取图像。
-- [ ] E4. 通过 provider 执行 OCR。
-- [ ] E5. 通过 parser / projector 回写业务字段。
-- [ ] E6. 调整 API 返回为异步任务语义。
-- [ ] E7. 补充集成测试。
+- [x] E1. 将商户 food permit OCR 改为“创建 `ocr_job`”。
+- [x] E2. worker 改为消费 `ocr_job_id` 而不是旧路径参数。
+- [x] E3. 在 worker 中通过媒体读取能力拉取图像。
+- [x] E4. 通过 provider 执行 OCR。
+- [x] E5. 通过 parser / projector 回写业务字段。
+- [x] E6. 调整 API 返回为异步任务语义。
+- [x] E7. 补充集成测试。
 
 验收标准：
 
@@ -399,13 +407,13 @@ type BinaryReader interface {
 
 ## 阶段 F：迁移营业执照与身份证 OCR
 
-- [ ] F1. 迁移商户营业执照 OCR。
-- [ ] F2. 迁移商户身份证 OCR。
-- [ ] F3. 迁移运营商营业执照 OCR。
-- [ ] F4. 迁移运营商身份证 OCR。
-- [ ] F5. 迁移骑手身份证 OCR。
-- [ ] F6. 收口旧同步 OCR 入口。
-- [ ] F7. 补齐业务回归测试。
+- [x] F1. 迁移商户营业执照 OCR。
+- [x] F2. 迁移商户身份证 OCR。
+- [x] F3. 迁移运营商营业执照 OCR。
+- [x] F4. 迁移运营商身份证 OCR。
+- [x] F5. 迁移骑手身份证 OCR。
+- [x] F6. 收口旧同步 OCR 入口。
+- [x] F7. 补齐业务回归测试。
 
 验收标准：
 
@@ -413,12 +421,12 @@ type BinaryReader interface {
 
 ## 阶段 G：迁移扩展证件与收尾
 
-- [ ] G1. 迁移骑手健康证 OCR。
+- [x] G1. 迁移骑手健康证 OCR。
 - [ ] G2. 将 remaining printed-text 证件统一接入。
-- [ ] G3. 删除 `mediaAssetLocalPath` 在 OCR 主链路中的依赖。
-- [ ] G4. 直接删除旧 multipart OCR 主入口。
-- [ ] G5. 更新 Swagger 与相关设计文档。
-- [ ] G6. 增加运维说明与问题排查手册。
+- [x] G3. 删除 `mediaAssetLocalPath` 在 OCR 主链路中的依赖。
+- [x] G4. 直接删除旧 multipart OCR 主入口。
+- [x] G5. 更新 Swagger 与相关设计文档。
+- [x] G6. 增加运维说明与问题排查手册。
 
 验收标准：
 
@@ -426,13 +434,13 @@ type BinaryReader interface {
 
 ## 阶段 H：接入第二 Provider 能力
 
-- [ ] H1. 评估并实现微信 OCR provider。
+ [x] H1. 评估并实现微信 OCR provider。
 - [ ] H2. 为适合的证件建立第二 provider 路由策略。
 - [ ] H3. 明确第二 provider 的启用方式、切换方式和禁用方式。
 - [ ] H4. 做 provider 结果差异校验。
 - [ ] H5. 增加微信 provider 配置项与启动校验。
-- [ ] H6. 补充第二 provider SDK 封装测试。
-- [ ] H7. 明确第二 provider 仅通过统一 provider 抽象接入。
+ [x] H6. 补充第二 provider SDK 封装测试。
+ [x] H7. 明确第二 provider 仅通过统一 provider 抽象接入。
 
 验收标准：
 
@@ -441,16 +449,16 @@ type BinaryReader interface {
 
 ## 阶段 I：质量、稳定性与观测补强
 
-- [ ] I1. 固定 `ocr_jobs` 状态机与状态流转约束。
-- [ ] I2. 增加任务 lease / 抢占 / 超时回收机制。
-- [ ] I3. 增加任务幂等键与重复提交去重策略。
-- [ ] I4. 增加可重试错误分类与退避重试策略。
-- [ ] I5. 增加死信任务或人工介入队列策略。
-- [ ] I6. 增加 OCR 结构化日志、metrics、关键告警。
-- [ ] I7. 增加原始结果与敏感字段的脱敏/留存策略。
-- [ ] I8. 增加审计记录，记录谁在什么业务上下文触发了 OCR。
-- [ ] I9. 增加失败注入测试、并发重复消费测试、幂等测试。
-- [ ] I10. 建立 OCR 样本集与回归评估基线。
+- [x] I1. 固定 `ocr_jobs` 状态机与状态流转约束。
+- [x] I2. 增加任务 lease / 抢占 / 超时回收机制。
+- [x] I3. 增加任务幂等键与重复提交去重策略。
+- [x] I4. 增加可重试错误分类与退避重试策略。
+- [x] I5. 增加死信任务或人工介入队列策略。
+- [x] I6. 增加 OCR 结构化日志、metrics、关键告警。
+- [x] I7. 增加原始结果与敏感字段的脱敏/留存策略。
+- [x] I8. 增加审计记录，记录谁在什么业务上下文触发了 OCR。
+- [x] I9. 增加失败注入测试、并发重复消费测试、幂等测试。
+- [x] I10. 建立 OCR 样本集与回归评估基线。
 
 验收标准：
 
@@ -458,12 +466,12 @@ type BinaryReader interface {
 
 ## 阶段 J：一次性切换、验收与回滚
 
-- [ ] J1. 定义统一 OCR 接口族替换旧 OCR 入口的实施顺序。
-- [ ] J2. 在代码层直接删除旧 OCR 对外接口与旧 worker 入参模型。
-- [ ] J3. 编写测试环境端到端联调脚本。
-- [ ] J4. 编写生产发布步骤与回滚原则。
-- [ ] J5. 明确 OCR 任务表与业务回写表的回滚边界。
-- [ ] J6. 补充上线后验收 checklist。
+- [x] J1. 定义统一 OCR 接口族替换旧 OCR 入口的实施顺序。
+- [x] J2. 在代码层直接删除旧 OCR 对外接口与旧 worker 入参模型。
+- [x] J3. 编写测试环境端到端联调脚本。
+- [x] J4. 编写生产发布步骤与回滚原则。
+- [x] J5. 明确 OCR 任务表与业务回写表的回滚边界。
+- [x] J6. 补充上线后验收 checklist。
 
 验收标准：
 
@@ -475,89 +483,89 @@ type BinaryReader interface {
 
 ### 7.1 当前最优先执行的小任务
 
-- [ ] T0. 固定 Aliyun 主 provider 的文档类型到 API 能力映射。
-- [ ] T1. 新增 `ocr_jobs` 表 migration 文件。
-- [ ] T2. 为 `ocr_jobs` 补充 `.down.sql`。
-- [ ] T3. 在 SQL 查询层增加 create / update / get / list 查询。
-- [ ] T4. 重新生成 sqlc。
-- [ ] T5. 新增 `ocr/types.go`，定义 document type、status、normalized result。
-- [ ] T6. 新增 `ocr/provider.go`，定义 provider 接口。
-- [ ] T7. 新增 `ocr/router.go`，定义 document type 到 provider 的路由规则。
-- [ ] T8. 新增 `ocr/service.go`，实现 CreateJob / ExecuteJob / GetJobResult。
-- [ ] T9. 在媒体层补充 `ReadMediaAsset` 内部能力。
-- [ ] T10. 为 `ReadMediaAsset` 补 local/OSS 测试。
+- [x] T0. 固定 Aliyun 主 provider 的文档类型到 API 能力映射。
+- [x] T1. 新增 `ocr_jobs` 表 migration 文件。
+- [x] T2. 为 `ocr_jobs` 补充 `.down.sql`。
+- [x] T3. 在 SQL 查询层增加 create / update / get / list 查询。
+- [x] T4. 重新生成 sqlc。
+- [x] T5. 新增 `ocr/types.go`，定义 document type、status、normalized result。
+- [x] T6. 新增 `ocr/provider.go`，定义 provider 接口。
+- [x] T7. 新增 `ocr/router.go`，定义 document type 到 provider 的路由规则。
+- [x] T8. 新增 `ocr/service.go`，实现 CreateJob / ExecuteJob / GetJobResult。
+- [x] T9. 在媒体层补充 `ReadMediaAsset` 内部能力。
+- [x] T10. 为 `ReadMediaAsset` 补 local/OSS 测试。
 
 ### 7.2 商户 food permit 迁移小任务
 
-- [ ] T11. 识别商户 food permit 现有请求结构与返回结构。
-- [ ] T12. 将 handler 改为只创建 `ocr_job`。
-- [ ] T13. 调整 worker 入参为 `ocr_job_id`。
-- [ ] T14. worker 中加载 job、读取 media、执行 provider。
-- [ ] T15. 输出 normalized result 并持久化。
-- [ ] T16. 将 normalized result 投影回 merchant application。
-- [ ] T17. 补充 handler 测试。
-- [ ] T18. 补充 worker 测试。
+- [x] T11. 识别商户 food permit 现有请求结构与返回结构。
+- [x] T12. 将 handler 改为只创建 `ocr_job`。
+- [x] T13. 调整 worker 入参为 `ocr_job_id`。
+- [x] T14. worker 中加载 job、读取 media、执行 provider。
+- [x] T15. 输出 normalized result 并持久化。
+- [x] T16. 将 normalized result 投影回 merchant application。
+- [x] T17. 补充 handler 测试。
+- [x] T18. 补充 worker 测试。
 
 ### 7.3 营业执照与身份证迁移小任务
 
-- [ ] T19. 抽离营业执照专用解析结构。
-- [ ] T20. 抽离身份证正反面专用解析结构。
-- [ ] T21. 迁移商户营业执照 OCR。
-- [ ] T22. 迁移商户身份证 OCR。
-- [ ] T23. 迁移运营商营业执照 OCR。
-- [ ] T24. 迁移运营商身份证 OCR。
-- [ ] T25. 迁移骑手身份证 OCR。
-- [ ] T26. 清理各 handler 内直接调用 provider SDK 的旧代码。
+- [x] T19. 抽离营业执照专用解析结构。
+- [x] T20. 抽离身份证正反面专用解析结构。
+- [x] T21. 迁移商户营业执照 OCR。
+- [x] T22. 迁移商户身份证 OCR。
+- [x] T23. 迁移运营商营业执照 OCR。
+- [x] T24. 迁移运营商身份证 OCR。
+- [x] T25. 迁移骑手身份证 OCR。
+- [x] T26. 清理各 handler 内直接调用 provider SDK 的旧代码。
 
 ### 7.4 扩展与收尾小任务
 
-- [ ] T27. 迁移骑手健康证 OCR。
-- [ ] T28. 新增统一 OCR 接口族：create / get / result / retry / batch-query。
-- [ ] T29. 更新 Swagger 注释与生成文档。
-- [ ] T30. 增加 OCR 失败重试策略。
-- [ ] T31. 增加 OCR 告警字段与监控点。
-- [ ] T32. 清理 OCR 主链路中的 `mediaAssetLocalPath` 依赖。
-- [ ] T33. 编写 OCR 运维 Runbook。
-- [ ] T33G. 删除 merchant/operator/rider 旧 OCR 对外接口与对应路由。
-- [ ] T33H. 删除旧 multipart OCR 请求结构、旧 worker payload 与旧路径读取代码。
+- [x] T27. 迁移骑手健康证 OCR。
+- [x] T28. 新增统一 OCR 接口族：create / get / result / retry / batch-query。
+- [x] T29. 更新 Swagger 注释与生成文档。
+- [x] T30. 增加 OCR 失败重试策略。
+- [x] T31. 增加 OCR 告警字段与监控点。
+- [x] T32. 清理 OCR 主链路中的 `mediaAssetLocalPath` 依赖。
+- [x] T33. 编写 OCR 运维 Runbook。
+- [x] T33G. 删除 merchant/operator/rider 旧 OCR 对外接口与对应路由。
+- [x] T33H. 删除旧 multipart OCR 请求结构、旧 worker payload 与旧路径读取代码。
 
 ### 7.4A 阿里云 provider 接入小任务
 
-- [ ] T33A. 梳理阿里云 OCR 在本项目涉及的能力映射：身份证、企业资质、通用文字。
-- [ ] T33B. 在配置层增加阿里云 OCR 开关、endpoint、region、凭证配置。
-- [ ] T33C. 启动阶段增加阿里云 OCR 配置校验。
-- [ ] T33D. 优先按 RAM 最小权限方案设计接入，不使用主账号长钥。
-- [ ] T33E. 封装阿里云 OCR client，不允许业务 handler 直接调用 SDK。
-- [ ] T33F. 补充凭证缺失、签名失败、权限不足、限流等错误映射测试。
-- [ ] T33I. 固定 private 证件只走服务端字节流上传，不允许 URL 模式上传。
+- [x] T33A. 梳理阿里云 OCR 在本项目涉及的能力映射：身份证、企业资质、通用文字。
+- [x] T33B. 在配置层增加阿里云 OCR 开关、endpoint、region、凭证配置。
+- [x] T33C. 启动阶段增加阿里云 OCR 配置校验。
+- [x] T33D. 优先按 RAM 最小权限方案设计接入，不使用主账号长钥。
+- [x] T33E. 封装阿里云 OCR client，不允许业务 handler 直接调用 SDK。
+- [x] T33F. 补充凭证缺失、签名失败、权限不足、限流等错误映射测试。
+- [x] T33I. 固定 private 证件只走服务端字节流上传，不允许 URL 模式上传。
 
 ### 7.5 质量与稳定性小任务
 
-- [ ] T34. 为 `ocr_jobs` 增加唯一幂等键与相关索引。
-- [ ] T35. 为 `ocr_jobs` 增加 `attempt_count`、`max_attempts`、`next_retry_at`。
-- [ ] T36. 为 `ocr_jobs` 增加 `leased_at`、`lease_owner` 或等价抢占字段。
-- [ ] T37. 固定状态机流转规则并写成测试。
-- [ ] T38. 实现可重试错误分类。
-- [ ] T39. 实现指数退避或固定间隔重试策略。
-- [ ] T40. 实现死信任务查询或人工处理入口。
-- [ ] T41. 为 OCR job 创建与完成写审计日志。
-- [ ] T42. 为身份证类 raw result 增加脱敏与留存期策略。
-- [ ] T43. 增加 Prometheus 指标或等价 metrics。
-- [ ] T44. 增加任务堆积、失败率、连续失败告警。
-- [ ] T45. 增加并发重复消费测试。
-- [ ] T46. 增加失败注入测试。
-- [ ] T47. 建立 OCR 样本集与基线评估脚本。
-- [ ] T47A. 固定核心指标口径：成功率、P95/P99 耗时、失败码分布、堆积量、重试量。
+- [x] T34. 为 `ocr_jobs` 增加唯一幂等键与相关索引。
+- [x] T35. 为 `ocr_jobs` 增加 `attempt_count`、`max_attempts`、`next_retry_at`。
+- [x] T36. 为 `ocr_jobs` 增加 `leased_at`、`lease_owner` 或等价抢占字段。
+- [x] T37. 固定状态机流转规则并写成测试。
+- [x] T38. 实现可重试错误分类。
+- [x] T39. 实现指数退避或固定间隔重试策略。
+- [x] T40. 实现死信任务查询或人工处理入口。
+- [x] T41. 为 OCR job 创建与完成写审计日志。
+- [x] T42. 为身份证类 raw result 增加脱敏与留存期策略。
+- [x] T43. 增加 Prometheus 指标或等价 metrics。
+- [x] T44. 增加任务堆积、失败率、连续失败告警。
+- [x] T45. 增加并发重复消费测试。
+- [x] T46. 增加失败注入测试。
+- [x] T47. 建立 OCR 样本集与基线评估脚本。
+- [x] T47A. 固定核心指标口径：成功率、P95/P99 耗时、失败码分布、堆积量、重试量。
 
 ### 7.6 发布切换小任务
 
-- [ ] T48. 编写统一 OCR 接口族的一次性切换清单。
-- [ ] T49. 编写测试环境端到端联调清单。
-- [ ] T50. 编写生产发布步骤。
-- [ ] T51. 编写回滚步骤与不允许回滚的数据边界。
-- [ ] T52. 编写上线后验收 checklist。
-- [ ] T53. 确认代码库中不再存在 merchant/operator/rider 旧 OCR 壳层接口。
-- [ ] T54. 确认代码库中不再存在旧 multipart OCR 主入口与旧 worker payload。
+- [x] T48. 编写统一 OCR 接口族的一次性切换清单。
+- [x] T49. 编写测试环境端到端联调清单。
+- [x] T50. 编写生产发布步骤。
+- [x] T51. 编写回滚步骤与不允许回滚的数据边界。
+- [x] T52. 编写上线后验收 checklist。
+- [x] T53. 确认代码库中不再存在 merchant/operator/rider 旧 OCR 壳层接口。
+- [x] T54. 确认代码库中不再存在旧 multipart OCR 主入口与旧 worker payload。
 
 ## 8. 验收标准
 
@@ -604,5 +612,44 @@ type BinaryReader interface {
 - [x] 已完成阿里云主 provider、微信第二 provider 的目标定位收口。
 - [x] 已形成统一 OCR 最终态方案。
 - [x] 已补充 10 分级 OCR 所需的稳定性、观测、发布与隐私治理任务。
-- [ ] 阶段 B 尚未开始编码。
-- [ ] 当前下一步应从 T0、T1-T10、T33A-T33F 开始落地基础设施与阿里云主 provider。
+- [x] 已完成阶段 B：`ocr_jobs` migration、sqlc 查询与 `ocr` 包基础骨架落地。
+- [x] 已完成 T0-T8，包括 Aliyun 主 provider 路由映射、CreateJob / ExecuteJob / GetJobResult 基础实现。
+- [x] 已完成 `go test ./ocr` 基础单元测试验证。
+- [x] 已完成阶段 C：`media.Registry.ReadMediaAsset` 已落地，local / OSS 均通过统一 `ObjectStorage.ReadObject` 抽象读取字节流。
+- [x] 已完成 T9、T10，并通过 `go test ./media` 验证读取能力。
+- [x] 已完成阶段 D 基础接入：`ocr/provider_aliyun.go`、Aliyun OCR 配置项、启动校验、错误映射与 provider 级测试已落地。
+- [x] 已完成 T33A、T33B、T33C、T33E、T33F、T33I。
+- [x] Aliyun provider 的 AK 路径已从占位 header 升级为真实 ACS3-HMAC-SHA256 签名 HTTP 请求，并补充了请求头、payload hash、原始响应透传测试。
+- [x] `ocr.Service` 已支持在缺少显式字节输入时，通过 `BinaryReader` 按 `media_asset_id` 自主读取媒体内容执行 OCR。
+- [x] Aliyun provider 已为 food permit 补齐基础归一化：可从原始 JSON 提取许可证号、主体名称、经营者姓名、有效期等字段，并构造兼容现有解析器的 `raw_text`。
+- [x] 已完成 T38、T39：`ocr.IsRetryableError`、最大尝试次数和重试抑制逻辑已落地，worker 会在不可重试或达到 `ocr_jobs.max_attempts` 时停止继续重试。
+- [x] 已完成 T43、T44：OCR Prometheus 指标与 `OCR_JOB_FAILED`、`OCR_RETRY_EXHAUSTED` 平台告警已接入，并已写入运维 Runbook。
+- [x] 已完成 T48：新增 `docs/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`，覆盖统一 OCR 接口族的一次性切换前置条件、执行顺序和冒烟清单。
+- [x] 已完成 T49：新增 `docs/OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md`，覆盖统一 OCR API、成功样本、可重试失败、不可重试失败与重试耗尽的测试环境闭环联调步骤。
+- [x] 已完成 T50：新增 `docs/OCR_RELEASE_RUNBOOK_2026-03-25.md`，固定生产配置预检查、migration、API/worker 发布、Swagger/权限切换和首轮生产冒烟顺序。
+- [x] 已完成 T51：新增 `docs/OCR_ROLLBACK_GUIDELINES_2026-03-25.md`，明确 OCR 发布后的回滚优先级、触发条件与不建议直接回滚的数据边界。
+- [x] 已完成 T52：新增 `docs/OCR_ACCEPTANCE_CHECKLIST_2026-03-25.md`，固定统一 OCR 主链路在首小时、首日、首周的上线后验收动作与通过标准。
+- [x] 已完成 T11，已盘点商户 food permit 旧链路的 handler、worker、请求/响应结构与 provider 依赖。
+- [x] 商户 food permit OCR 已开始迁移到 `media_asset_id` 优先模式：任务 payload 新增 `media_asset_id`，worker 优先通过 `media.Registry` 读取媒体字节，旧 `image_path` 仅作为回退。
+- [x] 商户 food permit 的 asset-backed 路径已开始创建 `ocr_job`，并将 `ocr_job_id` 写回现有 `food_permit_ocr` JSON 响应结构。
+- [x] 商户 food permit 的 multipart 上传入口也已改为先写入 `media_asset` 再创建 `ocr_job`；handler 不再向 food permit worker 主链传递本地 `image_path`。
+- [x] food permit worker 在收到 `ocr_job_id` 时，已通过统一 `ocr.Service` + WeChat printed-text provider 执行 OCR，并将 normalized raw text 投影回 merchant application。
+- [x] food permit worker 的旧 `image_path` 兼容消费分支已删除；当前任务契约已收紧为 `ocr_job_id` 主链。
+- [x] task processor 在 `ALIYUN_OCR_ENABLED=true` 时，food permit 路由已优先切到 Aliyun provider；未开启时仍回退到 WeChat printed-text 以保持测试与开发环境可运行。
+- [x] 已补充定向聚焦测试：`go test ./api -run 'TestUploadMerchantFoodPermitOCR_(WithMediaAssetIDCreatesOCRJob|WithMultipartCreatesMediaAssetAndOCRJob)' -count=1` 与 `go test ./worker -run TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob -count=1` 均已通过。
+- [x] 已完成营业执照、身份证、健康证与集团营业执照的统一 `ocr_job_id` 主链迁移，运行时代码中的旧直连 provider 路径已删除。
+- [x] 已完成 E6 与 F7：merchant/operator/rider 的响应构造测试与真实 GET API 回归测试已覆盖 `ocr_job_id`、`queued_at`、`started_at`、`error_code`、`alert_emitted_at` 等异步 OCR 字段语义。
+- [x] 已完成 E7：merchant food permit、rider application、operator application 均已补充真实 DB+HTTP 集成测试，验证数据库中的异步 OCR JSON 能通过对应申请查询接口稳定返回。
+- [x] 已完成 T33D：新增阿里云 OCR 最小权限接入方案文档，固定当前版本生产使用“专用 RAM 用户最小权限 AK/SK”，并明确 STS 配置位虽已存在但运行时尚未实现，当前不得在生产开启。
+- [x] 已纠正文档状态漂移：`ocr_jobs` 初始 migration 与 sqlc 查询已包含 `idempotency_key` 唯一索引、`attempt_count/max_attempts/next_retry_at`、`leased_at/lease_owner`，`ocr.Service.CreateJob` 也已通过 `UpsertOCRJob` 使用幂等键去重，因此 T34/T35/T36 与 I3 已同步标记完成。
+- [x] 已完成 T37 与 I1：`db/query/ocr_job.sql` 已限制状态流转为 `pending -> processing -> succeeded/failed/cancelled|pending(retry)`，并新增数据库级测试覆盖幂等创建、processing 租约、重试回 pending 与终态不可逆。
+- [x] 已完成 T53/T54：`casbin/policy.csv` 中旧 OCR 路径授权已删除，`docs/swagger.json`、`docs/swagger.yaml`、`docs/docs.go` 已重新生成；旧路径仅保留在执行计划等历史说明中作为下线示例。
+- [x] I2 已完成：`MarkOCRJobProcessing` 允许重拿超过 15 分钟未续租的 `processing` 任务 lease，覆盖 worker 崩溃/超时后的重投场景，并补充数据库级 stale lease 回收测试与运行手册说明。
+- [x] 已核对阶段 H 当前状态：`ocr/provider_wechat.go`、对应 SDK 封装测试以及统一 provider 抽象接入已落地，因此 H1/H6/H7 已完成；但 H2/H3/H4/H5 仍未闭环，目前只有 `ALIYUN_OCR_ENABLED` 驱动的有限 fallback 路由，尚未形成完整第二 provider 路由策略、差异校验与独立配置校验。
+- [ ] 当前下一步主线已完成阶段 I；阶段 H 仍可按需后置。
+
+- [x] T42 已完成：`id_card` 类型在写入 `raw_result` 前统一做字段级脱敏，`retention_until` 默认设置为创建后 7 天；重试创建的新 job 也沿用相同策略。
+- [x] T40 已完成：新增 admin-only `GET /v1/ocr/jobs/dead-letter`，可按 `owner_type` / `document_type` 查询失败且不再自动重试、需要人工介入的 OCR 任务，并直接返回 `attempt_count`、`max_attempts` 与 `manual_reason`。
+- [x] T45 已完成：新增数据库级并发测试，验证两个 worker 同时对同一 `ocr_job` 调用 `MarkOCRJobProcessing` 时，只有一个能成功拿到 lease，另一个会收到 `pgx.ErrNoRows`，从而防止重复消费。
+- [x] T46 已完成：新增失败注入回归测试，覆盖 `ocr.Service.ExecuteJob` 在限流错误下回写 `pending + next_retry_at` 的重试路径，以及 worker 在“重试未耗尽不告警 / 永久失败立即告警”两类边界上的行为。
+- [x] T47 / T47A 已完成：新增 `docs/OCR_BASELINE_EVALUATION_2026-03-25.md`、`cmd/ocr_baseline_eval`、repo-safe 样本清单示例与运行结果示例，固定 success_rate、field_accuracy、P50/P95/P99、error_code_distribution、backlog_count、retry_volume 的计算口径，并提供 `make ocr-baseline` 入口。

@@ -3,9 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"os"
 	"regexp"
 	"strings"
 	"time"
@@ -13,62 +11,9 @@ import (
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
-	"github.com/merrydance/locallife/util"
-	"github.com/merrydance/locallife/wechat"
+	"github.com/merrydance/locallife/ocr"
 	"github.com/rs/zerolog/log"
 )
-
-func marshalOCRTaskProcessing(startedAt string) []byte {
-	b, _ := json.Marshal(map[string]any{
-		"status":     "processing",
-		"started_at": startedAt,
-	})
-	return b
-}
-
-// getOCRErrorHint 根据错误类型返回用户友好的提示信息
-func getOCRErrorHint(err error) string {
-	if err == nil {
-		return ""
-	}
-	errStr := err.Error()
-
-	// 图片大小错误
-	if errors.Is(err, wechat.ErrImageTooLarge) || strings.Contains(errStr, "too large") {
-		return "图片文件过大，请压缩后重新上传（最大2MB）"
-	}
-
-	// 文件不存在
-	if errors.Is(err, os.ErrNotExist) || strings.Contains(errStr, "not exist") {
-		return "图片文件不存在，请重新上传"
-	}
-
-	// 微信API错误
-	if strings.Contains(errStr, "wechat") {
-		if strings.Contains(errStr, "48001") {
-			return "微信OCR接口暂时不可用，请稍后重试"
-		}
-		if strings.Contains(errStr, "45009") {
-			return "调用次数超限，请稍后重试"
-		}
-		if strings.Contains(errStr, "invalid image") || strings.Contains(errStr, "img format") {
-			return "图片格式不正确，请上传清晰的JPG或PNG格式照片"
-		}
-	}
-
-	// 默认提示
-	return "识别失败，请确保照片清晰、光线充足后重新上传"
-}
-
-func marshalOCRTaskFailed(err error, startedAt string) []byte {
-	b, _ := json.Marshal(map[string]any{
-		"status":     "failed",
-		"error":      err.Error(),
-		"user_hint":  getOCRErrorHint(err),
-		"started_at": startedAt,
-	})
-	return b
-}
 
 const (
 	TaskMerchantApplicationBusinessLicenseOCR = "merchant_application:ocr_business_license"
@@ -78,58 +23,65 @@ const (
 
 type merchantApplicationOCRPayload struct {
 	ApplicationID int64  `json:"application_id"`
-	ImagePath     string `json:"image_path"`
+	MediaAssetID  int64  `json:"media_asset_id,omitempty"`
+	OCRJobID      int64  `json:"ocr_job_id,omitempty"`
 	Side          string `json:"side,omitempty"` // Front/Back
 }
 
 func (distributor *RedisTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(
 	ctx context.Context,
 	applicationID int64,
-	imagePath string,
+	mediaAssetID int64,
+	ocrJobID int64,
 	opts ...asynq.Option,
 ) error {
 	payloadBytes, err := json.Marshal(merchantApplicationOCRPayload{
 		ApplicationID: applicationID,
-		ImagePath:     imagePath,
+		MediaAssetID:  mediaAssetID,
+		OCRJobID:      ocrJobID,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	return distributor.enqueue(ctx, TaskMerchantApplicationBusinessLicenseOCR, payloadBytes, opts...)
+	return distributor.enqueue(ctx, TaskMerchantApplicationBusinessLicenseOCR, payloadBytes, withDefaultOCRTaskOptions(opts...)...)
 }
 
 func (distributor *RedisTaskDistributor) DistributeTaskMerchantApplicationFoodPermitOCR(
 	ctx context.Context,
 	applicationID int64,
-	imagePath string,
+	mediaAssetID int64,
+	ocrJobID int64,
 	opts ...asynq.Option,
 ) error {
 	payloadBytes, err := json.Marshal(merchantApplicationOCRPayload{
 		ApplicationID: applicationID,
-		ImagePath:     imagePath,
+		MediaAssetID:  mediaAssetID,
+		OCRJobID:      ocrJobID,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	return distributor.enqueue(ctx, TaskMerchantApplicationFoodPermitOCR, payloadBytes, opts...)
+	return distributor.enqueue(ctx, TaskMerchantApplicationFoodPermitOCR, payloadBytes, withDefaultOCRTaskOptions(opts...)...)
 }
 
 func (distributor *RedisTaskDistributor) DistributeTaskMerchantApplicationIDCardOCR(
 	ctx context.Context,
 	applicationID int64,
-	imagePath string,
+	mediaAssetID int64,
+	ocrJobID int64,
 	side string,
 	opts ...asynq.Option,
 ) error {
 	payloadBytes, err := json.Marshal(merchantApplicationOCRPayload{
 		ApplicationID: applicationID,
-		ImagePath:     imagePath,
+		MediaAssetID:  mediaAssetID,
+		OCRJobID:      ocrJobID,
 		Side:          side,
 	})
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	return distributor.enqueue(ctx, TaskMerchantApplicationIDCardOCR, payloadBytes, opts...)
+	return distributor.enqueue(ctx, TaskMerchantApplicationIDCardOCR, payloadBytes, withDefaultOCRTaskOptions(opts...)...)
 }
 
 func (distributor *RedisTaskDistributor) enqueue(ctx context.Context, taskType string, payload []byte, opts ...asynq.Option) error {
@@ -147,95 +99,78 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationBusinessLicen
 	if err != nil {
 		return err
 	}
-	if processor.wechatClient == nil {
-		startedAt := time.Now().Format(time.RFC3339)
-		_, _ = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, db.UpdateMerchantApplicationBusinessLicenseParams{
-			ID:                 payload.ApplicationID,
-			BusinessLicenseOcr: marshalOCRTaskFailed(fmt.Errorf("wechat client not configured"), startedAt),
-		})
-		return fmt.Errorf("wechat client not configured: %w", asynq.SkipRetry)
+	if payload.OCRJobID <= 0 {
+		return fmt.Errorf("business license ocr task requires ocr_job_id: %w", asynq.SkipRetry)
 	}
+	if processor.ocrService == nil {
+		return fmt.Errorf("ocr service not configured for business license: %w", asynq.SkipRetry)
+	}
+	return processor.processMerchantApplicationBusinessLicenseOCRJob(ctx, payload)
+}
 
-	startedAt := time.Now().Format(time.RFC3339)
-	_, _ = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, db.UpdateMerchantApplicationBusinessLicenseParams{
-		ID:                 payload.ApplicationID,
-		BusinessLicenseOcr: marshalOCRTaskProcessing(startedAt),
+func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOCRJob(ctx context.Context, payload *merchantApplicationOCRPayload) error {
+	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{
+		JobID:      payload.OCRJobID,
+		LeaseOwner: "worker:merchant_business_license",
 	})
-
-	// 使用图片压缩器读取并压缩图片（如果需要）
-	compressor := util.NewImageCompressor(util.DefaultMaxOCRBytes)
-	imgData, wasCompressed, err := compressor.CompressFileForOCR(payload.ImagePath)
 	if err != nil {
-		ocrErr := fmt.Errorf("图片处理失败: %w", err)
+		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
+		failed := map[string]any{
+			"status":           string(ocr.JobStatusFailed),
+			"queued_at":        job.CreatedAt.Format(time.RFC3339),
+			"started_at":       formatPgTimestamp(job.StartedAt),
+			"ocr_job_id":       payload.OCRJobID,
+			"error_code":       ocr.ErrorCode(err),
+			"alert_emitted_at": formatOCRAlertEmittedAt(alertEmittedAt),
+			"error":            err.Error(),
+		}
+		failedJSON, _ := json.Marshal(failed)
 		_, _ = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, db.UpdateMerchantApplicationBusinessLicenseParams{
 			ID:                 payload.ApplicationID,
-			BusinessLicenseOcr: marshalOCRTaskFailed(ocrErr, startedAt),
+			BusinessLicenseOcr: failedJSON,
 		})
-		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("compress image: %w", asynq.SkipRetry)
-		}
-		return fmt.Errorf("compress image: %w", err)
+		processor.writeOCRJobAudit(ctx, job, "ocr_job_failed", ocrFailureAuditMetadata(err))
+		return asynqOCRTaskError(job, err)
 	}
-
-	if wasCompressed {
-		log.Info().
-			Int64("application_id", payload.ApplicationID).
-			Str("image_path", payload.ImagePath).
-			Int("compressed_size", len(imgData)).
-			Msg("business license image compressed for OCR")
+	observeOCRJob(job)
+	normalized, decodeErr := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
+	if decodeErr != nil {
+		return fmt.Errorf("decode normalized business license result: %w", decodeErr)
 	}
-
-	// 使用压缩后的图片数据调用 OCR
-	imgFile := util.NewBytesFile(imgData)
-	ocrResult, err := processor.wechatClient.OCRBusinessLicense(ctx, imgFile)
-	if err != nil {
-		_, _ = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, db.UpdateMerchantApplicationBusinessLicenseParams{
-			ID:                 payload.ApplicationID,
-			BusinessLicenseOcr: marshalOCRTaskFailed(err, startedAt),
-		})
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			return fmt.Errorf("wechat OCRBusinessLicense: %w", asynq.SkipRetry)
-		}
-		return fmt.Errorf("wechat OCRBusinessLicense: %w", err)
-	}
-
-	// 营业期限归一化：若为空或仅含注册/成立日期（无终止日期），默认视为长期有效
-	validPeriod := normalizeValidPeriod(ocrResult.ValidPeriod)
-
 	ocrData := map[string]any{
-		"status":               "done",
-		"started_at":           startedAt,
-		"reg_num":              ocrResult.RegNum,
-		"enterprise_name":      ocrResult.EnterpriseEName,
-		"legal_representative": ocrResult.LegalRepresentative,
-		"type_of_enterprise":   ocrResult.TypeOfEnterprise,
-		"address":              ocrResult.Address,
-		"business_scope":       ocrResult.BusinessScope,
-		"registered_capital":   ocrResult.RegisteredCapital,
-		"valid_period":         validPeriod,
-		"credit_code":          ocrResult.CreditCode,
-		"ocr_at":               time.Now().Format(time.RFC3339),
+		"status":     "done",
+		"queued_at":  job.CreatedAt.Format(time.RFC3339),
+		"started_at": formatPgTimestamp(job.StartedAt),
+		"ocr_job_id": job.ID,
+		"ocr_at":     normalized.RecognizedAt.Format(time.RFC3339),
+	}
+	arg := db.UpdateMerchantApplicationBusinessLicenseParams{ID: payload.ApplicationID}
+	if normalized.BusinessLicense != nil {
+		validPeriod := normalizeValidPeriod(normalized.BusinessLicense.ValidPeriod)
+		ocrData["reg_num"] = normalized.BusinessLicense.RegistrationNumber
+		ocrData["enterprise_name"] = normalized.BusinessLicense.EnterpriseName
+		ocrData["legal_representative"] = normalized.BusinessLicense.LegalRepresentative
+		ocrData["address"] = normalized.BusinessLicense.Address
+		ocrData["business_scope"] = normalized.BusinessLicense.BusinessScope
+		ocrData["valid_period"] = validPeriod
+		ocrData["credit_code"] = normalized.BusinessLicense.CreditCode
+		if normalized.BusinessLicense.CreditCode != "" {
+			arg.BusinessLicenseNumber = pgtype.Text{String: normalized.BusinessLicense.CreditCode, Valid: true}
+		} else if normalized.BusinessLicense.RegistrationNumber != "" {
+			arg.BusinessLicenseNumber = pgtype.Text{String: normalized.BusinessLicense.RegistrationNumber, Valid: true}
+		}
+		if normalized.BusinessLicense.BusinessScope != "" {
+			arg.BusinessScope = pgtype.Text{String: normalized.BusinessLicense.BusinessScope, Valid: true}
+		}
 	}
 	ocrJSON, _ := json.Marshal(ocrData)
-
-	arg := db.UpdateMerchantApplicationBusinessLicenseParams{ID: payload.ApplicationID}
 	arg.BusinessLicenseOcr = ocrJSON
-
-	if ocrResult.CreditCode != "" {
-		arg.BusinessLicenseNumber = pgtype.Text{String: ocrResult.CreditCode, Valid: true}
-	} else if ocrResult.RegNum != "" {
-		arg.BusinessLicenseNumber = pgtype.Text{String: ocrResult.RegNum, Valid: true}
-	}
-	if ocrResult.BusinessScope != "" {
-		arg.BusinessScope = pgtype.Text{String: ocrResult.BusinessScope, Valid: true}
-	}
-
 	_, err = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, arg)
 	if err != nil {
 		return fmt.Errorf("update merchant application business license: %w", err)
 	}
-
-	log.Info().Int64("application_id", payload.ApplicationID).Msg("✅ business license OCR updated")
+	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
+	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Msg("✅ business license OCR updated from ocr job")
 	return nil
 }
 
@@ -244,77 +179,65 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationFoodPermitOCR
 	if err != nil {
 		return err
 	}
-	if processor.wechatClient == nil {
-		startedAt := time.Now().Format(time.RFC3339)
-		_, _ = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
-			ID:            payload.ApplicationID,
-			FoodPermitOcr: marshalOCRTaskFailed(fmt.Errorf("wechat client not configured"), startedAt),
-		})
-		return fmt.Errorf("wechat client not configured: %w", asynq.SkipRetry)
+	if payload.OCRJobID <= 0 {
+		return fmt.Errorf("food permit ocr task requires ocr_job_id: %w", asynq.SkipRetry)
 	}
+	if processor.ocrService == nil {
+		return fmt.Errorf("ocr service not configured for food permit: %w", asynq.SkipRetry)
+	}
+	return processor.processMerchantApplicationFoodPermitOCRJob(ctx, payload)
+}
 
-	startedAt := time.Now().Format(time.RFC3339)
-	_, _ = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
-		ID:            payload.ApplicationID,
-		FoodPermitOcr: marshalOCRTaskProcessing(startedAt),
+func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(ctx context.Context, payload *merchantApplicationOCRPayload) error {
+	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{
+		JobID:      payload.OCRJobID,
+		LeaseOwner: "worker:merchant_food_permit",
 	})
-
-	// 使用图片压缩器读取并压缩图片（如果需要）
-	compressor := util.NewImageCompressor(util.DefaultMaxOCRBytes)
-	imgData, wasCompressed, err := compressor.CompressFileForOCR(payload.ImagePath)
 	if err != nil {
-		ocrErr := fmt.Errorf("图片处理失败: %w", err)
+		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
+		failed := foodPermitOCRData{
+			Status:         string(ocr.JobStatusFailed),
+			QueuedAt:       job.CreatedAt.Format(time.RFC3339),
+			StartedAt:      formatPgTimestamp(job.StartedAt),
+			OCRJobID:       int64Ptr(payload.OCRJobID),
+			Error:          err.Error(),
+			ErrorCode:      ocr.ErrorCode(err),
+			AlertEmittedAt: formatOCRAlertEmittedAt(alertEmittedAt),
+		}
+		failedJSON, _ := json.Marshal(failed)
 		_, _ = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
 			ID:            payload.ApplicationID,
-			FoodPermitOcr: marshalOCRTaskFailed(ocrErr, startedAt),
+			FoodPermitOcr: failedJSON,
 		})
-		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("compress image: %w", asynq.SkipRetry)
-		}
-		return fmt.Errorf("compress image: %w", err)
+		processor.writeOCRJobAudit(ctx, job, "ocr_job_failed", ocrFailureAuditMetadata(err))
+		return asynqOCRTaskError(job, err)
 	}
-
-	if wasCompressed {
-		log.Info().
-			Int64("application_id", payload.ApplicationID).
-			Str("image_path", payload.ImagePath).
-			Int("compressed_size", len(imgData)).
-			Msg("food permit image compressed for OCR")
+	observeOCRJob(job)
+	normalized, decodeErr := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
+	if decodeErr != nil {
+		return fmt.Errorf("decode normalized food permit result: %w", decodeErr)
 	}
-
-	// 使用压缩后的图片数据调用 OCR
-	imgFile := util.NewBytesFile(imgData)
-	ocrResult, err := processor.wechatClient.OCRPrintedText(ctx, imgFile)
-	if err != nil {
-		_, _ = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
-			ID:            payload.ApplicationID,
-			FoodPermitOcr: marshalOCRTaskFailed(err, startedAt),
-		})
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			return fmt.Errorf("wechat OCRPrintedText: %w", asynq.SkipRetry)
-		}
-		return fmt.Errorf("wechat OCRPrintedText: %w", err)
-	}
-
-	rawText := ocrResult.GetAllText()
 	ocrData := foodPermitOCRData{
 		Status:    "done",
-		StartedAt: startedAt,
-		RawText:   rawText,
-		OCRAt:     time.Now().Format(time.RFC3339),
+		QueuedAt:  job.CreatedAt.Format(time.RFC3339),
+		StartedAt: formatPgTimestamp(job.StartedAt),
+		OCRJobID:  int64Ptr(job.ID),
+		OCRAt:     normalized.RecognizedAt.Format(time.RFC3339),
 	}
-	parseFoodPermitOCRText(&ocrData, rawText)
+	if normalized.FoodPermit != nil {
+		ocrData.RawText = normalized.FoodPermit.RawText
+		parseFoodPermitOCRText(&ocrData, normalized.FoodPermit.RawText)
+	}
 	ocrJSON, _ := json.Marshal(ocrData)
-
-	arg := db.UpdateMerchantApplicationFoodPermitParams{ID: payload.ApplicationID}
-	arg.FoodPermitOcr = ocrJSON
-
-	_, err = processor.store.UpdateMerchantApplicationFoodPermit(ctx, arg)
+	_, err = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
+		ID:            payload.ApplicationID,
+		FoodPermitOcr: ocrJSON,
+	})
 	if err != nil {
 		return fmt.Errorf("update merchant application food permit: %w", err)
 	}
-
-	log.Info().Int64("application_id", payload.ApplicationID).Msg("✅ food permit OCR updated")
+	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
+	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Msg("✅ food permit OCR updated from ocr job")
 	return nil
 }
 
@@ -323,109 +246,84 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantApplicationIDCardOCR(ctx
 	if err != nil {
 		return err
 	}
-	if processor.wechatClient == nil {
-		startedAt := time.Now().Format(time.RFC3339)
-		failed := marshalOCRTaskFailed(fmt.Errorf("wechat client not configured"), startedAt)
-		switch payload.Side {
-		case "Front":
-			_, _ = processor.store.UpdateMerchantApplicationIDCardFront(ctx, db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: failed})
-		case "Back":
-			_, _ = processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: failed})
-		}
-		return fmt.Errorf("wechat client not configured: %w", asynq.SkipRetry)
-	}
 	if payload.Side != "Front" && payload.Side != "Back" {
 		return fmt.Errorf("invalid side: %w", asynq.SkipRetry)
 	}
-
-	startedAt := time.Now().Format(time.RFC3339)
-	processing := marshalOCRTaskProcessing(startedAt)
-	switch payload.Side {
-	case "Front":
-		_, _ = processor.store.UpdateMerchantApplicationIDCardFront(ctx, db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: processing})
-	case "Back":
-		_, _ = processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: processing})
+	if payload.OCRJobID <= 0 {
+		return fmt.Errorf("id card ocr task requires ocr_job_id: %w", asynq.SkipRetry)
 	}
+	if processor.ocrService == nil {
+		return fmt.Errorf("ocr service not configured for id card: %w", asynq.SkipRetry)
+	}
+	return processor.processMerchantApplicationIDCardOCRJob(ctx, payload)
+}
 
-	// 使用图片压缩器读取并压缩图片（如果需要）
-	compressor := util.NewImageCompressor(util.DefaultMaxOCRBytes)
-	imgData, wasCompressed, err := compressor.CompressFileForOCR(payload.ImagePath)
+func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx context.Context, payload *merchantApplicationOCRPayload) error {
+	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{
+		JobID:      payload.OCRJobID,
+		LeaseOwner: "worker:merchant_id_card",
+	})
 	if err != nil {
-		ocrErr := fmt.Errorf("图片处理失败: %w", err)
-		failed := marshalOCRTaskFailed(ocrErr, startedAt)
-		switch payload.Side {
-		case "Front":
-			_, _ = processor.store.UpdateMerchantApplicationIDCardFront(ctx, db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: failed})
-		case "Back":
-			_, _ = processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: failed})
+		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
+		failed := merchantIDCardOCRData{
+			Status:         string(ocr.JobStatusFailed),
+			QueuedAt:       job.CreatedAt.Format(time.RFC3339),
+			StartedAt:      formatPgTimestamp(job.StartedAt),
+			OCRJobID:       int64Ptr(payload.OCRJobID),
+			Error:          err.Error(),
+			ErrorCode:      ocr.ErrorCode(err),
+			AlertEmittedAt: formatOCRAlertEmittedAt(alertEmittedAt),
 		}
-		if errors.Is(err, os.ErrNotExist) {
-			return fmt.Errorf("compress image: %w", asynq.SkipRetry)
-		}
-		return fmt.Errorf("compress image: %w", err)
-	}
-
-	if wasCompressed {
-		log.Info().
-			Int64("application_id", payload.ApplicationID).
-			Str("image_path_sha256", hashString(payload.ImagePath)).
-			Str("side", payload.Side).
-			Int("compressed_size", len(imgData)).
-			Msg("id card image compressed for OCR")
-	}
-
-	// 使用压缩后的图片数据调用 OCR
-	imgFile := util.NewBytesFile(imgData)
-	ocrResult, err := processor.wechatClient.OCRIDCard(ctx, imgFile, payload.Side)
-	if err != nil {
-		failed := marshalOCRTaskFailed(err, startedAt)
+		failedJSON, _ := json.Marshal(failed)
 		if payload.Side == "Front" {
-			_, _ = processor.store.UpdateMerchantApplicationIDCardFront(ctx, db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: failed})
+			_, _ = processor.store.UpdateMerchantApplicationIDCardFront(ctx, db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: failedJSON})
 		} else {
-			_, _ = processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: failed})
+			_, _ = processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: failedJSON})
 		}
-		if errors.Is(err, wechat.ErrImageTooLarge) {
-			return fmt.Errorf("wechat OCRIDCard: %w", asynq.SkipRetry)
-		}
-		return fmt.Errorf("wechat OCRIDCard: %w", err)
+		processor.writeOCRJobAudit(ctx, job, "ocr_job_failed", ocrFailureAuditMetadata(err))
+		return asynqOCRTaskError(job, err)
 	}
-
-	ocrData := map[string]any{"status": "done", "started_at": startedAt, "ocr_at": time.Now().Format(time.RFC3339)}
-	if payload.Side == "Front" {
-		ocrData["name"] = ocrResult.Name
-		ocrData["id_number"] = ocrResult.ID
-		ocrData["gender"] = ocrResult.Gender
-		ocrData["nation"] = ocrResult.Nation
-		ocrData["address"] = ocrResult.Addr
-	} else {
-		ocrData["valid_date"] = ocrResult.ValidDate
+	observeOCRJob(job)
+	normalized, decodeErr := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
+	if decodeErr != nil {
+		return fmt.Errorf("decode normalized id card result: %w", decodeErr)
+	}
+	ocrData := merchantIDCardOCRData{
+		Status:    "done",
+		QueuedAt:  job.CreatedAt.Format(time.RFC3339),
+		StartedAt: formatPgTimestamp(job.StartedAt),
+		OCRJobID:  int64Ptr(job.ID),
+		OCRAt:     normalized.RecognizedAt.Format(time.RFC3339),
+	}
+	if normalized.IDCard != nil {
+		ocrData.Name = normalized.IDCard.Name
+		ocrData.IDNumber = normalized.IDCard.IDNumber
+		ocrData.Gender = normalized.IDCard.Gender
+		ocrData.Nation = normalized.IDCard.Ethnicity
+		ocrData.Address = normalized.IDCard.Address
+		ocrData.ValidDate = normalized.IDCard.ValidPeriod
 	}
 	ocrJSON, _ := json.Marshal(ocrData)
-
 	if payload.Side == "Front" {
-		arg := db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID}
-		arg.IDCardFrontOcr = ocrJSON
-		if ocrResult.Name != "" {
-			arg.LegalPersonName = pgtype.Text{String: ocrResult.Name, Valid: true}
+		arg := db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: ocrJSON}
+		if ocrData.Name != "" {
+			arg.LegalPersonName = pgtype.Text{String: ocrData.Name, Valid: true}
 		}
-		if ocrResult.ID != "" {
-			arg.LegalPersonIDNumber = pgtype.Text{String: ocrResult.ID, Valid: true}
+		if ocrData.IDNumber != "" {
+			arg.LegalPersonIDNumber = pgtype.Text{String: ocrData.IDNumber, Valid: true}
 		}
-
 		_, err = processor.store.UpdateMerchantApplicationIDCardFront(ctx, arg)
 		if err != nil {
 			return fmt.Errorf("update merchant application id card front: %w", err)
 		}
 	} else {
-		arg := db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID}
-		arg.IDCardBackOcr = ocrJSON
-		_, err = processor.store.UpdateMerchantApplicationIDCardBack(ctx, arg)
+		_, err = processor.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{ID: payload.ApplicationID, IDCardBackOcr: ocrJSON})
 		if err != nil {
 			return fmt.Errorf("update merchant application id card back: %w", err)
 		}
 	}
-
-	log.Info().Int64("application_id", payload.ApplicationID).Str("side", payload.Side).Msg("✅ id card OCR updated")
+	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
+	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Str("side", payload.Side).Msg("✅ id card OCR updated from ocr job")
 	return nil
 }
 
@@ -434,8 +332,7 @@ func (processor *RedisTaskProcessor) parseMerchantApplicationOCRPayload(task *as
 	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal payload: %w", asynq.SkipRetry)
 	}
-	payload.ImagePath = strings.TrimSpace(payload.ImagePath)
-	if payload.ApplicationID <= 0 || payload.ImagePath == "" {
+	if payload.ApplicationID <= 0 || (payload.MediaAssetID <= 0 && payload.OCRJobID <= 0) {
 		return nil, fmt.Errorf("invalid payload: %w", asynq.SkipRetry)
 	}
 	return &payload, nil
@@ -444,17 +341,51 @@ func (processor *RedisTaskProcessor) parseMerchantApplicationOCRPayload(task *as
 // foodPermitOCRData is a minimal copy of the API response struct for storage.
 // Kept in worker package to avoid import cycles.
 type foodPermitOCRData struct {
-	Status       string `json:"status,omitempty"`
-	Error        string `json:"error,omitempty"`
-	QueuedAt     string `json:"queued_at,omitempty"`
-	StartedAt    string `json:"started_at,omitempty"`
-	RawText      string `json:"raw_text,omitempty"`
-	PermitNo     string `json:"permit_no,omitempty"`
-	CompanyName  string `json:"company_name,omitempty"`
-	OperatorName string `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
-	ValidFrom    string `json:"valid_from,omitempty"`
-	ValidTo      string `json:"valid_to,omitempty"`
-	OCRAt        string `json:"ocr_at,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Error          string `json:"error,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
+	QueuedAt       string `json:"queued_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
+	RawText        string `json:"raw_text,omitempty"`
+	PermitNo       string `json:"permit_no,omitempty"`
+	CompanyName    string `json:"company_name,omitempty"`
+	OperatorName   string `json:"operator_name,omitempty"` // 经营者/法定代表人姓名
+	ValidFrom      string `json:"valid_from,omitempty"`
+	ValidTo        string `json:"valid_to,omitempty"`
+	OCRAt          string `json:"ocr_at,omitempty"`
+}
+
+type merchantIDCardOCRData struct {
+	Status         string `json:"status,omitempty"`
+	Error          string `json:"error,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
+	QueuedAt       string `json:"queued_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
+	Name           string `json:"name,omitempty"`
+	IDNumber       string `json:"id_number,omitempty"`
+	Gender         string `json:"gender,omitempty"`
+	Nation         string `json:"nation,omitempty"`
+	Address        string `json:"address,omitempty"`
+	ValidDate      string `json:"valid_date,omitempty"`
+	OCRAt          string `json:"ocr_at,omitempty"`
+}
+
+func int64Ptr(value int64) *int64 {
+	if value == 0 {
+		return nil
+	}
+	return &value
+}
+
+func formatPgTimestamp(value pgtype.Timestamptz) string {
+	if !value.Valid {
+		return ""
+	}
+	return value.Time.Format(time.RFC3339)
 }
 
 func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {

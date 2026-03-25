@@ -9,6 +9,8 @@ import (
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
+	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/util"
 	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
@@ -52,6 +54,8 @@ type RedisTaskProcessor struct {
 	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通客户端（分账）
 	pubSubPublisher   websocket.PubSubPublisher       // Pub/Sub 发布器（用于推送通知）
 	deliveryBroadcast *logic.DeliveryBroadcastLogic
+	mediaRegistry     *media.Registry
+	ocrService        *ocr.Service
 	config            util.Config
 	roleCache         map[int64]cachedUserRoles
 	roleCacheMu       sync.RWMutex
@@ -70,6 +74,7 @@ func NewRedisTaskProcessor(
 	wechatClient wechat.WechatClient,
 	ecommerceClient wechat.EcommerceClientInterface,
 	deliveryBroadcast *logic.DeliveryBroadcastLogic,
+	mediaRegistry *media.Registry,
 	config util.Config,
 ) TaskProcessor {
 	logger := NewLogger()
@@ -102,6 +107,11 @@ func NewRedisTaskProcessor(
 	})
 	pubSubPublisher := websocket.NewRedisPublisher(redisClient)
 
+	ocrService, err := newMerchantApplicationOCRService(store, mediaRegistry, wechatClient, config)
+	if err != nil {
+		log.Fatal().Err(err).Msg("cannot create food permit ocr service for task processor")
+	}
+
 	return &RedisTaskProcessor{
 		server:            server,
 		store:             store,
@@ -110,6 +120,8 @@ func NewRedisTaskProcessor(
 		ecommerceClient:   ecommerceClient,
 		pubSubPublisher:   pubSubPublisher,
 		deliveryBroadcast: deliveryBroadcast,
+		mediaRegistry:     mediaRegistry,
+		ocrService:        ocrService,
 		config:            config,
 		roleCache:         make(map[int64]cachedUserRoles),
 		roleCacheTTL:      1 * time.Minute,
@@ -123,15 +135,42 @@ func NewTestTaskProcessor(
 	wechatClient wechat.WechatClient,
 	ecommerceClient wechat.EcommerceClientInterface,
 ) *RedisTaskProcessor {
+	ocrService, _ := newMerchantApplicationOCRService(store, nil, wechatClient, util.Config{})
 	return &RedisTaskProcessor{
 		store:           store,
 		distributor:     distributor,
 		wechatClient:    wechatClient,
 		ecommerceClient: ecommerceClient,
+		ocrService:      ocrService,
 		pubSubPublisher: websocket.NoopPublisher{},
 		roleCache:       make(map[int64]cachedUserRoles),
 		roleCacheTTL:    1 * time.Minute,
 	}
+}
+
+func newMerchantApplicationOCRService(store db.Store, reader ocr.BinaryReader, wechatClient wechat.WechatClient, config util.Config) (*ocr.Service, error) {
+	routes := make(map[ocr.DocumentType]ocr.Route)
+	if config.AliyunOCREnabled {
+		aliyunProvider, err := ocr.NewAliyunProviderFromConfig(config)
+		if err != nil {
+			return nil, err
+		}
+		routes[ocr.DocumentTypeFoodPermit] = ocr.Route{Provider: aliyunProvider, Capability: ocr.CapabilityAliyunFoodPermit}
+		routes[ocr.DocumentTypeBusinessLicense] = ocr.Route{Provider: aliyunProvider, Capability: ocr.CapabilityAliyunBusinessLicense}
+		routes[ocr.DocumentTypeIDCard] = ocr.Route{Provider: aliyunProvider, Capability: ocr.CapabilityAliyunIDCard}
+	} else if wechatClient != nil {
+		routes[ocr.DocumentTypeFoodPermit] = ocr.Route{Provider: ocr.NewWechatPrintedTextProvider(wechatClient), Capability: ocr.CapabilityWechatPrintedText}
+		routes[ocr.DocumentTypeBusinessLicense] = ocr.Route{Provider: ocr.NewWechatBusinessLicenseProvider(wechatClient), Capability: ocr.CapabilityWechatBusinessLicense}
+		routes[ocr.DocumentTypeIDCard] = ocr.Route{Provider: ocr.NewWechatIDCardProvider(wechatClient), Capability: ocr.CapabilityWechatIDCard}
+	}
+	if len(routes) == 0 {
+		return nil, nil
+	}
+	router, err := ocr.NewStaticRouter(routes)
+	if err != nil {
+		return nil, err
+	}
+	return ocr.NewService(store, router, reader), nil
 }
 
 func (processor *RedisTaskProcessor) Start() error {
@@ -171,6 +210,11 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskMerchantApplicationBusinessLicenseOCR, processor.ProcessTaskMerchantApplicationBusinessLicenseOCR)
 	mux.HandleFunc(TaskMerchantApplicationFoodPermitOCR, processor.ProcessTaskMerchantApplicationFoodPermitOCR)
 	mux.HandleFunc(TaskMerchantApplicationIDCardOCR, processor.ProcessTaskMerchantApplicationIDCardOCR)
+	mux.HandleFunc(TaskOperatorApplicationBusinessLicenseOCR, processor.ProcessTaskOperatorApplicationBusinessLicenseOCR)
+	mux.HandleFunc(TaskOperatorApplicationIDCardOCR, processor.ProcessTaskOperatorApplicationIDCardOCR)
+	mux.HandleFunc(TaskRiderApplicationIDCardOCR, processor.ProcessTaskRiderApplicationIDCardOCR)
+	mux.HandleFunc(TaskRiderApplicationHealthCertOCR, processor.ProcessTaskRiderApplicationHealthCertOCR)
+	mux.HandleFunc(TaskGroupApplicationBusinessLicenseOCR, processor.ProcessTaskGroupApplicationBusinessLicenseOCR)
 
 	// 微信发货信息上报任务（合规）
 	mux.HandleFunc(TaskUploadShippingInfo, processor.ProcessTaskUploadShippingInfo)

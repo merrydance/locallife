@@ -66,6 +66,11 @@ sync_regions_test:
 swagger:
 	$(HOME)/go/bin/swag init -g main.go -o docs --parseDependency --parseInternal
 
+ocr-baseline:
+	@test -n "$(manifest)" || (echo "usage: make ocr-baseline manifest=<manifest.json> report=<run.json> [out=<summary.json>]" && exit 1)
+	@test -n "$(report)" || (echo "usage: make ocr-baseline manifest=<manifest.json> report=<run.json> [out=<summary.json>]" && exit 1)
+	go run ./cmd/ocr_baseline_eval -manifest "$(manifest)" -run "$(report)" $(if $(out),-out "$(out)",)
+
 server:
 	go run main.go
 
@@ -112,4 +117,4 @@ lint-filesize:
 	  echo "✅ All files within $(MAX_FILE_LINES)-line limit"; \
 	fi
 
-.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger test test-unit test-integration server mock proto evans redis sync_regions_test doc-audit lint-filesize
+.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger ocr-baseline test test-unit test-integration server mock proto evans redis sync_regions_test doc-audit lint-filesize

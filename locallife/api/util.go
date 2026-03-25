@@ -50,6 +50,13 @@ func pgTimeToPtr(val pgtype.Timestamptz) *time.Time {
 	return nil
 }
 
+func pgTimePtrToTimestamptz(val *time.Time) pgtype.Timestamptz {
+	if val == nil {
+		return pgtype.Timestamptz{}
+	}
+	return pgtype.Timestamptz{Time: *val, Valid: true}
+}
+
 func yuanToFen(amount float64) int64 {
 	return int64(amount * float64(fenPerYuan))
 }

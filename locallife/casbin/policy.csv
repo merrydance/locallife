@@ -154,9 +154,6 @@ p, operator, /v1/operator/rules/:key, PATCH
 p, merchant_owner, /v1/merchant/application, GET
 p, merchant_owner, /v1/merchant/application/basic, PUT
 p, merchant_owner, /v1/merchant/application/images, PUT
-p, merchant_owner, /v1/merchant/application/license/ocr, POST
-p, merchant_owner, /v1/merchant/application/foodpermit/ocr, POST
-p, merchant_owner, /v1/merchant/application/idcard/ocr, POST
 p, merchant_owner, /v1/merchant/application/submit, POST
 p, merchant_owner, /v1/merchant/application/reset, POST
 p, merchant_owner, /v1/merchants/me, GET
@@ -365,7 +362,6 @@ p, merchant_staff, /v1/tables/:id, GET
 # Rider Registration & Profile
 p, rider, /v1/rider/application, GET
 p, rider, /v1/rider/application/basic, PUT
-p, rider, /v1/rider/application/idcard/ocr, POST
 p, rider, /v1/rider/application/healthcert, POST
 p, rider, /v1/rider/application/submit, POST
 p, rider, /v1/rider/application/reset, POST
@@ -428,8 +424,6 @@ p, customer, /v1/operator/application, POST
 p, customer, /v1/operator/application, GET
 p, customer, /v1/operator/application/region, PUT
 p, customer, /v1/operator/application/basic, PUT
-p, customer, /v1/operator/application/license/ocr, POST
-p, customer, /v1/operator/application/idcard/ocr, POST
 p, customer, /v1/operator/application/submit, POST
 p, customer, /v1/operator/application/reset, POST
 

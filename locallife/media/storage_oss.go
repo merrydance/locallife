@@ -132,6 +132,22 @@ func (s *OSSStorage) StatObject(ctx context.Context, bucket, objectKey string) (
 	return meta, nil
 }
 
+// ReadObject 通过 OSS SDK 直接读取对象内容，避免服务端回读签名 URL。
+func (s *OSSStorage) ReadObject(ctx context.Context, bucket, objectKey string) (io.ReadCloser, error) {
+	result, err := s.client.GetObject(ctx, &oss.GetObjectRequest{
+		Bucket: oss.Ptr(bucket),
+		Key:    oss.Ptr(objectKey),
+	})
+	if err != nil {
+		var serviceErr *oss.ServiceError
+		if errors.As(err, &serviceErr) && serviceErr.StatusCode == 404 {
+			return nil, ErrObjectNotFound
+		}
+		return nil, fmt.Errorf("media: get object %s: %w", objectKey, err)
+	}
+	return result.Body, nil
+}
+
 // CreatePrivateDownloadURL 为私有桶对象签发短期 GET 签名 URL（V4 签名）。
 func (s *OSSStorage) CreatePrivateDownloadURL(ctx context.Context, bucket, objectKey string, ttl time.Duration) (string, error) {
 	if ttl <= 0 {

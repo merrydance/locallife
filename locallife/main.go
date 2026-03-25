@@ -19,6 +19,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	_ "github.com/merrydance/locallife/docs" // Swagger docs
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/scheduler"
 	"github.com/merrydance/locallife/session"
 	"github.com/merrydance/locallife/util"
@@ -64,6 +65,9 @@ func main() {
 	config, err := util.LoadConfig(".")
 	if err != nil {
 		log.Fatal().Err(err).Msg("cannot load config")
+	}
+	if err := config.ValidateAliyunOCRConfig(); err != nil {
+		log.Fatal().Err(err).Msg("invalid aliyun ocr config")
 	}
 
 	level, err := zerolog.ParseLevel(config.LogLevel)
@@ -269,8 +273,27 @@ func runTaskProcessor(
 		}
 	}
 
+	var mediaStorage media.ObjectStorage
+	if config.FileStorageProvider == "oss" {
+		storage, err := media.NewOSSStorage(
+			config.OSSEndpoint,
+			config.OSSRegion,
+			config.OSSAccessKeyID,
+			config.OSSAccessKeySecret,
+			config.OSSPublicBucket,
+			config.OSSPrivateBucket,
+		)
+		if err != nil {
+			log.Fatal().Err(err).Msg("cannot create media storage for task processor")
+		}
+		mediaStorage = storage
+	} else {
+		mediaStorage = media.NewLocalStorage(config.ExternalBaseURL, "uploads/dev")
+	}
+	mediaRegistry := media.NewRegistry(store, mediaStorage)
+
 	// 创建并启动任务处理器（传入 distributor 以支持任务链）
-	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, config)
+	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, mediaRegistry, config)
 	log.Info().Msg("start task processor")
 
 	waitGroup.Go(func() error {

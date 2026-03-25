@@ -23,2108 +23,6 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
-        "/agreements": {
-            "get": {
-                "description": "get the list of all active agreements",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "agreements"
-                ],
-                "summary": "List active agreements",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.listActiveAgreementsResponse"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/agreements/{type}": {
-            "get": {
-                "description": "get the content of an active agreement by its type",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "agreements"
-                ],
-                "summary": "Get active agreement by type",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Agreement Type",
-                        "name": "type",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/db.Agreement"
-                        }
-                    }
-                }
-            }
-        },
-        "/delivery-fee/calculate": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Calculate delivery fee based on region, distance, and promotions",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Calculate delivery fee",
-                "parameters": [
-                    {
-                        "description": "Calculation parameters",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.calculateDeliveryFeeRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.DeliveryFeeResult"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Config not found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/delivery-fee/config/{region_id}": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get delivery fee configuration for a region",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Get delivery fee config",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Region ID",
-                        "name": "region_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.deliveryFeeConfigResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Config not found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/delivery-fee/merchants/{id}/promotions": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Create delivery fee promotion for merchant. Only the merchant owner can create promotions for their own merchant.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Create delivery promotion (Merchant)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Merchant ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Promotion details",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createDeliveryPromotionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/api.deliveryPromotionResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Merchant role required or not authorized for this merchant",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/delivery-fee/merchants/{merchant_id}/promotions": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get all delivery promotions for a merchant. Only the merchant owner can view their own promotions.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "List delivery promotions (Merchant)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Merchant ID",
-                        "name": "merchant_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.deliveryPromotionResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Merchant role required or not authorized for this merchant",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/delivery-fee/merchants/{merchant_id}/promotions/{id}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Delete a delivery fee promotion. Only the merchant owner can delete their own promotions.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Delete delivery promotion (Merchant)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Merchant ID",
-                        "name": "merchant_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Promotion ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Merchant role required or not authorized for this merchant",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Promotion not found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update a delivery fee promotion. Only the merchant owner can update their own promotions.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Update delivery promotion (Merchant)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Merchant ID",
-                        "name": "merchant_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "type": "integer",
-                        "description": "Promotion ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Update fields",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.updateDeliveryPromotionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.deliveryPromotionResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Merchant role required or not authorized for this merchant",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Promotion not found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/delivery-fee/regions/{region_id}/config": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Create delivery fee configuration for a region (operator only). Each region can only have one active configuration.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Create delivery fee config (Operator)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Region ID",
-                        "name": "region_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Fee config details",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createDeliveryFeeConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/api.deliveryFeeConfigResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Operator role required or not authorized for this region",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "409": {
-                        "description": "Config already exists for this region",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Update delivery fee configuration for a region (operator only). Supports partial updates.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Update delivery fee config (Operator)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Region ID",
-                        "name": "region_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Update fields",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.updateDeliveryFeeConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.deliveryFeeConfigResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Operator role required or not authorized for this region",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Config not found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/operator/peak-hours/{id}": {
-            "delete": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Delete a peak hour configuration (operator only). Verifies operator has permission for the region.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Delete peak hour config (Operator)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Peak hour config ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "No Content"
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Operator role required or not authorized for this region",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Config not found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/operator/regions/{region_id}/peak-hours": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Get all peak hour configurations for a region. Only operator can access.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "List peak hour configs (Operator)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Region ID",
-                        "name": "region_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.peakHourConfigResponse"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Operator role required",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "Create peak hour delivery fee configuration for a region (operator only). Time format is HH:MM.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "delivery-fee"
-                ],
-                "summary": "Create peak hour config (Operator)",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "Region ID",
-                        "name": "region_id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "Peak hour config details",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createPeakHourConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "Created",
-                        "schema": {
-                            "$ref": "#/definitions/api.peakHourConfigResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "Operator role required or not authorized for this region",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/operators/me/profit-sharing/configs": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商查看本区域及全局分账规则配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商数据统计"
-                ],
-                "summary": "获取分账规则配置",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "状态",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "订单来源",
-                        "name": "order_source",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "商户ID",
-                        "name": "merchant_id",
-                        "in": "query"
-                    },
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "配置列表",
-                        "schema": {
-                            "$ref": "#/definitions/api.listOperatorProfitSharingConfigsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/profit-sharing/configs": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "平台获取分账规则配置列表",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取分账规则配置列表",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "状态",
-                        "name": "status",
-                        "in": "query"
-                    },
-                    {
-                        "type": "string",
-                        "description": "订单来源",
-                        "name": "order_source",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "区域ID",
-                        "name": "region_id",
-                        "in": "query"
-                    },
-                    {
-                        "type": "integer",
-                        "description": "商户ID",
-                        "name": "merchant_id",
-                        "in": "query"
-                    },
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "配置列表",
-                        "schema": {
-                            "$ref": "#/definitions/api.listProfitSharingConfigsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            },
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "平台创建分账规则配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "创建分账规则配置",
-                "parameters": [
-                    {
-                        "description": "分账规则配置",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.createProfitSharingConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "201": {
-                        "description": "创建成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.profitSharingConfigResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/profit-sharing/configs/{id}": {
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "平台更新分账规则配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "更新分账规则配置",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "配置ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "更新内容",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.updateProfitSharingConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.profitSharingConfigResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "404": {
-                        "description": "配置不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/profit-sharing/configs/{id}/disable": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "平台禁用分账规则配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "禁用分账规则配置",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "配置ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "禁用原因",
-                        "name": "request",
-                        "in": "body",
-                        "schema": {
-                            "$ref": "#/definitions/api.disableProfitSharingConfigRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "禁用成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.profitSharingConfigResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "404": {
-                        "description": "配置不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/categories": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取各商户分类的销售统计数据",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取分类销售统计",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "分类统计数据列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.categoryStatRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/daily": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取指定时间范围内每日的平台统计数据，包括订单数、GMV、佣金及订单类型分布",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取平台日趋势统计",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "每日统计数据列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.platformDailyStatRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/growth/merchants": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取每日新增审核通过的商户数量统计",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取商户增长统计",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "商户增长数据列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.growthStatRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/growth/users": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取每日新注册用户数量统计",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取用户增长统计",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "用户增长数据列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.growthStatRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/hourly": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取每小时的订单数量和GMV分布，用于分析订单高峰时段",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取订单时段分布",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "时段分布数据列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.hourlyDistributionRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/merchants/ranking": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取商户按销售额排序的排行榜，支持分页",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取商户销售排行榜",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "页码 (默认: 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 100,
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "每页数量 (默认: 20, 最大: 100)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "商户排行列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.merchantRankingRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/overview": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取指定时间范围内的平台全局统计数据，包括订单数、GMV、佣金、活跃商户和用户数",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取平台全局概览",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "平台概览数据",
-                        "schema": {
-                            "$ref": "#/definitions/api.platformOverviewResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/profit-sharing/config-audits": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取分账规则配置的审计记录，支持按配置ID过滤",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取分账规则审计记录",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "配置ID",
-                        "name": "config_id",
-                        "in": "query"
-                    },
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 200,
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "审计记录列表",
-                        "schema": {
-                            "$ref": "#/definitions/api.listProfitSharingConfigAuditsResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/profit-sharing/reconciliation": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取指定时间范围内分账订单的对账汇总数据，按状态汇总订单数与金额",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取分账对账汇总",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "分账对账汇总",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.platformProfitSharingReconciliationRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/profit-sharing/sla": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取指定时间范围内分账处理 SLA 统计（完成/失败/待处理与处理耗时）",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取分账 SLA 汇总",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "分账 SLA 汇总",
-                        "schema": {
-                            "$ref": "#/definitions/api.platformProfitSharingSlaSummaryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/realtime": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取最近24小时的实时统计数据，包括订单数、GMV及各状态订单分布",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取实时大盘数据",
-                "responses": {
-                    "200": {
-                        "description": "实时大盘数据",
-                        "schema": {
-                            "$ref": "#/definitions/api.realtimeDashboardResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/regions/compare": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取各区域的销售数据对比，包括商户数、订单数、GMV、佣金等",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取区域对比分析",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "区域对比数据列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.regionComparisonRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
-        "/platform/stats/riders/ranking": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取骑手按完成配送数排序的绩效排行榜，支持分页",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "Platform"
-                ],
-                "summary": "获取骑手绩效排行榜",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "开始日期 (格式: 2025-01-01)",
-                        "name": "start_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "结束日期 (格式: 2025-01-31)",
-                        "name": "end_date",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "页码 (默认: 1)",
-                        "name": "page",
-                        "in": "query"
-                    },
-                    {
-                        "maximum": 100,
-                        "minimum": 1,
-                        "type": "integer",
-                        "description": "每页数量 (默认: 20, 最大: 100)",
-                        "name": "limit",
-                        "in": "query"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "骑手绩效排行列表",
-                        "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/api.riderRankingRow"
-                            }
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "403": {
-                        "description": "权限不足",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.errorRes"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/addresses": {
             "get": {
                 "security": [
@@ -2251,7 +149,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "地址信息",
                         "schema": {
                             "$ref": "#/definitions/api.userAddressResponse"
@@ -2493,6 +391,142 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/admin/operators/region-applications": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理-运营商"
+                ],
+                "summary": "[管理] 列出区域扩展申请（支持状态过滤）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "状态过滤：pending/approved/rejected，不传返回全部",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/admin/operators/region-applications/{id}/approve": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理-运营商"
+                ],
+                "summary": "[管理] 审批通过区域扩展申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.adminRegionExpansionApplicationResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/admin/operators/region-applications/{id}/reject": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理-运营商"
+                ],
+                "summary": "[管理] 拒绝区域扩展申请",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "申请ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.adminRegionExpansionApplicationResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/admin/operators/{operator_id}/regions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "管理-运营商"
+                ],
+                "summary": "[管理] 获取运营商管理的区域列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "运营商实体 ID",
+                        "name": "operator_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/admin/riders": {
             "get": {
                 "security": [
@@ -2706,6 +740,64 @@ const docTemplate = `{
                         "description": "服务器错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/agreements": {
+            "get": {
+                "description": "get the list of all active agreements",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agreements"
+                ],
+                "summary": "List active agreements",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.listActiveAgreementsResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/agreements/{type}": {
+            "get": {
+                "description": "get the content of an active agreement by its type",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "agreements"
+                ],
+                "summary": "Get active agreement by type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Agreement Type",
+                        "name": "type",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/db.Agreement"
                         }
                     }
                 }
@@ -3144,8 +1236,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/api.billingGroupResponse"
                         }
@@ -3323,8 +1415,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/api.brandResponse"
                         }
@@ -3393,8 +1485,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/api.brandTemplateResponse"
                         }
@@ -4347,7 +2439,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "套餐详情",
                         "schema": {
                             "$ref": "#/definitions/api.comboSetWithDetailsResponse"
@@ -4750,6 +2842,536 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/delivery-fee/calculate": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Calculate delivery fee based on region, distance, and promotions",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Calculate delivery fee",
+                "parameters": [
+                    {
+                        "description": "Calculation parameters",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.calculateDeliveryFeeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.DeliveryFeeResult"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Config not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/delivery-fee/config/{region_id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get delivery fee configuration for a region",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Get delivery fee config",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Region ID",
+                        "name": "region_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.deliveryFeeConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Config not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/delivery-fee/merchants/{id}/promotions": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create delivery fee promotion for merchant. Only the merchant owner can create promotions for their own merchant.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Create delivery promotion (Merchant)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Merchant ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Promotion details",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createDeliveryPromotionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.deliveryPromotionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Merchant role required or not authorized for this merchant",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/delivery-fee/merchants/{merchant_id}/promotions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all delivery promotions for a merchant. Only the merchant owner can view their own promotions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "List delivery promotions (Merchant)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Merchant ID",
+                        "name": "merchant_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.deliveryPromotionResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Merchant role required or not authorized for this merchant",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/delivery-fee/merchants/{merchant_id}/promotions/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a delivery fee promotion. Only the merchant owner can delete their own promotions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Delete delivery promotion (Merchant)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Merchant ID",
+                        "name": "merchant_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Promotion ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Merchant role required or not authorized for this merchant",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Promotion not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update a delivery fee promotion. Only the merchant owner can update their own promotions.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Update delivery promotion (Merchant)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Merchant ID",
+                        "name": "merchant_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Promotion ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update fields",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateDeliveryPromotionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.deliveryPromotionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Merchant role required or not authorized for this merchant",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Promotion not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/delivery-fee/regions/{region_id}/config": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create delivery fee configuration for a region (operator only). Each region can only have one active configuration.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Create delivery fee config (Operator)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Region ID",
+                        "name": "region_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fee config details",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createDeliveryFeeConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.deliveryFeeConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Operator role required or not authorized for this region",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Config already exists for this region",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Update delivery fee configuration for a region (operator only). Supports partial updates.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Update delivery fee config (Operator)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Region ID",
+                        "name": "region_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Update fields",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateDeliveryFeeConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.deliveryFeeConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Operator role required or not authorized for this region",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Config not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -5872,7 +4494,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "菜品列表",
                         "schema": {
                             "$ref": "#/definitions/api.listDishesResponse"
@@ -6048,7 +4670,7 @@ const docTemplate = `{
                 ],
                 "summary": "获取菜品分类列表",
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "分类列表",
                         "schema": {
                             "$ref": "#/definitions/api.listDishCategoriesResponse"
@@ -6327,59 +4949,17 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "上传菜品展示图片（上传前微信图片安全检测通过才会落盘）",
-                "consumes": [
-                    "multipart/form-data"
-                ],
+                "description": "**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions -\u003e 直传 OSS -\u003e POST /v1/media/complete，然后将 media_asset_id 提交至菜品接口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "菜品管理"
                 ],
-                "summary": "上传菜品图片",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "图片文件",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
+                "summary": "[Deprecated] 上传菜品图片",
                 "responses": {
-                    "200": {
-                        "description": "上传成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.uploadImageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误或内容安全检测未通过",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "非商户",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信接口异常",
+                    "410": {
+                        "description": "接口已停用",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -6706,6 +5286,53 @@ const docTemplate = `{
                         "description": "服务器错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/dishes/{id}/featured-tags": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户手动为菜品打上或取消\"推荐\"/\"热卖\"标签，影响店内菜单排序",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "菜品管理"
+                ],
+                "summary": "设置菜品推荐/热卖标签",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "菜品ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "标签列表",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.setDishFeaturedTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的标签",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
                         }
                     }
                 }
@@ -7353,8 +5980,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "type": "array",
                             "items": {
@@ -7454,8 +6081,8 @@ const docTemplate = `{
                 ],
                 "summary": "创建集团入驻草稿",
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/api.groupApplicationResponse"
                         }
@@ -7538,67 +6165,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/groups/applications/license/ocr": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传集团营业执照图片，调用微信OCR识别并保存结果",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "集团申请"
-                ],
-                "summary": "上传集团营业执照并 OCR",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "营业执照图片",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.groupApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/groups/applications/me": {
             "get": {
                 "security": [
@@ -7615,8 +6181,8 @@ const docTemplate = `{
                 ],
                 "summary": "获取集团入驻草稿",
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/api.groupApplicationResponse"
                         }
@@ -8036,8 +6602,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "type": "array",
                             "items": {
@@ -8718,7 +7284,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "库存列表",
                         "schema": {
                             "$ref": "#/definitions/api.listDailyInventoryResponse"
@@ -9496,6 +8062,156 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/media/complete": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "确认媒体上传完成",
+                "parameters": [
+                    {
+                        "description": "确认参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.completeUploadRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.completeUploadResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/media/private-access": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "获取私有媒体短期访问地址",
+                "parameters": [
+                    {
+                        "description": "请求参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.privateAccessRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.privateAccessResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/media/upload-sessions": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "申请媒体直传会话",
+                "parameters": [
+                    {
+                        "description": "申请参数",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createUploadSessionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.uploadSessionResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/media/{id}": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "获取媒体资产元数据",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "media_asset_id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.mediaAssetResponse"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "media"
+                ],
+                "summary": "软删除媒体资产",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "media_asset_id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    }
+                }
+            }
+        },
         "/v1/memberships": {
             "get": {
                 "security": [
@@ -10176,135 +8892,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/merchant/application/foodpermit/ocr": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传食品经营许可证图片，使用通用印刷体OCR识别并解析有效期等信息",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户申请"
-                ],
-                "summary": "上传食品经营许可证并OCR识别",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "食品经营许可证图片",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "识别结果",
-                        "schema": {
-                            "$ref": "#/definitions/api.merchantApplicationDraftResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/application/idcard/ocr": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传法人身份证照片（正面或背面），调用微信OCR识别并保存结果",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户申请"
-                ],
-                "summary": "上传法人身份证并OCR识别",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "身份证图片",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "正面Front/背面Back",
-                        "name": "side",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "识别结果",
-                        "schema": {
-                            "$ref": "#/definitions/api.merchantApplicationDraftResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/merchant/application/images": {
             "put": {
                 "security": [
@@ -10343,66 +8930,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误或非草稿状态",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/application/license/ocr": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传营业执照图片，调用微信OCR识别并保存结果，自动填充企业名称、信用代码、经营范围等",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户申请"
-                ],
-                "summary": "上传营业执照并OCR识别",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "营业执照图片（可选；不传则使用已上传的营业执照图片）",
-                        "name": "image",
-                        "in": "formData"
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "识别结果",
-                        "schema": {
-                            "$ref": "#/definitions/api.merchantApplicationDraftResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -13669,62 +12196,17 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "上传商户入驻所需图片（营业执照、身份证、Logo、门头照、环境照）",
-                "consumes": [
-                    "multipart/form-data"
-                ],
+                "description": "**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions → 直传 OSS → POST /v1/media/complete，然后将 media_asset_id 提交至商户接口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "商户"
                 ],
-                "summary": "上传商户图片",
-                "parameters": [
-                    {
-                        "enum": [
-                            "business_license",
-                            "id_front",
-                            "id_back",
-                            "logo",
-                            "storefront",
-                            "environment"
-                        ],
-                        "type": "string",
-                        "description": "图片类别",
-                        "name": "category",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "file",
-                        "description": "图片文件",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
+                "summary": "[Deprecated] 上传商户图片",
                 "responses": {
-                    "200": {
-                        "description": "上传成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.uploadImageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
+                    "410": {
+                        "description": "接口已停用",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -14053,6 +12535,69 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchants/me/shop-images": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "允许已审核通过的商户更新店铺外观图片（门头照最多3张，环境照最多5张）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "更新商户门头照和环境照",
+                "parameters": [
+                    {
+                        "description": "图片URL数组",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateCurrentMerchantShopImagesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.updateCurrentMerchantShopImagesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请记录不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchants/me/status": {
             "get": {
                 "security": [
@@ -14144,6 +12689,110 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "商户被暂停或无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchants/me/tags": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前登录商户已选择的经营类目标签（type=merchant）",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "获取当前商户的经营类目标签",
+                "responses": {
+                    "200": {
+                        "description": "类目标签列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantTagsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "替换商户所有经营类目标签（type=merchant）。类目决定店铺在首页分类筛选中的展示位置，强烈建议完整填写。最多选 5 个。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "设置当前商户的经营类目标签",
+                "parameters": [
+                    {
+                        "description": "标签ID列表",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.setMerchantTagsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新后的类目标签",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantTagsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误（如超出5个或包含非merchant类型标签）",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -14504,7 +13153,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "规则列表",
                         "schema": {
                             "type": "array",
@@ -14927,7 +13576,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "代金券列表",
                         "schema": {
                             "$ref": "#/definitions/api.listMerchantVouchersResponse"
@@ -15624,6 +14273,367 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/ocr/jobs": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "统一创建 OCR 任务并返回可轮询的 ocr_job_id",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "OCR"
+                ],
+                "summary": "创建统一 OCR 任务",
+                "parameters": [
+                    {
+                        "description": "OCR 任务请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createOCRJobRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ocrJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ocr/jobs/batch-query": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "OCR"
+                ],
+                "summary": "批量查询 OCR 任务状态",
+                "parameters": [
+                    {
+                        "description": "批量查询请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.batchQueryOCRJobsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.batchQueryOCRJobsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ocr/jobs/dead-letter": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "OCR"
+                ],
+                "summary": "查询需要人工介入的 OCR 死信任务",
+                "parameters": [
+                    {
+                        "description": "业务主体类型过滤",
+                        "name": "owner_type",
+                        "in": "query",
+                        "type": "string"
+                    },
+                    {
+                        "description": "证件类型过滤",
+                        "name": "document_type",
+                        "in": "query",
+                        "type": "string"
+                    },
+                    {
+                        "description": "返回数量，默认 20，最大 100",
+                        "name": "limit",
+                        "in": "query",
+                        "type": "integer"
+                    },
+                    {
+                        "description": "分页偏移量",
+                        "name": "offset",
+                        "in": "query",
+                        "type": "integer"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.listOCRDeadLetterJobsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ocr/jobs/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "OCR"
+                ],
+                "summary": "查询 OCR 任务状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ocrJobResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ocr/jobs/{id}/result": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "OCR"
+                ],
+                "summary": "查询 OCR 归一化结果",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ocrJobResultResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/ocr/jobs/{id}/retry": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "OCR"
+                ],
+                "summary": "重试失败的 OCR 任务",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.ocrJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/appeals": {
             "get": {
                 "security": [
@@ -16000,135 +15010,6 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "更新成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或非草稿状态",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/application/idcard/ocr": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传法人身份证照片（正面或背面），调用微信OCR识别并保存结果",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申请"
-                ],
-                "summary": "上传法人身份证并OCR识别",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "身份证图片",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "正面Front/背面Back",
-                        "name": "side",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "识别结果",
-                        "schema": {
-                            "$ref": "#/definitions/api.operatorApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或非草稿状态",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/operator/application/license/ocr": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传营业执照图片，调用微信OCR识别并保存结果，自动填充企业名称、信用代码等",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "运营商申请"
-                ],
-                "summary": "上传营业执照并OCR识别",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "营业执照图片",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "识别结果",
                         "schema": {
                             "$ref": "#/definitions/api.operatorApplicationResponse"
                         }
@@ -16811,6 +15692,243 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/operator/merchants/{id}/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商获取指定商户在指定天数范围内的经营统计数据",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商-商户骑手管理"
+                ],
+                "summary": "获取商户经营统计",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "统计天数（1~365，默认30）",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantStatsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/peak-hours/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Delete a peak hour configuration (operator only). Verifies operator has permission for the region.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Delete peak hour config (Operator)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Peak hour config ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Operator role required or not authorized for this region",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Config not found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/region-expansion": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商"
+                ],
+                "summary": "获取自己的区域扩展申请列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.regionExpansionApplicationResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "已入驻运营商申请扩展管理新区域，需后台审批",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商"
+                ],
+                "summary": "申请运营更多区域",
+                "parameters": [
+                    {
+                        "description": "目标区域ID",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.applyRegionExpansionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.regionExpansionApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/regions": {
             "get": {
                 "security": [
@@ -16865,6 +15983,138 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/regions/{region_id}/peak-hours": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Get all peak hour configurations for a region. Only operator can access.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "List peak hour configs (Operator)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Region ID",
+                        "name": "region_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.peakHourConfigResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Operator role required",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "Create peak hour delivery fee configuration for a region (operator only). Time format is HH:MM.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "delivery-fee"
+                ],
+                "summary": "Create peak hour config (Operator)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Region ID",
+                        "name": "region_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Peak hour config details",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createPeakHourConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/api.peakHourConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Operator role required or not authorized for this region",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -17401,6 +16651,73 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/operator/riders/{id}/stats": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商获取指定骑手在指定天数范围内的配送绩效统计",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商-商户骑手管理"
+                ],
+                "summary": "获取骑手配送统计",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "骑手ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "统计天数（1~365，默认30）",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderStatsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "骑手不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/rules": {
             "get": {
                 "security": [
@@ -17775,6 +17092,89 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误或余额不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/profit-sharing/configs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商查看本区域及全局分账规则配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商数据统计"
+                ],
+                "summary": "获取分账规则配置",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "订单来源",
+                        "name": "order_source",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "配置列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listOperatorProfitSharingConfigsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -18633,7 +18033,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "订单详情",
                         "schema": {
                             "$ref": "#/definitions/api.orderResponse"
@@ -19045,7 +18445,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "为订单或预定创建支付订单，调用微信支付统一下单接口。\n\n**支付类型：**\n- native: 扫码支付(商户端扫用户付款码)\n- miniprogram: 小程序支付(返回调起支付所需参数)\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
+                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n**兼容字段：**\n- ` + "`" + `payment_type` + "`" + ` 仅作为兼容保留字段，可不传。\n- 对 ` + "`" + `order` + "`" + ` 和 ` + "`" + `reservation` + "`" + ` 主支付，系统已统一走平台收付通合单支付。\n- 旧客户端即使传入 ` + "`" + `native` + "`" + ` 或 ` + "`" + `miniprogram` + "`" + `，也不会再改变底层支付物理链路。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
                 "consumes": [
                     "application/json"
                 ],
@@ -19137,7 +18537,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "合单支付订单(含小程序支付参数)",
                         "schema": {
                             "$ref": "#/definitions/api.combinedPaymentOrderResponse"
@@ -19204,7 +18604,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "合单支付订单详情",
                         "schema": {
                             "$ref": "#/definitions/api.combinedPaymentOrderResponse"
@@ -19511,6 +18911,313 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/profit-sharing/configs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台获取分账规则配置列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账规则配置列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "状态",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "订单来源",
+                        "name": "order_source",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "配置列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listProfitSharingConfigsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台创建分账规则配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "创建分账规则配置",
+                "parameters": [
+                    {
+                        "description": "分账规则配置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.createProfitSharingConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "创建成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.profitSharingConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/configs/{id}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台更新分账规则配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "更新分账规则配置",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "配置ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "更新内容",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateProfitSharingConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.profitSharingConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "配置不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/profit-sharing/configs/{id}/disable": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台禁用分账规则配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "禁用分账规则配置",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "配置ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "禁用原因",
+                        "name": "request",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/api.disableProfitSharingConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "禁用成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.profitSharingConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "配置不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/rules": {
             "get": {
                 "security": [
@@ -19704,6 +19411,1005 @@ const docTemplate = `{
                         "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/bill-reconciliation": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "列出微信支付账单与本地数据库的对账报告，按账单日期倒序排列",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取每日账单对账报告列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "页码 (从1开始)",
+                        "name": "page_id",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "每页条数 (1-100)",
+                        "name": "page_size",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "对账报告列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.billReconciliationReportResponse"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/categories": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取各商户分类的销售统计数据",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分类销售统计",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分类统计数据列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.categoryStatRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/daily": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取指定时间范围内每日的平台统计数据，包括订单数、GMV、佣金及订单类型分布",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取平台日趋势统计",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "每日统计数据列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.platformDailyStatRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/growth/merchants": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取每日新增审核通过的商户数量统计",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取商户增长统计",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "商户增长数据列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.growthStatRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/growth/users": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取每日新注册用户数量统计",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取用户增长统计",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "用户增长数据列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.growthStatRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/hourly": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取每小时的订单数量和GMV分布，用于分析订单高峰时段",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取订单时段分布",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "时段分布数据列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.hourlyDistributionRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/merchants/ranking": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取商户按销售额排序的排行榜，支持分页",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取商户销售排行榜",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码 (默认: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "每页数量 (默认: 20, 最大: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "商户排行列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.merchantRankingRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取指定时间范围内的平台全局统计数据，包括订单数、GMV、佣金、活跃商户和用户数",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取平台全局概览",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "平台概览数据",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformOverviewResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/profit-sharing/config-audits": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取分账规则配置的审计记录，支持按配置ID过滤",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账规则审计记录",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "配置ID",
+                        "name": "config_id",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 1,
+                        "description": "页码",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 200,
+                        "minimum": 1,
+                        "type": "integer",
+                        "default": 20,
+                        "description": "每页数量",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "审计记录列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listProfitSharingConfigAuditsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/profit-sharing/reconciliation": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取指定时间范围内分账订单的对账汇总数据，按状态汇总订单数与金额",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账对账汇总",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分账对账汇总",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.platformProfitSharingReconciliationRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/profit-sharing/sla": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取指定时间范围内分账处理 SLA 统计（完成/失败/待处理与处理耗时）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取分账 SLA 汇总",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "分账 SLA 汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformProfitSharingSlaSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/realtime": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取最近24小时的实时统计数据，包括订单数、GMV及各状态订单分布",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取实时大盘数据",
+                "responses": {
+                    "200": {
+                        "description": "实时大盘数据",
+                        "schema": {
+                            "$ref": "#/definitions/api.realtimeDashboardResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/regions/compare": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取各区域的销售数据对比，包括商户数、订单数、GMV、佣金等",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取区域对比分析",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "区域对比数据列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.regionComparisonRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/stats/riders/ranking": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取骑手按完成配送数排序的绩效排行榜，支持分页",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取骑手绩效排行榜",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "开始日期 (格式: 2025-01-01)",
+                        "name": "start_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "结束日期 (格式: 2025-01-31)",
+                        "name": "end_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码 (默认: 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "每页数量 (默认: 20, 最大: 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "骑手绩效排行列表",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/api.riderRankingRow"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
                         }
                     }
                 }
@@ -20020,6 +20726,54 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/public/merchants/{id}/has-ordered": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Merchant"
+                ],
+                "summary": "查询当前用户是否曾在该商户成功下单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "has_ordered",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/public/merchants/{id}/recharge-rules": {
             "get": {
                 "security": [
@@ -20282,7 +21036,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "分账回退记录列表",
                         "schema": {
                             "type": "array",
@@ -20883,15 +21637,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "reservations": {
-                                    "type": "array",
-                                    "items": {
-                                        "$ref": "#/definitions/api.reservationResponse"
-                                    }
-                                }
-                            }
+                            "$ref": "#/definitions/api.reservationListResponse"
                         }
                     },
                     "400": {
@@ -21080,37 +21826,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "object",
-                            "properties": {
-                                "cancelled_count": {
-                                    "type": "integer",
-                                    "format": "int64"
-                                },
-                                "completed_count": {
-                                    "type": "integer",
-                                    "format": "int64"
-                                },
-                                "confirmed_count": {
-                                    "type": "integer",
-                                    "format": "int64"
-                                },
-                                "expired_count": {
-                                    "type": "integer",
-                                    "format": "int64"
-                                },
-                                "no_show_count": {
-                                    "type": "integer",
-                                    "format": "int64"
-                                },
-                                "paid_count": {
-                                    "type": "integer",
-                                    "format": "int64"
-                                },
-                                "pending_count": {
-                                    "type": "integer",
-                                    "format": "int64"
-                                }
-                            }
+                            "$ref": "#/definitions/api.reservationStatsResponse"
                         }
                     },
                     "401": {
@@ -21217,8 +21933,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/api.reservationResponse"
                         }
@@ -22025,53 +22741,17 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "上传用户评价所需图片（上传前微信图片安全检测通过才会落盘）",
-                "consumes": [
-                    "multipart/form-data"
-                ],
+                "description": "**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions -\u003e 直传 OSS -\u003e POST /v1/media/complete，然后将 media_asset_ids 提交至评价接口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "评价管理"
                 ],
-                "summary": "上传评价图片",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "图片文件",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
+                "summary": "[Deprecated] 上传评价图片",
                 "responses": {
-                    "200": {
-                        "description": "上传成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.uploadImageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误或内容安全检测未通过",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信接口异常",
+                    "410": {
+                        "description": "接口已停用",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -22120,8 +22800,7 @@ const docTemplate = `{
                     "200": {
                         "description": "评价列表",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.reviewListResponse"
                         }
                     },
                     "400": {
@@ -22193,8 +22872,7 @@ const docTemplate = `{
                     "200": {
                         "description": "评价列表",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.reviewListResponse"
                         }
                     },
                     "400": {
@@ -22260,8 +22938,7 @@ const docTemplate = `{
                     "200": {
                         "description": "评价列表",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.reviewListResponse"
                         }
                     },
                     "400": {
@@ -22319,7 +22996,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "评价详情",
                         "schema": {
                             "$ref": "#/definitions/api.reviewResponse"
@@ -22375,8 +23052,7 @@ const docTemplate = `{
                     "200": {
                         "description": "删除成功",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.successMessageResponse"
                         }
                     },
                     "400": {
@@ -22800,135 +23476,6 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "参数错误或状态不允许修改",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/application/healthcert": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传健康证照片",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手申请"
-                ],
-                "summary": "上传健康证",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "健康证图片",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "上传结果",
-                        "schema": {
-                            "$ref": "#/definitions/api.riderApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "申请不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/application/idcard/ocr": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "上传身份证照片，调用微信OCR识别并保存结果",
-                "consumes": [
-                    "multipart/form-data"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手申请"
-                ],
-                "summary": "上传身份证并OCR识别",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "身份证图片",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "正面Front/背面Back",
-                        "name": "side",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "识别结果",
-                        "schema": {
-                            "$ref": "#/definitions/api.riderApplicationResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -24104,9 +24651,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "提现成功",
+                        "description": "提现已提交或完成",
                         "schema": {
-                            "$ref": "#/definitions/api.depositResponse"
+                            "$ref": "#/definitions/api.riderWithdrawResponse"
                         }
                     },
                     "400": {
@@ -24326,6 +24873,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/search/categories": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "按用户位置或区域ID，返回有商户覆盖的菜系品类列表及商户数量，用于首页品类网格动态渲染",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Search"
+                ],
+                "summary": "获取区域活跃菜系品类",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID（可选，优先于坐标）",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "number",
+                        "description": "用户当前纬度",
+                        "name": "user_latitude",
+                        "in": "query"
+                    },
+                    {
+                        "type": "number",
+                        "description": "用户当前经度",
+                        "name": "user_longitude",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "品类列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.searchCategoriesListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/search/combos": {
             "get": {
                 "security": [
@@ -24391,26 +24995,19 @@ const docTemplate = `{
                     "200": {
                         "description": "搜索结果",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.searchComboListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -24427,7 +25024,26 @@ const docTemplate = `{
                     "Search"
                 ],
                 "summary": "获取搜索历史",
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "搜索历史列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.searchHistoryListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
             },
             "delete": {
                 "security": [
@@ -24439,7 +25055,20 @@ const docTemplate = `{
                     "Search"
                 ],
                 "summary": "清除全部搜索历史",
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "清除成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.successMessageResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/v1/search/history/{id}": {
@@ -24453,7 +25082,26 @@ const docTemplate = `{
                     "Search"
                 ],
                 "summary": "删除单条搜索历史",
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.successMessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/v1/search/merchants": {
@@ -24522,26 +25170,19 @@ const docTemplate = `{
                     "200": {
                         "description": "搜索结果",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.searchMerchantListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -24558,7 +25199,26 @@ const docTemplate = `{
                     "Search"
                 ],
                 "summary": "获取热门搜索关键词",
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "热门关键词列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.searchKeywordsListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/v1/search/rooms": {
@@ -24652,26 +25312,19 @@ const docTemplate = `{
                     "200": {
                         "description": "搜索结果",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.searchRoomListResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数错误",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "500": {
                         "description": "服务器内部错误",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -24688,7 +25341,20 @@ const docTemplate = `{
                     "Search"
                 ],
                 "summary": "实时搜索建议（前缀匹配）",
-                "responses": {}
+                "responses": {
+                    "200": {
+                        "description": "搜索建议列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.searchSuggestionsListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/v1/tables": {
@@ -24826,59 +25492,17 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "上传桌台/包间展示图片（上传前微信图片安全检测通过才会落盘）",
-                "consumes": [
-                    "multipart/form-data"
-                ],
+                "description": "**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions -\u003e 直传 OSS -\u003e POST /v1/media/complete，然后将 media_asset_id 提交至桌台接口。",
                 "produces": [
                     "application/json"
                 ],
                 "tags": [
                     "桌台管理"
                 ],
-                "summary": "上传桌台/包间图片",
-                "parameters": [
-                    {
-                        "type": "file",
-                        "description": "图片文件",
-                        "name": "image",
-                        "in": "formData",
-                        "required": true
-                    }
-                ],
+                "summary": "[Deprecated] 上传桌台图片",
                 "responses": {
-                    "200": {
-                        "description": "上传成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.uploadImageResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "请求参数错误或内容安全检测未通过",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "非商户",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "502": {
-                        "description": "微信接口异常",
+                    "410": {
+                        "description": "接口已停用",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -24911,7 +25535,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "桌台详情",
                         "schema": {
                             "$ref": "#/definitions/api.tableResponse"
@@ -25775,6 +26399,74 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/tags/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除标签并级联删除关联关系",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "标签管理"
+                ],
+                "summary": "删除标签（管理员）",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "标签ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "删除成功",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "标签不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/users/me": {
             "get": {
                 "security": [
@@ -26229,6 +26921,10 @@ const docTemplate = `{
                     "description": "地址",
                     "type": "string"
                 },
+                "alert_emitted_at": {
+                    "description": "平台告警发送时间",
+                    "type": "string"
+                },
                 "business_scope": {
                     "description": "经营范围",
                     "type": "string"
@@ -26245,6 +26941,10 @@ const docTemplate = `{
                     "description": "failure reason (if any)",
                     "type": "string"
                 },
+                "error_code": {
+                    "description": "machine-readable failure code",
+                    "type": "string"
+                },
                 "legal_representative": {
                     "description": "法定代表人",
                     "type": "string"
@@ -26252,6 +26952,10 @@ const docTemplate = `{
                 "ocr_at": {
                     "description": "OCR识别时间",
                     "type": "string"
+                },
+                "ocr_job_id": {
+                    "description": "统一 OCR 任务 ID",
+                    "type": "integer"
                 },
                 "queued_at": {
                     "description": "task enqueued time",
@@ -26329,7 +27033,13 @@ const docTemplate = `{
         "api.ErrorResponse": {
             "type": "object",
             "properties": {
+                "code": {
+                    "description": "Code 为数字错误码（仅 APIError 时存在），前端应以此为准做多语言处理。",
+                    "type": "integer",
+                    "example": 40401
+                },
                 "error": {
+                    "description": "Error 为人类可读的错误描述，降级展示或日志使用。",
                     "type": "string",
                     "example": "error message"
                 }
@@ -26338,6 +27048,10 @@ const docTemplate = `{
         "api.FoodPermitOCRData": {
             "type": "object",
             "properties": {
+                "alert_emitted_at": {
+                    "description": "平台告警发送时间",
+                    "type": "string"
+                },
                 "company_name": {
                     "description": "企业名称",
                     "type": "string"
@@ -26346,8 +27060,20 @@ const docTemplate = `{
                     "description": "failure reason (if any)",
                     "type": "string"
                 },
+                "error_code": {
+                    "description": "machine-readable failure code",
+                    "type": "string"
+                },
                 "ocr_at": {
                     "description": "OCR识别时间",
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "description": "统一 OCR 任务 ID",
+                    "type": "integer"
+                },
+                "operator_name": {
+                    "description": "经营者/法定代表人姓名",
                     "type": "string"
                 },
                 "permit_no": {
@@ -26383,8 +27109,17 @@ const docTemplate = `{
         "api.HealthCertOCRData": {
             "type": "object",
             "properties": {
+                "alert_emitted_at": {
+                    "type": "string"
+                },
                 "cert_number": {
                     "description": "证书编号",
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "error_code": {
                     "type": "string"
                 },
                 "id_number": {
@@ -26397,6 +27132,18 @@ const docTemplate = `{
                 },
                 "ocr_at": {
                     "description": "OCR识别时间",
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "queued_at": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 },
                 "valid_end": {
@@ -26414,6 +27161,15 @@ const docTemplate = `{
             "properties": {
                 "address": {
                     "description": "地址",
+                    "type": "string"
+                },
+                "alert_emitted_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "error_code": {
                     "type": "string"
                 },
                 "gender": {
@@ -26434,6 +27190,18 @@ const docTemplate = `{
                 },
                 "ocr_at": {
                     "description": "OCR识别时间",
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "queued_at": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 },
                 "valid_end": {
@@ -26464,8 +27232,16 @@ const docTemplate = `{
                     "description": "地址",
                     "type": "string"
                 },
+                "alert_emitted_at": {
+                    "description": "平台告警发送时间",
+                    "type": "string"
+                },
                 "error": {
                     "description": "failure reason (if any)",
+                    "type": "string"
+                },
+                "error_code": {
+                    "description": "machine-readable failure code",
                     "type": "string"
                 },
                 "gender": {
@@ -26487,6 +27263,10 @@ const docTemplate = `{
                 "ocr_at": {
                     "description": "OCR识别时间",
                     "type": "string"
+                },
+                "ocr_job_id": {
+                    "description": "统一 OCR 任务 ID",
+                    "type": "integer"
                 },
                 "queued_at": {
                     "description": "task enqueued time",
@@ -26518,7 +27298,28 @@ const docTemplate = `{
         "api.OperatorIDCardBackOCR": {
             "type": "object",
             "properties": {
+                "alert_emitted_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
                 "ocr_at": {
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "queued_at": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 },
                 "valid_end": {
@@ -26535,6 +27336,15 @@ const docTemplate = `{
                 "address": {
                     "type": "string"
                 },
+                "alert_emitted_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
                 "gender": {
                     "type": "string"
                 },
@@ -26548,6 +27358,18 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "ocr_at": {
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "queued_at": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
                     "type": "string"
                 }
             }
@@ -26967,16 +27789,15 @@ const docTemplate = `{
         "api.addTableImageRequest": {
             "type": "object",
             "required": [
-                "image_url"
+                "media_asset_id"
             ],
             "properties": {
-                "image_url": {
-                    "type": "string",
-                    "maxLength": 500,
-                    "minLength": 1
-                },
                 "is_primary": {
                     "type": "boolean"
+                },
+                "media_asset_id": {
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "sort_order": {
                     "type": "integer",
@@ -27012,6 +27833,44 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 200,
                     "minLength": 1
+                }
+            }
+        },
+        "api.adminRegionExpansionApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "contact_name": {
+                    "type": "string"
+                },
+                "contact_phone": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "operator_id": {
+                    "type": "integer"
+                },
+                "operator_name": {
+                    "type": "string"
+                },
+                "region_code": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "reject_reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },
@@ -27059,6 +27918,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.applyRegionExpansionRequest": {
+            "type": "object",
+            "required": [
+                "region_id"
+            ],
+            "properties": {
+                "region_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.approveGroupJoinRequestRequest": {
             "type": "object",
             "properties": {
@@ -27089,6 +27959,44 @@ const docTemplate = `{
                 }
             }
         },
+        "api.batchQueryOCRJobsRequest": {
+            "type": "object",
+            "required": [
+                "job_ids"
+            ],
+            "properties": {
+                "job_ids": {
+                    "type": "array",
+                    "maxItems": 50,
+                    "minItems": 1,
+                    "items": {
+                        "type": "integer"
+                    }
+                }
+            }
+        },
+        "api.batchQueryOCRJobsResponse": {
+            "type": "object",
+            "properties": {
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ocrJobResponse"
+                    }
+                }
+            }
+        },
+        "api.listOCRDeadLetterJobsResponse": {
+            "type": "object",
+            "properties": {
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ocrDeadLetterJobResponse"
+                    }
+                }
+            }
+        },
         "api.batchUpdateDishStatusRequest": {
             "type": "object",
             "required": [
@@ -27111,6 +28019,62 @@ const docTemplate = `{
                 }
             }
         },
+        "api.billReconciliationReportResponse": {
+            "type": "object",
+            "properties": {
+                "amount_mismatch": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "bill_date": {
+                    "description": "\"2006-01-02\"",
+                    "type": "string"
+                },
+                "bill_type": {
+                    "description": "trade | ecommerce_trade | refund",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "local_count": {
+                    "type": "integer"
+                },
+                "mismatch_count": {
+                    "type": "integer"
+                },
+                "missing_local": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "missing_wxpay": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "status": {
+                    "description": "pending | running | completed | failed",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "wxpay_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.billingGroupListResponse": {
             "type": "object",
             "properties": {
@@ -27121,9 +28085,6 @@ const docTemplate = `{
                     }
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -27138,9 +28099,6 @@ const docTemplate = `{
                     }
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -27457,11 +28415,11 @@ const docTemplate = `{
                     }
                 },
                 "meets_min_order": {
-                    "description": "是否满足起送金额",
+                    "description": "是否满足起送金额。MinOrderAmount 为 0（无限制）时该字段不返回。",
                     "type": "boolean"
                 },
                 "min_order_amount": {
-                    "description": "最小起送金额（分），0表示无限制",
+                    "description": "最小起送金额（分）。0 表示无起送限制，或该商户尚未配置起送金额。\n商户级起送金额配置上线后此字段将从商户配置读取；\n当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。\nomitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。",
                     "type": "integer"
                 },
                 "payment_assessment": {
@@ -27555,8 +28513,8 @@ const docTemplate = `{
                 "combo_id": {
                     "type": "integer"
                 },
-                "combo_member_images": {
-                    "description": "套餐成员图片",
+                "combo_member_image_urls": {
+                    "description": "套餐成员图片 CDN URL 列表",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -28004,7 +28962,7 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
-                "dish_images": {
+                "dish_image_urls": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -28030,8 +28988,8 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
-                "dish_images": {
-                    "description": "子菜品图片列表",
+                "dish_image_urls": {
+                    "description": "子菜品图片 CDN URL 列表",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -28068,6 +29026,41 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.tagResponse"
+                    }
+                }
+            }
+        },
+        "api.completeUploadRequest": {
+            "type": "object",
+            "required": [
+                "object_key",
+                "upload_id"
+            ],
+            "properties": {
+                "etag": {
+                    "type": "string"
+                },
+                "object_key": {
+                    "type": "string"
+                },
+                "upload_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.completeUploadResponse": {
+            "type": "object",
+            "properties": {
+                "media_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
                     }
                 }
             }
@@ -28311,9 +29304,10 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 500
                 },
-                "image_url": {
-                    "type": "string",
-                    "maxLength": 500
+                "image_asset_id": {
+                    "description": "图片媒体资产ID",
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "ingredient_ids": {
                     "description": "最多20个食材",
@@ -28375,8 +29369,8 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
-                "logo_url": {
-                    "type": "string"
+                "logo_asset_id": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -28430,8 +29424,8 @@ const docTemplate = `{
                 "contact_phone": {
                     "type": "string"
                 },
-                "license_image_url": {
-                    "type": "string"
+                "license_image_asset_id": {
+                    "type": "integer"
                 },
                 "license_number": {
                     "type": "string"
@@ -28462,6 +29456,37 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 1000,
                     "minLength": 10
+                }
+            }
+        },
+        "api.createOCRJobRequest": {
+            "type": "object",
+            "required": [
+                "document_type",
+                "media_asset_id",
+                "owner_id",
+                "owner_type"
+            ],
+            "properties": {
+                "document_type": {
+                    "type": "string"
+                },
+                "idempotency_key": {
+                    "type": "string"
+                },
+                "media_asset_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "owner_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "side": {
+                    "type": "string"
                 }
             }
         },
@@ -28572,8 +29597,7 @@ const docTemplate = `{
             "type": "object",
             "required": [
                 "business_type",
-                "order_id",
-                "payment_type"
+                "order_id"
             ],
             "properties": {
                 "business_type": {
@@ -28835,12 +29859,12 @@ const docTemplate = `{
                     "maxLength": 1000,
                     "minLength": 1
                 },
-                "images": {
-                    "description": "最多9张图片（本地 uploads 相对路径）",
+                "media_asset_ids": {
+                    "description": "最多9张图片（media_asset ID 列表）",
                     "type": "array",
                     "maxItems": 9,
                     "items": {
-                        "type": "string"
+                        "type": "integer"
                     }
                 },
                 "order_id": {
@@ -28965,6 +29989,34 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "api.createUploadSessionRequest": {
+            "type": "object",
+            "required": [
+                "business_type",
+                "checksum_sha256",
+                "content_length",
+                "content_type",
+                "media_category"
+            ],
+            "properties": {
+                "business_type": {
+                    "type": "string"
+                },
+                "checksum_sha256": {
+                    "type": "string"
+                },
+                "content_length": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "content_type": {
+                    "type": "string"
+                },
+                "media_category": {
+                    "type": "string"
                 }
             }
         },
@@ -29775,9 +30827,6 @@ const docTemplate = `{
                 "dish_id": {
                     "type": "integer"
                 },
-                "dish_image_url": {
-                    "type": "string"
-                },
                 "dish_name": {
                     "type": "string"
                 },
@@ -29875,7 +30924,13 @@ const docTemplate = `{
         "api.errorMessage": {
             "type": "object",
             "properties": {
+                "code": {
+                    "description": "Code 为数字错误码（仅 APIError 时存在），前端应以此为准做多语言处理。",
+                    "type": "integer",
+                    "example": 40401
+                },
                 "error": {
+                    "description": "Error 为人类可读的错误描述，降级展示或日志使用。",
                     "type": "string",
                     "example": "error message"
                 }
@@ -29884,7 +30939,13 @@ const docTemplate = `{
         "api.errorRes": {
             "type": "object",
             "properties": {
+                "code": {
+                    "description": "Code 为数字错误码（仅 APIError 时存在），前端应以此为准做多语言处理。",
+                    "type": "integer",
+                    "example": 40401
+                },
                 "error": {
+                    "description": "Error 为人类可读的错误描述，降级展示或日志使用。",
                     "type": "string",
                     "example": "error message"
                 }
@@ -30098,8 +31159,8 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "license_image_url": {
-                    "type": "string"
+                "license_image_asset_id": {
+                    "type": "integer"
                 },
                 "license_number": {
                     "type": "string"
@@ -30214,8 +31275,8 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "license_image_url": {
-                    "type": "string"
+                "license_image_asset_id": {
+                    "type": "integer"
                 },
                 "license_number": {
                     "type": "string"
@@ -30518,9 +31579,6 @@ const docTemplate = `{
                 "total": {
                     "type": "integer"
                 },
-                "total_count": {
-                    "type": "integer"
-                },
                 "vouchers": {
                     "type": "array",
                     "items": {
@@ -30548,9 +31606,6 @@ const docTemplate = `{
                 "total": {
                     "description": "总数",
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30563,12 +31618,6 @@ const docTemplate = `{
                         "$ref": "#/definitions/api.comboSetResponse"
                     }
                 },
-                "dish_images": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
                 "page_id": {
                     "type": "integer"
                 },
@@ -30576,9 +31625,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -30622,9 +31668,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30649,9 +31692,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 },
                 "transactions": {
@@ -30679,9 +31719,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30702,9 +31739,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30718,9 +31752,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 },
                 "vouchers": {
@@ -30748,9 +31779,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30770,9 +31798,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -30799,9 +31824,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -30846,9 +31868,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30869,9 +31888,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30891,9 +31907,6 @@ const docTemplate = `{
                     }
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -30943,9 +31956,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -30965,9 +31975,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -30995,9 +32002,6 @@ const docTemplate = `{
                 "total": {
                     "description": "总记录数",
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -31017,9 +32021,6 @@ const docTemplate = `{
                     }
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 }
             }
@@ -31052,9 +32053,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -31079,9 +32077,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 },
                 "vouchers": {
@@ -31109,9 +32104,6 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
-                },
-                "total_count": {
-                    "type": "integer"
                 }
             }
         },
@@ -31125,9 +32117,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                },
-                "total_count": {
                     "type": "integer"
                 },
                 "vouchers": {
@@ -31214,6 +32203,38 @@ const docTemplate = `{
             "properties": {
                 "success": {
                     "type": "boolean"
+                }
+            }
+        },
+        "api.mediaAssetResponse": {
+            "type": "object",
+            "properties": {
+                "file_size": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "media_category": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "moderation_status": {
+                    "type": "string"
+                },
+                "upload_status": {
+                    "type": "string"
+                },
+                "urls": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "visibility": {
+                    "type": "string"
                 }
             }
         },
@@ -31311,29 +32332,29 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "food_permit_ocr": {
-                    "$ref": "#/definitions/api.FoodPermitOCRData"
-                },
                 "food_permit_media_asset_id": {
                     "type": "integer"
+                },
+                "food_permit_ocr": {
+                    "$ref": "#/definitions/api.FoodPermitOCRData"
                 },
                 "id": {
                     "type": "integer"
                 },
+                "id_card_back_media_asset_id": {
+                    "type": "integer"
+                },
                 "id_card_back_ocr": {
                     "$ref": "#/definitions/api.MerchantIDCardOCRData"
+                },
+                "id_card_front_media_asset_id": {
+                    "type": "integer"
                 },
                 "id_card_front_ocr": {
                     "$ref": "#/definitions/api.MerchantIDCardOCRData"
                 },
                 "latitude": {
                     "type": "string"
-                },
-                "id_card_back_media_asset_id": {
-                    "type": "integer"
-                },
-                "id_card_front_media_asset_id": {
-                    "type": "integer"
                 },
                 "legal_person_id_number": {
                     "type": "string"
@@ -31482,8 +32503,7 @@ const docTemplate = `{
                     "description": "商户ID",
                     "type": "integer"
                 },
-                "merchant_logo": {
-                    "description": "商户Logo URL",
+                "merchant_logo_url": {
                     "type": "string"
                 },
                 "merchant_name": {
@@ -31912,6 +32932,58 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantStatsDish": {
+            "type": "object",
+            "properties": {
+                "dish_name": {
+                    "type": "string"
+                },
+                "total_revenue": {
+                    "type": "integer"
+                },
+                "total_sold": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantStatsResponse": {
+            "type": "object",
+            "properties": {
+                "avg_daily_sales": {
+                    "type": "integer"
+                },
+                "avg_orders_per_user_cents": {
+                    "type": "integer"
+                },
+                "days": {
+                    "type": "integer"
+                },
+                "repeat_customers": {
+                    "type": "integer"
+                },
+                "repurchase_rate_basis_points": {
+                    "type": "integer"
+                },
+                "top_dishes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantStatsDish"
+                    }
+                },
+                "total_commission": {
+                    "type": "integer"
+                },
+                "total_customers": {
+                    "type": "integer"
+                },
+                "total_orders": {
+                    "type": "integer"
+                },
+                "total_sales": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.merchantStatusResponse": {
             "type": "object",
             "properties": {
@@ -31923,6 +32995,17 @@ const docTemplate = `{
                 },
                 "message": {
                     "type": "string"
+                }
+            }
+        },
+        "api.merchantTagsResponse": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.tagDetailResponse"
+                    }
                 }
             }
         },
@@ -32062,6 +33145,124 @@ const docTemplate = `{
                 }
             }
         },
+        "api.ocrJobResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "document_type": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "result_version": {
+                    "type": "integer"
+                },
+                "side": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.ocrDeadLetterJobResponse": {
+            "type": "object",
+            "properties": {
+                "attempt_count": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "document_type": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "manual_reason": {
+                    "type": "string"
+                },
+                "max_attempts": {
+                    "type": "integer"
+                },
+                "next_retry_at": {
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "requested_by": {
+                    "type": "integer"
+                },
+                "retention_until": {
+                    "type": "string"
+                },
+                "side": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.ocrJobResultResponse": {
+            "type": "object",
+            "properties": {
+                "normalized_result": {},
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "result_version": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "api.openDiningSessionRequest": {
             "type": "object",
             "required": [
@@ -32103,14 +33304,14 @@ const docTemplate = `{
         "api.operatorApplicationResponse": {
             "type": "object",
             "properties": {
+                "business_license_asset_id": {
+                    "type": "integer"
+                },
                 "business_license_number": {
                     "type": "string"
                 },
                 "business_license_ocr": {
                     "$ref": "#/definitions/api.BusinessLicenseOCRData"
-                },
-                "business_license_asset_id": {
-                    "type": "integer"
                 },
                 "contact_name": {
                     "type": "string"
@@ -32124,17 +33325,21 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "id_card_back_asset_id": {
+                    "type": "integer"
+                },
                 "id_card_back_ocr": {
                     "$ref": "#/definitions/api.OperatorIDCardBackOCR"
                 },
-                "id_card_back_asset_id": {
+                "id_card_front_asset_id": {
                     "type": "integer"
                 },
                 "id_card_front_ocr": {
                     "$ref": "#/definitions/api.OperatorIDCardOCRData"
                 },
-                "id_card_front_asset_id": {
-                    "type": "integer"
+                "is_operator": {
+                    "description": "IsOperator 表示申请已通过且运营商账号已建立（即用户已是正式运营商）",
+                    "type": "boolean"
                 },
                 "legal_person_id_number": {
                     "type": "string"
@@ -32655,9 +33860,7 @@ const docTemplate = `{
                     "example": 20001
                 },
                 "image_url": {
-                    "description": "商品图片URL",
-                    "type": "string",
-                    "example": "https://example.com/images/dish1001.jpg"
+                    "type": "string"
                 },
                 "name": {
                     "description": "商品名称",
@@ -32925,6 +34128,10 @@ const docTemplate = `{
                 "user_id": {
                     "type": "integer",
                     "example": 10001
+                },
+                "wechat_transaction_id": {
+                    "description": "微信支付交易号，用于拉起小程序确认收货组件",
+                    "type": "string"
                 }
             }
         },
@@ -33222,6 +34429,32 @@ const docTemplate = `{
                 }
             }
         },
+        "api.privateAccessRequest": {
+            "type": "object",
+            "required": [
+                "media_id"
+            ],
+            "properties": {
+                "media_id": {
+                    "type": "integer",
+                    "minimum": 1
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.privateAccessResponse": {
+            "type": "object",
+            "properties": {
+                "download_url": {
+                    "type": "string"
+                },
+                "expire_at": {
+                    "type": "string"
+                }
+            }
+        },
         "api.profitSharingConfigAuditItem": {
             "type": "object",
             "properties": {
@@ -33385,7 +34618,8 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
-                "dish_images": {
+                "dish_image_urls": {
+                    "description": "子菜品图片 CDN URL 列表",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -33653,6 +34887,9 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "image_url": {
+                    "type": "string"
+                },
                 "minimum_spend": {
                     "type": "integer"
                 },
@@ -33660,10 +34897,6 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
-                    "type": "string"
-                },
-                "primary_image": {
-                    "description": "统一字段名：包间主图",
                     "type": "string"
                 },
                 "status": {
@@ -33998,6 +35231,32 @@ const docTemplate = `{
                 }
             }
         },
+        "api.regionExpansionApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "operator_id": {
+                    "type": "integer"
+                },
+                "region_id": {
+                    "type": "integer"
+                },
+                "region_name": {
+                    "type": "string"
+                },
+                "reject_reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "api.regionResponse": {
             "type": "object",
             "properties": {
@@ -34206,8 +35465,8 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "image_url": {
-                    "type": "string"
+                "image_asset_id": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -34222,6 +35481,26 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "unit_price": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.reservationListResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "reservations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.reservationResponse"
+                    }
+                },
+                "total": {
                     "type": "integer"
                 }
             }
@@ -34317,6 +35596,35 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "user_id": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.reservationStatsResponse": {
+            "type": "object",
+            "properties": {
+                "cancelled_count": {
+                    "type": "integer"
+                },
+                "checked_in_count": {
+                    "type": "integer"
+                },
+                "completed_count": {
+                    "type": "integer"
+                },
+                "confirmed_count": {
+                    "type": "integer"
+                },
+                "expired_count": {
+                    "type": "integer"
+                },
+                "no_show_count": {
+                    "type": "integer"
+                },
+                "paid_count": {
+                    "type": "integer"
+                },
+                "pending_count": {
                     "type": "integer"
                 }
             }
@@ -34436,6 +35744,26 @@ const docTemplate = `{
                 }
             }
         },
+        "api.reviewListResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "reviews": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.reviewResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.reviewResponse": {
             "type": "object",
             "properties": {
@@ -34448,7 +35776,7 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "images": {
+                "image_urls": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -34460,7 +35788,7 @@ const docTemplate = `{
                 "merchant_id": {
                     "type": "integer"
                 },
-                "merchant_logo": {
+                "merchant_logo_url": {
                     "type": "string"
                 },
                 "merchant_name": {
@@ -34730,6 +36058,32 @@ const docTemplate = `{
                 }
             }
         },
+        "api.riderStatsResponse": {
+            "type": "object",
+            "properties": {
+                "avg_delivery_seconds": {
+                    "type": "integer"
+                },
+                "completed_deliveries": {
+                    "type": "integer"
+                },
+                "completion_rate_basis_points": {
+                    "type": "integer"
+                },
+                "days": {
+                    "type": "integer"
+                },
+                "delayed_count": {
+                    "type": "integer"
+                },
+                "period_earnings": {
+                    "type": "integer"
+                },
+                "total_deliveries": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.riderStatusResponse": {
             "type": "object",
             "properties": {
@@ -34768,6 +36122,46 @@ const docTemplate = `{
                 },
                 "status": {
                     "description": "账号状态：pending/approved/active/suspended/rejected",
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderWithdrawRefundItemResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "out_refund_no": {
+                    "type": "string"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "refund_order_id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.riderWithdrawResponse": {
+            "type": "object",
+            "properties": {
+                "accepted_amount": {
+                    "type": "integer"
+                },
+                "refunds": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.riderWithdrawRefundItemResponse"
+                    }
+                },
+                "requested_amount": {
+                    "type": "integer"
+                },
+                "status": {
                     "type": "string"
                 }
             }
@@ -34812,7 +36206,7 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "images": {
+                "image_urls": {
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -34827,7 +36221,7 @@ const docTemplate = `{
                 "merchant_latitude": {
                     "type": "number"
                 },
-                "merchant_logo": {
+                "merchant_logo_url": {
                     "type": "string"
                 },
                 "merchant_longitude": {
@@ -34846,7 +36240,7 @@ const docTemplate = `{
                 "monthly_reservations": {
                     "type": "integer"
                 },
-                "primary_image": {
+                "primary_image_url": {
                     "type": "string"
                 },
                 "room_no": {
@@ -34875,6 +36269,9 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "image_url": {
+                    "type": "string"
+                },
                 "merchant_id": {
                     "type": "integer"
                 },
@@ -34883,9 +36280,6 @@ const docTemplate = `{
                 },
                 "monthly_reservations": {
                     "type": "integer"
-                },
-                "primary_image": {
-                    "type": "string"
                 },
                 "room_no": {
                     "type": "string"
@@ -34940,8 +36334,8 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "image_url": {
-                    "type": "string"
+                "image_asset_id": {
+                    "type": "integer"
                 },
                 "is_available": {
                     "type": "boolean"
@@ -34984,8 +36378,8 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
-                "image_url": {
-                    "type": "string"
+                "image_asset_id": {
+                    "type": "integer"
                 },
                 "is_available": {
                     "type": "boolean"
@@ -35034,8 +36428,8 @@ const docTemplate = `{
                 "is_open": {
                     "type": "boolean"
                 },
-                "logo_url": {
-                    "type": "string"
+                "logo_asset_id": {
+                    "type": "integer"
                 },
                 "name": {
                     "type": "string"
@@ -35122,6 +36516,302 @@ const docTemplate = `{
                 }
             }
         },
+        "api.searchCategoriesListResponse": {
+            "type": "object",
+            "properties": {
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.searchCategoryItem"
+                    }
+                }
+            }
+        },
+        "api.searchCategoryItem": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "merchant_count": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.searchComboListResponse": {
+            "type": "object",
+            "properties": {
+                "combos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.searchComboResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.searchComboResponse": {
+            "type": "object",
+            "properties": {
+                "combo_price": {
+                    "description": "Cents",
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "distance": {
+                    "type": "integer"
+                },
+                "estimated_delivery_fee": {
+                    "type": "integer"
+                },
+                "estimated_delivery_time": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "image_url": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_is_open": {
+                    "type": "boolean"
+                },
+                "merchant_logo_url": {
+                    "type": "string"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "monthly_sales": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "original_price": {
+                    "description": "Cents",
+                    "type": "integer"
+                },
+                "savings_percent": {
+                    "description": "节省百分比",
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.searchHistoryListResponse": {
+            "type": "object",
+            "properties": {
+                "history": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/db.ListSearchHistoryRow"
+                    }
+                }
+            }
+        },
+        "api.searchKeywordsListResponse": {
+            "type": "object",
+            "properties": {
+                "keywords": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/db.GetPopularKeywordsRow"
+                    }
+                }
+            }
+        },
+        "api.searchMerchantListResponse": {
+            "type": "object",
+            "properties": {
+                "merchants": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.searchMerchantResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.searchMerchantResponse": {
+            "type": "object",
+            "properties": {
+                "address": {
+                    "type": "string"
+                },
+                "cover_image": {
+                    "description": "门头照（首张），作为列表卡片封面",
+                    "type": "string"
+                },
+                "created_at": {
+                    "description": "入驻时间，前端用于判断新店",
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "distance": {
+                    "description": "距离（米），需要传入用户位置",
+                    "type": "integer"
+                },
+                "estimated_delivery_fee": {
+                    "description": "预估配送费（分），需要传入用户位置",
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "is_open": {
+                    "type": "boolean"
+                },
+                "label": {
+                    "description": "推荐 或 热销",
+                    "type": "string"
+                },
+                "logo_url": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "phone": {
+                    "type": "string"
+                },
+                "region_id": {
+                    "description": "区域ID，用于运费计算",
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "total_orders": {
+                    "description": "总销量",
+                    "type": "integer"
+                }
+            }
+        },
+        "api.searchRoomListResponse": {
+            "type": "object",
+            "properties": {
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "rooms": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.searchRoomResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.searchRoomResponse": {
+            "type": "object",
+            "properties": {
+                "capacity": {
+                    "type": "integer"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "image_url": {
+                    "type": "string"
+                },
+                "merchant_address": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_latitude": {
+                    "type": "number"
+                },
+                "merchant_logo_url": {
+                    "type": "string"
+                },
+                "merchant_longitude": {
+                    "type": "number"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "minimum_spend": {
+                    "description": "分",
+                    "type": "integer"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "table_no": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.searchSuggestionItem": {
+            "type": "object",
+            "properties": {
+                "keyword": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.searchSuggestionsListResponse": {
+            "type": "object",
+            "properties": {
+                "suggestions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.searchSuggestionItem"
+                    }
+                }
+            }
+        },
         "api.setBusinessHoursRequest": {
             "type": "object",
             "required": [
@@ -35148,6 +36838,34 @@ const docTemplate = `{
                     "maxItems": 20,
                     "items": {
                         "$ref": "#/definitions/api.customizationGroupInput"
+                    }
+                }
+            }
+        },
+        "api.setDishFeaturedTagsRequest": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "description": "期望设置的标签名列表，如 [\"推荐\"] 或 [\"热卖\"] 或 []",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.setMerchantTagsRequest": {
+            "type": "object",
+            "required": [
+                "tag_ids"
+            ],
+            "properties": {
+                "tag_ids": {
+                    "description": "最多选5个类目",
+                    "type": "array",
+                    "maxItems": 5,
+                    "items": {
+                        "type": "integer"
                     }
                 }
             }
@@ -35222,17 +36940,25 @@ const docTemplate = `{
                 }
             }
         },
+        "api.successMessageResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
         "api.tableImageResponse": {
             "type": "object",
             "properties": {
                 "id": {
                     "type": "integer"
                 },
-                "image_url": {
-                    "type": "string"
-                },
                 "is_primary": {
                     "type": "boolean"
+                },
+                "media_asset_id": {
+                    "type": "integer"
                 },
                 "sort_order": {
                     "type": "integer"
@@ -35528,6 +37254,40 @@ const docTemplate = `{
                 }
             }
         },
+        "api.updateCurrentMerchantShopImagesRequest": {
+            "type": "object",
+            "properties": {
+                "environment_images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "storefront_images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "api.updateCurrentMerchantShopImagesResponse": {
+            "type": "object",
+            "properties": {
+                "environment_images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "storefront_images": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "api.updateDailyInventoryRequest": {
             "type": "object",
             "required": [
@@ -35628,10 +37388,10 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 1000
                 },
-                "image_url": {
-                    "description": "图片URL，最大500字符",
-                    "type": "string",
-                    "maxLength": 500
+                "image_asset_id": {
+                    "description": "图片媒体资产ID",
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "is_available": {
                     "type": "boolean"
@@ -35733,8 +37493,8 @@ const docTemplate = `{
                 "group_name": {
                     "type": "string"
                 },
-                "license_image_url": {
-                    "type": "string"
+                "license_image_asset_id": {
+                    "type": "integer"
                 },
                 "license_number": {
                     "type": "string"
@@ -35753,8 +37513,8 @@ const docTemplate = `{
                 "contact_phone": {
                     "type": "string"
                 },
-                "license_image_url": {
-                    "type": "string"
+                "license_image_asset_id": {
+                    "type": "integer"
                 },
                 "license_number": {
                     "type": "string"
@@ -35878,9 +37638,9 @@ const docTemplate = `{
                 "latitude": {
                     "type": "string"
                 },
-                "logo_url": {
-                    "type": "string",
-                    "maxLength": 500
+                "logo_asset_id": {
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "longitude": {
                     "type": "string"
@@ -36262,10 +38022,9 @@ const docTemplate = `{
         "api.updateUserRequest": {
             "type": "object",
             "properties": {
-                "avatar_url": {
-                    "type": "string",
-                    "maxLength": 2048,
-                    "minLength": 1
+                "avatar_media_asset_id": {
+                    "type": "integer",
+                    "minimum": 1
                 },
                 "full_name": {
                     "type": "string",
@@ -36319,10 +38078,28 @@ const docTemplate = `{
                 }
             }
         },
-        "api.uploadImageResponse": {
+        "api.uploadSessionResponse": {
             "type": "object",
             "properties": {
-                "image_url": {
+                "expire_at": {
+                    "type": "string"
+                },
+                "form": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "object_key": {
+                    "type": "string"
+                },
+                "upload_host": {
+                    "type": "string"
+                },
+                "upload_id": {
+                    "type": "string"
+                },
+                "visibility": {
                     "type": "string"
                 }
             }
@@ -36748,6 +38525,37 @@ const docTemplate = `{
                 }
             }
         },
+        "db.GetPopularKeywordsRow": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer"
+                },
+                "keyword": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "db.ListSearchHistoryRow": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "keyword": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
         "db.Rule": {
             "type": "object",
             "properties": {
@@ -36844,12 +38652,6 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
-                },
-                "images": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 },
                 "level": {
                     "type": "string"

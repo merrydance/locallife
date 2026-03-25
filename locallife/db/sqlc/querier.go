@@ -96,6 +96,7 @@ type Querier interface {
 	CloseDiningSession(ctx context.Context, id int64) (DiningSession, error)
 	// 批量关闭过期的 pending 支付订单
 	CloseExpiredPaymentOrders(ctx context.Context) (int64, error)
+	CompleteOCRJob(ctx context.Context, arg CompleteOCRJobParams) (OcrJob, error)
 	// 用户点击完成（外卖）：直接进入 completed，并补齐 user_delivered_at
 	CompleteTakeoutOrderByUser(ctx context.Context, id int64) (Order, error)
 	CompleteUploadSession(ctx context.Context, arg CompleteUploadSessionParams) (MediaUploadSession, error)
@@ -522,6 +523,7 @@ type Querier interface {
 	// 探索附近包间（无需指定预订日期时段），用于本地包间浏览流
 	// 返回包间信息 + 商户信息 + 主图 + 近30天预订量
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
+	FailOCRJob(ctx context.Context, arg FailOCRJobParams) (OcrJob, error)
 	// 冻结用户余额（提现申请时）
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
 	// Phase3: abnormal stats aggregation queries
@@ -772,6 +774,7 @@ type Querier interface {
 	GetMerchantsWithStatsByIDs(ctx context.Context, dollar_1 []int64) ([]GetMerchantsWithStatsByIDsRow, error)
 	GetNotification(ctx context.Context, id int64) (Notification, error)
 	GetNotificationsByRelated(ctx context.Context, arg GetNotificationsByRelatedParams) ([]Notification, error)
+	GetOCRJob(ctx context.Context, id int64) (OcrJob, error)
 	GetOperator(ctx context.Context, id int64) (Operator, error)
 	// 运营商查看申诉详情
 	GetOperatorAppealDetail(ctx context.Context, arg GetOperatorAppealDetailParams) (GetOperatorAppealDetailRow, error)
@@ -1233,6 +1236,8 @@ type Querier interface {
 	// 获取指定日期范围内所有小程序直连支付订单（用于每日对账）
 	ListMiniprogramPaymentOrdersForReconciliation(ctx context.Context, arg ListMiniprogramPaymentOrdersForReconciliationParams) ([]ListMiniprogramPaymentOrdersForReconciliationRow, error)
 	ListNearbyRiders(ctx context.Context, arg ListNearbyRidersParams) ([]ListNearbyRidersRow, error)
+	ListOCRDeadLetterJobs(ctx context.Context, arg ListOCRDeadLetterJobsParams) ([]OcrJob, error)
+	ListOCRJobsByOwner(ctx context.Context, arg ListOCRJobsByOwnerParams) ([]OcrJob, error)
 	// 获取商户上架套餐（用于扫码点餐菜单展示）
 	ListOnlineCombosByMerchant(ctx context.Context, merchantID int64) ([]ListOnlineCombosByMerchantRow, error)
 	ListOnlineRiders(ctx context.Context) ([]Rider, error)
@@ -1406,6 +1411,7 @@ type Querier interface {
 	MarkClaimRecoveryWaived(ctx context.Context, id int64) (ClaimRecovery, error)
 	MarkNotificationAsPushed(ctx context.Context, id int64) error
 	MarkNotificationAsRead(ctx context.Context, arg MarkNotificationAsReadParams) (Notification, error)
+	MarkOCRJobProcessing(ctx context.Context, arg MarkOCRJobProcessingParams) (OcrJob, error)
 	MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedParams) (Order, error)
 	MarkRiderDepositCreditExpired(ctx context.Context, arg MarkRiderDepositCreditExpiredParams) (RiderDepositCredit, error)
 	MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg MarkUserVoucherAsExpiredOnRollbackParams) (UserVoucher, error)
@@ -1742,6 +1748,7 @@ type Querier interface {
 	// Group policies
 	UpsertGroupPolicies(ctx context.Context, arg UpsertGroupPoliciesParams) (GroupPolicy, error)
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
+	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)
 	UpsertRegionExternalMapping(ctx context.Context, arg UpsertRegionExternalMappingParams) (RegionExternalMapping, error)

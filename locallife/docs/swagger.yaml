@@ -30,6 +30,9 @@ definitions:
       address:
         description: 地址
         type: string
+      alert_emitted_at:
+        description: 平台告警发送时间
+        type: string
       business_scope:
         description: 经营范围
         type: string
@@ -42,12 +45,18 @@ definitions:
       error:
         description: failure reason (if any)
         type: string
+      error_code:
+        description: machine-readable failure code
+        type: string
       legal_representative:
         description: 法定代表人
         type: string
       ocr_at:
         description: OCR识别时间
         type: string
+      ocr_job_id:
+        description: 统一 OCR 任务 ID
+        type: integer
       queued_at:
         description: task enqueued time
         type: string
@@ -103,20 +112,37 @@ definitions:
     type: object
   api.ErrorResponse:
     properties:
+      code:
+        description: Code 为数字错误码（仅 APIError 时存在），前端应以此为准做多语言处理。
+        example: 40401
+        type: integer
       error:
+        description: Error 为人类可读的错误描述，降级展示或日志使用。
         example: error message
         type: string
     type: object
   api.FoodPermitOCRData:
     properties:
+      alert_emitted_at:
+        description: 平台告警发送时间
+        type: string
       company_name:
         description: 企业名称
         type: string
       error:
         description: failure reason (if any)
         type: string
+      error_code:
+        description: machine-readable failure code
+        type: string
       ocr_at:
         description: OCR识别时间
+        type: string
+      ocr_job_id:
+        description: 统一 OCR 任务 ID
+        type: integer
+      operator_name:
+        description: 经营者/法定代表人姓名
         type: string
       permit_no:
         description: 许可证编号
@@ -142,8 +168,14 @@ definitions:
     type: object
   api.HealthCertOCRData:
     properties:
+      alert_emitted_at:
+        type: string
       cert_number:
         description: 证书编号
+        type: string
+      error:
+        type: string
+      error_code:
         type: string
       id_number:
         description: 身份证号
@@ -153,6 +185,14 @@ definitions:
         type: string
       ocr_at:
         description: OCR识别时间
+        type: string
+      ocr_job_id:
+        type: integer
+      queued_at:
+        type: string
+      started_at:
+        type: string
+      status:
         type: string
       valid_end:
         description: 有效期截止
@@ -165,6 +205,12 @@ definitions:
     properties:
       address:
         description: 地址
+        type: string
+      alert_emitted_at:
+        type: string
+      error:
+        type: string
+      error_code:
         type: string
       gender:
         description: 性别
@@ -180,6 +226,14 @@ definitions:
         type: string
       ocr_at:
         description: OCR识别时间
+        type: string
+      ocr_job_id:
+        type: integer
+      queued_at:
+        type: string
+      started_at:
+        type: string
+      status:
         type: string
       valid_end:
         description: 有效期截止（"长期" 或日期）
@@ -200,8 +254,14 @@ definitions:
       address:
         description: 地址
         type: string
+      alert_emitted_at:
+        description: 平台告警发送时间
+        type: string
       error:
         description: failure reason (if any)
+        type: string
+      error_code:
+        description: machine-readable failure code
         type: string
       gender:
         description: 性别
@@ -218,6 +278,9 @@ definitions:
       ocr_at:
         description: OCR识别时间
         type: string
+      ocr_job_id:
+        description: 统一 OCR 任务 ID
+        type: integer
       queued_at:
         description: task enqueued time
         type: string
@@ -239,7 +302,21 @@ definitions:
     type: object
   api.OperatorIDCardBackOCR:
     properties:
+      alert_emitted_at:
+        type: string
+      error:
+        type: string
+      error_code:
+        type: string
       ocr_at:
+        type: string
+      ocr_job_id:
+        type: integer
+      queued_at:
+        type: string
+      started_at:
+        type: string
+      status:
         type: string
       valid_end:
         type: string
@@ -250,6 +327,12 @@ definitions:
     properties:
       address:
         type: string
+      alert_emitted_at:
+        type: string
+      error:
+        type: string
+      error_code:
+        type: string
       gender:
         type: string
       id_number:
@@ -259,6 +342,14 @@ definitions:
       nation:
         type: string
       ocr_at:
+        type: string
+      ocr_job_id:
+        type: integer
+      queued_at:
+        type: string
+      started_at:
+        type: string
+      status:
         type: string
     type: object
   api.ReportFoodSafetyRequest:
@@ -559,18 +650,17 @@ definitions:
     type: object
   api.addTableImageRequest:
     properties:
-      image_url:
-        maxLength: 500
-        minLength: 1
-        type: string
       is_primary:
         type: boolean
+      media_asset_id:
+        minimum: 1
+        type: integer
       sort_order:
         maximum: 100
         minimum: 0
         type: integer
     required:
-    - image_url
+    - media_asset_id
     type: object
   api.addTableTagRequest:
     properties:
@@ -592,6 +682,31 @@ definitions:
     required:
     - amount
     - notes
+    type: object
+  api.adminRegionExpansionApplicationResponse:
+    properties:
+      contact_name:
+        type: string
+      contact_phone:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      operator_id:
+        type: integer
+      operator_name:
+        type: string
+      region_code:
+        type: string
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      reject_reason:
+        type: string
+      status:
+        type: string
     type: object
   api.appealResponse:
     properties:
@@ -622,6 +737,13 @@ definitions:
       status:
         type: string
     type: object
+  api.applyRegionExpansionRequest:
+    properties:
+      region_id:
+        type: integer
+    required:
+    - region_id
+    type: object
   api.approveGroupJoinRequestRequest:
     properties:
       brand_id:
@@ -642,6 +764,31 @@ definitions:
           type: integer
         type: array
     type: object
+  api.batchQueryOCRJobsRequest:
+    properties:
+      job_ids:
+        items:
+          type: integer
+        maxItems: 50
+        minItems: 1
+        type: array
+    required:
+    - job_ids
+    type: object
+  api.batchQueryOCRJobsResponse:
+    properties:
+      jobs:
+        items:
+          $ref: '#/definitions/api.ocrJobResponse'
+        type: array
+    type: object
+  api.listOCRDeadLetterJobsResponse:
+    properties:
+      jobs:
+        items:
+          $ref: '#/definitions/api.ocrDeadLetterJobResponse'
+        type: array
+    type: object
   api.batchUpdateDishStatusRequest:
     properties:
       dish_ids:
@@ -658,6 +805,44 @@ definitions:
     - dish_ids
     - is_online
     type: object
+  api.billReconciliationReportResponse:
+    properties:
+      amount_mismatch:
+        items:
+          type: integer
+        type: array
+      bill_date:
+        description: '"2006-01-02"'
+        type: string
+      bill_type:
+        description: trade | ecommerce_trade | refund
+        type: string
+      created_at:
+        type: string
+      error_message:
+        type: string
+      id:
+        type: integer
+      local_count:
+        type: integer
+      mismatch_count:
+        type: integer
+      missing_local:
+        items:
+          type: integer
+        type: array
+      missing_wxpay:
+        items:
+          type: integer
+        type: array
+      status:
+        description: pending | running | completed | failed
+        type: string
+      updated_at:
+        type: string
+      wxpay_count:
+        type: integer
+    type: object
   api.billingGroupListResponse:
     properties:
       billing_groups:
@@ -665,8 +850,6 @@ definitions:
           $ref: '#/definitions/api.billingGroupResponse'
         type: array
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.billingGroupOrderListResponse:
@@ -676,8 +859,6 @@ definitions:
           $ref: '#/definitions/api.billingGroupOrderResponse'
         type: array
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.billingGroupOrderResponse:
@@ -897,10 +1078,14 @@ definitions:
           $ref: '#/definitions/logic.LadderPromotion'
         type: array
       meets_min_order:
-        description: 是否满足起送金额
+        description: 是否满足起送金额。MinOrderAmount 为 0（无限制）时该字段不返回。
         type: boolean
       min_order_amount:
-        description: 最小起送金额（分），0表示无限制
+        description: |-
+          最小起送金额（分）。0 表示无起送限制，或该商户尚未配置起送金额。
+          商户级起送金额配置上线后此字段将从商户配置读取；
+          当前前端不应依赖此字段阻止下单——订单创建服务端会再次校验。
+          omitempty：值为 0 时不序列化，前端收不到 0 即视为无限制。
         type: integer
       payment_assessment:
         allOf:
@@ -963,8 +1148,8 @@ definitions:
     properties:
       combo_id:
         type: integer
-      combo_member_images:
-        description: 套餐成员图片
+      combo_member_image_urls:
+        description: 套餐成员图片 CDN URL 列表
         items:
           type: string
         type: array
@@ -1269,7 +1454,7 @@ definitions:
         type: integer
       description:
         type: string
-      dish_images:
+      dish_image_urls:
         items:
           type: string
         type: array
@@ -1286,8 +1471,8 @@ definitions:
         type: integer
       description:
         type: string
-      dish_images:
-        description: 子菜品图片列表
+      dish_image_urls:
+        description: 子菜品图片 CDN URL 列表
         items:
           type: string
         type: array
@@ -1313,6 +1498,29 @@ definitions:
         items:
           $ref: '#/definitions/api.tagResponse'
         type: array
+    type: object
+  api.completeUploadRequest:
+    properties:
+      etag:
+        type: string
+      object_key:
+        type: string
+      upload_id:
+        type: string
+    required:
+    - object_key
+    - upload_id
+    type: object
+  api.completeUploadResponse:
+    properties:
+      media_id:
+        type: integer
+      status:
+        type: string
+      urls:
+        additionalProperties:
+          type: string
+        type: object
     type: object
   api.createBillingGroupRequest:
     properties:
@@ -1485,9 +1693,10 @@ definitions:
       description:
         maxLength: 500
         type: string
-      image_url:
-        maxLength: 500
-        type: string
+      image_asset_id:
+        description: 图片媒体资产ID
+        minimum: 1
+        type: integer
       ingredient_ids:
         description: 最多20个食材
         items:
@@ -1534,8 +1743,8 @@ definitions:
     properties:
       description:
         type: string
-      logo_url:
-        type: string
+      logo_asset_id:
+        type: integer
       name:
         type: string
     required:
@@ -1569,8 +1778,8 @@ definitions:
         type: array
       contact_phone:
         type: string
-      license_image_url:
-        type: string
+      license_image_asset_id:
+        type: integer
       license_number:
         type: string
       name:
@@ -1595,6 +1804,28 @@ definitions:
     required:
     - claim_id
     - reason
+    type: object
+  api.createOCRJobRequest:
+    properties:
+      document_type:
+        type: string
+      idempotency_key:
+        type: string
+      media_asset_id:
+        minimum: 1
+        type: integer
+      owner_id:
+        minimum: 1
+        type: integer
+      owner_type:
+        type: string
+      side:
+        type: string
+    required:
+    - document_type
+    - media_asset_id
+    - owner_id
+    - owner_type
     type: object
   api.createOperatorApplicationRequest:
     properties:
@@ -1695,7 +1926,6 @@ definitions:
     required:
     - business_type
     - order_id
-    - payment_type
     type: object
   api.createPeakHourConfigRequest:
     properties:
@@ -1868,10 +2098,10 @@ definitions:
         maxLength: 1000
         minLength: 1
         type: string
-      images:
-        description: 最多9张图片（本地 uploads 相对路径）
+      media_asset_ids:
+        description: 最多9张图片（media_asset ID 列表）
         items:
-          type: string
+          type: integer
         maxItems: 9
         type: array
       order_id:
@@ -1965,6 +2195,26 @@ definitions:
     - capacity
     - table_no
     - table_type
+    type: object
+  api.createUploadSessionRequest:
+    properties:
+      business_type:
+        type: string
+      checksum_sha256:
+        type: string
+      content_length:
+        minimum: 1
+        type: integer
+      content_type:
+        type: string
+      media_category:
+        type: string
+    required:
+    - business_type
+    - checksum_sha256
+    - content_length
+    - content_type
+    - media_category
     type: object
   api.createUserAddressRequest:
     properties:
@@ -2516,8 +2766,6 @@ definitions:
     properties:
       dish_id:
         type: integer
-      dish_image_url:
-        type: string
       dish_name:
         type: string
       dish_price:
@@ -2582,13 +2830,23 @@ definitions:
     type: object
   api.errorMessage:
     properties:
+      code:
+        description: Code 为数字错误码（仅 APIError 时存在），前端应以此为准做多语言处理。
+        example: 40401
+        type: integer
       error:
+        description: Error 为人类可读的错误描述，降级展示或日志使用。
         example: error message
         type: string
     type: object
   api.errorRes:
     properties:
+      code:
+        description: Code 为数字错误码（仅 APIError 时存在），前端应以此为准做多语言处理。
+        example: 40401
+        type: integer
       error:
+        description: Error 为人类可读的错误描述，降级展示或日志使用。
         example: error message
         type: string
     type: object
@@ -2736,8 +2994,8 @@ definitions:
         type: string
       id:
         type: integer
-      license_image_url:
-        type: string
+      license_image_asset_id:
+        type: integer
       license_number:
         type: string
       region_id:
@@ -2812,8 +3070,8 @@ definitions:
         type: string
       id:
         type: integer
-      license_image_url:
-        type: string
+      license_image_asset_id:
+        type: integer
       license_number:
         type: string
       name:
@@ -3020,8 +3278,6 @@ definitions:
         type: integer
       total:
         type: integer
-      total_count:
-        type: integer
       vouchers:
         items:
           $ref: '#/definitions/api.voucherResponse'
@@ -3041,8 +3297,6 @@ definitions:
       total:
         description: 总数
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listComboSetsResponse:
     properties:
@@ -3050,17 +3304,11 @@ definitions:
         items:
           $ref: '#/definitions/api.comboSetResponse'
         type: array
-      dish_images:
-        items:
-          type: string
-        type: array
       page_id:
         type: integer
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.listDailyInventoryResponse:
@@ -3089,8 +3337,6 @@ definitions:
         type: integer
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listGlobalDishCategoriesResponse:
     properties:
@@ -3106,8 +3352,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
       transactions:
         items:
@@ -3126,8 +3370,6 @@ definitions:
         type: integer
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listMerchantOrdersResponse:
     properties:
@@ -3141,8 +3383,6 @@ definitions:
         type: integer
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listMerchantVouchersResponse:
     properties:
@@ -3151,8 +3391,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
       vouchers:
         items:
@@ -3171,8 +3409,6 @@ definitions:
         type: integer
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listNotificationsResponse:
     properties:
@@ -3185,8 +3421,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.listOperatorMerchantsResponse:
@@ -3204,8 +3438,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.listOperatorProfitSharingConfigsResponse:
@@ -3235,8 +3467,6 @@ definitions:
         type: array
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listOrdersResponse:
     properties:
@@ -3250,8 +3480,6 @@ definitions:
         type: integer
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listPaymentOrdersResponse:
     properties:
@@ -3264,8 +3492,6 @@ definitions:
           $ref: '#/definitions/api.paymentOrderResponse'
         type: array
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.listProfitSharingConfigAuditsResponse:
@@ -3298,8 +3524,6 @@ definitions:
         type: array
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listRiderDepositsResponse:
     properties:
@@ -3312,8 +3536,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.listRiderPremiumScoreHistoryResponse:
@@ -3333,8 +3555,6 @@ definitions:
       total:
         description: 总记录数
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listRidersResponse:
     properties:
@@ -3347,8 +3567,6 @@ definitions:
           $ref: '#/definitions/api.riderResponse'
         type: array
       total:
-        type: integer
-      total_count:
         type: integer
     type: object
   api.listRoomsForCustomerResponse:
@@ -3370,8 +3588,6 @@ definitions:
         type: array
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listTagsResponse:
     properties:
@@ -3387,8 +3603,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
       vouchers:
         items:
@@ -3407,8 +3621,6 @@ definitions:
         type: integer
       total:
         type: integer
-      total_count:
-        type: integer
     type: object
   api.listUserVouchersResponse:
     properties:
@@ -3417,8 +3629,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-      total_count:
         type: integer
       vouchers:
         items:
@@ -3482,6 +3692,27 @@ definitions:
       success:
         type: boolean
     type: object
+  api.mediaAssetResponse:
+    properties:
+      file_size:
+        type: integer
+      id:
+        type: integer
+      media_category:
+        type: string
+      mime_type:
+        type: string
+      moderation_status:
+        type: string
+      upload_status:
+        type: string
+      urls:
+        additionalProperties:
+          type: string
+        type: object
+      visibility:
+        type: string
+    type: object
   api.membershipResponse:
     properties:
       balance:
@@ -3544,20 +3775,20 @@ definitions:
         items:
           type: string
         type: array
-      food_permit_ocr:
-        $ref: '#/definitions/api.FoodPermitOCRData'
       food_permit_media_asset_id:
         type: integer
+      food_permit_ocr:
+        $ref: '#/definitions/api.FoodPermitOCRData'
       id:
+        type: integer
+      id_card_back_media_asset_id:
         type: integer
       id_card_back_ocr:
         $ref: '#/definitions/api.MerchantIDCardOCRData'
-      id_card_back_media_asset_id:
+      id_card_front_media_asset_id:
         type: integer
       id_card_front_ocr:
         $ref: '#/definitions/api.MerchantIDCardOCRData'
-      id_card_front_media_asset_id:
-        type: integer
       latitude:
         type: string
       legal_person_id_number:
@@ -3666,8 +3897,7 @@ definitions:
       merchant_id:
         description: 商户ID
         type: integer
-      merchant_logo:
-        description: 商户Logo URL
+      merchant_logo_url:
         type: string
       merchant_name:
         description: 商户名称
@@ -3960,6 +4190,40 @@ definitions:
       version:
         type: integer
     type: object
+  api.merchantStatsDish:
+    properties:
+      dish_name:
+        type: string
+      total_revenue:
+        type: integer
+      total_sold:
+        type: integer
+    type: object
+  api.merchantStatsResponse:
+    properties:
+      avg_daily_sales:
+        type: integer
+      avg_orders_per_user_cents:
+        type: integer
+      days:
+        type: integer
+      repeat_customers:
+        type: integer
+      repurchase_rate_basis_points:
+        type: integer
+      top_dishes:
+        items:
+          $ref: '#/definitions/api.merchantStatsDish'
+        type: array
+      total_commission:
+        type: integer
+      total_customers:
+        type: integer
+      total_orders:
+        type: integer
+      total_sales:
+        type: integer
+    type: object
   api.merchantStatusResponse:
     properties:
       auto_close_at:
@@ -3968,6 +4232,13 @@ definitions:
         type: boolean
       message:
         type: string
+    type: object
+  api.merchantTagsResponse:
+    properties:
+      tags:
+        items:
+          $ref: '#/definitions/api.tagDetailResponse'
+        type: array
     type: object
   api.merchantUserRiskResponse:
     properties:
@@ -4059,6 +4330,84 @@ definitions:
       user_id:
         type: integer
     type: object
+  api.ocrJobResponse:
+    properties:
+      created_at:
+        type: string
+      document_type:
+        type: string
+      error_code:
+        type: string
+      error_message:
+        type: string
+      finished_at:
+        type: string
+      ocr_job_id:
+        type: integer
+      owner_id:
+        type: integer
+      owner_type:
+        type: string
+      provider:
+        type: string
+      result_version:
+        type: integer
+      side:
+        type: string
+      started_at:
+        type: string
+      status:
+        type: string
+    type: object
+  api.ocrDeadLetterJobResponse:
+    properties:
+      attempt_count:
+        type: integer
+      created_at:
+        type: string
+      document_type:
+        type: string
+      error_code:
+        type: string
+      error_message:
+        type: string
+      finished_at:
+        type: string
+      manual_reason:
+        type: string
+      max_attempts:
+        type: integer
+      next_retry_at:
+        type: string
+      ocr_job_id:
+        type: integer
+      owner_id:
+        type: integer
+      owner_type:
+        type: string
+      provider:
+        type: string
+      requested_by:
+        type: integer
+      retention_until:
+        type: string
+      side:
+        type: string
+      started_at:
+        type: string
+      status:
+        type: string
+    type: object
+  api.ocrJobResultResponse:
+    properties:
+      normalized_result: {}
+      ocr_job_id:
+        type: integer
+      result_version:
+        type: integer
+      status:
+        type: string
+    type: object
   api.openDiningSessionRequest:
     properties:
       reservation_id:
@@ -4101,14 +4450,17 @@ definitions:
         type: string
       id:
         type: integer
+      id_card_back_asset_id:
+        type: integer
       id_card_back_ocr:
         $ref: '#/definitions/api.OperatorIDCardBackOCR'
-      id_card_back_asset_id:
+      id_card_front_asset_id:
         type: integer
       id_card_front_ocr:
         $ref: '#/definitions/api.OperatorIDCardOCRData'
-      id_card_front_asset_id:
-        type: integer
+      is_operator:
+        description: IsOperator 表示申请已通过且运营商账号已建立（即用户已是正式运营商）
+        type: boolean
       legal_person_id_number:
         type: string
       legal_person_name:
@@ -4480,8 +4832,6 @@ definitions:
         example: 20001
         type: integer
       image_url:
-        description: 商品图片URL
-        example: https://example.com/images/dish1001.jpg
         type: string
       name:
         description: 商品名称
@@ -4682,6 +5032,9 @@ definitions:
       user_id:
         example: 10001
         type: integer
+      wechat_transaction_id:
+        description: 微信支付交易号，用于拉起小程序确认收货组件
+        type: string
     type: object
   api.orderStatsResponse:
     properties:
@@ -4882,6 +5235,23 @@ definitions:
       updated_at:
         type: string
     type: object
+  api.privateAccessRequest:
+    properties:
+      media_id:
+        minimum: 1
+        type: integer
+      reason:
+        type: string
+    required:
+    - media_id
+    type: object
+  api.privateAccessResponse:
+    properties:
+      download_url:
+        type: string
+      expire_at:
+        type: string
+    type: object
   api.profitSharingConfigAuditItem:
     properties:
       action:
@@ -4992,7 +5362,8 @@ definitions:
         type: integer
       description:
         type: string
-      dish_images:
+      dish_image_urls:
+        description: 子菜品图片 CDN URL 列表
         items:
           type: string
         type: array
@@ -5171,14 +5542,13 @@ definitions:
         type: string
       id:
         type: integer
+      image_url:
+        type: string
       minimum_spend:
         type: integer
       monthly_sales:
         type: integer
       name:
-        type: string
-      primary_image:
-        description: 统一字段名：包间主图
         type: string
       status:
         type: string
@@ -5408,6 +5778,23 @@ definitions:
       total_gmv:
         type: integer
     type: object
+  api.regionExpansionApplicationResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      operator_id:
+        type: integer
+      region_id:
+        type: integer
+      region_name:
+        type: string
+      reject_reason:
+        type: string
+      status:
+        type: string
+    type: object
   api.regionResponse:
     properties:
       code:
@@ -5548,8 +5935,8 @@ definitions:
         type: integer
       id:
         type: integer
-      image_url:
-        type: string
+      image_asset_id:
+        type: integer
       name:
         type: string
       quantity:
@@ -5559,6 +5946,19 @@ definitions:
       type:
         type: string
       unit_price:
+        type: integer
+    type: object
+  api.reservationListResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      reservations:
+        items:
+          $ref: '#/definitions/api.reservationResponse'
+        type: array
+      total:
         type: integer
     type: object
   api.reservationResponse:
@@ -5622,6 +6022,25 @@ definitions:
       updated_at:
         type: string
       user_id:
+        type: integer
+    type: object
+  api.reservationStatsResponse:
+    properties:
+      cancelled_count:
+        type: integer
+      checked_in_count:
+        type: integer
+      completed_count:
+        type: integer
+      confirmed_count:
+        type: integer
+      expired_count:
+        type: integer
+      no_show_count:
+        type: integer
+      paid_count:
+        type: integer
+      pending_count:
         type: integer
     type: object
   api.resolveSafetyReportRequest:
@@ -5704,6 +6123,19 @@ definitions:
     required:
     - status
     type: object
+  api.reviewListResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      reviews:
+        items:
+          $ref: '#/definitions/api.reviewResponse'
+        type: array
+      total:
+        type: integer
+    type: object
   api.reviewResponse:
     properties:
       content:
@@ -5712,7 +6144,7 @@ definitions:
         type: string
       id:
         type: integer
-      images:
+      image_urls:
         items:
           type: string
         type: array
@@ -5720,7 +6152,7 @@ definitions:
         type: boolean
       merchant_id:
         type: integer
-      merchant_logo:
+      merchant_logo_url:
         type: string
       merchant_name:
         type: string
@@ -5901,6 +6333,23 @@ definitions:
       user_id:
         type: integer
     type: object
+  api.riderStatsResponse:
+    properties:
+      avg_delivery_seconds:
+        type: integer
+      completed_deliveries:
+        type: integer
+      completion_rate_basis_points:
+        type: integer
+      days:
+        type: integer
+      delayed_count:
+        type: integer
+      period_earnings:
+        type: integer
+      total_deliveries:
+        type: integer
+    type: object
   api.riderStatusResponse:
     properties:
       active_deliveries:
@@ -5931,6 +6380,32 @@ definitions:
         description: 账号状态：pending/approved/active/suspended/rejected
         type: string
     type: object
+  api.riderWithdrawRefundItemResponse:
+    properties:
+      amount:
+        type: integer
+      out_refund_no:
+        type: string
+      payment_order_id:
+        type: integer
+      refund_order_id:
+        type: integer
+      status:
+        type: string
+    type: object
+  api.riderWithdrawResponse:
+    properties:
+      accepted_amount:
+        type: integer
+      refunds:
+        items:
+          $ref: '#/definitions/api.riderWithdrawRefundItemResponse'
+        type: array
+      requested_amount:
+        type: integer
+      status:
+        type: string
+    type: object
   api.rollbackRuleRequest:
     properties:
       version_id:
@@ -5957,7 +6432,7 @@ definitions:
         type: string
       id:
         type: integer
-      images:
+      image_urls:
         items:
           type: string
         type: array
@@ -5967,7 +6442,7 @@ definitions:
         type: integer
       merchant_latitude:
         type: number
-      merchant_logo:
+      merchant_logo_url:
         type: string
       merchant_longitude:
         type: number
@@ -5980,7 +6455,7 @@ definitions:
         type: integer
       monthly_reservations:
         type: integer
-      primary_image:
+      primary_image_url:
         type: string
       room_no:
         type: string
@@ -5999,14 +6474,14 @@ definitions:
         type: string
       id:
         type: integer
+      image_url:
+        type: string
       merchant_id:
         type: integer
       minimum_spend:
         type: integer
       monthly_reservations:
         type: integer
-      primary_image:
-        type: string
       room_no:
         type: string
       status:
@@ -6042,8 +6517,8 @@ definitions:
         type: string
       id:
         type: integer
-      image_url:
-        type: string
+      image_asset_id:
+        type: integer
       is_available:
         type: boolean
       name:
@@ -6071,8 +6546,8 @@ definitions:
         type: string
       id:
         type: integer
-      image_url:
-        type: string
+      image_asset_id:
+        type: integer
       is_available:
         type: boolean
       is_online:
@@ -6104,8 +6579,8 @@ definitions:
         type: integer
       is_open:
         type: boolean
-      logo_url:
-        type: string
+      logo_asset_id:
+        type: integer
       name:
         type: string
       phone:
@@ -6162,6 +6637,203 @@ definitions:
       table_type:
         type: string
     type: object
+  api.searchCategoriesListResponse:
+    properties:
+      categories:
+        items:
+          $ref: '#/definitions/api.searchCategoryItem'
+        type: array
+    type: object
+  api.searchCategoryItem:
+    properties:
+      id:
+        type: integer
+      merchant_count:
+        type: integer
+      name:
+        type: string
+    type: object
+  api.searchComboListResponse:
+    properties:
+      combos:
+        items:
+          $ref: '#/definitions/api.searchComboResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.searchComboResponse:
+    properties:
+      combo_price:
+        description: Cents
+        type: integer
+      description:
+        type: string
+      distance:
+        type: integer
+      estimated_delivery_fee:
+        type: integer
+      estimated_delivery_time:
+        type: integer
+      id:
+        type: integer
+      image_url:
+        type: string
+      merchant_id:
+        type: integer
+      merchant_is_open:
+        type: boolean
+      merchant_logo_url:
+        type: string
+      merchant_name:
+        type: string
+      monthly_sales:
+        type: integer
+      name:
+        type: string
+      original_price:
+        description: Cents
+        type: integer
+      savings_percent:
+        description: 节省百分比
+        type: integer
+      tags:
+        items:
+          type: string
+        type: array
+    type: object
+  api.searchHistoryListResponse:
+    properties:
+      history:
+        items:
+          $ref: '#/definitions/db.ListSearchHistoryRow'
+        type: array
+    type: object
+  api.searchKeywordsListResponse:
+    properties:
+      keywords:
+        items:
+          $ref: '#/definitions/db.GetPopularKeywordsRow'
+        type: array
+    type: object
+  api.searchMerchantListResponse:
+    properties:
+      merchants:
+        items:
+          $ref: '#/definitions/api.searchMerchantResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.searchMerchantResponse:
+    properties:
+      address:
+        type: string
+      cover_image:
+        description: 门头照（首张），作为列表卡片封面
+        type: string
+      created_at:
+        description: 入驻时间，前端用于判断新店
+        type: string
+      description:
+        type: string
+      distance:
+        description: 距离（米），需要传入用户位置
+        type: integer
+      estimated_delivery_fee:
+        description: 预估配送费（分），需要传入用户位置
+        type: integer
+      id:
+        type: integer
+      is_open:
+        type: boolean
+      label:
+        description: 推荐 或 热销
+        type: string
+      logo_url:
+        type: string
+      name:
+        type: string
+      phone:
+        type: string
+      region_id:
+        description: 区域ID，用于运费计算
+        type: integer
+      status:
+        type: string
+      tags:
+        items:
+          type: string
+        type: array
+      total_orders:
+        description: 总销量
+        type: integer
+    type: object
+  api.searchRoomListResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      rooms:
+        items:
+          $ref: '#/definitions/api.searchRoomResponse'
+        type: array
+      total:
+        type: integer
+    type: object
+  api.searchRoomResponse:
+    properties:
+      capacity:
+        type: integer
+      description:
+        type: string
+      id:
+        type: integer
+      image_url:
+        type: string
+      merchant_address:
+        type: string
+      merchant_id:
+        type: integer
+      merchant_latitude:
+        type: number
+      merchant_logo_url:
+        type: string
+      merchant_longitude:
+        type: number
+      merchant_name:
+        type: string
+      minimum_spend:
+        description: 分
+        type: integer
+      status:
+        type: string
+      table_no:
+        type: string
+    type: object
+  api.searchSuggestionItem:
+    properties:
+      keyword:
+        type: string
+      type:
+        type: string
+    type: object
+  api.searchSuggestionsListResponse:
+    properties:
+      suggestions:
+        items:
+          $ref: '#/definitions/api.searchSuggestionItem'
+        type: array
+    type: object
   api.setBusinessHoursRequest:
     properties:
       hours:
@@ -6182,6 +6854,25 @@ definitions:
           $ref: '#/definitions/api.customizationGroupInput'
         maxItems: 20
         type: array
+    type: object
+  api.setDishFeaturedTagsRequest:
+    properties:
+      tags:
+        description: 期望设置的标签名列表，如 ["推荐"] 或 ["热卖"] 或 []
+        items:
+          type: string
+        type: array
+    type: object
+  api.setMerchantTagsRequest:
+    properties:
+      tag_ids:
+        description: 最多选5个类目
+        items:
+          type: integer
+        maxItems: 5
+        type: array
+    required:
+    - tag_ids
     type: object
   api.staffResponse:
     properties:
@@ -6232,14 +6923,19 @@ definitions:
     - level
     - title
     type: object
+  api.successMessageResponse:
+    properties:
+      message:
+        type: string
+    type: object
   api.tableImageResponse:
     properties:
       id:
         type: integer
-      image_url:
-        type: string
       is_primary:
         type: boolean
+      media_asset_id:
+        type: integer
       sort_order:
         type: integer
       table_id:
@@ -6438,6 +7134,28 @@ definitions:
         maxItems: 10
         type: array
     type: object
+  api.updateCurrentMerchantShopImagesRequest:
+    properties:
+      environment_images:
+        items:
+          type: string
+        type: array
+      storefront_images:
+        items:
+          type: string
+        type: array
+    type: object
+  api.updateCurrentMerchantShopImagesResponse:
+    properties:
+      environment_images:
+        items:
+          type: string
+        type: array
+      storefront_images:
+        items:
+          type: string
+        type: array
+    type: object
   api.updateDailyInventoryRequest:
     properties:
       date:
@@ -6507,10 +7225,10 @@ definitions:
         description: 描述，最大1000字符
         maxLength: 1000
         type: string
-      image_url:
-        description: 图片URL，最大500字符
-        maxLength: 500
-        type: string
+      image_asset_id:
+        description: 图片媒体资产ID
+        minimum: 1
+        type: integer
       is_available:
         type: boolean
       is_online:
@@ -6582,8 +7300,8 @@ definitions:
         type: string
       group_name:
         type: string
-      license_image_url:
-        type: string
+      license_image_asset_id:
+        type: integer
       license_number:
         type: string
       region_id:
@@ -6595,8 +7313,8 @@ definitions:
         type: string
       contact_phone:
         type: string
-      license_image_url:
-        type: string
+      license_image_asset_id:
+        type: integer
       license_number:
         type: string
       name:
@@ -6679,9 +7397,9 @@ definitions:
         type: string
       latitude:
         type: string
-      logo_url:
-        maxLength: 500
-        type: string
+      logo_asset_id:
+        minimum: 1
+        type: integer
       longitude:
         type: string
       name:
@@ -6953,10 +7671,9 @@ definitions:
     type: object
   api.updateUserRequest:
     properties:
-      avatar_url:
-        maxLength: 2048
-        minLength: 1
-        type: string
+      avatar_media_asset_id:
+        minimum: 1
+        type: integer
       full_name:
         maxLength: 50
         minLength: 1
@@ -6995,9 +7712,21 @@ definitions:
       valid_until:
         type: string
     type: object
-  api.uploadImageResponse:
+  api.uploadSessionResponse:
     properties:
-      image_url:
+      expire_at:
+        type: string
+      form:
+        additionalProperties:
+          type: string
+        type: object
+      object_key:
+        type: string
+      upload_host:
+        type: string
+      upload_id:
+        type: string
+      visibility:
         type: string
     type: object
   api.upsertGroupPoliciesRequest:
@@ -7284,6 +8013,26 @@ definitions:
       version:
         type: string
     type: object
+  db.GetPopularKeywordsRow:
+    properties:
+      count:
+        type: integer
+      keyword:
+        type: string
+      type:
+        type: string
+    type: object
+  db.ListSearchHistoryRow:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: integer
+      keyword:
+        type: string
+      type:
+        type: string
+    type: object
   db.Rule:
     properties:
       category:
@@ -7348,10 +8097,6 @@ definitions:
         type: string
       id:
         type: integer
-      images:
-        items:
-          type: string
-        type: array
       level:
         type: string
       merchant_ids:
@@ -7500,1378 +8245,6 @@ info:
   title: LocalLife API
   version: "1.0"
 paths:
-  /agreements:
-    get:
-      consumes:
-      - application/json
-      description: get the list of all active agreements
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/api.listActiveAgreementsResponse'
-            type: array
-      summary: List active agreements
-      tags:
-      - agreements
-  /agreements/{type}:
-    get:
-      consumes:
-      - application/json
-      description: get the content of an active agreement by its type
-      parameters:
-      - description: Agreement Type
-        in: path
-        name: type
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/db.Agreement'
-      summary: Get active agreement by type
-      tags:
-      - agreements
-  /delivery-fee/calculate:
-    post:
-      consumes:
-      - application/json
-      description: Calculate delivery fee based on region, distance, and promotions
-      parameters:
-      - description: Calculation parameters
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.calculateDeliveryFeeRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.DeliveryFeeResult'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Config not found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Calculate delivery fee
-      tags:
-      - delivery-fee
-  /delivery-fee/config/{region_id}:
-    get:
-      consumes:
-      - application/json
-      description: Get delivery fee configuration for a region
-      parameters:
-      - description: Region ID
-        in: path
-        name: region_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.deliveryFeeConfigResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Config not found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Get delivery fee config
-      tags:
-      - delivery-fee
-  /delivery-fee/merchants/{id}/promotions:
-    post:
-      consumes:
-      - application/json
-      description: Create delivery fee promotion for merchant. Only the merchant owner
-        can create promotions for their own merchant.
-      parameters:
-      - description: Merchant ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Promotion details
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.createDeliveryPromotionRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/api.deliveryPromotionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Merchant role required or not authorized for this merchant
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create delivery promotion (Merchant)
-      tags:
-      - delivery-fee
-  /delivery-fee/merchants/{merchant_id}/promotions:
-    get:
-      consumes:
-      - application/json
-      description: Get all delivery promotions for a merchant. Only the merchant owner
-        can view their own promotions.
-      parameters:
-      - description: Merchant ID
-        in: path
-        name: merchant_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/api.deliveryPromotionResponse'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Merchant role required or not authorized for this merchant
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List delivery promotions (Merchant)
-      tags:
-      - delivery-fee
-  /delivery-fee/merchants/{merchant_id}/promotions/{id}:
-    delete:
-      consumes:
-      - application/json
-      description: Delete a delivery fee promotion. Only the merchant owner can delete
-        their own promotions.
-      parameters:
-      - description: Merchant ID
-        in: path
-        name: merchant_id
-        required: true
-        type: integer
-      - description: Promotion ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Merchant role required or not authorized for this merchant
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Promotion not found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete delivery promotion (Merchant)
-      tags:
-      - delivery-fee
-    patch:
-      consumes:
-      - application/json
-      description: Update a delivery fee promotion. Only the merchant owner can update
-        their own promotions.
-      parameters:
-      - description: Merchant ID
-        in: path
-        name: merchant_id
-        required: true
-        type: integer
-      - description: Promotion ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: Update fields
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.updateDeliveryPromotionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.deliveryPromotionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Merchant role required or not authorized for this merchant
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Promotion not found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update delivery promotion (Merchant)
-      tags:
-      - delivery-fee
-  /delivery-fee/regions/{region_id}/config:
-    patch:
-      consumes:
-      - application/json
-      description: Update delivery fee configuration for a region (operator only).
-        Supports partial updates.
-      parameters:
-      - description: Region ID
-        in: path
-        name: region_id
-        required: true
-        type: integer
-      - description: Update fields
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.updateDeliveryFeeConfigRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.deliveryFeeConfigResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Operator role required or not authorized for this region
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Config not found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Update delivery fee config (Operator)
-      tags:
-      - delivery-fee
-    post:
-      consumes:
-      - application/json
-      description: Create delivery fee configuration for a region (operator only).
-        Each region can only have one active configuration.
-      parameters:
-      - description: Region ID
-        in: path
-        name: region_id
-        required: true
-        type: integer
-      - description: Fee config details
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.createDeliveryFeeConfigRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/api.deliveryFeeConfigResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Operator role required or not authorized for this region
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "409":
-          description: Config already exists for this region
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create delivery fee config (Operator)
-      tags:
-      - delivery-fee
-  /operator/peak-hours/{id}:
-    delete:
-      consumes:
-      - application/json
-      description: Delete a peak hour configuration (operator only). Verifies operator
-        has permission for the region.
-      parameters:
-      - description: Peak hour config ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "204":
-          description: No Content
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Operator role required or not authorized for this region
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Config not found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Delete peak hour config (Operator)
-      tags:
-      - delivery-fee
-  /operator/regions/{region_id}/peak-hours:
-    get:
-      consumes:
-      - application/json
-      description: Get all peak hour configurations for a region. Only operator can
-        access.
-      parameters:
-      - description: Region ID
-        in: path
-        name: region_id
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            items:
-              $ref: '#/definitions/api.peakHourConfigResponse'
-            type: array
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Operator role required
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: List peak hour configs (Operator)
-      tags:
-      - delivery-fee
-    post:
-      consumes:
-      - application/json
-      description: Create peak hour delivery fee configuration for a region (operator
-        only). Time format is HH:MM.
-      parameters:
-      - description: Region ID
-        in: path
-        name: region_id
-        required: true
-        type: integer
-      - description: Peak hour config details
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.createPeakHourConfigRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: Created
-          schema:
-            $ref: '#/definitions/api.peakHourConfigResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Operator role required or not authorized for this region
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: Create peak hour config (Operator)
-      tags:
-      - delivery-fee
-  /operators/me/profit-sharing/configs:
-    get:
-      consumes:
-      - application/json
-      description: 运营商查看本区域及全局分账规则配置
-      parameters:
-      - description: 状态
-        in: query
-        name: status
-        type: string
-      - description: 订单来源
-        in: query
-        name: order_source
-        type: string
-      - description: 商户ID
-        in: query
-        name: merchant_id
-        type: integer
-      - default: 1
-        description: 页码
-        in: query
-        minimum: 1
-        name: page
-        type: integer
-      - default: 20
-        description: 每页数量
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 配置列表
-          schema:
-            $ref: '#/definitions/api.listOperatorProfitSharingConfigsResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取分账规则配置
-      tags:
-      - 运营商数据统计
-  /platform/profit-sharing/configs:
-    get:
-      consumes:
-      - application/json
-      description: 平台获取分账规则配置列表
-      parameters:
-      - description: 状态
-        in: query
-        name: status
-        type: string
-      - description: 订单来源
-        in: query
-        name: order_source
-        type: string
-      - description: 区域ID
-        in: query
-        name: region_id
-        type: integer
-      - description: 商户ID
-        in: query
-        name: merchant_id
-        type: integer
-      - default: 1
-        description: 页码
-        in: query
-        minimum: 1
-        name: page
-        type: integer
-      - default: 20
-        description: 每页数量
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 配置列表
-          schema:
-            $ref: '#/definitions/api.listProfitSharingConfigsResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取分账规则配置列表
-      tags:
-      - Platform
-    post:
-      consumes:
-      - application/json
-      description: 平台创建分账规则配置
-      parameters:
-      - description: 分账规则配置
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.createProfitSharingConfigRequest'
-      produces:
-      - application/json
-      responses:
-        "201":
-          description: 创建成功
-          schema:
-            $ref: '#/definitions/api.profitSharingConfigResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 创建分账规则配置
-      tags:
-      - Platform
-  /platform/profit-sharing/configs/{id}:
-    patch:
-      consumes:
-      - application/json
-      description: 平台更新分账规则配置
-      parameters:
-      - description: 配置ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 更新内容
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.updateProfitSharingConfigRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 更新成功
-          schema:
-            $ref: '#/definitions/api.profitSharingConfigResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "404":
-          description: 配置不存在
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 更新分账规则配置
-      tags:
-      - Platform
-  /platform/profit-sharing/configs/{id}/disable:
-    post:
-      consumes:
-      - application/json
-      description: 平台禁用分账规则配置
-      parameters:
-      - description: 配置ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 禁用原因
-        in: body
-        name: request
-        schema:
-          $ref: '#/definitions/api.disableProfitSharingConfigRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 禁用成功
-          schema:
-            $ref: '#/definitions/api.profitSharingConfigResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "404":
-          description: 配置不存在
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 禁用分账规则配置
-      tags:
-      - Platform
-  /platform/stats/categories:
-    get:
-      consumes:
-      - application/json
-      description: 获取各商户分类的销售统计数据
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 分类统计数据列表
-          schema:
-            items:
-              $ref: '#/definitions/api.categoryStatRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取分类销售统计
-      tags:
-      - Platform
-  /platform/stats/daily:
-    get:
-      consumes:
-      - application/json
-      description: 获取指定时间范围内每日的平台统计数据，包括订单数、GMV、佣金及订单类型分布
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 每日统计数据列表
-          schema:
-            items:
-              $ref: '#/definitions/api.platformDailyStatRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取平台日趋势统计
-      tags:
-      - Platform
-  /platform/stats/growth/merchants:
-    get:
-      consumes:
-      - application/json
-      description: 获取每日新增审核通过的商户数量统计
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 商户增长数据列表
-          schema:
-            items:
-              $ref: '#/definitions/api.growthStatRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取商户增长统计
-      tags:
-      - Platform
-  /platform/stats/growth/users:
-    get:
-      consumes:
-      - application/json
-      description: 获取每日新注册用户数量统计
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 用户增长数据列表
-          schema:
-            items:
-              $ref: '#/definitions/api.growthStatRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取用户增长统计
-      tags:
-      - Platform
-  /platform/stats/hourly:
-    get:
-      consumes:
-      - application/json
-      description: 获取每小时的订单数量和GMV分布，用于分析订单高峰时段
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 时段分布数据列表
-          schema:
-            items:
-              $ref: '#/definitions/api.hourlyDistributionRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取订单时段分布
-      tags:
-      - Platform
-  /platform/stats/merchants/ranking:
-    get:
-      consumes:
-      - application/json
-      description: 获取商户按销售额排序的排行榜，支持分页
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      - description: '页码 (默认: 1)'
-        in: query
-        minimum: 1
-        name: page
-        type: integer
-      - description: '每页数量 (默认: 20, 最大: 100)'
-        in: query
-        maximum: 100
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 商户排行列表
-          schema:
-            items:
-              $ref: '#/definitions/api.merchantRankingRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取商户销售排行榜
-      tags:
-      - Platform
-  /platform/stats/overview:
-    get:
-      consumes:
-      - application/json
-      description: 获取指定时间范围内的平台全局统计数据，包括订单数、GMV、佣金、活跃商户和用户数
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 平台概览数据
-          schema:
-            $ref: '#/definitions/api.platformOverviewResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取平台全局概览
-      tags:
-      - Platform
-  /platform/stats/profit-sharing/config-audits:
-    get:
-      consumes:
-      - application/json
-      description: 获取分账规则配置的审计记录，支持按配置ID过滤
-      parameters:
-      - description: 配置ID
-        in: query
-        name: config_id
-        type: integer
-      - default: 1
-        description: 页码
-        in: query
-        minimum: 1
-        name: page
-        type: integer
-      - default: 20
-        description: 每页数量
-        in: query
-        maximum: 200
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 审计记录列表
-          schema:
-            $ref: '#/definitions/api.listProfitSharingConfigAuditsResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取分账规则审计记录
-      tags:
-      - Platform
-  /platform/stats/profit-sharing/reconciliation:
-    get:
-      consumes:
-      - application/json
-      description: 获取指定时间范围内分账订单的对账汇总数据，按状态汇总订单数与金额
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 分账对账汇总
-          schema:
-            items:
-              $ref: '#/definitions/api.platformProfitSharingReconciliationRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取分账对账汇总
-      tags:
-      - Platform
-  /platform/stats/profit-sharing/sla:
-    get:
-      consumes:
-      - application/json
-      description: 获取指定时间范围内分账处理 SLA 统计（完成/失败/待处理与处理耗时）
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 分账 SLA 汇总
-          schema:
-            $ref: '#/definitions/api.platformProfitSharingSlaSummaryResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取分账 SLA 汇总
-      tags:
-      - Platform
-  /platform/stats/realtime:
-    get:
-      consumes:
-      - application/json
-      description: 获取最近24小时的实时统计数据，包括订单数、GMV及各状态订单分布
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 实时大盘数据
-          schema:
-            $ref: '#/definitions/api.realtimeDashboardResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取实时大盘数据
-      tags:
-      - Platform
-  /platform/stats/regions/compare:
-    get:
-      consumes:
-      - application/json
-      description: 获取各区域的销售数据对比，包括商户数、订单数、GMV、佣金等
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 区域对比数据列表
-          schema:
-            items:
-              $ref: '#/definitions/api.regionComparisonRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取区域对比分析
-      tags:
-      - Platform
-  /platform/stats/riders/ranking:
-    get:
-      consumes:
-      - application/json
-      description: 获取骑手按完成配送数排序的绩效排行榜，支持分页
-      parameters:
-      - description: '开始日期 (格式: 2025-01-01)'
-        in: query
-        name: start_date
-        required: true
-        type: string
-      - description: '结束日期 (格式: 2025-01-31)'
-        in: query
-        name: end_date
-        required: true
-        type: string
-      - description: '页码 (默认: 1)'
-        in: query
-        minimum: 1
-        name: page
-        type: integer
-      - description: '每页数量 (默认: 20, 最大: 100)'
-        in: query
-        maximum: 100
-        minimum: 1
-        name: limit
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 骑手绩效排行列表
-          schema:
-            items:
-              $ref: '#/definitions/api.riderRankingRow'
-            type: array
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.errorRes'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.errorRes'
-      security:
-      - BearerAuth: []
-      summary: 获取骑手绩效排行榜
-      tags:
-      - Platform
   /v1/addresses:
     get:
       consumes:
@@ -8988,7 +8361,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 地址信息
           schema:
             $ref: '#/definitions/api.userAddressResponse'
@@ -9108,6 +8481,89 @@ paths:
       summary: 设置默认地址
       tags:
       - 用户地址
+  /v1/admin/operators/{operator_id}/regions:
+    get:
+      parameters:
+      - description: 运营商实体 ID
+        in: path
+        name: operator_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: '[管理] 获取运营商管理的区域列表'
+      tags:
+      - 管理-运营商
+  /v1/admin/operators/region-applications:
+    get:
+      parameters:
+      - description: 状态过滤：pending/approved/rejected，不传返回全部
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: '[管理] 列出区域扩展申请（支持状态过滤）'
+      tags:
+      - 管理-运营商
+  /v1/admin/operators/region-applications/{id}/approve:
+    post:
+      parameters:
+      - description: 申请ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.adminRegionExpansionApplicationResponse'
+      security:
+      - BearerAuth: []
+      summary: '[管理] 审批通过区域扩展申请'
+      tags:
+      - 管理-运营商
+  /v1/admin/operators/region-applications/{id}/reject:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 申请ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.adminRegionExpansionApplicationResponse'
+      security:
+      - BearerAuth: []
+      summary: '[管理] 拒绝区域扩展申请'
+      tags:
+      - 管理-运营商
   /v1/admin/riders:
     get:
       consumes:
@@ -9251,6 +8707,44 @@ paths:
       summary: 拒绝骑手申请（管理员）
       tags:
       - 骑手管理
+  /v1/agreements:
+    get:
+      consumes:
+      - application/json
+      description: get the list of all active agreements
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.listActiveAgreementsResponse'
+            type: array
+      summary: List active agreements
+      tags:
+      - agreements
+  /v1/agreements/{type}:
+    get:
+      consumes:
+      - application/json
+      description: get the content of an active agreement by its type
+      parameters:
+      - description: Agreement Type
+        in: path
+        name: type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/db.Agreement'
+      summary: Get active agreement by type
+      tags:
+      - agreements
   /v1/auth/refresh:
     post:
       consumes:
@@ -9526,8 +9020,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/api.billingGroupResponse'
         "400":
@@ -9640,8 +9134,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/api.brandResponse'
         "401":
@@ -9685,8 +9179,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/api.brandTemplateResponse'
         "400":
@@ -10341,7 +9835,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 套餐详情
           schema:
             $ref: '#/definitions/api.comboSetWithDetailsResponse'
@@ -10568,6 +10062,353 @@ paths:
       summary: 上架/下架套餐
       tags:
       - 套餐管理
+  /v1/delivery-fee/calculate:
+    post:
+      consumes:
+      - application/json
+      description: Calculate delivery fee based on region, distance, and promotions
+      parameters:
+      - description: Calculation parameters
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.calculateDeliveryFeeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.DeliveryFeeResult'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Config not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Calculate delivery fee
+      tags:
+      - delivery-fee
+  /v1/delivery-fee/config/{region_id}:
+    get:
+      consumes:
+      - application/json
+      description: Get delivery fee configuration for a region
+      parameters:
+      - description: Region ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.deliveryFeeConfigResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Config not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Get delivery fee config
+      tags:
+      - delivery-fee
+  /v1/delivery-fee/merchants/{id}/promotions:
+    post:
+      consumes:
+      - application/json
+      description: Create delivery fee promotion for merchant. Only the merchant owner
+        can create promotions for their own merchant.
+      parameters:
+      - description: Merchant ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Promotion details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createDeliveryPromotionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.deliveryPromotionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Merchant role required or not authorized for this merchant
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create delivery promotion (Merchant)
+      tags:
+      - delivery-fee
+  /v1/delivery-fee/merchants/{merchant_id}/promotions:
+    get:
+      consumes:
+      - application/json
+      description: Get all delivery promotions for a merchant. Only the merchant owner
+        can view their own promotions.
+      parameters:
+      - description: Merchant ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.deliveryPromotionResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Merchant role required or not authorized for this merchant
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List delivery promotions (Merchant)
+      tags:
+      - delivery-fee
+  /v1/delivery-fee/merchants/{merchant_id}/promotions/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a delivery fee promotion. Only the merchant owner can delete
+        their own promotions.
+      parameters:
+      - description: Merchant ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: Promotion ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Merchant role required or not authorized for this merchant
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Promotion not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete delivery promotion (Merchant)
+      tags:
+      - delivery-fee
+    patch:
+      consumes:
+      - application/json
+      description: Update a delivery fee promotion. Only the merchant owner can update
+        their own promotions.
+      parameters:
+      - description: Merchant ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: Promotion ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: Update fields
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateDeliveryPromotionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.deliveryPromotionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Merchant role required or not authorized for this merchant
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Promotion not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update delivery promotion (Merchant)
+      tags:
+      - delivery-fee
+  /v1/delivery-fee/regions/{region_id}/config:
+    patch:
+      consumes:
+      - application/json
+      description: Update delivery fee configuration for a region (operator only).
+        Supports partial updates.
+      parameters:
+      - description: Region ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      - description: Update fields
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateDeliveryFeeConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.deliveryFeeConfigResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Operator role required or not authorized for this region
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Config not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Update delivery fee config (Operator)
+      tags:
+      - delivery-fee
+    post:
+      consumes:
+      - application/json
+      description: Create delivery fee configuration for a region (operator only).
+        Each region can only have one active configuration.
+      parameters:
+      - description: Region ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      - description: Fee config details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createDeliveryFeeConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.deliveryFeeConfigResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Operator role required or not authorized for this region
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Config already exists for this region
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create delivery fee config (Operator)
+      tags:
+      - delivery-fee
   /v1/delivery/:delivery_id/confirm-delivery:
     post:
       consumes:
@@ -11291,7 +11132,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 菜品列表
           schema:
             $ref: '#/definitions/api.listDishesResponse'
@@ -11565,6 +11406,36 @@ paths:
       summary: 设置菜品定制选项
       tags:
       - 菜品管理
+  /v1/dishes/{id}/featured-tags:
+    put:
+      consumes:
+      - application/json
+      description: 商户手动为菜品打上或取消"推荐"/"热卖"标签，影响店内菜单排序
+      parameters:
+      - description: 菜品ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 标签列表
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.setDishFeaturedTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新后的标签
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - BearerAuth: []
+      summary: 设置菜品推荐/热卖标签
+      tags:
+      - 菜品管理
   /v1/dishes/{id}/status:
     patch:
       consumes:
@@ -11662,7 +11533,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 分类列表
           schema:
             $ref: '#/definitions/api.listDishCategoriesResponse'
@@ -11842,45 +11713,18 @@ paths:
       - 菜品管理
   /v1/dishes/images/upload:
     post:
-      consumes:
-      - multipart/form-data
-      description: 上传菜品展示图片（上传前微信图片安全检测通过才会落盘）
-      parameters:
-      - description: 图片文件
-        in: formData
-        name: image
-        required: true
-        type: file
+      description: '**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions -> 直传 OSS ->
+        POST /v1/media/complete，然后将 media_asset_id 提交至菜品接口。'
       produces:
       - application/json
       responses:
-        "200":
-          description: 上传成功
-          schema:
-            $ref: '#/definitions/api.uploadImageResponse'
-        "400":
-          description: 请求参数错误或内容安全检测未通过
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 非商户
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "502":
-          description: 微信接口异常
+        "410":
+          description: 接口已停用
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 上传菜品图片
+      summary: '[Deprecated] 上传菜品图片'
       tags:
       - 菜品管理
   /v1/favorites/dishes:
@@ -12245,8 +12089,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             items:
               $ref: '#/definitions/api.groupResponse'
@@ -12475,8 +12319,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             items:
               $ref: '#/definitions/api.groupJoinRequestResponse'
@@ -12860,8 +12704,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/api.groupApplicationResponse'
         "401":
@@ -12967,53 +12811,14 @@ paths:
       summary: 更新集团入驻基础信息
       tags:
       - 集团申请
-  /v1/groups/applications/license/ocr:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传集团营业执照图片，调用微信OCR识别并保存结果
-      parameters:
-      - description: 营业执照图片
-        in: formData
-        name: image
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.groupApplicationResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传集团营业执照并 OCR
-      tags:
-      - 集团申请
   /v1/groups/applications/me:
     get:
       description: 获取当前用户的集团入驻草稿，不存在则创建
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/api.groupApplicationResponse'
         "401":
@@ -13121,7 +12926,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 库存列表
           schema:
             $ref: '#/definitions/api.listDailyInventoryResponse'
@@ -13629,6 +13434,102 @@ paths:
       summary: 上报前端错误日志
       tags:
       - 监控
+  /v1/media/{id}:
+    delete:
+      parameters:
+      - description: media_asset_id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+      summary: 软删除媒体资产
+      tags:
+      - media
+    get:
+      parameters:
+      - description: media_asset_id
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.mediaAssetResponse'
+      summary: 获取媒体资产元数据
+      tags:
+      - media
+  /v1/media/complete:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 确认参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.completeUploadRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.completeUploadResponse'
+      summary: 确认媒体上传完成
+      tags:
+      - media
+  /v1/media/private-access:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 请求参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.privateAccessRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.privateAccessResponse'
+      summary: 获取私有媒体短期访问地址
+      tags:
+      - media
+  /v1/media/upload-sessions:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 申请参数
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.createUploadSessionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.uploadSessionResponse'
+      summary: 申请媒体直传会话
+      tags:
+      - media
   /v1/memberships:
     get:
       description: 获取当前用户的所有会员卡
@@ -14076,89 +13977,6 @@ paths:
       summary: 更新商户申请基础信息
       tags:
       - 商户申请
-  /v1/merchant/application/foodpermit/ocr:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传食品经营许可证图片，使用通用印刷体OCR识别并解析有效期等信息
-      parameters:
-      - description: 食品经营许可证图片
-        in: formData
-        name: image
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 识别结果
-          schema:
-            $ref: '#/definitions/api.merchantApplicationDraftResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传食品经营许可证并OCR识别
-      tags:
-      - 商户申请
-  /v1/merchant/application/idcard/ocr:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传法人身份证照片（正面或背面），调用微信OCR识别并保存结果
-      parameters:
-      - description: 身份证图片
-        in: formData
-        name: image
-        required: true
-        type: file
-      - description: 正面Front/背面Back
-        in: formData
-        name: side
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 识别结果
-          schema:
-            $ref: '#/definitions/api.merchantApplicationDraftResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传法人身份证并OCR识别
-      tags:
-      - 商户申请
   /v1/merchant/application/images:
     put:
       consumes:
@@ -14197,44 +14015,6 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新门头照和环境照
-      tags:
-      - 商户申请
-  /v1/merchant/application/license/ocr:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传营业执照图片，调用微信OCR识别并保存结果，自动填充企业名称、信用代码、经营范围等
-      parameters:
-      - description: 营业执照图片（可选；不传则使用已上传的营业执照图片）
-        in: formData
-        name: image
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 识别结果
-          schema:
-            $ref: '#/definitions/api.merchantApplicationDraftResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传营业执照并OCR识别
       tags:
       - 商户申请
   /v1/merchant/application/reset:
@@ -16585,7 +16365,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 规则列表
           schema:
             items:
@@ -16861,7 +16641,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 代金券列表
           schema:
             $ref: '#/definitions/api.listMerchantVouchersResponse'
@@ -17083,49 +16863,18 @@ paths:
       - 代金券管理
   /v1/merchants/images/upload:
     post:
-      consumes:
-      - multipart/form-data
-      description: 上传商户入驻所需图片（营业执照、身份证、Logo、门头照、环境照）
-      parameters:
-      - description: 图片类别
-        enum:
-        - business_license
-        - id_front
-        - id_back
-        - logo
-        - storefront
-        - environment
-        in: formData
-        name: category
-        required: true
-        type: string
-      - description: 图片文件
-        in: formData
-        name: image
-        required: true
-        type: file
+      description: '**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions → 直传 OSS →
+        POST /v1/media/complete，然后将 media_asset_id 提交至商户接口。'
       produces:
       - application/json
       responses:
-        "200":
-          description: 上传成功
-          schema:
-            $ref: '#/definitions/api.uploadImageResponse'
-        "400":
-          description: 请求参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
+        "410":
+          description: 接口已停用
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 上传商户图片
+      summary: '[Deprecated] 上传商户图片'
       tags:
       - 商户
   /v1/merchants/me:
@@ -17332,6 +17081,46 @@ paths:
       summary: 更新商户会员设置
       tags:
       - 会员管理-商户
+  /v1/merchants/me/shop-images:
+    patch:
+      consumes:
+      - application/json
+      description: 允许已审核通过的商户更新店铺外观图片（门头照最多3张，环境照最多5张）
+      parameters:
+      - description: 图片URL数组
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateCurrentMerchantShopImagesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.updateCurrentMerchantShopImagesResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请记录不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户门头照和环境照
+      tags:
+      - 商户
   /v1/merchants/me/status:
     get:
       description: 获取当前商户的开店/打烊状态
@@ -17396,6 +17185,73 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新商户营业状态
+      tags:
+      - 商户
+  /v1/merchants/me/tags:
+    get:
+      description: 获取当前登录商户已选择的经营类目标签（type=merchant）
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 类目标签列表
+          schema:
+            $ref: '#/definitions/api.merchantTagsResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取当前商户的经营类目标签
+      tags:
+      - 商户
+    put:
+      consumes:
+      - application/json
+      description: 替换商户所有经营类目标签（type=merchant）。类目决定店铺在首页分类筛选中的展示位置，强烈建议完整填写。最多选 5
+        个。
+      parameters:
+      - description: 标签ID列表
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.setMerchantTagsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新后的类目标签
+          schema:
+            $ref: '#/definitions/api.merchantTagsResponse'
+        "400":
+          description: 参数错误（如超出5个或包含非merchant类型标签）
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 设置当前商户的经营类目标签
       tags:
       - 商户
   /v1/merchants/my:
@@ -17657,6 +17513,234 @@ paths:
       summary: 获取未读通知数量
       tags:
       - 通知管理
+  /v1/ocr/jobs:
+    post:
+      consumes:
+      - application/json
+      description: 统一创建 OCR 任务并返回可轮询的 ocr_job_id
+      parameters:
+      - description: OCR 任务请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createOCRJobRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ocrJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建统一 OCR 任务
+      tags:
+      - OCR
+  /v1/ocr/jobs/{id}:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ocrJobResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询 OCR 任务状态
+      tags:
+      - OCR
+  /v1/ocr/jobs/dead-letter:
+    get:
+      parameters:
+      - description: 业务主体类型过滤
+        in: query
+        name: owner_type
+        type: string
+      - description: 证件类型过滤
+        in: query
+        name: document_type
+        type: string
+      - description: 返回数量，默认 20，最大 100
+        in: query
+        name: limit
+        type: integer
+      - description: 分页偏移量
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listOCRDeadLetterJobsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询需要人工介入的 OCR 死信任务
+      tags:
+      - OCR
+  /v1/ocr/jobs/{id}/result:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ocrJobResultResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询 OCR 归一化结果
+      tags:
+      - OCR
+  /v1/ocr/jobs/{id}/retry:
+    post:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.ocrJobResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 重试失败的 OCR 任务
+      tags:
+      - OCR
+  /v1/ocr/jobs/batch-query:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 批量查询请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.batchQueryOCRJobsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.batchQueryOCRJobsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 批量查询 OCR 任务状态
+      tags:
+      - OCR
   /v1/operator/appeals:
     get:
       consumes:
@@ -17923,89 +18007,6 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新运营商申请基础信息
-      tags:
-      - 运营商申请
-  /v1/operator/application/idcard/ocr:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传法人身份证照片（正面或背面），调用微信OCR识别并保存结果
-      parameters:
-      - description: 身份证图片
-        in: formData
-        name: image
-        required: true
-        type: file
-      - description: 正面Front/背面Back
-        in: formData
-        name: side
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 识别结果
-          schema:
-            $ref: '#/definitions/api.operatorApplicationResponse'
-        "400":
-          description: 参数错误或非草稿状态
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传法人身份证并OCR识别
-      tags:
-      - 运营商申请
-  /v1/operator/application/license/ocr:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传营业执照图片，调用微信OCR识别并保存结果，自动填充企业名称、信用代码等
-      parameters:
-      - description: 营业执照图片
-        in: formData
-        name: image
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 识别结果
-          schema:
-            $ref: '#/definitions/api.operatorApplicationResponse'
-        "400":
-          description: 参数错误或非草稿状态
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传营业执照并OCR识别
       tags:
       - 运营商申请
   /v1/operator/application/region:
@@ -18380,6 +18381,53 @@ paths:
       summary: 获取商户详情
       tags:
       - 运营商-商户骑手管理
+  /v1/operator/merchants/{id}/stats:
+    get:
+      consumes:
+      - application/json
+      description: 运营商获取指定商户在指定天数范围内的经营统计数据
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 统计天数（1~365，默认30）
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.merchantStatsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "404":
+          description: 商户不存在
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 获取商户经营统计
+      tags:
+      - 运营商-商户骑手管理
   /v1/operator/merchants/ranking:
     get:
       consumes:
@@ -18430,6 +18478,111 @@ paths:
       summary: 获取商户排行
       tags:
       - 运营商数据统计
+  /v1/operator/peak-hours/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: Delete a peak hour configuration (operator only). Verifies operator
+        has permission for the region.
+      parameters:
+      - description: Peak hour config ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Operator role required or not authorized for this region
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Config not found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Delete peak hour config (Operator)
+      tags:
+      - delivery-fee
+  /v1/operator/region-expansion:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.regionExpansionApplicationResponse'
+            type: array
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取自己的区域扩展申请列表
+      tags:
+      - 运营商
+    post:
+      consumes:
+      - application/json
+      description: 已入驻运营商申请扩展管理新区域，需后台审批
+      parameters:
+      - description: 目标区域ID
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.applyRegionExpansionRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.regionExpansionApplicationResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 申请运营更多区域
+      tags:
+      - 运营商
   /v1/operator/regions:
     get:
       consumes:
@@ -18469,6 +18622,93 @@ paths:
       summary: 获取管理的区域
       tags:
       - 运营商数据统计
+  /v1/operator/regions/{region_id}/peak-hours:
+    get:
+      consumes:
+      - application/json
+      description: Get all peak hour configurations for a region. Only operator can
+        access.
+      parameters:
+      - description: Region ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/api.peakHourConfigResponse'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Operator role required
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: List peak hour configs (Operator)
+      tags:
+      - delivery-fee
+    post:
+      consumes:
+      - application/json
+      description: Create peak hour delivery fee configuration for a region (operator
+        only). Time format is HH:MM.
+      parameters:
+      - description: Region ID
+        in: path
+        name: region_id
+        required: true
+        type: integer
+      - description: Peak hour config details
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createPeakHourConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/api.peakHourConfigResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Operator role required or not authorized for this region
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: Create peak hour config (Operator)
+      tags:
+      - delivery-fee
   /v1/operator/regions/{region_id}/stats:
     get:
       consumes:
@@ -18760,6 +19000,49 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取骑手详情
+      tags:
+      - 运营商-商户骑手管理
+  /v1/operator/riders/{id}/stats:
+    get:
+      consumes:
+      - application/json
+      description: 运营商获取指定骑手在指定天数范围内的配送绩效统计
+      parameters:
+      - description: 骑手ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 统计天数（1~365，默认30）
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.riderStatsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "404":
+          description: 骑手不存在
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 获取骑手配送统计
       tags:
       - 运营商-商户骑手管理
   /v1/operator/riders/ranking:
@@ -19065,6 +19348,61 @@ paths:
       summary: 运营商提现
       tags:
       - 运营商财务
+  /v1/operators/me/profit-sharing/configs:
+    get:
+      consumes:
+      - application/json
+      description: 运营商查看本区域及全局分账规则配置
+      parameters:
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 订单来源
+        in: query
+        name: order_source
+        type: string
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 配置列表
+          schema:
+            $ref: '#/definitions/api.listOperatorProfitSharingConfigsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取分账规则配置
+      tags:
+      - 运营商数据统计
   /v1/operators/me/rules:
     get:
       description: 仅返回当前运营商可见的规则（按 region 过滤）
@@ -19571,7 +19909,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 订单详情
           schema:
             $ref: '#/definitions/api.orderResponse'
@@ -19925,11 +20263,12 @@ paths:
       consumes:
       - application/json
       description: |-
-        为订单或预定创建支付订单，调用微信支付统一下单接口。
+        为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。
 
-        **支付类型：**
-        - native: 扫码支付(商户端扫用户付款码)
-        - miniprogram: 小程序支付(返回调起支付所需参数)
+        **兼容字段：**
+        - `payment_type` 仅作为兼容保留字段，可不传。
+        - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通合单支付。
+        - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
 
         **业务类型：**
         - order: 订单支付
@@ -20123,7 +20462,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 合单支付订单(含小程序支付参数)
           schema:
             $ref: '#/definitions/api.combinedPaymentOrderResponse'
@@ -20166,7 +20505,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 合单支付订单详情
           schema:
             $ref: '#/definitions/api.combinedPaymentOrderResponse'
@@ -20238,6 +20577,205 @@ paths:
       summary: 关闭合单支付订单
       tags:
       - 支付管理
+  /v1/platform/profit-sharing/configs:
+    get:
+      consumes:
+      - application/json
+      description: 平台获取分账规则配置列表
+      parameters:
+      - description: 状态
+        in: query
+        name: status
+        type: string
+      - description: 订单来源
+        in: query
+        name: order_source
+        type: string
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 配置列表
+          schema:
+            $ref: '#/definitions/api.listProfitSharingConfigsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账规则配置列表
+      tags:
+      - Platform
+    post:
+      consumes:
+      - application/json
+      description: 平台创建分账规则配置
+      parameters:
+      - description: 分账规则配置
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createProfitSharingConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建成功
+          schema:
+            $ref: '#/definitions/api.profitSharingConfigResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 创建分账规则配置
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/configs/{id}:
+    patch:
+      consumes:
+      - application/json
+      description: 平台更新分账规则配置
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 更新内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateProfitSharingConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.profitSharingConfigResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: 配置不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 更新分账规则配置
+      tags:
+      - Platform
+  /v1/platform/profit-sharing/configs/{id}/disable:
+    post:
+      consumes:
+      - application/json
+      description: 平台禁用分账规则配置
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 禁用原因
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/api.disableProfitSharingConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 禁用成功
+          schema:
+            $ref: '#/definitions/api.profitSharingConfigResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: 配置不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 禁用分账规则配置
+      tags:
+      - Platform
   /v1/platform/rules:
     get:
       parameters:
@@ -20365,6 +20903,656 @@ paths:
       summary: 查询规则命中记录
       tags:
       - 规则引擎
+  /v1/platform/stats/bill-reconciliation:
+    get:
+      consumes:
+      - application/json
+      description: 列出微信支付账单与本地数据库的对账报告，按账单日期倒序排列
+      parameters:
+      - description: 页码 (从1开始)
+        in: query
+        name: page_id
+        required: true
+        type: integer
+      - description: 每页条数 (1-100)
+        in: query
+        name: page_size
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 对账报告列表
+          schema:
+            items:
+              $ref: '#/definitions/api.billReconciliationReportResponse'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取每日账单对账报告列表
+      tags:
+      - Platform
+  /v1/platform/stats/categories:
+    get:
+      consumes:
+      - application/json
+      description: 获取各商户分类的销售统计数据
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分类统计数据列表
+          schema:
+            items:
+              $ref: '#/definitions/api.categoryStatRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分类销售统计
+      tags:
+      - Platform
+  /v1/platform/stats/daily:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定时间范围内每日的平台统计数据，包括订单数、GMV、佣金及订单类型分布
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 每日统计数据列表
+          schema:
+            items:
+              $ref: '#/definitions/api.platformDailyStatRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取平台日趋势统计
+      tags:
+      - Platform
+  /v1/platform/stats/growth/merchants:
+    get:
+      consumes:
+      - application/json
+      description: 获取每日新增审核通过的商户数量统计
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 商户增长数据列表
+          schema:
+            items:
+              $ref: '#/definitions/api.growthStatRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取商户增长统计
+      tags:
+      - Platform
+  /v1/platform/stats/growth/users:
+    get:
+      consumes:
+      - application/json
+      description: 获取每日新注册用户数量统计
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 用户增长数据列表
+          schema:
+            items:
+              $ref: '#/definitions/api.growthStatRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取用户增长统计
+      tags:
+      - Platform
+  /v1/platform/stats/hourly:
+    get:
+      consumes:
+      - application/json
+      description: 获取每小时的订单数量和GMV分布，用于分析订单高峰时段
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 时段分布数据列表
+          schema:
+            items:
+              $ref: '#/definitions/api.hourlyDistributionRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取订单时段分布
+      tags:
+      - Platform
+  /v1/platform/stats/merchants/ranking:
+    get:
+      consumes:
+      - application/json
+      description: 获取商户按销售额排序的排行榜，支持分页
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - description: '页码 (默认: 1)'
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: '每页数量 (默认: 20, 最大: 100)'
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 商户排行列表
+          schema:
+            items:
+              $ref: '#/definitions/api.merchantRankingRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取商户销售排行榜
+      tags:
+      - Platform
+  /v1/platform/stats/overview:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定时间范围内的平台全局统计数据，包括订单数、GMV、佣金、活跃商户和用户数
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 平台概览数据
+          schema:
+            $ref: '#/definitions/api.platformOverviewResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取平台全局概览
+      tags:
+      - Platform
+  /v1/platform/stats/profit-sharing/config-audits:
+    get:
+      consumes:
+      - application/json
+      description: 获取分账规则配置的审计记录，支持按配置ID过滤
+      parameters:
+      - description: 配置ID
+        in: query
+        name: config_id
+        type: integer
+      - default: 1
+        description: 页码
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        maximum: 200
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 审计记录列表
+          schema:
+            $ref: '#/definitions/api.listProfitSharingConfigAuditsResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账规则审计记录
+      tags:
+      - Platform
+  /v1/platform/stats/profit-sharing/reconciliation:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定时间范围内分账订单的对账汇总数据，按状态汇总订单数与金额
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分账对账汇总
+          schema:
+            items:
+              $ref: '#/definitions/api.platformProfitSharingReconciliationRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账对账汇总
+      tags:
+      - Platform
+  /v1/platform/stats/profit-sharing/sla:
+    get:
+      consumes:
+      - application/json
+      description: 获取指定时间范围内分账处理 SLA 统计（完成/失败/待处理与处理耗时）
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 分账 SLA 汇总
+          schema:
+            $ref: '#/definitions/api.platformProfitSharingSlaSummaryResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取分账 SLA 汇总
+      tags:
+      - Platform
+  /v1/platform/stats/realtime:
+    get:
+      consumes:
+      - application/json
+      description: 获取最近24小时的实时统计数据，包括订单数、GMV及各状态订单分布
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 实时大盘数据
+          schema:
+            $ref: '#/definitions/api.realtimeDashboardResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取实时大盘数据
+      tags:
+      - Platform
+  /v1/platform/stats/regions/compare:
+    get:
+      consumes:
+      - application/json
+      description: 获取各区域的销售数据对比，包括商户数、订单数、GMV、佣金等
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 区域对比数据列表
+          schema:
+            items:
+              $ref: '#/definitions/api.regionComparisonRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取区域对比分析
+      tags:
+      - Platform
+  /v1/platform/stats/riders/ranking:
+    get:
+      consumes:
+      - application/json
+      description: 获取骑手按完成配送数排序的绩效排行榜，支持分页
+      parameters:
+      - description: '开始日期 (格式: 2025-01-01)'
+        in: query
+        name: start_date
+        required: true
+        type: string
+      - description: '结束日期 (格式: 2025-01-31)'
+        in: query
+        name: end_date
+        required: true
+        type: string
+      - description: '页码 (默认: 1)'
+        in: query
+        minimum: 1
+        name: page
+        type: integer
+      - description: '每页数量 (默认: 20, 最大: 100)'
+        in: query
+        maximum: 100
+        minimum: 1
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 骑手绩效排行列表
+          schema:
+            items:
+              $ref: '#/definitions/api.riderRankingRow'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取骑手绩效排行榜
+      tags:
+      - Platform
   /v1/platform/ws:
     get:
       consumes:
@@ -20562,6 +21750,36 @@ paths:
       summary: 获取商户菜品列表（消费者端）
       tags:
       - 公开接口
+  /v1/public/merchants/{id}/has-ordered:
+    get:
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: has_ordered
+          schema:
+            additionalProperties:
+              type: boolean
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询当前用户是否曾在该商户成功下单
+      tags:
+      - Merchant
   /v1/public/merchants/{id}/recharge-rules:
     get:
       description: 获取商户当前生效中的充值规则，供C端用户查看充值活动
@@ -20725,7 +21943,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 分账回退记录列表
           schema:
             items:
@@ -21053,8 +22271,8 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
-          description: OK
+        "201":
+          description: Created
           schema:
             $ref: '#/definitions/api.reservationResponse'
         "400":
@@ -21620,12 +22838,7 @@ paths:
         "200":
           description: OK
           schema:
-            properties:
-              reservations:
-                items:
-                  $ref: '#/definitions/api.reservationResponse'
-                type: array
-            type: object
+            $ref: '#/definitions/api.reservationListResponse'
         "400":
           description: 参数错误
           schema:
@@ -21746,29 +22959,7 @@ paths:
         "200":
           description: OK
           schema:
-            properties:
-              cancelled_count:
-                format: int64
-                type: integer
-              completed_count:
-                format: int64
-                type: integer
-              confirmed_count:
-                format: int64
-                type: integer
-              expired_count:
-                format: int64
-                type: integer
-              no_show_count:
-                format: int64
-                type: integer
-              paid_count:
-                format: int64
-                type: integer
-              pending_count:
-                format: int64
-                type: integer
-            type: object
+            $ref: '#/definitions/api.reservationStatsResponse'
         "401":
           description: 未授权
           schema:
@@ -21885,8 +23076,7 @@ paths:
         "200":
           description: 删除成功
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.successMessageResponse'
         "400":
           description: 无效的评价ID
           schema:
@@ -21925,7 +23115,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 评价详情
           schema:
             $ref: '#/definitions/api.reviewResponse'
@@ -21997,41 +23187,18 @@ paths:
       - 评价管理-商户
   /v1/reviews/images/upload:
     post:
-      consumes:
-      - multipart/form-data
-      description: 上传用户评价所需图片（上传前微信图片安全检测通过才会落盘）
-      parameters:
-      - description: 图片文件
-        in: formData
-        name: image
-        required: true
-        type: file
+      description: '**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions -> 直传 OSS ->
+        POST /v1/media/complete，然后将 media_asset_ids 提交至评价接口。'
       produces:
       - application/json
       responses:
-        "200":
-          description: 上传成功
-          schema:
-            $ref: '#/definitions/api.uploadImageResponse'
-        "400":
-          description: 请求参数错误或内容安全检测未通过
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "502":
-          description: 微信接口异常
+        "410":
+          description: 接口已停用
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 上传评价图片
+      summary: '[Deprecated] 上传评价图片'
       tags:
       - 评价管理
   /v1/reviews/me:
@@ -22059,8 +23226,7 @@ paths:
         "200":
           description: 评价列表
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.reviewListResponse'
         "400":
           description: 参数错误
           schema:
@@ -22108,8 +23274,7 @@ paths:
         "200":
           description: 评价列表
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.reviewListResponse'
         "400":
           description: 参数错误
           schema:
@@ -22153,8 +23318,7 @@ paths:
         "200":
           description: 评价列表
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.reviewListResponse'
         "400":
           description: 参数错误
           schema:
@@ -22397,89 +23561,6 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新骑手申请基础信息
-      tags:
-      - 骑手申请
-  /v1/rider/application/healthcert:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传健康证照片
-      parameters:
-      - description: 健康证图片
-        in: formData
-        name: image
-        required: true
-        type: file
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 上传结果
-          schema:
-            $ref: '#/definitions/api.riderApplicationResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传健康证
-      tags:
-      - 骑手申请
-  /v1/rider/application/idcard/ocr:
-    post:
-      consumes:
-      - multipart/form-data
-      description: 上传身份证照片，调用微信OCR识别并保存结果
-      parameters:
-      - description: 身份证图片
-        in: formData
-        name: image
-        required: true
-        type: file
-      - description: 正面Front/背面Back
-        in: formData
-        name: side
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 识别结果
-          schema:
-            $ref: '#/definitions/api.riderApplicationResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未登录
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 申请不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 上传身份证并OCR识别
       tags:
       - 骑手申请
   /v1/rider/application/reset:
@@ -23225,9 +24306,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: 提现成功
+          description: 提现已提交或完成
           schema:
-            $ref: '#/definitions/api.depositResponse'
+            $ref: '#/definitions/api.riderWithdrawResponse'
         "400":
           description: 余额不足、有进行中订单或账号未激活
           schema:
@@ -23374,6 +24455,42 @@ paths:
       summary: 扫码点餐
       tags:
       - 扫码点餐
+  /v1/search/categories:
+    get:
+      description: 按用户位置或区域ID，返回有商户覆盖的菜系品类列表及商户数量，用于首页品类网格动态渲染
+      parameters:
+      - description: 区域ID（可选，优先于坐标）
+        in: query
+        name: region_id
+        type: integer
+      - description: 用户当前纬度
+        in: query
+        name: user_latitude
+        type: number
+      - description: 用户当前经度
+        in: query
+        name: user_longitude
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 品类列表
+          schema:
+            $ref: '#/definitions/api.searchCategoriesListResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取区域活跃菜系品类
+      tags:
+      - Search
   /v1/search/combos:
     get:
       consumes:
@@ -23415,20 +24532,15 @@ paths:
         "200":
           description: 搜索结果
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.searchComboListResponse'
         "400":
           description: 请求参数错误
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
         "500":
           description: 服务器内部错误
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 搜索套餐
@@ -23436,14 +24548,34 @@ paths:
       - Search
   /v1/search/history:
     delete:
-      responses: {}
+      responses:
+        "200":
+          description: 清除成功
+          schema:
+            $ref: '#/definitions/api.successMessageResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 清除全部搜索历史
       tags:
       - Search
     get:
-      responses: {}
+      responses:
+        "200":
+          description: 搜索历史列表
+          schema:
+            $ref: '#/definitions/api.searchHistoryListResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 获取搜索历史
@@ -23451,7 +24583,19 @@ paths:
       - Search
   /v1/search/history/{id}:
     delete:
-      responses: {}
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/api.successMessageResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 删除单条搜索历史
@@ -23499,20 +24643,15 @@ paths:
         "200":
           description: 搜索结果
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.searchMerchantListResponse'
         "400":
           description: 请求参数错误
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
         "500":
           description: 服务器内部错误
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 搜索商户
@@ -23520,7 +24659,19 @@ paths:
       - Search
   /v1/search/popular:
     get:
-      responses: {}
+      responses:
+        "200":
+          description: 热门关键词列表
+          schema:
+            $ref: '#/definitions/api.searchKeywordsListResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 获取热门搜索关键词
@@ -23585,20 +24736,15 @@ paths:
         "200":
           description: 搜索结果
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.searchRoomListResponse'
         "400":
           description: 请求参数错误
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
         "500":
           description: 服务器内部错误
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 搜索包间
@@ -23606,7 +24752,15 @@ paths:
       - Search
   /v1/search/suggestions:
     get:
-      responses: {}
+      responses:
+        "200":
+          description: 搜索建议列表
+          schema:
+            $ref: '#/definitions/api.searchSuggestionsListResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
       summary: 实时搜索建议（前缀匹配）
@@ -23752,7 +24906,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 桌台详情
           schema:
             $ref: '#/definitions/api.tableResponse'
@@ -24230,45 +25384,18 @@ paths:
       - 桌台管理
   /v1/tables/images/upload:
     post:
-      consumes:
-      - multipart/form-data
-      description: 上传桌台/包间展示图片（上传前微信图片安全检测通过才会落盘）
-      parameters:
-      - description: 图片文件
-        in: formData
-        name: image
-        required: true
-        type: file
+      description: '**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions -> 直传 OSS ->
+        POST /v1/media/complete，然后将 media_asset_id 提交至桌台接口。'
       produces:
       - application/json
       responses:
-        "200":
-          description: 上传成功
-          schema:
-            $ref: '#/definitions/api.uploadImageResponse'
-        "400":
-          description: 请求参数错误或内容安全检测未通过
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 非商户
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "502":
-          description: 微信接口异常
+        "410":
+          description: 接口已停用
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 上传桌台/包间图片
+      summary: '[Deprecated] 上传桌台图片'
       tags:
       - 桌台管理
   /v1/tags:
@@ -24310,6 +25437,50 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取标签列表
+      tags:
+      - 标签管理
+  /v1/tags/{id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除标签并级联删除关联关系
+      parameters:
+      - description: 标签ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 删除成功
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 标签不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除标签（管理员）
       tags:
       - 标签管理
   /v1/users/me:

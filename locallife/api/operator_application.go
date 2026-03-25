@@ -2,11 +2,7 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
-	"mime/multipart"
 	"net/http"
-	"os"
-	"strconv"
 	"strings"
 	"time"
 
@@ -14,9 +10,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
-	"github.com/merrydance/locallife/util"
-	"github.com/merrydance/locallife/wechat"
-	"github.com/rs/zerolog/log"
 )
 
 // ==================== 运营商入驻申请 API ====================
@@ -58,19 +51,33 @@ type operatorApplicationResponse struct {
 
 // OperatorIDCardOCRData 运营商身份证正面OCR数据
 type OperatorIDCardOCRData struct {
-	Name     string `json:"name,omitempty"`
-	IDNumber string `json:"id_number,omitempty"`
-	Gender   string `json:"gender,omitempty"`
-	Nation   string `json:"nation,omitempty"`
-	Address  string `json:"address,omitempty"`
-	OCRAt    string `json:"ocr_at,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Error          string `json:"error,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
+	QueuedAt       string `json:"queued_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
+	Name           string `json:"name,omitempty"`
+	IDNumber       string `json:"id_number,omitempty"`
+	Gender         string `json:"gender,omitempty"`
+	Nation         string `json:"nation,omitempty"`
+	Address        string `json:"address,omitempty"`
+	OCRAt          string `json:"ocr_at,omitempty"`
 }
 
 // OperatorIDCardBackOCR 运营商身份证背面OCR数据
 type OperatorIDCardBackOCR struct {
-	ValidStart string `json:"valid_start,omitempty"`
-	ValidEnd   string `json:"valid_end,omitempty"`
-	OCRAt      string `json:"ocr_at,omitempty"`
+	Status         string `json:"status,omitempty"`
+	Error          string `json:"error,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
+	QueuedAt       string `json:"queued_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
+	ValidStart     string `json:"valid_start,omitempty"`
+	ValidEnd       string `json:"valid_end,omitempty"`
+	OCRAt          string `json:"ocr_at,omitempty"`
 }
 
 func newOperatorApplicationResponse(app db.OperatorApplication, regionName string) operatorApplicationResponse {
@@ -455,337 +462,6 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 	}
 
 	updatedApp, err := server.store.UpdateOperatorApplicationBasicInfo(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	regionName := server.getRegionName(ctx, updatedApp.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
-}
-
-// ==================== 上传营业执照并OCR识别 ====================
-
-// uploadOperatorBusinessLicenseOCR godoc
-// @Summary 上传营业执照并OCR识别
-// @Description 上传营业执照图片，调用微信OCR识别并保存结果，自动填充企业名称、信用代码等
-// @Tags 运营商申请
-// @Accept multipart/form-data
-// @Produce json
-// @Param image formData file true "营业执照图片"
-// @Success 200 {object} operatorApplicationResponse "识别结果"
-// @Failure 400 {object} ErrorResponse "参数错误或非草稿状态"
-// @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 404 {object} ErrorResponse "申请不存在"
-// @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/operator/application/license/ocr [post]
-// @Security BearerAuth
-func (server *Server) uploadOperatorBusinessLicenseOCR(ctx *gin.Context) {
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取申请
-	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
-		return
-	}
-
-	// 获取上传的文件；若未提供文件则检查 media_asset_id（媒体服务流程）
-	file, fileHeader, err := ctx.Request.FormFile("image")
-	var fromAssetID bool
-	var assetFileBytes []byte
-	var mediaAssetID int64
-	if err != nil {
-		if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
-			if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
-				mediaAssetID = id
-				localPath := server.mediaAssetLocalPath(ctx, id)
-				if localPath == "" {
-					ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
-					return
-				}
-				data, readErr := os.ReadFile(localPath)
-				if readErr != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, readErr))
-					return
-				}
-				assetFileBytes = data
-				fromAssetID = true
-			}
-		}
-		if !fromAssetID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrBusinessLicenseRequired))
-			return
-		}
-	} else {
-		defer file.Close()
-	}
-
-	var ocrReader multipart.File
-	if fromAssetID {
-		ocrReader = util.NewBytesFile(assetFileBytes)
-	} else {
-		// 内容安全检测（文件上传路径）
-		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-			if errors.Is(err, wechat.ErrRiskyContent) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
-				return
-			}
-			if errors.Is(err, wechat.ErrImageTooLarge) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
-				return
-			}
-			ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
-			return
-		}
-		if _, err := file.Seek(0, 0); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		uploader := util.NewFileUploader("uploads")
-		_, err = uploader.UploadOperatorImage(authPayload.UserID, "license", file, fileHeader)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if _, err := file.Seek(0, 0); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		ocrReader = file
-	}
-
-	// 调用微信OCR
-	ocrResult, err := server.wechatClient.OCRBusinessLicense(ctx, ocrReader)
-	if err != nil {
-		log.Error().Err(err).Msg("营业执照OCR识别失败")
-		// OCR失败不阻止保存，允许手动填写
-	}
-
-	// 构建更新参数
-	arg := db.UpdateOperatorApplicationBusinessLicenseParams{
-		ID: app.ID,
-	}
-	if fromAssetID {
-		arg.BusinessLicenseMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
-	}
-
-	if ocrResult != nil {
-		// 保存OCR结果
-		ocrData := BusinessLicenseOCRData{
-			RegNum:              ocrResult.RegNum,
-			EnterpriseName:      ocrResult.EnterpriseEName,
-			LegalRepresentative: ocrResult.LegalRepresentative,
-			TypeOfEnterprise:    ocrResult.TypeOfEnterprise,
-			Address:             ocrResult.Address,
-			BusinessScope:       ocrResult.BusinessScope,
-			RegisteredCapital:   ocrResult.RegisteredCapital,
-			ValidPeriod:         ocrResult.ValidPeriod,
-			CreditCode:          ocrResult.CreditCode,
-			OCRAt:               time.Now().Format(time.RFC3339),
-		}
-		ocrJSON, _ := json.Marshal(ocrData)
-		arg.BusinessLicenseOcr = ocrJSON
-
-		// 自动回填信息
-		if ocrResult.CreditCode != "" {
-			arg.BusinessLicenseNumber = pgtype.Text{String: ocrResult.CreditCode, Valid: true}
-		} else if ocrResult.RegNum != "" {
-			arg.BusinessLicenseNumber = pgtype.Text{String: ocrResult.RegNum, Valid: true}
-		}
-		if ocrResult.EnterpriseEName != "" {
-			arg.Name = pgtype.Text{String: ocrResult.EnterpriseEName, Valid: true}
-		}
-	}
-
-	updatedApp, err := server.store.UpdateOperatorApplicationBusinessLicense(ctx, arg)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	regionName := server.getRegionName(ctx, updatedApp.RegionID)
-	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
-}
-
-// ==================== 上传身份证并OCR识别 ====================
-
-// uploadOperatorIDCardOCR godoc
-// @Summary 上传法人身份证并OCR识别
-// @Description 上传法人身份证照片（正面或背面），调用微信OCR识别并保存结果
-// @Tags 运营商申请
-// @Accept multipart/form-data
-// @Produce json
-// @Param image formData file true "身份证图片"
-// @Param side formData string true "正面Front/背面Back"
-// @Success 200 {object} operatorApplicationResponse "识别结果"
-// @Failure 400 {object} ErrorResponse "参数错误或非草稿状态"
-// @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 404 {object} ErrorResponse "申请不存在"
-// @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/operator/application/idcard/ocr [post]
-// @Security BearerAuth
-func (server *Server) uploadOperatorIDCardOCR(ctx *gin.Context) {
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取申请
-	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if app.Status != "draft" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
-		return
-	}
-
-	// 获取上传的文件；若未提供文件则检查 media_asset_id（媒体服务流程）
-	file, fileHeader, err := ctx.Request.FormFile("image")
-	var fromAssetID bool
-	var assetFileBytes []byte
-	var mediaAssetID int64
-	if err != nil {
-		if assetIDStr := ctx.PostForm("media_asset_id"); assetIDStr != "" {
-			if id, parseErr := strconv.ParseInt(assetIDStr, 10, 64); parseErr == nil && id > 0 {
-				mediaAssetID = id
-				localPath := server.mediaAssetLocalPath(ctx, id)
-				if localPath == "" {
-					ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidDocumentImageURL))
-					return
-				}
-				data, readErr := os.ReadFile(localPath)
-				if readErr != nil {
-					ctx.JSON(http.StatusInternalServerError, internalError(ctx, readErr))
-					return
-				}
-				assetFileBytes = data
-				fromAssetID = true
-			}
-		}
-		if !fromAssetID {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDCardImageRequired))
-			return
-		}
-	} else {
-		defer file.Close()
-	}
-
-	side := ctx.PostForm("side")
-	if side != "Front" && side != "Back" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidIDCardSide))
-		return
-	}
-
-	var ocrReader multipart.File
-	if fromAssetID {
-		ocrReader = util.NewBytesFile(assetFileBytes)
-	} else {
-		// 内容安全检测（文件上传路径）
-		if err := server.wechatClient.ImgSecCheck(ctx, file); err != nil {
-			if errors.Is(err, wechat.ErrRiskyContent) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageContentSafetyFailed))
-				return
-			}
-			if errors.Is(err, wechat.ErrImageTooLarge) {
-				ctx.JSON(http.StatusBadRequest, errorResponse(ErrImageTooLarge))
-				return
-			}
-			ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
-			return
-		}
-		if _, err := file.Seek(0, 0); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		uploader := util.NewFileUploader("uploads")
-		_, err = uploader.UploadOperatorImage(authPayload.UserID, "idcard_"+side, file, fileHeader)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if _, err := file.Seek(0, 0); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		ocrReader = file
-	}
-
-	// 调用微信OCR
-	ocrResult, err := server.wechatClient.OCRIDCard(ctx, ocrReader, side)
-	if err != nil {
-		log.Error().Err(err).Msg("身份证OCR识别失败")
-	}
-
-	var updatedApp db.OperatorApplication
-
-	if side == "Front" {
-		arg := db.UpdateOperatorApplicationIDCardFrontParams{
-			ID: app.ID,
-		}
-		if fromAssetID {
-			arg.IDCardFrontMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
-		}
-
-		if ocrResult != nil {
-			ocrData := OperatorIDCardOCRData{
-				Name:     ocrResult.Name,
-				IDNumber: ocrResult.ID,
-				Gender:   ocrResult.Gender,
-				Nation:   ocrResult.Nation,
-				Address:  ocrResult.Addr,
-				OCRAt:    time.Now().Format(time.RFC3339),
-			}
-			ocrJSON, _ := json.Marshal(ocrData)
-			arg.IDCardFrontOcr = ocrJSON
-
-			// 自动回填
-			if ocrResult.Name != "" {
-				arg.LegalPersonName = pgtype.Text{String: ocrResult.Name, Valid: true}
-			}
-			if ocrResult.ID != "" {
-				arg.LegalPersonIDNumber = pgtype.Text{String: ocrResult.ID, Valid: true}
-			}
-		}
-
-		updatedApp, err = server.store.UpdateOperatorApplicationIDCardFront(ctx, arg)
-	} else {
-		arg := db.UpdateOperatorApplicationIDCardBackParams{
-			ID: app.ID,
-		}
-		if fromAssetID {
-			arg.IDCardBackMediaAssetID = pgtype.Int8{Int64: mediaAssetID, Valid: true}
-		}
-
-		if ocrResult != nil && ocrResult.ValidDate != "" {
-			ocrData := OperatorIDCardBackOCR{
-				ValidEnd: ocrResult.ValidDate,
-				OCRAt:    time.Now().Format(time.RFC3339),
-			}
-			ocrJSON, _ := json.Marshal(ocrData)
-			arg.IDCardBackOcr = ocrJSON
-		}
-
-		updatedApp, err = server.store.UpdateOperatorApplicationIDCardBack(ctx, arg)
-	}
-
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

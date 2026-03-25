@@ -67,6 +67,19 @@ func (s *LocalStorage) StatObject(_ context.Context, _ string, objectKey string)
 	}, nil
 }
 
+// ReadObject 直接打开本地对象文件并返回可读流。
+func (s *LocalStorage) ReadObject(_ context.Context, _ string, objectKey string) (io.ReadCloser, error) {
+	localPath := filepath.Join(s.baseDir, filepath.FromSlash(objectKey))
+	file, err := os.Open(localPath) //nolint:gosec // objectKey is generated server-side
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, ErrObjectNotFound
+		}
+		return nil, fmt.Errorf("media: open local object %s: %w", localPath, err)
+	}
+	return file, nil
+}
+
 // CreatePrivateDownloadURL 返回本地开发访问 URL。
 // 本地模式下 TTL 仅用于保持与生产签名接口一致的调用约定；实际不做过期校验。
 func (s *LocalStorage) CreatePrivateDownloadURL(_ context.Context, _ string, objectKey string, _ time.Duration) (string, error) {

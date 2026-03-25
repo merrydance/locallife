@@ -141,7 +141,8 @@ type TaskDistributor interface {
 	DistributeTaskMerchantApplicationBusinessLicenseOCR(
 		ctx context.Context,
 		applicationID int64,
-		imagePath string,
+		mediaAssetID int64,
+		ocrJobID int64,
 		opts ...asynq.Option,
 	) error
 
@@ -149,7 +150,8 @@ type TaskDistributor interface {
 	DistributeTaskMerchantApplicationFoodPermitOCR(
 		ctx context.Context,
 		applicationID int64,
-		imagePath string,
+		mediaAssetID int64,
+		ocrJobID int64,
 		opts ...asynq.Option,
 	) error
 
@@ -157,8 +159,56 @@ type TaskDistributor interface {
 	DistributeTaskMerchantApplicationIDCardOCR(
 		ctx context.Context,
 		applicationID int64,
-		imagePath string,
+		mediaAssetID int64,
+		ocrJobID int64,
 		side string,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskOperatorApplicationBusinessLicenseOCR 分发运营商营业执照 OCR 任务
+	DistributeTaskOperatorApplicationBusinessLicenseOCR(
+		ctx context.Context,
+		applicationID int64,
+		mediaAssetID int64,
+		ocrJobID int64,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskOperatorApplicationIDCardOCR 分发运营商身份证 OCR 任务
+	DistributeTaskOperatorApplicationIDCardOCR(
+		ctx context.Context,
+		applicationID int64,
+		mediaAssetID int64,
+		ocrJobID int64,
+		side string,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskRiderApplicationIDCardOCR 分发骑手身份证 OCR 任务
+	DistributeTaskRiderApplicationIDCardOCR(
+		ctx context.Context,
+		applicationID int64,
+		mediaAssetID int64,
+		ocrJobID int64,
+		side string,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskRiderApplicationHealthCertOCR 分发骑手健康证 OCR 任务
+	DistributeTaskRiderApplicationHealthCertOCR(
+		ctx context.Context,
+		applicationID int64,
+		mediaAssetID int64,
+		ocrJobID int64,
+		opts ...asynq.Option,
+	) error
+
+	// DistributeTaskGroupApplicationBusinessLicenseOCR 分发集团营业执照 OCR 任务
+	DistributeTaskGroupApplicationBusinessLicenseOCR(
+		ctx context.Context,
+		applicationID int64,
+		mediaAssetID int64,
+		ocrJobID int64,
 		opts ...asynq.Option,
 	) error
 

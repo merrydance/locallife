@@ -1,0 +1,191 @@
+package worker
+
+import (
+	"context"
+	"encoding/json"
+	"testing"
+	"time"
+
+	"github.com/hibiken/asynq"
+	"github.com/jackc/pgx/v5/pgtype"
+	mockdb "github.com/merrydance/locallife/db/mock"
+	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/ocr"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
+)
+
+type stubHealthCertOCRProvider struct{}
+
+func (stubHealthCertOCRProvider) Name() ocr.ProviderName {
+	return ocr.ProviderNameWechat
+}
+
+func (stubHealthCertOCRProvider) Recognize(_ context.Context, capability ocr.Capability, req ocr.RecognizeRequest) (ocr.RecognizeResponse, error) {
+	if capability != ocr.CapabilityWechatPrintedText && capability != ocr.CapabilityAliyunHealthCert {
+		return ocr.RecognizeResponse{}, nil
+	}
+	recognizedAt := time.Date(2026, 3, 25, 14, 45, 0, 0, time.UTC)
+	return ocr.RecognizeResponse{
+		RawResult: json.RawMessage(`{"text":"ok"}`),
+		Normalized: ocr.NormalizedResult{
+			DocumentType: ocr.DocumentTypeHealthCert,
+			RecognizedAt: recognizedAt,
+			HealthCert: &ocr.HealthCertResult{
+				RawText:     "姓名：张三\n健康证号：JK20260001\n有效期至：2030年12月31日\n110101199001011234",
+				Certificate: "JK20260001",
+			},
+		},
+	}, nil
+}
+
+func TestProcessTaskRiderApplicationIDCardOCR_UsesOCRJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeIDCard: {
+			Provider:   stubIDCardOCRProvider{},
+			Capability: ocr.CapabilityWechatIDCard,
+		},
+	})
+	require.NoError(t, err)
+
+	processor := &RedisTaskProcessor{
+		store:      store,
+		ocrService: ocr.NewService(store, router, stubFoodPermitBinaryReader{}),
+	}
+
+	createdAt := time.Date(2026, 3, 25, 14, 30, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 3, 25, 14, 30, 10, 0, time.UTC)
+	baseJob := db.OcrJob{
+		ID:           130,
+		DocumentType: string(ocr.DocumentTypeIDCard),
+		Provider:     string(ocr.ProviderNameWechat),
+		MediaAssetID: 230,
+		OwnerType:    string(ocr.OwnerTypeRiderApplication),
+		OwnerID:      81,
+		Status:       string(ocr.JobStatusPending),
+		Side:         string(ocr.DocumentSideFront),
+		CreatedAt:    createdAt,
+	}
+	app := db.RiderApplication{ID: 81, IDCardOcr: []byte(`{"valid_end":"长期"}`), Status: "draft"}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(130)).Return(baseJob, nil),
+		store.EXPECT().MarkOCRJobProcessing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusProcessing)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().CompleteOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CompleteOCRJobParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusSucceeded)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			job.NormalizedResult = arg.NormalizedResult
+			job.RawResult = arg.RawResult
+			job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(5 * time.Second), Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().GetRiderApplication(gomock.Any(), int64(81)).Return(app, nil),
+		store.EXPECT().UpdateRiderApplicationIDCard(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateRiderApplicationIDCardParams) (db.RiderApplication, error) {
+			require.Equal(t, int64(81), arg.ID)
+			require.Equal(t, "张三", arg.RealName.String)
+			var payload riderIDCardOCRData
+			require.NoError(t, json.Unmarshal(arg.IDCardOcr, &payload))
+			require.Equal(t, "done", payload.Status)
+			require.Equal(t, "张三", payload.Name)
+			require.Equal(t, "长期", payload.ValidEnd)
+			require.NotNil(t, payload.OCRJobID)
+			require.Equal(t, int64(130), *payload.OCRJobID)
+			return db.RiderApplication{ID: 81}, nil
+		}),
+		store.EXPECT().CreateAuditLog(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateAuditLogParams) (db.AuditLog, error) {
+			require.Equal(t, "ocr_job_succeeded", arg.Action)
+			return db.AuditLog{ID: 1}, nil
+		}),
+	)
+
+	payload, err := json.Marshal(riderApplicationOCRPayload{ApplicationID: 81, OCRJobID: 130, Side: "Front"})
+	require.NoError(t, err)
+	task := asynq.NewTask(TaskRiderApplicationIDCardOCR, payload)
+	err = processor.ProcessTaskRiderApplicationIDCardOCR(context.Background(), task)
+	require.NoError(t, err)
+}
+
+func TestProcessTaskRiderApplicationHealthCertOCR_UsesOCRJob(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	router, err := ocr.NewStaticRouter(map[ocr.DocumentType]ocr.Route{
+		ocr.DocumentTypeHealthCert: {
+			Provider:   stubHealthCertOCRProvider{},
+			Capability: ocr.CapabilityWechatPrintedText,
+		},
+	})
+	require.NoError(t, err)
+
+	processor := &RedisTaskProcessor{
+		store:      store,
+		ocrService: ocr.NewService(store, router, stubFoodPermitBinaryReader{}),
+	}
+
+	createdAt := time.Date(2026, 3, 25, 14, 40, 0, 0, time.UTC)
+	startedAt := time.Date(2026, 3, 25, 14, 40, 10, 0, time.UTC)
+	baseJob := db.OcrJob{
+		ID:           131,
+		DocumentType: string(ocr.DocumentTypeHealthCert),
+		Provider:     string(ocr.ProviderNameWechat),
+		MediaAssetID: 231,
+		OwnerType:    string(ocr.OwnerTypeRiderApplication),
+		OwnerID:      82,
+		Status:       string(ocr.JobStatusPending),
+		CreatedAt:    createdAt,
+	}
+	app := db.RiderApplication{ID: 82, HealthCertOcr: []byte(`{"name":"张三"}`), Status: "draft"}
+
+	gomock.InOrder(
+		store.EXPECT().GetOCRJob(gomock.Any(), int64(131)).Return(baseJob, nil),
+		store.EXPECT().MarkOCRJobProcessing(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusProcessing)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().CompleteOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CompleteOCRJobParams) (db.OcrJob, error) {
+			job := baseJob
+			job.Status = string(ocr.JobStatusSucceeded)
+			job.StartedAt = pgtype.Timestamptz{Time: startedAt, Valid: true}
+			job.NormalizedResult = arg.NormalizedResult
+			job.RawResult = arg.RawResult
+			job.FinishedAt = pgtype.Timestamptz{Time: startedAt.Add(5 * time.Second), Valid: true}
+			return job, nil
+		}),
+		store.EXPECT().GetRiderApplication(gomock.Any(), int64(82)).Return(app, nil),
+		store.EXPECT().UpdateRiderApplicationHealthCert(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.UpdateRiderApplicationHealthCertParams) (db.RiderApplication, error) {
+			require.Equal(t, int64(82), arg.ID)
+			var payload riderHealthCertOCRData
+			require.NoError(t, json.Unmarshal(arg.HealthCertOcr, &payload))
+			require.Equal(t, "done", payload.Status)
+			require.Equal(t, "张三", payload.Name)
+			require.Equal(t, "JK20260001", payload.CertNumber)
+			require.Equal(t, "2030年12月31日", payload.ValidEnd)
+			require.NotNil(t, payload.OCRJobID)
+			require.Equal(t, int64(131), *payload.OCRJobID)
+			return db.RiderApplication{ID: 82}, nil
+		}),
+		store.EXPECT().CreateAuditLog(gomock.Any(), gomock.Any()).DoAndReturn(func(_ context.Context, arg db.CreateAuditLogParams) (db.AuditLog, error) {
+			require.Equal(t, "ocr_job_succeeded", arg.Action)
+			return db.AuditLog{ID: 1}, nil
+		}),
+	)
+
+	payload, err := json.Marshal(riderApplicationOCRPayload{ApplicationID: 82, OCRJobID: 131})
+	require.NoError(t, err)
+	task := asynq.NewTask(TaskRiderApplicationHealthCertOCR, payload)
+	err = processor.ProcessTaskRiderApplicationHealthCertOCR(context.Background(), task)
+	require.NoError(t, err)
+}

@@ -584,3 +584,63 @@ func TestCreateOrGetRiderApplicationDraft_WithMediaAssetIDs(t *testing.T) {
 	require.NotNil(t, resp.HealthCertAssetID)
 	require.Equal(t, int64(3), *resp.HealthCertAssetID)
 }
+
+func TestCreateOrGetRiderApplicationDraft_ReturnsAsyncOCRFields(t *testing.T) {
+	user, _ := randomUser(t)
+	ocrJobID := int64(9201)
+	idCardOCR, err := json.Marshal(IDCardOCRData{
+		Status:    "done",
+		QueuedAt:  "2026-03-25T16:20:00Z",
+		StartedAt: "2026-03-25T16:20:05Z",
+		OCRJobID:  &ocrJobID,
+		Name:      "王五",
+	})
+	require.NoError(t, err)
+	healthCertOCR, err := json.Marshal(HealthCertOCRData{
+		Status:         "failed",
+		ErrorCode:      "ocr_provider_unavailable",
+		AlertEmittedAt: "2026-03-25T16:22:00Z",
+		QueuedAt:       "2026-03-25T16:21:00Z",
+		StartedAt:      "2026-03-25T16:21:01Z",
+		OCRJobID:       &ocrJobID,
+		Name:           "王五",
+	})
+	require.NoError(t, err)
+
+	app := randomRiderApplication(user.ID)
+	app.IDCardOcr = idCardOCR
+	app.HealthCertOcr = healthCertOCR
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetRiderApplicationByUserID(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/rider/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp riderApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.IDCardOCR)
+	require.Equal(t, "2026-03-25T16:20:00Z", resp.IDCardOCR.QueuedAt)
+	require.Equal(t, "2026-03-25T16:20:05Z", resp.IDCardOCR.StartedAt)
+	require.NotNil(t, resp.IDCardOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.IDCardOCR.OCRJobID)
+	require.NotNil(t, resp.HealthCertOCR)
+	require.Equal(t, "failed", resp.HealthCertOCR.Status)
+	require.Equal(t, "ocr_provider_unavailable", resp.HealthCertOCR.ErrorCode)
+	require.Equal(t, "2026-03-25T16:22:00Z", resp.HealthCertOCR.AlertEmittedAt)
+	require.NotNil(t, resp.HealthCertOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.HealthCertOCR.OCRJobID)
+}

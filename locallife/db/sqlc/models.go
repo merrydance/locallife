@@ -1085,6 +1085,42 @@ type Notification struct {
 	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
 }
 
+// 统一 OCR 任务表
+type OcrJob struct {
+	ID int64 `json:"id"`
+	// 由 media_asset_id + document_type + owner_type + owner_id + side 组成的幂等键
+	IdempotencyKey string `json:"idempotency_key"`
+	// 证件类型：business_license | id_card | food_permit | health_cert
+	DocumentType   string      `json:"document_type"`
+	Provider       string      `json:"provider"`
+	ProviderTaskID pgtype.Text `json:"provider_task_id"`
+	MediaAssetID   int64       `json:"media_asset_id"`
+	// 业务主体类型：merchant_application | operator_application | rider_application | group_application
+	OwnerType string `json:"owner_type"`
+	OwnerID   int64  `json:"owner_id"`
+	// 证件面：front | back，非双面证件为空字符串
+	Side         string             `json:"side"`
+	Status       string             `json:"status"`
+	AttemptCount int32              `json:"attempt_count"`
+	MaxAttempts  int32              `json:"max_attempts"`
+	NextRetryAt  pgtype.Timestamptz `json:"next_retry_at"`
+	LeasedAt     pgtype.Timestamptz `json:"leased_at"`
+	LeaseOwner   pgtype.Text        `json:"lease_owner"`
+	ErrorCode    pgtype.Text        `json:"error_code"`
+	ErrorMessage pgtype.Text        `json:"error_message"`
+	// 供应商原始 OCR 结果
+	RawResult []byte `json:"raw_result"`
+	// 统一归一化后的 OCR 结果
+	NormalizedResult []byte             `json:"normalized_result"`
+	ResultVersion    int32              `json:"result_version"`
+	RetentionUntil   pgtype.Timestamptz `json:"retention_until"`
+	RequestedBy      int64              `json:"requested_by"`
+	CreatedAt        time.Time          `json:"created_at"`
+	StartedAt        pgtype.Timestamptz `json:"started_at"`
+	FinishedAt       pgtype.Timestamptz `json:"finished_at"`
+	UpdatedAt        time.Time          `json:"updated_at"`
+}
+
 type Operator struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"user_id"`

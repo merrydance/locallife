@@ -2068,10 +2068,11 @@ func TestGetRoomDetailAPI_WithImages(t *testing.T) {
 		TableID:      room.ID,
 		MediaAssetID: pgtype.Int8{Int64: imageAssetID, Valid: true},
 	}
-	imageAsset := db.MediaAsset{
-		ID:         imageAssetID,
-		ObjectKey:  "table/room/77/room_photo.jpg",
-		Visibility: "public",
+	imageAsset := db.ListMediaAssetsByIDsRow{
+		ID:               imageAssetID,
+		ObjectKey:        "table/room/77/room_photo.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
 	}
 
 	ctrl := gomock.NewController(t)
@@ -2097,7 +2098,7 @@ func TestGetRoomDetailAPI_WithImages(t *testing.T) {
 		Times(1).Return([]db.TableImage{tableImage}, nil)
 	store.EXPECT().
 		ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
-		Times(1).Return([]db.MediaAsset{imageAsset}, nil)
+		Times(1).Return([]db.ListMediaAssetsByIDsRow{imageAsset}, nil)
 
 	server, _ := newTestServerForMedia(t, store)
 

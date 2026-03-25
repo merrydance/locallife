@@ -949,6 +949,21 @@ func (mr *MockStoreMockRecorder) CompleteDeliveryTx(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteDeliveryTx", reflect.TypeOf((*MockStore)(nil).CompleteDeliveryTx), ctx, arg)
 }
 
+// CompleteOCRJob mocks base method.
+func (m *MockStore) CompleteOCRJob(ctx context.Context, arg db.CompleteOCRJobParams) (db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteOCRJob", ctx, arg)
+	ret0, _ := ret[0].(db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CompleteOCRJob indicates an expected call of CompleteOCRJob.
+func (mr *MockStoreMockRecorder) CompleteOCRJob(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteOCRJob", reflect.TypeOf((*MockStore)(nil).CompleteOCRJob), ctx, arg)
+}
+
 // CompleteOrderTx mocks base method.
 func (m *MockStore) CompleteOrderTx(ctx context.Context, arg db.CompleteOrderTxParams) (db.CompleteOrderTxResult, error) {
 	m.ctrl.T.Helper()
@@ -5144,6 +5159,21 @@ func (mr *MockStoreMockRecorder) ExploreNearbyRooms(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExploreNearbyRooms", reflect.TypeOf((*MockStore)(nil).ExploreNearbyRooms), ctx, arg)
 }
 
+// FailOCRJob mocks base method.
+func (m *MockStore) FailOCRJob(ctx context.Context, arg db.FailOCRJobParams) (db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FailOCRJob", ctx, arg)
+	ret0, _ := ret[0].(db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FailOCRJob indicates an expected call of FailOCRJob.
+func (mr *MockStoreMockRecorder) FailOCRJob(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailOCRJob", reflect.TypeOf((*MockStore)(nil).FailOCRJob), ctx, arg)
+}
+
 // FreezeUserBalance mocks base method.
 func (m *MockStore) FreezeUserBalance(ctx context.Context, arg db.FreezeUserBalanceParams) (db.UserBalance, error) {
 	m.ctrl.T.Helper()
@@ -7692,6 +7722,21 @@ func (m *MockStore) GetNotificationsByRelated(ctx context.Context, arg db.GetNot
 func (mr *MockStoreMockRecorder) GetNotificationsByRelated(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNotificationsByRelated", reflect.TypeOf((*MockStore)(nil).GetNotificationsByRelated), ctx, arg)
+}
+
+// GetOCRJob mocks base method.
+func (m *MockStore) GetOCRJob(ctx context.Context, id int64) (db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetOCRJob", ctx, id)
+	ret0, _ := ret[0].(db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetOCRJob indicates an expected call of GetOCRJob.
+func (mr *MockStoreMockRecorder) GetOCRJob(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOCRJob", reflect.TypeOf((*MockStore)(nil).GetOCRJob), ctx, id)
 }
 
 // GetOperator mocks base method.
@@ -12489,6 +12534,36 @@ func (mr *MockStoreMockRecorder) ListNearbyRiders(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNearbyRiders", reflect.TypeOf((*MockStore)(nil).ListNearbyRiders), ctx, arg)
 }
 
+// ListOCRDeadLetterJobs mocks base method.
+func (m *MockStore) ListOCRDeadLetterJobs(ctx context.Context, arg db.ListOCRDeadLetterJobsParams) ([]db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOCRDeadLetterJobs", ctx, arg)
+	ret0, _ := ret[0].([]db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOCRDeadLetterJobs indicates an expected call of ListOCRDeadLetterJobs.
+func (mr *MockStoreMockRecorder) ListOCRDeadLetterJobs(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOCRDeadLetterJobs", reflect.TypeOf((*MockStore)(nil).ListOCRDeadLetterJobs), ctx, arg)
+}
+
+// ListOCRJobsByOwner mocks base method.
+func (m *MockStore) ListOCRJobsByOwner(ctx context.Context, arg db.ListOCRJobsByOwnerParams) ([]db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOCRJobsByOwner", ctx, arg)
+	ret0, _ := ret[0].([]db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOCRJobsByOwner indicates an expected call of ListOCRJobsByOwner.
+func (mr *MockStoreMockRecorder) ListOCRJobsByOwner(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOCRJobsByOwner", reflect.TypeOf((*MockStore)(nil).ListOCRJobsByOwner), ctx, arg)
+}
+
 // ListOnlineCombosByMerchant mocks base method.
 func (m *MockStore) ListOnlineCombosByMerchant(ctx context.Context, merchantID int64) ([]db.ListOnlineCombosByMerchantRow, error) {
 	m.ctrl.T.Helper()
@@ -14465,6 +14540,21 @@ func (m *MockStore) MarkNotificationAsRead(ctx context.Context, arg db.MarkNotif
 func (mr *MockStoreMockRecorder) MarkNotificationAsRead(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkNotificationAsRead", reflect.TypeOf((*MockStore)(nil).MarkNotificationAsRead), ctx, arg)
+}
+
+// MarkOCRJobProcessing mocks base method.
+func (m *MockStore) MarkOCRJobProcessing(ctx context.Context, arg db.MarkOCRJobProcessingParams) (db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkOCRJobProcessing", ctx, arg)
+	ret0, _ := ret[0].(db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkOCRJobProcessing indicates an expected call of MarkOCRJobProcessing.
+func (mr *MockStoreMockRecorder) MarkOCRJobProcessing(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkOCRJobProcessing", reflect.TypeOf((*MockStore)(nil).MarkOCRJobProcessing), ctx, arg)
 }
 
 // MarkOrderReplaced mocks base method.
@@ -18725,6 +18815,21 @@ func (m *MockStore) UpsertMerchantMembershipSettings(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) UpsertMerchantMembershipSettings(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantMembershipSettings", reflect.TypeOf((*MockStore)(nil).UpsertMerchantMembershipSettings), ctx, arg)
+}
+
+// UpsertOCRJob mocks base method.
+func (m *MockStore) UpsertOCRJob(ctx context.Context, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertOCRJob", ctx, arg)
+	ret0, _ := ret[0].(db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertOCRJob indicates an expected call of UpsertOCRJob.
+func (mr *MockStoreMockRecorder) UpsertOCRJob(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertOCRJob", reflect.TypeOf((*MockStore)(nil).UpsertOCRJob), ctx, arg)
 }
 
 // UpsertOrderDisplayConfig mocks base method.

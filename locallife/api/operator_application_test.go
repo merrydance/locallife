@@ -966,3 +966,80 @@ func TestGetOperatorApplicationAPI_WithMediaAssetIDs(t *testing.T) {
 	require.NotNil(t, resp.IDCardBackAssetID)
 	require.Equal(t, int64(12), *resp.IDCardBackAssetID)
 }
+
+func TestGetOperatorApplicationAPI_ReturnsAsyncOCRFields(t *testing.T) {
+	user, _ := randomUser(t)
+	ocrJobID := int64(9101)
+
+	businessLicenseOCR, err := json.Marshal(BusinessLicenseOCRData{
+		Status:         "done",
+		QueuedAt:       "2026-03-25T16:10:00Z",
+		StartedAt:      "2026-03-25T16:10:02Z",
+		OCRJobID:       &ocrJobID,
+		AlertEmittedAt: "2026-03-25T16:10:30Z",
+	})
+	require.NoError(t, err)
+	idCardFrontOCR, err := json.Marshal(OperatorIDCardOCRData{
+		Status:         "processing",
+		ErrorCode:      "ocr_retryable_error",
+		AlertEmittedAt: "2026-03-25T16:12:00Z",
+		QueuedAt:       "2026-03-25T16:11:00Z",
+		StartedAt:      "2026-03-25T16:11:03Z",
+		OCRJobID:       &ocrJobID,
+	})
+	require.NoError(t, err)
+	idCardBackOCR, err := json.Marshal(OperatorIDCardBackOCR{
+		Status:    "done",
+		QueuedAt:  "2026-03-25T16:13:00Z",
+		StartedAt: "2026-03-25T16:13:04Z",
+		OCRJobID:  &ocrJobID,
+	})
+	require.NoError(t, err)
+
+	app := randomOperatorApplicationDraft(user.ID, 1)
+	app.BusinessLicenseOcr = businessLicenseOCR
+	app.IDCardFrontOcr = idCardFrontOCR
+	app.IDCardBackOcr = idCardBackOCR
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetOperatorApplicationByUserID(gomock.Any(), user.ID).
+		Times(1).
+		Return(app, nil)
+	store.EXPECT().
+		GetRegion(gomock.Any(), gomock.Eq(int64(1))).
+		Times(1).
+		Return(db.Region{}, db.ErrRecordNotFound)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/application", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp operatorApplicationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.BusinessLicenseOCR)
+	require.Equal(t, "2026-03-25T16:10:00Z", resp.BusinessLicenseOCR.QueuedAt)
+	require.Equal(t, "2026-03-25T16:10:02Z", resp.BusinessLicenseOCR.StartedAt)
+	require.NotNil(t, resp.BusinessLicenseOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.BusinessLicenseOCR.OCRJobID)
+	require.NotNil(t, resp.IDCardFrontOCR)
+	require.Equal(t, "processing", resp.IDCardFrontOCR.Status)
+	require.Equal(t, "ocr_retryable_error", resp.IDCardFrontOCR.ErrorCode)
+	require.Equal(t, "2026-03-25T16:12:00Z", resp.IDCardFrontOCR.AlertEmittedAt)
+	require.NotNil(t, resp.IDCardFrontOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.IDCardFrontOCR.OCRJobID)
+	require.NotNil(t, resp.IDCardBackOCR)
+	require.Equal(t, "2026-03-25T16:13:00Z", resp.IDCardBackOCR.QueuedAt)
+	require.Equal(t, "2026-03-25T16:13:04Z", resp.IDCardBackOCR.StartedAt)
+	require.NotNil(t, resp.IDCardBackOCR.OCRJobID)
+	require.Equal(t, ocrJobID, *resp.IDCardBackOCR.OCRJobID)
+}

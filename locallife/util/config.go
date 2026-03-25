@@ -1,6 +1,7 @@
 package util
 
 import (
+	"fmt"
 	"strings"
 	"time"
 
@@ -133,6 +134,18 @@ type Config struct {
 	// 阿里云 CDN 配置
 	CDNPublicBaseURL string `mapstructure:"CDN_PUBLIC_BASE_URL"` // 公共图 CDN 域名，如 https://cdn.example.com
 
+	// 阿里云 OCR 配置
+	AliyunOCREnabled         bool          `mapstructure:"ALIYUN_OCR_ENABLED"`
+	AliyunOCREndpoint        string        `mapstructure:"ALIYUN_OCR_ENDPOINT"`
+	AliyunOCRRegion          string        `mapstructure:"ALIYUN_OCR_REGION"`
+	AliyunOCRAccessKeyID     string        `mapstructure:"ALIYUN_OCR_ACCESS_KEY_ID"`
+	AliyunOCRAccessKeySecret string        `mapstructure:"ALIYUN_OCR_ACCESS_KEY_SECRET"`
+	AliyunOCRSTSEnabled      bool          `mapstructure:"ALIYUN_OCR_STS_ENABLED"`
+	AliyunOCRRoleARN         string        `mapstructure:"ALIYUN_OCR_ROLE_ARN"`
+	AliyunOCRRoleSessionName string        `mapstructure:"ALIYUN_OCR_ROLE_SESSION_NAME"`
+	AliyunOCRRoleExternalID  string        `mapstructure:"ALIYUN_OCR_ROLE_EXTERNAL_ID"`
+	AliyunOCRHTTPTimeout     time.Duration `mapstructure:"ALIYUN_OCR_HTTP_TIMEOUT"`
+
 	// 媒体访问与上传参数
 	PrivateDownloadURLTTL   time.Duration `mapstructure:"PRIVATE_DOWNLOAD_URL_TTL"`   // 私有图签名地址有效期，如 5m
 	MediaMaxUploadBytes     int64         `mapstructure:"MEDIA_MAX_UPLOAD_BYTES"`     // 单文件最大字节数，如 10485760（10MB）
@@ -189,6 +202,9 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("IMAGE_VARIANT_THUMB_WIDTH", 200)
 	v.SetDefault("IMAGE_VARIANT_CARD_WIDTH", 400)
 	v.SetDefault("IMAGE_VARIANT_DETAIL_WIDTH", 960)
+	v.SetDefault("ALIYUN_OCR_ENABLED", false)
+	v.SetDefault("ALIYUN_OCR_STS_ENABLED", false)
+	v.SetDefault("ALIYUN_OCR_HTTP_TIMEOUT", "30s")
 
 	// 数据库连接池默认值
 	v.SetDefault("DB_MAX_CONNS", 25)
@@ -210,6 +226,38 @@ func LoadConfig(path string) (config Config, err error) {
 	// Normalize common quoted values from .env (e.g. REDIS_PASSWORD="...")
 	config.RedisPassword = trimOptionalQuotes(config.RedisPassword)
 	return
+}
+
+// ValidateAliyunOCRConfig validates Aliyun OCR startup configuration.
+func (config Config) ValidateAliyunOCRConfig() error {
+	if !config.AliyunOCREnabled {
+		return nil
+	}
+	if config.AliyunOCREndpoint == "" {
+		return fmt.Errorf("ALIYUN_OCR_ENDPOINT is required when ALIYUN_OCR_ENABLED=true")
+	}
+	if config.AliyunOCRRegion == "" {
+		return fmt.Errorf("ALIYUN_OCR_REGION is required when ALIYUN_OCR_ENABLED=true")
+	}
+	if config.AliyunOCRHTTPTimeout <= 0 {
+		return fmt.Errorf("ALIYUN_OCR_HTTP_TIMEOUT must be > 0 when ALIYUN_OCR_ENABLED=true")
+	}
+	if config.AliyunOCRSTSEnabled {
+		if config.AliyunOCRRoleARN == "" {
+			return fmt.Errorf("ALIYUN_OCR_ROLE_ARN is required when ALIYUN_OCR_STS_ENABLED=true")
+		}
+		if config.AliyunOCRRoleSessionName == "" {
+			return fmt.Errorf("ALIYUN_OCR_ROLE_SESSION_NAME is required when ALIYUN_OCR_STS_ENABLED=true")
+		}
+		return nil
+	}
+	if config.AliyunOCRAccessKeyID == "" {
+		return fmt.Errorf("ALIYUN_OCR_ACCESS_KEY_ID is required when ALIYUN_OCR_ENABLED=true and STS is disabled")
+	}
+	if config.AliyunOCRAccessKeySecret == "" {
+		return fmt.Errorf("ALIYUN_OCR_ACCESS_KEY_SECRET is required when ALIYUN_OCR_ENABLED=true and STS is disabled")
+	}
+	return nil
 }
 
 func trimOptionalQuotes(s string) string {

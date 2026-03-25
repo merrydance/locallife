@@ -1,6 +1,7 @@
 package media
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -21,6 +22,8 @@ type stubStorage struct {
 	directResult DirectUploadResult
 	privateURL   string
 	privateErr   error
+	readData     []byte
+	readErr      error
 }
 
 func (s *stubStorage) CreateDirectUpload(_ context.Context, req DirectUploadRequest) (DirectUploadResult, error) {
@@ -32,6 +35,13 @@ func (s *stubStorage) CreateDirectUpload(_ context.Context, req DirectUploadRequ
 
 func (s *stubStorage) StatObject(_ context.Context, _, _ string) (ObjectMetadata, error) {
 	return s.statMeta, s.statErr
+}
+
+func (s *stubStorage) ReadObject(_ context.Context, _, _ string) (io.ReadCloser, error) {
+	if s.readErr != nil {
+		return nil, s.readErr
+	}
+	return io.NopCloser(bytes.NewReader(s.readData)), nil
 }
 
 func (s *stubStorage) CreatePrivateDownloadURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
@@ -506,4 +516,43 @@ func TestRegistry_CreatePrivateAccessURL_PublicAsset(t *testing.T) {
 	_, err := reg.CreatePrivateAccessURL(context.Background(), 21, 5*time.Minute)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "not private")
+}
+
+func TestRegistry_ReadMediaAsset_LocalOrRemoteStorage(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	storage := &stubStorage{readData: []byte("binary-image-data")}
+	reg := NewRegistry(store, storage)
+
+	asset := db.MediaAsset{ID: 30, ObjectKey: "merchant/license/test.jpg", Visibility: string(VisibilityPrivate), UploadStatus: "confirmed", MimeType: "image/jpeg"}
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), int64(30)).
+		Times(1).
+		Return(asset, nil)
+
+	data, contentType, err := reg.ReadMediaAsset(context.Background(), 30)
+	require.NoError(t, err)
+	require.Equal(t, []byte("binary-image-data"), data)
+	require.Equal(t, "image/jpeg", contentType)
+}
+
+func TestRegistry_ReadMediaAsset_TooLarge(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	storage := &stubStorage{readData: make([]byte, maxDownloadBytes+1)}
+	reg := NewRegistry(store, storage)
+
+	asset := db.MediaAsset{ID: 31, ObjectKey: "merchant/license/huge.jpg", Visibility: string(VisibilityPublic), UploadStatus: "confirmed", MimeType: "image/jpeg"}
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), int64(31)).
+		Times(1).
+		Return(asset, nil)
+
+	_, _, err := reg.ReadMediaAsset(context.Background(), 31)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "exceeds max download size")
 }

@@ -127,6 +127,9 @@ func (ossStorageStub) CreateDirectUpload(_ context.Context, _ DirectUploadReques
 func (ossStorageStub) StatObject(_ context.Context, _, _ string) (ObjectMetadata, error) {
 	return ObjectMetadata{}, nil
 }
+func (ossStorageStub) ReadObject(_ context.Context, _, _ string) (io.ReadCloser, error) {
+	return io.NopCloser(strings.NewReader("")), nil
+}
 func (ossStorageStub) CreatePrivateDownloadURL(_ context.Context, _, _ string, _ time.Duration) (string, error) {
 	return "", nil
 }
