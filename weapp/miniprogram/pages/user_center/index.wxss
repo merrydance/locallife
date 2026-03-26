@@ -1,4 +1,4 @@
-/* 用户中心 - 严格遵循 DESIGN_SYSTEM.md 规范 */
+/* 用户中心 - 严格遵循 .github/standards/weapp/DESIGN_SYSTEM.md 规范 */
 
 /* Skyline 滚动容器 */
 .page-scroll {

@@ -73,6 +73,6 @@
 
 ## 8. 关联文档
 
-- `docs/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
-- `docs/OCR_RELEASE_RUNBOOK_2026-03-25.md`
-- `docs/OCR_OPERATIONS_RUNBOOK_2026-03-25.md`
+- `.github/standards/domains/ocr/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
+- `.github/standards/domains/ocr/OCR_RELEASE_RUNBOOK_2026-03-25.md`
+- `.github/standards/domains/ocr/OCR_OPERATIONS_RUNBOOK_2026-03-25.md`

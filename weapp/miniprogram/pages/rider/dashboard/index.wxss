@@ -1,4 +1,4 @@
-/* 骑手调度中心 - 严格遵循 DESIGN_SYSTEM.md */
+/* 骑手调度中心 - 严格遵循 .github/standards/weapp/DESIGN_SYSTEM.md */
 
 .page-container {
   min-height: 100vh;

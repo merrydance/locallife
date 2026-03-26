@@ -1,7 +1,7 @@
 # Go 后端硬约束
 
 > 本文件定义 **不可违反的工程约束**。项目架构、分层、错误处理等实现细节见
-> `SYSTEM_PROMPT.md`。
+> `.github/standards/backend/SYSTEM_PROMPT.md`。
 
 ## 1. 依赖注入
 
@@ -55,3 +55,26 @@
 ## 9. 依赖管理
 
 - 使用 Go Modules，`go.mod` 锁定明确版本，提交 `go.sum`。
+
+## 10. 变更完整性检查
+
+提交后端变更前，必须检查是否形成完整执行路径，而不是只改到一半：
+
+- 改 API 行为时，同时检查路由、请求绑定、Logic 入参、响应 DTO、Swagger、测试。
+- 改 Logic 时，同时检查调用入口、Store 接口、事务路径、Worker/Scheduler 入口、测试。
+- 改 `db/query/` 或依赖 SQL 结构时，同时检查 `make sqlc`、生成代码调用方、Logic、Handler、测试。
+- 新增状态或枚举时，优先落到 `db/sqlc/constants.go`，并检查所有比较与映射点是否同步。
+- 新增异步任务时，检查分发、处理、重试/幂等、观测日志是否完整。
+
+## 11. 禁止出现的半成品信号
+
+- SQL 已新增，但没有任何 Logic、Handler、Worker、Scheduler 或测试使用它。
+- Logic 已计算出结果，但结果没有持久化、没有返回给调用方、也没有影响后续行为。
+- Handler 新增了请求字段或返回字段，但未贯穿到 Logic、Store、DTO 或 Swagger。
+- 为了排查问题保留 `fmt.Println`、`panic`、临时 `return`、硬编码测试值、注释掉的生产分支。
+
+## 12. 最低验收门槛
+
+- 说明本次改动是否需要执行 `make sqlc`、`make mock`、`make swagger`。
+- 至少运行最小相关验证命令，并在交付时说明执行了什么。
+- 若未补测试，必须明确说明残余风险落在哪个分支或失败路径。

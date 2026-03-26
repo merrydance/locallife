@@ -1,4 +1,4 @@
-/* 关于我们 - 遵循 DESIGN_SYSTEM.md */
+/* 关于我们 - 遵循 .github/standards/weapp/DESIGN_SYSTEM.md */
 
 .page-scroll {
   background: var(--td-bg-color-page);

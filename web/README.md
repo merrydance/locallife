@@ -2,9 +2,9 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## UI Standards
 
-- Unified entry: [WEB_UI_STANDARDS.md](WEB_UI_STANDARDS.md)
-- Guardrails: [DESIGN_GUARDRAILS.md](DESIGN_GUARDRAILS.md)
-- Merchant historical reference: [src/styles/design-system.md](src/styles/design-system.md)
+- Unified entry: [../.github/standards/web/WEB_UI_STANDARDS.md](../.github/standards/web/WEB_UI_STANDARDS.md)
+- Guardrails: [../.github/standards/web/DESIGN_GUARDRAILS.md](../.github/standards/web/DESIGN_GUARDRAILS.md)
+- Merchant historical reference: [../.github/standards/web/design-system.md](../.github/standards/web/design-system.md)
 - Constraint constants: [src/styles/ui-constraints.ts](src/styles/ui-constraints.ts)
 
 ## Getting Started

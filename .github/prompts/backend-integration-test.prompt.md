@@ -1,0 +1,35 @@
+# Backend Integration Test Request Template
+
+Use this template when asking for new or updated integration coverage in this workspace.
+
+## Backend Integration Test
+
+Target area: `locallife/integration/`
+
+Request:
+
+- Add or update an integration test for <workflow>
+- Exercise a real cross-layer path instead of a unit-test-only seam
+- Reuse existing journey-style or scenario-style patterns from nearby integration tests
+- Validate business outcomes and persisted state, not just the immediate function return
+- Tell me whether this change should run `make test-integration`, `make test-unit`, or both
+- Run the smallest relevant validation command and report what was executed
+
+Optional context:
+
+- Affected workflow: <details>
+- Related endpoint, job, or scheduler: <path>
+- Required setup or fixture details: <details>
+
+## Cross-Layer Regression Test
+
+Request:
+
+- Add a regression test that proves this change is wired end to end
+- Check API, logic, persistence, worker, or scheduler boundaries as needed for the scenario
+- Call out any setup cost or gaps that prevent full integration coverage
+
+Optional context:
+
+- Bug or regression being guarded: <details>
+- Changed files or packages: <paths>
