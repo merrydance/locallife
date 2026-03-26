@@ -8,6 +8,7 @@ Request:
 
 - Review this change with findings first, ordered by severity
 - Prioritize bugs, behavioral regressions, contract violations, broken change propagation, and missing validation
+- Check authentication, authorization, sensitive data exposure, unsafe defaults, and obvious injection or callback-handling risks when relevant
 - Check whether the change forms a complete end-to-end path instead of stopping at one layer
 - Call out missing tests, missing regeneration steps, and residual risk
 - If there are no findings, say so explicitly
@@ -31,6 +32,7 @@ Request:
 - Flag SQL added under `locallife/db/query/` when it is not wired through generated code, logic, handlers, workers, or tests
 - Check whether `make sqlc`, `make mock`, or `make swagger` should have been run
 - Call out debug leftovers such as temporary prints, panic probes, hardcoded values, or short-circuit returns
+- Check authn/authz boundaries, secret or PII exposure, callback verification, upload/download access control, and unsafe logging
 
 Optional context:
 
@@ -48,6 +50,7 @@ Request:
 - Check whether new fields and statuses are fully threaded through state, API calls, rendering states, and user-facing copy
 - Flag places where the UI diverges from existing patterns without a clear reason
 - Call out missing empty states, loading states, validation states, and tests where relevant
+- Flag sensitive field exposure, client-only permission gating, unsafe rendering of user content, and dangerous actions without proper confirmation
 
 Optional context:
 
@@ -65,6 +68,7 @@ Request:
 - Check whether new actions and fields are fully wired through page state, service calls, event handlers, and user-visible states
 - Flag business styles that leak into shared global styles
 - Call out debug leftovers, placeholder branches, and missing validation or quality checks
+- Flag exposed private materials or sensitive fields, client-only permission assumptions, and dangerous actions without clear confirmation or failure handling
 
 Optional context:
 

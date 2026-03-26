@@ -20,6 +20,15 @@ Apply these rules when the user asks for a review.
 - Missing regeneration steps such as `make sqlc`, `make mock`, or `make swagger` after source changes.
 - Missing tests for new branches, edge cases, or failure paths.
 
+## Security Checks
+
+- Check authentication and authorization boundaries, especially object-level access control and role scoping.
+- Flag handlers or services that rely only on client-provided identity, role, merchant_id, owner_id, or status fields without server-side verification.
+- Check whether new fields, endpoints, or actions expose secrets, tokens, internal IDs, raw provider payloads, or personally identifiable information to logs, responses, or UI.
+- Flag missing validation or sanitization on user-controlled inputs that could affect SQL, HTML rendering, file paths, object keys, callback handling, or downstream requests.
+- Check upload, download, media, OCR, payment, and webhook flows for missing ownership checks, signature checks, content-type checks, or replay protections.
+- Flag hardcoded credentials, test keys, debug bypasses, insecure defaults, or new configuration that would be unsafe in production.
+
 ## Structural Completeness Checks
 
 - Check whether the change forms a complete path instead of stopping at one layer.
@@ -54,7 +63,10 @@ Apply these rules when the user asks for a review.
 - Backend: verify API contract semantics against `.github/standards/backend/API_CONTRACT_STANDARDS.md`, especially status codes, empty-state behavior, and route consistency.
 - Backend: check that business logic stays out of handlers and that status constants still come from `locallife/db/sqlc/constants.go`.
 - Backend: check that source changes in `locallife/db/query/`, interfaces, or Swagger annotations were followed by the required regeneration steps.
+- Backend: review authn/authz, secret handling, callback verification, upload/download access control, and whether sensitive data is over-logged or over-returned.
 - Web: check that new UI work still follows `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`.
 - Web: check that new data or status fields are fully threaded through page state, API calls, rendering states, and user-visible copy.
+- Web: flag client-only permission checks, sensitive data exposure in page state or rendered fields, unsafe rendering of user content, and dangerous actions without proper confirmation or disabled states.
 - Mini Program: check that new patterns align with `.github/standards/weapp/DESIGN_SYSTEM.md` and do not leak business styles into shared global styles.
 - Mini Program: check that new fields or actions are wired through page state, service calls, event handlers, and user-facing states.
+- Mini Program: flag client-only permission assumptions, exposed private materials or internal fields, unsafe weak-network fallbacks, and dangerous operations without clear confirmation or failure handling.
