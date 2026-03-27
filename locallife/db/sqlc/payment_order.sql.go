@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -24,6 +25,29 @@ func (q *Queries) CloseExpiredPaymentOrders(ctx context.Context) (int64, error) 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const countPaymentLedgerEntriesByUser = `-- name: CountPaymentLedgerEntriesByUser :one
+SELECT COUNT(*)::bigint
+FROM (
+    SELECT po.id
+    FROM payment_orders po
+    WHERE po.user_id = $1
+
+    UNION ALL
+
+    SELECT ro.id
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+    WHERE po.user_id = $1
+) AS ledger_entries
+`
+
+func (q *Queries) CountPaymentLedgerEntriesByUser(ctx context.Context, userID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countPaymentLedgerEntriesByUser, userID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
 }
 
 const createPaymentOrder = `-- name: CreatePaymentOrder :one
@@ -705,6 +729,94 @@ func (q *Queries) ListPaidUnrefundedReservationPaymentOrders(ctx context.Context
 			&i.Attach,
 			&i.CombinedPaymentID,
 			&i.ProcessedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPaymentLedgerEntriesByUser = `-- name: ListPaymentLedgerEntriesByUser :many
+SELECT id, entry_type, payment_order_id, refund_order_id, order_id, business_type, amount, status, occurred_at, created_at
+FROM (
+    SELECT
+        po.id AS id,
+        'payment'::text AS entry_type,
+        po.id AS payment_order_id,
+        NULL::bigint AS refund_order_id,
+        po.order_id,
+        po.business_type,
+        po.amount,
+        po.status,
+        COALESCE(po.paid_at, po.created_at) AS occurred_at,
+        po.created_at
+    FROM payment_orders po
+    WHERE po.user_id = $1
+
+    UNION ALL
+
+    SELECT
+        ro.id AS id,
+        'refund'::text AS entry_type,
+        ro.payment_order_id,
+        ro.id AS refund_order_id,
+        po.order_id,
+        po.business_type,
+        ro.refund_amount AS amount,
+        ro.status,
+        COALESCE(ro.refunded_at, ro.created_at) AS occurred_at,
+        ro.created_at
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+    WHERE po.user_id = $1
+) AS ledger_entries
+ORDER BY occurred_at DESC, created_at DESC, id DESC
+LIMIT $2 OFFSET $3
+`
+
+type ListPaymentLedgerEntriesByUserParams struct {
+	UserID int64 `json:"user_id"`
+	Limit  int32 `json:"limit"`
+	Offset int32 `json:"offset"`
+}
+
+type ListPaymentLedgerEntriesByUserRow struct {
+	ID             int64       `json:"id"`
+	EntryType      string      `json:"entry_type"`
+	PaymentOrderID int64       `json:"payment_order_id"`
+	RefundOrderID  pgtype.Int8 `json:"refund_order_id"`
+	OrderID        pgtype.Int8 `json:"order_id"`
+	BusinessType   string      `json:"business_type"`
+	Amount         int64       `json:"amount"`
+	Status         string      `json:"status"`
+	OccurredAt     time.Time   `json:"occurred_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+}
+
+func (q *Queries) ListPaymentLedgerEntriesByUser(ctx context.Context, arg ListPaymentLedgerEntriesByUserParams) ([]ListPaymentLedgerEntriesByUserRow, error) {
+	rows, err := q.db.Query(ctx, listPaymentLedgerEntriesByUser, arg.UserID, arg.Limit, arg.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPaymentLedgerEntriesByUserRow{}
+	for rows.Next() {
+		var i ListPaymentLedgerEntriesByUserRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.EntryType,
+			&i.PaymentOrderID,
+			&i.RefundOrderID,
+			&i.OrderID,
+			&i.BusinessType,
+			&i.Amount,
+			&i.Status,
+			&i.OccurredAt,
+			&i.CreatedAt,
 		); err != nil {
 			return nil, err
 		}

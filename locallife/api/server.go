@@ -963,6 +963,7 @@ func (server *Server) setupRouter() {
 		paymentGroup.POST("/combined", server.createCombinedPaymentOrder)
 		paymentGroup.GET("/combined/:id", server.getCombinedPaymentOrder)
 		paymentGroup.POST("/combined/:id/close", server.closeCombinedPaymentOrder)
+		paymentGroup.GET("/ledger", server.listPaymentLedger)
 		paymentGroup.GET("", server.listPaymentOrders)
 		paymentGroup.GET("/:id", server.getPaymentOrder)
 		paymentGroup.POST("/:id/close", server.closePaymentOrder)

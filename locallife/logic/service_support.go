@@ -99,6 +99,7 @@ type DefaultPaymentFacade struct {
 	paymentClient   wechat.PaymentClientInterface
 	ecommerceClient wechat.EcommerceClientInterface
 	paymentService  *PaymentOrderService
+	ledgerService   *PaymentLedgerService
 	combinedService *CombinedPaymentService
 }
 
@@ -111,6 +112,7 @@ func NewDefaultPaymentFacade(
 		paymentClient:   paymentClient,
 		ecommerceClient: ecommerceClient,
 		paymentService:  NewPaymentOrderService(store, paymentClient, ecommerceClient),
+		ledgerService:   NewPaymentLedgerService(store),
 		combinedService: NewCombinedPaymentService(store, ecommerceClient),
 	}
 }
@@ -137,6 +139,10 @@ func (f *DefaultPaymentFacade) GetPaymentOrder(ctx context.Context, input GetPay
 
 func (f *DefaultPaymentFacade) ListPaymentOrders(ctx context.Context, input ListPaymentOrdersInput) (ListPaymentOrdersResult, error) {
 	return f.paymentService.ListPaymentOrders(ctx, input)
+}
+
+func (f *DefaultPaymentFacade) ListPaymentLedger(ctx context.Context, input ListPaymentLedgerInput) (ListPaymentLedgerResult, error) {
+	return f.ledgerService.ListPaymentLedger(ctx, input)
 }
 
 func (f *DefaultPaymentFacade) ClosePaymentOrder(ctx context.Context, input ClosePaymentOrderInput) (ClosePaymentOrderResult, error) {

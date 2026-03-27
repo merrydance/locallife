@@ -113,7 +113,7 @@ func TestProcessTaskMerchantWithdrawResult_FailedPublishesAlert(t *testing.T) {
 	var published map[string]interface{}
 	require.NoError(t, json.Unmarshal(publisher.payload, &published))
 	data := published["data"].(map[string]interface{})
-	require.Equal(t, string(AlertTypeRefundFailed), data["alert_type"])
+	require.Equal(t, string(AlertTypeWithdrawFailed), data["alert_type"])
 	require.Equal(t, "商户提现失败", data["title"])
 	extra := data["extra"].(map[string]interface{})
 	require.EqualValues(t, float64(record.ID), extra["withdrawal_record_id"])

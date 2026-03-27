@@ -1,358 +1,418 @@
 /**
- * 支付相关API接口
- * 基于swagger.json中的支付管理接口
+ * 支付与退款统一 API 模块
  */
 
 import { request } from '../utils/request'
 
-// ==================== 数据类型定义 ====================
+export type PaymentStatus = 'pending' | 'paid' | 'refunded' | 'closed' | 'failed'
+export type RefundStatus = 'pending' | 'processing' | 'success' | 'failed' | 'closed'
+export type PaymentType = 'native' | 'miniprogram'
+export type BusinessType = 'order' | 'reservation' | 'reservation_addon' | 'membership_recharge' | 'rider_deposit' | 'claim_recovery'
+export type PaymentLedgerEntryType = 'payment' | 'refund'
 
-/** 支付状态枚举 */
-export type PaymentStatus =
-    | 'pending'   // 待支付
-    | 'paid'      // 已支付
-    | 'refunded'  // 已退款
-    | 'closed'    // 已关闭
-
-/** 支付类型枚举 */
-export type PaymentType =
-    | 'native'      // 扫码支付
-    | 'miniprogram' // 小程序支付
-
-/** 业务类型枚举 */
-export type BusinessType =
-    | 'order'             // 订单支付
-    | 'reservation'       // 预定押金/全款
-
-/** 小程序支付参数 */
 export interface MiniProgramPayParams {
-    timeStamp: string
-    nonceStr: string
-    package: string
-    signType?: 'MD5' | 'HMAC-SHA256' | 'RSA'
-    paySign: string
+  timeStamp: string
+  nonceStr: string
+  package: string
+  signType?: 'MD5' | 'HMAC-SHA256' | 'RSA'
+  paySign: string
 }
 
-/** 支付订单响应 */
-export interface PaymentOrderResponse {
-    id: number
-    user_id: number
-    order_id?: number
-    out_trade_no: string
-    prepay_id?: string
-    amount: number
-    status: PaymentStatus
-    payment_type: PaymentType
-    business_type: BusinessType
-    pay_params?: MiniProgramPayParams
-    created_at: string
-    paid_at?: string
+export interface PaymentOrder {
+  id: number
+  user_id: number
+  order_id?: number
+  out_trade_no: string
+  prepay_id?: string
+  amount: number
+  status: PaymentStatus
+  payment_type: PaymentType | string
+  business_type: BusinessType | string
+  pay_params?: MiniProgramPayParams
+  created_at: string
+  paid_at?: string
 }
+
+export type PaymentOrderResponse = PaymentOrder
+export type PaymentDTO = PaymentOrder
 
 export interface CombinedPaymentSubOrderResponse {
-    order_id: number
-    merchant_id: number
-    sub_mch_id: string
-    amount: number
-    out_trade_no: string
-    description: string
-    profit_sharing_status?: string
-    merchant_name?: string
-    merchant_logo?: string
-    order_no?: string
+  order_id: number
+  merchant_id: number
+  sub_mch_id: string
+  amount: number
+  out_trade_no: string
+  description: string
+  profit_sharing_status?: string
+  merchant_name?: string
+  merchant_logo?: string
+  order_no?: string
 }
 
 export interface CombinedPaymentOrderResponse {
-    id: number
-    combine_out_trade_no: string
-    total_amount: number
-    status: PaymentStatus
-    prepay_id?: string
-    pay_params?: MiniProgramPayParams
-    expires_at?: string
-    sub_orders: CombinedPaymentSubOrderResponse[]
+  id: number
+  combine_out_trade_no: string
+  total_amount: number
+  status: PaymentStatus | string
+  prepay_id?: string
+  pay_params?: MiniProgramPayParams
+  expires_at?: string
+  sub_orders: CombinedPaymentSubOrderResponse[]
 }
 
 export interface CreateCombinedPaymentRequest {
-    order_ids: number[]
+  order_ids: number[]
 }
 
-/** 创建支付请求 */
 export interface CreatePaymentRequest {
-    order_id: number
-    payment_type?: PaymentType
-    business_type: BusinessType
+  order_id: number
+  payment_type?: PaymentType
+  business_type: BusinessType
 }
 
-/** 退款响应 */
-export interface RefundResponse {
-    id: number
-    payment_id: number
-    refund_amount: number
-    refund_reason: string
-    status: 'pending' | 'success' | 'failed'
-    refund_no: string
-    created_at: string
-    refunded_at?: string
+export interface RefundOrder {
+  id: number
+  payment_order_id: number
+  refund_type: 'full' | 'partial'
+  refund_amount: number
+  refund_reason?: string
+  out_refund_no: string
+  status: RefundStatus | string
+  refunded_at?: string
+  created_at: string
 }
 
-/** 创建退款请求 */
+export type RefundResponse = RefundOrder
+
+export interface CreateRefundOrderRequest {
+  payment_order_id: number
+  refund_amount: number
+  refund_type: 'full' | 'partial'
+  refund_reason?: string
+}
+
+export interface LegacyRefundRequest {
+  payment_id: number
+  amount: number
+  reason: string
+  refund_type: 'full' | 'partial'
+  operator_id?: number
+}
+
 export interface CreateRefundRequest {
-    refund_amount: number
-    refund_reason: string
+  refund_amount: number
+  refund_reason: string
+  refund_type?: 'full' | 'partial'
 }
 
-/** 支付列表查询参数 */
 export interface ListPaymentsParams {
-    page_id?: number
-    page_size?: number
-    order_id?: number
+  page_id?: number
+  page_size?: number
+  order_id?: number
 }
 
 export interface ListPaymentsResponse {
-    payment_orders: PaymentOrderResponse[]
-    total: number
-    page_id: number
-    page_size: number
+  payment_orders: PaymentOrder[]
+  total: number
+  page_id: number
+  page_size: number
 }
 
-// ==================== API接口函数 ====================
-
-/**
- * 获取支付订单列表
- * @param params 查询参数
- */
-export async function getPaymentList(params: ListPaymentsParams): Promise<ListPaymentsResponse> {
-    return request({
-        url: '/v1/payments',
-        method: 'GET',
-        data: params
-    })
+export interface ListRefundOrdersByPaymentResponse {
+  refund_orders: RefundOrder[]
+  total: number
 }
 
-/**
- * 获取支付订单详情
- * @param paymentId 支付订单ID
- */
-export async function getPaymentDetail(paymentId: number): Promise<PaymentOrderResponse> {
-    return request({
-        url: `/v1/payments/${paymentId}`,
-        method: 'GET'
-    })
+export interface ProfitSharingReturn {
+  id: number
+  refund_order_id: number
+  out_order_no: string
+  out_return_no: string
+  return_mchid: string
+  amount: number
+  status: string
+  return_id?: string
+  fail_reason?: string
+  finished_at?: string
+  created_at: string
+  updated_at: string
 }
 
-/**
- * 创建支付订单
- * @param paymentData 支付数据
- */
-export async function createPayment(paymentData: CreatePaymentRequest): Promise<PaymentOrderResponse> {
-    return request({
-        url: '/v1/payments',
-        method: 'POST',
-        data: paymentData
-    })
+export interface PaymentLedgerEntry {
+  id: number
+  entry_type: PaymentLedgerEntryType
+  payment_order_id: number
+  refund_order_id?: number
+  order_id?: number
+  business_type: BusinessType | string
+  amount: number
+  status: string
+  occurred_at: string
+  created_at: string
 }
 
-/**
- * 创建合单支付订单
- * @param payload 合单支付数据
- */
-export async function createCombinedPaymentOrder(payload: CreateCombinedPaymentRequest): Promise<CombinedPaymentOrderResponse> {
-    return request({
-        url: '/v1/payments/combined',
-        method: 'POST',
-        data: payload
-    })
+export interface ListPaymentLedgerParams {
+  page_id?: number
+  page_size?: number
 }
 
-/**
- * 获取合单支付订单详情
- * @param combinedPaymentId 合单支付订单ID
- */
-export async function getCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
-    return request({
-        url: `/v1/payments/combined/${combinedPaymentId}`,
-        method: 'GET'
-    })
+export interface ListPaymentLedgerResponse {
+  entries: PaymentLedgerEntry[]
+  total: number
+  page_id: number
+  page_size: number
 }
 
-/**
- * 关闭合单支付订单
- * @param combinedPaymentId 合单支付订单ID
- */
-export async function closeCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
-    return request({
-        url: `/v1/payments/combined/${combinedPaymentId}/close`,
-        method: 'POST'
-    })
+export interface DeliveryFeeBreakdown {
+  base_fee: number
+  distance_fee: number
+  peak_hour_fee: number
+  total_before_discount: number
+  promotion_discount: number
+  final_fee: number
 }
 
-/**
- * 关闭支付订单
- * @param paymentId 支付订单ID
- */
-export async function closePayment(paymentId: number): Promise<void> {
-    return request({
-        url: `/v1/payments/${paymentId}/close`,
-        method: 'POST'
-    })
+export interface DeliveryPromotionApplied {
+  code: string
+  discount_amount: number
+  description?: string
 }
 
-/**
- * 获取支付订单的退款列表
- * @param paymentId 支付订单ID
- */
-export async function getPaymentRefunds(paymentId: number): Promise<RefundResponse[]> {
-    return request({
-        url: `/v1/payments/${paymentId}/refunds`,
-        method: 'GET'
-    })
+export interface DeliveryFeeResult {
+  base_fee?: number
+  distance_fee?: number
+  peak_hour_fee?: number
+  promotion_discount?: number
+  final_fee?: number
+  delivery_distance?: number
+  delivery_suspended?: boolean
+  suspend_reason?: string
+  breakdown?: DeliveryFeeBreakdown
+  promotions_applied?: DeliveryPromotionApplied[]
 }
 
-/**
- * 创建退款
- * @param paymentId 支付订单ID
- * @param refundData 退款数据
- */
-export async function createRefund(paymentId: number, refundData: CreateRefundRequest): Promise<RefundResponse> {
-    return request({
-        url: `/v1/payments/${paymentId}/refunds`,
-        method: 'POST',
-        data: refundData
-    })
+export interface CalculateDeliveryFeeRequest extends Record<string, unknown> {
+  merchant_id: number
+  user_address_id: number
+  order_amount: number
+  delivery_distance?: number
+  peak_hour?: boolean
+  promotion_codes?: string[]
 }
 
-// ==================== 便捷方法 ====================
-
-/**
- * 为订单创建小程序支付
- * @param orderId 订单ID
- */
-export async function createOrderPayment(orderId: number): Promise<PaymentOrderResponse> {
-    return createPayment({
-        order_id: orderId,
-        business_type: 'order'
-    })
-}
-
-/**
- * 为预定创建小程序支付
- * @param reservationId 预定ID
- */
-export async function createReservationPayment(reservationId: number): Promise<PaymentOrderResponse> {
-    return createPayment({
-        order_id: reservationId,
-        business_type: 'reservation'
-    })
-}
-
-/**
- * 调起微信支付
- * @param paymentParams 支付参数
- */
-export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Promise<void> {
-    return new Promise((resolve, reject) => {
-        wx.requestPayment({
-            ...paymentParams,
-            success: () => resolve(),
-            fail: (error) => reject(error)
-        })
-    })
-}
-
-/**
- * 完整的支付流程
- * @param orderId 订单ID
- * @param businessType 业务类型
- * @throws {PaymentCancelledError} 用户主动取消时
- * @throws {Error} 其他支付失败时
- */
-export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<void> {
-    // 1. 创建支付订单
-    const payment = await createPayment({
-        order_id: orderId,
-        business_type: businessType
-    })
-
-    if (!payment.pay_params) {
-        throw new Error('支付参数缺失')
+function normalizeRefundPayload(
+  paymentIdOrParams: number | CreateRefundOrderRequest | LegacyRefundRequest,
+  refundData?: CreateRefundRequest
+): CreateRefundOrderRequest {
+  if (typeof paymentIdOrParams === 'number') {
+    if (!refundData) {
+      throw new Error('refundData is required')
     }
-
-    // 2. 调起微信支付，单独捕获以区分"用户取消"和"真实失败"
-    try {
-        await invokeWechatPay(payment.pay_params)
-    } catch (error: unknown) {
-        const wxError = error as { errMsg?: string }
-        if (wxError?.errMsg?.includes('cancel')) {
-            throw new PaymentCancelledError()
-        }
-        throw error
+    return {
+      payment_order_id: paymentIdOrParams,
+      refund_amount: refundData.refund_amount,
+      refund_reason: refundData.refund_reason,
+      refund_type: refundData.refund_type || 'full'
     }
+  }
 
-    // 3. 轮询支付状态，确保后端已接收到回调并更新
-    // 微信回调通常在秒级，这里轮询最大等待 10s 左右
-    // 若超时说明 webhook 延迟，但用户侧已付款，视为乐观成功继续流程
-    try {
-        await pollPaymentStatus(payment.id, 5, 2000)
-    } catch (error: unknown) {
-        if (error instanceof Error && error.message === '支付状态检查超时') {
-            console.warn('[payment] 支付状态轮询超时，后端 webhook 可能延迟，继续跳转成功页')
-            return
-        }
-        throw error
+  if ('payment_id' in paymentIdOrParams) {
+    return {
+      payment_order_id: paymentIdOrParams.payment_id,
+      refund_amount: paymentIdOrParams.amount,
+      refund_reason: paymentIdOrParams.reason,
+      refund_type: paymentIdOrParams.refund_type
     }
+  }
+
+  return paymentIdOrParams
 }
 
-/**
- * 检查支付状态
- * @param paymentId 支付订单ID
- */
-export async function checkPaymentStatus(paymentId: number): Promise<PaymentStatus> {
-    const payment = await getPaymentDetail(paymentId)
-    return payment.status
+export async function getPaymentList(params: ListPaymentsParams = {}): Promise<ListPaymentsResponse> {
+  return request({
+    url: '/v1/payments',
+    method: 'GET',
+    data: params
+  })
 }
 
-/**
- * 轮询支付状态直到完成
- * @param paymentId 支付订单ID
- * @param maxAttempts 最大尝试次数
- * @param interval 轮询间隔（毫秒）
- */
-export async function pollPaymentStatus(
-    paymentId: number,
-    maxAttempts: number = 30,
-    interval: number = 2000
-): Promise<PaymentStatus> {
-    for (let i = 0; i < maxAttempts; i++) {
-        const status = await checkPaymentStatus(paymentId)
-
-        if (status === 'paid' || status === 'refunded' || status === 'closed') {
-            return status
-        }
-
-        if (i < maxAttempts - 1) {
-            await new Promise((resolve) => setTimeout(resolve, interval))
-        }
-    }
-
-    throw new Error('支付状态检查超时')
-}
-
-/** 用户主动取消支付时抛出的错误，区别于真正的支付失败 */
-export class PaymentCancelledError extends Error {
-    constructor() {
-        super('用户取消支付')
-        this.name = 'PaymentCancelledError'
-    }
-}
-
-// ==================== 兼容性别名 ====================
-
-/** @deprecated 使用 getPaymentList 替代 */
 export const getPayments = getPaymentList
 
-/** @deprecated 使用 PaymentOrderResponse 替代 */
-export type PaymentDTO = PaymentOrderResponse
+export async function getPaymentLedger(params: ListPaymentLedgerParams = {}): Promise<ListPaymentLedgerResponse> {
+  return request({
+    url: '/v1/payments/ledger',
+    method: 'GET',
+    data: params
+  })
+}
 
-/** @deprecated 使用 createPayment 替代 */
+export async function getPaymentDetail(paymentId: number): Promise<PaymentOrderResponse> {
+  return request({
+    url: `/v1/payments/${paymentId}`,
+    method: 'GET'
+  })
+}
+
+export const getPaymentById = getPaymentDetail
+
+export async function createPayment(paymentData: CreatePaymentRequest): Promise<PaymentOrderResponse> {
+  return request({
+    url: '/v1/payments',
+    method: 'POST',
+    data: paymentData
+  })
+}
+
 export const pay = createPayment
+
+export async function createCombinedPaymentOrder(payload: CreateCombinedPaymentRequest): Promise<CombinedPaymentOrderResponse> {
+  return request({
+    url: '/v1/payments/combined',
+    method: 'POST',
+    data: payload
+  })
+}
+
+export async function getCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
+  return request({
+    url: `/v1/payments/combined/${combinedPaymentId}`,
+    method: 'GET'
+  })
+}
+
+export async function closeCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
+  return request({
+    url: `/v1/payments/combined/${combinedPaymentId}/close`,
+    method: 'POST'
+  })
+}
+
+export async function closePayment(paymentId: number): Promise<PaymentOrderResponse> {
+  return request({
+    url: `/v1/payments/${paymentId}/close`,
+    method: 'POST'
+  })
+}
+
+export async function getPaymentRefunds(paymentId: number): Promise<ListRefundOrdersByPaymentResponse> {
+  return request({
+    url: `/v1/payments/${paymentId}/refunds`,
+    method: 'GET'
+  })
+}
+
+export async function createRefund(
+  paymentIdOrParams: number | CreateRefundOrderRequest | LegacyRefundRequest,
+  refundData?: CreateRefundRequest
+): Promise<RefundOrder> {
+  return request({
+    url: '/v1/refunds',
+    method: 'POST',
+    data: normalizeRefundPayload(paymentIdOrParams, refundData)
+  })
+}
+
+export async function getRefundById(id: number): Promise<RefundOrder> {
+  return request({
+    url: `/v1/refunds/${id}`,
+    method: 'GET'
+  })
+}
+
+export async function getRefundReturns(refundId: number): Promise<ProfitSharingReturn[]> {
+  return request({
+    url: `/v1/refunds/${refundId}/returns`,
+    method: 'GET'
+  })
+}
+
+export async function calculateDeliveryFee(params: CalculateDeliveryFeeRequest): Promise<DeliveryFeeResult> {
+  return request({
+    url: '/v1/delivery-fee/calculate',
+    method: 'POST',
+    data: params
+  })
+}
+
+export async function createOrderPayment(orderId: number): Promise<PaymentOrderResponse> {
+  return createPayment({
+    order_id: orderId,
+    business_type: 'order'
+  })
+}
+
+export async function createReservationPayment(reservationId: number): Promise<PaymentOrderResponse> {
+  return createPayment({
+    order_id: reservationId,
+    business_type: 'reservation'
+  })
+}
+
+export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Promise<void> {
+  return new Promise((resolve, reject) => {
+    wx.requestPayment({
+      ...paymentParams,
+      success: () => resolve(),
+      fail: (error) => reject(error)
+    })
+  })
+}
+
+export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<void> {
+  const payment = await createPayment({
+    order_id: orderId,
+    business_type: businessType
+  })
+
+  if (!payment.pay_params) {
+    throw new Error('支付参数缺失')
+  }
+
+  try {
+    await invokeWechatPay(payment.pay_params)
+  } catch (error: unknown) {
+    const wxError = error as { errMsg?: string }
+    if (wxError?.errMsg?.includes('cancel')) {
+      throw new PaymentCancelledError()
+    }
+    throw error
+  }
+
+  try {
+    await pollPaymentStatus(payment.id, 5, 2000)
+  } catch (error: unknown) {
+    if (error instanceof Error && error.message === '支付状态检查超时') {
+      console.warn('[payment] 支付状态轮询超时，后端 webhook 可能延迟，继续跳转成功页')
+      return
+    }
+    throw error
+  }
+}
+
+export async function checkPaymentStatus(paymentId: number): Promise<PaymentStatus> {
+  const payment = await getPaymentDetail(paymentId)
+  return payment.status
+}
+
+export async function pollPaymentStatus(paymentId: number, maxAttempts: number = 30, interval: number = 2000): Promise<PaymentStatus> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const status = await checkPaymentStatus(paymentId)
+
+    if (status === 'paid' || status === 'refunded' || status === 'closed') {
+      return status
+    }
+
+    if (i < maxAttempts - 1) {
+      await new Promise((resolve) => setTimeout(resolve, interval))
+    }
+  }
+
+  throw new Error('支付状态检查超时')
+}
+
+export class PaymentCancelledError extends Error {
+  constructor() {
+    super('用户取消支付')
+    this.name = 'PaymentCancelledError'
+  }
+}

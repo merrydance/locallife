@@ -167,6 +167,7 @@ type Querier interface {
 	CountOrderUrges(ctx context.Context, orderID int64) (int64, error)
 	CountOrdersByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountOrdersByMerchantAndStatus(ctx context.Context, arg CountOrdersByMerchantAndStatusParams) (int64, error)
+	CountPaymentLedgerEntriesByUser(ctx context.Context, userID int64) (int64, error)
 	// 统计申请数量（包含 submitted/approved/rejected）
 	CountPendingOperatorApplications(ctx context.Context) (int64, error)
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
@@ -1270,6 +1271,7 @@ type Querier interface {
 	ListPaidUnprocessedPaymentOrders(ctx context.Context, arg ListPaidUnprocessedPaymentOrdersParams) ([]PaymentOrder, error)
 	ListPaidUnrefundedPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
 	ListPaidUnrefundedReservationPaymentOrders(ctx context.Context, limit int32) ([]PaymentOrder, error)
+	ListPaymentLedgerEntriesByUser(ctx context.Context, arg ListPaymentLedgerEntriesByUserParams) ([]ListPaymentLedgerEntriesByUserRow, error)
 	ListPaymentOrdersByUser(ctx context.Context, arg ListPaymentOrdersByUserParams) ([]PaymentOrder, error)
 	ListPaymentOrdersByUserAndStatus(ctx context.Context, arg ListPaymentOrdersByUserAndStatusParams) ([]PaymentOrder, error)
 	ListPeakHourConfigsByRegion(ctx context.Context, regionID int64) ([]PeakHourConfig, error)

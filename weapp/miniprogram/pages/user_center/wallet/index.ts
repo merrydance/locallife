@@ -1,5 +1,5 @@
 import { formatPriceNoSymbol } from '../../../utils/util'
-import { getPayments, PaymentOrder } from '../../../api/payment-refund'
+import { getPaymentLedger, PaymentLedgerEntry } from '../../../api/payment'
 import MembershipService from '../../../api/membership'
 
 interface MembershipDisplay {
@@ -21,6 +21,76 @@ interface TransactionDisplay {
   status: string
   statusName: string
   statusTheme: 'primary' | 'success' | 'warning' | 'error' | 'default'
+}
+
+interface BusinessTitlePair {
+  payment: string
+  refund: string
+}
+
+const businessTitleMap: Record<string, BusinessTitlePair> = {
+  order: { payment: '订单消费', refund: '订单退款' },
+  reservation: { payment: '预订消费', refund: '预订退款' },
+  reservation_addon: { payment: '预订补差', refund: '预订退款' },
+  membership_recharge: { payment: '会员充值', refund: '会员退款' },
+  rider_deposit: { payment: '押金支付', refund: '押金退款' },
+  claim_recovery: { payment: '追偿支付', refund: '追偿退款' }
+}
+
+function formatTransactionTime(timeText: string): string {
+  const date = new Date(timeText)
+  return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function mapTransactionDisplay(entry: PaymentLedgerEntry): TransactionDisplay {
+  const isRefund = entry.entry_type === 'refund'
+  const amount = isRefund ? entry.amount : -entry.amount
+  const titleConfig = businessTitleMap[entry.business_type] || { payment: '支付记录', refund: '退款记录' }
+
+  let statusName = '已完成'
+  let statusTheme: TransactionDisplay['statusTheme'] = isRefund ? 'primary' : 'success'
+
+  if (isRefund) {
+    if (entry.status === 'pending' || entry.status === 'processing') {
+      statusName = '退款中'
+      statusTheme = 'warning'
+    } else if (entry.status === 'failed') {
+      statusName = '退款失败'
+      statusTheme = 'error'
+    } else if (entry.status === 'closed') {
+      statusName = '已关闭'
+      statusTheme = 'default'
+    } else {
+      statusName = '退款成功'
+      statusTheme = 'primary'
+    }
+  } else {
+    if (entry.status === 'pending') {
+      statusName = '待支付'
+      statusTheme = 'warning'
+    } else if (entry.status === 'failed') {
+      statusName = '支付失败'
+      statusTheme = 'error'
+    } else if (entry.status === 'closed') {
+      statusName = '已关闭'
+      statusTheme = 'default'
+    } else {
+      statusName = '已支付'
+      statusTheme = 'success'
+    }
+  }
+
+  return {
+    id: String(isRefund ? entry.refund_order_id || entry.id : entry.payment_order_id),
+    type: isRefund ? 'REFUND' : 'PAYMENT',
+    amount,
+    amountDisplay: `${amount > 0 ? '+' : '-'}${formatPriceNoSymbol(Math.abs(amount))}`,
+    title: isRefund ? titleConfig.refund : titleConfig.payment,
+    time: formatTransactionTime(entry.occurred_at || entry.created_at),
+    status: entry.status,
+    statusName,
+    statusTheme
+  }
 }
 
 type MembershipEvent = WechatMiniprogram.CustomEvent & {
@@ -72,7 +142,7 @@ Page({
     try {
       const [membershipRes, paymentRes] = await Promise.all([
         MembershipService.listMyMemberships(1, 50),
-        getPayments({ page: 1, page_size: 10 })
+        getPaymentLedger({ page_id: 1, page_size: 10 })
       ])
 
       // 1. Process Memberships
@@ -92,32 +162,7 @@ Page({
       const totalBalance = (membershipRes.memberships || []).reduce((sum, m) => sum + (m.balance || 0), 0)
       const totalRecharged = (membershipRes.memberships || []).reduce((sum, m) => sum + (m.total_recharged || 0), 0)
 
-      // 2. Process Transactions (from payments)
-      const transactions: TransactionDisplay[] = (paymentRes.payment_orders || []).map((p: PaymentOrder) => {
-        const isRefund = p.status === 'refunded'
-        const amount = isRefund ? p.amount : -p.amount
-        
-        let statusName = '已完成'
-        let statusTheme: TransactionDisplay['statusTheme'] = 'success'
-        if (p.status === 'pending') { statusName = '待支付'; statusTheme = 'warning' }
-        else if (p.status === 'closed') { statusName = '已关闭'; statusTheme = 'default' }
-        else if (p.status === 'refunded') { statusName = '已退款'; statusTheme = 'primary' }
-
-        const date = new Date(p.paid_at || p.created_at)
-        const timeStr = `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
-
-        return {
-          id: String(p.id),
-          type: isRefund ? 'REFUND' : 'PAYMENT',
-          amount,
-          amountDisplay: (amount > 0 ? '+' : '') + formatPriceNoSymbol(Math.abs(amount)),
-          title: p.business_type === 'reservation' ? '预订消费' : '订单消费',
-          time: timeStr,
-          status: p.status,
-          statusName,
-          statusTheme
-        }
-      })
+      const transactions: TransactionDisplay[] = (paymentRes.entries || []).map((entry) => mapTransactionDisplay(entry))
 
       this.setData({
         balance: totalBalance,

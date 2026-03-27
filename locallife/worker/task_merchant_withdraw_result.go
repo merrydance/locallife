@@ -117,7 +117,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 				Reason: pgtype.Text{String: fmt.Sprintf("query withdraw result failed: %v", err), Valid: true},
 			})
 			processor.publishAlert(ctx, AlertData{
-				AlertType:   AlertTypeRefundFailed,
+				AlertType:   AlertTypeWithdrawFailed,
 				Level:       AlertLevelCritical,
 				Title:       "商户提现结果查询失败",
 				Message:     fmt.Sprintf("提现记录 %d 连续查询失败，已标记为 failed，请人工核查。", record.ID),
@@ -162,7 +162,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 
 	if newStatus == "failed" {
 		processor.publishAlert(ctx, AlertData{
-			AlertType:   AlertTypeRefundFailed,
+			AlertType:   AlertTypeWithdrawFailed,
 			Level:       AlertLevelCritical,
 			Title:       "商户提现失败",
 			Message:     fmt.Sprintf("提现记录 %d 状态变为 failed，微信提现单号 %s，请人工介入处理。", record.ID, accountInfo.OutRequestNo),

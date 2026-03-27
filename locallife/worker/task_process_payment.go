@@ -29,6 +29,7 @@ const (
 	AlertTypeTaskEnqueueFailure  AlertType = "TASK_ENQUEUE_FAILURE"
 	AlertTypeProfitSharingFailed AlertType = "PROFIT_SHARING_FAILED"
 	AlertTypeRefundFailed        AlertType = "REFUND_FAILED"
+	AlertTypeWithdrawFailed      AlertType = "WITHDRAW_FAILED"
 	AlertTypeSystemError         AlertType = "SYSTEM_ERROR"
 	AlertTypeBillMismatch        AlertType = "BILL_MISMATCH"
 	AlertTypeRiderDepositExpiry  AlertType = "RIDER_DEPOSIT_EXPIRY"

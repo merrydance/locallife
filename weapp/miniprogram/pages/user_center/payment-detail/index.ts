@@ -1,6 +1,5 @@
-import { getPaymentById, closePayment, getPaymentRefunds, getPayments, PaymentOrder, RefundOrder } from '../../../api/payment-refund'
+import { closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, invokeWechatPay, PaymentOrder, RefundOrder } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
-import { createPayment as createPaymentOrder, invokeWechatPay } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 
 type RefundView = RefundOrder & {
@@ -76,7 +75,7 @@ Page({
         this.setData({ loading: true, error: null })
         try {
             // 通过订单ID获取支付列表，取第一条
-            const result = await getPayments({ order_id: orderId, page: 1, page_size: 1 })
+            const result = await getPayments({ order_id: orderId, page_id: 1, page_size: 1 })
             if (result.payment_orders && result.payment_orders.length > 0) {
                 const payment = result.payment_orders[0]
                 this.setData({ paymentId: payment.id })

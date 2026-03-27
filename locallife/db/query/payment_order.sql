@@ -67,6 +67,58 @@ WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: ListPaymentLedgerEntriesByUser :many
+SELECT *
+FROM (
+    SELECT
+        po.id AS id,
+        'payment'::text AS entry_type,
+        po.id AS payment_order_id,
+        NULL::bigint AS refund_order_id,
+        po.order_id,
+        po.business_type,
+        po.amount,
+        po.status,
+        COALESCE(po.paid_at, po.created_at) AS occurred_at,
+        po.created_at
+    FROM payment_orders po
+    WHERE po.user_id = $1
+
+    UNION ALL
+
+    SELECT
+        ro.id AS id,
+        'refund'::text AS entry_type,
+        ro.payment_order_id,
+        ro.id AS refund_order_id,
+        po.order_id,
+        po.business_type,
+        ro.refund_amount AS amount,
+        ro.status,
+        COALESCE(ro.refunded_at, ro.created_at) AS occurred_at,
+        ro.created_at
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+    WHERE po.user_id = $1
+) AS ledger_entries
+ORDER BY occurred_at DESC, created_at DESC, id DESC
+LIMIT $2 OFFSET $3;
+
+-- name: CountPaymentLedgerEntriesByUser :one
+SELECT COUNT(*)::bigint
+FROM (
+    SELECT po.id
+    FROM payment_orders po
+    WHERE po.user_id = $1
+
+    UNION ALL
+
+    SELECT ro.id
+    FROM refund_orders ro
+    JOIN payment_orders po ON po.id = ro.payment_order_id
+    WHERE po.user_id = $1
+) AS ledger_entries;
+
 -- name: ListPaymentOrdersByUserAndStatus :many
 SELECT * FROM payment_orders
 WHERE user_id = $1 AND status = $2

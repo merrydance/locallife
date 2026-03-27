@@ -29,6 +29,8 @@ export default function OperatorFinancePage() {
   const [selectedWithdrawalId, setSelectedWithdrawalId] = useState("");
   const [selectedWithdrawal, setSelectedWithdrawal] = useState<OperatorWithdrawalItem | null>(null);
   const [financeLocked, setFinanceLocked] = useState(false);
+  const [financeNotice, setFinanceNotice] = useState<string | null>(null);
+  const [financeError, setFinanceError] = useState<string | null>(null);
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawRemark, setWithdrawRemark] = useState("");
@@ -56,6 +58,9 @@ export default function OperatorFinancePage() {
 
         let balanceRes: OperatorAccountBalanceResponse | null = null;
         let withdrawalsRes: OperatorWithdrawalsResponse | null = null;
+        let nextFinanceLocked = !shouldLoadPaymentFinance;
+        let nextFinanceNotice: string | null = null;
+        let nextFinanceError: string | null = null;
 
         if (shouldLoadPaymentFinance) {
           const [balanceResult, withdrawalsResult] = await Promise.allSettled([
@@ -65,9 +70,17 @@ export default function OperatorFinancePage() {
 
           if (balanceResult.status === "fulfilled") {
             balanceRes = balanceResult.value;
+            if ((balanceRes.account_status ?? "active") !== "active") {
+              nextFinanceLocked = true;
+              nextFinanceNotice = balanceRes.status_desc || "收付通账户尚未开通，请先完成进件流程。";
+            }
           }
           if (withdrawalsResult.status === "fulfilled") {
             withdrawalsRes = withdrawalsResult.value;
+            if (!nextFinanceNotice && (withdrawalsRes.account_status ?? "active") !== "active") {
+              nextFinanceLocked = true;
+              nextFinanceNotice = withdrawalsRes.status_desc || "收付通账户尚未开通，请先完成进件流程。";
+            }
           }
 
           if (balanceResult.status === "rejected" || withdrawalsResult.status === "rejected") {
@@ -82,7 +95,13 @@ export default function OperatorFinancePage() {
             const blockedByPaymentConfig =
               balanceMessage.includes("operator payment config is not active") ||
               withdrawalsMessage.includes("operator payment config is not active");
-            const _ = blockedByPaymentConfig
+            if (blockedByPaymentConfig) {
+              nextFinanceLocked = true;
+              nextFinanceNotice = "收付通账户尚未开通，请先完成签约与进件。";
+            } else {
+              nextFinanceLocked = true;
+              nextFinanceError = "财务数据加载失败，请稍后重试。";
+            }
           }
         }
 
@@ -91,7 +110,9 @@ export default function OperatorFinancePage() {
         setCommission(commissionRes);
         setWithdrawals(withdrawalsRes?.withdrawals ?? []);
         setConfigs(configRes);
-        setFinanceLocked(!balanceRes?.sub_mch_id);
+        setFinanceLocked(nextFinanceLocked || !(balanceRes?.sub_mch_id || nextFinanceNotice));
+        setFinanceNotice(nextFinanceNotice);
+        setFinanceError(nextFinanceError);
       });
   };
 
@@ -130,6 +151,11 @@ export default function OperatorFinancePage() {
         {success && (
           <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
             {success}
+          </div>
+        )}
+        {financeError && (
+          <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+            {financeError}
           </div>
         )}
         <Tabs defaultValue="overview" className="space-y-4">
@@ -214,9 +240,9 @@ export default function OperatorFinancePage() {
           </TabsContent>
 
           <TabsContent value="finance" className="space-y-4 m-0">
-            {financeLocked && (
+            {financeNotice && (
               <div className="rounded-lg border px-4 py-3 text-sm">
-                微信支付商户未开通或未完成签约，暂不可进行分账账户查询与提现操作。
+                {financeNotice}
               </div>
             )}
 

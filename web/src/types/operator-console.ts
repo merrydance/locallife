@@ -230,10 +230,12 @@ export interface OperatorCommissionResponse {
 }
 
 export interface OperatorAccountBalanceResponse {
-  sub_mch_id: string;
-  available_amount: number;
-  pending_amount: number;
-  withdrawable_amount: number;
+  sub_mch_id?: string;
+  available_amount?: number;
+  pending_amount?: number;
+  withdrawable_amount?: number;
+  account_status?: string;
+  status_desc?: string;
 }
 
 export interface OperatorWithdrawalItem {
@@ -255,6 +257,8 @@ export interface OperatorWithdrawalsResponse {
   page: number;
   limit: number;
   total_pages: number;
+  account_status?: string;
+  status_desc?: string;
 }
 
 export interface OperatorApplymentStatusResponse {

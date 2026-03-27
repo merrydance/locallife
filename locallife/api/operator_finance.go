@@ -159,16 +159,19 @@ func (server *Server) getOperatorAccountBalance(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	operator, err := server.getActiveOperatorForFinance(ctx, authPayload.UserID)
+	operator, err := server.getOperatorFromUserID(ctx, authPayload.UserID)
 	if err != nil {
-		switch err.Error() {
-		case "operator is not active":
-			ctx.JSON(http.StatusForbidden, errorResponse(err))
-		case "operator payment config is not active":
-			ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		default:
-			return
-		}
+		return
+	}
+	if operator.Status != "active" {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator is not active")))
+		return
+	}
+	if accountStatus, statusDesc := getOperatorFinanceAccountStatus(operator); accountStatus != "active" {
+		ctx.JSON(http.StatusOK, operatorAccountBalanceResponse{
+			AccountStatus: accountStatus,
+			StatusDesc:    statusDesc,
+		})
 		return
 	}
 
@@ -183,6 +186,7 @@ func (server *Server) getOperatorAccountBalance(ctx *gin.Context) {
 		AvailableAmount:    balance.AvailableAmount,
 		PendingAmount:      balance.PendingAmount,
 		WithdrawableAmount: balance.WithdrawableAmount,
+		AccountStatus:      "active",
 	})
 }
 

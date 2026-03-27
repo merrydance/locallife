@@ -253,6 +253,53 @@ func TestGetOperatorAccountBalanceAPI(t *testing.T) {
 	require.Equal(t, int64(120000), resp.WithdrawableAmount)
 }
 
+func TestGetOperatorAccountBalanceAPI_NotConfigured(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := db.Operator{
+		ID:       1002,
+		UserID:   user.ID,
+		RegionID: 1,
+		Status:   "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Return([]db.UserRole{{
+			UserID:          user.ID,
+			Role:            "operator",
+			Status:          "active",
+			RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
+		}}, nil)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(2).
+		Return(operator, nil)
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/operators/me/finance/account/balance", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp operatorAccountBalanceResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "not_configured", resp.AccountStatus)
+	require.NotEmpty(t, resp.StatusDesc)
+	require.Empty(t, resp.SubMchID)
+}
+
 func TestListOperatorWithdrawalsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	activeOperator := db.Operator{

@@ -1,4 +1,4 @@
-import { getRefundById, getRefundReturns, ProfitSharingReturn, RefundOrder } from '../../../api/payment-refund'
+import { getRefundById, getRefundReturns, ProfitSharingReturn, RefundOrder } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
 
 interface RefundProgress {

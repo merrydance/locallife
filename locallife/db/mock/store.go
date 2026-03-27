@@ -1773,6 +1773,21 @@ func (mr *MockStoreMockRecorder) CountOrdersByMerchantAndStatus(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOrdersByMerchantAndStatus", reflect.TypeOf((*MockStore)(nil).CountOrdersByMerchantAndStatus), ctx, arg)
 }
 
+// CountPaymentLedgerEntriesByUser mocks base method.
+func (m *MockStore) CountPaymentLedgerEntriesByUser(ctx context.Context, userID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPaymentLedgerEntriesByUser", ctx, userID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPaymentLedgerEntriesByUser indicates an expected call of CountPaymentLedgerEntriesByUser.
+func (mr *MockStoreMockRecorder) CountPaymentLedgerEntriesByUser(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPaymentLedgerEntriesByUser", reflect.TypeOf((*MockStore)(nil).CountPaymentLedgerEntriesByUser), ctx, userID)
+}
+
 // CountPendingOperatorApplications mocks base method.
 func (m *MockStore) CountPendingOperatorApplications(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
@@ -12952,6 +12967,21 @@ func (m *MockStore) ListPaidUnrefundedReservationPaymentOrders(ctx context.Conte
 func (mr *MockStoreMockRecorder) ListPaidUnrefundedReservationPaymentOrders(ctx, limit any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaidUnrefundedReservationPaymentOrders", reflect.TypeOf((*MockStore)(nil).ListPaidUnrefundedReservationPaymentOrders), ctx, limit)
+}
+
+// ListPaymentLedgerEntriesByUser mocks base method.
+func (m *MockStore) ListPaymentLedgerEntriesByUser(ctx context.Context, arg db.ListPaymentLedgerEntriesByUserParams) ([]db.ListPaymentLedgerEntriesByUserRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPaymentLedgerEntriesByUser", ctx, arg)
+	ret0, _ := ret[0].([]db.ListPaymentLedgerEntriesByUserRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPaymentLedgerEntriesByUser indicates an expected call of ListPaymentLedgerEntriesByUser.
+func (mr *MockStoreMockRecorder) ListPaymentLedgerEntriesByUser(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPaymentLedgerEntriesByUser", reflect.TypeOf((*MockStore)(nil).ListPaymentLedgerEntriesByUser), ctx, arg)
 }
 
 // ListPaymentOrdersByUser mocks base method.
