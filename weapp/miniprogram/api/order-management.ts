@@ -74,6 +74,13 @@ export interface OrderStatsResponse {
     completion_rate: number                      // 完成率
 }
 
+export interface MerchantOrderListResult {
+    orders: OrderResponse[]
+    total: number
+    page_id: number
+    page_size: number
+}
+
 /**
  * 拒单请求 - 对齐 api.rejectOrderRequest
  */
@@ -159,18 +166,29 @@ export class MerchantOrderManagementService {
         page_id: number                            // 页码（必填）
         page_size: number                          // 每页数量（必填，5-50）
         status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'delivering' | 'completed' | 'cancelled'  // 状态筛选
-    }): Promise<OrderResponse[]> {
-        const response = await request<OrderResponse[] | { orders?: OrderResponse[] }>({
+        order_type?: OrderResponse['order_type']   // 订单类型筛选
+    }): Promise<MerchantOrderListResult> {
+        const response = await request<OrderResponse[] | MerchantOrderListResult | { orders?: OrderResponse[], total?: number, page_id?: number, page_size?: number }>({
             url: '/v1/merchant/orders',
             method: 'GET',
             data: params
         })
 
         if (Array.isArray(response)) {
-            return response
+            return {
+                orders: response,
+                total: response.length,
+                page_id: params.page_id,
+                page_size: params.page_size
+            }
         }
 
-        return response.orders || []
+        return {
+            orders: response.orders || [],
+            total: response.total || 0,
+            page_id: response.page_id || params.page_id,
+            page_size: response.page_size || params.page_size
+        }
     }
 
     /**

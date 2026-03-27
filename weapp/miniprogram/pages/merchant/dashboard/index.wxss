@@ -54,6 +54,12 @@
   gap: 20rpx;
 }
 
+.shortcut-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 28rpx;
+}
+
 .stats-item {
   display: flex;
   flex-direction: column;
@@ -113,8 +119,15 @@
   margin-bottom: 32rpx;
 }
 
-.card-title {
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
   padding: 0 var(--spacer-lg) var(--spacer-md);
+}
+
+.card-title {
   font-size: var(--font-size-heading);
   font-weight: 600;
   color: var(--td-text-color-primary);

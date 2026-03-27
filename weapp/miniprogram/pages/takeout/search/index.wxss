@@ -18,6 +18,17 @@
   padding: 24rpx;
 }
 
+.initial-loading,
+.initial-error,
+.result-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  padding: 80rpx 24rpx;
+}
+
 .block-section {
   margin-bottom: 40rpx;
 }
@@ -67,6 +78,16 @@
 /* ======= 建议态 ======= */
 .suggest-list {
   background: var(--td-bg-color-container);
+}
+
+.suggest-empty {
+  padding: 40rpx 24rpx;
+  text-align: center;
+}
+
+.suggest-empty-text {
+  font-size: 26rpx;
+  color: var(--td-text-color-placeholder);
 }
 
 .suggest-item {

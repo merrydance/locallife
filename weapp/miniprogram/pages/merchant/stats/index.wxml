@@ -1,0 +1,126 @@
+<custom-navbar title="经营统计" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载经营统计中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '经营统计加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <block wx:else>
+    <view class="toolbar">
+      <view class="range-group">
+        <view
+          wx:for="{{rangeOptions}}"
+          wx:key="key"
+          class="range-chip {{currentRange === item.key ? 'range-chip-active' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onSelectRange"
+        >
+          {{item.label}}
+        </view>
+      </view>
+      <text class="updated-at">更新于 {{updatedAtLabel}}</text>
+    </view>
+
+    <view class="summary-grid">
+      <view class="summary-card accent-sales">
+        <text class="summary-label">区间营收</text>
+        <text class="summary-value">{{summary.totalSalesText}}</text>
+        <text class="summary-meta">{{summary.dateRangeLabel}}</text>
+      </view>
+      <view class="summary-card">
+        <text class="summary-label">完成订单</text>
+        <text class="summary-value">{{summary.completedOrders}}</text>
+        <text class="summary-meta">总订单 {{summary.totalOrders}}</text>
+      </view>
+      <view class="summary-card">
+        <text class="summary-label">完成率</text>
+        <text class="summary-value">{{summary.completionRateText}}</text>
+        <text class="summary-meta">取消 {{summary.cancelledOrders}} 单</text>
+      </view>
+      <view class="summary-card">
+        <text class="summary-label">平均客单</text>
+        <text class="summary-value">{{summary.avgOrderValueText}}</text>
+        <text class="summary-meta">近 {{currentRange === '7d' ? '7' : '30'}} 天订单均值</text>
+      </view>
+    </view>
+
+    <view class="meta-strip">
+      <view class="meta-row">
+        <text class="meta-label">日均销售</text>
+        <text class="meta-value">{{summary.avgDailySalesText}}</text>
+      </view>
+      <view class="meta-row">
+        <text class="meta-label">服务费支出</text>
+        <text class="meta-value">{{summary.totalCommissionText}}</text>
+      </view>
+      <view class="meta-row">
+        <text class="meta-label">统计口径</text>
+        <text class="meta-value">{{summary.dateRangeLabel}}</text>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <text class="section-title">热销菜</text>
+        <text class="section-subtitle">按销售额排序</text>
+      </view>
+
+      <t-empty wx:if="{{!topDishes.length}}" description="当前区间暂无热销菜数据" />
+
+      <view wx:else class="dish-list">
+        <view wx:for="{{topDishes}}" wx:key="dish_id" class="dish-card">
+          <view class="dish-rank">{{item.rank}}</view>
+          <view class="dish-body">
+            <view class="dish-head">
+              <text class="dish-name">{{item.dish_name}}</text>
+              <text class="dish-revenue">{{item.revenueText}}</text>
+            </view>
+            <view class="dish-meta">
+              <text>售出 {{item.soldLabel}}</text>
+              <text>单价 {{item.priceText}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <text class="section-title">预订池概览</text>
+        <text class="section-subtitle">当前商户预订状态</text>
+      </view>
+
+      <view class="reservation-grid">
+        <view class="reservation-card">
+          <text class="reservation-label">待支付</text>
+          <text class="reservation-value">{{reservationStats.pending_count}}</text>
+        </view>
+        <view class="reservation-card">
+          <text class="reservation-label">待确认</text>
+          <text class="reservation-value">{{reservationStats.paid_count}}</text>
+        </view>
+        <view class="reservation-card">
+          <text class="reservation-label">已确认</text>
+          <text class="reservation-value">{{reservationStats.confirmed_count}}</text>
+        </view>
+        <view class="reservation-card">
+          <text class="reservation-label">已签到</text>
+          <text class="reservation-value">{{reservationStats.checked_in_count || 0}}</text>
+        </view>
+        <view class="reservation-card">
+          <text class="reservation-label">已完成</text>
+          <text class="reservation-value">{{reservationStats.completed_count}}</text>
+        </view>
+        <view class="reservation-card warning-card">
+          <text class="reservation-label">爽约 / 过期</text>
+          <text class="reservation-value">{{reservationStats.no_show_count + reservationStats.expired_count}}</text>
+        </view>
+      </view>
+    </view>
+  </block>
+</view>

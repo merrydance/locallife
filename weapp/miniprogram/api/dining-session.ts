@@ -26,6 +26,7 @@ export interface DiningSessionPrecheckResponse {
   table_id: number
   reserved: boolean
   reservation_id?: number
+  /** 仅表示当前登录用户是否为该预约本人，不表示商户侧可管理权限 */
   is_reservation_owner: boolean
   payment_mode?: string
   paid_amount?: number

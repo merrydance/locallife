@@ -15,6 +15,11 @@ import { formatPrice } from '../../utils/util'
 const PAGE_CONTEXT = 'takeout_index'
 const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
 const DEFAULT_AVG_PREP_MINUTES = 15
+const FIRST_SCREEN_MERCHANT_COUNT = 3
+const HYDRATION_BATCH_SIZE = 2
+const PRIORITY_META_HYDRATION_DELAY_MS = 260
+const BACKGROUND_DISH_HYDRATION_DELAY_MS = 700
+const BACKGROUND_META_HYDRATION_DELAY_MS = 1200
 
 interface FeaturedDish {
   id: number
@@ -57,6 +62,18 @@ interface UserMessageError {
 
 type SearchTimer = ReturnType<typeof setTimeout>
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = []
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size))
+  }
+  return chunks
+}
+
 function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
   const promoTag = tags.find((tag) => /促销|满减|折扣|优惠|券/.test(tag)) || ''
   let subsidyTag = tags.find((tag) => /补贴|免配送|免运费|运费减免|配送补贴/.test(tag)) || ''
@@ -96,6 +113,8 @@ Page({
   // 当前列表数据是使用哪套坐标加载的（用于跨城检测）
   _dataLoadedLat: null as number | null,
   _dataLoadedLng: null as number | null,
+  _feedHydrationGeneration: 0,
+  _feedHydrationTimers: [] as SearchTimer[],
 
   onLoad() {
     wx.showShareMenu({
@@ -400,6 +419,7 @@ Page({
   onUnload() {
     // 页面卸载时清理
     requestManager.cancelByContext(PAGE_CONTEXT)
+    this.resetFeedHydration()
 
     // 取消位置订阅
     if (this._unsubscribeLocation) {
@@ -481,7 +501,6 @@ Page({
       const reset = page === 1
 
       if (reset) {
-        await this.refreshServiceProviderState()
         // onLoad 时若 token 尚未就绪，loadCategories 会被跳过；
         // 在此补充调用，确保品类数据在 token 就绪后一定能加载
         if (this.data.cuisineCategories.length === 0) {
@@ -508,6 +527,8 @@ Page({
   },
 
   async loadFeed(reset = false) {
+    const generation = reset ? this.resetFeedHydration() : this._feedHydrationGeneration
+
     if (reset) {
       this.setData({ page: 1, merchantFeed: [], hasMore: true })
     }
@@ -560,14 +581,14 @@ Page({
 
       // 记录已有 feed 长度，异步加载菜品时用于按 ID 定位
       if (reset) {
-        this.setData({ merchantFeed: feedItems, hasMore })
+        this.setData({ merchantFeed: feedItems, hasMore, hasServiceProviders: merchants.length > 0 })
       } else {
         this.setData({ merchantFeed: [...this.data.merchantFeed, ...feedItems], hasMore })
       }
 
-      // 异步填充各商户的精选菜品（不阻塞页面渲染）
+      // 优先稳定首屏结构，再把详情和更多卡片放到后台渐进水合。
       const merchantIds = merchants.map((m) => m.id)
-      this.loadFeaturedDishesForAll(merchantIds)
+      this.scheduleMerchantHydration(merchantIds, generation)
 
       // 预加载商户封面图
       const { preloadImages } = require('../../utils/image')
@@ -580,76 +601,81 @@ Page({
   },
 
   /**
-   * 批量获取商户精选菜品 + 详情（促销/出餐时间）+ 是否老顾客
-   * 使用 Promise.allSettled 并行请求，任一失败不影响其他
+   * 将卡片水合拆成优先批次和后台批次，避免第一页首屏产生逐店请求风暴。
    */
-  async loadFeaturedDishesForAll(merchantIds: number[]) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const results: Array<{ status: string, value?: [import('../../api/merchant').PublicMerchantDishesResponse, import('../../api/merchant').PublicMerchantDetail, boolean], reason?: unknown }> = await (Promise as any).allSettled(
-      merchantIds.map((id) => Promise.all([
-        getPublicMerchantDishes(id),
-        getPublicMerchantDetail(id, true),
-        getHasUserOrderedFromMerchant(id)
-      ]))
+  scheduleMerchantHydration(merchantIds: number[], generation: number) {
+    const priorityIds = merchantIds.slice(0, FIRST_SCREEN_MERCHANT_COUNT)
+    const backgroundIds = merchantIds.slice(FIRST_SCREEN_MERCHANT_COUNT)
+
+    this.queueHydrationPhase(priorityIds, generation, 0, this.hydrateMerchantDishesBatch)
+    this.queueHydrationPhase(priorityIds, generation, PRIORITY_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
+    this.queueHydrationPhase(backgroundIds, generation, BACKGROUND_DISH_HYDRATION_DELAY_MS, this.hydrateMerchantDishesBatch)
+    this.queueHydrationPhase(backgroundIds, generation, BACKGROUND_META_HYDRATION_DELAY_MS, this.hydrateMerchantMetaBatch)
+  },
+
+  queueHydrationPhase(
+    merchantIds: number[],
+    generation: number,
+    initialDelay: number,
+    worker: (merchantIds: number[], generation: number) => Promise<void>
+  ) {
+    if (merchantIds.length === 0) return
+
+    const timer = setTimeout(() => {
+      this._feedHydrationTimers = this._feedHydrationTimers.filter((currentTimer) => currentTimer !== timer)
+      if (generation !== this._feedHydrationGeneration) return
+      void this.runHydrationQueue(merchantIds, generation, worker)
+    }, initialDelay)
+
+    this._feedHydrationTimers.push(timer)
+  },
+
+  async runHydrationQueue(
+    merchantIds: number[],
+    generation: number,
+    worker: (merchantIds: number[], generation: number) => Promise<void>
+  ) {
+    for (const chunk of chunkArray(merchantIds, HYDRATION_BATCH_SIZE)) {
+      if (generation !== this._feedHydrationGeneration) return
+      await worker.call(this, chunk, generation)
+      if (generation !== this._feedHydrationGeneration) return
+      await sleep(120)
+    }
+  },
+
+  async hydrateMerchantDishesBatch(merchantIds: number[], generation: number) {
+    const results = await Promise.allSettled(
+      merchantIds.map(async (merchantId) => ({
+        merchantId,
+        dishesResp: await getPublicMerchantDishes(merchantId)
+      }))
     )
 
+    if (generation !== this._feedHydrationGeneration) return
+
     const updates: Record<string, unknown> = {}
-    results.forEach((result: { status: string, value?: [import('../../api/merchant').PublicMerchantDishesResponse, import('../../api/merchant').PublicMerchantDetail, boolean], reason?: unknown }, i: number) => {
-      const merchantId = merchantIds[i]
+    results.forEach((result, index) => {
+      const merchantId = result.status === 'fulfilled' ? result.value.merchantId : merchantIds[index]
       const feedIndex = this.data.merchantFeed.findIndex((item) => item.id === merchantId)
       if (feedIndex === -1) return
 
-      if (result.status === 'fulfilled' && result.value) {
-        const [dishesResp, detail, hasOrdered] = result.value
-
-        // 精选菜品
-        const featuredDishes: FeaturedDish[] = dishesResp.dishes.slice(0, 4).map((d: import('../../api/merchant').PublicDish) => ({
-          id: d.id,
-          name: d.name,
-          imageUrl: getPublicImageUrl(d.image_url || '') || '/assets/placeholder_food.png',
-          priceDisplay: formatPrice(d.price),
-          price: d.price,
-          merchantId,
-          customization_groups: d.customization_groups || []
-        }))
-        updates[`merchantFeed[${feedIndex}].featuredDishes`] = featuredDishes
-
-        // 出餐时间
-        updates[`merchantFeed[${feedIndex}].avgPrepMinutes`] =
-          (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
-            ? detail.avg_prep_minutes
-            : DEFAULT_AVG_PREP_MINUTES
-        updates[`merchantFeed[${feedIndex}].isOrderingSuspended`] = !!detail.is_ordering_suspended
-
-        // 满减文案：取门槛最低的一条
-        if (detail.discount_rules && detail.discount_rules.length > 0) {
-          const best = detail.discount_rules.reduce((a: PublicDiscountRule, b: PublicDiscountRule) => a.min_order_amount <= b.min_order_amount ? a : b)
-          updates[`merchantFeed[${feedIndex}].discountPromoText`] =
-            `满${(best.min_order_amount / 100).toFixed(0)}减${(best.discount_amount / 100).toFixed(0)}`
-        }
-
-        // 券文案：取面额最大的一张
-        if (detail.vouchers && detail.vouchers.length > 0) {
-          const best = detail.vouchers.reduce((a: PublicVoucher, b: PublicVoucher) => a.amount >= b.amount ? a : b)
-          updates[`merchantFeed[${feedIndex}].voucherText`] =
-            `领券减${(best.amount / 100).toFixed(0)}元`
-        }
-
-        // 运费优惠文案
-        if (detail.delivery_promotions && detail.delivery_promotions.length > 0) {
-          const best = detail.delivery_promotions.reduce((a: PublicDeliveryPromotion, b: PublicDeliveryPromotion) => a.min_order_amount <= b.min_order_amount ? a : b)
-          const threshold = best.min_order_amount
-          updates[`merchantFeed[${feedIndex}].deliveryPromoText`] = threshold === 0
-            ? '免运费'
-            : `满${(threshold / 100).toFixed(0)}免运费`
-        }
-
-        // 老顾客标识
-        updates[`merchantFeed[${feedIndex}].hasOrdered`] = hasOrdered
-      }
-
       updates[`merchantFeed[${feedIndex}].dishesLoading`] = false
-      updates[`merchantFeed[${feedIndex}].detailLoading`] = false
+
+      if (result.status !== 'fulfilled') return
+
+      const { dishesResp } = result.value
+
+      const featuredDishes: FeaturedDish[] = dishesResp.dishes.slice(0, 4).map((dish: import('../../api/merchant').PublicDish) => ({
+        id: dish.id,
+        name: dish.name,
+        imageUrl: getPublicImageUrl(dish.image_url || '') || '/assets/placeholder_food.png',
+        priceDisplay: formatPrice(dish.price),
+        price: dish.price,
+        merchantId,
+        customization_groups: dish.customization_groups || []
+      }))
+
+      updates[`merchantFeed[${feedIndex}].featuredDishes`] = featuredDishes
     })
 
     if (Object.keys(updates).length > 0) {
@@ -657,22 +683,84 @@ Page({
     }
   },
 
-  async refreshServiceProviderState() {
-    try {
-      const app = getApp<IAppOption>()
-      const merchants = await searchMerchants({
-        keyword: '',
-        page_id: 1,
-        page_size: 1,
-        user_latitude: app.globalData.latitude || undefined,
-        user_longitude: app.globalData.longitude || undefined
-      })
+  async hydrateMerchantMetaBatch(merchantIds: number[], generation: number) {
+    const results = await Promise.allSettled(
+      merchantIds.map(async (merchantId) => ({
+        merchantId,
+        detail: await getPublicMerchantDetail(merchantId, true),
+        hasOrdered: await getHasUserOrderedFromMerchant(merchantId)
+      }))
+    )
 
-      this.setData({ hasServiceProviders: merchants.length > 0 })
-    } catch (error) {
-      logger.warn('探测区域商户状态失败，按有服务兜底展示', error, 'Takeout.refreshServiceProviderState')
-      this.setData({ hasServiceProviders: true })
+    if (generation !== this._feedHydrationGeneration) return
+
+    const updates: Record<string, unknown> = {}
+    results.forEach((result, index) => {
+      const merchantId = result.status === 'fulfilled' ? result.value.merchantId : merchantIds[index]
+      const feedIndex = this.data.merchantFeed.findIndex((item) => item.id === merchantId)
+      if (feedIndex === -1) return
+
+      updates[`merchantFeed[${feedIndex}].detailLoading`] = false
+
+      if (result.status !== 'fulfilled') return
+
+      const { detail, hasOrdered } = result.value
+
+      updates[`merchantFeed[${feedIndex}].avgPrepMinutes`] =
+        (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
+          ? detail.avg_prep_minutes
+          : DEFAULT_AVG_PREP_MINUTES
+      updates[`merchantFeed[${feedIndex}].isOrderingSuspended`] = !!detail.is_ordering_suspended
+      updates[`merchantFeed[${feedIndex}].discountPromoText`] = this.buildDiscountPromoText(detail.discount_rules)
+      updates[`merchantFeed[${feedIndex}].voucherText`] = this.buildVoucherText(detail.vouchers)
+      updates[`merchantFeed[${feedIndex}].deliveryPromoText`] = this.buildDeliveryPromoText(detail.delivery_promotions)
+      updates[`merchantFeed[${feedIndex}].hasOrdered`] = hasOrdered
+    })
+
+    if (Object.keys(updates).length > 0) {
+      this.setData(updates)
     }
+  },
+
+  buildDiscountPromoText(discountRules?: PublicDiscountRule[]) {
+    if (!discountRules || discountRules.length === 0) {
+      return ''
+    }
+
+    const best = discountRules.reduce((current, next) => current.min_order_amount <= next.min_order_amount ? current : next)
+    return `满${(best.min_order_amount / 100).toFixed(0)}减${(best.discount_amount / 100).toFixed(0)}`
+  },
+
+  buildVoucherText(vouchers?: PublicVoucher[]) {
+    if (!vouchers || vouchers.length === 0) {
+      return ''
+    }
+
+    const best = vouchers.reduce((current, next) => current.amount >= next.amount ? current : next)
+    return `领券减${(best.amount / 100).toFixed(0)}元`
+  },
+
+  buildDeliveryPromoText(deliveryPromotions?: PublicDeliveryPromotion[]) {
+    if (!deliveryPromotions || deliveryPromotions.length === 0) {
+      return ''
+    }
+
+    const best = deliveryPromotions.reduce((current, next) => current.min_order_amount <= next.min_order_amount ? current : next)
+    const threshold = best.min_order_amount
+    return threshold === 0
+      ? '免运费'
+      : `满${(threshold / 100).toFixed(0)}免运费`
+  },
+
+  clearFeedHydrationTimers() {
+    this._feedHydrationTimers.forEach((timer) => clearTimeout(timer))
+    this._feedHydrationTimers = []
+  },
+
+  resetFeedHydration() {
+    this._feedHydrationGeneration += 1
+    this.clearFeedHydrationTimers()
+    return this._feedHydrationGeneration
   },
 
   /**

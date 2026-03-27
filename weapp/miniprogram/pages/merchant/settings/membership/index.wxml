@@ -1,0 +1,65 @@
+<custom-navbar title="会员设置" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载会员设置中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '会员设置加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <block wx:else>
+    <view class="hero-card">
+      <text class="hero-title">会员权益使用规则</text>
+      <text class="hero-subtitle">控制余额和赠送金在哪些业务场景可用，以及是否允许与优惠叠加。</text>
+      <text class="hero-meta">商户 ID {{merchantId}}</text>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">叠加规则</view>
+      <t-cell-group theme="card">
+        <t-cell title="允许与优惠券叠加" description="开启后，会员余额或赠送金可与平台/店铺优惠券同时使用">
+          <t-switch slot="note" value="{{form.allow_with_voucher}}" data-field="allow_with_voucher" bind:change="onToggleRule" size="large" />
+        </t-cell>
+        <t-cell title="允许与折扣活动叠加" description="开启后，会员权益可与店铺折扣活动同时使用">
+          <t-switch slot="note" value="{{form.allow_with_discount}}" data-field="allow_with_discount" bind:change="onToggleRule" size="large" />
+        </t-cell>
+        <t-input label="最高抵扣比例" type="number" value="{{form.max_deduction_percent}}" placeholder="1-100" bindchange="onPercentChange">
+          <text slot="suffix">%</text>
+        </t-input>
+      </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">余额可用场景</view>
+      <view class="scene-list">
+        <view wx:for="{{sceneOptions}}" wx:key="key" class="scene-card {{form.balanceScenes[item.key] ? 'scene-card-active' : ''}}" data-group="balanceScenes" data-scene="{{item.key}}" bindtap="onToggleScene">
+          <view class="scene-head">
+            <text class="scene-title">{{item.label}}</text>
+            <text class="scene-check">{{form.balanceScenes[item.key] ? '已启用' : '未启用'}}</text>
+          </view>
+          <text class="scene-desc">{{item.desc}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">赠送金可用场景</view>
+      <view class="scene-list">
+        <view wx:for="{{sceneOptions}}" wx:key="key" class="scene-card {{form.bonusScenes[item.key] ? 'scene-card-active' : ''}}" data-group="bonusScenes" data-scene="{{item.key}}" bindtap="onToggleScene">
+          <view class="scene-head">
+            <text class="scene-title">{{item.label}}</text>
+            <text class="scene-check">{{form.bonusScenes[item.key] ? '已启用' : '未启用'}}</text>
+          </view>
+          <text class="scene-desc">{{item.desc}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="save-wrap">
+      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存会员设置</t-button>
+    </view>
+  </block>
+</view>

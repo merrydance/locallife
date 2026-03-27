@@ -11,6 +11,10 @@ Page({
   data: {
     navBarHeight: 88,
     configItems: [
+      { id: 'profile', title: '店铺资料', desc: '维护店铺名称、联系电话、地址与介绍', path: '/pages/merchant/settings/profile/index' },
+      { id: 'membership', title: '会员设置', desc: '配置余额与赠送金可用场景及叠加规则', path: '/pages/merchant/settings/membership/index' },
+      { id: 'kitchen', title: '后厨看板', desc: '查看新单、制作中和待取餐订单', path: '/pages/merchant/kitchen/index' },
+      { id: 'stats', title: '经营统计', desc: '查看订单概览、完成率和热销菜表现', path: '/pages/merchant/stats/index' },
       { id: 'claims', title: '索赔与追偿', desc: '查看责任判定、提交异议、支付平台垫付款', path: '/pages/merchant/claims/index' },
       { id: 'dishes', title: '菜品管理', desc: '新增、编辑、上下架菜品', path: '/pages/merchant/dishes/index' },
       { id: 'dish-categories', title: '菜品分类管理', desc: '维护分类与排序', path: '/pages/merchant/dishes/categories/index' },

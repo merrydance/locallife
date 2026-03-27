@@ -18,6 +18,17 @@
   <!-- ======= 初始态：历史 + 热搜 ======= -->
   <view wx:if="{{showInitial}}" class="initial-section">
 
+    <view wx:if="{{initialLoading}}" class="initial-loading">
+      <t-loading theme="circular" size="40rpx" text="加载搜索记录..." />
+    </view>
+
+    <view wx:elif="{{initialError}}" class="initial-error">
+      <t-empty description="{{initialErrorMessage || '搜索记录加载失败，请重试'}}" />
+      <t-button theme="primary" size="small" shape="round" bindtap="onRetryInitial">重新加载</t-button>
+    </view>
+
+    <block wx:else>
+
     <!-- 搜索历史 -->
     <view class="block-section" wx:if="{{history.length > 0}}">
       <view class="block-header">
@@ -59,11 +70,19 @@
       </view>
     </view>
 
+    <t-empty wx:if="{{history.length === 0 && hotWords.length === 0}}" description="输入关键词开始搜索" />
+
+    </block>
+
   </view>
 
   <!-- ======= 建议态：实时搜索建议 ======= -->
   <view wx:elif="{{showSuggestions}}" class="suggest-list">
+    <view wx:if="{{suggestions.length === 0}}" class="suggest-empty">
+      <text class="suggest-empty-text">没有相关搜索建议，直接搜索试试</text>
+    </view>
     <view
+      wx:else
       class="suggest-item"
       wx:for="{{suggestions}}"
       wx:key="keyword"
@@ -90,6 +109,11 @@
     <!-- 加載中 -->
     <view wx:if="{{searching}}" class="searching-wrap">
       <t-loading theme="circular" size="40rpx" text="搜索中..." />
+    </view>
+
+    <view wx:elif="{{resultsError}}" class="result-error">
+      <t-empty description="{{resultsErrorMessage || '搜索失败，请稍后重试'}}" />
+      <t-button theme="primary" size="small" shape="round" bindtap="onRetrySearch">重试</t-button>
     </view>
 
     <block wx:else>

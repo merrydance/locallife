@@ -160,6 +160,10 @@
       "name": "merchant",
       "pages": [
         "dashboard/index",
+        "kitchen/index",
+        "stats/index",
+        "settings/profile/index",
+        "settings/membership/index",
         "config/index",
         "claims/index",
         "claims/detail/index",

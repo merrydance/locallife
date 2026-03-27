@@ -4,6 +4,7 @@ import { logger } from '../../../../utils/logger'
 import dayjs from 'dayjs'
 
 type OrderStatus = OrderResponse['status']
+type OrderStatusFilter = '' | OrderStatus
 
 interface MerchantOrderListItem extends OrderResponse {
   order_no_short: string
@@ -16,7 +17,7 @@ interface MerchantOrderListItem extends OrderResponse {
 }
 
 interface OrdersPageOptions {
-  status?: OrderStatus
+  status?: OrderStatusFilter
   order_type?: OrderResponse['order_type']
 }
 
@@ -25,7 +26,7 @@ Page({
     navBarHeight: 88,
     loading: false,
     orders: [] as MerchantOrderListItem[],
-    currentStatus: 'paid' as OrderStatus,
+    currentStatus: 'paid' as OrderStatusFilter,
     orderTypeFilter: '' as '' | OrderResponse['order_type'],
     pageTitle: '订单管理',
     page: 1,
@@ -58,19 +59,17 @@ Page({
       const res = await MerchantOrderManagementService.getOrderList({
         page_id: page,
         page_size: this.data.pageSize,
-        status: this.data.currentStatus || undefined
+        status: this.data.currentStatus || undefined,
+        order_type: this.data.orderTypeFilter || undefined
       })
 
-      const sourceOrders = this.data.orderTypeFilter
-        ? (res || []).filter((order) => order.order_type === this.data.orderTypeFilter)
-        : (res || [])
-
-      const formattedOrders = sourceOrders.map((o) => this.formatOrder(o))
+        const sourceOrders = res.orders || []
+        const formattedOrders = sourceOrders.map((o) => this.formatOrder(o))
       
       this.setData({
         orders: reset ? formattedOrders : [...this.data.orders, ...formattedOrders],
         page: page + 1,
-        hasMore: res.length === this.data.pageSize
+          hasMore: page * this.data.pageSize < (res.total || 0)
       })
     } catch (err) {
       logger.error('Merchant load orders failed', err)
@@ -94,7 +93,7 @@ Page({
     }
   },
 
-  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatus }>) {
+  onTabChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatusFilter }>) {
     this.setData({ 
       currentStatus: e.detail.value,
       orders: [],

@@ -44,12 +44,18 @@ Page({
     showSuggestions: false,
     showResults: false,
     // 初始态数据
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
     history: [] as SearchHistory[],
     hotWords: [] as PopularKeyword[],
     // 建议态数据
     suggestions: [] as SearchSuggestion[],
     // 结果态数据
     searching: false,
+    resultsError: false,
+    resultsErrorMessage: '',
+    lastSearchKeyword: '',
     activeResultTab: 'dishes',
     resultDishes: [] as DishResult[],
     resultMerchants: [] as MerchantResult[],
@@ -66,14 +72,43 @@ Page({
   },
 
   async loadInitialData() {
+    this.setData({
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+
     try {
-      const [history, hotWords] = await Promise.all([
-        getSearchHistory(10).catch(() => [] as SearchHistory[]),
-        getPopularKeywords('dish').catch(() => [] as PopularKeyword[])
+      const [historyResult, hotWordsResult] = await Promise.allSettled([
+        getSearchHistory(10),
+        getPopularKeywords('dish')
       ])
-      this.setData({ history, hotWords })
+
+      const history = historyResult.status === 'fulfilled' ? historyResult.value : []
+      const hotWords = hotWordsResult.status === 'fulfilled' ? hotWordsResult.value : []
+      const initialError = historyResult.status === 'rejected' && hotWordsResult.status === 'rejected'
+
+      this.setData({
+        history,
+        hotWords,
+        initialLoading: false,
+        initialError,
+        initialErrorMessage: initialError ? '搜索记录加载失败，请重试' : ''
+      })
+
+      if (initialError) {
+        console.warn('加载搜索初始数据失败', {
+          historyError: historyResult.status === 'rejected' ? historyResult.reason : undefined,
+          hotWordsError: hotWordsResult.status === 'rejected' ? hotWordsResult.reason : undefined
+        })
+      }
     } catch (err) {
       console.warn('加载搜索初始数据失败', err)
+      this.setData({
+        initialLoading: false,
+        initialError: true,
+        initialErrorMessage: '搜索记录加载失败，请重试'
+      })
     }
   },
 
@@ -84,7 +119,14 @@ Page({
 
     if (!keyword.trim()) {
       // 清空时回到初始态
-      this.setData({ showInitial: true, showSuggestions: false, showResults: false })
+      this.setData({
+        showInitial: true,
+        showSuggestions: false,
+        showResults: false,
+        resultsError: false,
+        resultsErrorMessage: '',
+        suggestions: []
+      })
       if (debounceTimer) clearTimeout(debounceTimer)
       return
     }
@@ -104,6 +146,9 @@ Page({
       }
     } catch (err) {
       console.warn('获取搜索建议失败', err)
+      if (this.data.keyword === keyword) {
+        this.setData({ suggestions: [] })
+      }
     }
   },
 
@@ -121,8 +166,13 @@ Page({
       showSuggestions: false,
       showResults: true,
       searching: true,
+      resultsError: false,
+      resultsErrorMessage: '',
+      lastSearchKeyword: keyword,
       resultDishes: [],
-      resultMerchants: []
+      resultMerchants: [],
+      resultDishCount: 0,
+      resultMerchantCount: 0
     })
 
     try {
@@ -162,13 +212,28 @@ Page({
       })
     } catch (err) {
       console.error('搜索失败', err)
-      this.setData({ searching: false })
-      wx.showToast({ title: '搜索失败，请重试', icon: 'none' })
+      const userMessage = typeof err === 'object' && err !== null && 'userMessage' in err
+        ? (err as { userMessage?: string }).userMessage
+        : ''
+
+      this.setData({
+        searching: false,
+        resultsError: true,
+        resultsErrorMessage: userMessage || '搜索失败，请稍后重试'
+      })
     }
   },
 
   onClear() {
-    this.setData({ keyword: '', showInitial: true, showSuggestions: false, showResults: false })
+    this.setData({
+      keyword: '',
+      showInitial: true,
+      showSuggestions: false,
+      showResults: false,
+      resultsError: false,
+      resultsErrorMessage: '',
+      suggestions: []
+    })
   },
 
   onCancel() {
@@ -223,6 +288,16 @@ Page({
     this.setData({ activeResultTab: e.detail.value })
   },
 
+  onRetryInitial() {
+    this.loadInitialData()
+  },
+
+  onRetrySearch() {
+    const keyword = this.data.lastSearchKeyword || this.data.keyword.trim()
+    if (!keyword) return
+    this.doSearch(keyword)
+  },
+
   // 点击结果跳转
   onDishTap(e: WechatMiniprogram.CustomEvent) {
     const { id, merchantId } = e.currentTarget.dataset as { id: number, merchantId: number }
@@ -236,5 +311,12 @@ Page({
 
   stopPropagation() {
     // 阻止冒泡
+  },
+
+  onUnload() {
+    if (debounceTimer) {
+      clearTimeout(debounceTimer)
+      debounceTimer = null
+    }
   }
 })

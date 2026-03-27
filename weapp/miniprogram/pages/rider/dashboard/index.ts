@@ -72,10 +72,7 @@ Page({
   },
 
   onShow() {
-    if (this.data.isOnline) {
-      this.refreshData().catch((err) => logger.error('Show refresh error', err))
-      this.initWebSocket()
-    }
+    this.enterOnlineRuntime().catch((err) => logger.error('Show refresh error', err))
   },
 
   onHide() {
@@ -106,7 +103,7 @@ Page({
       })
 
       if (status.is_online) {
-        this.refreshData()
+        await this.enterOnlineRuntime()
       }
     } catch (err: unknown) {
       logger.error('Failed to init rider data', err)
@@ -276,8 +273,7 @@ Page({
       })
       
       if (targetOnline) {
-        this.refreshData().catch((err) => logger.error('Toggle online refresh error', err))
-        this.initWebSocket()
+        this.enterOnlineRuntime().catch((err) => logger.error('Toggle online refresh error', err))
       } else {
         this.setData({ recommendOrders: [] })
         this.cleanupWebSocket()
@@ -377,6 +373,13 @@ Page({
    */
   onGoToWallet() {
     wx.navigateTo({ url: '/pages/rider/deposit/index' })
+  },
+
+  async enterOnlineRuntime() {
+    if (!this.data.isOnline) return
+
+    await this.refreshData()
+    this.initWebSocket()
   },
 
   /**

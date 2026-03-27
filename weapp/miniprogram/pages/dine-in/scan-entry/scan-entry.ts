@@ -304,7 +304,7 @@ Page({
         if (!merchantInfo) return
 
         wx.navigateTo({
-            url: `/pages/merchant/detail/detail?id=${merchantInfo.id}`
+            url: `/pages/takeout/restaurant-detail/index?id=${merchantInfo.id}`
         })
     },
 

@@ -1,0 +1,56 @@
+<custom-navbar title="店铺资料" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载店铺资料中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '店铺资料加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <block wx:else>
+    <view class="hero-card">
+      <view>
+        <text class="hero-title">店铺基础设置</text>
+        <text class="hero-subtitle">维护顾客可见的店铺名称、联系电话、地址与介绍</text>
+      </view>
+      <t-tag theme="{{isOpen ? 'success' : 'warning'}}" variant="light" size="small">{{isOpen ? '营业中' : '休息中'}}</t-tag>
+    </view>
+
+    <view class="meta-strip">
+      <view class="meta-row">
+        <text class="meta-label">商户 ID</text>
+        <text class="meta-value">{{merchantId}}</text>
+      </view>
+      <view class="meta-row">
+        <text class="meta-label">最后更新时间</text>
+        <text class="meta-value">{{updatedAtLabel}}</text>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">基础信息</view>
+      <t-cell-group theme="card">
+        <t-input label="店铺名称" value="{{form.name}}" data-field="name" placeholder="请输入店铺名称" bindchange="onInputChange" />
+        <t-input label="联系电话" type="number" value="{{form.phone}}" data-field="phone" placeholder="11位联系电话" bindchange="onInputChange" />
+        <t-input label="店铺地址" value="{{form.address}}" data-field="address" placeholder="请输入店铺地址" bindchange="onInputChange" />
+        <t-textarea label="店铺介绍" value="{{form.description}}" data-field="description" placeholder="介绍店铺招牌菜、经营特色和营业氛围" maxlength="500" indicator bindchange="onInputChange" />
+      </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">扩展设置</view>
+      <t-cell-group theme="card">
+        <t-cell title="店铺图片管理" description="维护 Logo、门头照和环境照" arrow bindtap="onGoProfileImages" />
+        <t-cell title="经营类目设置" description="选择影响曝光和分类筛选的经营类目" arrow bindtap="onGoMerchantCategories" />
+        <t-cell title="会员设置" description="配置余额与赠送金在各业务场景中的使用规则" arrow bindtap="onGoMembership" />
+      </t-cell-group>
+    </view>
+
+    <view class="save-wrap">
+      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存店铺资料</t-button>
+    </view>
+  </block>
+</view>

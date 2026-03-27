@@ -392,6 +392,42 @@ export interface MerchantOperatorResponse {
   updated_at: string
 }
 
+export interface MerchantOpenStatusResponse {
+  is_open: boolean
+  auto_close_at?: string
+  message: string
+}
+
+export interface UpdateMyMerchantProfileRequest {
+  name?: string
+  description?: string
+  phone?: string
+  address?: string
+  latitude?: string
+  longitude?: string
+  logo_asset_id?: number | null
+  version: number
+}
+
+export type MerchantMembershipScene = 'dine_in' | 'takeout' | 'reservation'
+
+export interface MerchantMembershipSettingsResponse {
+  merchant_id: number
+  balance_usable_scenes: MerchantMembershipScene[]
+  bonus_usable_scenes: MerchantMembershipScene[]
+  allow_with_voucher: boolean
+  allow_with_discount: boolean
+  max_deduction_percent: number
+}
+
+export interface UpdateMerchantMembershipSettingsRequest {
+  balance_usable_scenes?: MerchantMembershipScene[]
+  bonus_usable_scenes?: MerchantMembershipScene[]
+  allow_with_voucher?: boolean
+  allow_with_discount?: boolean
+  max_deduction_percent?: number
+}
+
 /**
  * 获取当前登录商户信息（商户工作台）
  * GET /v1/merchants/me
@@ -415,6 +451,68 @@ export function updateMyMerchantLogo(logoAssetId: number | null, version: number
   return request<MerchantOperatorResponse>({
     url: '/v1/merchants/me',
     method: 'PATCH',
+    data
+  })
+}
+
+/**
+ * 更新当前商户资料（商户工作台）
+ * PATCH /v1/merchants/me
+ */
+export function updateMyMerchantProfile(data: UpdateMyMerchantProfileRequest) {
+  return request<MerchantOperatorResponse>({
+    url: '/v1/merchants/me',
+    method: 'PATCH',
+    data
+  })
+}
+
+/**
+ * 获取当前商户营业状态
+ * GET /v1/merchants/me/status
+ */
+export function getMyMerchantOpenStatus() {
+  return request<MerchantOpenStatusResponse>({
+    url: '/v1/merchants/me/status',
+    method: 'GET'
+  })
+}
+
+/**
+ * 更新当前商户营业状态
+ * PATCH /v1/merchants/me/status
+ */
+export function updateMyMerchantOpenStatus(isOpen: boolean, autoCloseAt?: string) {
+  const data: Record<string, unknown> = { is_open: isOpen }
+  if (autoCloseAt) {
+    data.auto_close_at = autoCloseAt
+  }
+  return request<MerchantOpenStatusResponse>({
+    url: '/v1/merchants/me/status',
+    method: 'PATCH',
+    data
+  })
+}
+
+/**
+ * 获取当前商户会员设置
+ * GET /v1/merchants/me/membership-settings
+ */
+export function getMyMerchantMembershipSettings() {
+  return request<MerchantMembershipSettingsResponse>({
+    url: '/v1/merchants/me/membership-settings',
+    method: 'GET'
+  })
+}
+
+/**
+ * 更新当前商户会员设置
+ * PUT /v1/merchants/me/membership-settings
+ */
+export function updateMyMerchantMembershipSettings(data: UpdateMerchantMembershipSettingsRequest) {
+  return request<MerchantMembershipSettingsResponse>({
+    url: '/v1/merchants/me/membership-settings',
+    method: 'PUT',
     data
   })
 }

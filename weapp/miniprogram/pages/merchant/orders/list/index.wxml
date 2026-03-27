@@ -71,7 +71,7 @@
             data-id="{{item.id}}"
             loading="{{item.submitting}}"
            shape="round">
-            接单制作
+            {{item.order_type === 'reservation' ? '接单备菜' : '接单制作'}}
           </t-button>
           
           <t-button 

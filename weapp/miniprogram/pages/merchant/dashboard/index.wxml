@@ -39,6 +39,10 @@
           <text class="stats-value">¥{{todayStats.avgOrderPrice / 100}}</text>
         </view>
       </view>
+
+      <view class="shortcut-row">
+        <t-button size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoStats">经营统计</t-button>
+      </view>
     </view>
   </t-skeleton>
 
@@ -50,7 +54,7 @@
           <t-icon name="{{isOpen ? 'check-circle' : 'error-circle'}}" size="32rpx" />
           <text class="ops-text">{{isOpen ? '正在接收订单中' : '已暂停接单'}}</text>
         </view>
-        <t-button size="extra-small" theme="primary" bind:tap="onToggleBusiness" shape="round">
+        <t-button size="extra-small" theme="primary" bind:tap="onToggleBusiness" shape="round" loading="{{businessStatusSubmitting}}">
           {{isOpen ? '打烊' : '开门'}}
         </t-button>
       </view>
@@ -64,7 +68,10 @@
     rowCol="{{ [1, 1, { width: '100%', height: '400rpx' }, 1, 1] }}"
   >
     <view class="card-section">
-      <view class="card-title">订单流</view>
+      <view class="card-head">
+        <view class="card-title">订单流</view>
+        <t-button size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoKitchen">进入后厨</t-button>
+      </view>
       <t-tabs value="{{currentOrderTab}}" bind:change="onOrderTabChange" t-class="order-tabs">
         <t-tab-panel label="待接单" value="paid" />
         <t-tab-panel label="制作中" value="preparing" />
