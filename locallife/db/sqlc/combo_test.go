@@ -500,3 +500,50 @@ func TestGetCombosWithMerchantByIDs_FilterOffline(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, results, "下架套餐不应被返回")
 }
+
+func TestSearchCombosGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	uniqueName := "SuspendedCombo_" + util.RandomString(8)
+
+	_, err := testStore.CreateComboSet(context.Background(), CreateComboSetParams{
+		MerchantID:    merchant.ID,
+		Name:          uniqueName,
+		OriginalPrice: util.RandomMoney(),
+		ComboPrice:    util.RandomMoney(),
+		IsOnline:      true,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	err = testStore.SuspendMerchantTakeout(context.Background(), SuspendMerchantTakeoutParams{
+		MerchantID:           merchant.ID,
+		TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+	})
+	require.NoError(t, err)
+
+	combos, err := testStore.SearchCombosGlobal(context.Background(), SearchCombosGlobalParams{
+		Column1: uniqueName,
+		Limit:   10,
+		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, combos)
+
+	count, err := testStore.CountSearchCombosGlobal(context.Background(), CountSearchCombosGlobalParams{
+		Column1: uniqueName,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}

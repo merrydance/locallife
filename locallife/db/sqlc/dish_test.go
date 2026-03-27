@@ -707,6 +707,57 @@ func TestSearchDishesGlobal_OnlyApprovedMerchants(t *testing.T) {
 	require.Empty(t, dishes, "Dishes from pending merchant should not appear in global search")
 }
 
+func TestSearchDishesGlobal_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	uniqueName := "SuspendedDish_" + util.RandomString(8)
+
+	_, err := testStore.CreateDish(context.Background(), CreateDishParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        uniqueName,
+		Price:       util.RandomMoney(),
+		IsAvailable: true,
+		IsOnline:    true,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	err = testStore.SuspendMerchantTakeout(context.Background(), SuspendMerchantTakeoutParams{
+		MerchantID:           merchant.ID,
+		TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+	})
+	require.NoError(t, err)
+
+	dishes, err := testStore.SearchDishesGlobal(context.Background(), SearchDishesGlobalParams{
+		Column1: pgtype.Text{String: uniqueName, Valid: true},
+		Limit:   10,
+		Offset:  0,
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.Empty(t, dishes)
+
+	count, err := testStore.CountSearchDishesGlobal(context.Background(), CountSearchDishesGlobalParams{
+		Column1: pgtype.Text{String: uniqueName, Valid: true},
+		RegionID: pgtype.Int8{
+			Int64: merchant.RegionID,
+			Valid: true,
+		},
+		TagID: pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
 func TestSearchDishesGlobal_Pagination(t *testing.T) {
 	// 创建已激活的商户
 	owner := createRandomUser(t)

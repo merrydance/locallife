@@ -141,9 +141,11 @@ func (q *Queries) CountSearchDishesByName(ctx context.Context, arg CountSearchDi
 const countSearchDishesGlobal = `-- name: CountSearchDishesGlobal :one
 SELECT COUNT(*) FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
   AND m.region_id = $2
@@ -1905,9 +1907,11 @@ SELECT
   ) as customization_groups
 FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
   AND m.region_id = $6

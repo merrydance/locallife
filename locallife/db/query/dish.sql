@@ -194,9 +194,11 @@ SELECT
   ) as customization_groups
 FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
   AND m.region_id = sqlc.narg('region_id')
@@ -230,9 +232,11 @@ SELECT id FROM dishes WHERE deleted_at IS NULL;
 -- 统计全局菜品搜索结果总数
 SELECT COUNT(*) FROM dishes d
 JOIN merchants m ON d.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE 
   m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.latitude IS NOT NULL
   AND m.longitude IS NOT NULL
   AND m.region_id = sqlc.narg('region_id')

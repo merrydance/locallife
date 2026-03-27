@@ -98,9 +98,11 @@ const countSearchCombosGlobal = `-- name: CountSearchCombosGlobal :one
 SELECT COUNT(*)
 FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = $2
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
@@ -912,6 +914,7 @@ SELECT
     ) as tags
 FROM combo_sets cs
 JOIN merchants m ON cs.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 LEFT JOIN LATERAL (
     SELECT d.image_media_asset_id
     FROM combo_dishes cd
@@ -925,6 +928,7 @@ LEFT JOIN LATERAL (
 WHERE 
     m.status = 'active'
     AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = $6
     AND cs.deleted_at IS NULL
     AND cs.is_online = true
