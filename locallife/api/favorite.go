@@ -24,6 +24,7 @@ type favoriteMerchantResponse struct {
 	MerchantLogoURL     string `json:"merchant_logo_url,omitempty"`
 	Address             string `json:"address"`
 	Status              string `json:"status"`
+	IsOrderingSuspended bool   `json:"is_ordering_suspended"`
 	CreatedAt           string `json:"created_at"`
 }
 
@@ -186,6 +187,7 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 			MerchantLogoAssetID: int64PtrFromPgInt8(m.MerchantLogoMediaAssetID),
 			Address:             m.MerchantAddress,
 			Status:              m.MerchantStatus,
+			IsOrderingSuspended: m.MerchantIsOrderingSuspended,
 			CreatedAt:           m.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
 		})
 	}

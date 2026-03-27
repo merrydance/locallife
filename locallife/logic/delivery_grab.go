@@ -65,6 +65,13 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	if !rider.IsOnline {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请先上线"))
 	}
+	suspension, err := GetRiderSuspension(ctx, store, rider.ID)
+	if err != nil {
+		return result, err
+	}
+	if suspension != nil {
+		return result, NewRequestError(http.StatusForbidden, errors.New("骑手接单已暂停"))
+	}
 	if !rider.RegionID.Valid {
 		return result, NewRequestError(http.StatusBadRequest, ErrRiderRegionUnassigned)
 	}

@@ -311,10 +311,15 @@ SET status = @status,
     review_notes = @review_notes,
     reviewed_at = NOW(),
     compensation_amount = CASE WHEN @status = 'approved' THEN sqlc.narg(compensation_amount)::bigint ELSE NULL END,
-    compensated_at = CASE WHEN @status = 'approved' THEN NOW() ELSE NULL END
+    compensated_at = NULL
 WHERE id = @id
   AND status = 'pending'
 RETURNING *;
+
+-- name: MarkAppealCompensated :exec
+UPDATE appeals
+SET compensated_at = COALESCE(compensated_at, $2)
+WHERE id = $1;
 
 -- =========================== 通用查询 ===========================
 

@@ -12,6 +12,7 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/worker"
+	"github.com/rs/zerolog/log"
 )
 
 // =============================================================================
@@ -447,6 +448,77 @@ func (server *Server) getMerchantClaimDecision(ctx *gin.Context) {
 	claim, err := server.store.GetMerchantClaimDetailForMerchant(ctx, db.GetMerchantClaimDetailForMerchantParams{
 		ID:         claimID,
 		MerchantID: merchant.ID,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("claim not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	decisions, err := server.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: claim.OrderID, Valid: true})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if len(decisions) == 0 {
+		ctx.JSON(http.StatusOK, merchantClaimDecisionResult{Decision: nil})
+		return
+	}
+
+	latest := decisions[0]
+	var traceSummary *string
+	if latest.TraceSummary.Valid {
+		traceSummary = &latest.TraceSummary.String
+	}
+
+	decisionValue := merchantClaimDecisionResponse{
+		DecisionID:         latest.ID,
+		ResponsibleParty:   latest.ResponsibleParty,
+		CompensationSource: latest.CompensationSource,
+		DecisionStatus:     latest.DecisionStatus,
+		ReasonCodes:        latest.ReasonCodes,
+		TraceSummary:       traceSummary,
+		CreatedAt:          latest.CreatedAt.Format(time.RFC3339),
+		UpdatedAt:          latest.UpdatedAt.Format(time.RFC3339),
+	}
+	ctx.JSON(http.StatusOK, merchantClaimDecisionResult{Decision: &decisionValue})
+}
+
+// getRiderClaimDecision 骑手查看索赔判定依据
+// @Summary 获取索赔判定依据
+// @Description 骑手查看该索赔对应订单的最新行为判定信息（责任方、赔付来源、原因码、判定摘要）
+// @Tags 骑手申诉管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Param id path int true "索赔ID"
+// @Success 200 {object} merchantClaimDecisionResult "成功返回判定依据"
+// @Failure 400 {object} map[string]interface{} "参数错误"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "非骑手用户"
+// @Failure 404 {object} map[string]interface{} "索赔不存在"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /v1/rider/claims/{id}/decision [get]
+func (server *Server) getRiderClaimDecision(ctx *gin.Context) {
+	claimID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid claim id")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	rider, err := server.getRiderFromUserID(ctx, authPayload.UserID)
+	if err != nil {
+		return
+	}
+
+	claim, err := server.store.GetRiderClaimDetailForRider(ctx, db.GetRiderClaimDetailForRiderParams{
+		ID:      claimID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
 	})
 	if err != nil {
 		if isNotFoundError(err) {
@@ -1269,12 +1341,12 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 type reviewAppealRequest struct {
 	Status             string `json:"status" binding:"required,oneof=approved rejected"`
 	ReviewNotes        string `json:"review_notes" binding:"required,min=5,max=500"`
-	CompensationAmount *int64 `json:"compensation_amount" binding:"omitempty,min=1,max=10000000"` // 申诉成功时的补偿金额（分），最大10万元
+	CompensationAmount *int64 `json:"compensation_amount" binding:"omitempty,min=1,max=10000000"` // 可选补偿金额（分），最大10万元
 }
 
 // reviewAppeal 运营商审核申诉
 // @Summary 审核申诉
-// @Description 运营商审核申诉，批准时需提供补偿金额，系统会自动更新用户信用分
+// @Description 运营商审核申诉，可仅撤销判责与追偿，也可附带补偿金额；系统会自动更新用户信用分
 // @Tags 运营商申诉管理
 // @Accept json
 // @Produce json
@@ -1328,18 +1400,18 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 		return
 	}
 
-	// 如果批准申诉，需要提供补偿金额
+	// 批准申诉时可选附带补偿金额；未提供则仅撤销判责与追偿。
 	var compensationAmount pgtype.Int8
-	if req.Status == "approved" {
-		if req.CompensationAmount == nil || *req.CompensationAmount <= 0 {
-			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("compensation_amount is required for approved appeals")))
-			return
-		}
+	if req.Status == "approved" && req.CompensationAmount != nil {
 		compensationAmount = pgtype.Int8{Int64: *req.CompensationAmount, Valid: true}
 	}
+	if req.Status == "approved" && compensationAmount.Valid && compensationAmount.Int64 > 0 && server.paymentClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrAppealCompensationUnavailable))
+		return
+	}
 
-	// 审核申诉
-	updatedAppeal, err := server.store.ReviewAppeal(ctx, db.ReviewAppealParams{
+	// 审核申诉，并在同一事务内持久化申诉补偿动作。
+	reviewResult, err := server.store.ReviewAppealWithCompensationTx(ctx, db.ReviewAppealWithCompensationTxParams{
 		ID:                 appealID,
 		Status:             req.Status,
 		ReviewerID:         pgtype.Int8{Int64: operator.ID, Valid: true},
@@ -1350,6 +1422,7 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
+	updatedAppeal := reviewResult.Appeal
 
 	if payload, ok := ctx.Get(authorizationPayloadKey); ok {
 		actor := payload.(*token.Payload)
@@ -1372,27 +1445,24 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 		})
 	}
 
-	// 获取申诉后处理所需的信息
-	appealInfo, err := server.store.GetAppealForPostProcess(ctx, appealID)
-	if err != nil {
-		// 不阻塞响应，但记录错误
-		// 申诉已成功审核，异步任务可能不会执行
-		ctx.JSON(http.StatusOK, newAppealResponse(updatedAppeal))
-		return
-	}
-
 	// 分发异步任务处理后续逻辑（信用分更新、通知等）
 	taskPayload := &worker.ProcessAppealResultPayload{
-		AppealID:           appealID,
-		ClaimID:            appealInfo.ClaimID,
+		AppealID: appealID,
+		ClaimID:  reviewResult.PostProcess.ClaimID,
+		CompensationActionID: func() int64 {
+			if reviewResult.CompensationAction != nil {
+				return reviewResult.CompensationAction.ID
+			}
+			return 0
+		}(),
 		Status:             req.Status,
-		AppellantType:      appealInfo.AppellantType,
-		AppellantID:        appealInfo.AppellantID,
-		ClaimantUserID:     appealInfo.ClaimantUserID,
-		ClaimType:          appealInfo.ClaimType,
-		ClaimAmount:        appealInfo.ClaimAmount,
+		AppellantType:      reviewResult.PostProcess.AppellantType,
+		AppellantID:        reviewResult.PostProcess.AppellantID,
+		ClaimantUserID:     reviewResult.PostProcess.ClaimantUserID,
+		ClaimType:          reviewResult.PostProcess.ClaimType,
+		ClaimAmount:        reviewResult.PostProcess.ClaimAmount,
 		CompensationAmount: compensationAmount.Int64,
-		OrderNo:            appealInfo.OrderNo,
+		OrderNo:            reviewResult.PostProcess.OrderNo,
 	}
 
 	if server.taskDistributor == nil {
@@ -1415,8 +1485,14 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
 	switch payload.Status {
 	case "approved":
-		if err := server.rollbackClaimRecoveryInline(ctx, payload); err != nil {
+		if err := server.waiveClaimRecoveryInline(ctx, payload); err != nil {
 			return err
+		}
+		if payload.CompensationActionID > 0 {
+			if err := worker.ExecuteClaimPayoutAction(ctx, server.store, server.paymentClient, payload.CompensationActionID); err != nil {
+				log.Error().Err(err).Int64("appeal_id", payload.AppealID).Int64("behavior_action_id", payload.CompensationActionID).Msg("failed to execute appeal compensation action inline")
+				return err
+			}
 		}
 	case "rejected":
 		if err := server.resumeClaimRecoveryInline(ctx, payload); err != nil {
@@ -1465,7 +1541,7 @@ func (server *Server) processAppealResultInline(ctx *gin.Context, payload *worke
 	return nil
 }
 
-func (server *Server) rollbackClaimRecoveryInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
+func (server *Server) waiveClaimRecoveryInline(ctx *gin.Context, payload *worker.ProcessAppealResultPayload) error {
 	if payload.ClaimID == 0 {
 		return nil
 	}
@@ -1474,44 +1550,21 @@ func (server *Server) rollbackClaimRecoveryInline(ctx *gin.Context, payload *wor
 	if err != nil {
 		return nil
 	}
+	if recovery.Status != "appealed" {
+		return nil
+	}
 
-	_, _ = server.store.MarkClaimRecoveryWaived(ctx, recovery.ID)
-
-	if claim, claimErr := server.store.GetClaim(ctx, payload.ClaimID); claimErr == nil {
-		if _, err := server.store.ClaimRefundRollbackTx(ctx, db.ClaimRefundRollbackTxParams{
-			ClaimID: payload.ClaimID,
-			UserID:  claim.UserID,
-			Remark:  "appeal approved rollback",
-		}); err != nil {
-			return err
+	if _, err := server.store.MarkClaimRecoveryWaived(ctx, recovery.ID); err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil
 		}
+		return err
 	}
 
 	if recovery.RecoveryTarget.Valid && recovery.RecoveryTarget.String == "merchant" {
 		order, orderErr := server.store.GetOrder(ctx, recovery.OrderID)
 		if orderErr != nil {
 			return orderErr
-		}
-		if recovery.Status == "paid" {
-			if _, err := server.store.GetMerchantSettlementAdjustmentByRelatedAndType(ctx, db.GetMerchantSettlementAdjustmentByRelatedAndTypeParams{
-				RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-				RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-				AdjustmentType: "claim_recovery_reversal",
-			}); err != nil {
-				_, err = server.store.CreateMerchantSettlementAdjustment(ctx, db.CreateMerchantSettlementAdjustmentParams{
-					MerchantID:     order.MerchantID,
-					AdjustmentType: "claim_recovery_reversal",
-					Amount:         recovery.RecoveryAmount,
-					Status:         "finished",
-					RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-					RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-					Note:           pgtype.Text{String: "claim recovery appeal rollback", Valid: true},
-					PostedAt:       pgtype.Timestamptz{Time: time.Now(), Valid: true},
-				})
-				if err != nil {
-					return err
-				}
-			}
 		}
 		if err := server.store.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
 			return err
@@ -1542,8 +1595,14 @@ func (server *Server) resumeClaimRecoveryInline(ctx *gin.Context, payload *worke
 	if err != nil {
 		return nil
 	}
+	if recovery.Status != "appealed" {
+		return nil
+	}
 
-	_, _ = server.store.MarkClaimRecoveryPending(ctx, recovery.ID)
+	_, err = server.store.ResumeClaimRecoveryAfterAppeal(ctx, recovery.ID)
+	if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return err
+	}
 	return nil
 }
 
@@ -1566,15 +1625,19 @@ func (server *Server) getAppellantUserID(ctx *gin.Context, appellantType string,
 func buildAppealNotificationContent(payload *worker.ProcessAppealResultPayload, isAppellant bool) (string, string) {
 	if isAppellant {
 		if payload.Status == "approved" {
-			return "申诉成功通知", "您针对订单" + payload.OrderNo + "的申诉已通过审核，补偿金额" + formatMoney(payload.CompensationAmount) + "将在1-3个工作日内到账。"
+			content := "您针对订单" + payload.OrderNo + "的申诉已通过审核，平台已撤销本次判责与追偿。"
+			if payload.CompensationAmount > 0 {
+				content += " 已核定补偿金额" + formatMoney(payload.CompensationAmount) + "。"
+			}
+			return "申诉成功通知", content
 		}
-		return "申诉结果通知", "您针对订单" + payload.OrderNo + "的申诉未通过审核，如有疑问请联系客服。"
+		return "申诉结果通知", "您针对订单" + payload.OrderNo + "的申诉未通过审核，原判责与追偿继续有效。"
 	}
 
 	if payload.Status == "approved" {
-		return "索赔申诉结果通知", "您在订单" + payload.OrderNo + "中的" + getClaimTypeLabel(payload.ClaimType) + "索赔经审核认定为不当，相关赔付将被撤回。请合理使用售后服务。"
+		return "索赔申诉结果通知", "您在订单" + payload.OrderNo + "中的" + getClaimTypeLabel(payload.ClaimType) + "索赔经审核认定为不当，平台已撤销对责任方的追责与追偿安排，已发放赔付不再向您追回。请合理使用售后服务。"
 	}
-	return "索赔申诉结果通知", "商家/骑手针对您订单" + payload.OrderNo + "的申诉未通过审核，原索赔有效。"
+	return "索赔申诉结果通知", "商家/骑手针对您订单" + payload.OrderNo + "的申诉未通过审核，原索赔与平台判责继续有效。"
 }
 
 func formatMoney(amount int64) string {

@@ -164,7 +164,7 @@ export async function getRecommendedMerchants(params?: RecommendMerchantsParams)
     merchants: response.merchants || [],
     has_more: page * pageSize < total,
     page,
-    total: total
+    total
   }
 }
 
@@ -204,6 +204,7 @@ export interface PublicMerchantDetail {
   longitude: number
   region_id: number
   is_open: boolean
+  is_ordering_suspended: boolean
   tags: string[]
   monthly_sales: number
   avg_prep_minutes: number

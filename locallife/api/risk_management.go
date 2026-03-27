@@ -33,8 +33,6 @@ type behaviorThresholdConfig struct {
 	RiderAbnormalRate    float64 `json:"rider_abnormal_rate_30d"`
 }
 
-var manualReviewEnabled = false
-
 func getBehaviorWindowDays(ctx *gin.Context, store db.Store) (int, int) {
 	window7d := 7
 	window30d := 30
@@ -111,7 +109,7 @@ func getBehaviorThresholds(ctx *gin.Context, store db.Store) behaviorThresholdCo
 // SubmitClaimRequest 提交索赔请求
 type SubmitClaimRequest struct {
 	OrderID           int64  `json:"order_id" binding:"required,min=1"`
-	ClaimType         string `json:"claim_type" binding:"required,oneof=foreign-object damage timeout food-safety"`
+	ClaimType         string `json:"claim_type" binding:"required,oneof=foreign-object damage timeout"`
 	ClaimAmount       int64  `json:"claim_amount" binding:"required,min=1,max=100000000"` // 最高100万分(1万元)
 	ClaimReason       string `json:"claim_reason" binding:"required,min=5,max=1000"`
 	DeviceFingerprint string `json:"device_fingerprint,omitempty" binding:"omitempty,max=256"`
@@ -120,12 +118,92 @@ type SubmitClaimRequest struct {
 // SubmitClaimResponse 索赔响应
 type SubmitClaimResponse struct {
 	ClaimID            int64   `json:"claim_id"`
-	Status             string  `json:"status"` // instant, auto, manual, platform-pay
+	Status             string  `json:"status"`                    // accepted
+	DecisionStatus     string  `json:"decision_status,omitempty"` // auto-adjudicated
+	PayoutStatus       string  `json:"payout_status,omitempty"`   // processing, paid
 	ApprovedAmount     *int64  `json:"approved_amount,omitempty"`
 	CompensationSource string  `json:"compensation_source,omitempty"` // merchant, rider, platform
 	Reason             string  `json:"reason"`
-	RefundETA          *string `json:"refund_eta,omitempty"` // 秒赔/自动通过时提供预计到账时间
+	PayoutETA          *string `json:"payout_eta,omitempty"` // 预计赔付时间
 	Warning            *string `json:"warning,omitempty"`    // 警告信息
+}
+
+const (
+	submitClaimStatusAccepted                = "accepted"
+	submitClaimStatusRejected                = "rejected"
+	submitClaimDecisionStatusAutoAdjudicated = "auto-adjudicated"
+	submitClaimDecisionStatusRejected        = "rejected"
+	submitClaimPayoutStatusProcessing        = "processing"
+	submitClaimPayoutStatusPaid              = "paid"
+)
+
+func submitClaimPayoutETA(decisionType string) *string {
+	eta := "1-3个工作日"
+	if decisionType == algorithm.ApprovalTypeInstant {
+		eta = "即时到账"
+	}
+	return &eta
+}
+
+func claimApprovalTypeValue(claim db.Claim) string {
+	if claim.ApprovalType.Valid {
+		return claim.ApprovalType.String
+	}
+	return ""
+}
+
+func userClaimReason(claim db.Claim) string {
+	if claim.Status == "rejected" {
+		if claim.RejectionReason.Valid && claim.RejectionReason.String != "" {
+			return claim.RejectionReason.String
+		}
+		if claim.ReviewNotes.Valid && claim.ReviewNotes.String != "" {
+			return claim.ReviewNotes.String
+		}
+	}
+	if claim.DecisionReason.Valid && claim.DecisionReason.String != "" {
+		return claim.DecisionReason.String
+	}
+	if claim.AutoApprovalReason.Valid && claim.AutoApprovalReason.String != "" {
+		return claim.AutoApprovalReason.String
+	}
+	if claim.ReviewNotes.Valid && claim.ReviewNotes.String != "" {
+		return claim.ReviewNotes.String
+	}
+	return ""
+}
+
+func userClaimProcessedAt(claim db.Claim) *time.Time {
+	if claim.PaidAt.Valid {
+		return &claim.PaidAt.Time
+	}
+	if claim.ReviewedAt.Valid {
+		return &claim.ReviewedAt.Time
+	}
+	return nil
+}
+
+func userClaimLifecycleFromClaim(claim db.Claim) (string, string, string, *string) {
+	if claim.Status == "rejected" {
+		return submitClaimStatusRejected, submitClaimDecisionStatusRejected, "", nil
+	}
+
+	status := submitClaimStatusAccepted
+	decisionStatus := ""
+	payoutStatus := ""
+	var payoutETA *string
+
+	if claim.ApprovedAmount.Valid && claim.ApprovedAmount.Int64 > 0 {
+		decisionStatus = submitClaimDecisionStatusAutoAdjudicated
+		if claim.PaidAt.Valid {
+			payoutStatus = submitClaimPayoutStatusPaid
+		} else {
+			payoutStatus = submitClaimPayoutStatusProcessing
+			payoutETA = submitClaimPayoutETA(claimApprovalTypeValue(claim))
+		}
+	}
+
+	return status, decisionStatus, payoutStatus, payoutETA
 }
 
 // SubmitClaim 提交索赔
@@ -338,15 +416,15 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 		decision, err := server.rulesEngine.Evaluate(ctx, ruleInput)
 		if err != nil {
-			// P1-004 Fix: 规则引擎故障时降级为人工审核，而不是直接报错
+			// 规则引擎故障时仍继续自动裁定，不再转人工审核。
 			log.Error().Err(err).
 				Int64("order_id", req.OrderID).
 				Int64("user_id", authPayload.UserID).
-				Msg("Rules engine evaluation failed, falling back to manual review")
+				Msg("Rules engine evaluation failed, falling back to deterministic platform-pay adjudication")
 
 			ruleDecision = rules.Decision{
-				Action: "manual",
-				Reason: "系统风控服务暂时不可用，转入人工审核",
+				Action: "platform-pay",
+				Reason: "系统风控服务暂时不可用，已按平台自动裁定继续处理",
 			}
 		} else {
 			server.recordRuleHit(ctx, ruleInput, decision, RoleCustomer)
@@ -362,29 +440,27 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 	}
 
-	// 7. 获取配送费（超时索赔用）
-	var deliveryFee int64
-	if req.ClaimType == algorithm.ClaimTypeTimeout || req.ClaimType == algorithm.ClaimTypeDamage {
-		delivery, err := server.store.GetDeliveryByOrderID(ctx, order.ID)
-		if err == nil {
-			deliveryFee = delivery.DeliveryFee
-		}
-	}
-
 	// 创建自动审核器
 	approver := algorithm.NewClaimAutoApproval(server.store, server.wsHub)
+	if server.taskDistributor != nil {
+		approver.SetNotificationDistributor(worker.NewNotificationAdapter(server.taskDistributor))
+	}
 
 	// 评估索赔（新设计）
 	decision, err := approver.EvaluateClaim(
 		ctx,
 		authPayload.UserID,
 		req.OrderID,
-		req.ClaimAmount,
-		deliveryFee,
+		algorithm.ClaimCompensationContext{
+			RequestedAmount:     req.ClaimAmount,
+			OrderTotalAmount:    order.TotalAmount,
+			DeliveryFee:         order.DeliveryFee,
+			DeliveryFeeDiscount: order.DeliveryFeeDiscount,
+		},
 		req.ClaimType,
 	)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("evaluate claim: %w", err)))
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -392,13 +468,14 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	if ruleDecision.Action != "" && ruleDecision.Action != "allow" && ruleDecision.Action != "alert" {
 		switch ruleDecision.Action {
 		case "manual":
-			decision.Type = algorithm.ApprovalTypeManual
-			decision.Approved = false
-			decision.Amount = 0
+			decision.Type = "platform-pay"
+			decision.Approved = true
+			decision.CompensationSource = algorithm.CompensationSourcePlatform
 			decision.Reason = ruleDecision.Reason
-			decision.NeedsReview = true
+			decision.NeedsReview = false
 		case "platform-pay":
 			decision.Type = "platform-pay"
+			decision.Approved = true
 			decision.CompensationSource = algorithm.CompensationSourcePlatform
 			if ruleDecision.Reason != "" {
 				decision.Reason = ruleDecision.Reason
@@ -436,40 +513,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		IPAddress:         ctx.ClientIP(),
 		UserAgent:         ctx.Request.UserAgent(),
 		AddressID:         addressID,
-	}
-
-	// 创建索赔记录
-	claim, err := approver.CreateClaimWithDecisionAndEvidence(
-		ctx,
-		req.OrderID,
-		authPayload.UserID,
-		req.ClaimType,
-		req.ClaimReason,
-		decision.Amount, // 使用决策后的金额（超时可能只赔运费）
-		decision,
-		evidenceContext,
-	)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create claim with decision: %w", err)))
-		return
-	}
-
-	// 平台先行赔付：入队失败视为服务不可用，直接返回 503，避免向用户呈现"已批准"而实际未打款。
-	// 生产环境通过 main.go 的 Fatal 检查确保 Redis 始终可用（无降级路径）。
-	if decision.Approved && decision.Amount > 0 {
-		err := server.taskDistributor.DistributeTaskClaimRefund(ctx, &worker.ClaimRefundPayload{
-			ClaimID:    claim.ID,
-			UserID:     authPayload.UserID,
-			Amount:     decision.Amount,
-			SourceType: "platform",
-			SourceID:   0,
-			Remark:     "platform payout",
-		}, asynq.Queue(worker.QueueCritical))
-		if err != nil {
-			log.Error().Err(err).Int64("claim_id", claim.ID).Msg("failed to enqueue claim refund task")
-			ctx.JSON(http.StatusServiceUnavailable, errorResponse(fmt.Errorf("payment service temporarily unavailable, please retry")))
-			return
-		}
 	}
 
 	// 生成追偿单（责任方为商户/骑手且需要追偿）
@@ -535,6 +578,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	if recoveryAmount <= 0 {
 		recoveryAmount = decision.Amount
 	}
+	var recoveryPlan *algorithm.ClaimRecoveryPlan
 	if decision.Approved && recoveryRequired && (recoveryTarget == "merchant" || recoveryTarget == "rider") {
 		decisionSnapshot := map[string]any{
 			"decision_type":       decision.Type,
@@ -550,43 +594,113 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 		decisionSnapshotJSON, _ := json.Marshal(decisionSnapshot)
 		dueAt := time.Now().Add(24 * time.Hour)
-		_, _ = server.store.CreateClaimRecovery(ctx, db.CreateClaimRecoveryParams{
-			ClaimID:          claim.ID,
-			OrderID:          req.OrderID,
+		recoveryPlan = &algorithm.ClaimRecoveryPlan{
 			ResponsibleParty: responsibleParty,
-			RecoveryTarget:   pgtype.Text{String: recoveryTarget, Valid: recoveryTarget != ""},
+			RecoveryTarget:   recoveryTarget,
 			RecoveryAmount:   recoveryAmount,
-			Status:           "pending",
 			DueAt:            dueAt,
 			DecisionSnapshot: decisionSnapshotJSON,
-		})
+		}
+	}
+	if decision.Approved && decision.Amount > 0 && server.paymentClient == nil {
+		ctx.JSON(http.StatusServiceUnavailable, errorResponse(ErrClaimPayoutServiceUnavailable))
+		return
+	}
+
+	// 创建索赔记录（必要时在同一事务中创建追偿单）
+	claim, err := approver.CreateClaimWithDecisionAndEvidence(
+		ctx,
+		req.OrderID,
+		authPayload.UserID,
+		req.ClaimType,
+		req.ClaimReason,
+		req.ClaimAmount,
+		decision,
+		evidenceContext,
+		recoveryPlan,
+	)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("create claim with decision: %w", err)))
+		return
+	}
+
+	// 平台先行赔付：入队失败时保留持久化赔付动作，由恢复调度器补偿重试。
+	if decision.Approved && decision.Amount > 0 {
+		decisions, err := server.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: req.OrderID, Valid: true})
+		if err != nil || len(decisions) == 0 {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("load payout decision actions: %w", err)))
+			return
+		}
+		actions, err := server.store.ListBehaviorActionsByDecision(ctx, decisions[0].ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("load payout behavior actions: %w", err)))
+			return
+		}
+		var payoutActionID int64
+		for _, action := range actions {
+			if action.ActionType == "payout" && action.TargetEntity == "user" {
+				payoutActionID = action.ID
+				break
+			}
+		}
+		if payoutActionID == 0 {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("payout action not created for approved claim")))
+			return
+		}
+
+		err = server.taskDistributor.DistributeTaskClaimPayout(ctx, &worker.ClaimPayoutPayload{
+			ActionID: payoutActionID,
+		}, asynq.Queue(worker.QueueCritical))
+		if err != nil {
+			log.Error().Err(err).Int64("claim_id", claim.ID).Int64("behavior_action_id", payoutActionID).Msg("failed to enqueue claim payout task, recovery scheduler will retry persisted payout action")
+		}
 	}
 
 	// 构造响应
 	resp := SubmitClaimResponse{
 		ClaimID:            claim.ID,
-		Status:             decision.Type,
+		Status:             submitClaimStatusAccepted,
 		CompensationSource: decision.CompensationSource,
 		Reason:             decision.Reason,
 	}
 
 	if decision.Approved {
 		resp.ApprovedAmount = &decision.Amount
-
-		// 秒赔和自动通过提供预计到账时间
-		if decision.Type == "instant" || decision.Type == "auto" || decision.Type == "platform-pay" {
-			eta := "1-3个工作日"
-			if decision.Type == "instant" {
-				eta = "即时到账"
-			}
-			resp.RefundETA = &eta
-		}
+		resp.DecisionStatus = submitClaimDecisionStatusAutoAdjudicated
+		resp.PayoutStatus = submitClaimPayoutStatusProcessing
+		resp.PayoutETA = submitClaimPayoutETA(decision.Type)
 	}
 
 	// 如果有警告信息，添加到响应
 	if decision.Warning != "" {
 		resp.Warning = &decision.Warning
 	}
+
+	metadata := map[string]any{
+		"order_id":            req.OrderID,
+		"claim_type":          req.ClaimType,
+		"status":              resp.Status,
+		"decision_status":     resp.DecisionStatus,
+		"payout_status":       resp.PayoutStatus,
+		"compensation_source": resp.CompensationSource,
+		"requested_amount":    req.ClaimAmount,
+		"approved_amount":     decision.Amount,
+		"auto_adjudicated":    decision.Approved,
+	}
+	if resp.PayoutETA != nil {
+		metadata["payout_eta"] = *resp.PayoutETA
+	}
+	if resp.Warning != nil {
+		metadata["warning"] = *resp.Warning
+	}
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "customer",
+		Action:      "user_claim_submitted",
+		TargetType:  "claim",
+		TargetID:    &claim.ID,
+		Metadata:    metadata,
+	})
 
 	// 📢 异步执行商户/骑手索赔历史检查（避免阻塞API响应）
 	if server.taskDistributor != nil {
@@ -615,132 +729,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, resp)
-}
-
-// ReviewClaimRequest 审核索赔请求
-type ReviewClaimRequest struct {
-	Approved       *bool  `json:"approved" binding:"required"`                         // 是否通过
-	ApprovedAmount *int64 `json:"approved_amount,omitempty" binding:"omitempty,min=1"` // 审核通过金额（分）
-	ReviewNote     string `json:"review_note" binding:"required,min=5,max=500"`        // 审核备注
-}
-
-// ReviewClaim 人工审核索赔
-// @Summary 审核索赔
-// @Description 运营商/客服人工审核索赔申请。仅限低信用用户提交的需要人工审核的索赔。
-// @Tags 索赔管理
-// @Accept json
-// @Produce json
-// @Param id path int true "索赔ID"
-// @Param request body ReviewClaimRequest true "审核信息"
-// @Success 200 {object} claimResponse "审核成功"
-// @Failure 400 {object} ErrorResponse "参数错误或索赔状态不允许审核"
-// @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "无权限审核此索赔"
-// @Failure 404 {object} ErrorResponse "索赔不存在"
-// @Failure 500 {object} ErrorResponse "内部错误"
-// @Router /v1/claims/{id}/review [patch]
-// @Security BearerAuth
-func (server *Server) ReviewClaim(ctx *gin.Context) {
-	if !manualReviewEnabled {
-		ctx.JSON(http.StatusGone, errorResponse(errors.New("manual review disabled; claims are auto-adjudicated")))
-		return
-	}
-
-	claimIDStr := ctx.Param("id")
-	claimID, err := strconv.ParseInt(claimIDStr, 10, 64)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidClaimID))
-		return
-	}
-
-	var req ReviewClaimRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	// 获取当前审核员信息
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 获取索赔记录
-	claim, err := server.store.GetClaim(ctx, claimID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrClaimNotFound))
-		} else {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get claim %d: %w", claimID, err)))
-		}
-		return
-	}
-
-	// 检查状态 - 只允许审核pending状态的索赔
-	if claim.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrClaimAlreadyReviewed))
-		return
-	}
-
-	// 检查是否是需要人工审核的索赔
-	if claim.ApprovalType.Valid && claim.ApprovalType.String != "manual" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrClaimNoManualReview))
-		return
-	}
-
-	// 通过时必须提供审核金额
-	if *req.Approved && req.ApprovedAmount == nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApprovalAmountRequired))
-		return
-	}
-
-	// 审核金额不能超过索赔金额
-	if req.ApprovedAmount != nil && *req.ApprovedAmount > claim.ClaimAmount {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApprovalAmountExceedsClaim))
-		return
-	}
-
-	// 更新索赔状态
-	status := "rejected"
-	if *req.Approved {
-		status = "approved"
-	}
-
-	params := db.UpdateClaimStatusParams{
-		ID:     claimID,
-		Status: status,
-		ReviewerID: pgtype.Int8{
-			Int64: authPayload.UserID, // 使用token中的用户ID
-			Valid: true,
-		},
-		ReviewedAt: pgtype.Timestamptz{
-			Time:  time.Now(),
-			Valid: true,
-		},
-		ReviewNotes: pgtype.Text{
-			String: req.ReviewNote,
-			Valid:  true,
-		},
-	}
-
-	if req.ApprovedAmount != nil {
-		params.ApprovedAmount = pgtype.Int8{
-			Int64: *req.ApprovedAmount,
-			Valid: true,
-		}
-	}
-
-	err = server.store.UpdateClaimStatus(ctx, params)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update claim %d status: %w", claimID, err)))
-		return
-	}
-
-	// 重新获取更新后的索赔记录
-	updatedClaim, err := server.store.GetClaim(ctx, claimID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get updated claim %d: %w", claimID, err)))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newClaimResponse(updatedClaim))
 }
 
 // ReportFoodSafetyRequest 上报食安请求
@@ -1131,21 +1119,20 @@ func (server *Server) ResumeRider(ctx *gin.Context) {
 
 // ==================== 用户索赔查询 API ====================
 
-type claimResponse struct {
+type userClaimResponse struct {
 	ID             int64      `json:"id"`
-	UserID         int64      `json:"user_id"`
 	OrderID        int64      `json:"order_id"`
 	ClaimType      string     `json:"claim_type"`
 	Description    string     `json:"description"`
 	ClaimAmount    int64      `json:"claim_amount"`
 	ApprovedAmount *int64     `json:"approved_amount,omitempty"`
-	Status         string     `json:"status"`
-	ApprovalType   string     `json:"approval_type,omitempty"`
-	ReviewerID     *int64     `json:"reviewer_id,omitempty"`
-	ReviewNotes    string     `json:"review_notes,omitempty"`
-	IsMalicious    bool       `json:"is_malicious"`
+	Status         string     `json:"status"`                    // accepted, rejected
+	DecisionStatus string     `json:"decision_status,omitempty"` // auto-adjudicated, rejected
+	PayoutStatus   string     `json:"payout_status,omitempty"`   // processing, paid
+	Reason         string     `json:"reason,omitempty"`
+	PayoutETA      *string    `json:"payout_eta,omitempty"`
 	CreatedAt      time.Time  `json:"created_at"`
-	ReviewedAt     *time.Time `json:"reviewed_at,omitempty"`
+	ProcessedAt    *time.Time `json:"processed_at,omitempty"`
 }
 
 type riderSuspendResponse struct {
@@ -1154,41 +1141,32 @@ type riderSuspendResponse struct {
 	DurationHours int    `json:"duration_hours"`
 }
 
-type claimsListResponse struct {
-	Claims   []claimResponse `json:"claims"`
-	Total    int64           `json:"total"`
-	PageSize int             `json:"page_size"`
-	Page     int             `json:"page"`
+type userClaimsListResponse struct {
+	Claims   []userClaimResponse `json:"claims"`
+	Total    int64               `json:"total"`
+	PageSize int                 `json:"page_size"`
+	Page     int                 `json:"page"`
 }
 
-func newClaimResponse(claim db.Claim) claimResponse {
-	resp := claimResponse{
-		ID:          claim.ID,
-		UserID:      claim.UserID,
-		OrderID:     claim.OrderID,
-		ClaimType:   claim.ClaimType,
-		Description: claim.Description,
-		ClaimAmount: claim.ClaimAmount,
-		Status:      claim.Status,
-		IsMalicious: claim.IsMalicious,
-		CreatedAt:   claim.CreatedAt,
+func newUserClaimResponse(claim db.Claim) userClaimResponse {
+	status, decisionStatus, payoutStatus, payoutETA := userClaimLifecycleFromClaim(claim)
+	resp := userClaimResponse{
+		ID:             claim.ID,
+		OrderID:        claim.OrderID,
+		ClaimType:      claim.ClaimType,
+		Description:    claim.Description,
+		ClaimAmount:    claim.ClaimAmount,
+		Status:         status,
+		DecisionStatus: decisionStatus,
+		PayoutStatus:   payoutStatus,
+		Reason:         userClaimReason(claim),
+		PayoutETA:      payoutETA,
+		CreatedAt:      claim.CreatedAt,
+		ProcessedAt:    userClaimProcessedAt(claim),
 	}
 
-	// 处理可空字段
 	if claim.ApprovedAmount.Valid {
 		resp.ApprovedAmount = &claim.ApprovedAmount.Int64
-	}
-	if claim.ApprovalType.Valid {
-		resp.ApprovalType = claim.ApprovalType.String
-	}
-	if claim.ReviewerID.Valid {
-		resp.ReviewerID = &claim.ReviewerID.Int64
-	}
-	if claim.ReviewNotes.Valid {
-		resp.ReviewNotes = claim.ReviewNotes.String
-	}
-	if claim.ReviewedAt.Valid {
-		resp.ReviewedAt = &claim.ReviewedAt.Time
 	}
 
 	return resp
@@ -1202,7 +1180,7 @@ func newClaimResponse(claim db.Claim) claimResponse {
 // @Produce json
 // @Param page query int false "页码" default(1) minimum(1)
 // @Param page_size query int false "每页数量" default(20) minimum(1) maximum(100)
-// @Success 200 {object} map[string]interface{} "索赔列表"
+// @Success 200 {object} userClaimsListResponse "索赔列表"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 500 {object} ErrorResponse "内部错误"
 // @Router /v1/claims [get]
@@ -1241,16 +1219,16 @@ func (server *Server) ListUserClaims(ctx *gin.Context) {
 		return
 	}
 
-	var response []claimResponse
+	var response []userClaimResponse
 	for _, c := range claims {
-		response = append(response, newClaimResponse(c))
+		response = append(response, newUserClaimResponse(c))
 	}
 
 	if response == nil {
-		response = []claimResponse{}
+		response = []userClaimResponse{}
 	}
 
-	ctx.JSON(http.StatusOK, claimsListResponse{Claims: response, Total: totalCount, PageSize: pageSize, Page: page})
+	ctx.JSON(http.StatusOK, userClaimsListResponse{Claims: response, Total: totalCount, PageSize: pageSize, Page: page})
 }
 
 // GetClaimDetail 获取索赔详情
@@ -1260,7 +1238,7 @@ func (server *Server) ListUserClaims(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param id path int true "索赔ID"
-// @Success 200 {object} claimResponse "索赔详情"
+// @Success 200 {object} userClaimResponse "索赔详情"
 // @Failure 400 {object} ErrorResponse "无效的索赔ID"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "该索赔不属于当前用户"
@@ -1294,5 +1272,5 @@ func (server *Server) GetClaimDetail(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newClaimResponse(claim))
+	ctx.JSON(http.StatusOK, newUserClaimResponse(claim))
 }

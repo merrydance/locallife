@@ -40,6 +40,7 @@ interface RestaurantViewModel {
   discount_rules: PublicMerchantDetail['discount_rules']
   vouchers: PublicMerchantDetail['vouchers']
   delivery_promotions: PublicMerchantDetail['delivery_promotions']
+  is_ordering_suspended: boolean
 }
 
 interface DishView {
@@ -90,6 +91,8 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   }
   return fallback
 }
+
+const ORDERING_SUSPENDED_MESSAGE = '当前商户暂停接单，请稍后再试'
 
 Page({
   data: {
@@ -243,7 +246,8 @@ Page({
           business_hours_display: businessHoursDisplay,
           discount_rules: merchant.discount_rules || [],
           vouchers: merchant.vouchers || [],
-          delivery_promotions: merchant.delivery_promotions || []
+          delivery_promotions: merchant.delivery_promotions || [],
+          is_ordering_suspended: !!merchant.is_ordering_suspended
         }
       }
       return null
@@ -375,11 +379,19 @@ Page({
   },
 
   onDishTap(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const id = e.currentTarget.dataset.id
     wx.navigateTo({ url: `/pages/takeout/dish-detail/index?id=${id}&merchant_id=${this.data.restaurantId}` })
   },
 
   onComboTap(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const id = e.currentTarget.dataset.id
     const combo = this.data.combos.find((c) => String(c.id) === String(id))
 
@@ -397,6 +409,10 @@ Page({
   async onAddCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
     const { restaurant } = this.data
+    if (restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const dish = this.data.dishes.find((d) => d.id === id)
 
     if (dish && restaurant) {
@@ -415,6 +431,10 @@ Page({
   async onAddComboCart(e: WechatMiniprogram.CustomEvent) {
     const id = e.currentTarget.dataset.id
     const { restaurant } = this.data
+    if (restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const combo = this.data.combos.find((c) => c.id === id)
 
     if (combo && restaurant) {
@@ -453,10 +473,18 @@ Page({
   },
 
   onCheckout() {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     wx.navigateTo({ url: '/pages/takeout/cart/index' })
   },
 
   onCartTap() {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     // 点击购物车栏跳转到购物车页面
     wx.navigateTo({ url: '/pages/takeout/cart/index' })
   },
@@ -495,6 +523,10 @@ Page({
   },
 
   onRoomTap(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.restaurant?.is_ordering_suspended) {
+      this.showOrderingSuspendedToast()
+      return
+    }
     const roomId = e.currentTarget.dataset.id
     if (roomId) {
       wx.navigateTo({
@@ -517,6 +549,10 @@ Page({
 
   stopPropagation() {
     // 仅用于阻止冒泡
+  },
+
+  showOrderingSuspendedToast() {
+    wx.showToast({ title: ORDERING_SUSPENDED_MESSAGE, icon: 'none' })
   },
 
   // Gap 8: 分享给朋友

@@ -132,6 +132,26 @@ SET status = $2,
     executed_at = COALESCE(sqlc.narg('executed_at'), executed_at)
 WHERE id = $1;
 
+-- name: UpdateBehaviorActionExecution :exec
+UPDATE behavior_actions
+SET status = $2,
+    detail = $3,
+    executed_at = COALESCE(sqlc.narg('executed_at'), executed_at)
+WHERE id = $1;
+
+-- name: GetBehaviorAction :one
+SELECT * FROM behavior_actions
+WHERE id = $1
+LIMIT 1;
+
+-- name: ListBehaviorActionsByStatusAndType :many
+SELECT * FROM behavior_actions
+WHERE status = $1
+    AND action_type = $2
+    AND target_entity = $3
+ORDER BY created_at ASC
+LIMIT $4;
+
 -- name: ListBehaviorActionsByDecision :many
 SELECT * FROM behavior_actions
 WHERE decision_id = $1

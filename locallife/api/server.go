@@ -1012,6 +1012,7 @@ func (server *Server) setupRouter() {
 		// 骑手索赔与申诉
 		riderGroup.GET("/claims", server.listRiderClaims)
 		riderGroup.GET("/claims/:id", server.getRiderClaimDetail)
+		riderGroup.GET("/claims/:id/decision", server.getRiderClaimDecision)
 		riderGroup.GET("/claims/behavior-summary", server.getRiderClaimBehaviorSummary)
 		riderGroup.GET("/claims/:id/recovery", server.getRiderClaimRecovery)
 		riderGroup.POST("/claims/:id/recovery/pay", server.payRiderClaimRecovery)

@@ -119,6 +119,20 @@ func TestGetTakeoutSuspension(t *testing.T) {
 			},
 		},
 		{
+			name: "ProfileError",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), merchantID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{}, errors.New("db timeout"))
+			},
+			check: func(t *testing.T, info *TakeoutSuspensionInfo, err error) {
+				require.Error(t, err)
+				require.ErrorContains(t, err, "db timeout")
+				require.Nil(t, info)
+			},
+		},
+		{
 			name: "NotSuspended",
 			buildStubs: func(store *mockdb.MockStore) {
 				profile := db.GetMerchantProfileRow{MerchantID: merchantID, IsTakeoutSuspended: false}
@@ -165,6 +179,92 @@ func TestGetTakeoutSuspension(t *testing.T) {
 			tc.buildStubs(store)
 
 			info, err := GetTakeoutSuspension(context.Background(), store, merchantID)
+			tc.check(t, info, err)
+		})
+	}
+}
+
+func TestGetRiderSuspension(t *testing.T) {
+	riderID := int64(303)
+	now := time.Date(2026, 2, 12, 12, 0, 0, 0, time.UTC)
+
+	testCases := []struct {
+		name       string
+		buildStubs func(store *mockdb.MockStore)
+		check      func(t *testing.T, info *RiderSuspensionInfo, err error)
+	}{
+		{
+			name: "ProfileNotFound",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), riderID).
+					Times(1).
+					Return(db.RiderProfile{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, info *RiderSuspensionInfo, err error) {
+				require.NoError(t, err)
+				require.Nil(t, info)
+			},
+		},
+		{
+			name: "ProfileError",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), riderID).
+					Times(1).
+					Return(db.RiderProfile{}, errors.New("db timeout"))
+			},
+			check: func(t *testing.T, info *RiderSuspensionInfo, err error) {
+				require.Error(t, err)
+				require.ErrorContains(t, err, "db timeout")
+				require.Nil(t, info)
+			},
+		},
+		{
+			name: "NotSuspended",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), riderID).
+					Times(1).
+					Return(db.RiderProfile{RiderID: riderID, IsSuspended: false}, nil)
+			},
+			check: func(t *testing.T, info *RiderSuspensionInfo, err error) {
+				require.NoError(t, err)
+				require.Nil(t, info)
+			},
+		},
+		{
+			name: "Suspended",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), riderID).
+					Times(1).
+					Return(db.RiderProfile{
+						RiderID:       riderID,
+						IsSuspended:   true,
+						SuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+						SuspendUntil:  pgtype.Timestamptz{Time: now.Add(2 * time.Hour), Valid: true},
+					}, nil)
+			},
+			check: func(t *testing.T, info *RiderSuspensionInfo, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, info)
+				require.Equal(t, "claim recovery overdue", info.Reason)
+				require.Equal(t, now.Add(2*time.Hour), info.Until)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			info, err := GetRiderSuspension(context.Background(), store, riderID)
 			tc.check(t, info, err)
 		})
 	}

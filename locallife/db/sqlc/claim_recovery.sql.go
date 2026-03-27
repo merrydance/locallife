@@ -281,3 +281,31 @@ func (q *Queries) MarkClaimRecoveryWaived(ctx context.Context, id int64) (ClaimR
 	)
 	return i, err
 }
+
+const resumeClaimRecoveryAfterAppeal = `-- name: ResumeClaimRecoveryAfterAppeal :one
+UPDATE claim_recoveries
+SET status = CASE WHEN due_at <= NOW() THEN 'overdue' ELSE 'pending' END,
+    updated_at = NOW()
+WHERE id = $1
+  AND status = 'appealed'
+RETURNING id, claim_id, order_id, responsible_party, recovery_target, recovery_amount, status, due_at, decision_snapshot, created_at, updated_at
+`
+
+func (q *Queries) ResumeClaimRecoveryAfterAppeal(ctx context.Context, id int64) (ClaimRecovery, error) {
+	row := q.db.QueryRow(ctx, resumeClaimRecoveryAfterAppeal, id)
+	var i ClaimRecovery
+	err := row.Scan(
+		&i.ID,
+		&i.ClaimID,
+		&i.OrderID,
+		&i.ResponsibleParty,
+		&i.RecoveryTarget,
+		&i.RecoveryAmount,
+		&i.Status,
+		&i.DueAt,
+		&i.DecisionSnapshot,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

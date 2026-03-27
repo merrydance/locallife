@@ -329,6 +329,52 @@ func TestCountSearchMerchants_PartialMatch(t *testing.T) {
 	require.Equal(t, int64(1), count)
 }
 
+func TestSearchMerchants_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
+	user := createRandomUser(t)
+	region := createRandomRegion(t)
+	uniqueName := "SUSPENDED_SEARCH_MERCHANT_" + util.RandomString(5)
+
+	merchant, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID: user.ID,
+		Name:        uniqueName,
+		Phone:       fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:     "test address " + util.RandomString(10),
+		Status:      "active",
+		RegionID:    region.ID,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CreateMerchantProfile(context.Background(), merchant.ID)
+	require.NoError(t, err)
+
+	err = testStore.SuspendMerchantTakeout(context.Background(), SuspendMerchantTakeoutParams{
+		MerchantID:           merchant.ID,
+		TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+	})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchants(context.Background(), SearchMerchantsParams{
+		Offset:  0,
+		Limit:   10,
+		Column3: "SUSPENDED_SEARCH_MERCHANT",
+		Column4: 39.9282,
+		Column5: 116.4507,
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.Empty(t, merchants)
+
+	count, err := testStore.CountSearchMerchants(context.Background(), CountSearchMerchantsParams{
+		Column1:  pgtype.Text{String: "SUSPENDED_SEARCH_MERCHANT", Valid: true},
+		RegionID: pgtype.Int8{Int64: region.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Zero(t, count)
+}
+
 // ==================== Merchant Application Tests ====================
 
 func TestCreateMerchantApplication(t *testing.T) {

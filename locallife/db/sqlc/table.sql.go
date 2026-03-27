@@ -95,9 +95,11 @@ func (q *Queries) CountAvailableTablesByMerchant(ctx context.Context, merchantID
 const countExploreNearbyRooms = `-- name: CountExploreNearbyRooms :one
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = $1
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
@@ -127,9 +129,11 @@ func (q *Queries) CountExploreNearbyRooms(ctx context.Context, arg CountExploreN
 const countSearchRooms = `-- name: CountSearchRooms :one
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = $1
   AND ($2::SMALLINT IS NULL OR t.capacity >= $2)
   AND ($3::SMALLINT IS NULL OR t.capacity <= $3)
@@ -298,9 +302,11 @@ SELECT
     )::INT as monthly_reservations
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选
   AND m.region_id = $1
   -- 按人数筛选
@@ -996,9 +1002,11 @@ SELECT
     m.longitude as merchant_longitude
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选（必选）
   AND m.region_id = $1
   -- 按人数筛选
@@ -1120,9 +1128,11 @@ SELECT
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND mt.tag_id = $1
   -- 按区域筛选（必选）
   AND m.region_id = $2
@@ -1245,9 +1255,11 @@ SELECT
     COALESCE((SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选（必选）
   AND m.region_id = $1
   -- 按人数筛选

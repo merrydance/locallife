@@ -1,4 +1,4 @@
-import FavoriteService, { FavoriteType } from '../../../api/favorite'
+import FavoriteService, { FavoriteMerchantListItem, FavoriteType } from '../../../api/favorite'
 import { ErrorHandler } from '../../../utils/error-handler'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
@@ -19,6 +19,7 @@ type FavoriteMerchantItem = {
     merchant_name: string
     merchant_logo?: string
     address?: string
+    is_ordering_suspended?: boolean
     created_at?: string
 }
 
@@ -34,6 +35,7 @@ interface FavoriteViewModel {
     rating?: number
     priceDisplay?: string
     createdAt: string
+    isOrderingSuspended?: boolean
 }
 
 Page({
@@ -100,7 +102,7 @@ Page({
             } else {
                 const res = await FavoriteService.getFavoriteMerchants(this.data.page, this.data.pageSize)
                 list = res.merchants.map((merchant) => {
-                    const m = merchant as unknown as FavoriteMerchantItem
+                    const m = merchant as FavoriteMerchantItem | FavoriteMerchantListItem
                     return ({
                     id: m.id,
                     targetId: m.merchant_id,
@@ -110,7 +112,8 @@ Page({
                     image: m.merchant_logo || '',
                     subTitle: m.address || '',
                     rating: 5.0,
-                    createdAt: m.created_at?.split('T')[0] || ''
+                    createdAt: m.created_at?.split('T')[0] || '',
+                    isOrderingSuspended: !!m.is_ordering_suspended
                     })
                 })
                 total = res.total

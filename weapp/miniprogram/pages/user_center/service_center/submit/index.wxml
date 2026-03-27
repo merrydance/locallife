@@ -10,6 +10,7 @@
         color="{{resultColor}}"
       />
       <text class="result-title">{{resultTitle}}</text>
+      <text class="result-desc">{{resultSummary}}</text>
       <text class="result-desc">{{submitResult.reason}}</text>
 
       <view wx:if="{{submitResult.approved_amount}}" class="result-amount">
@@ -17,9 +18,9 @@
         <text class="result-amount-value">¥{{approvedAmountDisplay}}</text>
       </view>
 
-      <view wx:if="{{submitResult.refund_eta}}" class="result-eta">
+      <view wx:if="{{submitResult.payout_eta}}" class="result-eta">
         <t-icon name="time" size="28rpx" color="#666" />
-        <text>预计到账：{{submitResult.refund_eta}}</text>
+        <text>预计赔付时间：{{submitResult.payout_eta}}</text>
       </view>
 
       <view wx:if="{{submitResult.warning}}" class="result-warning">

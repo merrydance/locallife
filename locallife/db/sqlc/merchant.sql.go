@@ -151,11 +151,13 @@ func (q *Queries) CountMerchantsByRegionWithStatus(ctx context.Context, arg Coun
 }
 
 const countSearchMerchants = `-- name: CountSearchMerchants :one
-SELECT COUNT(*) FROM merchants
-WHERE status = 'active'
-  AND deleted_at IS NULL
-  AND region_id = $2
-  AND name ILIKE '%' || $1 || '%'
+SELECT COUNT(*) FROM merchants m
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = $2
+  AND m.name ILIKE '%' || $1 || '%'
 `
 
 type CountSearchMerchantsParams struct {
@@ -172,9 +174,11 @@ func (q *Queries) CountSearchMerchants(ctx context.Context, arg CountSearchMerch
 
 const countSearchMerchantsByTag = `-- name: CountSearchMerchantsByTag :one
 SELECT COUNT(*) FROM merchants m
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = $1
   AND mt.tag_id = $2
 `
@@ -1831,6 +1835,7 @@ FROM merchants m
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = $6
   AND (
     $3::text IS NULL
@@ -1963,6 +1968,7 @@ FROM merchants m
   INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = $1
   AND mt_filter.tag_id = $2
 ORDER BY

@@ -80,6 +80,9 @@ type PaymentClientInterface interface {
 	// CreateTransfer 发起转账（商家转账到零钱）
 	CreateTransfer(ctx context.Context, req *TransferRequest) (*TransferResponse, error)
 
+	// QueryTransfer 按商户批次单号查询转账批次状态
+	QueryTransfer(ctx context.Context, outBatchNo string) (*TransferQueryResponse, error)
+
 	// DecryptPaymentNotification 解密支付通知
 	DecryptPaymentNotification(notification *PaymentNotification) (*PaymentNotificationResource, error)
 

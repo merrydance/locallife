@@ -17,6 +17,15 @@ export type AppellantType = 'merchant' | 'rider' | 'user'
 /** 索赔状态枚举 */
 export type ClaimStatus = 'pending' | 'approved' | 'rejected' | 'compensated'
 
+/** 用户侧索赔生命周期状态 */
+export type UserClaimStatus = 'accepted' | 'rejected'
+
+/** 用户侧索赔裁定状态 */
+export type UserClaimDecisionStatus = 'auto-adjudicated' | 'rejected'
+
+/** 用户侧索赔赔付状态 */
+export type UserClaimPayoutStatus = 'processing' | 'paid'
+
 /** 索赔类型枚举 */
 export type ClaimType = 'refund' | 'compensation' | 'quality_issue' | 'delivery_issue'
 
@@ -127,6 +136,12 @@ export interface ClaimRecoveryResponse {
     updated_at: string
 }
 
+/** 用户索赔列表查询参数 */
+export interface UserClaimsQueryParams extends Record<string, unknown> {
+    page?: number
+    page_size?: number
+}
+
 /** 索赔列表查询参数 */
 export interface ClaimsQueryParams extends Record<string, unknown> {
     page_id: number
@@ -138,7 +153,7 @@ export interface ClaimsQueryParams extends Record<string, unknown> {
 // ==================== 用户索赔提交相关类型 ====================
 
 /** 用户提交索赔类型枚举 - 对齐后端 SubmitClaimRequest.claim_type */
-export type UserClaimType = 'foreign-object' | 'damage' | 'timeout' | 'food-safety'
+export type UserClaimType = 'foreign-object' | 'damage' | 'timeout'
 
 /** 用户提交索赔请求 - 对齐后端 SubmitClaimRequest */
 export interface SubmitClaimRequest extends Record<string, unknown> {
@@ -152,12 +167,46 @@ export interface SubmitClaimRequest extends Record<string, unknown> {
 /** 用户提交索赔响应 - 对齐后端 SubmitClaimResponse */
 export interface SubmitClaimResponse {
     claim_id: number
-    status: 'instant' | 'auto' | 'manual' | 'platform-pay'
+    status: 'accepted'
+    decision_status?: 'auto-adjudicated'
+    payout_status?: 'processing' | 'paid'
     approved_amount?: number
     compensation_source?: string    // merchant | rider | platform
     reason: string
-    refund_eta?: string             // 秒赔/自动通过时提供预计到账时间
+    payout_eta?: string             // 预计赔付时间
     warning?: string                // 警告信息
+}
+
+/** 用户索赔响应 - 对齐用户态 /v1/claims DTO */
+export interface UserClaimResponse {
+    id: number
+    order_id: number
+    claim_type: string
+    description: string
+    claim_amount: number
+    approved_amount?: number
+    status: UserClaimStatus
+    decision_status?: UserClaimDecisionStatus
+    payout_status?: UserClaimPayoutStatus
+    reason?: string
+    payout_eta?: string
+    created_at: string
+    processed_at?: string
+}
+
+export interface UserClaimsListResponse {
+    claims: UserClaimResponse[]
+    total: number
+    page: number
+    page_size: number
+}
+
+export interface UserClaimPresentation {
+    statusText: string
+    statusTheme: string
+    statusIcon: string
+    statusColor: string
+    summary: string
 }
 
 // ==================== 评价回复相关类型 ====================
@@ -313,13 +362,7 @@ export class ClaimManagementService {
      * 获取用户索赔列表
      * @param params 查询参数
      */
-    async getUserClaims(params: ClaimsQueryParams): Promise<{
-        claims: ClaimResponse[]
-        total: number
-        page_id: number
-        page_size: number
-        has_more: boolean
-    }> {
+    async getUserClaims(params: UserClaimsQueryParams): Promise<UserClaimsListResponse> {
         return request({
             url: '/v1/claims',
             method: 'GET',
@@ -391,7 +434,7 @@ export class ClaimManagementService {
      * 获取索赔详情
      * @param claimId 索赔ID
      */
-    async getClaimDetail(claimId: number): Promise<ClaimResponse> {
+    async getClaimDetail(claimId: number): Promise<UserClaimResponse> {
         return request({
             url: `/v1/claims/${claimId}`,
             method: 'GET'
@@ -874,6 +917,46 @@ export function formatClaimStatus(status: ClaimStatus): string {
         compensated: '已赔付'
     }
     return statusMap[status] || status
+}
+
+export function getUserClaimPresentation(claim: Pick<UserClaimResponse, 'status' | 'decision_status' | 'payout_status'>): UserClaimPresentation {
+    if (claim.status === 'rejected' || claim.decision_status === 'rejected') {
+        return {
+            statusText: '未支持赔付',
+            statusTheme: 'danger',
+            statusIcon: 'close-circle-filled',
+            statusColor: '#d32f2f',
+            summary: '平台已完成核验，当前未支持本次赔付。'
+        }
+    }
+
+    if (claim.payout_status === 'paid') {
+        return {
+            statusText: '赔付已到账',
+            statusTheme: 'success',
+            statusIcon: 'check-circle-filled',
+            statusColor: '#2e7d32',
+            summary: '平台已完成自动裁定，赔付已到账。'
+        }
+    }
+
+    if (claim.decision_status === 'auto-adjudicated') {
+        return {
+            statusText: '已自动裁定',
+            statusTheme: 'primary',
+            statusIcon: 'check-circle-filled',
+            statusColor: '#1976d2',
+            summary: '平台已完成自动裁定，赔付正在处理中。'
+        }
+    }
+
+    return {
+        statusText: '平台已受理',
+        statusTheme: 'warning',
+        statusIcon: 'time-filled',
+        statusColor: '#ff9800',
+        summary: '平台已受理您的反馈，正在处理中。'
+    }
 }
 
 /**

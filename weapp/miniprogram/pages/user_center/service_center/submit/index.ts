@@ -3,12 +3,20 @@ import type { UserClaimType, SubmitClaimResponse } from '../../../../api/appeals
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
 
+const SUPPORTED_USER_CLAIM_TYPES: UserClaimType[] = ['foreign-object', 'damage', 'timeout']
+
+function normalizeUserClaimType(claimType?: string): UserClaimType | null {
+  if (claimType && SUPPORTED_USER_CLAIM_TYPES.includes(claimType as UserClaimType)) {
+    return claimType as UserClaimType
+  }
+  return null
+}
+
 /** 用户索赔类型 → 中文显示 */
 const USER_CLAIM_TYPE_MAP: Record<UserClaimType, string> = {
   'foreign-object': '异物问题',
   'damage': '餐品损坏',
-  'timeout': '配送超时',
-  'food-safety': '食品安全'
+	'timeout': '配送超时'
 }
 
 function formatUserClaimType(type: UserClaimType): string {
@@ -19,24 +27,48 @@ function formatUserClaimType(type: UserClaimType): string {
 const TYPE_ICON_MAP: Record<UserClaimType, string> = {
   'foreign-object': 'search',
   'damage': 'heart-filled',
-  'timeout': 'time',
-  'food-safety': 'secured'
+  'timeout': 'time'
 }
 
 /** 索赔类型 → 页面标题映射 */
 const TYPE_TITLE_MAP: Record<UserClaimType, string> = {
   'foreign-object': '异物问题反馈',
   'damage': '餐品损坏反馈',
-  'timeout': '配送超时反馈',
-  'food-safety': '食品安全反馈'
+  'timeout': '配送超时反馈'
 }
 
-/** 提交结果 → 展示信息映射 */
-const RESULT_CONFIG: Record<string, { icon: string, color: string, title: string }> = {
-  instant: { icon: 'check-circle-filled', color: '#2e7d32', title: '秒赔成功' },
-  auto: { icon: 'check-circle-filled', color: '#2e7d32', title: '审核通过' },
-  manual: { icon: 'time-filled', color: '#ff9800', title: '已提交审核' },
-  'platform-pay': { icon: 'check-circle-filled', color: '#1976d2', title: '平台先行赔付' }
+type SubmitResultPresentation = {
+  icon: string
+  color: string
+  title: string
+  summary: string
+}
+
+function getSubmitResultPresentation(result: SubmitClaimResponse): SubmitResultPresentation {
+  if (result.payout_status === 'paid') {
+    return {
+      icon: 'check-circle-filled',
+      color: '#2e7d32',
+      title: '赔付已到账',
+      summary: '平台已受理并完成自动裁定，赔付已到账。'
+    }
+  }
+
+  if (result.decision_status === 'auto-adjudicated') {
+    return {
+      icon: 'check-circle-filled',
+      color: '#1976d2',
+      title: '已自动裁定',
+      summary: '平台已受理并完成自动裁定，赔付正在处理中。'
+    }
+  }
+
+  return {
+    icon: 'time-filled',
+    color: '#1976d2',
+    title: '平台已受理',
+    summary: '平台已受理您的反馈，正在为您处理。'
+  }
 }
 
 /** 最小索赔原因字数 */
@@ -70,6 +102,7 @@ Page({
     resultIcon: '',
     resultColor: '',
     resultTitle: '',
+    resultSummary: '',
     approvedAmountDisplay: ''
   },
 
@@ -80,7 +113,19 @@ Page({
   },
 
   onLoad(options: { claimType?: string, orderId?: string }) {
-    const claimType = (options.claimType || 'foreign-object') as UserClaimType
+	const claimType = normalizeUserClaimType(options.claimType)
+  if (!claimType) {
+    logger.warn('[SubmitClaim] unsupported claim type', options.claimType)
+    wx.showToast({ title: '暂不支持该反馈类型', icon: 'none', duration: 2000 })
+    setTimeout(() => {
+    wx.navigateBack({
+      fail: () => {
+      wx.redirectTo({ url: '/pages/user_center/service_center/index' })
+      }
+    })
+    }, 2000)
+    return
+  }
     this.setData({
       claimType,
       claimTypeText: formatUserClaimType(claimType),
@@ -174,13 +219,14 @@ Page({
         claim_reason: this.data.reasonInput.trim()
       })
 
-      const config = RESULT_CONFIG[result.status] || RESULT_CONFIG['manual']
+      const presentation = getSubmitResultPresentation(result)
 
       this.setData({
         submitResult: result,
-        resultIcon: config.icon,
-        resultColor: config.color,
-        resultTitle: config.title,
+        resultIcon: presentation.icon,
+        resultColor: presentation.color,
+        resultTitle: presentation.title,
+        resultSummary: presentation.summary,
         approvedAmountDisplay:
           result.approved_amount !== null && result.approved_amount !== undefined
             ? formatAmount(result.approved_amount)

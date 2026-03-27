@@ -397,6 +397,13 @@ func ConfirmReservation(ctx context.Context, store db.Store, userID, reservation
 	if reservation.MerchantID != merchant.ID {
 		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("reservation does not belong to your merchant"))
 	}
+	suspension, err := GetTakeoutSuspension(ctx, store, merchant.ID)
+	if err != nil {
+		return ReservationStatusUpdateResult{}, err
+	}
+	if suspension != nil {
+		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("商户预订接单已暂停"))
+	}
 	if !isReservationStatusAllowed(reservation.Status, reservationActionConfirm) {
 		return ReservationStatusUpdateResult{}, NewRequestError(http.StatusConflict, errors.New("reservation is not paid"))
 	}

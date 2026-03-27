@@ -17,6 +17,7 @@ interface MerchantFeedData {
   name: string
   imageUrl: string
   isOpen: boolean
+  isOrderingSuspended: boolean
   distance: string
   monthlySales: number
   deliveryFeeDisplay: string
@@ -74,8 +75,12 @@ Component({
     },
 
     onDishTap(e: WechatMiniprogram.TouchEvent) {
-      const index = e.currentTarget.dataset.index as number
       const data = this.data as unknown as ComponentData
+      if (data.merchant.isOrderingSuspended) {
+        wx.showToast({ title: '当前商户暂停接单', icon: 'none' })
+        return
+      }
+      const index = e.currentTarget.dataset.index as number
       const dish = data.merchant.featuredDishes[index]
       if (!dish) return
       const params = [
@@ -87,8 +92,12 @@ Component({
     },
 
     onDishAdd(e: WechatMiniprogram.TouchEvent) {
-      const index = e.currentTarget.dataset.index as number
       const data = this.data as unknown as ComponentData
+      if (data.merchant.isOrderingSuspended) {
+        wx.showToast({ title: '当前商户暂停接单', icon: 'none' })
+        return
+      }
+      const index = e.currentTarget.dataset.index as number
       const dish = data.merchant.featuredDishes[index]
       if (!dish) return
       this.triggerEvent('dishadd', { dishId: dish.id, merchantId: dish.merchantId })
@@ -96,8 +105,12 @@ Component({
 
     onSelectSpec(e: WechatMiniprogram.TouchEvent) {
       // 有定制项时跳转菜品详情页选规格
-      const index = e.currentTarget.dataset.index as number
       const data = this.data as unknown as ComponentData
+      if (data.merchant.isOrderingSuspended) {
+        wx.showToast({ title: '当前商户暂停接单', icon: 'none' })
+        return
+      }
+      const index = e.currentTarget.dataset.index as number
       const dish = data.merchant.featuredDishes[index]
       if (!dish) return
       const params = [

@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
@@ -132,30 +131,6 @@ func PayMerchantClaimRecovery(ctx context.Context, store db.Store, input PayMerc
 		return db.ClaimRecovery{}, err
 	}
 
-	now := input.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
-
-	if _, err := store.GetMerchantSettlementAdjustmentByRelatedAndType(ctx, db.GetMerchantSettlementAdjustmentByRelatedAndTypeParams{
-		RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-		RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-		AdjustmentType: "claim_recovery_charge",
-	}); err != nil {
-		if _, err := store.CreateMerchantSettlementAdjustment(ctx, db.CreateMerchantSettlementAdjustmentParams{
-			MerchantID:     input.MerchantID,
-			AdjustmentType: "claim_recovery_charge",
-			Amount:         -updated.RecoveryAmount,
-			Status:         "finished",
-			RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-			RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-			Note:           pgtype.Text{String: "claim recovery paid", Valid: true},
-			PostedAt:       pgtype.Timestamptz{Time: now, Valid: true},
-		}); err != nil {
-			return db.ClaimRecovery{}, err
-		}
-	}
-
 	if err := store.UnsuspendMerchantTakeout(ctx, input.MerchantID); err != nil {
 		return db.ClaimRecovery{}, err
 	}
@@ -220,35 +195,10 @@ func WaiveClaimRecovery(ctx context.Context, store db.Store, input WaiveClaimRec
 		return db.ClaimRecovery{}, err
 	}
 
-	now := input.Now
-	if now.IsZero() {
-		now = time.Now()
-	}
-
 	if updated.RecoveryTarget.Valid && updated.RecoveryTarget.String == "merchant" {
 		order, orderErr := store.GetOrder(ctx, updated.OrderID)
 		if orderErr != nil {
 			return db.ClaimRecovery{}, orderErr
-		}
-		if recovery.Status == "paid" {
-			if _, err := store.GetMerchantSettlementAdjustmentByRelatedAndType(ctx, db.GetMerchantSettlementAdjustmentByRelatedAndTypeParams{
-				RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-				RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-				AdjustmentType: "claim_recovery_reversal",
-			}); err != nil {
-				if _, err := store.CreateMerchantSettlementAdjustment(ctx, db.CreateMerchantSettlementAdjustmentParams{
-					MerchantID:     order.MerchantID,
-					AdjustmentType: "claim_recovery_reversal",
-					Amount:         updated.RecoveryAmount,
-					Status:         "finished",
-					RelatedType:    pgtype.Text{String: "claim_recovery", Valid: true},
-					RelatedID:      pgtype.Int8{Int64: recovery.ID, Valid: true},
-					Note:           pgtype.Text{String: "claim recovery waived", Valid: true},
-					PostedAt:       pgtype.Timestamptz{Time: now, Valid: true},
-				}); err != nil {
-					return db.ClaimRecovery{}, err
-				}
-			}
 		}
 		if err := store.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
 			return db.ClaimRecovery{}, err

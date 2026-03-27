@@ -147,7 +147,7 @@ func TestCreateUserBalanceLog(t *testing.T) {
 	// 创建日志
 	log, err := testStore.CreateUserBalanceLog(context.Background(), CreateUserBalanceLogParams{
 		UserID:        user.ID,
-		Type:          "claim_refund",
+		Type:          "claim_payout",
 		Amount:        5000,
 		BalanceBefore: 0,
 		BalanceAfter:  5000,
@@ -155,7 +155,7 @@ func TestCreateUserBalanceLog(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, log)
 	require.Equal(t, user.ID, log.UserID)
-	require.Equal(t, "claim_refund", log.Type)
+	require.Equal(t, "claim_payout", log.Type)
 	require.Equal(t, int64(5000), log.Amount)
 }
 
@@ -167,7 +167,7 @@ func TestListUserBalanceLogs(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		_, err := testStore.CreateUserBalanceLog(context.Background(), CreateUserBalanceLogParams{
 			UserID:        user.ID,
-			Type:          "claim_refund",
+			Type:          "claim_payout",
 			Amount:        int64(1000 * (i + 1)),
 			BalanceBefore: int64(1000 * i),
 			BalanceAfter:  int64(1000 * (i + 1)),

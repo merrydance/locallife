@@ -55,6 +55,7 @@ const (
 	closeOrderURL        = "/v3/pay/transactions/out-trade-no/%s/close"
 	refundURL            = "/v3/refund/domestic/refunds"
 	queryRefundURL       = "/v3/refund/domestic/refunds/%s"
+	queryTransferURL     = "/v3/transfer/batches/out-batch-no/%s?need_query_detail=false"
 )
 
 // PaymentClient 微信支付客户端
@@ -504,6 +505,16 @@ type TransferResponse struct {
 	BatchStatus string `json:"batch_status"`
 }
 
+// TransferQueryResponse 转账批次查询响应
+type TransferQueryResponse struct {
+	OutBatchNo  string `json:"out_batch_no"`
+	BatchID     string `json:"batch_id"`
+	BatchStatus string `json:"batch_status"`
+	CreateTime  string `json:"create_time"`
+	UpdateTime  string `json:"update_time"`
+	CloseReason string `json:"close_reason"`
+}
+
 // CreateTransfer 发起转账（商家转账到零钱）
 func (c *PaymentClient) CreateTransfer(ctx context.Context, req *TransferRequest) (*TransferResponse, error) {
 	// 生成商户明细单号
@@ -544,6 +555,21 @@ func (c *PaymentClient) CreateTransfer(ctx context.Context, req *TransferRequest
 	var resp TransferResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// QueryTransfer 按商户批次单号查询转账批次状态。
+func (c *PaymentClient) QueryTransfer(ctx context.Context, outBatchNo string) (*TransferQueryResponse, error) {
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodGet, fmt.Sprintf(queryTransferURL, outBatchNo), nil)
+	if err != nil {
+		return nil, fmt.Errorf("query transfer: %w", err)
+	}
+
+	var resp TransferQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal transfer query response: %w", err)
 	}
 
 	return &resp, nil

@@ -171,6 +171,7 @@ func main() {
 
 	var billClient wechat.BillClientInterface
 	var reconciliationPublisher websocket.PubSubPublisher
+	claimPayoutPaymentClient := buildClaimPayoutPaymentClient(config)
 	if config.RedisAddress != "" {
 		// 初始化逻辑层
 		redisClient := redis.NewClient(&redis.Options{
@@ -198,6 +199,11 @@ func main() {
 	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("refund-recovery", worker.NewRefundRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))
+	if claimPayoutPaymentClient != nil {
+		schedulerManager.Register("claim-payout-recovery", worker.NewClaimPayoutRecoveryScheduler(store, claimPayoutPaymentClient))
+	} else {
+		log.Warn().Msg("claim payout recovery scheduler disabled: payment client not configured")
+	}
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
@@ -226,6 +232,32 @@ func runDBMigration(migrationURL string, dbSource string) {
 	log.Info().Msg("db migrated successfully")
 }
 
+func buildClaimPayoutPaymentClient(config util.Config) wechat.PaymentClientInterface {
+	if config.WechatPayMchID == "" || config.WechatPayPrivateKeyPath == "" {
+		return nil
+	}
+
+	paymentClient, err := wechat.NewPaymentClient(wechat.PaymentClientConfig{
+		MchID:                   config.WechatPayMchID,
+		AppID:                   config.WechatMiniAppID,
+		SerialNumber:            config.WechatPaySerialNumber,
+		HTTPTimeout:             config.WechatPayHTTPTimeout,
+		PrivateKeyPath:          config.WechatPayPrivateKeyPath,
+		APIV3Key:                config.WechatPayAPIV3Key,
+		NotifyURL:               config.WechatPayNotifyURL,
+		RefundNotifyURL:         config.WechatPayRefundNotifyURL,
+		PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
+		PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
+		PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
+	})
+	if err != nil {
+		log.Warn().Err(err).Msg("failed to create payment client, claim payout transfer disabled")
+		return nil
+	}
+
+	return paymentClient
+}
+
 func runTaskProcessor(
 	ctx context.Context,
 	waitGroup *errgroup.Group,
@@ -240,6 +272,7 @@ func runTaskProcessor(
 	// 创建平台收付通客户端（用于分账）
 	wechatClient := wechat.NewClient(config.WechatMiniAppID, config.WechatMiniAppSecret, store)
 
+	paymentClient := buildClaimPayoutPaymentClient(config)
 	var ecommerceClient wechat.EcommerceClientInterface
 	if config.WechatPayMchID != "" && config.WechatPayPrivateKeyPath != "" {
 		client, err := wechat.NewEcommerceClient(wechat.EcommerceClientConfig{
@@ -294,6 +327,7 @@ func runTaskProcessor(
 
 	// 创建并启动任务处理器（传入 distributor 以支持任务链）
 	taskProcessor := worker.NewRedisTaskProcessor(redisOpt, store, taskDistributor, wechatClient, ecommerceClient, deliveryBroadcast, mediaRegistry, config)
+	taskProcessor.SetPaymentClient(paymentClient)
 	log.Info().Msg("start task processor")
 
 	waitGroup.Go(func() error {

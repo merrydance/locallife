@@ -18,7 +18,6 @@ const (
 const (
 	ApprovalTypeInstant = "instant"
 	ApprovalTypeAuto    = "auto"
-	ApprovalTypeManual  = "manual"
 )
 
 // Compensation sources
@@ -40,7 +39,6 @@ const (
 const (
 	ClaimStatusPending      = "pending"
 	ClaimStatusAutoApproved = "auto-approved"
-	ClaimStatusManualReview = "manual-review"
 )
 
 // Behavior thresholds

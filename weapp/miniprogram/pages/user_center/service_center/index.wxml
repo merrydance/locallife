@@ -23,12 +23,6 @@
         </view>
         <text class="entry-label">配送超时</text>
       </view>
-      <view class="entry-item" bindtap="onQuickEntry" data-type="food-safety">
-        <view class="entry-icon entry-icon--safety">
-          <t-icon name="secured" size="48rpx" />
-        </view>
-        <text class="entry-label">食品安全</text>
-      </view>
     </view>
   </view>
 
@@ -63,10 +57,14 @@
             <t-tag size="small" variant="dark">{{item.claimTypeText}}</t-tag>
             <text class="claim-amount">¥{{item.claimAmountDisplay}}</text>
           </view>
+          <text class="claim-desc">{{item.statusSummary}}</text>
           <text wx:if="{{item.description}}" class="claim-desc">{{item.description}}</text>
         </view>
         <view wx:if="{{item.approvedAmountDisplay}}" class="claim-footer">
           <text class="claim-approved">赔付金额：¥{{item.approvedAmountDisplay}}</text>
+        </view>
+        <view wx:if="{{item.payoutEta}}" class="claim-footer">
+          <text class="claim-approved">预计赔付时间：{{item.payoutEta}}</text>
         </view>
       </view>
 

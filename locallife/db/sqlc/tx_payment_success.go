@@ -278,6 +278,69 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 			}
 			result.OrderResult = &orderResult
 
+		case "claim_recovery":
+			if !paymentOrder.Attach.Valid || paymentOrder.Attach.String == "" {
+				return fmt.Errorf("claim recovery attach is required")
+			}
+
+			var attach struct {
+				ClaimID        int64  `json:"claim_id"`
+				RecoveryID     int64  `json:"recovery_id"`
+				RecoveryTarget string `json:"recovery_target"`
+			}
+			if err := json.Unmarshal([]byte(paymentOrder.Attach.String), &attach); err != nil {
+				return fmt.Errorf("parse claim recovery attach: %w", err)
+			}
+			if attach.ClaimID == 0 {
+				return fmt.Errorf("claim recovery attach claim_id is required")
+			}
+
+			recovery, err := q.GetClaimRecoveryByClaimID(ctx, attach.ClaimID)
+			if err != nil {
+				return fmt.Errorf("get claim recovery by claim id: %w", err)
+			}
+			if attach.RecoveryID != 0 && recovery.ID != attach.RecoveryID {
+				return fmt.Errorf("claim recovery id mismatch")
+			}
+
+			if recovery.Status == "paid" {
+				break
+			}
+			if recovery.Status != "pending" && recovery.Status != "overdue" {
+				log.Error().
+					Int64("payment_order_id", paymentOrder.ID).
+					Int64("claim_id", attach.ClaimID).
+					Int64("recovery_id", recovery.ID).
+					Str("recovery_status", recovery.Status).
+					Msg("claim recovery payment succeeded but recovery status is no longer payable")
+				break
+			}
+
+			if _, err := q.MarkClaimRecoveryPaid(ctx, recovery.ID); err != nil {
+				return fmt.Errorf("mark claim recovery paid: %w", err)
+			}
+
+			switch attach.RecoveryTarget {
+			case "merchant":
+				order, err := q.GetOrder(ctx, recovery.OrderID)
+				if err != nil {
+					return fmt.Errorf("get order for merchant recovery: %w", err)
+				}
+				if err := q.UnsuspendMerchantTakeout(ctx, order.MerchantID); err != nil {
+					return fmt.Errorf("unsuspend merchant takeout: %w", err)
+				}
+			case "rider":
+				delivery, err := q.GetDeliveryByOrderID(ctx, recovery.OrderID)
+				if err != nil {
+					return fmt.Errorf("get delivery for rider recovery: %w", err)
+				}
+				if delivery.RiderID.Valid {
+					if err := q.UnsuspendRider(ctx, delivery.RiderID.Int64); err != nil {
+						return fmt.Errorf("unsuspend rider: %w", err)
+					}
+				}
+			}
+
 		default:
 			return fmt.Errorf("unknown business type: %s", paymentOrder.BusinessType)
 		}

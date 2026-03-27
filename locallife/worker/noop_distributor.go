@@ -2,12 +2,14 @@ package worker
 
 import (
 	"context"
+	"errors"
 
 	"github.com/hibiken/asynq"
 )
 
 // NoopTaskDistributor is a safe fallback when Redis is disabled.
-// It drops tasks and returns nil to avoid blocking core flows.
+// Most tasks are dropped, but flows with inline fallback or explicit retry
+// semantics must return an error so callers can degrade safely.
 type NoopTaskDistributor struct{}
 
 func NewNoopTaskDistributor() TaskDistributor {
@@ -79,11 +81,11 @@ func (NoopTaskDistributor) DistributeTaskCheckRiderDamage(ctx context.Context, r
 }
 
 func (NoopTaskDistributor) DistributeTaskProcessAppealResult(ctx context.Context, payload *ProcessAppealResultPayload, opts ...asynq.Option) error {
-	return nil
+	return errors.New("appeal result task distributor unavailable without redis")
 }
 
-func (NoopTaskDistributor) DistributeTaskClaimRefund(ctx context.Context, payload *ClaimRefundPayload, opts ...asynq.Option) error {
-	return nil
+func (NoopTaskDistributor) DistributeTaskClaimPayout(ctx context.Context, payload *ClaimPayoutPayload, opts ...asynq.Option) error {
+	return errors.New("claim payout task distributor unavailable without redis")
 }
 
 func (NoopTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, opts ...asynq.Option) error {

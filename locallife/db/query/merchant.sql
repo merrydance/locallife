@@ -171,6 +171,7 @@ FROM merchants m
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = sqlc.narg('region_id')
   AND (
     $3::text IS NULL
@@ -189,11 +190,13 @@ LIMIT $2
 OFFSET $1;
 
 -- name: CountSearchMerchants :one
-SELECT COUNT(*) FROM merchants
-WHERE status = 'active'
-  AND deleted_at IS NULL
-  AND region_id = sqlc.narg('region_id')
-  AND name ILIKE '%' || $1 || '%';
+SELECT COUNT(*) FROM merchants m
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
+WHERE m.status = 'active'
+  AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
+  AND m.region_id = sqlc.narg('region_id')
+  AND m.name ILIKE '%' || $1 || '%';
 
 -- ==================== 商户标签关联 ====================
 
@@ -498,6 +501,7 @@ FROM merchants m
   INNER JOIN merchant_tags mt_filter ON m.id = mt_filter.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = sqlc.narg('region_id')
   AND mt_filter.tag_id = sqlc.arg('tag_id')
 ORDER BY
@@ -515,9 +519,11 @@ OFFSET sqlc.arg('offset');
 -- name: CountSearchMerchantsByTag :one
 -- 统计指定标签在区域内的商户数量（用于分页）
 SELECT COUNT(*) FROM merchants m
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = sqlc.narg('region_id')
   AND mt.tag_id = sqlc.arg('tag_id');
 

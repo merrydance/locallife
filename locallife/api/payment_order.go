@@ -36,6 +36,7 @@ const (
 	BusinessTypeReservationAddon   = "reservation_addon"   // 预定加菜补差
 	BusinessTypeMembershipRecharge = "membership_recharge" // 会员充值
 	BusinessTypeRiderDeposit       = "rider_deposit"       // 骑手押金
+	BusinessTypeClaimRecovery      = "claim_recovery"      // 索赔追偿支付
 )
 
 // 支付状态常量

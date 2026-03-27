@@ -29,6 +29,7 @@ export interface FavoriteMerchantResponse {
     merchant_logo?: string
     address: string
     status: string
+    is_ordering_suspended?: boolean
     created_at: string
 }
 

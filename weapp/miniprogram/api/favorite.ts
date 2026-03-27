@@ -24,6 +24,17 @@ export interface FavoriteItem {
     created_at: string
 }
 
+export interface FavoriteMerchantListItem {
+    id: number
+    merchant_id: number
+    merchant_name: string
+    merchant_logo?: string
+    address?: string
+    status?: string
+    is_ordering_suspended?: boolean
+    created_at?: string
+}
+
 /**
  * 收藏列表查询参数
  */
@@ -87,7 +98,7 @@ export class FavoriteService {
      * 获取收藏商户列表
      * GET /v1/favorites/merchants
      */
-    static async getFavoriteMerchants(page: number = 1, pageSize: number = 20): Promise<{ merchants: Array<Record<string, unknown>>, total: number }> {
+    static async getFavoriteMerchants(page: number = 1, pageSize: number = 20): Promise<{ merchants: FavoriteMerchantListItem[], total: number }> {
         return await request({
             url: '/v1/favorites/merchants',
             method: 'GET',

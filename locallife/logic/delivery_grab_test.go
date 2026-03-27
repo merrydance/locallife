@@ -48,6 +48,10 @@ func TestGrabDeliveryOrder_RegionMismatch(t *testing.T) {
 		Times(1).
 		Return(rider, nil)
 	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: 20, ExpiresAt: time.Now().Add(time.Hour)}, nil)
@@ -80,6 +84,10 @@ func TestGrabDeliveryOrder_DistanceTooFar(t *testing.T) {
 		Times(1).
 		Return(rider, nil)
 	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour)}, nil)
@@ -111,6 +119,10 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 		GetRiderByUserID(gomock.Any(), int64(1)).
 		Times(1).
 		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -149,6 +161,32 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	require.Equal(t, delivery.ID, result.Delivery.ID)
 }
 
+func TestGrabDeliveryOrder_Suspended(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{
+			RiderID:       rider.ID,
+			IsSuspended:   true,
+			SuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+		}, nil)
+
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 403, reqErr.Status)
+	require.Equal(t, "骑手接单已暂停", reqErr.Err.Error())
+}
+
 func TestGrabDeliveryOrder_HighValueScoreDenied(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -160,6 +198,10 @@ func TestGrabDeliveryOrder_HighValueScoreDenied(t *testing.T) {
 		GetRiderByUserID(gomock.Any(), int64(1)).
 		Times(1).
 		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
@@ -186,6 +228,10 @@ func TestGrabDeliveryOrder_Expired(t *testing.T) {
 		Times(1).
 		Return(rider, nil)
 	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: 20, ExpiresAt: time.Now().Add(-time.Hour)}, nil)
@@ -209,6 +255,10 @@ func TestGrabDeliveryOrder_GrabTxError(t *testing.T) {
 		GetRiderByUserID(gomock.Any(), int64(1)).
 		Times(1).
 		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 	store.EXPECT().
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).

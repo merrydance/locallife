@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS payment_orders_claim_recovery_attach_active_uq;

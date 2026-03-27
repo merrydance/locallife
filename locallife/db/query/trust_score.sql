@@ -271,6 +271,11 @@ UPDATE claims
 SET lookback_result = $2
 WHERE id = $1;
 
+-- name: MarkClaimPaid :exec
+UPDATE claims
+SET paid_at = COALESCE(paid_at, $2)
+WHERE id = $1;
+
 -- name: GetPendingClaims :many
 SELECT * FROM claims
 WHERE status = 'pending'
@@ -561,35 +566,6 @@ WHERE c.id = ANY($1::bigint[])
   AND d.rider_id IS NOT NULL
 GROUP BY d.rider_id;
 
--- ==========================================
--- 运营商索赔管理（区域内待审核索赔）
--- ==========================================
-
--- name: ListRegionPendingClaims :many
--- 获取运营商区域内待人工审核的索赔列表
-SELECT c.*, 
-       o.order_no,
-       o.merchant_id,
-       m.name as merchant_name,
-       u.phone as user_phone,
-       m.region_id
-FROM claims c
-JOIN orders o ON c.order_id = o.id
-JOIN merchants m ON o.merchant_id = m.id
-JOIN users u ON c.user_id = u.id
-WHERE m.region_id = $1
-  AND c.status = 'manual-review'
-ORDER BY c.created_at ASC
-LIMIT $2 OFFSET $3;
-
--- name: CountRegionPendingClaims :one
--- 统计运营商区域内待人工审核的索赔数量
-SELECT COUNT(*) as total
-FROM claims c
-JOIN orders o ON c.order_id = o.id
-JOIN merchants m ON o.merchant_id = m.id
-WHERE m.region_id = $1
-  AND c.status = 'manual-review';
 
 -- name: GetClaimWithDetails :one
 -- 获取索赔详情（包含订单、商户、用户信息）
@@ -609,16 +585,6 @@ JOIN merchants m ON o.merchant_id = m.id
 JOIN users u ON c.user_id = u.id
 WHERE c.id = $1
 LIMIT 1;
-
--- name: ReviewClaim :exec
--- 运营商审核索赔
-UPDATE claims
-SET status = $2,
-    approved_amount = $3,
-    reviewer_id = $4,
-    review_notes = $5,
-    reviewed_at = NOW()
-WHERE id = $1;
 -- ==========================================
 -- 用户索赔行为回溯查询（新设计）
 -- ==========================================

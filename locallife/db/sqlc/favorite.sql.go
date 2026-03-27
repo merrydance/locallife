@@ -212,9 +212,11 @@ SELECT
     m.name AS merchant_name,
     m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.address AS merchant_address,
-    m.status AS merchant_status
+    m.status AS merchant_status,
+    COALESCE(mp.is_takeout_suspended, false) AS merchant_is_ordering_suspended
 FROM favorites f
 JOIN merchants m ON m.id = f.merchant_id
+LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE f.user_id = $1 AND f.favorite_type = 'merchant'
 ORDER BY f.created_at DESC
 LIMIT $2 OFFSET $3
@@ -227,13 +229,14 @@ type ListFavoriteMerchantsParams struct {
 }
 
 type ListFavoriteMerchantsRow struct {
-	ID                       int64       `json:"id"`
-	CreatedAt                time.Time   `json:"created_at"`
-	MerchantID               int64       `json:"merchant_id"`
-	MerchantName             string      `json:"merchant_name"`
-	MerchantLogoMediaAssetID pgtype.Int8 `json:"merchant_logo_media_asset_id"`
-	MerchantAddress          string      `json:"merchant_address"`
-	MerchantStatus           string      `json:"merchant_status"`
+	ID                          int64       `json:"id"`
+	CreatedAt                   time.Time   `json:"created_at"`
+	MerchantID                  int64       `json:"merchant_id"`
+	MerchantName                string      `json:"merchant_name"`
+	MerchantLogoMediaAssetID    pgtype.Int8 `json:"merchant_logo_media_asset_id"`
+	MerchantAddress             string      `json:"merchant_address"`
+	MerchantStatus              string      `json:"merchant_status"`
+	MerchantIsOrderingSuspended bool        `json:"merchant_is_ordering_suspended"`
 }
 
 func (q *Queries) ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMerchantsParams) ([]ListFavoriteMerchantsRow, error) {
@@ -253,6 +256,7 @@ func (q *Queries) ListFavoriteMerchants(ctx context.Context, arg ListFavoriteMer
 			&i.MerchantLogoMediaAssetID,
 			&i.MerchantAddress,
 			&i.MerchantStatus,
+			&i.MerchantIsOrderingSuspended,
 		); err != nil {
 			return nil, err
 		}

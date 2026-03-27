@@ -15,6 +15,12 @@ type TakeoutSuspensionInfo struct {
 	Until  time.Time
 }
 
+// RiderSuspensionInfo holds rider suspension details for delivery intake.
+type RiderSuspensionInfo struct {
+	Reason string
+	Until  time.Time
+}
+
 // ValidateMerchantForOrder ensures the merchant is active and open for ordering.
 func ValidateMerchantForOrder(ctx context.Context, store db.Store, merchantID int64) (db.Merchant, error) {
 	merchant, err := store.GetMerchant(ctx, merchantID)
@@ -39,7 +45,10 @@ func ValidateMerchantForOrder(ctx context.Context, store db.Store, merchantID in
 func GetTakeoutSuspension(ctx context.Context, store db.Store, merchantID int64) (*TakeoutSuspensionInfo, error) {
 	profile, err := store.GetMerchantProfile(ctx, merchantID)
 	if err != nil {
-		return nil, nil
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
 	}
 	if !profile.IsTakeoutSuspended {
 		return nil, nil
@@ -48,6 +57,25 @@ func GetTakeoutSuspension(ctx context.Context, store db.Store, merchantID int64)
 	return &TakeoutSuspensionInfo{
 		Reason: profile.TakeoutSuspendReason.String,
 		Until:  profile.TakeoutSuspendUntil.Time,
+	}, nil
+}
+
+// GetRiderSuspension returns rider suspension info if delivery intake is suspended.
+func GetRiderSuspension(ctx context.Context, store db.Store, riderID int64) (*RiderSuspensionInfo, error) {
+	profile, err := store.GetRiderProfile(ctx, riderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if !profile.IsSuspended {
+		return nil, nil
+	}
+
+	return &RiderSuspensionInfo{
+		Reason: profile.SuspendReason.String,
+		Until:  profile.SuspendUntil.Time,
 	}, nil
 }
 

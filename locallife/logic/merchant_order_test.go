@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/stretchr/testify/require"
@@ -58,11 +59,37 @@ func TestAcceptMerchantOrder(t *testing.T) {
 					GetOrderForUpdate(gomock.Any(), input.OrderID).
 					Times(1).
 					Return(order, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), input.MerchantID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: input.MerchantID, IsTakeoutSuspended: false}, nil)
 			},
 			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
 				require.Equal(t, "only paid orders can be accepted", reqErr.Err.Error())
+			},
+		},
+		{
+			name: "TakeoutSuspended",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(baseOrder, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), input.MerchantID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{
+						MerchantID:           input.MerchantID,
+						IsTakeoutSuspended:   true,
+						TakeoutSuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+					}, nil)
+			},
+			check: func(t *testing.T, _ MerchantOrderUpdateResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "商户外卖接单已暂停", reqErr.Err.Error())
 			},
 		},
 		{
@@ -72,6 +99,10 @@ func TestAcceptMerchantOrder(t *testing.T) {
 					GetOrderForUpdate(gomock.Any(), input.OrderID).
 					Times(1).
 					Return(baseOrder, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), input.MerchantID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: input.MerchantID, IsTakeoutSuspended: false}, nil)
 				store.EXPECT().
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).

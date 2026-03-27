@@ -191,6 +191,21 @@ func (mr *MockPaymentClientInterfaceMockRecorder) QueryRefund(ctx, outRefundNo a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryRefund", reflect.TypeOf((*MockPaymentClientInterface)(nil).QueryRefund), ctx, outRefundNo)
 }
 
+// QueryTransfer mocks base method.
+func (m *MockPaymentClientInterface) QueryTransfer(ctx context.Context, outBatchNo string) (*wechat.TransferQueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryTransfer", ctx, outBatchNo)
+	ret0, _ := ret[0].(*wechat.TransferQueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryTransfer indicates an expected call of QueryTransfer.
+func (mr *MockPaymentClientInterfaceMockRecorder) QueryTransfer(ctx, outBatchNo any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryTransfer", reflect.TypeOf((*MockPaymentClientInterface)(nil).QueryTransfer), ctx, outBatchNo)
+}
+
 // VerifyNotificationSignature mocks base method.
 func (m *MockPaymentClientInterface) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
 	m.ctrl.T.Helper()

@@ -33,6 +33,13 @@ type ClaimAutoApproval struct {
 	wsHub                   WebSocketHub            // WebSocket通知（必需，用于商户/骑手实时推送）
 }
 
+type ClaimCompensationContext struct {
+	RequestedAmount     int64
+	OrderTotalAmount    int64
+	DeliveryFee         int64
+	DeliveryFeeDiscount int64
+}
+
 // ClaimEvidenceContext 索赔证据上下文（行为追溯）
 type ClaimEvidenceContext struct {
 	DeviceID          string
@@ -41,6 +48,14 @@ type ClaimEvidenceContext struct {
 	IPAddress         string
 	UserAgent         string
 	AddressID         *int64
+}
+
+type ClaimRecoveryPlan struct {
+	ResponsibleParty string
+	RecoveryTarget   string
+	RecoveryAmount   int64
+	DueAt            time.Time
+	DecisionSnapshot []byte
 }
 
 // WebSocketHub WebSocket通知接口
@@ -64,44 +79,48 @@ func (caa *ClaimAutoApproval) SetNotificationDistributor(distributor Notificatio
 	caa.notificationDistributor = distributor
 }
 
-// EvaluateClaim 评估索赔申请（新设计）
-// 核心逻辑：
-// 1. 食安 → 平台先赔付（不走人工审核）
-// 2. 其他类型 → 检查用户行为 → 决定是否秒赔/平台垫付
+// EvaluateClaim 评估异常订单索赔申请。
+// food safety 不属于本链路，误入时直接引导到独立 workflow。
 func (caa *ClaimAutoApproval) EvaluateClaim(
 	ctx context.Context,
 	userID int64,
 	orderID int64,
-	claimAmount int64,
-	deliveryFee int64,
+	compensation ClaimCompensationContext,
 	claimType string,
 ) (*Decision, error) {
-	// Step 1: 食安索赔 → 平台先赔付（不走人工审核）
+	// Step 1: 食安问题改走专门链路，不进入异常订单平台介入索赔。
 	if claimType == ClaimTypeFoodSafety {
-		return &Decision{
-			Type:               ApprovalTypeAuto,
-			Approved:           true,
-			Amount:             claimAmount,
-			Reason:             "食安索赔平台先行赔付",
-			CompensationSource: CompensationSourceMerchant,
-			BehaviorStatus:     ClaimBehaviorNormal,
-		}, nil
+		return nil, errors.New("food safety claims must use the dedicated food safety workflow")
 	}
 
-	// Step 2: 确定赔付金额和来源
-	compensationAmount := claimAmount
+	// Step 2: 基于订单价格口径计算可赔金额。
+	netDeliveryFee := compensation.DeliveryFee - compensation.DeliveryFeeDiscount
+	if netDeliveryFee < 0 {
+		netDeliveryFee = 0
+	}
+	mealAmount := compensation.OrderTotalAmount - netDeliveryFee
+	if mealAmount < 0 {
+		mealAmount = 0
+	}
+	eligibleAmount := mealAmount + netDeliveryFee
+	if eligibleAmount < 0 {
+		eligibleAmount = 0
+	}
+	compensationAmount := compensation.RequestedAmount
+	if compensationAmount > eligibleAmount {
+		compensationAmount = eligibleAmount
+	}
 	compensationSource := CompensationSourceMerchant
 
 	switch claimType {
 	case ClaimTypeTimeout:
-		// 超时只赔运费，从骑手押金扣
-		compensationAmount = deliveryFee
+		// 平台介入后，超时责任默认落骑手，赔付口径按订单可赔金额执行。
 		compensationSource = CompensationSourceRider
 	case ClaimTypeDamage:
-		// 餐损赔全额，从骑手押金扣
+		// 餐损责任默认落骑手。
 		compensationSource = CompensationSourceRider
 	case ClaimTypeForeignObject:
-		// 异物赔全额，商户退款
+		// 异物责任默认落商户。
 		compensationSource = CompensationSourceMerchant
 	}
 
@@ -406,7 +425,7 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecision(
 	claimAmount int64,
 	decision *Decision,
 ) (*db.Claim, error) {
-	return caa.CreateClaimWithDecisionAndEvidence(ctx, orderID, userID, claimType, description, claimAmount, decision, nil)
+	return caa.CreateClaimWithDecisionAndEvidence(ctx, orderID, userID, claimType, description, claimAmount, decision, nil, nil)
 }
 
 // CreateClaimWithDecisionAndEvidence 根据决策创建索赔记录（含行为追溯证据）
@@ -419,6 +438,7 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	claimAmount int64,
 	decision *Decision,
 	evidenceContext *ClaimEvidenceContext,
+	recoveryPlan *ClaimRecoveryPlan,
 ) (*db.Claim, error) {
 	// 序列化回溯结果
 	var lookbackJSON []byte
@@ -438,14 +458,11 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	case ApprovalTypeInstant, ApprovalTypeAuto, "platform-pay":
 		// 秒赔、自动通过、平台垫付都是自动批准
 		status = ClaimStatusAutoApproved
-		approvedAmount = &claimAmount
-	case ApprovalTypeManual:
-		// 人工审核（食安）
-		status = ClaimStatusManualReview
+		approvedAmount = &decision.Amount
 	default:
 		if decision.Approved {
 			status = ClaimStatusAutoApproved
-			approvedAmount = &claimAmount
+			approvedAmount = &decision.Amount
 		}
 	}
 
@@ -471,6 +488,17 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 		}
 	}
 
+	recoveryTarget := ""
+	recoveryAmount := int64(0)
+	var recoveryDueAt *time.Time
+	var decisionSnapshot []byte
+	if recoveryPlan != nil {
+		recoveryTarget = recoveryPlan.RecoveryTarget
+		recoveryAmount = recoveryPlan.RecoveryAmount
+		recoveryDueAt = &recoveryPlan.DueAt
+		decisionSnapshot = recoveryPlan.DecisionSnapshot
+	}
+
 	result, err := caa.store.CreateClaimWithBehaviorTx(ctx, db.CreateClaimWithBehaviorTxParams{
 		OrderID:            orderID,
 		UserID:             userID,
@@ -493,15 +521,21 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 		IPAddress:          evidenceArg.IPAddress,
 		UserAgent:          evidenceArg.UserAgent,
 		AddressID:          evidenceArg.AddressID,
+		CreateRecovery:     recoveryPlan != nil,
+		RecoveryTarget:     recoveryTarget,
+		RecoveryAmount:     recoveryAmount,
+		RecoveryDueAt:      recoveryDueAt,
+		DecisionSnapshot:   decisionSnapshot,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create claim with behavior: %w", err)
 	}
 
 	claim := result.Claim
+	caa.notifyResponsibleParty(ctx, claim, claimType, decision, recoveryPlan)
 
-	// 餐损/食安赔付后的事后处理
-	if (claimType == ClaimTypeDamage || claimType == ClaimTypeFoodSafety) && decision.NeedsReview {
+	// 餐损赔付后的事后处理
+	if claimType == ClaimTypeDamage && decision.NeedsReview {
 		// 发现可疑模式，异步进行信用分处理
 		// 使用Worker任务异步执行（如果未配置worker则降级为goroutine）
 		// 接入方法：在API层通过caa.SetTaskDistributor(server.taskDistributor)设置
@@ -513,7 +547,84 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	return &claim, nil
 }
 
-// handleSuspiciousPattern 处理可疑的餐损/食安索赔模式
+func (caa *ClaimAutoApproval) notifyResponsibleParty(
+	ctx context.Context,
+	claim db.Claim,
+	claimType string,
+	decision *Decision,
+	recoveryPlan *ClaimRecoveryPlan,
+) {
+	if recoveryPlan == nil || decision == nil {
+		return
+	}
+	if recoveryPlan.RecoveryTarget != "merchant" && recoveryPlan.RecoveryTarget != "rider" {
+		return
+	}
+	if caa.notificationDistributor == nil && caa.wsHub == nil {
+		return
+	}
+
+	order, err := caa.store.GetOrder(ctx, claim.OrderID)
+	if err != nil {
+		return
+	}
+
+	title := "异常订单判责通知"
+	content := fmt.Sprintf(
+		"订单%s的%s异常索赔已判定由您承担。平台已向用户先行赔付%s，并已生成%s追偿单，请尽快处理。",
+		order.OrderNo,
+		claimTypeLabel(claimType),
+		formatClaimAmount(decision.Amount),
+		formatClaimAmount(recoveryPlan.RecoveryAmount),
+	)
+	if decision.Reason != "" {
+		content += " 判责依据：" + decision.Reason + "。"
+	}
+
+	switch recoveryPlan.RecoveryTarget {
+	case "merchant":
+		merchant, err := caa.store.GetMerchant(ctx, order.MerchantID)
+		if err != nil {
+			return
+		}
+		if caa.notificationDistributor != nil {
+			_ = caa.notificationDistributor.SendUserNotification(ctx, merchant.OwnerUserID, "system", title, content, "claim", claim.ID)
+		}
+		caa.sendNotification("merchant", title, content, merchant.ID)
+	case "rider":
+		delivery, err := caa.store.GetDeliveryByOrderID(ctx, order.ID)
+		if err != nil || !delivery.RiderID.Valid {
+			return
+		}
+		rider, err := caa.store.GetRider(ctx, delivery.RiderID.Int64)
+		if err != nil {
+			return
+		}
+		if caa.notificationDistributor != nil {
+			_ = caa.notificationDistributor.SendUserNotification(ctx, rider.UserID, "system", title, content, "claim", claim.ID)
+		}
+		caa.sendNotification("rider", title, content, rider.ID)
+	}
+}
+
+func claimTypeLabel(claimType string) string {
+	switch claimType {
+	case ClaimTypeForeignObject:
+		return "异物"
+	case ClaimTypeDamage:
+		return "餐损"
+	case ClaimTypeTimeout:
+		return "超时"
+	default:
+		return "异常订单"
+	}
+}
+
+func formatClaimAmount(amount int64) string {
+	return fmt.Sprintf("%.2f元", float64(amount)/100)
+}
+
+// handleSuspiciousPattern 处理可疑的餐损索赔模式
 // 已经赔付，但根据信用分和模式进行事后处罚
 func (caa *ClaimAutoApproval) handleSuspiciousPattern(
 	ctx context.Context,

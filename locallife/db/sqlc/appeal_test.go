@@ -229,7 +229,7 @@ func TestReviewAppeal_Approve(t *testing.T) {
 	require.True(t, reviewed.CompensationAmount.Valid)
 	require.Equal(t, int64(3000), reviewed.CompensationAmount.Int64)
 	require.True(t, reviewed.ReviewedAt.Valid)
-	require.True(t, reviewed.CompensatedAt.Valid)
+	require.False(t, reviewed.CompensatedAt.Valid)
 }
 
 func TestReviewAppeal_Reject(t *testing.T) {

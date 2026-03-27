@@ -31,6 +31,7 @@ interface MerchantFeedViewModel {
   name: string
   imageUrl: string
   isOpen: boolean
+  isOrderingSuspended: boolean
   distance: string
   monthlySales: number
   deliveryFeeDisplay: string
@@ -537,6 +538,7 @@ Page({
           name: m.name,
           imageUrl: getPublicImageUrl(m.cover_image || m.logo_url || ''),
           isOpen: m.is_open ?? true,
+          isOrderingSuspended: false,
           distance: DishAdapter.formatDistance(m.distance ?? 0),
           monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
           deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
@@ -617,6 +619,7 @@ Page({
           (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
             ? detail.avg_prep_minutes
             : DEFAULT_AVG_PREP_MINUTES
+        updates[`merchantFeed[${feedIndex}].isOrderingSuspended`] = !!detail.is_ordering_suspended
 
         // 满减文案：取门槛最低的一条
         if (detail.discount_rules && detail.discount_rules.length > 0) {
@@ -678,6 +681,12 @@ Page({
   async onDishAddFromFeed(e: WechatMiniprogram.CustomEvent) {
     const { dishId, merchantId } = e.detail as { dishId: number, merchantId: number }
     if (!dishId || !merchantId) return
+
+    const merchant = this.data.merchantFeed.find((item) => item.id === merchantId)
+    if (merchant?.isOrderingSuspended) {
+      wx.showToast({ title: '当前商户暂停接单', icon: 'none' })
+      return
+    }
 
     const success = await CartService.addItem({
       merchantId: String(merchantId),

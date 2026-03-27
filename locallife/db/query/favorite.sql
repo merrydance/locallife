@@ -28,9 +28,11 @@ SELECT
     m.name AS merchant_name,
     m.logo_media_asset_id AS merchant_logo_media_asset_id,
     m.address AS merchant_address,
-    m.status AS merchant_status
+    m.status AS merchant_status,
+    COALESCE(mp.is_takeout_suspended, false) AS merchant_is_ordering_suspended
 FROM favorites f
 JOIN merchants m ON m.id = f.merchant_id
+LEFT JOIN merchant_profiles mp ON mp.merchant_id = m.id
 WHERE f.user_id = $1 AND f.favorite_type = 'merchant'
 ORDER BY f.created_at DESC
 LIMIT $2 OFFSET $3;

@@ -381,3 +381,54 @@ func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
 	require.NotNil(t, resp.CoverImage)
 	require.Equal(t, "/dev/uploads/merchants/12/storefront/cover.jpg", *resp.CoverImage)
 }
+
+func TestGetPublicMerchantDetail_ReturnsOrderingSuspendedFlag(t *testing.T) {
+	merchant := randomMerchant(util.RandomInt(1, 1000))
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		GetMerchantProfile(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(db.GetMerchantProfileRow{IsTakeoutSuspended: true}, nil)
+	store.EXPECT().
+		GetMerchantAvgPrepMinutes(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(int32(0), nil)
+	store.EXPECT().
+		ListMerchantActiveDiscountRules(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.DiscountRule{}, nil)
+	store.EXPECT().
+		ListMerchantActiveVouchers(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Voucher{}, nil)
+	store.EXPECT().
+		ListMerchantActiveDeliveryPromotions(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.MerchantDeliveryPromotion{}, nil)
+
+	server := newTestServer(t, store)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/public/merchants/"+strconv.FormatInt(merchant.ID, 10)+"?lite=true", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchant.OwnerUserID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp publicMerchantDetailResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.True(t, resp.IsOrderingSuspended)
+}

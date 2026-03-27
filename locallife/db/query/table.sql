@@ -253,9 +253,11 @@ SELECT
     m.longitude as merchant_longitude
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选（必选）
   AND m.region_id = sqlc.arg(region_id)
   -- 按人数筛选
@@ -298,9 +300,11 @@ SELECT
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
 INNER JOIN merchant_tags mt ON m.id = mt.merchant_id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND mt.tag_id = sqlc.arg(tag_id)
   -- 按区域筛选（必选）
   AND m.region_id = sqlc.arg(region_id)
@@ -327,9 +331,11 @@ OFFSET sqlc.arg(page_offset);
 -- 统计搜索包间结果数量
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = sqlc.arg(region_id)
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
@@ -374,9 +380,11 @@ SELECT
     )::INT as monthly_reservations
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选
   AND m.region_id = sqlc.arg(region_id)
   -- 按人数筛选
@@ -394,9 +402,11 @@ OFFSET sqlc.arg(page_offset);
 -- 统计可探索包间总数
 SELECT COUNT(*) FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   AND m.region_id = sqlc.arg(region_id)
   AND (sqlc.narg(min_capacity)::SMALLINT IS NULL OR t.capacity >= sqlc.narg(min_capacity))
   AND (sqlc.narg(max_capacity)::SMALLINT IS NULL OR t.capacity <= sqlc.narg(max_capacity))
@@ -423,9 +433,11 @@ SELECT
     COALESCE((SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = true LIMIT 1), 0) as primary_image_asset_id
 FROM tables t
 INNER JOIN merchants m ON t.merchant_id = m.id
+LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
 WHERE t.table_type = 'room'
   AND t.status = 'available'
   AND m.status = 'active'
+  AND COALESCE(mp.is_takeout_suspended, false) = false
   -- 按区域筛选（必选）
   AND m.region_id = sqlc.arg(region_id)
   -- 按人数筛选

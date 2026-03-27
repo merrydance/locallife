@@ -34,6 +34,7 @@
         <text>约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</text>
       </view>
     </view>
+    <view wx:if="{{restaurant.is_ordering_suspended && !headerCollapsed}}" class="suspension-chip">暂停接单</view>
     <view class="header-share-row">
       <button class="share-btn-reset header-share-btn" open-type="share">
         <t-icon name="share" size="28rpx" color="rgba(255,255,255,0.85)" />
@@ -62,9 +63,15 @@
     <t-button theme="primary" size="small" bindtap="loadRestaurantDetail" style="margin-top: 24rpx;" shape="round">重新加载</t-button>
   </view>
 
-  <!-- 菜品列表 Tab -->
-  <view wx:elif="{{activeTab === 'dishes'}}" class="dishes-tab">
-    <view class="dishes-container">
+  <block wx:else>
+    <view wx:if="{{restaurant && restaurant.is_ordering_suspended}}" class="suspension-banner">
+      <view class="suspension-banner-title">当前暂停接单</view>
+      <view class="suspension-banner-desc">该商户暂时无法下外卖单或预订包间，恢复后会自动恢复可下单状态。</view>
+    </view>
+
+    <!-- 菜品列表 Tab -->
+    <view wx:if="{{activeTab === 'dishes'}}" class="dishes-tab">
+      <view class="dishes-container">
       <!-- 左侧分类 (Shell + Loading) -->
       <scroll-view class="category-sidebar" scroll-y enhanced show-scrollbar="{{false}}">
         <block wx:if="{{loading && categories.length === 0}}">
@@ -113,8 +120,9 @@
               </view>
             </view>
             <view class="action-area" catchtap="stopPropagation">
+              <view wx:if="{{restaurant && restaurant.is_ordering_suspended}}" class="disabled-action">已暂停</view>
               <t-button 
-                wx:if="{{item.hasCustomizations}}"
+                wx:elif="{{item.hasCustomizations}}"
                 size="extra-small" 
                 theme="primary"
                 shape="round"
@@ -138,80 +146,84 @@
         </view>
         <view style="height: 120rpx;"></view>
       </scroll-view>
+      </view>
     </view>
-  </view>
 
-  <!-- 精选套餐 Tab -->
-  <scroll-view wx:elif="{{activeTab === 'combos'}}" class="combos-tab" scroll-y bindscroll="onScroll">
-    <block wx:if="{{loading && combos.length === 0}}">
-      <dish-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
-    </block>
-    <block wx:elif="{{combos.length > 0}}">
-      <view wx:for="{{combos}}" wx:key="id" class="combo-item" data-id="{{item.id}}" bindtap="onComboTap">
-        <view class="combo-image-grid grid-count-{{item.dish_images.length > 4 ? 4 : item.dish_images.length}}" wx:if="{{item.dish_images && item.dish_images.length > 0}}">
-          <t-image 
-            wx:for="{{item.dish_images}}" 
-            wx:for-item="img" 
-            wx:for-index="imgIdx"
-            wx:if="{{imgIdx < 4}}"
-            wx:key="*this"
-            class="grid-img" 
-            src="{{img}}" 
-            mode="aspectFill" 
-            lazy 
-          />
-        </view>
-        <t-image wx:else class="combo-image" src="{{item.image_url}}" mode="aspectFill" lazy />
+    <!-- 精选套餐 Tab -->
+    <scroll-view wx:elif="{{activeTab === 'combos'}}" class="combos-tab" scroll-y bindscroll="onScroll">
+      <block wx:if="{{loading && combos.length === 0}}">
+        <dish-skeleton wx:for="{{[1,2,3]}}" wx:key="*this" />
+      </block>
+      <block wx:elif="{{combos.length > 0}}">
+        <view wx:for="{{combos}}" wx:key="id" class="combo-item" data-id="{{item.id}}" bindtap="onComboTap">
+          <view class="combo-image-grid grid-count-{{item.dish_images.length > 4 ? 4 : item.dish_images.length}}" wx:if="{{item.dish_images && item.dish_images.length > 0}}">
+            <t-image 
+              wx:for="{{item.dish_images}}" 
+              wx:for-item="img" 
+              wx:for-index="imgIdx"
+              wx:if="{{imgIdx < 4}}"
+              wx:key="*this"
+              class="grid-img" 
+              src="{{img}}" 
+              mode="aspectFill" 
+              lazy 
+            />
+          </view>
+          <t-image wx:else class="combo-image" src="{{item.image_url}}" mode="aspectFill" lazy />
 
-        <view class="combo-info">
-          <view>
-            <view class="combo-name">{{item.name}}</view>
-            <view class="combo-desc">{{item.description}}</view>
+          <view class="combo-info">
+            <view>
+              <view class="combo-name">{{item.name}}</view>
+              <view class="combo-desc">{{item.description}}</view>
+            </view>
+            <view class="combo-price-row">
+              <text class="combo-price">¥{{item.comboPriceDisplay}}</text>
+              <view class="combo-discount">省 ¥{{item.savingsDisplay}}</view>
+            </view>
           </view>
-          <view class="combo-price-row">
-            <text class="combo-price">¥{{item.comboPriceDisplay}}</text>
-            <view class="combo-discount">省 ¥{{item.savingsDisplay}}</view>
-          </view>
-        </view>
-        <view class="action-area" catchtap="stopPropagation">
-          <t-button 
-            icon="add" 
-            shape="circle" 
-            theme="primary"
-            size="small"
-            data-id="{{item.id}}"
-            catchtap="onAddComboCart"
-          />
-        </view>
-      </view>
-    </block>
-    <t-empty wx:elif="{{!loading}}" icon="info-circle" description="暂无精选套餐" />
-    <view class="empty-placeholder"></view>
-  </scroll-view>
 
-  <!-- 豪华包间 Tab -->
-  <scroll-view wx:elif="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y bindscroll="onScroll">
-    <block wx:if="{{loading && rooms.length === 0}}">
-      <view wx:for="{{[1,2]}}" wx:key="*this" class="room-skeleton skeleton-shimmer"></view>
-    </block>
-    <block wx:elif="{{rooms.length > 0}}">
-      <view wx:for="{{rooms}}" wx:key="id" class="room-item" data-id="{{item.id}}" bindtap="onRoomTap">
-        <t-image class="room-image" src="{{item.primary_image}}" mode="aspectFill" lazy use-error-placeholder error-placeholder-src="/assets/icons/dish.svg" />
-        <view class="room-info">
-          <view class="room-name">{{item.name}}</view>
-          <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
-            <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="extra-small" variant="dark" theme="primary">{{tag}}</t-tag>
-          </view>
-          <view class="room-meta">
-            <text>可容纳 {{item.capacity}} 人</text>
-            <text class="room-price">¥{{item.minimumSpendDisplay}} 起</text>
+          <view class="action-area" catchtap="stopPropagation">
+            <view wx:if="{{restaurant && restaurant.is_ordering_suspended}}" class="disabled-action">已暂停</view>
+            <t-button 
+              wx:else
+              icon="add" 
+              shape="circle" 
+              theme="primary"
+              size="small"
+              data-id="{{item.id}}"
+              catchtap="onAddComboCart"
+            />
           </view>
         </view>
-      </view>
-    </block>
-    <t-empty wx:elif="{{!loading}}" icon="info-circle" description="暂无可用包间" />
-    <view class="empty-placeholder"></view>
-  </scroll-view>
+      </block>
+      <t-empty wx:elif="{{!loading}}" icon="info-circle" description="暂无精选套餐" />
+      <view class="empty-placeholder"></view>
+    </scroll-view>
+
+    <!-- 豪华包间 Tab -->
+    <scroll-view wx:elif="{{activeTab === 'rooms'}}" class="rooms-tab" scroll-y bindscroll="onScroll">
+      <block wx:if="{{loading && rooms.length === 0}}">
+        <view wx:for="{{[1,2]}}" wx:key="*this" class="room-skeleton skeleton-shimmer"></view>
+      </block>
+      <block wx:elif="{{rooms.length > 0}}">
+        <view wx:for="{{rooms}}" wx:key="id" class="room-item" data-id="{{item.id}}" bindtap="onRoomTap">
+          <t-image class="room-image" src="{{item.primary_image}}" mode="aspectFill" lazy use-error-placeholder error-placeholder-src="/assets/icons/dish.svg" />
+          <view class="room-info">
+            <view class="room-name">{{item.name}}</view>
+            <view class="dish-tags" wx:if="{{item.tags.length > 0}}">
+              <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="extra-small" variant="dark" theme="primary">{{tag}}</t-tag>
+            </view>
+            <view class="room-meta">
+              <text>可容纳 {{item.capacity}} 人</text>
+              <text class="room-price">¥{{item.minimumSpendDisplay}} 起</text>
+            </view>
+          </view>
+        </view>
+      </block>
+      <t-empty wx:elif="{{!loading}}" icon="info-circle" description="暂无可用包间" />
+      <view class="empty-placeholder"></view>
+    </scroll-view>
+  </block>
 
 </view>
 

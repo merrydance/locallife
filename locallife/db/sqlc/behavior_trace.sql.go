@@ -359,6 +359,28 @@ func (q *Queries) GetActiveBehaviorBlocklist(ctx context.Context, arg GetActiveB
 	return i, err
 }
 
+const getBehaviorAction = `-- name: GetBehaviorAction :one
+SELECT id, decision_id, action_type, target_entity, status, detail, executed_at, created_at FROM behavior_actions
+WHERE id = $1
+LIMIT 1
+`
+
+func (q *Queries) GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error) {
+	row := q.db.QueryRow(ctx, getBehaviorAction, id)
+	var i BehaviorAction
+	err := row.Scan(
+		&i.ID,
+		&i.DecisionID,
+		&i.ActionType,
+		&i.TargetEntity,
+		&i.Status,
+		&i.Detail,
+		&i.ExecutedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const getBehaviorDecision = `-- name: GetBehaviorDecision :one
 SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id FROM behavior_decisions
 WHERE id = $1
@@ -488,6 +510,56 @@ ORDER BY created_at ASC
 
 func (q *Queries) ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error) {
 	rows, err := q.db.Query(ctx, listBehaviorActionsByDecision, decisionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BehaviorAction{}
+	for rows.Next() {
+		var i BehaviorAction
+		if err := rows.Scan(
+			&i.ID,
+			&i.DecisionID,
+			&i.ActionType,
+			&i.TargetEntity,
+			&i.Status,
+			&i.Detail,
+			&i.ExecutedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listBehaviorActionsByStatusAndType = `-- name: ListBehaviorActionsByStatusAndType :many
+SELECT id, decision_id, action_type, target_entity, status, detail, executed_at, created_at FROM behavior_actions
+WHERE status = $1
+    AND action_type = $2
+    AND target_entity = $3
+ORDER BY created_at ASC
+LIMIT $4
+`
+
+type ListBehaviorActionsByStatusAndTypeParams struct {
+	Status       string `json:"status"`
+	ActionType   string `json:"action_type"`
+	TargetEntity string `json:"target_entity"`
+	Limit        int32  `json:"limit"`
+}
+
+func (q *Queries) ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error) {
+	rows, err := q.db.Query(ctx, listBehaviorActionsByStatusAndType,
+		arg.Status,
+		arg.ActionType,
+		arg.TargetEntity,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -664,6 +736,31 @@ func (q *Queries) ListPlatformConfigsByKey(ctx context.Context, configKey string
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateBehaviorActionExecution = `-- name: UpdateBehaviorActionExecution :exec
+UPDATE behavior_actions
+SET status = $2,
+    detail = $3,
+    executed_at = COALESCE($4, executed_at)
+WHERE id = $1
+`
+
+type UpdateBehaviorActionExecutionParams struct {
+	ID         int64              `json:"id"`
+	Status     string             `json:"status"`
+	Detail     []byte             `json:"detail"`
+	ExecutedAt pgtype.Timestamptz `json:"executed_at"`
+}
+
+func (q *Queries) UpdateBehaviorActionExecution(ctx context.Context, arg UpdateBehaviorActionExecutionParams) error {
+	_, err := q.db.Exec(ctx, updateBehaviorActionExecution,
+		arg.ID,
+		arg.Status,
+		arg.Detail,
+		arg.ExecutedAt,
+	)
+	return err
 }
 
 const updateBehaviorActionStatus = `-- name: UpdateBehaviorActionStatus :exec

@@ -205,11 +205,8 @@ var (
 
 var (
 	ErrOrderNotEligibleForClaim   = apierr(40057, "claims can only be filed for completed orders")
-	ErrApprovalAmountRequired     = apierr(40058, "approval amount is required when approving a claim")
-	ErrApprovalAmountExceedsClaim = apierr(40059, "approval amount cannot exceed the claim amount")
 	ErrClaimAmountExceedsOrder    = apierr(40060, "claim amount cannot exceed the order total")
-	ErrClaimAlreadyReviewed       = apierr(40061, "claim has already been reviewed")
-	ErrClaimNoManualReview        = apierr(40062, "this claim does not require manual review")
+	ErrFoodSafetyClaimUnsupported = apierr(40063, "food safety claims are handled by the dedicated food safety workflow")
 
 	// 403 类
 	ErrClaimNotOwned             = apierr(40357, "this claim does not belong to the current user")
@@ -275,4 +272,6 @@ var (
 	ErrOrderStateNotEligible         = apierr(40099, "current order state does not allow this action")
 	ErrLocationAddressRequired       = apierr(40100, "location could not be determined: please select on map or provide a detailed address")
 	ErrMerchantServiceUnavailable    = apierr(50301, "merchant service is temporarily unavailable")
+	ErrClaimPayoutServiceUnavailable = apierr(50302, "claim payout service is temporarily unavailable")
+	ErrAppealCompensationUnavailable = apierr(50303, "appeal compensation service is temporarily unavailable")
 )

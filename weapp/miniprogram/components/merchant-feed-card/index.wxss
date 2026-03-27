@@ -92,6 +92,27 @@
   border-top: 1rpx solid var(--td-component-stroke);
 }
 
+.paused-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+  padding: 20rpx 12rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-error-color-1);
+}
+
+.paused-title {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-error-color-7);
+}
+
+.paused-desc {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  line-height: 1.5;
+}
+
 /* 骨架屏 */
 
 .dish-preview-skeleton {

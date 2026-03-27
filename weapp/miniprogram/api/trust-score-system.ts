@@ -158,7 +158,7 @@ export interface SubmitAppealRequest extends Record<string, unknown> {
 /** 提交索赔请求 - 对齐 api.SubmitClaimRequest */
 export interface SubmitClaimRequest extends Record<string, unknown> {
     order_id: number                             // 订单ID（必填）
-    claim_type: 'foreign-object' | 'damage' | 'timeout' | 'food-safety'  // 索赔类型（必填）
+    claim_type: 'foreign-object' | 'damage' | 'timeout'  // 索赔类型（必填）
     claim_amount: number                         // 索赔金额（分，1-100000000，必填）
     claim_reason: string                         // 索赔原因（5-1000字符，必填）
 }
@@ -166,10 +166,12 @@ export interface SubmitClaimRequest extends Record<string, unknown> {
 /** 提交索赔响应 - 对齐 api.SubmitClaimResponse */
 export interface SubmitClaimResponse {
     claim_id: number                             // 索赔ID
-    status: string                               // 状态：instant, auto, manual, platform-pay
+    status: 'accepted'                           // 平台已受理
+    decision_status?: 'auto-adjudicated'         // 系统已自动裁定
+    payout_status?: 'processing' | 'paid'        // 赔付处理中 / 已赔付
     approved_amount?: number                     // 批准金额（分）
     compensation_source?: string                 // 赔偿来源：merchant, rider, platform
-    refund_eta?: string                          // 预计到账时间
+    payout_eta?: string                          // 预计赔付时间
     reason?: string                              // 原因
     warning?: string                             // 警告信息
 }

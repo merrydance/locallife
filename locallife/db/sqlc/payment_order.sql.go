@@ -89,6 +89,44 @@ func (q *Queries) CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrder
 	return i, err
 }
 
+const getLatestPaymentOrderByBusinessTypeAndAttach = `-- name: GetLatestPaymentOrderByBusinessTypeAndAttach :one
+SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
+WHERE business_type = $1
+    AND attach = $2
+ORDER BY created_at DESC
+LIMIT 1
+`
+
+type GetLatestPaymentOrderByBusinessTypeAndAttachParams struct {
+	BusinessType string      `json:"business_type"`
+	Attach       pgtype.Text `json:"attach"`
+}
+
+func (q *Queries) GetLatestPaymentOrderByBusinessTypeAndAttach(ctx context.Context, arg GetLatestPaymentOrderByBusinessTypeAndAttachParams) (PaymentOrder, error) {
+	row := q.db.QueryRow(ctx, getLatestPaymentOrderByBusinessTypeAndAttach, arg.BusinessType, arg.Attach)
+	var i PaymentOrder
+	err := row.Scan(
+		&i.ID,
+		&i.OrderID,
+		&i.ReservationID,
+		&i.UserID,
+		&i.PaymentType,
+		&i.BusinessType,
+		&i.Amount,
+		&i.OutTradeNo,
+		&i.TransactionID,
+		&i.PrepayID,
+		&i.Status,
+		&i.PaidAt,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.Attach,
+		&i.CombinedPaymentID,
+		&i.ProcessedAt,
+	)
+	return i, err
+}
+
 const getLatestPaymentOrderByOrder = `-- name: GetLatestPaymentOrderByOrder :one
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
 WHERE order_id = $1

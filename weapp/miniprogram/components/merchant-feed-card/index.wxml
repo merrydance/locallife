@@ -9,6 +9,7 @@
     <!-- 第1行: 商户名 + 角标 -->
     <view class="row-1">
       <text class="merchant-name">{{merchant.name}}</text>
+      <t-tag wx:if="{{merchant.isOrderingSuspended}}" theme="danger" size="small" variant="dark">暂停接单</t-tag>
       <t-tag wx:if="{{merchant.label === '推荐'}}" theme="success" size="small" variant="dark">推荐</t-tag>
       <t-tag wx:elif="{{merchant.label === '热销'}}" theme="warning" size="small" variant="dark">热销</t-tag>
       <t-tag wx:if="{{merchant.isNewStore}}" theme="primary" size="small" variant="dark">新店</t-tag>
@@ -63,6 +64,13 @@
           <view class="skeleton-name" />
           <view class="skeleton-price" />
         </view>
+      </view>
+    </block>
+
+    <block wx:elif="{{merchant.isOrderingSuspended}}">
+      <view class="paused-panel">
+        <text class="paused-title">当前暂停接单</text>
+        <text class="paused-desc">该商户暂时无法下外卖单，恢复后会自动恢复展示与下单。</text>
       </view>
     </block>
 

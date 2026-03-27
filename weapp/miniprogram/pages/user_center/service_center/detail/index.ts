@@ -1,5 +1,5 @@
-import { claimManagementService, formatClaimStatus } from '../../../../api/appeals-customer-service'
-import type { ClaimResponse } from '../../../../api/appeals-customer-service'
+import { claimManagementService, getUserClaimPresentation } from '../../../../api/appeals-customer-service'
+import type { UserClaimResponse } from '../../../../api/appeals-customer-service'
 import { logger } from '../../../../utils/logger'
 
 /** 索赔类型 → 中文显示（涵盖所有 claim_type 值） */
@@ -16,22 +16,6 @@ const CLAIM_TYPE_DISPLAY: Record<string, string> = {
 
 function displayClaimType(type: string): string {
   return CLAIM_TYPE_DISPLAY[type] || type
-}
-
-/** 索赔状态 → 图标映射 */
-const STATUS_ICON_MAP: Record<string, string> = {
-  pending: 'time-filled',
-  approved: 'check-circle-filled',
-  rejected: 'close-circle-filled',
-  compensated: 'check-circle-filled'
-}
-
-/** 索赔状态 → 颜色映射 */
-const STATUS_COLOR_MAP: Record<string, string> = {
-  pending: '#ff9800',
-  approved: '#2e7d32',
-  rejected: '#d32f2f',
-  compensated: '#2e7d32'
 }
 
 /** 格式化金额（分 → 元） */
@@ -53,20 +37,24 @@ function formatDateTime(dateStr: string): string {
 interface DisplayClaimDetail {
   id: number
   statusText: string
+  statusSummary: string
   claimTypeText: string
   claimAmountDisplay: string
   approvedAmountDisplay: string | null
   description: string
+  reason: string | null
   orderId: number
   createTimeDisplay: string
-  reviewedAtDisplay: string | null
-  reviewNotes: string | null
+  processedAtDisplay: string | null
+  payoutEta: string | null
 }
 
-function adaptClaimDetail(c: ClaimResponse): DisplayClaimDetail {
+function adaptClaimDetail(c: UserClaimResponse): DisplayClaimDetail {
+  const presentation = getUserClaimPresentation(c)
   return {
     id: c.id,
-    statusText: formatClaimStatus(c.status),
+    statusText: presentation.statusText,
+    statusSummary: presentation.summary,
     claimTypeText: displayClaimType(c.claim_type),
 
     claimAmountDisplay: formatAmount(c.claim_amount),
@@ -75,10 +63,11 @@ function adaptClaimDetail(c: ClaimResponse): DisplayClaimDetail {
         ? formatAmount(c.approved_amount)
         : null,
     description: c.description,
+    reason: c.reason || null,
     orderId: c.order_id,
     createTimeDisplay: formatDateTime(c.created_at),
-    reviewedAtDisplay: c.reviewed_at ? formatDateTime(c.reviewed_at) : null,
-    reviewNotes: c.review_notes || null
+    processedAtDisplay: c.processed_at ? formatDateTime(c.processed_at) : null,
+    payoutEta: c.payout_eta || null
   }
 }
 
@@ -114,11 +103,12 @@ Page({
     try {
       const claim = await claimManagementService.getClaimDetail(this.data.claimId)
       const displayClaim = adaptClaimDetail(claim)
+      const presentation = getUserClaimPresentation(claim)
 
       this.setData({
         claim: displayClaim,
-        statusIcon: STATUS_ICON_MAP[claim.status] || 'info-circle-filled',
-        statusColor: STATUS_COLOR_MAP[claim.status] || '#999',
+        statusIcon: presentation.statusIcon,
+        statusColor: presentation.statusColor,
         loading: false
       })
     } catch (err) {

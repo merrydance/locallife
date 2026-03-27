@@ -54,6 +54,13 @@
   overflow: hidden;
 }
 
+.header-tags {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  flex-shrink: 0;
+}
+
 .header-row {
   display: flex;
   justify-content: space-between;
@@ -68,6 +75,21 @@
   margin-right: var(--spacer-sm);
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.status-note {
+  margin-top: var(--spacer-xs);
+  font-size: var(--font-size-xs);
+  color: var(--td-error-color-6);
+}
+
+.sub-text {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }

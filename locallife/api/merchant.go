@@ -1033,6 +1033,7 @@ type publicMerchantDetailResponse struct {
 	Longitude               float64                   `json:"longitude"`
 	RegionID                int64                     `json:"region_id"`
 	IsOpen                  bool                      `json:"is_open"`
+	IsOrderingSuspended     bool                      `json:"is_ordering_suspended"`
 	Tags                    []string                  `json:"tags"`                                 // 商户标签（如：快餐、川菜）
 	MonthlySales            int32                     `json:"monthly_sales"`                        // 近30天订单量
 	AvgPrepMinutes          int32                     `json:"avg_prep_minutes"`                     // 平均出餐时间（分钟）
@@ -1178,6 +1179,7 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 	profile, err := server.store.GetMerchantProfile(ctx, merchant.ID)
 	if err == nil {
 		resp.MonthlySales = profile.CompletedOrders // 使用已完成订单数
+		resp.IsOrderingSuspended = profile.IsTakeoutSuspended
 	} else {
 		resp.MonthlySales = 0
 	}

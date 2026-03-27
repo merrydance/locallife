@@ -229,7 +229,7 @@ type Claim struct {
 	ClaimAmount    int64       `json:"claim_amount"`
 	ApprovedAmount pgtype.Int8 `json:"approved_amount"`
 	Status         string      `json:"status"`
-	// instant=秒赔(>=750分+<=50元), auto=回溯通过, manual=人工审核
+	// instant=秒赔(>=750分+<=50元), auto=自动裁定通过
 	ApprovalType pgtype.Text `json:"approval_type"`
 	IsMalicious  bool        `json:"is_malicious"`
 	// 回溯检查：最近5笔订单（30天→90天→1年）的索赔历史
@@ -2034,7 +2034,7 @@ type UserBalance struct {
 type UserBalanceLog struct {
 	ID     int64 `json:"id"`
 	UserID int64 `json:"user_id"`
-	// 变动类型：claim_refund/order_pay/withdraw/recharge/adjustment
+	// 变动类型：claim_payout/claim_payout_reversal/appeal_compensation/order_pay/withdraw/recharge/adjustment
 	Type          string      `json:"type"`
 	Amount        int64       `json:"amount"`
 	BalanceBefore int64       `json:"balance_before"`

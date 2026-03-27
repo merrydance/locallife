@@ -62,11 +62,20 @@ func (m *MockNotificationDistributor) SendUserNotification(ctx context.Context, 
 	return nil
 }
 
+func testCompensationContext(requestedAmount, orderTotalAmount, deliveryFee int64) ClaimCompensationContext {
+	return ClaimCompensationContext{
+		RequestedAmount:     requestedAmount,
+		OrderTotalAmount:    orderTotalAmount,
+		DeliveryFee:         deliveryFee,
+		DeliveryFeeDiscount: 0,
+	}
+}
+
 // ========================================
 // EvaluateClaim 测试
 // ========================================
 
-func TestEvaluateClaim_FoodSafety_AutoPayout(t *testing.T) {
+func TestEvaluateClaim_FoodSafety_UsesDedicatedWorkflow(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -76,18 +85,14 @@ func TestEvaluateClaim_FoodSafety_AutoPayout(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeFoodSafety,
 	)
 
-	require.NoError(t, err)
-	require.NotNil(t, decision)
-	require.Equal(t, ApprovalTypeAuto, decision.Type)
-	require.True(t, decision.Approved)
-	require.Equal(t, CompensationSourceMerchant, decision.CompensationSource)
+	require.Error(t, err)
+	require.Nil(t, decision)
 }
 
 func TestEvaluateClaim_Timeout_RiderPays(t *testing.T) {
@@ -109,10 +114,9 @@ func TestEvaluateClaim_Timeout_RiderPays(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeTimeout,
 	)
 
@@ -120,7 +124,7 @@ func TestEvaluateClaim_Timeout_RiderPays(t *testing.T) {
 	require.NotNil(t, decision)
 	require.Equal(t, ApprovalTypeInstant, decision.Type)
 	require.True(t, decision.Approved)
-	require.Equal(t, int64(300), decision.Amount) // 超时只赔运费
+	require.Equal(t, int64(5000), decision.Amount)
 	require.Equal(t, CompensationSourceRider, decision.CompensationSource)
 	require.Equal(t, ClaimBehaviorNormal, decision.BehaviorStatus)
 }
@@ -142,10 +146,9 @@ func TestEvaluateClaim_Damage_RiderPays(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount（餐费）
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeDamage,
 	)
 
@@ -174,10 +177,9 @@ func TestEvaluateClaim_ForeignObject_MerchantPays(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeForeignObject,
 	)
 
@@ -211,10 +213,9 @@ func TestEvaluateClaim_FirstWarning(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeDamage,
 	)
 
@@ -249,10 +250,9 @@ func TestEvaluateClaim_WarnedAfterWarning(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeDamage,
 	)
 
@@ -288,10 +288,9 @@ func TestEvaluateClaim_PlatformPay(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeDamage,
 	)
 
@@ -342,10 +341,9 @@ func TestEvaluateClaim_RejectService(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeDamage,
 	)
 
@@ -375,10 +373,9 @@ func TestEvaluateClaim_BehaviorCheckFailed_FallbackToInstant(t *testing.T) {
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
-		1,    // userID
-		100,  // orderID
-		5000, // claimAmount
-		300,  // deliveryFee
+		1,   // userID
+		100, // orderID
+		testCompensationContext(5000, 5000, 300),
 		ClaimTypeDamage,
 	)
 
@@ -387,6 +384,38 @@ func TestEvaluateClaim_BehaviorCheckFailed_FallbackToInstant(t *testing.T) {
 	require.Equal(t, ApprovalTypeInstant, decision.Type) // 降级秒赔
 	require.True(t, decision.Approved)
 	require.Contains(t, decision.Reason, "降级秒赔")
+}
+
+func TestEvaluateClaim_CapsRequestedAmountByEligibleOrderAmount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	caa := NewClaimAutoApproval(store, wsHub)
+
+	store.EXPECT().GetUserBehaviorStats(gomock.Any(), int64(1)).Return(db.GetUserBehaviorStatsRow{
+		TakeoutOrders90d: 20,
+		Claims90d:        0,
+		WarningCount:     0,
+	}, nil)
+
+	decision, err := caa.EvaluateClaim(
+		context.Background(),
+		1,
+		100,
+		ClaimCompensationContext{
+			RequestedAmount:     6000,
+			OrderTotalAmount:    5000,
+			DeliveryFee:         300,
+			DeliveryFeeDiscount: 100,
+		},
+		ClaimTypeDamage,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, decision)
+	require.Equal(t, int64(5000), decision.Amount)
 }
 
 // ========================================
@@ -543,7 +572,7 @@ func TestCreateClaimWithDecision_InstantApproval(t *testing.T) {
 			ID:          1,
 			OrderID:     100,
 			ClaimType:   ClaimTypeForeignObject,
-			ClaimAmount: 5000,
+			ClaimAmount: 7000,
 			Status:      ClaimStatusAutoApproved,
 		},
 	}, nil)
@@ -554,7 +583,7 @@ func TestCreateClaimWithDecision_InstantApproval(t *testing.T) {
 		1,   // userID
 		ClaimTypeForeignObject,
 		"发现异物",
-		5000,
+		7000,
 		decision,
 	)
 
@@ -562,6 +591,162 @@ func TestCreateClaimWithDecision_InstantApproval(t *testing.T) {
 	require.NotNil(t, claim)
 	require.Equal(t, int64(1), claim.ID)
 	require.Equal(t, ClaimStatusAutoApproved, claim.Status)
+	require.Equal(t, int64(7000), claim.ClaimAmount)
+}
+
+func TestCreateClaimWithDecision_SeparatesRequestedAndApprovedAmounts(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	caa := NewClaimAutoApproval(store, wsHub)
+
+	decision := &Decision{
+		Type:               ApprovalTypeInstant,
+		Approved:           true,
+		Amount:             5000,
+		Reason:             "正常用户秒赔",
+		BehaviorStatus:     ClaimBehaviorNormal,
+		CompensationSource: CompensationSourceMerchant,
+	}
+
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, params db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
+			require.Equal(t, int64(7000), params.ClaimAmount)
+			require.NotNil(t, params.ApprovedAmount)
+			require.Equal(t, int64(5000), *params.ApprovedAmount)
+			return db.CreateClaimWithBehaviorTxResult{
+				Claim: db.Claim{ID: 1, ClaimAmount: params.ClaimAmount, Status: params.Status},
+			}, nil
+		})
+
+	claim, err := caa.CreateClaimWithDecision(
+		context.Background(),
+		100,
+		1,
+		ClaimTypeForeignObject,
+		"发现异物",
+		7000,
+		decision,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+	require.Equal(t, int64(7000), claim.ClaimAmount)
+}
+
+func TestCreateClaimWithDecisionAndEvidence_PassesRecoveryPlanIntoTransaction(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	caa := NewClaimAutoApproval(store, wsHub)
+
+	decision := &Decision{
+		Type:               ApprovalTypeInstant,
+		Approved:           true,
+		Amount:             5000,
+		Reason:             "正常用户秒赔",
+		BehaviorStatus:     ClaimBehaviorNormal,
+		CompensationSource: CompensationSourceMerchant,
+	}
+
+	dueAt := time.Now().Add(24 * time.Hour)
+	recoveryPlan := &ClaimRecoveryPlan{
+		ResponsibleParty: "merchant",
+		RecoveryTarget:   "merchant",
+		RecoveryAmount:   5000,
+		DueAt:            dueAt,
+		DecisionSnapshot: []byte(`{"decision_type":"instant"}`),
+	}
+
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, params db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
+			require.True(t, params.CreateRecovery)
+			require.Equal(t, recoveryPlan.RecoveryTarget, params.RecoveryTarget)
+			require.Equal(t, recoveryPlan.RecoveryAmount, params.RecoveryAmount)
+			require.NotNil(t, params.RecoveryDueAt)
+			require.WithinDuration(t, recoveryPlan.DueAt, *params.RecoveryDueAt, time.Second)
+			require.Equal(t, recoveryPlan.DecisionSnapshot, params.DecisionSnapshot)
+			return db.CreateClaimWithBehaviorTxResult{
+				Claim: db.Claim{ID: 1, OrderID: params.OrderID, ClaimAmount: params.ClaimAmount, Status: params.Status},
+			}, nil
+		})
+	store.EXPECT().GetOrder(gomock.Any(), int64(1)).Return(db.Order{}, errors.New("not found"))
+
+	claim, err := caa.CreateClaimWithDecisionAndEvidence(
+		context.Background(),
+		1,
+		1,
+		ClaimTypeForeignObject,
+		"发现异物",
+		7000,
+		decision,
+		nil,
+		recoveryPlan,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+	require.Equal(t, int64(7000), claim.ClaimAmount)
+}
+
+func TestNotifyResponsibleParty_MerchantRecovery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	notifier := &MockNotificationDistributor{}
+	caa := NewClaimAutoApproval(store, wsHub)
+	caa.SetNotificationDistributor(notifier)
+
+	claim := db.Claim{ID: 9, OrderID: 100}
+	decision := &Decision{Amount: 5000, Reason: "异物责任归属商户"}
+	recoveryPlan := &ClaimRecoveryPlan{RecoveryTarget: "merchant", RecoveryAmount: 5000}
+
+	store.EXPECT().GetOrder(gomock.Any(), int64(100)).Return(db.Order{ID: 100, OrderNo: "ORD-100", MerchantID: 7}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), int64(7)).Return(db.Merchant{ID: 7, OwnerUserID: 77}, nil)
+
+	caa.notifyResponsibleParty(context.Background(), claim, ClaimTypeForeignObject, decision, recoveryPlan)
+
+	require.Len(t, notifier.notifications, 1)
+	require.Equal(t, int64(77), notifier.notifications[0].UserID)
+	require.Equal(t, "system", notifier.notifications[0].NotificationType)
+	require.Contains(t, notifier.notifications[0].Content, "ORD-100")
+	require.Contains(t, notifier.notifications[0].Content, "已生成50.00元追偿单")
+	require.Contains(t, notifier.notifications[0].Content, "异物责任归属商户")
+	require.Len(t, wsHub.merchantMessages[7], 1)
+}
+
+func TestNotifyResponsibleParty_RiderRecovery(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	notifier := &MockNotificationDistributor{}
+	caa := NewClaimAutoApproval(store, wsHub)
+	caa.SetNotificationDistributor(notifier)
+
+	claim := db.Claim{ID: 10, OrderID: 101}
+	decision := &Decision{Amount: 4200, Reason: "餐损责任归属骑手"}
+	recoveryPlan := &ClaimRecoveryPlan{RecoveryTarget: "rider", RecoveryAmount: 4200}
+
+	store.EXPECT().GetOrder(gomock.Any(), int64(101)).Return(db.Order{ID: 101, OrderNo: "ORD-101", MerchantID: 8}, nil)
+	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), int64(101)).Return(db.Delivery{OrderID: 101, RiderID: pgtype.Int8{Int64: 18, Valid: true}}, nil)
+	store.EXPECT().GetRider(gomock.Any(), int64(18)).Return(db.Rider{ID: 18, UserID: 118}, nil)
+
+	caa.notifyResponsibleParty(context.Background(), claim, ClaimTypeDamage, decision, recoveryPlan)
+
+	require.Len(t, notifier.notifications, 1)
+	require.Equal(t, int64(118), notifier.notifications[0].UserID)
+	require.Contains(t, notifier.notifications[0].Content, "ORD-101")
+	require.Contains(t, notifier.notifications[0].Content, "已生成42.00元追偿单")
+	require.Contains(t, notifier.notifications[0].Content, "餐损责任归属骑手")
+	require.Len(t, wsHub.riderMessages[18], 1)
 }
 
 func TestCreateClaimWithDecision_RiderDeposit_DeductAndRefund(t *testing.T) {
@@ -604,50 +789,6 @@ func TestCreateClaimWithDecision_RiderDeposit_DeductAndRefund(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, claim)
-}
-
-func TestCreateClaimWithDecision_ManualReview(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	wsHub := NewMockWebSocketHub()
-	caa := NewClaimAutoApproval(store, wsHub)
-
-	decision := &Decision{
-		Type:               ApprovalTypeManual,
-		Approved:           false,
-		Amount:             0,
-		Reason:             "食安索赔需人工审核",
-		CompensationSource: CompensationSourceMerchant,
-		NeedsReview:        false, // 设为false避免触发handleSuspiciousPattern
-	}
-
-	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(ctx context.Context, params db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
-			require.Equal(t, ClaimStatusManualReview, params.Status)
-			return db.CreateClaimWithBehaviorTxResult{
-				Claim: db.Claim{
-					ID:        1,
-					Status:    params.Status,
-					ClaimType: ClaimTypeFoodSafety,
-				},
-			}, nil
-		})
-
-	claim, err := caa.CreateClaimWithDecision(
-		context.Background(),
-		100,
-		1,
-		ClaimTypeFoodSafety,
-		"食物变质",
-		10000,
-		decision,
-	)
-
-	require.NoError(t, err)
-	require.NotNil(t, claim)
-	require.Equal(t, ClaimStatusManualReview, claim.Status)
 }
 
 func TestCreateClaimWithDecision_PlatformPay(t *testing.T) {

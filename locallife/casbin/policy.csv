@@ -61,7 +61,6 @@ p, admin, /v1/admin/operators/region-applications/:id/reject, POST
 p, admin, /v1/tags, POST
 
 # Claims & Risk Management (admin-only actions)
-p, admin, /v1/claims/:id/review, PATCH
 p, admin, /v1/food-safety/merchants/:id/suspend, PATCH
 p, admin, /v1/fraud/detect, POST
 

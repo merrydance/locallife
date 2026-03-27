@@ -54,6 +54,13 @@ WHERE order_id = $1
 ORDER BY created_at DESC
 LIMIT 1;
 
+-- name: GetLatestPaymentOrderByBusinessTypeAndAttach :one
+SELECT * FROM payment_orders
+WHERE business_type = $1
+    AND attach = $2
+ORDER BY created_at DESC
+LIMIT 1;
+
 -- name: ListPaymentOrdersByUser :many
 SELECT * FROM payment_orders
 WHERE user_id = $1

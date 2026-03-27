@@ -35,6 +35,13 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 	if order.MerchantID != input.MerchantID {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("order does not belong to your merchant"))
 	}
+	suspension, err := GetTakeoutSuspension(ctx, store, input.MerchantID)
+	if err != nil {
+		return MerchantOrderUpdateResult{}, err
+	}
+	if suspension != nil {
+		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("商户外卖接单已暂停"))
+	}
 	if order.Status != db.OrderStatusPaid {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only paid orders can be accepted"))
 	}

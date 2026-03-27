@@ -397,24 +397,6 @@ definitions:
         description: 小时
         type: integer
     type: object
-  api.ReviewClaimRequest:
-    properties:
-      approved:
-        description: 是否通过
-        type: boolean
-      approved_amount:
-        description: 审核通过金额（分）
-        minimum: 1
-        type: integer
-      review_note:
-        description: 审核备注
-        maxLength: 500
-        minLength: 5
-        type: string
-    required:
-    - approved
-    - review_note
-    type: object
   api.RoleAccessEntry:
     properties:
       auth_required:
@@ -480,7 +462,6 @@ definitions:
         - foreign-object
         - damage
         - timeout
-        - food-safety
         type: string
       device_fingerprint:
         maxLength: 256
@@ -503,13 +484,19 @@ definitions:
       compensation_source:
         description: merchant, rider, platform
         type: string
+      decision_status:
+        description: auto-adjudicated
+        type: string
+      payout_eta:
+        description: 预计赔付时间
+        type: string
+      payout_status:
+        description: processing, paid
+        type: string
       reason:
         type: string
-      refund_eta:
-        description: 秒赔/自动通过时提供预计到账时间
-        type: string
       status:
-        description: instant, auto, manual, platform-pay
+        description: accepted
         type: string
       warning:
         description: 警告信息
@@ -780,13 +767,6 @@ definitions:
       jobs:
         items:
           $ref: '#/definitions/api.ocrJobResponse'
-        type: array
-    type: object
-  api.listOCRDeadLetterJobsResponse:
-    properties:
-      jobs:
-        items:
-          $ref: '#/definitions/api.ocrDeadLetterJobResponse'
         type: array
     type: object
   api.batchUpdateDishStatusRequest:
@@ -1255,6 +1235,23 @@ definitions:
       message:
         type: string
     type: object
+  api.claimRecoveryPaymentResponse:
+    properties:
+      amount:
+        type: integer
+      expires_at:
+        type: string
+      out_trade_no:
+        type: string
+      pay_params:
+        $ref: '#/definitions/api.miniProgramPayParams'
+      payment_order_id:
+        type: integer
+      recovery:
+        $ref: '#/definitions/api.claimRecoveryResponse'
+      status:
+        type: string
+    type: object
   api.claimRecoveryResponse:
     properties:
       claim_id:
@@ -1275,37 +1272,6 @@ definitions:
         type: string
       updated_at:
         type: string
-    type: object
-  api.claimResponse:
-    properties:
-      approval_type:
-        type: string
-      approved_amount:
-        type: integer
-      claim_amount:
-        type: integer
-      claim_type:
-        type: string
-      created_at:
-        type: string
-      description:
-        type: string
-      id:
-        type: integer
-      is_malicious:
-        type: boolean
-      order_id:
-        type: integer
-      review_notes:
-        type: string
-      reviewed_at:
-        type: string
-      reviewer_id:
-        type: integer
-      status:
-        type: string
-      user_id:
-        type: integer
     type: object
   api.clearCartRequest:
     properties:
@@ -3423,6 +3389,13 @@ definitions:
       total:
         type: integer
     type: object
+  api.listOCRDeadLetterJobsResponse:
+    properties:
+      jobs:
+        items:
+          $ref: '#/definitions/api.ocrDeadLetterJobResponse'
+        type: array
+    type: object
   api.listOperatorMerchantsResponse:
     properties:
       limit:
@@ -3915,6 +3888,32 @@ definitions:
         description: 桌台ID
         type: integer
     type: object
+  api.merchantClaimDecisionResponse:
+    properties:
+      compensation_source:
+        type: string
+      created_at:
+        type: string
+      decision_id:
+        type: integer
+      decision_status:
+        type: string
+      reason_codes:
+        items:
+          type: string
+        type: array
+      responsible_party:
+        type: string
+      trace_summary:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  api.merchantClaimDecisionResult:
+    properties:
+      decision:
+        $ref: '#/definitions/api.merchantClaimDecisionResponse'
+    type: object
   api.merchantCreateReservationRequest:
     properties:
       contact_name:
@@ -4330,35 +4329,6 @@ definitions:
       user_id:
         type: integer
     type: object
-  api.ocrJobResponse:
-    properties:
-      created_at:
-        type: string
-      document_type:
-        type: string
-      error_code:
-        type: string
-      error_message:
-        type: string
-      finished_at:
-        type: string
-      ocr_job_id:
-        type: integer
-      owner_id:
-        type: integer
-      owner_type:
-        type: string
-      provider:
-        type: string
-      result_version:
-        type: integer
-      side:
-        type: string
-      started_at:
-        type: string
-      status:
-        type: string
-    type: object
   api.ocrDeadLetterJobResponse:
     properties:
       attempt_count:
@@ -4391,6 +4361,35 @@ definitions:
         type: integer
       retention_until:
         type: string
+      side:
+        type: string
+      started_at:
+        type: string
+      status:
+        type: string
+    type: object
+  api.ocrJobResponse:
+    properties:
+      created_at:
+        type: string
+      document_type:
+        type: string
+      error_code:
+        type: string
+      error_message:
+        type: string
+      finished_at:
+        type: string
+      ocr_job_id:
+        type: integer
+      owner_id:
+        type: integer
+      owner_type:
+        type: string
+      provider:
+        type: string
+      result_version:
+        type: integer
       side:
         type: string
       started_at:
@@ -5490,6 +5489,8 @@ definitions:
         type: integer
       is_open:
         type: boolean
+      is_ordering_suspended:
+        type: boolean
       latitude:
         type: number
       logo_url:
@@ -6097,7 +6098,7 @@ definitions:
   api.reviewAppealRequest:
     properties:
       compensation_amount:
-        description: 申诉成功时的补偿金额（分），最大10万元
+        description: 可选补偿金额（分），最大10万元
         maximum: 10000000
         minimum: 1
         type: integer
@@ -7781,6 +7782,51 @@ definitions:
         allOf:
         - $ref: '#/definitions/api.cartSummaryResponse'
         description: 汇总统计
+    type: object
+  api.userClaimResponse:
+    properties:
+      approved_amount:
+        type: integer
+      claim_amount:
+        type: integer
+      claim_type:
+        type: string
+      created_at:
+        type: string
+      decision_status:
+        description: auto-adjudicated, rejected
+        type: string
+      description:
+        type: string
+      id:
+        type: integer
+      order_id:
+        type: integer
+      payout_eta:
+        type: string
+      payout_status:
+        description: processing, paid
+        type: string
+      processed_at:
+        type: string
+      reason:
+        type: string
+      status:
+        description: accepted, rejected
+        type: string
+    type: object
+  api.userClaimsListResponse:
+    properties:
+      claims:
+        items:
+          $ref: '#/definitions/api.userClaimResponse'
+        type: array
+      page:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
     type: object
   api.userResponse:
     properties:
@@ -9539,8 +9585,7 @@ paths:
         "200":
           description: 索赔列表
           schema:
-            additionalProperties: true
-            type: object
+            $ref: '#/definitions/api.userClaimsListResponse'
         "401":
           description: 未授权
           schema:
@@ -9618,7 +9663,7 @@ paths:
         "200":
           description: 索赔详情
           schema:
-            $ref: '#/definitions/api.claimResponse'
+            $ref: '#/definitions/api.userClaimResponse'
         "400":
           description: 无效的索赔ID
           schema:
@@ -9642,55 +9687,6 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取索赔详情
-      tags:
-      - 索赔管理
-  /v1/claims/{id}/review:
-    patch:
-      consumes:
-      - application/json
-      description: 运营商/客服人工审核索赔申请。仅限低信用用户提交的需要人工审核的索赔。
-      parameters:
-      - description: 索赔ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 审核信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.ReviewClaimRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 审核成功
-          schema:
-            $ref: '#/definitions/api.claimResponse'
-        "400":
-          description: 参数错误或索赔状态不允许审核
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 无权限审核此索赔
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 索赔不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 审核索赔
       tags:
       - 索赔管理
   /v1/combos:
@@ -14355,7 +14351,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 商户确认已支付索赔追偿，系统标记为已支付并恢复接单限制
+      description: 商户为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付
       parameters:
       - description: 索赔ID
         in: path
@@ -14366,9 +14362,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: 已支付
+          description: 支付单创建成功
           schema:
-            $ref: '#/definitions/api.claimRecoveryResponse'
+            $ref: '#/definitions/api.claimRecoveryPaymentResponse'
         "400":
           description: 参数错误
           schema:
@@ -14396,7 +14392,7 @@ paths:
             type: object
       security:
       - Bearer: []
-      summary: 商户支付追偿单
+      summary: 商户创建追偿支付单
       tags:
       - 商户索赔管理
   /v1/merchant/devices:
@@ -17587,53 +17583,6 @@ paths:
       summary: 查询 OCR 任务状态
       tags:
       - OCR
-  /v1/ocr/jobs/dead-letter:
-    get:
-      parameters:
-      - description: 业务主体类型过滤
-        in: query
-        name: owner_type
-        type: string
-      - description: 证件类型过滤
-        in: query
-        name: document_type
-        type: string
-      - description: 返回数量，默认 20，最大 100
-        in: query
-        name: limit
-        type: integer
-      - description: 分页偏移量
-        in: query
-        name: offset
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.listOCRDeadLetterJobsResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: Forbidden
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询需要人工介入的 OCR 死信任务
-      tags:
-      - OCR
   /v1/ocr/jobs/{id}/result:
     get:
       produces:
@@ -17739,6 +17688,53 @@ paths:
       security:
       - BearerAuth: []
       summary: 批量查询 OCR 任务状态
+      tags:
+      - OCR
+  /v1/ocr/jobs/dead-letter:
+    get:
+      parameters:
+      - description: 业务主体类型过滤
+        in: query
+        name: owner_type
+        type: string
+      - description: 证件类型过滤
+        in: query
+        name: document_type
+        type: string
+      - description: 返回数量，默认 20，最大 100
+        in: query
+        name: limit
+        type: integer
+      - description: 分页偏移量
+        in: query
+        name: offset
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listOCRDeadLetterJobsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询需要人工介入的 OCR 死信任务
       tags:
       - OCR
   /v1/operator/appeals:
@@ -17854,7 +17850,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 运营商审核申诉，批准时需提供补偿金额，系统会自动更新用户信用分
+      description: 运营商审核申诉，可仅撤销判责与追偿，也可附带补偿金额；系统会自动更新用户信用分
       parameters:
       - description: 申诉ID
         in: path
@@ -23730,6 +23726,54 @@ paths:
       summary: 获取索赔详情
       tags:
       - 骑手申诉管理
+  /v1/rider/claims/{id}/decision:
+    get:
+      consumes:
+      - application/json
+      description: 骑手查看该索赔对应订单的最新行为判定信息（责任方、赔付来源、原因码、判定摘要）
+      parameters:
+      - description: 索赔ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回判定依据
+          schema:
+            $ref: '#/definitions/api.merchantClaimDecisionResult'
+        "400":
+          description: 参数错误
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非骑手用户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 索赔不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取索赔判定依据
+      tags:
+      - 骑手申诉管理
   /v1/rider/claims/{id}/recovery:
     get:
       consumes:
@@ -23782,7 +23826,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 骑手确认已支付索赔追偿，系统标记为已支付并恢复接单限制
+      description: 骑手为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付
       parameters:
       - description: 索赔ID
         in: path
@@ -23793,9 +23837,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: 已支付
+          description: 支付单创建成功
           schema:
-            $ref: '#/definitions/api.claimRecoveryResponse'
+            $ref: '#/definitions/api.claimRecoveryPaymentResponse'
         "400":
           description: 参数错误
           schema:
@@ -23823,7 +23867,7 @@ paths:
             type: object
       security:
       - Bearer: []
-      summary: 骑手支付追偿单
+      summary: 骑手创建追偿支付单
       tags:
       - 骑手索赔管理
   /v1/rider/deposit:

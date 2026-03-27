@@ -69,3 +69,11 @@ SET status = 'pending',
 WHERE id = $1
   AND status = 'appealed'
 RETURNING *;
+
+-- name: ResumeClaimRecoveryAfterAppeal :one
+UPDATE claim_recoveries
+SET status = CASE WHEN due_at <= NOW() THEN 'overdue' ELSE 'pending' END,
+    updated_at = NOW()
+WHERE id = $1
+  AND status = 'appealed'
+RETURNING *;

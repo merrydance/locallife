@@ -128,10 +128,10 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
-	// DistributeTaskClaimRefund 分发索赔退款任务
-	DistributeTaskClaimRefund(
+	// DistributeTaskClaimPayout 分发索赔平台赔付任务
+	DistributeTaskClaimPayout(
 		ctx context.Context,
-		payload *ClaimRefundPayload,
+		payload *ClaimPayoutPayload,
 		opts ...asynq.Option,
 	) error
 

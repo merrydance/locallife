@@ -2044,8 +2044,7 @@ const docTemplate = `{
                     "200": {
                         "description": "索赔列表",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": true
+                            "$ref": "#/definitions/api.userClaimsListResponse"
                         }
                     },
                     "401": {
@@ -2167,7 +2166,7 @@ const docTemplate = `{
                     "200": {
                         "description": "索赔详情",
                         "schema": {
-                            "$ref": "#/definitions/api.claimResponse"
+                            "$ref": "#/definitions/api.userClaimResponse"
                         }
                     },
                     "400": {
@@ -2184,82 +2183,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "该索赔不属于当前用户",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "索赔不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/claims/{id}/review": {
-            "patch": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "运营商/客服人工审核索赔申请。仅限低信用用户提交的需要人工审核的索赔。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "索赔管理"
-                ],
-                "summary": "审核索赔",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "索赔ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "审核信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.ReviewClaimRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "审核成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.claimResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误或索赔状态不允许审核",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限审核此索赔",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -9469,7 +9392,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户确认已支付索赔追偿，系统标记为已支付并恢复接单限制",
+                "description": "商户为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付",
                 "consumes": [
                     "application/json"
                 ],
@@ -9479,7 +9402,7 @@ const docTemplate = `{
                 "tags": [
                     "商户索赔管理"
                 ],
-                "summary": "商户支付追偿单",
+                "summary": "商户创建追偿支付单",
                 "parameters": [
                     {
                         "type": "integer",
@@ -9491,9 +9414,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "已支付",
+                        "description": "支付单创建成功",
                         "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryResponse"
+                            "$ref": "#/definitions/api.claimRecoveryPaymentResponse"
                         }
                     },
                     "400": {
@@ -14426,28 +14349,28 @@ const docTemplate = `{
                 "summary": "查询需要人工介入的 OCR 死信任务",
                 "parameters": [
                     {
+                        "type": "string",
                         "description": "业务主体类型过滤",
                         "name": "owner_type",
-                        "in": "query",
-                        "type": "string"
+                        "in": "query"
                     },
                     {
+                        "type": "string",
                         "description": "证件类型过滤",
                         "name": "document_type",
-                        "in": "query",
-                        "type": "string"
+                        "in": "query"
                     },
                     {
+                        "type": "integer",
                         "description": "返回数量，默认 20，最大 100",
                         "name": "limit",
-                        "in": "query",
-                        "type": "integer"
+                        "in": "query"
                     },
                     {
+                        "type": "integer",
                         "description": "分页偏移量",
                         "name": "offset",
-                        "in": "query",
-                        "type": "integer"
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -14801,7 +14724,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "运营商审核申诉，批准时需提供补偿金额，系统会自动更新用户信用分",
+                "description": "运营商审核申诉，可仅撤销判责与追偿，也可附带补偿金额；系统会自动更新用户信用分",
                 "consumes": [
                     "application/json"
                 ],
@@ -23754,6 +23677,78 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/rider/claims/{id}/decision": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "骑手查看该索赔对应订单的最新行为判定信息（责任方、赔付来源、原因码、判定摘要）",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手申诉管理"
+                ],
+                "summary": "获取索赔判定依据",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "索赔ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回判定依据",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantClaimDecisionResult"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非骑手用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "索赔不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/rider/claims/{id}/recovery": {
             "get": {
                 "security": [
@@ -23833,7 +23828,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "骑手确认已支付索赔追偿，系统标记为已支付并恢复接单限制",
+                "description": "骑手为索赔追偿创建微信支付单，支付成功后系统再标记追偿单为已支付",
                 "consumes": [
                     "application/json"
                 ],
@@ -23843,7 +23838,7 @@ const docTemplate = `{
                 "tags": [
                     "骑手索赔管理"
                 ],
-                "summary": "骑手支付追偿单",
+                "summary": "骑手创建追偿支付单",
                 "parameters": [
                     {
                         "type": "integer",
@@ -23855,9 +23850,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "已支付",
+                        "description": "支付单创建成功",
                         "schema": {
-                            "$ref": "#/definitions/api.claimRecoveryResponse"
+                            "$ref": "#/definitions/api.claimRecoveryPaymentResponse"
                         }
                     },
                     "400": {
@@ -27435,30 +27430,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.ReviewClaimRequest": {
-            "type": "object",
-            "required": [
-                "approved",
-                "review_note"
-            ],
-            "properties": {
-                "approved": {
-                    "description": "是否通过",
-                    "type": "boolean"
-                },
-                "approved_amount": {
-                    "description": "审核通过金额（分）",
-                    "type": "integer",
-                    "minimum": 1
-                },
-                "review_note": {
-                    "description": "审核备注",
-                    "type": "string",
-                    "maxLength": 500,
-                    "minLength": 5
-                }
-            }
-        },
         "api.RoleAccessEntry": {
             "type": "object",
             "properties": {
@@ -27557,8 +27528,7 @@ const docTemplate = `{
                     "enum": [
                         "foreign-object",
                         "damage",
-                        "timeout",
-                        "food-safety"
+                        "timeout"
                     ]
                 },
                 "device_fingerprint": {
@@ -27584,15 +27554,23 @@ const docTemplate = `{
                     "description": "merchant, rider, platform",
                     "type": "string"
                 },
+                "decision_status": {
+                    "description": "auto-adjudicated",
+                    "type": "string"
+                },
+                "payout_eta": {
+                    "description": "预计赔付时间",
+                    "type": "string"
+                },
+                "payout_status": {
+                    "description": "processing, paid",
+                    "type": "string"
+                },
                 "reason": {
                     "type": "string"
                 },
-                "refund_eta": {
-                    "description": "秒赔/自动通过时提供预计到账时间",
-                    "type": "string"
-                },
                 "status": {
-                    "description": "instant, auto, manual, platform-pay",
+                    "description": "accepted",
                     "type": "string"
                 },
                 "warning": {
@@ -27982,17 +27960,6 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.ocrJobResponse"
-                    }
-                }
-            }
-        },
-        "api.listOCRDeadLetterJobsResponse": {
-            "type": "object",
-            "properties": {
-                "jobs": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api.ocrDeadLetterJobResponse"
                     }
                 }
             }
@@ -28669,6 +28636,32 @@ const docTemplate = `{
                 }
             }
         },
+        "api.claimRecoveryPaymentResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "integer"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "pay_params": {
+                    "$ref": "#/definitions/api.miniProgramPayParams"
+                },
+                "payment_order_id": {
+                    "type": "integer"
+                },
+                "recovery": {
+                    "$ref": "#/definitions/api.claimRecoveryResponse"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "api.claimRecoveryResponse": {
             "type": "object",
             "properties": {
@@ -28698,53 +28691,6 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
-                }
-            }
-        },
-        "api.claimResponse": {
-            "type": "object",
-            "properties": {
-                "approval_type": {
-                    "type": "string"
-                },
-                "approved_amount": {
-                    "type": "integer"
-                },
-                "claim_amount": {
-                    "type": "integer"
-                },
-                "claim_type": {
-                    "type": "string"
-                },
-                "created_at": {
-                    "type": "string"
-                },
-                "description": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "is_malicious": {
-                    "type": "boolean"
-                },
-                "order_id": {
-                    "type": "integer"
-                },
-                "review_notes": {
-                    "type": "string"
-                },
-                "reviewed_at": {
-                    "type": "string"
-                },
-                "reviewer_id": {
-                    "type": "integer"
-                },
-                "status": {
-                    "type": "string"
-                },
-                "user_id": {
-                    "type": "integer"
                 }
             }
         },
@@ -31802,6 +31748,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listOCRDeadLetterJobsResponse": {
+            "type": "object",
+            "properties": {
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.ocrDeadLetterJobResponse"
+                    }
+                }
+            }
+        },
         "api.listOperatorMerchantsResponse": {
             "type": "object",
             "properties": {
@@ -32528,6 +32485,46 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantClaimDecisionResponse": {
+            "type": "object",
+            "properties": {
+                "compensation_source": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decision_id": {
+                    "type": "integer"
+                },
+                "decision_status": {
+                    "type": "string"
+                },
+                "reason_codes": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "responsible_party": {
+                    "type": "string"
+                },
+                "trace_summary": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantClaimDecisionResult": {
+            "type": "object",
+            "properties": {
+                "decision": {
+                    "$ref": "#/definitions/api.merchantClaimDecisionResponse"
+                }
+            }
+        },
         "api.merchantCreateReservationRequest": {
             "type": "object",
             "required": [
@@ -33145,50 +33142,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.ocrJobResponse": {
-            "type": "object",
-            "properties": {
-                "created_at": {
-                    "type": "string"
-                },
-                "document_type": {
-                    "type": "string"
-                },
-                "error_code": {
-                    "type": "string"
-                },
-                "error_message": {
-                    "type": "string"
-                },
-                "finished_at": {
-                    "type": "string"
-                },
-                "ocr_job_id": {
-                    "type": "integer"
-                },
-                "owner_id": {
-                    "type": "integer"
-                },
-                "owner_type": {
-                    "type": "string"
-                },
-                "provider": {
-                    "type": "string"
-                },
-                "result_version": {
-                    "type": "integer"
-                },
-                "side": {
-                    "type": "string"
-                },
-                "started_at": {
-                    "type": "string"
-                },
-                "status": {
-                    "type": "string"
-                }
-            }
-        },
         "api.ocrDeadLetterJobResponse": {
             "type": "object",
             "properties": {
@@ -33236,6 +33189,50 @@ const docTemplate = `{
                 },
                 "retention_until": {
                     "type": "string"
+                },
+                "side": {
+                    "type": "string"
+                },
+                "started_at": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.ocrJobResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "document_type": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "finished_at": {
+                    "type": "string"
+                },
+                "ocr_job_id": {
+                    "type": "integer"
+                },
+                "owner_id": {
+                    "type": "integer"
+                },
+                "owner_type": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "result_version": {
+                    "type": "integer"
                 },
                 "side": {
                     "type": "string"
@@ -34809,6 +34806,9 @@ const docTemplate = `{
                 "is_open": {
                     "type": "boolean"
                 },
+                "is_ordering_suspended": {
+                    "type": "boolean"
+                },
                 "latitude": {
                     "type": "number"
                 },
@@ -35711,7 +35711,7 @@ const docTemplate = `{
             ],
             "properties": {
                 "compensation_amount": {
-                    "description": "申诉成功时的补偿金额（分），最大10万元",
+                    "description": "可选补偿金额（分），最大10万元",
                     "type": "integer",
                     "maximum": 10000000,
                     "minimum": 1
@@ -38182,6 +38182,73 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.cartSummaryResponse"
                         }
                     ]
+                }
+            }
+        },
+        "api.userClaimResponse": {
+            "type": "object",
+            "properties": {
+                "approved_amount": {
+                    "type": "integer"
+                },
+                "claim_amount": {
+                    "type": "integer"
+                },
+                "claim_type": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "decision_status": {
+                    "description": "auto-adjudicated, rejected",
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "payout_eta": {
+                    "type": "string"
+                },
+                "payout_status": {
+                    "description": "processing, paid",
+                    "type": "string"
+                },
+                "processed_at": {
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "accepted, rejected",
+                    "type": "string"
+                }
+            }
+        },
+        "api.userClaimsListResponse": {
+            "type": "object",
+            "properties": {
+                "claims": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.userClaimResponse"
+                    }
+                },
+                "page": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },

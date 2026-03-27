@@ -1380,6 +1380,22 @@ func (q *Queries) ListRiderClaimsForRider(ctx context.Context, arg ListRiderClai
 	return items, nil
 }
 
+const markAppealCompensated = `-- name: MarkAppealCompensated :exec
+UPDATE appeals
+SET compensated_at = COALESCE(compensated_at, $2)
+WHERE id = $1
+`
+
+type MarkAppealCompensatedParams struct {
+	ID            int64              `json:"id"`
+	CompensatedAt pgtype.Timestamptz `json:"compensated_at"`
+}
+
+func (q *Queries) MarkAppealCompensated(ctx context.Context, arg MarkAppealCompensatedParams) error {
+	_, err := q.db.Exec(ctx, markAppealCompensated, arg.ID, arg.CompensatedAt)
+	return err
+}
+
 const reviewAppeal = `-- name: ReviewAppeal :one
 UPDATE appeals
 SET status = $1,
@@ -1387,7 +1403,7 @@ SET status = $1,
     review_notes = $3,
     reviewed_at = NOW(),
     compensation_amount = CASE WHEN $1 = 'approved' THEN $4::bigint ELSE NULL END,
-    compensated_at = CASE WHEN $1 = 'approved' THEN NOW() ELSE NULL END
+    compensated_at = NULL
 WHERE id = $5
   AND status = 'pending'
 RETURNING id, claim_id, appellant_type, appellant_id, reason, status, reviewer_id, review_notes, reviewed_at, compensation_amount, compensated_at, region_id, created_at

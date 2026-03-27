@@ -3,50 +3,54 @@ package db
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ==========================================
-// 索赔退款事务
+// 平台索赔赔付事务
 // ==========================================
 
-// ClaimRefundTxParams 索赔退款事务参数
-type ClaimRefundTxParams struct {
+// ClaimPayoutTxParams 平台索赔赔付事务参数
+type ClaimPayoutTxParams struct {
 	ClaimID    int64  // 索赔ID
 	UserID     int64  // 用户ID
-	Amount     int64  // 退款金额（分）
+	Amount     int64  // 赔付金额（分）
 	SourceType string // 资金来源：rider_deposit, merchant_refund, platform
 	SourceID   int64  // 来源ID（骑手ID、商户ID，平台为0）
 	Remark     string // 备注
 }
 
-// ClaimRefundTxResult 索赔退款事务结果
-type ClaimRefundTxResult struct {
+// ClaimPayoutTxResult 平台索赔赔付事务结果
+type ClaimPayoutTxResult struct {
 	UserBalance    UserBalance    // 更新后的用户余额
 	BalanceLog     UserBalanceLog // 余额变动日志
 	BalanceCreated bool           // 是否新创建了余额账户
 }
 
-// ClaimRefundTx 索赔退款事务
-// 将退款金额从来源（骑手押金/商户/平台）转入用户余额账户
-func (store *SQLStore) ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParams) (ClaimRefundTxResult, error) {
-	var result ClaimRefundTxResult
+// ClaimPayoutTx 平台索赔赔付事务
+// 将平台赔付金额转入用户余额账户，责任追偿由独立 recovery 链路处理。
+func (store *SQLStore) ClaimPayoutTx(ctx context.Context, arg ClaimPayoutTxParams) (ClaimPayoutTxResult, error) {
+	var result ClaimPayoutTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
 
-		// 1. 幂等检查：是否已经退款过
+		// 1. 幂等检查：是否已经赔付过
 		existingLog, err := q.GetUserBalanceLogByRelated(ctx, GetUserBalanceLogByRelatedParams{
 			RelatedType: pgtype.Text{String: "claim", Valid: true},
 			RelatedID:   pgtype.Int8{Int64: arg.ClaimID, Valid: true},
 		})
 		if err == nil && existingLog.ID > 0 {
-			// 已经退款过，返回成功（幂等）
+			// 已经赔付过，返回成功（幂等）
 			balance, _ := q.GetUserBalance(ctx, arg.UserID)
 			result.UserBalance = balance
 			result.BalanceLog = existingLog
+			if err := q.MarkClaimPaid(ctx, MarkClaimPaidParams{ID: arg.ClaimID, PaidAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}); err != nil {
+				return fmt.Errorf("mark claim paid: %w", err)
+			}
 			return nil
 		}
 
@@ -81,7 +85,7 @@ func (store *SQLStore) ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParam
 		// 4. 记录余额变动日志
 		result.BalanceLog, err = q.CreateUserBalanceLog(ctx, CreateUserBalanceLogParams{
 			UserID:        arg.UserID,
-			Type:          "claim_refund",
+			Type:          "claim_payout",
 			Amount:        arg.Amount,
 			BalanceBefore: balanceBefore,
 			BalanceAfter:  balance.Balance,
@@ -95,6 +99,10 @@ func (store *SQLStore) ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParam
 			return fmt.Errorf("create balance log: %w", err)
 		}
 
+		if err := q.MarkClaimPaid(ctx, MarkClaimPaidParams{ID: arg.ClaimID, PaidAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}); err != nil {
+			return fmt.Errorf("mark claim paid: %w", err)
+		}
+
 		return nil
 	})
 
@@ -102,44 +110,44 @@ func (store *SQLStore) ClaimRefundTx(ctx context.Context, arg ClaimRefundTxParam
 }
 
 // ==========================================
-// 索赔退款回滚事务（申诉成立）
+// 平台索赔赔付回滚事务（申诉成立）
 // ==========================================
 
-// ClaimRefundRollbackTxParams 索赔退款回滚参数
-type ClaimRefundRollbackTxParams struct {
+// ClaimPayoutRollbackTxParams 平台索赔赔付回滚参数
+type ClaimPayoutRollbackTxParams struct {
 	ClaimID int64  // 索赔ID
 	UserID  int64  // 用户ID
 	Remark  string // 备注
 }
 
-// ClaimRefundRollbackTxResult 索赔退款回滚结果
-type ClaimRefundRollbackTxResult struct {
+// ClaimPayoutRollbackTxResult 平台索赔赔付回滚结果
+type ClaimPayoutRollbackTxResult struct {
 	UserBalance UserBalance
 	BalanceLog  UserBalanceLog
 }
 
-// ClaimRefundRollbackTx 索赔退款回滚事务
-// 将索赔退款从用户余额中扣回（幂等）
-func (store *SQLStore) ClaimRefundRollbackTx(ctx context.Context, arg ClaimRefundRollbackTxParams) (ClaimRefundRollbackTxResult, error) {
-	var result ClaimRefundRollbackTxResult
+// ClaimPayoutRollbackTx 平台索赔赔付回滚事务
+// 将平台赔付款从用户余额中扣回（幂等）。
+func (store *SQLStore) ClaimPayoutRollbackTx(ctx context.Context, arg ClaimPayoutRollbackTxParams) (ClaimPayoutRollbackTxResult, error) {
+	var result ClaimPayoutRollbackTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
-		refundLog, err := q.GetUserBalanceLogByRelatedAndType(ctx, GetUserBalanceLogByRelatedAndTypeParams{
+		payoutLog, err := q.GetUserBalanceLogByRelatedAndType(ctx, GetUserBalanceLogByRelatedAndTypeParams{
 			RelatedType: pgtype.Text{String: "claim", Valid: true},
 			RelatedID:   pgtype.Int8{Int64: arg.ClaimID, Valid: true},
-			Type:        "claim_refund",
+			Type:        "claim_payout",
 		})
 		if err != nil {
 			if err == pgx.ErrNoRows {
 				return nil
 			}
-			return fmt.Errorf("get refund log: %w", err)
+			return fmt.Errorf("get payout log: %w", err)
 		}
 
 		reversalLog, err := q.GetUserBalanceLogByRelatedAndType(ctx, GetUserBalanceLogByRelatedAndTypeParams{
 			RelatedType: pgtype.Text{String: "claim", Valid: true},
 			RelatedID:   pgtype.Int8{Int64: arg.ClaimID, Valid: true},
-			Type:        "claim_refund_reversal",
+			Type:        "claim_payout_reversal",
 		})
 		if err == nil && reversalLog.ID > 0 {
 			result.BalanceLog = reversalLog
@@ -151,7 +159,7 @@ func (store *SQLStore) ClaimRefundRollbackTx(ctx context.Context, arg ClaimRefun
 			return fmt.Errorf("get reversal log: %w", err)
 		}
 
-		if refundLog.Amount <= 0 {
+		if payoutLog.Amount <= 0 {
 			return nil
 		}
 
@@ -163,7 +171,7 @@ func (store *SQLStore) ClaimRefundRollbackTx(ctx context.Context, arg ClaimRefun
 		balanceBefore := balance.Balance
 		balance, err = q.DeductUserBalance(ctx, DeductUserBalanceParams{
 			UserID:  arg.UserID,
-			Balance: refundLog.Amount,
+			Balance: payoutLog.Amount,
 		})
 		if err != nil {
 			return fmt.Errorf("deduct user balance: %w", err)
@@ -172,18 +180,18 @@ func (store *SQLStore) ClaimRefundRollbackTx(ctx context.Context, arg ClaimRefun
 
 		remark := arg.Remark
 		if remark == "" {
-			remark = "claim refund rollback"
+			remark = "claim payout rollback"
 		}
 
-		sourceType := refundLog.SourceType.String
-		sourceTypeValid := refundLog.SourceType.Valid && sourceType != ""
-		sourceID := refundLog.SourceID.Int64
-		sourceIDValid := refundLog.SourceID.Valid && sourceID > 0
+		sourceType := payoutLog.SourceType.String
+		sourceTypeValid := payoutLog.SourceType.Valid && sourceType != ""
+		sourceID := payoutLog.SourceID.Int64
+		sourceIDValid := payoutLog.SourceID.Valid && sourceID > 0
 
 		result.BalanceLog, err = q.CreateUserBalanceLog(ctx, CreateUserBalanceLogParams{
 			UserID:        arg.UserID,
-			Type:          "claim_refund_reversal",
-			Amount:        refundLog.Amount,
+			Type:          "claim_payout_reversal",
+			Amount:        payoutLog.Amount,
 			BalanceBefore: balanceBefore,
 			BalanceAfter:  balance.Balance,
 			RelatedType:   pgtype.Text{String: "claim", Valid: true},
@@ -194,6 +202,98 @@ func (store *SQLStore) ClaimRefundRollbackTx(ctx context.Context, arg ClaimRefun
 		})
 		if err != nil {
 			return fmt.Errorf("create balance log: %w", err)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// ==========================================
+// 申诉补偿事务
+// ==========================================
+
+type AppealCompensationTxParams struct {
+	AppealID int64
+	UserID   int64
+	Amount   int64
+	Remark   string
+}
+
+type AppealCompensationTxResult struct {
+	UserBalance    UserBalance
+	BalanceLog     UserBalanceLog
+	BalanceCreated bool
+}
+
+func (store *SQLStore) AppealCompensationTx(ctx context.Context, arg AppealCompensationTxParams) (AppealCompensationTxResult, error) {
+	var result AppealCompensationTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		existingLog, err := q.GetUserBalanceLogByRelatedAndType(ctx, GetUserBalanceLogByRelatedAndTypeParams{
+			RelatedType: pgtype.Text{String: "appeal", Valid: true},
+			RelatedID:   pgtype.Int8{Int64: arg.AppealID, Valid: true},
+			Type:        "appeal_compensation",
+		})
+		if err == nil && existingLog.ID > 0 {
+			balance, _ := q.GetUserBalance(ctx, arg.UserID)
+			result.UserBalance = balance
+			result.BalanceLog = existingLog
+			if err := q.MarkAppealCompensated(ctx, MarkAppealCompensatedParams{ID: arg.AppealID, CompensatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}); err != nil {
+				return fmt.Errorf("mark appeal compensated: %w", err)
+			}
+			return nil
+		}
+		if err != nil && err != pgx.ErrNoRows {
+			return fmt.Errorf("get appeal compensation log: %w", err)
+		}
+
+		balance, err := q.GetUserBalanceForUpdate(ctx, arg.UserID)
+		if err != nil {
+			if _, createErr := q.GetOrCreateUserBalance(ctx, arg.UserID); createErr != nil {
+				return fmt.Errorf("get or create user balance: %w", createErr)
+			}
+			balance, err = q.GetUserBalanceForUpdate(ctx, arg.UserID)
+			if err != nil {
+				return fmt.Errorf("get user balance for update after create: %w", err)
+			}
+			result.BalanceCreated = true
+		}
+
+		balanceBefore := balance.Balance
+		balance, err = q.AddUserBalance(ctx, AddUserBalanceParams{
+			UserID:  arg.UserID,
+			Balance: arg.Amount,
+		})
+		if err != nil {
+			return fmt.Errorf("add user balance: %w", err)
+		}
+		result.UserBalance = balance
+
+		remark := arg.Remark
+		if remark == "" {
+			remark = "appeal compensation"
+		}
+
+		result.BalanceLog, err = q.CreateUserBalanceLog(ctx, CreateUserBalanceLogParams{
+			UserID:        arg.UserID,
+			Type:          "appeal_compensation",
+			Amount:        arg.Amount,
+			BalanceBefore: balanceBefore,
+			BalanceAfter:  balance.Balance,
+			RelatedType:   pgtype.Text{String: "appeal", Valid: true},
+			RelatedID:     pgtype.Int8{Int64: arg.AppealID, Valid: true},
+			SourceType:    pgtype.Text{String: "platform", Valid: true},
+			SourceID:      pgtype.Int8{Valid: false},
+			Remark:        pgtype.Text{String: remark, Valid: true},
+		})
+		if err != nil {
+			return fmt.Errorf("create appeal compensation balance log: %w", err)
+		}
+
+		if err := q.MarkAppealCompensated(ctx, MarkAppealCompensatedParams{ID: arg.AppealID, CompensatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true}}); err != nil {
+			return fmt.Errorf("mark appeal compensated: %w", err)
 		}
 
 		return nil

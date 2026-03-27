@@ -67,11 +67,38 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), userID).
 					Times(1).
 					Return(db.Rider{ID: 1, UserID: userID, IsOnline: true}, nil)
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), int64(1)).
+					Times(1).
+					Return(db.RiderProfile{RiderID: 1, IsSuspended: false}, nil)
 			},
 			check: func(t *testing.T, _ RecommendDeliveryForUserResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
 				require.Equal(t, "您尚未分配服务区域，请联系管理员", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "Suspended",
+			input: RecommendDeliveryForUserInput{UserID: userID, RiderLat: 30, RiderLng: 120},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), userID).
+					Times(1).
+					Return(db.Rider{ID: 1, UserID: userID, IsOnline: true}, nil)
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), int64(1)).
+					Times(1).
+					Return(db.RiderProfile{
+						RiderID:       1,
+						IsSuspended:   true,
+						SuspendReason: pgtype.Text{String: "claim recovery overdue", Valid: true},
+					}, nil)
+			},
+			check: func(t *testing.T, _ RecommendDeliveryForUserResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "骑手接单已暂停", reqErr.Err.Error())
 			},
 		},
 		{
@@ -83,6 +110,10 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), userID).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), rider.ID).
+					Times(1).
+					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
 				store.EXPECT().
 					GetActiveRecommendConfig(gomock.Any()).
 					Times(1).

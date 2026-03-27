@@ -97,23 +97,6 @@ func (q *Queries) CountRecentClaimsByUsers(ctx context.Context, arg CountRecentC
 	return claim_count, err
 }
 
-const countRegionPendingClaims = `-- name: CountRegionPendingClaims :one
-SELECT COUNT(*) as total
-FROM claims c
-JOIN orders o ON c.order_id = o.id
-JOIN merchants m ON o.merchant_id = m.id
-WHERE m.region_id = $1
-  AND c.status = 'manual-review'
-`
-
-// 统计运营商区域内待人工审核的索赔数量
-func (q *Queries) CountRegionPendingClaims(ctx context.Context, regionID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countRegionPendingClaims, regionID)
-	var total int64
-	err := row.Scan(&total)
-	return total, err
-}
-
 const countRiderDamageClaims = `-- name: CountRiderDamageClaims :one
 
 SELECT COUNT(*) as total
@@ -2328,108 +2311,6 @@ func (q *Queries) ListMerchantFoodSafetyIncidents(ctx context.Context, arg ListM
 	return items, nil
 }
 
-const listRegionPendingClaims = `-- name: ListRegionPendingClaims :many
-
-SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason, 
-       o.order_no,
-       o.merchant_id,
-       m.name as merchant_name,
-       u.phone as user_phone,
-       m.region_id
-FROM claims c
-JOIN orders o ON c.order_id = o.id
-JOIN merchants m ON o.merchant_id = m.id
-JOIN users u ON c.user_id = u.id
-WHERE m.region_id = $1
-  AND c.status = 'manual-review'
-ORDER BY c.created_at ASC
-LIMIT $2 OFFSET $3
-`
-
-type ListRegionPendingClaimsParams struct {
-	RegionID int64 `json:"region_id"`
-	Limit    int32 `json:"limit"`
-	Offset   int32 `json:"offset"`
-}
-
-type ListRegionPendingClaimsRow struct {
-	ID                 int64              `json:"id"`
-	OrderID            int64              `json:"order_id"`
-	UserID             int64              `json:"user_id"`
-	ClaimType          string             `json:"claim_type"`
-	Description        string             `json:"description"`
-	ClaimAmount        int64              `json:"claim_amount"`
-	ApprovedAmount     pgtype.Int8        `json:"approved_amount"`
-	Status             string             `json:"status"`
-	ApprovalType       pgtype.Text        `json:"approval_type"`
-	IsMalicious        bool               `json:"is_malicious"`
-	LookbackResult     []byte             `json:"lookback_result"`
-	AutoApprovalReason pgtype.Text        `json:"auto_approval_reason"`
-	RejectionReason    pgtype.Text        `json:"rejection_reason"`
-	ReviewerID         pgtype.Int8        `json:"reviewer_id"`
-	ReviewNotes        pgtype.Text        `json:"review_notes"`
-	CreatedAt          time.Time          `json:"created_at"`
-	ReviewedAt         pgtype.Timestamptz `json:"reviewed_at"`
-	PaidAt             pgtype.Timestamptz `json:"paid_at"`
-	DecisionVersion    pgtype.Text        `json:"decision_version"`
-	DecisionReason     pgtype.Text        `json:"decision_reason"`
-	OrderNo            string             `json:"order_no"`
-	MerchantID         int64              `json:"merchant_id"`
-	MerchantName       string             `json:"merchant_name"`
-	UserPhone          pgtype.Text        `json:"user_phone"`
-	RegionID           int64              `json:"region_id"`
-}
-
-// ==========================================
-// 运营商索赔管理（区域内待审核索赔）
-// ==========================================
-// 获取运营商区域内待人工审核的索赔列表
-func (q *Queries) ListRegionPendingClaims(ctx context.Context, arg ListRegionPendingClaimsParams) ([]ListRegionPendingClaimsRow, error) {
-	rows, err := q.db.Query(ctx, listRegionPendingClaims, arg.RegionID, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []ListRegionPendingClaimsRow{}
-	for rows.Next() {
-		var i ListRegionPendingClaimsRow
-		if err := rows.Scan(
-			&i.ID,
-			&i.OrderID,
-			&i.UserID,
-			&i.ClaimType,
-			&i.Description,
-			&i.ClaimAmount,
-			&i.ApprovedAmount,
-			&i.Status,
-			&i.ApprovalType,
-			&i.IsMalicious,
-			&i.LookbackResult,
-			&i.AutoApprovalReason,
-			&i.RejectionReason,
-			&i.ReviewerID,
-			&i.ReviewNotes,
-			&i.CreatedAt,
-			&i.ReviewedAt,
-			&i.PaidAt,
-			&i.DecisionVersion,
-			&i.DecisionReason,
-			&i.OrderNo,
-			&i.MerchantID,
-			&i.MerchantName,
-			&i.UserPhone,
-			&i.RegionID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRiderClaims = `-- name: ListRiderClaims :many
 SELECT c.id, c.order_id, c.user_id, c.claim_type, c.description, c.claim_amount, c.approved_amount, c.status, c.approval_type, c.is_malicious, c.lookback_result, c.auto_approval_reason, c.rejection_reason, c.reviewer_id, c.review_notes, c.created_at, c.reviewed_at, c.paid_at, c.decision_version, c.decision_reason FROM claims c
 JOIN orders o ON c.order_id = o.id
@@ -2631,33 +2512,19 @@ func (q *Queries) ListUserRecentOrders(ctx context.Context, arg ListUserRecentOr
 	return items, nil
 }
 
-const reviewClaim = `-- name: ReviewClaim :exec
+const markClaimPaid = `-- name: MarkClaimPaid :exec
 UPDATE claims
-SET status = $2,
-    approved_amount = $3,
-    reviewer_id = $4,
-    review_notes = $5,
-    reviewed_at = NOW()
+SET paid_at = COALESCE(paid_at, $2)
 WHERE id = $1
 `
 
-type ReviewClaimParams struct {
-	ID             int64       `json:"id"`
-	Status         string      `json:"status"`
-	ApprovedAmount pgtype.Int8 `json:"approved_amount"`
-	ReviewerID     pgtype.Int8 `json:"reviewer_id"`
-	ReviewNotes    pgtype.Text `json:"review_notes"`
+type MarkClaimPaidParams struct {
+	ID     int64              `json:"id"`
+	PaidAt pgtype.Timestamptz `json:"paid_at"`
 }
 
-// 运营商审核索赔
-func (q *Queries) ReviewClaim(ctx context.Context, arg ReviewClaimParams) error {
-	_, err := q.db.Exec(ctx, reviewClaim,
-		arg.ID,
-		arg.Status,
-		arg.ApprovedAmount,
-		arg.ReviewerID,
-		arg.ReviewNotes,
-	)
+func (q *Queries) MarkClaimPaid(ctx context.Context, arg MarkClaimPaidParams) error {
+	_, err := q.db.Exec(ctx, markClaimPaid, arg.ID, arg.PaidAt)
 	return err
 }
 

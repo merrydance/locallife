@@ -42,8 +42,8 @@ type TaskProcessor interface {
 	ProcessTaskProfitSharing(ctx context.Context, task *asynq.Task) error
 	// ProcessTaskProfitSharingReturnResult 处理分账回退结果任务
 	ProcessTaskProfitSharingReturnResult(ctx context.Context, task *asynq.Task) error
-	// ProcessTaskClaimRefund 处理索赔退款任务
-	ProcessTaskClaimRefund(ctx context.Context, task *asynq.Task) error
+	// ProcessTaskClaimPayout 处理索赔平台赔付任务
+	ProcessTaskClaimPayout(ctx context.Context, task *asynq.Task) error
 }
 
 type RedisTaskProcessor struct {
@@ -51,6 +51,7 @@ type RedisTaskProcessor struct {
 	store             db.Store
 	distributor       TaskDistributor                 // 用于在任务中分发后续任务
 	wechatClient      wechat.WechatClient             // 微信小程序客户端（用于证照OCR等）
+	paymentClient     wechat.PaymentClientInterface   // 平台直连支付客户端（赔付到零钱）
 	ecommerceClient   wechat.EcommerceClientInterface // 平台收付通客户端（分账）
 	pubSubPublisher   websocket.PubSubPublisher       // Pub/Sub 发布器（用于推送通知）
 	deliveryBroadcast *logic.DeliveryBroadcastLogic
@@ -76,7 +77,7 @@ func NewRedisTaskProcessor(
 	deliveryBroadcast *logic.DeliveryBroadcastLogic,
 	mediaRegistry *media.Registry,
 	config util.Config,
-) TaskProcessor {
+) *RedisTaskProcessor {
 	logger := NewLogger()
 	redis.SetLogger(logger)
 
@@ -117,6 +118,7 @@ func NewRedisTaskProcessor(
 		store:             store,
 		distributor:       distributor,
 		wechatClient:      wechatClient,
+		paymentClient:     nil,
 		ecommerceClient:   ecommerceClient,
 		pubSubPublisher:   pubSubPublisher,
 		deliveryBroadcast: deliveryBroadcast,
@@ -126,6 +128,10 @@ func NewRedisTaskProcessor(
 		roleCache:         make(map[int64]cachedUserRoles),
 		roleCacheTTL:      1 * time.Minute,
 	}
+}
+
+func (processor *RedisTaskProcessor) SetPaymentClient(paymentClient wechat.PaymentClientInterface) {
+	processor.paymentClient = paymentClient
 }
 
 // NewTestTaskProcessor 创建用于测试的处理器实例（不需要Redis连接）
@@ -200,7 +206,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessAppealResult, processor.ProcessTaskProcessAppealResult)
 
 	// 索赔退款任务
-	mux.HandleFunc(TaskClaimRefund, processor.ProcessTaskClaimRefund)
+	mux.HandleFunc(TaskClaimPayout, processor.ProcessTaskClaimPayout)
 
 	// 进件/分账结果处理任务
 	mux.HandleFunc(TaskProcessApplymentResult, processor.ProcessTaskApplymentResult)

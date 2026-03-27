@@ -1,16 +1,8 @@
-import { claimManagementService, formatClaimStatus } from '../../../api/appeals-customer-service'
-import type { ClaimResponse, UserClaimType } from '../../../api/appeals-customer-service'
+import { claimManagementService, getUserClaimPresentation } from '../../../api/appeals-customer-service'
+import type { UserClaimResponse, UserClaimType } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
 
 const PAGE_SIZE = 20
-
-/** 索赔状态 → TDesign Tag Theme 映射 */
-const STATUS_THEME_MAP: Record<string, string> = {
-  pending: 'warning',
-  approved: 'success',
-  rejected: 'danger',
-  compensated: 'success'
-}
 
 /** 索赔类型 → 中文显示（涵盖后端所有 claim_type 值） */
 const CLAIM_TYPE_DISPLAY: Record<string, string> = {
@@ -47,18 +39,22 @@ interface DisplayClaim {
   id: number
   statusText: string
   statusTheme: string
+  statusSummary: string
   claimTypeText: string
   claimAmountDisplay: string
   approvedAmountDisplay: string | null
   description: string
   createTimeDisplay: string
+  payoutEta: string | null
 }
 
-function adaptClaim(c: ClaimResponse): DisplayClaim {
+function adaptClaim(c: UserClaimResponse): DisplayClaim {
+  const presentation = getUserClaimPresentation(c)
   return {
     id: c.id,
-    statusText: formatClaimStatus(c.status),
-    statusTheme: STATUS_THEME_MAP[c.status] || 'default',
+    statusText: presentation.statusText,
+    statusTheme: presentation.statusTheme,
+    statusSummary: presentation.summary,
     claimTypeText: displayClaimType(c.claim_type),
     claimAmountDisplay: formatAmount(c.claim_amount),
     approvedAmountDisplay:
@@ -66,7 +62,8 @@ function adaptClaim(c: ClaimResponse): DisplayClaim {
         ? formatAmount(c.approved_amount)
         : null,
     description: c.description,
-    createTimeDisplay: formatTime(c.created_at)
+    createTimeDisplay: formatTime(c.created_at),
+    payoutEta: c.payout_eta || null
   }
 }
 
@@ -98,7 +95,7 @@ Page({
     this.setData({ loading: true })
     try {
       const result = await claimManagementService.getUserClaims({
-        page_id: this.data.currentPage,
+        page: this.data.currentPage,
         page_size: PAGE_SIZE
       })
       const claimsArr = Array.isArray(result.claims) ? result.claims : []
@@ -109,7 +106,7 @@ Page({
         claims: this.data.currentPage === 1
           ? displayClaims
           : existingClaims.concat(displayClaims),
-        hasMore: displayClaims.length >= PAGE_SIZE,
+        hasMore: result.page * result.page_size < result.total,
         loading: false
       })
     } catch (err) {

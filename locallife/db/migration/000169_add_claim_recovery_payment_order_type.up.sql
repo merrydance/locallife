@@ -1,0 +1,15 @@
+ALTER TABLE payment_orders
+DROP CONSTRAINT IF EXISTS payment_orders_business_type_check;
+
+ALTER TABLE payment_orders
+ADD CONSTRAINT payment_orders_business_type_check
+CHECK (business_type IN (
+  'order',
+  'reservation',
+  'reservation_addon',
+  'membership_recharge',
+  'rider_deposit',
+  'claim_recovery',
+  'deposit',
+  'recharge'
+));

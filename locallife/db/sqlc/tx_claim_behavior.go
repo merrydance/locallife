@@ -32,11 +32,17 @@ type CreateClaimWithBehaviorTxParams struct {
 	IPAddress          string
 	UserAgent          string
 	AddressID          *int64
+	CreateRecovery     bool
+	RecoveryTarget     string
+	RecoveryAmount     int64
+	RecoveryDueAt      *time.Time
+	DecisionSnapshot   []byte
 }
 
 type CreateClaimWithBehaviorTxResult struct {
 	Claim            Claim
 	BehaviorDecision BehaviorDecision
+	PayoutAction     *BehaviorAction
 }
 
 func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg CreateClaimWithBehaviorTxParams) (CreateClaimWithBehaviorTxResult, error) {
@@ -109,22 +115,28 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 			return err
 		}
 
-		// 记录行为动作（赔付动作）
+		// 记录行为动作（平台赔付动作）
 		if arg.ApprovedAmount != nil && *arg.ApprovedAmount > 0 {
 			detail, _ := json.Marshal(map[string]any{
-				"action":   "platform_payout",
-				"claim_id": claim.ID,
-				"amount":   *arg.ApprovedAmount,
+				"action":      "platform_payout",
+				"claim_id":    claim.ID,
+				"user_id":     arg.UserID,
+				"amount":      *arg.ApprovedAmount,
+				"source_type": "platform",
+				"source_id":   0,
+				"remark":      "platform payout",
 			})
-			if _, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
+			action, err := q.CreateBehaviorAction(ctx, CreateBehaviorActionParams{
 				DecisionID:   decision.ID,
-				ActionType:   "refund",
+				ActionType:   "payout",
 				TargetEntity: "user",
 				Status:       "created",
 				Detail:       detail,
-			}); err != nil {
+			})
+			if err != nil {
 				return err
 			}
+			result.PayoutAction = &action
 		}
 
 		stats, err := q.GetUserClaimWindowStats(ctx, arg.UserID)
@@ -141,6 +153,25 @@ func (store *SQLStore) CreateClaimWithBehaviorTx(ctx context.Context, arg Create
 
 		result.Claim = claim
 		result.BehaviorDecision = decision
+
+		if arg.CreateRecovery {
+			dueAt := time.Now().Add(24 * time.Hour)
+			if arg.RecoveryDueAt != nil {
+				dueAt = *arg.RecoveryDueAt
+			}
+			if _, err := q.CreateClaimRecovery(ctx, CreateClaimRecoveryParams{
+				ClaimID:          claim.ID,
+				OrderID:          arg.OrderID,
+				ResponsibleParty: arg.ResponsibleParty,
+				RecoveryTarget:   pgtype.Text{String: arg.RecoveryTarget, Valid: arg.RecoveryTarget != ""},
+				RecoveryAmount:   arg.RecoveryAmount,
+				Status:           "pending",
+				DueAt:            dueAt,
+				DecisionSnapshot: arg.DecisionSnapshot,
+			}); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 

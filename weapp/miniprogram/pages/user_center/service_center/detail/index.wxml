@@ -14,7 +14,8 @@
     <view class="status-card">
       <t-icon name="{{statusIcon}}" size="80rpx" color="{{statusColor}}" />
       <text class="status-title">{{claim.statusText}}</text>
-      <text wx:if="{{claim.reviewNotes}}" class="status-desc">{{claim.reviewNotes}}</text>
+      <text class="status-desc">{{claim.statusSummary}}</text>
+      <text wx:if="{{claim.reason}}" class="status-desc">{{claim.reason}}</text>
     </view>
 
     <!-- 索赔信息 -->
@@ -40,9 +41,13 @@
         <text class="info-label">提交时间</text>
         <text class="info-value">{{claim.createTimeDisplay}}</text>
       </view>
-      <view wx:if="{{claim.reviewedAtDisplay}}" class="info-row">
+      <view wx:if="{{claim.processedAtDisplay}}" class="info-row">
         <text class="info-label">处理时间</text>
-        <text class="info-value">{{claim.reviewedAtDisplay}}</text>
+        <text class="info-value">{{claim.processedAtDisplay}}</text>
+      </view>
+      <view wx:if="{{claim.payoutEta}}" class="info-row">
+        <text class="info-label">预计赔付时间</text>
+        <text class="info-value">{{claim.payoutEta}}</text>
       </view>
     </view>
 
