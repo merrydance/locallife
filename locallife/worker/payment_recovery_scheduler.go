@@ -106,12 +106,29 @@ func (s *PaymentRecoveryScheduler) runOnce(ctx context.Context) {
 	}
 
 	for _, order := range orders {
+		refundOrders, err := s.store.ListRefundOrdersByPaymentOrder(ctx, order.ID)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("payment_order_id", order.ID).
+				Str("out_trade_no", order.OutTradeNo).
+				Msg("list refund orders for payment recovery failed")
+			continue
+		}
+		if len(refundOrders) > 0 {
+			log.Warn().
+				Int64("payment_order_id", order.ID).
+				Str("out_trade_no", order.OutTradeNo).
+				Int("refund_order_count", len(refundOrders)).
+				Msg("skip payment recovery because refund activity exists")
+			continue
+		}
+
 		transactionID := ""
 		if order.TransactionID.Valid {
 			transactionID = order.TransactionID.String
 		}
 
-		err := s.distributor.DistributeTaskProcessPaymentSuccess(
+		enqueueErr := s.distributor.DistributeTaskProcessPaymentSuccess(
 			ctx,
 			&PaymentSuccessPayload{
 				PaymentOrderID: order.ID,
@@ -121,8 +138,8 @@ func (s *PaymentRecoveryScheduler) runOnce(ctx context.Context) {
 			asynq.MaxRetry(5),
 			asynq.Queue(QueueCritical),
 		)
-		if err != nil {
-			log.Error().Err(err).
+		if enqueueErr != nil {
+			log.Error().Err(enqueueErr).
 				Int64("payment_order_id", order.ID).
 				Str("out_trade_no", order.OutTradeNo).
 				Msg("enqueue payment recovery task failed")

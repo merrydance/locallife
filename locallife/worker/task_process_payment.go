@@ -109,6 +109,13 @@ func (processor *RedisTaskProcessor) maybeMarkPaymentOrderRefunded(ctx context.C
 	}
 }
 
+func refundRequestTotalAmount(paymentAmount, refundAmount int64) int64 {
+	if refundAmount > paymentAmount {
+		return refundAmount
+	}
+	return paymentAmount
+}
+
 func (processor *RedisTaskProcessor) publishWSMessage(ctx context.Context, channel string, payload []byte) {
 	if processor.pubSubPublisher == nil {
 		log.Warn().Str("channel", channel).Msg("pubsub publisher not configured, skip ws publish")
@@ -1453,8 +1460,23 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		return nil
 	}
 
+	switch paymentOrder.BusinessType {
+	case "membership_recharge":
+		return processor.processMembershipRechargeRefund(ctx, paymentOrder, payload)
+	case "rider_deposit":
+		return processor.processRiderDepositMismatchRefund(ctx, paymentOrder, payload)
+	}
+
+	orderID := payload.OrderID
+	if orderID == 0 && paymentOrder.OrderID.Valid {
+		orderID = paymentOrder.OrderID.Int64
+	}
+	if orderID == 0 {
+		return fmt.Errorf("payment order %d missing order context for refund", paymentOrder.ID)
+	}
+
 	// 获取订单以获取商户信息
-	order, err := processor.store.GetOrder(ctx, payload.OrderID)
+	order, err := processor.store.GetOrder(ctx, orderID)
 	if err != nil {
 		return fmt.Errorf("get order: %w", err)
 	}
@@ -1470,7 +1492,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 
 	// 生成退款单号（下划线分隔符确保不同 ID 组合不产生相同字符串）
 	// 例: RF1_23 ≠ RF12_3，而 RF123 则无法区分
-	outRefundNo := fmt.Sprintf("RF%d_%d", payload.PaymentOrderID, payload.OrderID)
+	outRefundNo := fmt.Sprintf("RF%d_%d", payload.PaymentOrderID, orderID)
 
 	// 幂等检查：该退款单号是否已存在
 	var refundOrder db.RefundOrder
@@ -1731,7 +1753,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			OutRefundNo:  outRefundNo,
 			Reason:       payload.Reason,
 			RefundAmount: payload.RefundAmount,
-			TotalAmount:  paymentOrder.Amount,
+			TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
 		})
 		if err != nil {
 			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
@@ -1761,7 +1783,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			OutRefundNo:  outRefundNo,
 			Reason:       payload.Reason,
 			RefundAmount: payload.RefundAmount,
-			TotalAmount:  paymentOrder.Amount,
+			TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
 		})
 		if err != nil {
 			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
@@ -1784,6 +1806,182 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			Str("out_refund_no", outRefundNo).
 			Str("status", wxRefund.Status).
 			Msg("direct refund request processed")
+	}
+
+	return nil
+}
+
+func (processor *RedisTaskProcessor) processMembershipRechargeRefund(ctx context.Context, paymentOrder db.PaymentOrder, payload PayloadProcessRefund) error {
+	log.Info().
+		Int64("payment_order_id", payload.PaymentOrderID).
+		Int64("refund_amount", payload.RefundAmount).
+		Str("reason", payload.Reason).
+		Msg("processing membership recharge refund task")
+
+	if processor.ecommerceClient == nil {
+		return fmt.Errorf("ecommerce client not configured, cannot process membership recharge refund")
+	}
+	if !paymentOrder.Attach.Valid || paymentOrder.Attach.String == "" {
+		return fmt.Errorf("membership recharge attach is missing")
+	}
+
+	var attachData struct {
+		MembershipID int64 `json:"membership_id"`
+	}
+	if err := json.Unmarshal([]byte(paymentOrder.Attach.String), &attachData); err != nil {
+		return fmt.Errorf("parse membership recharge attach: %w", err)
+	}
+	if attachData.MembershipID == 0 {
+		return fmt.Errorf("membership recharge attach membership_id is required")
+	}
+
+	membership, err := processor.store.GetMembershipForUpdate(ctx, attachData.MembershipID)
+	if err != nil {
+		return fmt.Errorf("get membership for refund: %w", err)
+	}
+	paymentConfig, err := processor.store.GetMerchantPaymentConfig(ctx, membership.MerchantID)
+	if err != nil {
+		return fmt.Errorf("get merchant payment config: %w", err)
+	}
+
+	outRefundNo := fmt.Sprintf("RFM%d_M", payload.PaymentOrderID)
+	var refundOrder db.RefundOrder
+	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+	if findErr == nil {
+		refundOrder = existingRefund
+		if refundOrder.Status == "success" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("membership recharge refund already succeeded")
+			return nil
+		}
+		if refundOrder.Status == "processing" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("membership recharge refund already processing")
+			return nil
+		}
+	} else if !errors.Is(findErr, db.ErrRecordNotFound) {
+		return fmt.Errorf("check existing membership recharge refund order: %w", findErr)
+	} else {
+		refundOrder, err = processor.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
+			PaymentOrderID: paymentOrder.ID,
+			RefundType:     "amount_mismatch",
+			RefundAmount:   payload.RefundAmount,
+			RefundReason:   pgtype.Text{String: payload.Reason, Valid: payload.Reason != ""},
+			OutRefundNo:    outRefundNo,
+			Status:         "pending",
+		})
+		if err != nil {
+			if db.ErrorCode(err) == db.UniqueViolation {
+				refundOrder, err = processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+				if err != nil {
+					return fmt.Errorf("lookup membership recharge refund order after conflict: %w", err)
+				}
+			} else {
+				return fmt.Errorf("create membership recharge refund order: %w", err)
+			}
+		}
+	}
+
+	refundResp, err := processor.ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
+		SubMchID:     paymentConfig.SubMchID,
+		OutTradeNo:   paymentOrder.OutTradeNo,
+		OutRefundNo:  outRefundNo,
+		Reason:       payload.Reason,
+		RefundAmount: payload.RefundAmount,
+		TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
+	})
+	if err != nil {
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		return fmt.Errorf("call wechat membership recharge refund API: %w", err)
+	}
+
+	switch refundResp.Status {
+	case wechat.RefundStatusSuccess:
+		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+	case wechat.RefundStatusProcessing:
+		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: refundResp.RefundID != ""},
+		})
+	default:
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+	}
+
+	return nil
+}
+
+func (processor *RedisTaskProcessor) processRiderDepositMismatchRefund(ctx context.Context, paymentOrder db.PaymentOrder, payload PayloadProcessRefund) error {
+	log.Info().
+		Int64("payment_order_id", payload.PaymentOrderID).
+		Int64("refund_amount", payload.RefundAmount).
+		Str("reason", payload.Reason).
+		Msg("processing rider deposit mismatch refund task")
+
+	if processor.ecommerceClient == nil {
+		return fmt.Errorf("ecommerce client not configured, cannot process rider deposit refund")
+	}
+
+	outRefundNo := fmt.Sprintf("RFM%d_D", payload.PaymentOrderID)
+	var refundOrder db.RefundOrder
+	existingRefund, findErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+	if findErr == nil {
+		refundOrder = existingRefund
+		if refundOrder.Status == "success" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("rider deposit refund already succeeded")
+			return nil
+		}
+		if refundOrder.Status == "processing" {
+			log.Info().Str("out_refund_no", outRefundNo).Msg("rider deposit refund already processing")
+			return nil
+		}
+	} else if !errors.Is(findErr, db.ErrRecordNotFound) {
+		return fmt.Errorf("check existing rider deposit refund order: %w", findErr)
+	} else {
+		createdRefundOrder, createErr := processor.store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
+			PaymentOrderID: paymentOrder.ID,
+			RefundType:     "amount_mismatch",
+			RefundAmount:   payload.RefundAmount,
+			RefundReason:   pgtype.Text{String: payload.Reason, Valid: payload.Reason != ""},
+			OutRefundNo:    outRefundNo,
+			Status:         "pending",
+		})
+		if createErr != nil {
+			if db.ErrorCode(createErr) == db.UniqueViolation {
+				lookupRefundOrder, lookupErr := processor.store.GetRefundOrderByOutRefundNo(ctx, outRefundNo)
+				if lookupErr != nil {
+					return fmt.Errorf("lookup rider deposit refund order after conflict: %w", lookupErr)
+				}
+				refundOrder = lookupRefundOrder
+			} else {
+				return fmt.Errorf("create rider deposit refund order: %w", createErr)
+			}
+		} else {
+			refundOrder = createdRefundOrder
+		}
+	}
+
+	wxRefund, err := processor.ecommerceClient.CreateRefund(ctx, &wechat.RefundRequest{
+		OutTradeNo:   paymentOrder.OutTradeNo,
+		OutRefundNo:  outRefundNo,
+		Reason:       payload.Reason,
+		RefundAmount: payload.RefundAmount,
+		TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
+	})
+	if err != nil {
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		return fmt.Errorf("call wechat rider deposit refund API: %w", err)
+	}
+
+	switch wxRefund.Status {
+	case wechat.RefundStatusSuccess:
+		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+	case wechat.RefundStatusProcessing:
+		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: wxRefund.RefundID != ""},
+		})
+	default:
+		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
 	}
 
 	return nil
@@ -1868,7 +2066,7 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 		OutRefundNo:  outRefundNo,
 		Reason:       payload.Reason,
 		RefundAmount: payload.RefundAmount,
-		TotalAmount:  paymentOrder.Amount,
+		TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
 	})
 	if err != nil {
 		// 保持 pending 状态，由恢复调度器重试

@@ -118,7 +118,13 @@ LIMIT $1;
 
 -- name: ListPaidUnprocessedPaymentOrders :many
 SELECT * FROM payment_orders
-WHERE status = 'paid' AND processed_at IS NULL AND paid_at <= $1
+WHERE status = 'paid'
+    AND processed_at IS NULL
+    AND paid_at <= $1
+    AND NOT EXISTS (
+            SELECT 1 FROM refund_orders ro
+            WHERE ro.payment_order_id = payment_orders.id
+    )
 ORDER BY paid_at
 LIMIT $2;
 

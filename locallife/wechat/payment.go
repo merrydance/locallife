@@ -150,6 +150,16 @@ func NewPaymentClient(cfg PaymentClientConfig) (*PaymentClient, error) {
 	}, nil
 }
 
+// GetMchID 返回当前直连支付商户号，供回调归属校验使用。
+func (c *PaymentClient) GetMchID() string {
+	return c.mchID
+}
+
+// GetAppID 返回当前直连支付 AppID，供回调归属校验使用。
+func (c *PaymentClient) GetAppID() string {
+	return c.appID
+}
+
 // loadPublicKey 从 PEM 文件加载 RSA 公钥
 func loadPublicKey(path string) (*rsa.PublicKey, error) {
 	data, err := os.ReadFile(path)
@@ -644,6 +654,8 @@ type PaymentNotificationResource struct {
 	TradeType      string `json:"trade_type"`
 	TradeState     string `json:"trade_state"`
 	TradeStateDesc string `json:"trade_state_desc"`
+	AppID          string `json:"appid"`
+	MchID          string `json:"mchid"`
 	BankType       string `json:"bank_type"`
 	SuccessTime    string `json:"success_time"`
 	Payer          struct {

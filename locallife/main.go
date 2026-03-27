@@ -196,6 +196,7 @@ func main() {
 	schedulerManager.Register("auto-tag", autotag.NewScheduler(store))
 	schedulerManager.Register("session-cleanup", session.NewScheduler(store))
 	schedulerManager.Register("payment-recovery", worker.NewPaymentRecoveryScheduler(store, taskDistributor))
+	schedulerManager.Register("wechat-notification-recovery", worker.NewWechatNotificationRecoveryScheduler(store))
 	schedulerManager.Register("profit-sharing-recovery", worker.NewProfitSharingRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("refund-recovery", worker.NewRefundRecoveryScheduler(store, taskDistributor))
 	schedulerManager.Register("merchant-withdraw-recovery", worker.NewMerchantWithdrawRecoveryScheduler(store, taskDistributor))

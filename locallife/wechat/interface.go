@@ -62,6 +62,12 @@ type WechatClient interface {
 // PaymentClientInterface 微信支付客户端接口（小程序直连支付）
 // 用于押金、充值等平台直接收款场景
 type PaymentClientInterface interface {
+	// GetMchID 获取直连支付商户号
+	GetMchID() string
+
+	// GetAppID 获取直连支付 AppID
+	GetAppID() string
+
 	// CreateJSAPIOrder 创建 JSAPI 订单（小程序支付）
 	CreateJSAPIOrder(ctx context.Context, req *JSAPIOrderRequest) (*JSAPIOrderResponse, *JSAPIPayParams, error)
 

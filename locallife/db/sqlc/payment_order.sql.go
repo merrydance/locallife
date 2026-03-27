@@ -550,7 +550,13 @@ func (q *Queries) ListMiniprogramPaymentOrdersForReconciliation(ctx context.Cont
 
 const listPaidUnprocessedPaymentOrders = `-- name: ListPaidUnprocessedPaymentOrders :many
 SELECT id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at FROM payment_orders
-WHERE status = 'paid' AND processed_at IS NULL AND paid_at <= $1
+WHERE status = 'paid'
+    AND processed_at IS NULL
+    AND paid_at <= $1
+    AND NOT EXISTS (
+            SELECT 1 FROM refund_orders ro
+            WHERE ro.payment_order_id = payment_orders.id
+    )
 ORDER BY paid_at
 LIMIT $2
 `

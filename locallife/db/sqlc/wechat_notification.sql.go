@@ -102,6 +102,48 @@ func (q *Queries) GetWechatNotification(ctx context.Context, id string) (WechatN
 	return i, err
 }
 
+const listStaleUnprocessedWechatNotifications = `-- name: ListStaleUnprocessedWechatNotifications :many
+SELECT id, event_type, resource_type, summary, out_trade_no, transaction_id, processed_at, created_at FROM wechat_notifications
+WHERE processed_at IS NULL
+    AND created_at <= $1
+ORDER BY created_at
+LIMIT $2
+`
+
+type ListStaleUnprocessedWechatNotificationsParams struct {
+	CreatedAt pgtype.Timestamp `json:"created_at"`
+	Limit     int32            `json:"limit"`
+}
+
+func (q *Queries) ListStaleUnprocessedWechatNotifications(ctx context.Context, arg ListStaleUnprocessedWechatNotificationsParams) ([]WechatNotification, error) {
+	rows, err := q.db.Query(ctx, listStaleUnprocessedWechatNotifications, arg.CreatedAt, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []WechatNotification{}
+	for rows.Next() {
+		var i WechatNotification
+		if err := rows.Scan(
+			&i.ID,
+			&i.EventType,
+			&i.ResourceType,
+			&i.Summary,
+			&i.OutTradeNo,
+			&i.TransactionID,
+			&i.ProcessedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWechatNotificationsByOutTradeNo = `-- name: ListWechatNotificationsByOutTradeNo :many
 SELECT id, event_type, resource_type, summary, out_trade_no, transaction_id, processed_at, created_at FROM wechat_notifications
 WHERE out_trade_no = $1

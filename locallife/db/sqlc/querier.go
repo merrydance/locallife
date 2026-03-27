@@ -1360,6 +1360,7 @@ type Querier interface {
 	ListSafetyReportsByRegion(ctx context.Context, arg ListSafetyReportsByRegionParams) ([]SafetyReport, error)
 	ListSafetyReportsByRegionAndStatus(ctx context.Context, arg ListSafetyReportsByRegionAndStatusParams) ([]SafetyReport, error)
 	ListSearchHistory(ctx context.Context, arg ListSearchHistoryParams) ([]ListSearchHistoryRow, error)
+	ListStaleUnprocessedWechatNotifications(ctx context.Context, arg ListStaleUnprocessedWechatNotificationsParams) ([]WechatNotification, error)
 	ListStuckProcessingProfitSharingReturns(ctx context.Context, arg ListStuckProcessingProfitSharingReturnsParams) ([]ProfitSharingReturn, error)
 	// 批量查询（用于退款流程判断是否需要退回补差）
 	ListSubsidyOrdersByPaymentIDs(ctx context.Context, paymentOrderIds []int64) ([]SubsidyOrder, error)

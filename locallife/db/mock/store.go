@@ -13974,6 +13974,21 @@ func (mr *MockStoreMockRecorder) ListSearchHistory(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSearchHistory", reflect.TypeOf((*MockStore)(nil).ListSearchHistory), ctx, arg)
 }
 
+// ListStaleUnprocessedWechatNotifications mocks base method.
+func (m *MockStore) ListStaleUnprocessedWechatNotifications(ctx context.Context, arg db.ListStaleUnprocessedWechatNotificationsParams) ([]db.WechatNotification, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListStaleUnprocessedWechatNotifications", ctx, arg)
+	ret0, _ := ret[0].([]db.WechatNotification)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListStaleUnprocessedWechatNotifications indicates an expected call of ListStaleUnprocessedWechatNotifications.
+func (mr *MockStoreMockRecorder) ListStaleUnprocessedWechatNotifications(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListStaleUnprocessedWechatNotifications", reflect.TypeOf((*MockStore)(nil).ListStaleUnprocessedWechatNotifications), ctx, arg)
+}
+
 // ListStuckProcessingProfitSharingReturns mocks base method.
 func (m *MockStore) ListStuckProcessingProfitSharingReturns(ctx context.Context, arg db.ListStuckProcessingProfitSharingReturnsParams) ([]db.ProfitSharingReturn, error) {
 	m.ctrl.T.Helper()

@@ -161,6 +161,34 @@ func (mr *MockPaymentClientInterfaceMockRecorder) GenerateJSAPIPayParams(prepayI
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateJSAPIPayParams", reflect.TypeOf((*MockPaymentClientInterface)(nil).GenerateJSAPIPayParams), prepayID)
 }
 
+// GetAppID mocks base method.
+func (m *MockPaymentClientInterface) GetAppID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetAppID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetAppID indicates an expected call of GetAppID.
+func (mr *MockPaymentClientInterfaceMockRecorder) GetAppID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAppID", reflect.TypeOf((*MockPaymentClientInterface)(nil).GetAppID))
+}
+
+// GetMchID mocks base method.
+func (m *MockPaymentClientInterface) GetMchID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMchID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetMchID indicates an expected call of GetMchID.
+func (mr *MockPaymentClientInterfaceMockRecorder) GetMchID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMchID", reflect.TypeOf((*MockPaymentClientInterface)(nil).GetMchID))
+}
+
 // QueryOrderByOutTradeNo mocks base method.
 func (m *MockPaymentClientInterface) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*wechat.OrderQueryResponse, error) {
 	m.ctrl.T.Helper()

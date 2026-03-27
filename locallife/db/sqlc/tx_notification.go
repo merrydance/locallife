@@ -40,6 +40,22 @@ func (store *SQLStore) ReleaseWechatNotificationClaim(ctx context.Context, id st
 	return err
 }
 
+// MarkWechatNotificationProcessed 标记通知处理完成。
+//
+// 该标记用于区分“已处理完成的重复通知”（可直接返回 SUCCESS）与
+// “仅占位成功但业务未完成的通知”（应继续返回 FAIL 触发微信重试）。
+func (store *SQLStore) MarkWechatNotificationProcessed(ctx context.Context, id, outTradeNo, transactionID string) error {
+	_, err := store.connPool.Exec(ctx,
+		`UPDATE wechat_notifications
+		 SET processed_at = NOW(),
+		     out_trade_no = COALESCE(NULLIF($2, ''), out_trade_no),
+		     transaction_id = COALESCE(NULLIF($3, ''), transaction_id)
+		 WHERE id = $1`,
+		id, outTradeNo, transactionID,
+	)
+	return err
+}
+
 // ===== 进件状态更新事务 (CB-4) =====
 
 // ApplymentSubMchActivationTxParams 进件开通二级商户号事务参数

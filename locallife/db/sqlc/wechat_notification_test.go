@@ -31,6 +31,7 @@ func createRandomWechatNotification(t *testing.T) WechatNotification {
 	require.Equal(t, arg.Summary.String, notification.Summary.String)
 	require.Equal(t, arg.OutTradeNo.String, notification.OutTradeNo.String)
 	require.Equal(t, arg.TransactionID.String, notification.TransactionID.String)
+	require.False(t, notification.ProcessedAt.Valid)
 	require.NotZero(t, notification.CreatedAt)
 
 	return notification
@@ -71,6 +72,22 @@ func TestGetWechatNotification(t *testing.T) {
 	require.Equal(t, notification1.EventType, notification2.EventType)
 	require.Equal(t, notification1.OutTradeNo.String, notification2.OutTradeNo.String)
 	require.Equal(t, notification1.TransactionID.String, notification2.TransactionID.String)
+	require.False(t, notification2.ProcessedAt.Valid)
+}
+
+func TestMarkWechatNotificationProcessed(t *testing.T) {
+	notification := createRandomWechatNotification(t)
+	sqlStore, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	err := sqlStore.MarkWechatNotificationProcessed(context.Background(), notification.ID, notification.OutTradeNo.String, notification.TransactionID.String)
+	require.NoError(t, err)
+
+	updated, err := testStore.GetWechatNotification(context.Background(), notification.ID)
+	require.NoError(t, err)
+	require.True(t, updated.ProcessedAt.Valid)
+	require.Equal(t, notification.OutTradeNo.String, updated.OutTradeNo.String)
+	require.Equal(t, notification.TransactionID.String, updated.TransactionID.String)
 }
 
 // 测试按out_trade_no查询列表

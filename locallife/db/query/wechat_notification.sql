@@ -25,6 +25,13 @@ SELECT * FROM wechat_notifications
 WHERE out_trade_no = $1
 ORDER BY created_at DESC;
 
+-- name: ListStaleUnprocessedWechatNotifications :many
+SELECT * FROM wechat_notifications
+WHERE processed_at IS NULL
+    AND created_at <= $1
+ORDER BY created_at
+LIMIT $2;
+
 -- name: DeleteOldWechatNotifications :exec
 -- 删除30天前的通知记录（数据清理）
 DELETE FROM wechat_notifications
