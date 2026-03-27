@@ -172,8 +172,8 @@ func TestListOCRDeadLetterJobs_AdminCanQuery(t *testing.T) {
 		store.EXPECT().ListOCRDeadLetterJobs(gomock.Any(), db.ListOCRDeadLetterJobsParams{
 			OwnerType:    string(ocr.OwnerTypeMerchantApplication),
 			DocumentType: string(ocr.DocumentTypeIDCard),
-			Limit:        10,
-			Offset:       5,
+			PageLimit:    10,
+			PageOffset:   5,
 		}).Return([]db.OcrJob{job}, nil),
 	)
 

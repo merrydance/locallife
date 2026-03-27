@@ -43,29 +43,29 @@ WHERE status IN ('failed', 'cancelled')
       'ocr_execution_failed'
     )
   )
-  AND (sqlc.arg(owner_type) = '' OR owner_type = sqlc.arg(owner_type))
-  AND (sqlc.arg(document_type) = '' OR document_type = sqlc.arg(document_type))
+  AND ((sqlc.arg(owner_type))::text = '' OR owner_type = (sqlc.arg(owner_type))::text)
+  AND ((sqlc.arg(document_type))::text = '' OR document_type = (sqlc.arg(document_type))::text)
 ORDER BY COALESCE(finished_at, updated_at, created_at) DESC
-LIMIT $3 OFFSET $4;
+LIMIT sqlc.arg(page_limit) OFFSET sqlc.arg(page_offset);
 
 -- name: MarkOCRJobProcessing :one
 UPDATE ocr_jobs
 SET status = 'processing',
     attempt_count = attempt_count + 1,
     next_retry_at = NULL,
-    lease_owner = $2,
+    lease_owner = sqlc.arg(lease_owner),
     leased_at = now(),
     started_at = COALESCE(started_at, now()),
     error_code = NULL,
     error_message = NULL,
     updated_at = now()
-WHERE id = $1
+WHERE id = sqlc.arg(id)
   AND (
     status = 'pending'
     OR (
       status = 'processing'
       AND leased_at IS NOT NULL
-      AND leased_at < $3
+      AND leased_at < sqlc.arg(lease_expires_before)
     )
   )
 RETURNING *;

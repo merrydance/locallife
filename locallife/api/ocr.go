@@ -494,8 +494,8 @@ func (server *Server) listOCRDeadLetterJobs(ctx *gin.Context) {
 	jobs, err := server.store.ListOCRDeadLetterJobs(ctx, db.ListOCRDeadLetterJobsParams{
 		OwnerType:    ownerType,
 		DocumentType: documentType,
-		Limit:        limit,
-		Offset:       offset,
+		PageLimit:    limit,
+		PageOffset:   offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

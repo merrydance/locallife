@@ -183,14 +183,6 @@ func (q *Queries) GetOCRJob(ctx context.Context, id int64) (OcrJob, error) {
 	return i, err
 }
 
-const listOCRJobsByOwner = `-- name: ListOCRJobsByOwner :many
-SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
-WHERE owner_type = $1
-  AND owner_id = $2
-ORDER BY created_at DESC
-LIMIT $3 OFFSET $4
-`
-
 const listOCRDeadLetterJobs = `-- name: ListOCRDeadLetterJobs :many
 SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
 WHERE status IN ('failed', 'cancelled')
@@ -206,25 +198,25 @@ WHERE status IN ('failed', 'cancelled')
       'ocr_execution_failed'
     )
   )
-  AND ($1 = '' OR owner_type = $1)
-  AND ($2 = '' OR document_type = $2)
+  AND (($1)::text = '' OR owner_type = ($1)::text)
+  AND (($2)::text = '' OR document_type = ($2)::text)
 ORDER BY COALESCE(finished_at, updated_at, created_at) DESC
-LIMIT $3 OFFSET $4
+LIMIT $4 OFFSET $3
 `
 
 type ListOCRDeadLetterJobsParams struct {
 	OwnerType    string `json:"owner_type"`
 	DocumentType string `json:"document_type"`
-	Limit        int32  `json:"limit"`
-	Offset       int32  `json:"offset"`
+	PageOffset   int32  `json:"page_offset"`
+	PageLimit    int32  `json:"page_limit"`
 }
 
 func (q *Queries) ListOCRDeadLetterJobs(ctx context.Context, arg ListOCRDeadLetterJobsParams) ([]OcrJob, error) {
 	rows, err := q.db.Query(ctx, listOCRDeadLetterJobs,
 		arg.OwnerType,
 		arg.DocumentType,
-		arg.Limit,
-		arg.Offset,
+		arg.PageOffset,
+		arg.PageLimit,
 	)
 	if err != nil {
 		return nil, err
@@ -270,6 +262,14 @@ func (q *Queries) ListOCRDeadLetterJobs(ctx context.Context, arg ListOCRDeadLett
 	}
 	return items, nil
 }
+
+const listOCRJobsByOwner = `-- name: ListOCRJobsByOwner :many
+SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
+WHERE owner_type = $1
+  AND owner_id = $2
+ORDER BY created_at DESC
+LIMIT $3 OFFSET $4
+`
 
 type ListOCRJobsByOwnerParams struct {
 	OwnerType string `json:"owner_type"`
@@ -335,13 +335,13 @@ UPDATE ocr_jobs
 SET status = 'processing',
     attempt_count = attempt_count + 1,
     next_retry_at = NULL,
-    lease_owner = $2,
+    lease_owner = $1,
     leased_at = now(),
     started_at = COALESCE(started_at, now()),
     error_code = NULL,
     error_message = NULL,
     updated_at = now()
-WHERE id = $1
+WHERE id = $2
   AND (
     status = 'pending'
     OR (
@@ -354,13 +354,13 @@ RETURNING id, idempotency_key, document_type, provider, provider_task_id, media_
 `
 
 type MarkOCRJobProcessingParams struct {
-	ID                 int64              `json:"id"`
 	LeaseOwner         pgtype.Text        `json:"lease_owner"`
+	ID                 int64              `json:"id"`
 	LeaseExpiresBefore pgtype.Timestamptz `json:"lease_expires_before"`
 }
 
 func (q *Queries) MarkOCRJobProcessing(ctx context.Context, arg MarkOCRJobProcessingParams) (OcrJob, error) {
-	row := q.db.QueryRow(ctx, markOCRJobProcessing, arg.ID, arg.LeaseOwner, arg.LeaseExpiresBefore)
+	row := q.db.QueryRow(ctx, markOCRJobProcessing, arg.LeaseOwner, arg.ID, arg.LeaseExpiresBefore)
 	var i OcrJob
 	err := row.Scan(
 		&i.ID,

@@ -332,3 +332,88 @@ func TestMarkOCRJobProcessing_ReclaimsExpiredLease(t *testing.T) {
 	require.True(t, persisted.LeasedAt.Valid)
 	require.True(t, persisted.LeasedAt.Time.After(expiredLeasedAt))
 }
+
+func TestListOCRDeadLetterJobs_AppliesFilterBeforePagination(t *testing.T) {
+	store, ok := testStore.(*SQLStore)
+	require.True(t, ok)
+
+	_, err := store.connPool.Exec(context.Background(), `
+		DELETE FROM ocr_jobs
+		WHERE owner_type = 'merchant_application'
+		  AND document_type IN ('business_license', 'food_permit')
+	`)
+	require.NoError(t, err)
+
+	jobNewest := createRandomOCRJob(t)
+	jobMiddle := createRandomOCRJob(t)
+	jobOldest := createRandomOCRJob(t)
+
+	otherUser := createRandomUser(t)
+	otherAsset := createRandomMediaAsset(t, otherUser.ID)
+	otherDocJob, err := testStore.UpsertOCRJob(context.Background(), UpsertOCRJobParams{
+		IdempotencyKey: fmt.Sprintf("%d:food_permit:merchant_application:%d:", otherAsset.ID, otherUser.ID),
+		DocumentType:   "food_permit",
+		Provider:       "aliyun",
+		MediaAssetID:   otherAsset.ID,
+		OwnerType:      "merchant_application",
+		OwnerID:        otherUser.ID,
+		Side:           "",
+		MaxAttempts:    3,
+		RequestedBy:    otherUser.ID,
+	})
+	require.NoError(t, err)
+
+	newestFinishedAt := time.Now().Add(-1 * time.Minute)
+	middleFinishedAt := time.Now().Add(-2 * time.Minute)
+	oldestFinishedAt := time.Now().Add(-3 * time.Minute)
+	filteredOutFinishedAt := time.Now().Add(-30 * time.Second)
+
+	for _, item := range []struct {
+		job        OcrJob
+		finishedAt time.Time
+	}{
+		{job: jobNewest, finishedAt: newestFinishedAt},
+		{job: jobMiddle, finishedAt: middleFinishedAt},
+		{job: jobOldest, finishedAt: oldestFinishedAt},
+		{job: otherDocJob, finishedAt: filteredOutFinishedAt},
+	} {
+		_, execErr := store.connPool.Exec(context.Background(), `
+			UPDATE ocr_jobs
+			SET status = 'failed',
+			    attempt_count = max_attempts,
+			    next_retry_at = NULL,
+			    error_code = 'ocr_execution_failed',
+			    error_message = 'dead letter',
+			    finished_at = $2,
+			    updated_at = $2
+			WHERE id = $1
+		`, item.job.ID, item.finishedAt)
+		require.NoError(t, execErr)
+	}
+
+	allJobs, err := testStore.ListOCRDeadLetterJobs(context.Background(), ListOCRDeadLetterJobsParams{
+		OwnerType:    "merchant_application",
+		DocumentType: "business_license",
+		PageOffset:   0,
+		PageLimit:    10,
+	})
+	require.NoError(t, err)
+	require.Len(t, allJobs, 3)
+	require.NotContains(t, []int64{allJobs[0].ID, allJobs[1].ID, allJobs[2].ID}, otherDocJob.ID)
+	require.Equal(t, "business_license", allJobs[0].DocumentType)
+	require.Equal(t, "business_license", allJobs[1].DocumentType)
+	require.Equal(t, "business_license", allJobs[2].DocumentType)
+
+	jobs, err := testStore.ListOCRDeadLetterJobs(context.Background(), ListOCRDeadLetterJobsParams{
+		OwnerType:    "merchant_application",
+		DocumentType: "business_license",
+		PageOffset:   1,
+		PageLimit:    2,
+	})
+	require.NoError(t, err)
+	require.Len(t, jobs, 2)
+	require.Equal(t, allJobs[1].ID, jobs[0].ID)
+	require.Equal(t, allJobs[2].ID, jobs[1].ID)
+	require.Contains(t, []int64{jobNewest.ID, jobMiddle.ID, jobOldest.ID}, jobs[0].ID)
+	require.Contains(t, []int64{jobNewest.ID, jobMiddle.ID, jobOldest.ID}, jobs[1].ID)
+}
