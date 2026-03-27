@@ -15293,6 +15293,15 @@ paths:
         in: query
         name: status
         type: string
+      - description: 订单类型筛选
+        enum:
+        - takeout
+        - dine_in
+        - takeaway
+        - reservation
+        in: query
+        name: order_type
+        type: string
       produces:
       - application/json
       responses:

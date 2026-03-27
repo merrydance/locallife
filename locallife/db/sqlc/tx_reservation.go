@@ -184,9 +184,9 @@ type ConfirmReservationTxResult struct {
 	Table       Table
 }
 
-// ConfirmReservationTx confirms a reservation and updates the table status in a single transaction:
+// ConfirmReservationTx confirms a reservation without occupying the table:
 // 1. Update reservation status to confirmed
-// 2. Update table to reserved with current reservation ID
+// 2. Return the current table snapshot for callers that need it
 func (store *SQLStore) ConfirmReservationTx(ctx context.Context, arg ConfirmReservationTxParams) (ConfirmReservationTxResult, error) {
 	var result ConfirmReservationTxResult
 
@@ -199,14 +199,10 @@ func (store *SQLStore) ConfirmReservationTx(ctx context.Context, arg ConfirmRese
 			return fmt.Errorf("update reservation to confirmed: %w", err)
 		}
 
-		// 2. 更新桌台状态为已预定
-		result.Table, err = q.UpdateTableStatus(ctx, UpdateTableStatusParams{
-			ID:                   arg.TableID,
-			Status:               "reserved",
-			CurrentReservationID: pgtype.Int8{Int64: arg.ReservationID, Valid: true},
-		})
+		// 2. 返回当前桌台快照；占桌动作由后续到店/开台流程负责
+		result.Table, err = q.GetTable(ctx, arg.TableID)
 		if err != nil {
-			return fmt.Errorf("update table status: %w", err)
+			return fmt.Errorf("get table: %w", err)
 		}
 
 		return nil

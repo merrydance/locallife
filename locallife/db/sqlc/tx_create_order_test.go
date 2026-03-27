@@ -625,6 +625,127 @@ func TestCreateOrderTxInsufficientBalance(t *testing.T) {
 	require.Contains(t, err.Error(), "insufficient balance")
 }
 
+func TestCreateOrderTx_BillingGroupAggregation(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	table := createRandomTable(t, merchant.ID)
+	session := createOpenDiningSession(t, merchant.ID, table.ID, user.ID, pgtype.Int8{Valid: false})
+
+	billingGroup, err := testStore.CreateBillingGroup(context.Background(), CreateBillingGroupParams{
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		TotalAmount:     9999,
+		PaidAmount:      8888,
+	})
+	require.NoError(t, err)
+
+	orderNo := util.RandomString(20)
+	result, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:             orderNo,
+			UserID:              user.ID,
+			MerchantID:          merchant.ID,
+			OrderType:           "dine_in",
+			TableID:             pgtype.Int8{Int64: table.ID, Valid: true},
+			DeliveryFee:         0,
+			Subtotal:            1280,
+			DiscountAmount:      0,
+			DeliveryFeeDiscount: 0,
+			TotalAmount:         1280,
+			Status:              OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "Billing Dish",
+			UnitPrice: 1280,
+			Quantity:  1,
+			Subtotal:  1280,
+		}},
+		BillingGroupID: &billingGroup.ID,
+	})
+	require.NoError(t, err)
+
+	orders, err := testStore.ListBillingGroupOrdersByGroup(context.Background(), billingGroup.ID)
+	require.NoError(t, err)
+	require.Len(t, orders, 1)
+	require.Equal(t, result.Order.ID, orders[0].OrderID)
+	require.Equal(t, int64(1280), orders[0].Amount)
+	require.Equal(t, "linked", orders[0].Status)
+
+	amounts, err := testStore.GetBillingGroupAmounts(context.Background(), billingGroup.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1280), amounts.TotalAmount)
+	require.Equal(t, int64(0), amounts.PaidAmount)
+}
+
+func TestGetBillingGroupAmounts_ExcludesCancelledAndReplacedOrders(t *testing.T) {
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	user := createRandomUser(t)
+	table := createRandomTable(t, merchant.ID)
+	session := createOpenDiningSession(t, merchant.ID, table.ID, user.ID, pgtype.Int8{Valid: false})
+
+	billingGroup, err := testStore.CreateBillingGroup(context.Background(), CreateBillingGroupParams{
+		DiningSessionID: session.ID,
+		Status:          "open",
+		IsDefault:       true,
+		TotalAmount:     0,
+		PaidAmount:      0,
+	})
+	require.NoError(t, err)
+
+	pendingOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+	paidOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+	cancelledOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+	replacedOrder := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, replaced_by_order_id = $4, updated_at = now()
+		WHERE id = $1`, pendingOrder.ID, OrderStatusPending, int64(1000), pgtype.Int8{Valid: false})
+	require.NoError(t, err)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, updated_at = now()
+		WHERE id = $1`, paidOrder.ID, OrderStatusPaid, int64(2000))
+	require.NoError(t, err)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, updated_at = now()
+		WHERE id = $1`, cancelledOrder.ID, OrderStatusCancelled, int64(3000))
+	require.NoError(t, err)
+	_, err = testStore.(*SQLStore).connPool.Exec(context.Background(), `
+		UPDATE orders
+		SET status = $2, total_amount = $3, replaced_by_order_id = $4, updated_at = now()
+		WHERE id = $1`, replacedOrder.ID, OrderStatusPaid, int64(4000), pgtype.Int8{Int64: paidOrder.ID, Valid: true})
+	require.NoError(t, err)
+
+	for _, entry := range []struct {
+		orderID int64
+		amount  int64
+	}{
+		{orderID: pendingOrder.ID, amount: 1000},
+		{orderID: paidOrder.ID, amount: 2000},
+		{orderID: cancelledOrder.ID, amount: 3000},
+		{orderID: replacedOrder.ID, amount: 4000},
+	} {
+		_, err = testStore.CreateBillingGroupOrder(context.Background(), CreateBillingGroupOrderParams{
+			BillingGroupID: billingGroup.ID,
+			OrderID:        entry.orderID,
+			Amount:         entry.amount,
+			Status:         "linked",
+		})
+		require.NoError(t, err)
+	}
+
+	amounts, err := testStore.GetBillingGroupAmounts(context.Background(), billingGroup.ID)
+	require.NoError(t, err)
+	require.Equal(t, int64(3000), amounts.TotalAmount)
+	require.Equal(t, int64(2000), amounts.PaidAmount)
+}
+
 // ==================== ProcessOrderPaymentTx Transaction Tests ====================
 
 // createMerchantWithLocation 创建带有经纬度的商户（用于配送测试）

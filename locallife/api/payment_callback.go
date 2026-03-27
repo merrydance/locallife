@@ -31,6 +31,7 @@ type wechatPaymentNotifyResponse struct {
 
 const maxWebhookBodyBytes int64 = 1 << 20 // 1MB
 const notificationClaimStaleWindow = 2 * time.Minute
+const notificationReleaseReasonProcessingFailed = "processing_failed"
 
 type directPaymentOwnershipProvider interface {
 	GetMchID() string
@@ -63,8 +64,21 @@ func (server *Server) markNotificationProcessed(ctx context.Context, notificatio
 func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notificationID, metricLabel string) bool {
 	existing, err := server.store.GetWechatNotification(ctx, notificationID)
 	if err != nil {
-		log.Warn().Err(err).Str("notification_id", notificationID).Msg("duplicate notification lookup failed, fallback success")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		paymentCallbackFailuresTotal.WithLabelValues(metricLabel, "duplicate_claim_lookup").Inc()
+		log.Error().Err(err).Str("notification_id", notificationID).Str("callback_type", metricLabel).Msg("duplicate notification lookup failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeSystemError,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "微信重复回调状态查询失败",
+			Message:     fmt.Sprintf("微信回调 notification_id=%s 在重复认领后查询本地状态失败，callback_type=%s。系统已返回 FAIL 等待微信重试，请尽快排查通知表与回调处理链。", notificationID, metricLabel),
+			RelatedID:   0,
+			RelatedType: "wechat_notification",
+			Extra: map[string]interface{}{
+				"notification_id": notificationID,
+				"callback_type":   metricLabel,
+			},
+		})
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "notification status lookup failed"})
 		return false
 	}
 
@@ -74,7 +88,7 @@ func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notif
 	}
 
 	if existing.CreatedAt.Valid && time.Since(existing.CreatedAt.Time) > notificationClaimStaleWindow {
-		server.releaseNotificationWithReason(ctx, notificationID, "stale_claim_retry")
+		server.releaseNotificationWithReason(ctx, notificationID, metricLabel, "stale_claim_retry")
 		paymentCallbackFailuresTotal.WithLabelValues(metricLabel, "stale_claim_retry").Inc()
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "stale claim, please retry"})
 		return false
@@ -282,23 +296,47 @@ func (server *Server) tryClaimApplymentNotification(ctx *gin.Context, n Applymen
 	return true
 }
 
-// releaseNotification 释放一个已认领但业务逻辑失败的通知占位，允许微信下次重试。
-func (server *Server) releaseNotification(ctx context.Context, id string) {
-	server.releaseNotificationWithReason(ctx, id, "")
+func normalizeNotificationMetricLabel(callbackType string) string {
+	callbackType = strings.TrimSpace(callbackType)
+	if callbackType == "" {
+		return "unknown"
+	}
+	return callbackType
 }
 
-func (server *Server) releaseNotificationWithReason(ctx context.Context, id, reason string) {
+func normalizeNotificationReleaseReason(reason string) string {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return notificationReleaseReasonProcessingFailed
+	}
+	return reason
+}
+
+// releaseNotification 释放一个已认领但业务逻辑失败的通知占位，允许微信下次重试。
+func (server *Server) releaseNotification(ctx context.Context, id string, callbackType ...string) {
+	label := ""
+	if len(callbackType) > 0 {
+		label = callbackType[0]
+	}
+	server.releaseNotificationWithReason(ctx, id, label, notificationReleaseReasonProcessingFailed)
+}
+
+func (server *Server) releaseNotificationWithReason(ctx context.Context, id, callbackType, reason string) {
+	callbackType = normalizeNotificationMetricLabel(callbackType)
+	reason = normalizeNotificationReleaseReason(reason)
 	if err := server.store.ReleaseWechatNotificationClaim(ctx, id); err != nil {
-		log.Error().Err(err).Str("notification_id", id).Str("reason", reason).Msg("release notification claim failed - recovery scheduler will handle")
+		paymentCallbackFailuresTotal.WithLabelValues(callbackType, "release_claim_"+reason).Inc()
+		log.Error().Err(err).Str("notification_id", id).Str("callback_type", callbackType).Str("reason", reason).Msg("release notification claim failed - recovery scheduler will handle")
 		server.sendAlert(websocket.AlertData{
 			AlertType:   websocket.AlertTypeSystemError,
 			Level:       websocket.AlertLevelCritical,
 			Title:       "微信通知占位释放失败",
-			Message:     fmt.Sprintf("微信通知 %s 在释放 claim 时失败，reason=%s。后续重试可能被阻塞，需要尽快排查 notification 表与回调处理链。", id, reason),
+			Message:     fmt.Sprintf("微信通知 %s 在释放 claim 时失败，callback_type=%s, reason=%s。后续重试可能被阻塞，需要尽快排查 notification 表与回调处理链。", id, callbackType, reason),
 			RelatedID:   0,
 			RelatedType: "wechat_notification",
 			Extra: map[string]interface{}{
 				"notification_id": id,
+				"callback_type":   callbackType,
 				"reason":          reason,
 				"error":           err.Error(),
 			},
@@ -381,7 +419,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("payment", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt payment notification")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "payment")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
@@ -410,7 +448,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 				"appid":          resource.AppID,
 			},
 		})
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ownership validation failed",
@@ -444,7 +482,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 					"business_action": "wechat_retry_expected",
 				},
 			})
-			server.releaseNotification(ctx, notification.ID)
+			server.releaseNotification(ctx, notification.ID, "payment")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 				Code:    "FAIL",
 				Message: "payment order not found, please retry",
@@ -453,7 +491,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		}
 		log.Error().Err(err).Str("out_trade_no", resource.OutTradeNo).Msg("get payment order")
 		paymentCallbackFailuresTotal.WithLabelValues("payment", "query_payment_order").Inc()
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "internal error",
@@ -585,7 +623,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		if refundRecordErr != nil {
 			paymentCallbackFailuresTotal.WithLabelValues("payment", "create_mismatch_refund_record").Inc()
 			log.Error().Err(refundRecordErr).Int64("payment_order_id", paymentOrder.ID).Msg("create amount mismatch refund record failed")
-			server.releaseNotification(ctx, notification.ID)
+			server.releaseNotification(ctx, notification.ID, "payment")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
 			return
 		}
@@ -595,7 +633,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 			TransactionID: pgtype.Text{String: resource.TransactionID, Valid: true},
 		}); updateErr != nil {
 			log.Error().Err(updateErr).Int64("id", paymentOrder.ID).Msg("update payment order to paid for mismatch refund failed")
-			server.releaseNotification(ctx, notification.ID)
+			server.releaseNotification(ctx, notification.ID, "payment")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
 			return
 		}
@@ -699,7 +737,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("payment", "update_payment_order").Inc()
 		log.Error().Err(err).Int64("id", paymentOrder.ID).Msg("update payment order to paid")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "update order failed",
@@ -852,7 +890,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("refund", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt refund notification")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "refund")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
@@ -880,7 +918,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 				"mchid":          resource.MchID,
 			},
 		})
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "refund")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ownership validation failed",
@@ -912,7 +950,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 			log.Error().Err(err).
 				Str("out_refund_no", resource.OutRefundNo).
 				Msg("failed to enqueue refund result task")
-			server.releaseNotification(ctx, notification.ID)
+			server.releaseNotification(ctx, notification.ID, "refund")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 				Code:    "FAIL",
 				Message: "enqueue failed, please retry",
@@ -1006,7 +1044,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_refund", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt ecommerce refund notification")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
@@ -1042,7 +1080,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 				"sub_mchid":     resource.SubMchID,
 			},
 		})
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ownership validation failed",
@@ -1069,7 +1107,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 				Str("sp_mchid", resource.SpMchID).
 				Str("sub_mchid", resource.SubMchID).
 				Msg("⚠️ CRITICAL: failed to enqueue ecommerce refund result task - manual intervention may be required")
-			server.releaseNotification(ctx, notification.ID)
+			server.releaseNotification(ctx, notification.ID, "ecommerce_refund")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 				Code:    "FAIL",
 				Message: "enqueue failed, please retry",
@@ -1161,7 +1199,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt profit sharing notification")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "profit_sharing")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
@@ -1198,7 +1236,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 				"sub_mch_id":   resource.SubMchID,
 			},
 		})
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "profit_sharing")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ownership validation failed",
@@ -1221,7 +1259,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 			return
 		}
 		log.Error().Err(err).Str("out_order_no", resource.OutOrderNo).Msg("get profit sharing order")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "profit_sharing")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "internal error",
@@ -1263,7 +1301,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 				"sub_mch_id":              resource.SubMchID,
 			},
 		})
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "profit_sharing")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ownership validation failed",
@@ -1321,7 +1359,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 		if err != nil {
 			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "update_profit_sharing_order").Inc()
 			log.Error().Err(err).Int64("id", profitSharingOrder.ID).Msg("update profit sharing order to finished")
-			server.releaseNotification(ctx, notification.ID)
+			server.releaseNotification(ctx, notification.ID, "profit_sharing")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 				Code:    "FAIL",
 				Message: "update order failed",
@@ -1467,7 +1505,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 	resource, err := server.ecommerceClient.DecryptCombinePaymentNotification(&notification)
 	if err != nil {
 		log.Error().Err(err).Msg("decrypt combine payment notification")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
@@ -1498,7 +1536,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 				"combine_appid":        resource.CombineAppID,
 			},
 		})
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ownership validation failed",
@@ -1720,7 +1758,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 			Int("success_count", successCount).
 			Int("failed_count", len(failedOrders)).
 			Msg("some sub orders failed to process")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: fmt.Sprintf("%d orders failed", len(failedOrders)),
@@ -1768,7 +1806,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 				},
 			})
 		}
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "get combined payment order failed",
@@ -1784,7 +1822,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 			Int64("combined_payment_id", combinedOrder.ID).
 			Str("combine_out_trade_no", resource.CombineOutTradeNo).
 			Msg("update combined payment order to paid failed")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "update combined payment order failed",
@@ -1902,7 +1940,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	var paymentNotification wechat.PaymentNotification
 	if err := json.Unmarshal(body, &paymentNotification); err != nil {
 		log.Error().Err(err).Msg("parse payment notification for decryption")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "applyment")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "parse notification failed",
@@ -1913,7 +1951,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	// 使用 paymentClient 解密
 	if server.paymentClient == nil {
 		log.Error().Msg("payment client not configured for decryption")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "applyment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "payment client not configured",
@@ -1924,7 +1962,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	decrypted, err := server.paymentClient.DecryptNotificationRaw(&paymentNotification)
 	if err != nil {
 		log.Error().Err(err).Msg("decrypt applyment notification")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "applyment")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
@@ -1935,7 +1973,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	var resource ApplymentStateChangeResource
 	if err := json.Unmarshal(decrypted, &resource); err != nil {
 		log.Error().Err(err).Str("decrypted", string(decrypted)).Msg("parse applyment resource")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "applyment")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "parse resource failed",
@@ -1963,7 +2001,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 			return
 		}
 		log.Error().Err(err).Msg("get applyment record")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "applyment")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "internal error",
@@ -1991,7 +2029,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 				Int64("applyment_id", applyment.ID).
 				Str("subject_type", applyment.SubjectType).
 				Msg("applyment activation tx failed")
-			server.releaseNotification(ctx, notification.ID)
+			server.releaseNotification(ctx, notification.ID, "applyment")
 			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
 			return
 		}
@@ -2163,7 +2201,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 	if err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "decrypt").Inc()
 		log.Error().Err(err).Msg("decrypt settlement notification")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "settlement")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "decrypt failed",
@@ -2198,7 +2236,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		}
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "query_sub_order").Inc()
 		log.Error().Err(err).Str("merchant_trade_no", resource.MerchantTradeNo).Msg("get combined sub order")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "settlement")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "internal error",
@@ -2218,7 +2256,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		}
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "query_payment_order").Inc()
 		log.Error().Err(err).Str("out_trade_no", subOrder.OutTradeNo).Msg("get payment order for settlement")
-		server.releaseNotification(ctx, notification.ID)
+		server.releaseNotification(ctx, notification.ID, "settlement")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "internal error",

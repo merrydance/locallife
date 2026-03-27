@@ -146,35 +146,31 @@ func (s *OrderService) GetMerchantOrder(ctx context.Context, input GetMerchantOr
 
 func (s *OrderService) ListMerchantOrders(ctx context.Context, input ListMerchantOrdersQueryInput) (ListMerchantOrdersQueryResult, error) {
 	offset := int32((input.PageID - 1) * input.PageSize)
-
-	var (
-		orders []db.Order
-		err    error
-		total  int64
-	)
+	status := pgtype.Text{}
 	if input.Status != nil && *input.Status != "" {
-		orders, err = s.store.ListOrdersByMerchantAndStatus(ctx, db.ListOrdersByMerchantAndStatusParams{
-			MerchantID: input.MerchantID,
-			Status:     *input.Status,
-			Limit:      input.PageSize,
-			Offset:     offset,
-		})
-		if err == nil {
-			total, err = s.store.CountOrdersByMerchantAndStatus(ctx, db.CountOrdersByMerchantAndStatusParams{
-				MerchantID: input.MerchantID,
-				Status:     *input.Status,
-			})
-		}
-	} else {
-		orders, err = s.store.ListOrdersByMerchant(ctx, db.ListOrdersByMerchantParams{
-			MerchantID: input.MerchantID,
-			Limit:      input.PageSize,
-			Offset:     offset,
-		})
-		if err == nil {
-			total, err = s.store.CountOrdersByMerchant(ctx, input.MerchantID)
-		}
+		status = pgtype.Text{String: *input.Status, Valid: true}
 	}
+	orderType := pgtype.Text{}
+	if input.OrderType != nil && *input.OrderType != "" {
+		orderType = pgtype.Text{String: *input.OrderType, Valid: true}
+	}
+
+	orders, err := s.store.ListOrdersByMerchantWithFilters(ctx, db.ListOrdersByMerchantWithFiltersParams{
+		MerchantID: input.MerchantID,
+		Status:     status,
+		OrderType:  orderType,
+		Limit:      input.PageSize,
+		Offset:     offset,
+	})
+	if err != nil {
+		return ListMerchantOrdersQueryResult{}, err
+	}
+
+	total, err := s.store.CountOrdersByMerchantWithFilters(ctx, db.CountOrdersByMerchantWithFiltersParams{
+		MerchantID: input.MerchantID,
+		Status:     status,
+		OrderType:  orderType,
+	})
 	if err != nil {
 		return ListMerchantOrdersQueryResult{}, err
 	}

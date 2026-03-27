@@ -104,14 +104,10 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 
 		// 4.1 账单组订单关联（可选）
 		if arg.BillingGroupID != nil {
-			amount := result.Order.TotalAmount
-			if result.Order.FinalAmount.Valid {
-				amount = result.Order.FinalAmount.Int64
-			}
 			if _, err := q.CreateBillingGroupOrder(ctx, CreateBillingGroupOrderParams{
 				BillingGroupID: *arg.BillingGroupID,
 				OrderID:        result.Order.ID,
-				Amount:         amount,
+				Amount:         result.Order.TotalAmount,
 				Status:         "linked",
 			}); err != nil {
 				return fmt.Errorf("create billing group order: %w", err)

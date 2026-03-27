@@ -173,6 +173,35 @@ func (q *Queries) GetBillingGroup(ctx context.Context, id int64) (BillingGroup, 
 	return i, err
 }
 
+const getBillingGroupAmounts = `-- name: GetBillingGroupAmounts :one
+SELECT
+  COALESCE(SUM(o.total_amount) FILTER (
+    WHERE o.id IS NOT NULL
+      AND o.status <> 'cancelled'
+      AND o.replaced_by_order_id IS NULL
+  ), 0)::bigint AS total_amount,
+  COALESCE(SUM(o.total_amount) FILTER (
+    WHERE o.id IS NOT NULL
+      AND o.status IN ('paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering', 'rider_delivered', 'user_delivered', 'completed')
+      AND o.replaced_by_order_id IS NULL
+  ), 0)::bigint AS paid_amount
+FROM billing_group_orders bgo
+LEFT JOIN orders o ON o.id = bgo.order_id
+WHERE bgo.billing_group_id = $1
+`
+
+type GetBillingGroupAmountsRow struct {
+	TotalAmount int64 `json:"total_amount"`
+	PaidAmount  int64 `json:"paid_amount"`
+}
+
+func (q *Queries) GetBillingGroupAmounts(ctx context.Context, billingGroupID int64) (GetBillingGroupAmountsRow, error) {
+	row := q.db.QueryRow(ctx, getBillingGroupAmounts, billingGroupID)
+	var i GetBillingGroupAmountsRow
+	err := row.Scan(&i.TotalAmount, &i.PaidAmount)
+	return i, err
+}
+
 const getDefaultBillingGroupBySession = `-- name: GetDefaultBillingGroupBySession :one
 SELECT id, dining_session_id, status, is_default, total_amount, paid_amount, created_at, updated_at, closed_at FROM billing_groups
 WHERE dining_session_id = $1

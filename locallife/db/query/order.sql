@@ -112,6 +112,14 @@ WHERE merchant_id = $1 AND status = ANY($2::text[])
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;
 
+-- name: ListOrdersByMerchantWithFilters :many
+SELECT * FROM orders
+WHERE merchant_id = sqlc.arg('merchant_id')
+    AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+    AND (sqlc.narg('order_type')::text IS NULL OR order_type = sqlc.narg('order_type')::text)
+ORDER BY created_at DESC
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
+
 -- name: CountOrdersByMerchant :one
 SELECT COUNT(*) FROM orders
 WHERE merchant_id = $1;
@@ -119,6 +127,12 @@ WHERE merchant_id = $1;
 -- name: CountOrdersByMerchantAndStatus :one
 SELECT COUNT(*) FROM orders
 WHERE merchant_id = $1 AND status = $2;
+
+-- name: CountOrdersByMerchantWithFilters :one
+SELECT COUNT(*) FROM orders
+WHERE merchant_id = sqlc.arg('merchant_id')
+    AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text)
+    AND (sqlc.narg('order_type')::text IS NULL OR order_type = sqlc.narg('order_type')::text);
 
 -- name: GetLatestOrderByReservation :one
 SELECT * FROM orders

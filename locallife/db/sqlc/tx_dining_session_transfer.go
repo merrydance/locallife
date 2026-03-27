@@ -33,6 +33,39 @@ type TransferDiningSessionTableTxResult struct {
 	ToTable   Table
 }
 
+func findConflictingReservationForTableAt(ctx context.Context, q *Queries, tableID int64, now time.Time) (*TableReservation, error) {
+	date := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	reservations, err := q.ListReservationsByTableAndDate(ctx, ListReservationsByTableAndDateParams{
+		TableID: tableID,
+		ReservationDate: pgtype.Date{
+			Time:  date,
+			Valid: true,
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	for _, reservation := range reservations {
+		if reservation.Status != "pending" && reservation.Status != "paid" && reservation.Status != "confirmed" && reservation.Status != "checked_in" {
+			continue
+		}
+		if !reservation.ReservationTime.Valid {
+			continue
+		}
+
+		reservationStart := util.CombineDateAndTime(reservation.ReservationDate.Time, reservation.ReservationTime.Microseconds)
+		if !util.IsConflictWithReservation(now, reservationStart) {
+			continue
+		}
+
+		conflict := reservation
+		return &conflict, nil
+	}
+
+	return nil, nil
+}
+
 // TransferDiningSessionTableTx transfers an open dining session to another table within a transaction.
 func (store *SQLStore) TransferDiningSessionTableTx(ctx context.Context, arg TransferDiningSessionTableTxParams) (TransferDiningSessionTableTxResult, error) {
 	var result TransferDiningSessionTableTxResult
@@ -90,6 +123,16 @@ func (store *SQLStore) TransferDiningSessionTableTx(ctx context.Context, arg Tra
 			return fmt.Errorf("check active dining session: %w", err)
 		}
 
+		conflictingReservation, err := findConflictingReservationForTableAt(ctx, q, toTable.ID, time.Now())
+		if err != nil {
+			return fmt.Errorf("find conflicting reservation for target table: %w", err)
+		}
+		if conflictingReservation != nil {
+			if !session.ReservationID.Valid || conflictingReservation.ID != session.ReservationID.Int64 {
+				return ErrTargetTableReserved
+			}
+		}
+
 		if session.ReservationID.Valid {
 			res, err := q.GetTableReservationForUpdate(ctx, session.ReservationID.Int64)
 			if err != nil {
@@ -100,39 +143,6 @@ func (store *SQLStore) TransferDiningSessionTableTx(ctx context.Context, arg Tra
 			}
 			if res.TableID != fromTable.ID {
 				return ErrReservationMismatch
-			}
-
-			// Check if target table has a conflicting reservation
-			if toTable.CurrentReservationID.Valid && toTable.CurrentReservationID.Int64 != res.ID {
-				targetRes, err := q.GetTableReservation(ctx, toTable.CurrentReservationID.Int64)
-				if err == nil {
-					resStart := util.CombineDateAndTime(targetRes.ReservationDate.Time, targetRes.ReservationTime.Microseconds)
-					if util.IsConflictWithReservation(time.Now(), resStart) {
-						return ErrTargetTableReserved
-					}
-				} else {
-					return ErrTargetTableReserved
-				}
-			}
-			if toTable.Status == "reserved" && (!toTable.CurrentReservationID.Valid || toTable.CurrentReservationID.Int64 != res.ID) {
-				// Similar check for status
-				if toTable.CurrentReservationID.Valid {
-					targetRes, err := q.GetTableReservation(ctx, toTable.CurrentReservationID.Int64)
-					if err == nil {
-						resStart := util.CombineDateAndTime(targetRes.ReservationDate.Time, targetRes.ReservationTime.Microseconds)
-						if util.IsConflictWithReservation(time.Now(), resStart) {
-							return ErrTargetTableReserved
-						}
-					} else {
-						return ErrTargetTableReserved
-					}
-				} else {
-					return ErrTargetTableReserved
-				}
-			}
-		} else {
-			if toTable.Status == "reserved" || toTable.CurrentReservationID.Valid {
-				return ErrTargetTableReserved
 			}
 		}
 

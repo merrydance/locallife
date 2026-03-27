@@ -58,6 +58,14 @@ func newBillingGroupOrderResponse(o db.BillingGroupOrder) billingGroupOrderRespo
 	return resp
 }
 
+func (server *Server) buildBillingGroupResponse(ctx *gin.Context, bg db.BillingGroup) (billingGroupResponse, error) {
+	amounts, err := server.store.GetBillingGroupAmounts(ctx, bg.ID)
+	if err != nil {
+		return billingGroupResponse{}, err
+	}
+	return newBillingGroupResponse(bg, amounts), nil
+}
+
 // createBillingGroup 创建账单组（用于单独结算/拼桌）
 // @Summary 创建账单组
 // @Tags 账单组
@@ -116,7 +124,13 @@ func (server *Server) createBillingGroup(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, newBillingGroupResponse(billingGroup))
+	resp, err := server.buildBillingGroupResponse(ctx, billingGroup)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, resp)
 }
 
 // joinBillingGroup 加入账单组
@@ -201,7 +215,13 @@ func (server *Server) joinBillingGroup(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, newBillingGroupResponse(billingGroup))
+	resp, err := server.buildBillingGroupResponse(ctx, billingGroup)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // listBillingGroups 列出会话下的账单组
@@ -265,7 +285,12 @@ func (server *Server) listBillingGroups(ctx *gin.Context) {
 
 	resp := billingGroupListResponse{BillingGroups: make([]billingGroupResponse, 0, len(groups))}
 	for _, g := range groups {
-		resp.BillingGroups = append(resp.BillingGroups, newBillingGroupResponse(g))
+		item, err := server.buildBillingGroupResponse(ctx, g)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		resp.BillingGroups = append(resp.BillingGroups, item)
 	}
 	resp.Total = int64(len(resp.BillingGroups))
 

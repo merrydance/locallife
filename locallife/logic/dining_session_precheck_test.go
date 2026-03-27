@@ -150,6 +150,7 @@ func TestPrecheckDiningSession(t *testing.T) {
 				require.True(t, result.Reserved)
 				require.NotNil(t, result.Reservation)
 				require.NotNil(t, result.Order)
+				require.True(t, result.IsReservationOwner)
 				require.Equal(t, int64(500), *result.PaidAmount)
 				require.Equal(t, paymentModeDeposit, *result.PaymentMode)
 			},
@@ -183,6 +184,45 @@ func TestPrecheckDiningSession(t *testing.T) {
 				require.True(t, result.Reserved)
 				require.NotNil(t, result.Reservation)
 				require.Nil(t, result.Order)
+				require.False(t, result.IsReservationOwner)
+			},
+		},
+		{
+			name:  "ReservationAllowedMerchantStaff",
+			input: DiningSessionPrecheckInput{UserID: 120, TableID: table.ID, Now: now},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetTable(gomock.Any(), table.ID).
+					Times(1).
+					Return(table, nil)
+				store.EXPECT().
+					ListReservationsByTableAndDate(gomock.Any(), db.ListReservationsByTableAndDateParams{
+						TableID:         table.ID,
+						ReservationDate: reservationDate,
+					}).
+					Times(1).
+					Return([]db.TableReservation{reservation}, nil)
+				store.EXPECT().
+					GetMerchant(gomock.Any(), table.MerchantID).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					CheckUserHasMerchantAccess(gomock.Any(), db.CheckUserHasMerchantAccessParams{
+						MerchantID: table.MerchantID,
+						UserID:     int64(120),
+					}).
+					Times(1).
+					Return(true, nil)
+				store.EXPECT().
+					GetLatestOrderByReservation(gomock.Any(), pgtype.Int8{Int64: reservation.ID, Valid: true}).
+					Times(1).
+					Return(db.Order{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, result DiningSessionPrecheckResult, err error) {
+				require.NoError(t, err)
+				require.True(t, result.Reserved)
+				require.NotNil(t, result.Reservation)
+				require.False(t, result.IsReservationOwner)
 			},
 		},
 	}

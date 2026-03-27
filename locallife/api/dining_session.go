@@ -66,14 +66,14 @@ type billingGroupResponse struct {
 	ClosedAt        *string `json:"closed_at,omitempty"`
 }
 
-func newBillingGroupResponse(bg db.BillingGroup) billingGroupResponse {
+func newBillingGroupResponse(bg db.BillingGroup, amounts db.GetBillingGroupAmountsRow) billingGroupResponse {
 	resp := billingGroupResponse{
 		ID:              bg.ID,
 		DiningSessionID: bg.DiningSessionID,
 		Status:          bg.Status,
 		IsDefault:       bg.IsDefault,
-		TotalAmount:     bg.TotalAmount,
-		PaidAmount:      bg.PaidAmount,
+		TotalAmount:     amounts.TotalAmount,
+		PaidAmount:      amounts.PaidAmount,
 		CreatedAt:       bg.CreatedAt.Format(timeLayout),
 	}
 	if bg.UpdatedAt.Valid {
@@ -235,9 +235,14 @@ func (server *Server) openDiningSession(ctx *gin.Context) {
 	}
 
 	session := result.Session
+	billingGroupResp, err := server.buildBillingGroupResponse(ctx, result.BillingGroup)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	response := openDiningSessionResponse{
 		Session:       newDiningSessionResponse(session),
-		BillingGroup:  newBillingGroupResponse(result.BillingGroup),
+		BillingGroup:  billingGroupResp,
 		CartID:        result.CartID,
 		ImportedItems: result.ImportedItems,
 	}

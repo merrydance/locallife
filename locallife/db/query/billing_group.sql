@@ -26,6 +26,22 @@ SELECT * FROM billing_groups
 WHERE dining_session_id = $1
 ORDER BY id ASC;
 
+-- name: GetBillingGroupAmounts :one
+SELECT
+  COALESCE(SUM(o.total_amount) FILTER (
+    WHERE o.id IS NOT NULL
+      AND o.status <> 'cancelled'
+      AND o.replaced_by_order_id IS NULL
+  ), 0)::bigint AS total_amount,
+  COALESCE(SUM(o.total_amount) FILTER (
+    WHERE o.id IS NOT NULL
+      AND o.status IN ('paid', 'preparing', 'ready', 'courier_accepted', 'picked', 'delivering', 'rider_delivered', 'user_delivered', 'completed')
+      AND o.replaced_by_order_id IS NULL
+  ), 0)::bigint AS paid_amount
+FROM billing_group_orders bgo
+LEFT JOIN orders o ON o.id = bgo.order_id
+WHERE bgo.billing_group_id = $1;
+
 -- Billing group members
 
 -- name: CreateBillingGroupMember :one

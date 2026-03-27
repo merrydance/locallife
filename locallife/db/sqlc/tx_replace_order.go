@@ -70,6 +70,42 @@ func (store *SQLStore) ReplaceOrderTx(ctx context.Context, arg ReplaceOrderTxPar
 			return fmt.Errorf("mark old order replaced: %w", err)
 		}
 
+		oldGroupLinks, err := q.db.Query(ctx, `
+			SELECT billing_group_id
+			FROM billing_group_orders
+			WHERE order_id = $1
+			ORDER BY id ASC`, arg.OldOrderID)
+		if err != nil {
+			return fmt.Errorf("list old billing group links: %w", err)
+		}
+
+		groupIDs := make([]int64, 0, 1)
+
+		for oldGroupLinks.Next() {
+			var billingGroupID int64
+			if err := oldGroupLinks.Scan(&billingGroupID); err != nil {
+				oldGroupLinks.Close()
+				return fmt.Errorf("scan old billing group link: %w", err)
+			}
+			groupIDs = append(groupIDs, billingGroupID)
+		}
+		if err := oldGroupLinks.Err(); err != nil {
+			oldGroupLinks.Close()
+			return fmt.Errorf("iterate old billing group links: %w", err)
+		}
+		oldGroupLinks.Close()
+
+		for _, billingGroupID := range groupIDs {
+			if _, err := q.CreateBillingGroupOrder(ctx, CreateBillingGroupOrderParams{
+				BillingGroupID: billingGroupID,
+				OrderID:        result.NewOrder.ID,
+				Amount:         result.NewOrder.TotalAmount,
+				Status:         "linked",
+			}); err != nil {
+				return fmt.Errorf("create replacement billing group order: %w", err)
+			}
+		}
+
 		return nil
 	})
 

@@ -51,6 +51,9 @@ func ValidateOrderSessionAndBilling(ctx context.Context, store db.Store, input O
 		if reservation.MerchantID != input.MerchantID {
 			return result, NewRequestError(http.StatusBadRequest, errors.New("reservation does not belong to this merchant"))
 		}
+		if reservation.PaymentMode == paymentModeDeposit && reservation.Status == reservationStatusPending {
+			return result, NewRequestError(http.StatusConflict, errors.New("reservation deposit is not paid"))
+		}
 		if reservation.Status != "pending" && reservation.Status != "paid" && reservation.Status != "confirmed" && reservation.Status != "checked_in" {
 			return result, NewRequestError(http.StatusConflict, errors.New("reservation is in an invalid state"))
 		}

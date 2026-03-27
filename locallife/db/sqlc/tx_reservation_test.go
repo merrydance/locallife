@@ -196,11 +196,10 @@ func TestConfirmReservationTx_Success(t *testing.T) {
 	require.Equal(t, "confirmed", result.Reservation.Status)
 	require.True(t, result.Reservation.ConfirmedAt.Valid)
 
-	// 验证桌台状态已更新为reserved，并关联当前预定
+	// 验证确认预定不会提前占用桌台
 	require.Equal(t, room.ID, result.Table.ID)
-	require.Equal(t, "reserved", result.Table.Status)
-	require.True(t, result.Table.CurrentReservationID.Valid)
-	require.Equal(t, reservation.ID, result.Table.CurrentReservationID.Int64)
+	require.Equal(t, "available", result.Table.Status)
+	require.False(t, result.Table.CurrentReservationID.Valid)
 
 	// 从数据库验证
 	dbReservation, err := testStore.GetTableReservation(context.Background(), reservation.ID)
@@ -209,8 +208,51 @@ func TestConfirmReservationTx_Success(t *testing.T) {
 
 	dbTable, err := testStore.GetTable(context.Background(), room.ID)
 	require.NoError(t, err)
-	require.Equal(t, "reserved", dbTable.Status)
-	require.Equal(t, reservation.ID, dbTable.CurrentReservationID.Int64)
+	require.Equal(t, "available", dbTable.Status)
+	require.False(t, dbTable.CurrentReservationID.Valid)
+}
+
+func TestConfirmReservationTx_NearReservationDoesNotOccupyTable(t *testing.T) {
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	room := createRandomRoom(t, merchant.ID)
+
+	nearTime := time.Now().Add(20 * time.Minute)
+	reservation, err := testStore.CreateTableReservation(context.Background(), CreateTableReservationParams{
+		TableID:         room.ID,
+		UserID:          user.ID,
+		MerchantID:      merchant.ID,
+		ReservationDate: pgtype.Date{Time: nearTime, Valid: true},
+		ReservationTime: pgtype.Time{Microseconds: int64(nearTime.Hour()*3600+nearTime.Minute()*60) * 1000000, Valid: true},
+		GuestCount:      2,
+		ContactName:     "近时段确认",
+		ContactPhone:    "13800138000",
+		PaymentMode:     "deposit",
+		DepositAmount:   10000,
+		PrepaidAmount:   0,
+		RefundDeadline:  nearTime.Add(-2 * time.Hour),
+		PaymentDeadline: time.Now().Add(10 * time.Minute),
+		Status:          "pending",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateReservationToPaid(context.Background(), reservation.ID)
+	require.NoError(t, err)
+
+	result, err := testStore.ConfirmReservationTx(context.Background(), ConfirmReservationTxParams{
+		ReservationID: reservation.ID,
+		TableID:       room.ID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "confirmed", result.Reservation.Status)
+	require.Equal(t, "available", result.Table.Status)
+	require.False(t, result.Table.CurrentReservationID.Valid)
+
+	dbTable, err := testStore.GetTable(context.Background(), room.ID)
+	require.NoError(t, err)
+	require.Equal(t, "available", dbTable.Status)
+	require.False(t, dbTable.CurrentReservationID.Valid)
 }
 
 // ==================== CompleteReservationTx Tests ====================
@@ -234,6 +276,13 @@ func TestCompleteReservationTx_Success(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "confirmed", confirmResult.Reservation.Status)
+
+	_, err = testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:                   room.ID,
+		Status:               "occupied",
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	// 执行完成事务
 	arg := CompleteReservationTxParams{
@@ -351,7 +400,14 @@ func TestCancelReservationTx_WithTableRelease(t *testing.T) {
 		TableID:       room.ID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "reserved", confirmResult.Table.Status)
+	require.Equal(t, "available", confirmResult.Table.Status)
+
+	_, err = testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:                   room.ID,
+		Status:               "reserved",
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	// 执行取消事务
 	arg := CancelReservationTxParams{
@@ -398,7 +454,14 @@ func TestMarkNoShowTx_Success(t *testing.T) {
 		TableID:       room.ID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "reserved", confirmResult.Table.Status)
+	require.Equal(t, "available", confirmResult.Table.Status)
+
+	_, err = testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:                   room.ID,
+		Status:               "reserved",
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	// 执行标记未到店事务
 	arg := MarkNoShowTxParams{
@@ -488,8 +551,16 @@ func TestReservationCompleteFlow(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "confirmed", confirmResult.Reservation.Status)
-	require.Equal(t, "reserved", confirmResult.Table.Status)
-	require.Equal(t, reservationID, confirmResult.Table.CurrentReservationID.Int64)
+	require.Equal(t, "available", confirmResult.Table.Status)
+	require.False(t, confirmResult.Table.CurrentReservationID.Valid)
+
+	// Step 3.5: 到店开台后才真正占桌
+	_, err = testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:                   room.ID,
+		Status:               "occupied",
+		CurrentReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	// Step 4: 完成消费
 	completeResult, err := testStore.CompleteReservationTx(context.Background(), CompleteReservationTxParams{
@@ -541,7 +612,14 @@ func TestReservationCancelFlow(t *testing.T) {
 		TableID:       room.ID,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "reserved", confirmResult.Table.Status)
+	require.Equal(t, "available", confirmResult.Table.Status)
+
+	_, err = testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:                   room.ID,
+		Status:               "reserved",
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	// Step 4: 取消
 	cancelResult, err := testStore.CancelReservationTx(context.Background(), CancelReservationTxParams{
@@ -580,10 +658,17 @@ func TestReservationTableConsistency(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 验证一致性：预定confirmed时，桌台必须是reserved且关联此预定
+	// 验证一致性：预定confirmed时，桌台不应被提前占用
 	require.Equal(t, "confirmed", confirmResult.Reservation.Status)
-	require.Equal(t, "reserved", confirmResult.Table.Status)
-	require.Equal(t, reservation.ID, confirmResult.Table.CurrentReservationID.Int64)
+	require.Equal(t, "available", confirmResult.Table.Status)
+	require.False(t, confirmResult.Table.CurrentReservationID.Valid)
+
+	_, err = testStore.UpdateTableStatus(context.Background(), UpdateTableStatusParams{
+		ID:                   room.ID,
+		Status:               "occupied",
+		CurrentReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+	})
+	require.NoError(t, err)
 
 	// 完成预定
 	completeResult, err := testStore.CompleteReservationTx(context.Background(), CompleteReservationTxParams{

@@ -167,6 +167,7 @@ type Querier interface {
 	CountOrderUrges(ctx context.Context, orderID int64) (int64, error)
 	CountOrdersByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountOrdersByMerchantAndStatus(ctx context.Context, arg CountOrdersByMerchantAndStatusParams) (int64, error)
+	CountOrdersByMerchantWithFilters(ctx context.Context, arg CountOrdersByMerchantWithFiltersParams) (int64, error)
 	CountPaymentLedgerEntriesByUser(ctx context.Context, userID int64) (int64, error)
 	// 统计申请数量（包含 submitted/approved/rejected）
 	CountPendingOperatorApplications(ctx context.Context) (int64, error)
@@ -558,6 +559,7 @@ type Querier interface {
 	GetBestDeliveryPromotion(ctx context.Context, arg GetBestDeliveryPromotionParams) (MerchantDeliveryPromotion, error)
 	GetBestDiscountRule(ctx context.Context, arg GetBestDiscountRuleParams) (DiscountRule, error)
 	GetBillingGroup(ctx context.Context, id int64) (BillingGroup, error)
+	GetBillingGroupAmounts(ctx context.Context, billingGroupID int64) (GetBillingGroupAmountsRow, error)
 	GetBusinessHour(ctx context.Context, id int64) (MerchantBusinessHour, error)
 	GetBusinessHourByDate(ctx context.Context, arg GetBusinessHourByDateParams) (MerchantBusinessHour, error)
 	GetBusinessHourByDayOfWeek(ctx context.Context, arg GetBusinessHourByDayOfWeekParams) (MerchantBusinessHour, error)
@@ -1265,6 +1267,7 @@ type Querier interface {
 	ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerchantParams) ([]Order, error)
 	ListOrdersByMerchantAndStatus(ctx context.Context, arg ListOrdersByMerchantAndStatusParams) ([]Order, error)
 	ListOrdersByMerchantAndStatuses(ctx context.Context, arg ListOrdersByMerchantAndStatusesParams) ([]Order, error)
+	ListOrdersByMerchantWithFilters(ctx context.Context, arg ListOrdersByMerchantWithFiltersParams) ([]Order, error)
 	ListOrdersByUser(ctx context.Context, arg ListOrdersByUserParams) ([]ListOrdersByUserRow, error)
 	ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersByUserAndStatusParams) ([]ListOrdersByUserAndStatusRow, error)
 	ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error)

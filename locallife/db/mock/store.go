@@ -1773,6 +1773,21 @@ func (mr *MockStoreMockRecorder) CountOrdersByMerchantAndStatus(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOrdersByMerchantAndStatus", reflect.TypeOf((*MockStore)(nil).CountOrdersByMerchantAndStatus), ctx, arg)
 }
 
+// CountOrdersByMerchantWithFilters mocks base method.
+func (m *MockStore) CountOrdersByMerchantWithFilters(ctx context.Context, arg db.CountOrdersByMerchantWithFiltersParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOrdersByMerchantWithFilters", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOrdersByMerchantWithFilters indicates an expected call of CountOrdersByMerchantWithFilters.
+func (mr *MockStoreMockRecorder) CountOrdersByMerchantWithFilters(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOrdersByMerchantWithFilters", reflect.TypeOf((*MockStore)(nil).CountOrdersByMerchantWithFilters), ctx, arg)
+}
+
 // CountPaymentLedgerEntriesByUser mocks base method.
 func (m *MockStore) CountPaymentLedgerEntriesByUser(ctx context.Context, userID int64) (int64, error) {
 	m.ctrl.T.Helper()
@@ -5547,6 +5562,21 @@ func (m *MockStore) GetBillingGroup(ctx context.Context, id int64) (db.BillingGr
 func (mr *MockStoreMockRecorder) GetBillingGroup(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBillingGroup", reflect.TypeOf((*MockStore)(nil).GetBillingGroup), ctx, id)
+}
+
+// GetBillingGroupAmounts mocks base method.
+func (m *MockStore) GetBillingGroupAmounts(ctx context.Context, billingGroupID int64) (db.GetBillingGroupAmountsRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetBillingGroupAmounts", ctx, billingGroupID)
+	ret0, _ := ret[0].(db.GetBillingGroupAmountsRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetBillingGroupAmounts indicates an expected call of GetBillingGroupAmounts.
+func (mr *MockStoreMockRecorder) GetBillingGroupAmounts(ctx, billingGroupID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetBillingGroupAmounts", reflect.TypeOf((*MockStore)(nil).GetBillingGroupAmounts), ctx, billingGroupID)
 }
 
 // GetBusinessHour mocks base method.
@@ -12877,6 +12907,21 @@ func (m *MockStore) ListOrdersByMerchantAndStatuses(ctx context.Context, arg db.
 func (mr *MockStoreMockRecorder) ListOrdersByMerchantAndStatuses(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrdersByMerchantAndStatuses", reflect.TypeOf((*MockStore)(nil).ListOrdersByMerchantAndStatuses), ctx, arg)
+}
+
+// ListOrdersByMerchantWithFilters mocks base method.
+func (m *MockStore) ListOrdersByMerchantWithFilters(ctx context.Context, arg db.ListOrdersByMerchantWithFiltersParams) ([]db.Order, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListOrdersByMerchantWithFilters", ctx, arg)
+	ret0, _ := ret[0].([]db.Order)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListOrdersByMerchantWithFilters indicates an expected call of ListOrdersByMerchantWithFilters.
+func (mr *MockStoreMockRecorder) ListOrdersByMerchantWithFilters(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOrdersByMerchantWithFilters", reflect.TypeOf((*MockStore)(nil).ListOrdersByMerchantWithFilters), ctx, arg)
 }
 
 // ListOrdersByUser mocks base method.

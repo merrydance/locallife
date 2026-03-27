@@ -998,6 +998,9 @@ type listMerchantOrdersRequest struct {
 
 	// 订单状态筛选 (选填，枚举值: pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
 	Status string `form:"status" binding:"omitempty,oneof=pending paid preparing ready courier_accepted picked delivering rider_delivered user_delivered completed cancelled" enums:"pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled" example:"paid"`
+
+	// 订单类型筛选 (选填，枚举值: takeout,dine_in,takeaway,reservation)
+	OrderType string `form:"order_type" binding:"omitempty,oneof=takeout dine_in takeaway reservation" enums:"takeout,dine_in,takeaway,reservation" example:"reservation"`
 }
 
 type listMerchantOrdersResponse struct {
@@ -1029,6 +1032,7 @@ type listMerchantOrdersResponse struct {
 // @Param page_id query int true "页码(从1开始)" minimum(1)
 // @Param page_size query int true "每页条数" minimum(5) maximum(50)
 // @Param status query string false "订单状态筛选" Enums(pending,paid,preparing,ready,courier_accepted,picked,delivering,rider_delivered,user_delivered,completed,cancelled)
+// @Param order_type query string false "订单类型筛选" Enums(takeout,dine_in,takeaway,reservation)
 // @Success 200 {object} listMerchantOrdersResponse "订单列表"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
@@ -1060,10 +1064,15 @@ func (server *Server) listMerchantOrders(ctx *gin.Context) {
 	if req.Status != "" {
 		status = &req.Status
 	}
+	var orderType *string
+	if req.OrderType != "" {
+		orderType = &req.OrderType
+	}
 
 	result, err := service.ListMerchantOrders(ctx, logic.ListMerchantOrdersQueryInput{
 		MerchantID: merchant.ID,
 		Status:     status,
+		OrderType:  orderType,
 		PageID:     req.PageID,
 		PageSize:   req.PageSize,
 	})

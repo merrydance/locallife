@@ -240,6 +240,26 @@ func (q *Queries) CountOrdersByMerchantAndStatus(ctx context.Context, arg CountO
 	return count, err
 }
 
+const countOrdersByMerchantWithFilters = `-- name: CountOrdersByMerchantWithFilters :one
+SELECT COUNT(*) FROM orders
+WHERE merchant_id = $1
+    AND ($2::text IS NULL OR status = $2::text)
+    AND ($3::text IS NULL OR order_type = $3::text)
+`
+
+type CountOrdersByMerchantWithFiltersParams struct {
+	MerchantID int64       `json:"merchant_id"`
+	Status     pgtype.Text `json:"status"`
+	OrderType  pgtype.Text `json:"order_type"`
+}
+
+func (q *Queries) CountOrdersByMerchantWithFilters(ctx context.Context, arg CountOrdersByMerchantWithFiltersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrdersByMerchantWithFilters, arg.MerchantID, arg.Status, arg.OrderType)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrder = `-- name: CreateOrder :one
 INSERT INTO orders (
     order_no,
@@ -1282,6 +1302,97 @@ func (q *Queries) ListOrdersByMerchantAndStatuses(ctx context.Context, arg ListO
 		arg.Column2,
 		arg.Limit,
 		arg.Offset,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Order{}
+	for rows.Next() {
+		var i Order
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrderNo,
+			&i.UserID,
+			&i.MerchantID,
+			&i.OrderType,
+			&i.AddressID,
+			&i.DeliveryFee,
+			&i.DeliveryDistance,
+			&i.TableID,
+			&i.ReservationID,
+			&i.Subtotal,
+			&i.DiscountAmount,
+			&i.DeliveryFeeDiscount,
+			&i.TotalAmount,
+			&i.Status,
+			&i.PaymentMethod,
+			&i.PaidAt,
+			&i.Notes,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.CompletedAt,
+			&i.CancelledAt,
+			&i.CancelReason,
+			&i.FinalAmount,
+			&i.PlatformCommission,
+			&i.UserVoucherID,
+			&i.VoucherAmount,
+			&i.BalancePaid,
+			&i.MembershipID,
+			&i.FulfillmentStatus,
+			&i.ReplacedByOrderID,
+			&i.PickupCode,
+			&i.DispatchOrderID,
+			&i.FlowID,
+			&i.StatusHint,
+			&i.Badges,
+			&i.ExceptionState,
+			&i.ClaimChannel,
+			&i.Overtime,
+			&i.PrepStartAt,
+			&i.ReadyAt,
+			&i.CourierAcceptAt,
+			&i.PickedAt,
+			&i.RiderDeliveredAt,
+			&i.UserDeliveredAt,
+			&i.AutoUserDeliveredAt,
+			&i.DeliveryDuration,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrdersByMerchantWithFilters = `-- name: ListOrdersByMerchantWithFilters :many
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+WHERE merchant_id = $1
+    AND ($2::text IS NULL OR status = $2::text)
+    AND ($3::text IS NULL OR order_type = $3::text)
+ORDER BY created_at DESC
+LIMIT $5 OFFSET $4
+`
+
+type ListOrdersByMerchantWithFiltersParams struct {
+	MerchantID int64       `json:"merchant_id"`
+	Status     pgtype.Text `json:"status"`
+	OrderType  pgtype.Text `json:"order_type"`
+	Offset     int32       `json:"offset"`
+	Limit      int32       `json:"limit"`
+}
+
+func (q *Queries) ListOrdersByMerchantWithFilters(ctx context.Context, arg ListOrdersByMerchantWithFiltersParams) ([]Order, error) {
+	rows, err := q.db.Query(ctx, listOrdersByMerchantWithFilters,
+		arg.MerchantID,
+		arg.Status,
+		arg.OrderType,
+		arg.Offset,
+		arg.Limit,
 	)
 	if err != nil {
 		return nil, err

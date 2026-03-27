@@ -193,7 +193,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 
 	var depositDeduction int64
 	if reservation != nil && reservation.PaymentMode == "deposit" {
-		depositDeduction = reservation.DepositAmount
+		depositDeduction, err = ResolveReservationDepositDeduction(ctx, s.store, reservation)
+		if err != nil {
+			return CreateOrderCommandResult{}, err
+		}
 	}
 
 	var membershipID *int64

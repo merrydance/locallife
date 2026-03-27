@@ -13,6 +13,8 @@ This directory contains reusable prompt templates with normalized names.
 - `general-implementation.prompt.md`
 - `general-review.prompt.md`
 - `backend-implementation.prompt.md`
+- `backend-task-card-implementation.prompt.md`
+- `backend-phase-batch-implementation.prompt.md`
 - `backend-review-closure.prompt.md`
 - `backend-integration-test.prompt.md`
 - `backend-payment-runbook.prompt.md`

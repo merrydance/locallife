@@ -20,11 +20,12 @@ func TestValidateOrderSessionAndBilling_Reservation(t *testing.T) {
 	billingGroupID := int64(50)
 
 	baseReservation := db.TableReservation{
-		ID:         reservationID,
-		UserID:     userID,
-		MerchantID: merchantID,
-		TableID:    tableID,
-		Status:     "paid",
+		ID:          reservationID,
+		UserID:      userID,
+		MerchantID:  merchantID,
+		TableID:     tableID,
+		PaymentMode: paymentModeFull,
+		Status:      "paid",
 	}
 
 	testCases := []struct {
@@ -40,6 +41,24 @@ func TestValidateOrderSessionAndBilling_Reservation(t *testing.T) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
 				require.Equal(t, "reservation_id is required", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "DepositReservationPendingRequiresPayment",
+			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "reservation", ReservationID: &reservationID},
+			buildStubs: func(store *mockdb.MockStore) {
+				reservation := baseReservation
+				reservation.PaymentMode = paymentModeDeposit
+				reservation.Status = reservationStatusPending
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(reservation, nil)
+			},
+			check: func(t *testing.T, _ OrderSessionResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 409, reqErr.Status)
+				require.Equal(t, "reservation deposit is not paid", reqErr.Err.Error())
 			},
 		},
 		{
@@ -105,6 +124,28 @@ func TestValidateOrderSessionAndBilling_Reservation(t *testing.T) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
 				require.Equal(t, "table does not match reservation", reqErr.Err.Error())
+			},
+		},
+		{
+			name:  "DepositReservationPaidAllowed",
+			input: OrderSessionInput{UserID: userID, MerchantID: merchantID, OrderType: "reservation", ReservationID: &reservationID},
+			buildStubs: func(store *mockdb.MockStore) {
+				reservation := baseReservation
+				reservation.PaymentMode = paymentModeDeposit
+				store.EXPECT().
+					GetTableReservation(gomock.Any(), reservationID).
+					Times(1).
+					Return(reservation, nil)
+				store.EXPECT().
+					GetActiveDiningSessionByReservation(gomock.Any(), pgtype.Int8{Int64: reservationID, Valid: true}).
+					Times(1).
+					Return(db.DiningSession{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, result OrderSessionResult, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, result.Reservation)
+				require.Equal(t, paymentModeDeposit, result.Reservation.PaymentMode)
+				require.Nil(t, result.DiningSession)
 			},
 		},
 		{

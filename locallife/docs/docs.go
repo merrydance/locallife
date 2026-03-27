@@ -10711,6 +10711,18 @@ const docTemplate = `{
                         "description": "订单状态筛选",
                         "name": "status",
                         "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "takeout",
+                            "dine_in",
+                            "takeaway",
+                            "reservation"
+                        ],
+                        "type": "string",
+                        "description": "订单类型筛选",
+                        "name": "order_type",
+                        "in": "query"
                     }
                 ],
                 "responses": {

@@ -139,6 +139,56 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			},
 		},
 		{
+			name: "重复通知_查询状态失败返回FAIL",
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+				paymentClient.EXPECT().
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil)
+
+				store.EXPECT().
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(false, nil)
+
+				store.EXPECT().
+					GetWechatNotification(gomock.Any(), notificationID).
+					Times(1).
+					Return(db.WechatNotification{}, errors.New("lookup failed"))
+
+				paymentClient.EXPECT().
+					DecryptPaymentNotification(gomock.Any()).
+					Times(0)
+			},
+			setupRequest: func(t *testing.T) *http.Request {
+				requestBody := map[string]interface{}{
+					"id":            notificationID,
+					"event_type":    "TRANSACTION.SUCCESS",
+					"resource_type": "encrypt-resource",
+					"resource": map[string]interface{}{
+						"algorithm":       "AEAD_AES_256_GCM",
+						"ciphertext":      "mock_encrypted_data",
+						"nonce":           "mock_nonce",
+						"associated_data": "transaction",
+					},
+				}
+				bodyBytes, err := json.Marshal(requestBody)
+				require.NoError(t, err)
+
+				request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-pay/notify", bytes.NewReader(bodyBytes))
+				require.NoError(t, err)
+				request.Header.Set("Wechatpay-Timestamp", "1234567890")
+				request.Header.Set("Wechatpay-Nonce", "test_nonce")
+				request.Header.Set("Wechatpay-Signature", "test_signature")
+				request.Header.Set("Wechatpay-Serial", "test_serial")
+				return request
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
+				assertWechatFailResponse(t, recorder, "notification status lookup failed")
+			},
+		},
+		{
 			name: "重复通知_处理中返回FAIL",
 			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
 				paymentClient.EXPECT().

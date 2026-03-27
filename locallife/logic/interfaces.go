@@ -270,6 +270,7 @@ type GetMerchantOrderQueryResult struct {
 type ListMerchantOrdersQueryInput struct {
 	MerchantID int64
 	Status     *string
+	OrderType  *string
 	PageID     int32
 	PageSize   int32
 }

@@ -67,7 +67,7 @@ func PrecheckDiningSession(ctx context.Context, store db.Store, input DiningSess
 
 	result.Reserved = true
 	result.Reservation = activeReservation
-	result.IsReservationOwner = true
+	result.IsReservationOwner = activeReservation.UserID == input.UserID
 
 	paymentMode := activeReservation.PaymentMode
 	paidAmount := activeReservation.PrepaidAmount
