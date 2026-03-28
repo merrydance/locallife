@@ -348,15 +348,15 @@ func (c *AliyunOpenAPIClient) Recognize(ctx context.Context, capability Capabili
 		query.Set("Side", string(req.Side))
 		requestURL.RawQuery = query.Encode()
 	}
+	if len(req.Data) == 0 {
+		return nil, fmt.Errorf("aliyun ocr request body is empty for capability=%s media_asset_id=%d", capability, req.MediaAssetID)
+	}
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), bytes.NewReader(req.Data))
 	if err != nil {
 		return nil, err
 	}
-	contentType := strings.TrimSpace(req.ContentType)
-	if contentType == "" {
-		contentType = "application/octet-stream"
-	}
-	httpReq.Header.Set("Content-Type", contentType)
+	httpReq.ContentLength = int64(len(req.Data))
+	httpReq.Header.Set("Content-Type", "application/octet-stream")
 	httpReq.Header.Set("Accept", "application/json")
 	httpReq.Header.Set("x-acs-version", op.Version)
 	httpReq.Header.Set("x-acs-action", op.Action)
@@ -373,7 +373,7 @@ func (c *AliyunOpenAPIClient) Recognize(ctx context.Context, capability Capabili
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		return nil, parseAliyunAPIError(resp.StatusCode, payload)
+		return nil, fmt.Errorf("%w: action=%s body_len=%d media_asset_id=%d", parseAliyunAPIError(resp.StatusCode, payload), op.Action, len(req.Data), req.MediaAssetID)
 	}
 	return json.RawMessage(payload), nil
 }

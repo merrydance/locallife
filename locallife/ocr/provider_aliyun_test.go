@@ -219,7 +219,7 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 		if got := r.Header.Get("x-acs-version"); got != "2021-07-07" {
 			t.Fatalf("x-acs-version = %s", got)
 		}
-		if got := r.Header.Get("Content-Type"); got != "image/jpeg" {
+		if got := r.Header.Get("Content-Type"); got != "application/octet-stream" {
 			t.Fatalf("content-type = %s", got)
 		}
 		if got := r.Header.Get("Accept"); got != "application/json" {
@@ -278,6 +278,14 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 	}
 	if string(capturedBody) != "img-bytes" {
 		t.Fatalf("raw request body = %q", string(capturedBody))
+	}
+}
+
+func TestAliyunOpenAPIClientRecognizeRejectsEmptyBody(t *testing.T) {
+	client := &AliyunOpenAPIClient{endpoint: "https://ocr-api.cn-hangzhou.aliyuncs.com", region: "cn-hangzhou"}
+	_, err := client.Recognize(context.Background(), CapabilityAliyunBusinessLicense, RecognizeRequest{DocumentType: DocumentTypeBusinessLicense, MediaAssetID: 77})
+	if err == nil || !strings.Contains(err.Error(), "request body is empty") {
+		t.Fatalf("expected empty body error, got %v", err)
 	}
 }
 
