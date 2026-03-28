@@ -1798,7 +1798,6 @@ const getUsersByDeviceFingerprint = `-- name: GetUsersByDeviceFingerprint :many
 SELECT DISTINCT user_id
 FROM user_devices
 WHERE device_fingerprint = $1
-ORDER BY last_seen DESC
 `
 
 func (q *Queries) GetUsersByDeviceFingerprint(ctx context.Context, deviceFingerprint pgtype.Text) ([]int64, error) {
@@ -1825,7 +1824,6 @@ const getUsersByDeviceID = `-- name: GetUsersByDeviceID :many
 SELECT DISTINCT user_id
 FROM user_devices
 WHERE device_id = $1
-ORDER BY last_seen DESC
 `
 
 func (q *Queries) GetUsersByDeviceID(ctx context.Context, deviceID string) ([]int64, error) {

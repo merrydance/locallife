@@ -105,31 +105,71 @@ type BehaviorBlocklist struct {
 }
 
 type BehaviorDecision struct {
-	ID                 int64       `json:"id"`
-	OrderID            pgtype.Int8 `json:"order_id"`
-	UserID             pgtype.Int8 `json:"user_id"`
-	MerchantID         pgtype.Int8 `json:"merchant_id"`
-	RiderID            pgtype.Int8 `json:"rider_id"`
-	DecisionVersion    string      `json:"decision_version"`
-	ReasonCodes        []string    `json:"reason_codes"`
-	ResponsibleParty   string      `json:"responsible_party"`
-	CompensationSource string      `json:"compensation_source"`
-	DecisionStatus     string      `json:"decision_status"`
-	TraceSummary       pgtype.Text `json:"trace_summary"`
-	CreatedAt          time.Time   `json:"created_at"`
-	UpdatedAt          time.Time   `json:"updated_at"`
-	ReservationID      pgtype.Int8 `json:"reservation_id"`
+	ID                     int64       `json:"id"`
+	OrderID                pgtype.Int8 `json:"order_id"`
+	UserID                 pgtype.Int8 `json:"user_id"`
+	MerchantID             pgtype.Int8 `json:"merchant_id"`
+	RiderID                pgtype.Int8 `json:"rider_id"`
+	DecisionVersion        string      `json:"decision_version"`
+	ReasonCodes            []string    `json:"reason_codes"`
+	ResponsibleParty       string      `json:"responsible_party"`
+	CompensationSource     string      `json:"compensation_source"`
+	DecisionStatus         string      `json:"decision_status"`
+	TraceSummary           pgtype.Text `json:"trace_summary"`
+	CreatedAt              time.Time   `json:"created_at"`
+	UpdatedAt              time.Time   `json:"updated_at"`
+	ReservationID          pgtype.Int8 `json:"reservation_id"`
+	ClaimID                pgtype.Int8 `json:"claim_id"`
+	DecisionMode           pgtype.Text `json:"decision_mode"`
+	ResponsibilityDomain   pgtype.Text `json:"responsibility_domain"`
+	PayoutMode             pgtype.Text `json:"payout_mode"`
+	EffectiveStatus        string      `json:"effective_status"`
+	ConfidenceScore        pgtype.Int4 `json:"confidence_score"`
+	UserRiskScore          pgtype.Int4 `json:"user_risk_score"`
+	MerchantLiabilityScore pgtype.Int4 `json:"merchant_liability_score"`
+	RiderLiabilityScore    pgtype.Int4 `json:"rider_liability_score"`
+	FallbackReason         pgtype.Text `json:"fallback_reason"`
+	RestrictionReason      pgtype.Text `json:"restriction_reason"`
+	LiabilityShares        []byte      `json:"liability_shares"`
+	ScoreBreakdown         []byte      `json:"score_breakdown"`
+	GraphHits              []byte      `json:"graph_hits"`
+	FactSnapshot           []byte      `json:"fact_snapshot"`
+	SupersedesDecisionID   pgtype.Int8 `json:"supersedes_decision_id"`
+	OverturnedByDecisionID pgtype.Int8 `json:"overturned_by_decision_id"`
+	ProfileEffectApplied   bool        `json:"profile_effect_applied"`
+}
+
+type BehaviorDecisionEffect struct {
+	ID                   int64              `json:"id"`
+	DecisionID           int64              `json:"decision_id"`
+	EntityType           string             `json:"entity_type"`
+	EntityID             int64              `json:"entity_id"`
+	MetricKey            string             `json:"metric_key"`
+	DeltaValue           int64              `json:"delta_value"`
+	Status               string             `json:"status"`
+	AppliedAt            time.Time          `json:"applied_at"`
+	RevertedAt           pgtype.Timestamptz `json:"reverted_at"`
+	RevertedByDecisionID pgtype.Int8        `json:"reverted_by_decision_id"`
+	Note                 pgtype.Text        `json:"note"`
+	CreatedAt            time.Time          `json:"created_at"`
 }
 
 type BehaviorTraceSnapshot struct {
-	ID              int64          `json:"id"`
-	DecisionID      int64          `json:"decision_id"`
-	WindowDays      int32          `json:"window_days"`
-	AbnormalCount   int32          `json:"abnormal_count"`
-	TotalCount      int32          `json:"total_count"`
-	AbnormalRate    pgtype.Numeric `json:"abnormal_rate"`
-	AssociationHits []string       `json:"association_hits"`
-	CreatedAt       time.Time      `json:"created_at"`
+	ID                 int64          `json:"id"`
+	DecisionID         int64          `json:"decision_id"`
+	WindowDays         int32          `json:"window_days"`
+	AbnormalCount      int32          `json:"abnormal_count"`
+	TotalCount         int32          `json:"total_count"`
+	AbnormalRate       pgtype.Numeric `json:"abnormal_rate"`
+	AssociationHits    []string       `json:"association_hits"`
+	CreatedAt          time.Time      `json:"created_at"`
+	ActorType          pgtype.Text    `json:"actor_type"`
+	ActorID            pgtype.Int8    `json:"actor_id"`
+	WindowKey          pgtype.Text    `json:"window_key"`
+	StatsScope         pgtype.Text    `json:"stats_scope"`
+	MetricPayload      []byte         `json:"metric_payload"`
+	AssociationPayload []byte         `json:"association_payload"`
+	SnapshotVersion    pgtype.Text    `json:"snapshot_version"`
 }
 
 type BillingGroup struct {
@@ -257,6 +297,17 @@ type ClaimRecovery struct {
 	DecisionSnapshot []byte      `json:"decision_snapshot"`
 	CreatedAt        time.Time   `json:"created_at"`
 	UpdatedAt        time.Time   `json:"updated_at"`
+	DecisionID       pgtype.Int8 `json:"decision_id"`
+	RecoveryBasis    pgtype.Text `json:"recovery_basis"`
+}
+
+type ClaimRecoveryEvent struct {
+	ID         int64       `json:"id"`
+	RecoveryID int64       `json:"recovery_id"`
+	DecisionID pgtype.Int8 `json:"decision_id"`
+	EventType  string      `json:"event_type"`
+	Payload    []byte      `json:"payload"`
+	CreatedAt  time.Time   `json:"created_at"`
 }
 
 type CloudPrinter struct {

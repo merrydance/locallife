@@ -445,14 +445,12 @@ RETURNING *;
 -- name: GetUsersByDeviceID :many
 SELECT DISTINCT user_id
 FROM user_devices
-WHERE device_id = $1
-ORDER BY last_seen DESC;
+WHERE device_id = $1;
 
 -- name: GetUsersByDeviceFingerprint :many
 SELECT DISTINCT user_id
 FROM user_devices
-WHERE device_fingerprint = $1
-ORDER BY last_seen DESC;
+WHERE device_fingerprint = $1;
 
 -- name: GetDevicesByUserID :many
 SELECT *

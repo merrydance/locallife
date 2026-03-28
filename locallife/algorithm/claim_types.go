@@ -20,6 +20,14 @@ const (
 	ApprovalTypeAuto    = "auto"
 )
 
+// Formal decision modes
+const (
+	DecisionModeMerchantRecovery = db.BehaviorDecisionModeMerchantRecovery
+	DecisionModeRiderRecovery    = db.BehaviorDecisionModeRiderRecovery
+	DecisionModePlatformFallback = db.BehaviorDecisionModePlatformFallback
+	DecisionModeUserRestricted   = db.BehaviorDecisionModeUserRestricted
+)
+
 // Compensation sources
 const (
 	CompensationSourceMerchant = "merchant"
@@ -29,10 +37,10 @@ const (
 
 // Claim behavior statuses
 const (
-	ClaimBehaviorNormal        = "normal"
-	ClaimBehaviorWarned        = "warned"
-	ClaimBehaviorPlatformPay   = "platform-pay"
-	ClaimBehaviorRejectService = "reject-service"
+	ClaimBehaviorNormal           = "normal"
+	ClaimBehaviorWarned           = "warned"
+	ClaimBehaviorPlatformFallback = DecisionModePlatformFallback
+	ClaimBehaviorUserRestricted   = DecisionModeUserRestricted
 )
 
 // Claim statuses
@@ -74,6 +82,21 @@ type Decision struct {
 	Warning            string          `json:"warning,omitempty"`
 	ShouldWarn         bool            `json:"should_warn,omitempty"`
 	LookbackData       *LookbackResult `json:"lookback_data,omitempty"`
+}
+
+func DecisionApprovalType(decisionType string) string {
+	switch decisionType {
+	case ApprovalTypeInstant:
+		return ApprovalTypeInstant
+	case ApprovalTypeAuto,
+		DecisionModeMerchantRecovery,
+		DecisionModeRiderRecovery,
+		DecisionModePlatformFallback,
+		DecisionModeUserRestricted:
+		return ApprovalTypeAuto
+	default:
+		return decisionType
+	}
 }
 
 // ClaimBehaviorResult 用户索赔行为评估结果

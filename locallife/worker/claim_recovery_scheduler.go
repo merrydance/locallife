@@ -112,6 +112,8 @@ func (s *ClaimRecoveryScheduler) runOnce(ctx context.Context) {
 			}); err != nil {
 				log.Error().Err(err).Int64("merchant_id", order.MerchantID).Msg("suspend merchant for recovery failed")
 			}
+			// 这里读取 persisted behavior decision 只是为了给逾期后的 block action 找到归属锚点。
+			// scheduler 不重跑主判，只把已发生的恢复逾期后处理记录到既有 decision 上。
 			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: updated.OrderID, Valid: true}); err == nil && len(decisions) > 0 {
 				detail, _ := json.Marshal(map[string]any{
 					"action":        "suspend_takeout",
@@ -142,6 +144,8 @@ func (s *ClaimRecoveryScheduler) runOnce(ctx context.Context) {
 			}); err != nil {
 				log.Error().Err(err).Int64("rider_id", delivery.RiderID.Int64).Msg("suspend rider for recovery failed")
 			}
+			// 这里读取 persisted behavior decision 只是为了给逾期后的 block action 找到归属锚点。
+			// scheduler 不重跑主判，只把已发生的恢复逾期后处理记录到既有 decision 上。
 			if decisions, err := s.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: updated.OrderID, Valid: true}); err == nil && len(decisions) > 0 {
 				detail, _ := json.Marshal(map[string]any{
 					"action":        "suspend_rider",

@@ -5,20 +5,30 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/websocket"
+	"github.com/rs/zerolog/log"
 )
 
-// NotificationDistributor 通知分发器接口
-// 用于解耦 algorithm 包和 worker 包，避免循环依赖
+// NotificationDistributor 通知分发器接口。
+// algorithm 层只负责分发正式 notify action；实际的通知落库、偏好检查和后续推送由下游实现负责。
+// 当前生产实现会将通知提交到 worker 任务，由通知中心创建 notification 记录并按能力做实时推送。
 type NotificationDistributor interface {
-	// SendUserNotification 发送用户通知（站内通知 + 可选的微信消息）
+	// SendUserNotification 分发用户通知。
+	// 当前主实现会创建站内通知记录；若下游支持，也可追加 WebSocket 或微信订阅消息等渠道。
 	// notificationType: system/food_safety/order 等
 	// relatedType: claim/order/merchant 等
 	SendUserNotification(ctx context.Context, userID int64, notificationType, title, content string, relatedType string, relatedID int64) error
+}
+
+// ClaimPayoutDistributor 分发正式 payout action。
+// algorithm 层只负责触发持久化 payout action 的执行；具体入队和重试由下游实现负责。
+type ClaimPayoutDistributor interface {
+	EnqueueClaimPayoutAction(ctx context.Context, actionID int64) error
 }
 
 // ClaimAutoApproval 索赔自动审核器
@@ -29,8 +39,9 @@ type NotificationDistributor interface {
 type ClaimAutoApproval struct {
 	store                   db.Store
 	lookbackChecker         *LookbackChecker
-	notificationDistributor NotificationDistributor // 通知分发器（可选，用于发送用户通知）
-	wsHub                   WebSocketHub            // WebSocket通知（必需，用于商户/骑手实时推送）
+	notificationDistributor NotificationDistributor // 可选。用于把用户通知动作分发到通知中心链路。
+	payoutDistributor       ClaimPayoutDistributor  // 可选。用于把 payout action 分发到异步执行链路。
+	wsHub                   WebSocketHub            // 可选。仅用于商户/骑手的实时 WebSocket fallback。
 }
 
 type ClaimCompensationContext struct {
@@ -58,6 +69,29 @@ type ClaimRecoveryPlan struct {
 	DecisionSnapshot []byte
 }
 
+type behaviorRestrictionActionPayload struct {
+	Action            string `json:"action"`
+	ClaimID           int64  `json:"claim_id"`
+	UserID            int64  `json:"user_id"`
+	DecisionMode      string `json:"decision_mode"`
+	RestrictionReason string `json:"restriction_reason,omitempty"`
+	Remark            string `json:"remark"`
+}
+
+type behaviorNotifyActionPayload struct {
+	Action           string `json:"action"`
+	ClaimID          int64  `json:"claim_id"`
+	TargetEntity     string `json:"target_entity"`
+	TargetID         int64  `json:"target_id,omitempty"`
+	RecipientUserID  int64  `json:"recipient_user_id,omitempty"`
+	NotificationType string `json:"notification_type"`
+	Title            string `json:"title"`
+	Content          string `json:"content"`
+	RelatedType      string `json:"related_type"`
+	RelatedID        int64  `json:"related_id"`
+	Remark           string `json:"remark"`
+}
+
 // WebSocketHub WebSocket通知接口
 type WebSocketHub interface {
 	SendToMerchant(merchantID int64, msg websocket.Message)
@@ -74,9 +108,15 @@ func NewClaimAutoApproval(store db.Store, wsHub WebSocketHub) *ClaimAutoApproval
 	}
 }
 
-// SetNotificationDistributor 设置通知分发器（可选）
+// SetNotificationDistributor 设置通知分发器（可选）。
+// 未设置时，用户侧 notify action 不会在 algorithm 层直接送达，但通知中心链路可由上层自行接入。
 func (caa *ClaimAutoApproval) SetNotificationDistributor(distributor NotificationDistributor) {
 	caa.notificationDistributor = distributor
+}
+
+// SetClaimPayoutDistributor 设置 payout action 分发器（可选）。
+func (caa *ClaimAutoApproval) SetClaimPayoutDistributor(distributor ClaimPayoutDistributor) {
+	caa.payoutDistributor = distributor
 }
 
 // EvaluateClaim 评估异常订单索赔申请。
@@ -169,25 +209,21 @@ func (caa *ClaimAutoApproval) EvaluateClaim(
 			decision.Warning = "您的索赔行为已触发警告，后续索赔将进入平台行为回溯审计"
 		}
 
-	case ClaimBehaviorPlatformPay:
-		// 问题用户：照赔，但平台垫付
-		decision.Type = "platform-pay"
-		decision.Reason = "问题用户，平台垫付"
+	case ClaimBehaviorPlatformFallback:
+		// 用户风险升高但未到限制服务阈值：本次由平台正式兜底
+		decision.Type = DecisionModePlatformFallback
+		decision.Reason = "用户风险较高，本次由平台兜底处理"
 		decision.CompensationSource = CompensationSourcePlatform
 		decision.Warning = fmt.Sprintf(
-			"您的索赔行为异常（近3个月%d单索赔%d次），本次由平台垫付。如继续异常行为，将被拒绝服务。",
+			"您的索赔行为异常（近3个月%d单索赔%d次），本次已由平台兜底处理。如继续异常行为，账号将被限制服务。",
 			behaviorResult.TakeoutOrders, behaviorResult.ClaimCount+1)
-		// 记录平台垫付
-		caa.recordPlatformPay(ctx, userID, decision.Warning)
 
-	case ClaimBehaviorRejectService:
-		// 拒绝服务用户：照赔 + 平台垫付 + 拒绝后续服务
-		decision.Type = "platform-pay"
-		decision.Reason = "拒绝服务用户，平台垫付"
+	case ClaimBehaviorUserRestricted:
+		// 确认高风险用户：本次进入 user_restricted 正式模式
+		decision.Type = DecisionModeUserRestricted
+		decision.Reason = "用户风险已确认，本次限制服务并由平台兜底"
 		decision.CompensationSource = CompensationSourcePlatform
 		decision.Warning = "您的账号因索赔行为异常已被限制服务，本次索赔由平台垫付。"
-		// 触发拒绝服务流程
-		caa.triggerRejectService(ctx, userID)
 	}
 
 	return decision, nil
@@ -217,16 +253,16 @@ func (caa *ClaimAutoApproval) CheckUserClaimBehavior(ctx context.Context, userID
 	// 判定状态
 	// 1. 平台垫付次数>=2次 → 拒绝服务
 	if stats.PlatformPayCount >= 2 {
-		result.Status = ClaimBehaviorRejectService
+		result.Status = ClaimBehaviorUserRestricted
 		result.RejectService = true
-		result.Message = "多次平台垫付，拒绝服务"
+		result.Message = "多次平台兜底，限制服务"
 		return result, nil
 	}
 
 	// 2. 已有平台垫付记录：持续平台垫付
 	if stats.PlatformPayCount > 0 {
-		result.Status = ClaimBehaviorPlatformPay
-		result.Message = "问题用户，平台垫付"
+		result.Status = ClaimBehaviorPlatformFallback
+		result.Message = "问题用户，平台兜底"
 		return result, nil
 	}
 
@@ -294,8 +330,8 @@ func (caa *ClaimAutoApproval) recordPlatformPay(ctx context.Context, userID int6
 	})
 }
 
-// triggerRejectService 触发拒绝服务
-func (caa *ClaimAutoApproval) triggerRejectService(ctx context.Context, userID int64) {
+// applyUserRestrictionBlock writes the formal restriction record without dispatching notifications.
+func (caa *ClaimAutoApproval) applyUserRestrictionBlock(ctx context.Context, userID int64) {
 	// 外卖拒绝服务：写入行为追溯黑名单
 	_, err := caa.store.GetActiveBehaviorBlocklist(ctx, db.GetActiveBehaviorBlocklistParams{
 		EntityType: "user",
@@ -305,6 +341,7 @@ func (caa *ClaimAutoApproval) triggerRejectService(ctx context.Context, userID i
 		return
 	}
 	if !errors.Is(err, db.ErrRecordNotFound) {
+		log.Error().Err(err).Int64("user_id", userID).Msg("load active behavior blocklist failed during persisted restriction execution")
 		return
 	}
 
@@ -314,27 +351,14 @@ func (caa *ClaimAutoApproval) triggerRejectService(ctx context.Context, userID i
 	}
 	blockUntil := time.Now().AddDate(0, 0, int(blockDays))
 
-	_, _ = caa.store.CreateBehaviorBlocklist(ctx, db.CreateBehaviorBlocklistParams{
+	if _, err := caa.store.CreateBehaviorBlocklist(ctx, db.CreateBehaviorBlocklistParams{
 		EntityType: "user",
 		EntityID:   userID,
 		ReasonCode: "malicious-claims",
 		BlockUntil: pgtype.Timestamptz{Time: blockUntil, Valid: true},
 		Status:     "active",
-	})
-
-	// 发送通知给用户（站内通知）
-	// C端用户使用站内通知系统，用户打开小程序时可看到
-	// 微信订阅消息需要用户授权，由前端根据通知内容决定是否触发
-	if caa.notificationDistributor != nil {
-		_ = caa.notificationDistributor.SendUserNotification(
-			ctx,
-			userID,
-			"system",   // notificationType
-			"账户状态变更通知", // title
-			"由于您的账户存在异常索赔行为，服务已受到限制。如有疑问请联系客服。", // content
-			"user", // relatedType
-			userID, // relatedID
-		)
+	}); err != nil {
+		log.Error().Err(err).Int64("user_id", userID).Msg("create behavior blocklist failed during persisted restriction execution")
 	}
 }
 
@@ -454,8 +478,8 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	status := ClaimStatusPending
 	var approvedAmount *int64
 
-	switch decision.Type {
-	case ApprovalTypeInstant, ApprovalTypeAuto, "platform-pay":
+	switch DecisionApprovalType(decision.Type) {
+	case ApprovalTypeInstant, ApprovalTypeAuto:
 		// 秒赔、自动通过、平台垫付都是自动批准
 		status = ClaimStatusAutoApproved
 		approvedAmount = &decision.Amount
@@ -467,7 +491,7 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	}
 
 	reasonCodes := []string{decision.Type}
-	if decision.BehaviorStatus != "" {
+	if decision.BehaviorStatus != "" && decision.BehaviorStatus != decision.Type {
 		reasonCodes = append(reasonCodes, decision.BehaviorStatus)
 	}
 
@@ -486,6 +510,9 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 		case CompensationSourcePlatform:
 			responsibleParty = "platform_fallback"
 		}
+	}
+	if decision.BehaviorStatus == ClaimBehaviorUserRestricted || decision.Type == DecisionModeUserRestricted {
+		responsibleParty = "user"
 	}
 
 	recoveryTarget := ""
@@ -506,7 +533,7 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 		Description:        description,
 		ClaimAmount:        claimAmount,
 		Status:             status,
-		ApprovalType:       decision.Type,
+		ApprovalType:       DecisionApprovalType(decision.Type),
 		ApprovedAmount:     approvedAmount,
 		AutoApprovalReason: decision.Reason,
 		LookbackResult:     lookbackJSON,
@@ -532,7 +559,12 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	}
 
 	claim := result.Claim
-	caa.notifyResponsibleParty(ctx, claim, claimType, decision, recoveryPlan)
+	// 这里开始只消费事务返回的正式结果。
+	// claim 主链的 payout/restriction/notification/recovery 语义都应来自 persisted decision/action，
+	// algorithm 不再回查 behavior tables 重新拼装副作用。
+	alignDecisionWithPersistedBehaviorDecision(decision, result.BehaviorDecision, recoveryPlan)
+	caa.applyPersistedDecisionSideEffects(ctx, userID, result.BehaviorDecision, decision)
+	caa.executePersistedBehaviorActions(ctx, result)
 
 	// 餐损赔付后的事后处理
 	if claimType == ClaimTypeDamage && decision.NeedsReview {
@@ -547,81 +579,145 @@ func (caa *ClaimAutoApproval) CreateClaimWithDecisionAndEvidence(
 	return &claim, nil
 }
 
-func (caa *ClaimAutoApproval) notifyResponsibleParty(
-	ctx context.Context,
-	claim db.Claim,
-	claimType string,
-	decision *Decision,
-	recoveryPlan *ClaimRecoveryPlan,
-) {
-	if recoveryPlan == nil || decision == nil {
-		return
-	}
-	if recoveryPlan.RecoveryTarget != "merchant" && recoveryPlan.RecoveryTarget != "rider" {
-		return
-	}
-	if caa.notificationDistributor == nil && caa.wsHub == nil {
+func (caa *ClaimAutoApproval) applyPersistedDecisionSideEffects(ctx context.Context, userID int64, behaviorDecision db.BehaviorDecision, decision *Decision) {
+	if !behaviorDecision.DecisionMode.Valid || decision == nil {
 		return
 	}
 
-	order, err := caa.store.GetOrder(ctx, claim.OrderID)
-	if err != nil {
-		return
-	}
-
-	title := "异常订单判责通知"
-	content := fmt.Sprintf(
-		"订单%s的%s异常索赔已判定由您承担。平台已向用户先行赔付%s，并已生成%s追偿单，请尽快处理。",
-		order.OrderNo,
-		claimTypeLabel(claimType),
-		formatClaimAmount(decision.Amount),
-		formatClaimAmount(recoveryPlan.RecoveryAmount),
-	)
-	if decision.Reason != "" {
-		content += " 判责依据：" + decision.Reason + "。"
-	}
-
-	switch recoveryPlan.RecoveryTarget {
-	case "merchant":
-		merchant, err := caa.store.GetMerchant(ctx, order.MerchantID)
-		if err != nil {
-			return
+	switch behaviorDecision.DecisionMode.String {
+	case db.BehaviorDecisionModePlatformFallback:
+		reason := decision.Warning
+		if reason == "" {
+			reason = decision.Reason
 		}
-		if caa.notificationDistributor != nil {
-			_ = caa.notificationDistributor.SendUserNotification(ctx, merchant.OwnerUserID, "system", title, content, "claim", claim.ID)
-		}
-		caa.sendNotification("merchant", title, content, merchant.ID)
-	case "rider":
-		delivery, err := caa.store.GetDeliveryByOrderID(ctx, order.ID)
-		if err != nil || !delivery.RiderID.Valid {
-			return
-		}
-		rider, err := caa.store.GetRider(ctx, delivery.RiderID.Int64)
-		if err != nil {
-			return
-		}
-		if caa.notificationDistributor != nil {
-			_ = caa.notificationDistributor.SendUserNotification(ctx, rider.UserID, "system", title, content, "claim", claim.ID)
-		}
-		caa.sendNotification("rider", title, content, rider.ID)
+		caa.recordPlatformPay(ctx, userID, reason)
 	}
 }
 
-func claimTypeLabel(claimType string) string {
-	switch claimType {
-	case ClaimTypeForeignObject:
-		return "异物"
-	case ClaimTypeDamage:
-		return "餐损"
-	case ClaimTypeTimeout:
-		return "超时"
-	default:
-		return "异常订单"
+func (caa *ClaimAutoApproval) executePersistedBehaviorActions(ctx context.Context, result db.CreateClaimWithBehaviorTxResult) {
+	if result.PayoutAction != nil {
+		caa.executePayoutAction(ctx, *result.PayoutAction)
+	}
+	if result.RestrictionAction != nil {
+		caa.executeRestrictionAction(ctx, *result.RestrictionAction)
+	}
+	if result.NotificationAction != nil {
+		caa.executeNotificationAction(ctx, *result.NotificationAction)
 	}
 }
 
-func formatClaimAmount(amount int64) string {
-	return fmt.Sprintf("%.2f元", float64(amount)/100)
+func (caa *ClaimAutoApproval) executePayoutAction(ctx context.Context, action db.BehaviorAction) {
+	if action.ID == 0 {
+		log.Warn().Msg("skip persisted payout action without action id")
+		return
+	}
+	if caa.payoutDistributor == nil {
+		log.Error().Int64("behavior_action_id", action.ID).Msg("claim payout distributor unavailable during persisted payout execution")
+		return
+	}
+	if err := caa.payoutDistributor.EnqueueClaimPayoutAction(ctx, action.ID); err != nil {
+		log.Error().Err(err).Int64("behavior_action_id", action.ID).Msg("dispatch persisted payout action failed")
+	}
+}
+
+func (caa *ClaimAutoApproval) executeRestrictionAction(ctx context.Context, action db.BehaviorAction) {
+	var detail behaviorRestrictionActionPayload
+	if err := json.Unmarshal(action.Detail, &detail); err != nil {
+		log.Error().Err(err).Int64("behavior_action_id", action.ID).Str("action_type", action.ActionType).Msg("decode persisted restriction action detail failed")
+		return
+	}
+	if detail.UserID == 0 {
+		log.Warn().Int64("behavior_action_id", action.ID).Msg("skip persisted restriction action without user id")
+		return
+	}
+	caa.applyUserRestrictionBlock(ctx, detail.UserID)
+}
+
+func (caa *ClaimAutoApproval) executeNotificationAction(ctx context.Context, action db.BehaviorAction) {
+	var detail behaviorNotifyActionPayload
+	if err := json.Unmarshal(action.Detail, &detail); err != nil {
+		log.Error().Err(err).Int64("behavior_action_id", action.ID).Str("action_type", action.ActionType).Msg("decode persisted notification action detail failed")
+		return
+	}
+
+	if caa.notificationDistributor != nil && detail.RecipientUserID > 0 {
+		notificationType := detail.NotificationType
+		if notificationType == "" {
+			notificationType = "system"
+		}
+		relatedType := detail.RelatedType
+		if relatedType == "" {
+			relatedType = "claim"
+		}
+		if err := caa.notificationDistributor.SendUserNotification(
+			ctx,
+			detail.RecipientUserID,
+			notificationType,
+			detail.Title,
+			detail.Content,
+			relatedType,
+			detail.RelatedID,
+		); err != nil {
+			log.Error().Err(err).
+				Int64("behavior_action_id", action.ID).
+				Int64("recipient_user_id", detail.RecipientUserID).
+				Str("target_entity", detail.TargetEntity).
+				Msg("dispatch persisted notification action failed")
+		}
+	}
+
+	if detail.TargetID > 0 && (detail.TargetEntity == "merchant" || detail.TargetEntity == "rider") {
+		caa.sendNotification(detail.TargetEntity, detail.Title, detail.Content, detail.TargetID)
+	}
+}
+
+func alignDecisionWithPersistedBehaviorDecision(decision *Decision, behaviorDecision db.BehaviorDecision, recoveryPlan *ClaimRecoveryPlan) *ClaimRecoveryPlan {
+	if decision == nil || !behaviorDecision.DecisionMode.Valid {
+		return recoveryPlan
+	}
+
+	switch behaviorDecision.DecisionMode.String {
+	case db.BehaviorDecisionModePlatformFallback:
+		decision.Type = DecisionModePlatformFallback
+		decision.Approved = true
+		decision.CompensationSource = CompensationSourcePlatform
+		if reason := persistedBehaviorDecisionReason(behaviorDecision); reason != "" {
+			decision.Reason = reason
+			decision.Warning = reason
+		}
+		return nil
+	case db.BehaviorDecisionModeUserRestricted:
+		decision.Type = DecisionModeUserRestricted
+		decision.Approved = true
+		decision.BehaviorStatus = ClaimBehaviorUserRestricted
+		decision.CompensationSource = CompensationSourcePlatform
+		if reason := persistedBehaviorDecisionReason(behaviorDecision); reason != "" {
+			decision.Reason = reason
+			decision.Warning = reason
+		}
+		return nil
+	case db.BehaviorDecisionModeMerchantRecovery:
+		decision.Type = DecisionModeMerchantRecovery
+		decision.CompensationSource = CompensationSourceMerchant
+	case db.BehaviorDecisionModeRiderRecovery:
+		decision.Type = DecisionModeRiderRecovery
+		decision.CompensationSource = CompensationSourceRider
+	}
+
+	return recoveryPlan
+}
+
+func persistedBehaviorDecisionReason(behaviorDecision db.BehaviorDecision) string {
+	if behaviorDecision.TraceSummary.Valid && behaviorDecision.TraceSummary.String != "" {
+		return behaviorDecision.TraceSummary.String
+	}
+	if behaviorDecision.FallbackReason.Valid && behaviorDecision.FallbackReason.String != "" {
+		return behaviorDecision.FallbackReason.String
+	}
+	if behaviorDecision.RestrictionReason.Valid && behaviorDecision.RestrictionReason.String != "" {
+		return behaviorDecision.RestrictionReason.String
+	}
+	return ""
 }
 
 // handleSuspiciousPattern 处理可疑的餐损索赔模式
@@ -654,12 +750,9 @@ func (caa *ClaimAutoApproval) handleSuspiciousPattern(
 		warningMessage = "系统检测到可疑索赔模式，请注意"
 	}
 
-	// 发送用户通知
-	// 实现方式：通过站内通知系统发送，用户打开小程序时可查看
-	// 注意：
-	// 1. C端用户不使用WebSocket，使用站内通知系统
-	// 2. 微信订阅消息需要用户提前授权模板ID，属于运营配置层面
-	// 3. 如需发送微信订阅消息，可在 NotificationDistributor 中扩展实现
+	// 发送用户通知。
+	// 当前阶段只要求把通知写入通知中心；用户在小程序内可通过通知列表和未读计数接口获取。
+	// 普通用户不要求在本链路上接 WebSocket，也不要求额外补微信订阅消息离线触达。
 	if caa.notificationDistributor != nil {
 		_ = caa.notificationDistributor.SendUserNotification(
 			ctx,
@@ -675,9 +768,10 @@ func (caa *ClaimAutoApproval) handleSuspiciousPattern(
 	_ = reason
 }
 
-// sendNotification 发送WebSocket通知
+// sendNotification 发送商户/骑手 WebSocket 实时通知。
+// 该 helper 不承担普通用户通知送达；普通用户当前通过通知中心在小程序内拉取通知即可。
 func (caa *ClaimAutoApproval) sendNotification(entityType, title, message string, entityID int64) {
-	if caa.wsHub == nil {
+	if isNilWebSocketHub(caa.wsHub) {
 		return // 静默失败，不阻塞业务
 	}
 
@@ -703,6 +797,18 @@ func (caa *ClaimAutoApproval) sendNotification(entityType, title, message string
 		caa.wsHub.SendToMerchant(entityID, msg)
 	case "rider":
 		caa.wsHub.SendToRider(entityID, msg)
-		// 注：用户通知需要通过其他渠道（小程序模板消息）
+	}
+}
+
+func isNilWebSocketHub(hub WebSocketHub) bool {
+	if hub == nil {
+		return true
+	}
+	value := reflect.ValueOf(hub)
+	switch value.Kind() {
+	case reflect.Chan, reflect.Func, reflect.Interface, reflect.Map, reflect.Pointer, reflect.Slice:
+		return value.IsNil()
+	default:
+		return false
 	}
 }

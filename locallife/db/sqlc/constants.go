@@ -16,6 +16,40 @@ const (
 
 	OrderTypeReservation = "reservation"
 
+	BehaviorDecisionModeMerchantRecovery = "merchant_recovery"
+	BehaviorDecisionModeRiderRecovery    = "rider_recovery"
+	BehaviorDecisionModePlatformFallback = "platform_fallback"
+	BehaviorDecisionModeUserRestricted   = "user_restricted"
+
+	BehaviorResponsibilityDomainMerchant = "merchant_domain"
+	BehaviorResponsibilityDomainRider    = "rider_domain"
+	BehaviorResponsibilityDomainUser     = "user_domain"
+	BehaviorResponsibilityDomainUnknown  = "unknown"
+
+	BehaviorPayoutModeInstantPaid = "instant_paid"
+	BehaviorPayoutModeLimitedPaid = "limited_paid"
+	BehaviorPayoutModeRejected    = "rejected"
+
+	BehaviorEffectiveStatusEffective = "effective"
+
+	BehaviorDecisionEffectStatusApplied  = "applied"
+	BehaviorDecisionEffectStatusReverted = "reverted"
+
+	ClaimRecoveryEventTypeCreated    = "created"
+	ClaimRecoveryEventTypePaid       = "paid"
+	ClaimRecoveryEventTypeWaived     = "waived"
+	ClaimRecoveryEventTypeResumed    = "resumed"
+	ClaimRecoveryEventTypeOverturned = "overturned"
+
+	ClaimRecoveryBasisMerchantRecovery = "merchant_recovery"
+	ClaimRecoveryBasisRiderRecovery    = "rider_recovery"
+
+	BehaviorSnapshotWindowKey7d  = "7d"
+	BehaviorSnapshotWindowKey30d = "30d"
+	BehaviorSnapshotScopeRaw     = "raw"
+	BehaviorSnapshotScopeNet     = "net_effective"
+	BehaviorSnapshotVersionV2    = "v2"
+
 	FulfillmentStatusScheduled      = "scheduled"
 	FulfillmentStatusPendingKitchen = "pending_kitchen"
 	FulfillmentStatusPreparing      = "preparing"

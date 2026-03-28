@@ -45,6 +45,7 @@ ORDER BY scope_type, scope_id;
 INSERT INTO behavior_decisions (
     order_id,
     reservation_id,
+    claim_id,
     user_id,
     merchant_id,
     rider_id,
@@ -53,9 +54,39 @@ INSERT INTO behavior_decisions (
     responsible_party,
     compensation_source,
     decision_status,
-    trace_summary
+    trace_summary,
+    decision_mode,
+    responsibility_domain,
+    payout_mode,
+    confidence_score,
+    user_risk_score,
+    merchant_liability_score,
+    rider_liability_score,
+    fallback_reason,
+    restriction_reason,
+    liability_shares,
+    score_breakdown,
+    graph_hits,
+    fact_snapshot,
+    supersedes_decision_id,
+    overturned_by_decision_id
 ) VALUES (
-    sqlc.narg('order_id'), sqlc.narg('reservation_id'), $1, $2, $3, $4, $5, $6, $7, $8, $9
+    sqlc.narg('order_id'), sqlc.narg('reservation_id'), sqlc.narg('claim_id'), $1, $2, $3, $4, $5, $6, $7, $8, $9,
+    sqlc.narg('decision_mode'),
+    sqlc.narg('responsibility_domain'),
+    sqlc.narg('payout_mode'),
+    sqlc.narg('confidence_score'),
+    sqlc.narg('user_risk_score'),
+    sqlc.narg('merchant_liability_score'),
+    sqlc.narg('rider_liability_score'),
+    sqlc.narg('fallback_reason'),
+    sqlc.narg('restriction_reason'),
+    sqlc.narg('liability_shares'),
+    sqlc.narg('score_breakdown'),
+    sqlc.narg('graph_hits'),
+    sqlc.narg('fact_snapshot'),
+    sqlc.narg('supersedes_decision_id'),
+    sqlc.narg('overturned_by_decision_id')
 ) RETURNING *;
 
 -- name: GetBehaviorDecision :one
@@ -71,6 +102,12 @@ ORDER BY created_at DESC;
 -- name: UpdateBehaviorDecisionStatus :exec
 UPDATE behavior_decisions
 SET decision_status = $2,
+    updated_at = NOW()
+WHERE id = $1;
+
+-- name: UpdateBehaviorDecisionProfileEffectApplied :exec
+UPDATE behavior_decisions
+SET profile_effect_applied = $2,
     updated_at = NOW()
 WHERE id = $1;
 
@@ -101,10 +138,69 @@ INSERT INTO behavior_trace_snapshots (
     abnormal_count,
     total_count,
     abnormal_rate,
-    association_hits
+    association_hits,
+    actor_type,
+    actor_id,
+    window_key,
+    stats_scope,
+    metric_payload,
+    association_payload,
+    snapshot_version
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
+    $1, $2, $3, $4, $5, $6,
+    sqlc.narg('actor_type'),
+    sqlc.narg('actor_id'),
+    sqlc.narg('window_key'),
+    sqlc.narg('stats_scope'),
+    COALESCE(sqlc.narg('metric_payload'), '{}'::jsonb),
+    COALESCE(sqlc.narg('association_payload'), '{}'::jsonb),
+    COALESCE(sqlc.narg('snapshot_version'), 'v2')
 ) RETURNING *;
+
+-- ==============================
+-- behavior_decision_effects
+-- ==============================
+
+-- name: CreateBehaviorDecisionEffect :one
+INSERT INTO behavior_decision_effects (
+    decision_id,
+    entity_type,
+    entity_id,
+    metric_key,
+    delta_value,
+    status,
+    note
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING *;
+
+-- name: ListBehaviorDecisionEffectsByDecision :many
+SELECT * FROM behavior_decision_effects
+WHERE decision_id = $1
+ORDER BY created_at ASC;
+
+-- name: GetBehaviorEffectSummary :one
+SELECT
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'claim_attempts' AND status = 'applied'), 0)::BIGINT AS claim_attempts,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'effective_claims' AND status = 'applied'), 0)::BIGINT AS effective_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'effective_liability_claims' AND status = 'applied'), 0)::BIGINT AS effective_liability_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'merchant_recovered_claims' AND status = 'applied'), 0)::BIGINT AS merchant_recovered_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'rider_recovered_claims' AND status = 'applied'), 0)::BIGINT AS rider_recovered_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'platform_fallback_claims' AND status = 'applied'), 0)::BIGINT AS platform_fallback_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'malicious_confirmed_claims' AND status = 'applied'), 0)::BIGINT AS malicious_confirmed_claims
+FROM behavior_decision_effects
+WHERE entity_type = sqlc.arg('entity_type')
+    AND entity_id = sqlc.arg('entity_id')
+    AND created_at >= sqlc.arg('start_at')
+    AND created_at <= sqlc.arg('end_at');
+
+-- name: RevertBehaviorDecisionEffectsByDecision :exec
+UPDATE behavior_decision_effects
+SET status = 'reverted',
+    reverted_at = COALESCE(sqlc.narg('reverted_at'), NOW()),
+    reverted_by_decision_id = sqlc.narg('reverted_by_decision_id')
+WHERE decision_id = $1
+  AND status = 'applied';
 
 -- name: ListBehaviorTraceSnapshotsByDecision :many
 SELECT * FROM behavior_trace_snapshots

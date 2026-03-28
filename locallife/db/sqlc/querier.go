@@ -130,7 +130,7 @@ type Querier interface {
 	CountFutureReservationsByTable(ctx context.Context, tableID int64) (int64, error)
 	CountIngredients(ctx context.Context, arg CountIngredientsParams) (int64, error)
 	// 商户申诉计数
-	CountMerchantAppealsForMerchant(ctx context.Context, appellantID int64) (int64, error)
+	CountMerchantAppealsForMerchant(ctx context.Context, arg CountMerchantAppealsForMerchantParams) (int64, error)
 	// 统计各状态的申请数量
 	CountMerchantApplicationsByStatus(ctx context.Context, status string) (int64, error)
 	CountMerchantBosses(ctx context.Context, merchantID int64) (int64, error)
@@ -140,7 +140,7 @@ type Querier interface {
 	// 统计商户在指定时间窗口内特定类型的索赔数量
 	CountMerchantClaimsByType(ctx context.Context, arg CountMerchantClaimsByTypeParams) (int64, error)
 	// 商户收到的索赔计数
-	CountMerchantClaimsForMerchant(ctx context.Context, merchantID int64) (int64, error)
+	CountMerchantClaimsForMerchant(ctx context.Context, arg CountMerchantClaimsForMerchantParams) (int64, error)
 	// 统计商户的顾客总数
 	CountMerchantCustomers(ctx context.Context, merchantID int64) (int32, error)
 	CountMerchantFinanceOrders(ctx context.Context, arg CountMerchantFinanceOrdersParams) (int64, error)
@@ -265,6 +265,10 @@ type Querier interface {
 	// behavior_decisions
 	// ==============================
 	CreateBehaviorDecision(ctx context.Context, arg CreateBehaviorDecisionParams) (BehaviorDecision, error)
+	// ==============================
+	// behavior_decision_effects
+	// ==============================
+	CreateBehaviorDecisionEffect(ctx context.Context, arg CreateBehaviorDecisionEffectParams) (BehaviorDecisionEffect, error)
 	CreateBehaviorTraceSnapshot(ctx context.Context, arg CreateBehaviorTraceSnapshotParams) (BehaviorTraceSnapshot, error)
 	// Billing groups
 	CreateBillingGroup(ctx context.Context, arg CreateBillingGroupParams) (BillingGroup, error)
@@ -282,6 +286,7 @@ type Querier interface {
 	CreateClaim(ctx context.Context, arg CreateClaimParams) (Claim, error)
 	// Claim recovery queries
 	CreateClaimRecovery(ctx context.Context, arg CreateClaimRecoveryParams) (ClaimRecovery, error)
+	CreateClaimRecoveryEvent(ctx context.Context, arg CreateClaimRecoveryEventParams) (ClaimRecoveryEvent, error)
 	CreateCloudPrinter(ctx context.Context, arg CreateCloudPrinterParams) (CloudPrinter, error)
 	// ==================== 合单支付主表查询 ====================
 	CreateCombinedPaymentOrder(ctx context.Context, arg CreateCombinedPaymentOrderParams) (CombinedPaymentOrder, error)
@@ -555,6 +560,7 @@ type Querier interface {
 	GetApprovedOperatorApplicationByUserID(ctx context.Context, userID int64) (OperatorApplication, error)
 	GetBehaviorAction(ctx context.Context, id int64) (BehaviorAction, error)
 	GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDecision, error)
+	GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error)
 	// 获取满足订单金额条件的最优促销（减免金额最大的那条）
 	GetBestDeliveryPromotion(ctx context.Context, arg GetBestDeliveryPromotionParams) (MerchantDeliveryPromotion, error)
 	GetBestDiscountRule(ctx context.Context, arg GetBestDiscountRuleParams) (DiscountRule, error)
@@ -1096,6 +1102,7 @@ type Querier interface {
 	ListBehaviorActionsByDecision(ctx context.Context, decisionID int64) ([]BehaviorAction, error)
 	ListBehaviorActionsByStatusAndType(ctx context.Context, arg ListBehaviorActionsByStatusAndTypeParams) ([]BehaviorAction, error)
 	ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehaviorAppealsByEntityParams) ([]BehaviorAppeal, error)
+	ListBehaviorDecisionEffectsByDecision(ctx context.Context, decisionID int64) ([]BehaviorDecisionEffect, error)
 	ListBehaviorDecisionsByOrder(ctx context.Context, orderID pgtype.Int8) ([]BehaviorDecision, error)
 	ListBehaviorTraceSnapshotsByDecision(ctx context.Context, decisionID int64) ([]BehaviorTraceSnapshot, error)
 	ListBillingGroupOrdersByGroup(ctx context.Context, billingGroupID int64) ([]BillingGroupOrder, error)
@@ -1107,6 +1114,7 @@ type Querier interface {
 	ListCartItems(ctx context.Context, cartID int64) ([]ListCartItemsRow, error)
 	// 获取购物车商品详情（用于结算时校验价格和可用性）
 	ListCartItemsForCheckout(ctx context.Context, dollar_1 []int64) ([]ListCartItemsForCheckoutRow, error)
+	ListClaimRecoveryEventsByRecovery(ctx context.Context, recoveryID int64) ([]ClaimRecoveryEvent, error)
 	// ==========================================
 	// 欺诈检测：时间窗口查询
 	// ==========================================
@@ -1464,6 +1472,7 @@ type Querier interface {
 	ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error
 	RestoreRiderDepositCreditByPaymentOrderID(ctx context.Context, arg RestoreRiderDepositCreditByPaymentOrderIDParams) (RiderDepositCredit, error)
 	ResumeClaimRecoveryAfterAppeal(ctx context.Context, id int64) (ClaimRecovery, error)
+	RevertBehaviorDecisionEffectsByDecision(ctx context.Context, arg RevertBehaviorDecisionEffectsByDecisionParams) error
 	// 审核申诉
 	ReviewAppeal(ctx context.Context, arg ReviewAppealParams) (Appeal, error)
 	ReviewGroupApplication(ctx context.Context, arg ReviewGroupApplicationParams) (MerchantGroupApplication, error)
@@ -1548,6 +1557,7 @@ type Querier interface {
 	UpdateBehaviorActionStatus(ctx context.Context, arg UpdateBehaviorActionStatusParams) error
 	UpdateBehaviorAppealStatus(ctx context.Context, arg UpdateBehaviorAppealStatusParams) error
 	UpdateBehaviorBlocklistStatus(ctx context.Context, arg UpdateBehaviorBlocklistStatusParams) error
+	UpdateBehaviorDecisionProfileEffectApplied(ctx context.Context, arg UpdateBehaviorDecisionProfileEffectAppliedParams) error
 	UpdateBehaviorDecisionStatus(ctx context.Context, arg UpdateBehaviorDecisionStatusParams) error
 	UpdateBillingGroupStatus(ctx context.Context, arg UpdateBillingGroupStatusParams) (BillingGroup, error)
 	UpdateBusinessHour(ctx context.Context, arg UpdateBusinessHourParams) (MerchantBusinessHour, error)

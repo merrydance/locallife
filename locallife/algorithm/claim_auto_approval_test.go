@@ -2,6 +2,7 @@ package algorithm
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -39,6 +40,7 @@ func (m *MockWebSocketHub) SendToRider(riderID int64, msg websocket.Message) {
 // MockNotificationDistributor 实现 NotificationDistributor 接口
 type MockNotificationDistributor struct {
 	notifications []UserNotification
+	err           error
 }
 
 type UserNotification struct {
@@ -59,7 +61,7 @@ func (m *MockNotificationDistributor) SendUserNotification(ctx context.Context, 
 		RelatedType:      relatedType,
 		RelatedID:        relatedID,
 	})
-	return nil
+	return m.err
 }
 
 func testCompensationContext(requestedAmount, orderTotalAmount, deliveryFee int64) ClaimCompensationContext {
@@ -282,10 +284,6 @@ func TestEvaluateClaim_PlatformPay(t *testing.T) {
 		PlatformPayCount: 1, // 已有1次平台垫付（需要>=2才触发RejectService）
 	}, nil)
 
-	store.EXPECT().
-		IncrementUserPlatformPayCount(gomock.Any(), gomock.Any()).
-		Return(nil)
-
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
 		1,   // userID
@@ -296,48 +294,27 @@ func TestEvaluateClaim_PlatformPay(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, decision)
-	require.Equal(t, "platform-pay", decision.Type)
+	require.Equal(t, DecisionModePlatformFallback, decision.Type)
 	require.True(t, decision.Approved)
 	require.Equal(t, CompensationSourcePlatform, decision.CompensationSource)
 }
 
-func TestEvaluateClaim_RejectService(t *testing.T) {
+func TestEvaluateClaim_UserRestricted(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	wsHub := NewMockWebSocketHub()
-	notifier := &MockNotificationDistributor{}
 	caa := NewClaimAutoApproval(store, wsHub)
-	caa.SetNotificationDistributor(notifier)
 
-	// 模拟拒绝服务用户（平台垫付>=2次）
+	// 模拟高风险用户（平台兜底记录>=2次）
 	store.EXPECT().GetUserBehaviorStats(gomock.Any(), int64(1)).Return(db.GetUserBehaviorStatsRow{
 		TakeoutOrders90d: 5,
 		Claims90d:        5,
 		WarningCount:     3,
 		RequiresEvidence: false,
-		PlatformPayCount: 2, // 已有2次平台垫付 → RejectService
+		PlatformPayCount: 2, // 已有2次平台兜底记录 -> user_restricted
 	}, nil)
-
-	store.EXPECT().
-		GetActiveBehaviorBlocklist(gomock.Any(), db.GetActiveBehaviorBlocklistParams{
-			EntityType: "user",
-			EntityID:   int64(1),
-		}).
-		Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
-
-	store.EXPECT().
-		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
-			ConfigKey: "behavior_trace.reject_service_cooldown_days",
-			ScopeType: "global",
-			ScopeID:   pgtype.Int8{Valid: false},
-		}).
-		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
-
-	store.EXPECT().
-		CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
-		Return(db.BehaviorBlocklist{}, nil)
 
 	decision, err := caa.EvaluateClaim(
 		context.Background(),
@@ -349,15 +326,10 @@ func TestEvaluateClaim_RejectService(t *testing.T) {
 
 	require.NoError(t, err)
 	require.NotNil(t, decision)
-	require.Equal(t, "platform-pay", decision.Type)
+	require.Equal(t, DecisionModeUserRestricted, decision.Type)
 	require.True(t, decision.Approved) // 照赔
 	require.Equal(t, CompensationSourcePlatform, decision.CompensationSource)
-	require.Equal(t, ClaimBehaviorRejectService, decision.BehaviorStatus)
-
-	// 验证拒绝服务通知已发送
-	require.Len(t, notifier.notifications, 1)
-	require.Equal(t, "system", notifier.notifications[0].NotificationType)
-	require.Contains(t, notifier.notifications[0].Content, "服务已受到限制")
+	require.Equal(t, ClaimBehaviorUserRestricted, decision.BehaviorStatus)
 }
 
 func TestEvaluateClaim_BehaviorCheckFailed_FallbackToInstant(t *testing.T) {
@@ -674,7 +646,6 @@ func TestCreateClaimWithDecisionAndEvidence_PassesRecoveryPlanIntoTransaction(t 
 				Claim: db.Claim{ID: 1, OrderID: params.OrderID, ClaimAmount: params.ClaimAmount, Status: params.Status},
 			}, nil
 		})
-	store.EXPECT().GetOrder(gomock.Any(), int64(1)).Return(db.Order{}, errors.New("not found"))
 
 	claim, err := caa.CreateClaimWithDecisionAndEvidence(
 		context.Background(),
@@ -693,60 +664,278 @@ func TestCreateClaimWithDecisionAndEvidence_PassesRecoveryPlanIntoTransaction(t 
 	require.Equal(t, int64(7000), claim.ClaimAmount)
 }
 
-func TestNotifyResponsibleParty_MerchantRecovery(t *testing.T) {
+func TestCreateClaimWithDecisionAndEvidence_AlignsPlatformFallbackFromPersistedDecision(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	wsHub := NewMockWebSocketHub()
-	notifier := &MockNotificationDistributor{}
 	caa := NewClaimAutoApproval(store, wsHub)
-	caa.SetNotificationDistributor(notifier)
 
-	claim := db.Claim{ID: 9, OrderID: 100}
-	decision := &Decision{Amount: 5000, Reason: "异物责任归属商户"}
-	recoveryPlan := &ClaimRecoveryPlan{RecoveryTarget: "merchant", RecoveryAmount: 5000}
+	decision := &Decision{
+		Type:               ApprovalTypeInstant,
+		Approved:           true,
+		Amount:             3600,
+		Reason:             "骑手责任成立",
+		BehaviorStatus:     ClaimBehaviorNormal,
+		CompensationSource: CompensationSourceRider,
+	}
 
-	store.EXPECT().GetOrder(gomock.Any(), int64(100)).Return(db.Order{ID: 100, OrderNo: "ORD-100", MerchantID: 7}, nil)
-	store.EXPECT().GetMerchant(gomock.Any(), int64(7)).Return(db.Merchant{ID: 7, OwnerUserID: 77}, nil)
+	dueAt := time.Now().Add(24 * time.Hour)
+	recoveryPlan := &ClaimRecoveryPlan{
+		ResponsibleParty: "rider",
+		RecoveryTarget:   "rider",
+		RecoveryAmount:   3600,
+		DueAt:            dueAt,
+		DecisionSnapshot: []byte(`{"decision_type":"instant"}`),
+	}
 
-	caa.notifyResponsibleParty(context.Background(), claim, ClaimTypeForeignObject, decision, recoveryPlan)
+	store.EXPECT().IncrementUserPlatformPayCount(gomock.Any(), db.IncrementUserPlatformPayCountParams{
+		UserID:            1,
+		LastWarningReason: pgtype.Text{String: "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理", Valid: true},
+	}).Return(nil)
 
-	require.Len(t, notifier.notifications, 1)
-	require.Equal(t, int64(77), notifier.notifications[0].UserID)
-	require.Equal(t, "system", notifier.notifications[0].NotificationType)
-	require.Contains(t, notifier.notifications[0].Content, "ORD-100")
-	require.Contains(t, notifier.notifications[0].Content, "已生成50.00元追偿单")
-	require.Contains(t, notifier.notifications[0].Content, "异物责任归属商户")
-	require.Len(t, wsHub.merchantMessages[7], 1)
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, params db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
+			require.True(t, params.CreateRecovery)
+			require.Equal(t, "rider", params.RecoveryTarget)
+			return db.CreateClaimWithBehaviorTxResult{
+				Claim: db.Claim{
+					ID:             11,
+					OrderID:        params.OrderID,
+					ClaimAmount:    params.ClaimAmount,
+					Status:         params.Status,
+					ApprovalType:   pgtype.Text{String: "auto", Valid: true},
+					ApprovedAmount: pgtype.Int8{Int64: 3600, Valid: true},
+				},
+				BehaviorDecision: db.BehaviorDecision{
+					DecisionMode:       pgtype.Text{String: db.BehaviorDecisionModePlatformFallback, Valid: true},
+					FallbackReason:     pgtype.Text{String: "missing_pickup_confirmation", Valid: true},
+					TraceSummary:       pgtype.Text{String: "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理", Valid: true},
+					CompensationSource: "platform",
+				},
+			}, nil
+		})
+
+	claim, err := caa.CreateClaimWithDecisionAndEvidence(
+		context.Background(),
+		101,
+		1,
+		ClaimTypeDamage,
+		"骑手配送损坏",
+		3600,
+		decision,
+		nil,
+		recoveryPlan,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+	require.Equal(t, int64(11), claim.ID)
+	require.Equal(t, DecisionModePlatformFallback, decision.Type)
+	require.Equal(t, CompensationSourcePlatform, decision.CompensationSource)
+	require.Equal(t, "当前订单缺少取餐确认等关键责任事实，本次不向服务方追责，已由平台兜底处理", decision.Reason)
+	require.Equal(t, decision.Reason, decision.Warning)
+	require.Empty(t, wsHub.riderMessages)
+	require.Empty(t, wsHub.merchantMessages)
 }
 
-func TestNotifyResponsibleParty_RiderRecovery(t *testing.T) {
+func TestCreateClaimWithDecisionAndEvidence_AlignsUserRestrictedFromPersistedDecision(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
 	wsHub := NewMockWebSocketHub()
-	notifier := &MockNotificationDistributor{}
+	caa := NewClaimAutoApproval(store, wsHub)
+	store.EXPECT().
+		GetActiveBehaviorBlocklist(gomock.Any(), db.GetActiveBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   int64(1),
+		}).
+		Return(db.BehaviorBlocklist{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: "behavior_trace.reject_service_cooldown_days",
+			ScopeType: "global",
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateBehaviorBlocklist(gomock.Any(), gomock.Any()).
+		Return(db.BehaviorBlocklist{}, nil)
+
+	decision := &Decision{
+		Type:               DecisionModeMerchantRecovery,
+		Approved:           true,
+		Amount:             2800,
+		Reason:             "商户责任候选",
+		CompensationSource: CompensationSourceMerchant,
+	}
+
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, params db.CreateClaimWithBehaviorTxParams) (db.CreateClaimWithBehaviorTxResult, error) {
+			require.Equal(t, "merchant", params.ResponsibleParty)
+			return db.CreateClaimWithBehaviorTxResult{
+				Claim: db.Claim{
+					ID:             21,
+					OrderID:        params.OrderID,
+					ClaimAmount:    params.ClaimAmount,
+					Status:         params.Status,
+					ApprovalType:   pgtype.Text{String: "auto", Valid: true},
+					ApprovedAmount: pgtype.Int8{Int64: 2800, Valid: true},
+				},
+				BehaviorDecision: db.BehaviorDecision{
+					DecisionMode:       pgtype.Text{String: db.BehaviorDecisionModeUserRestricted, Valid: true},
+					RestrictionReason:  pgtype.Text{String: "confirmed_high_user_risk", Valid: true},
+					TraceSummary:       pgtype.Text{String: "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。", Valid: true},
+					CompensationSource: "platform",
+				},
+				RestrictionAction: &db.BehaviorAction{
+					ID:           22,
+					DecisionID:   21,
+					ActionType:   "block",
+					TargetEntity: "user",
+					Status:       "created",
+					Detail:       []byte(`{"action":"apply_user_restriction","claim_id":21,"user_id":1,"decision_mode":"user_restricted","restriction_reason":"confirmed_high_user_risk","remark":"user restricted action created"}`),
+				},
+			}, nil
+		})
+
+	claim, err := caa.CreateClaimWithDecisionAndEvidence(
+		context.Background(),
+		201,
+		1,
+		ClaimTypeDamage,
+		"异常索赔",
+		2800,
+		decision,
+		nil,
+		nil,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+	require.Equal(t, int64(21), claim.ID)
+	require.Equal(t, DecisionModeUserRestricted, decision.Type)
+	require.Equal(t, ClaimBehaviorUserRestricted, decision.BehaviorStatus)
+	require.Equal(t, CompensationSourcePlatform, decision.CompensationSource)
+	require.Equal(t, "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。", decision.Reason)
+	require.Equal(t, decision.Reason, decision.Warning)
+	require.Empty(t, wsHub.riderMessages)
+	require.Empty(t, wsHub.merchantMessages)
+}
+
+func TestCreateClaimWithDecisionAndEvidence_UserRestrictionLookupFailureIsNonBlocking(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	caa := NewClaimAutoApproval(store, wsHub)
+
+	decision := &Decision{
+		Type:               DecisionModeMerchantRecovery,
+		Approved:           true,
+		Amount:             2800,
+		Reason:             "商户责任候选",
+		CompensationSource: CompensationSourceMerchant,
+	}
+
+	store.EXPECT().
+		GetActiveBehaviorBlocklist(gomock.Any(), db.GetActiveBehaviorBlocklistParams{
+			EntityType: "user",
+			EntityID:   int64(1),
+		}).
+		Return(db.BehaviorBlocklist{}, errors.New("blocklist lookup failed"))
+
+	store.EXPECT().CreateClaimWithBehaviorTx(gomock.Any(), gomock.Any()).Return(db.CreateClaimWithBehaviorTxResult{
+		Claim: db.Claim{
+			ID:             31,
+			OrderID:        301,
+			ClaimAmount:    2800,
+			Status:         ClaimStatusAutoApproved,
+			ApprovalType:   pgtype.Text{String: "auto", Valid: true},
+			ApprovedAmount: pgtype.Int8{Int64: 2800, Valid: true},
+		},
+		BehaviorDecision: db.BehaviorDecision{
+			DecisionMode:       pgtype.Text{String: db.BehaviorDecisionModeUserRestricted, Valid: true},
+			RestrictionReason:  pgtype.Text{String: "confirmed_high_user_risk", Valid: true},
+			TraceSummary:       pgtype.Text{String: "您的账号因索赔行为异常已被限制服务，本次索赔由平台兜底处理。", Valid: true},
+			CompensationSource: "platform",
+		},
+		RestrictionAction: &db.BehaviorAction{
+			ID:           32,
+			DecisionID:   31,
+			ActionType:   "block",
+			TargetEntity: "user",
+			Status:       "created",
+			Detail:       []byte(`{"action":"apply_user_restriction","claim_id":31,"user_id":1,"decision_mode":"user_restricted","restriction_reason":"confirmed_high_user_risk","remark":"user restricted action created"}`),
+		},
+	}, nil)
+
+	claim, err := caa.CreateClaimWithDecisionAndEvidence(
+		context.Background(),
+		301,
+		1,
+		ClaimTypeDamage,
+		"异常索赔",
+		2800,
+		decision,
+		nil,
+		nil,
+	)
+
+	require.NoError(t, err)
+	require.NotNil(t, claim)
+	require.Equal(t, int64(31), claim.ID)
+	require.Equal(t, DecisionModeUserRestricted, decision.Type)
+	require.Equal(t, ClaimBehaviorUserRestricted, decision.BehaviorStatus)
+	require.Equal(t, CompensationSourcePlatform, decision.CompensationSource)
+	require.Empty(t, wsHub.riderMessages)
+	require.Empty(t, wsHub.merchantMessages)
+}
+
+func TestExecuteNotificationAction_RiderWebSocketFallbackWhenDistributorFails(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wsHub := NewMockWebSocketHub()
+	notifier := &MockNotificationDistributor{err: errors.New("notification queue unavailable")}
 	caa := NewClaimAutoApproval(store, wsHub)
 	caa.SetNotificationDistributor(notifier)
 
-	claim := db.Claim{ID: 10, OrderID: 101}
-	decision := &Decision{Amount: 4200, Reason: "餐损责任归属骑手"}
-	recoveryPlan := &ClaimRecoveryPlan{RecoveryTarget: "rider", RecoveryAmount: 4200}
+	action := db.BehaviorAction{
+		ID:           41,
+		DecisionID:   40,
+		ActionType:   "notify",
+		TargetEntity: "rider",
+		Status:       "created",
+		Detail:       []byte(`{"action":"notify_responsible_party","claim_id":40,"target_entity":"rider","target_id":18,"recipient_user_id":118,"notification_type":"system","title":"异常订单判责通知","content":"订单ORD-101的餐损异常索赔已判定由您承担。平台已向用户先行赔付42.00元，并已生成42.00元追偿单，请尽快处理。 判责依据：餐损责任归属骑手。","related_type":"claim","related_id":40,"remark":"notification action created"}`),
+	}
 
-	store.EXPECT().GetOrder(gomock.Any(), int64(101)).Return(db.Order{ID: 101, OrderNo: "ORD-101", MerchantID: 8}, nil)
-	store.EXPECT().GetDeliveryByOrderID(gomock.Any(), int64(101)).Return(db.Delivery{OrderID: 101, RiderID: pgtype.Int8{Int64: 18, Valid: true}}, nil)
-	store.EXPECT().GetRider(gomock.Any(), int64(18)).Return(db.Rider{ID: 18, UserID: 118}, nil)
-
-	caa.notifyResponsibleParty(context.Background(), claim, ClaimTypeDamage, decision, recoveryPlan)
-
+	require.NotPanics(t, func() {
+		caa.executeNotificationAction(context.Background(), action)
+	})
 	require.Len(t, notifier.notifications, 1)
 	require.Equal(t, int64(118), notifier.notifications[0].UserID)
-	require.Contains(t, notifier.notifications[0].Content, "ORD-101")
-	require.Contains(t, notifier.notifications[0].Content, "已生成42.00元追偿单")
-	require.Contains(t, notifier.notifications[0].Content, "餐损责任归属骑手")
 	require.Len(t, wsHub.riderMessages[18], 1)
+	var notificationData map[string]interface{}
+	require.NoError(t, json.Unmarshal(wsHub.riderMessages[18][0].Data, &notificationData))
+	require.Contains(t, notificationData["message"], "已判定由您承担")
+}
+
+func TestSendNotification_IgnoresTypedNilWebSocketHub(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	var nilHub *MockWebSocketHub
+	caa := NewClaimAutoApproval(store, nilHub)
+
+	require.NotPanics(t, func() {
+		caa.sendNotification("merchant", "标题", "内容", 1)
+	})
 }
 
 func TestCreateClaimWithDecision_RiderDeposit_DeductAndRefund(t *testing.T) {
@@ -791,7 +980,7 @@ func TestCreateClaimWithDecision_RiderDeposit_DeductAndRefund(t *testing.T) {
 	require.NotNil(t, claim)
 }
 
-func TestCreateClaimWithDecision_PlatformPay(t *testing.T) {
+func TestCreateClaimWithDecision_PlatformFallback(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -800,10 +989,10 @@ func TestCreateClaimWithDecision_PlatformPay(t *testing.T) {
 	caa := NewClaimAutoApproval(store, wsHub)
 
 	decision := &Decision{
-		Type:               "platform-pay",
+		Type:               DecisionModePlatformFallback,
 		Approved:           true,
 		Amount:             5000,
-		Reason:             "问题用户，平台垫付",
+		Reason:             "高风险索赔，平台兜底",
 		CompensationSource: CompensationSourcePlatform,
 	}
 

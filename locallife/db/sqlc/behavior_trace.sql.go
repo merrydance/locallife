@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -178,6 +179,7 @@ const createBehaviorDecision = `-- name: CreateBehaviorDecision :one
 INSERT INTO behavior_decisions (
     order_id,
     reservation_id,
+    claim_id,
     user_id,
     merchant_id,
     rider_id,
@@ -186,24 +188,70 @@ INSERT INTO behavior_decisions (
     responsible_party,
     compensation_source,
     decision_status,
-    trace_summary
+    trace_summary,
+    decision_mode,
+    responsibility_domain,
+    payout_mode,
+    confidence_score,
+    user_risk_score,
+    merchant_liability_score,
+    rider_liability_score,
+    fallback_reason,
+    restriction_reason,
+    liability_shares,
+    score_breakdown,
+    graph_hits,
+    fact_snapshot,
+    supersedes_decision_id,
+    overturned_by_decision_id
 ) VALUES (
-    $10, $11, $1, $2, $3, $4, $5, $6, $7, $8, $9
-) RETURNING id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id
+    $10, $11, $12, $1, $2, $3, $4, $5, $6, $7, $8, $9,
+    $13,
+    $14,
+    $15,
+    $16,
+    $17,
+    $18,
+    $19,
+    $20,
+    $21,
+    $22,
+    $23,
+    $24,
+    $25,
+    $26,
+    $27
+) RETURNING id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied
 `
 
 type CreateBehaviorDecisionParams struct {
-	UserID             pgtype.Int8 `json:"user_id"`
-	MerchantID         pgtype.Int8 `json:"merchant_id"`
-	RiderID            pgtype.Int8 `json:"rider_id"`
-	DecisionVersion    string      `json:"decision_version"`
-	ReasonCodes        []string    `json:"reason_codes"`
-	ResponsibleParty   string      `json:"responsible_party"`
-	CompensationSource string      `json:"compensation_source"`
-	DecisionStatus     string      `json:"decision_status"`
-	TraceSummary       pgtype.Text `json:"trace_summary"`
-	OrderID            pgtype.Int8 `json:"order_id"`
-	ReservationID      pgtype.Int8 `json:"reservation_id"`
+	UserID                 pgtype.Int8 `json:"user_id"`
+	MerchantID             pgtype.Int8 `json:"merchant_id"`
+	RiderID                pgtype.Int8 `json:"rider_id"`
+	DecisionVersion        string      `json:"decision_version"`
+	ReasonCodes            []string    `json:"reason_codes"`
+	ResponsibleParty       string      `json:"responsible_party"`
+	CompensationSource     string      `json:"compensation_source"`
+	DecisionStatus         string      `json:"decision_status"`
+	TraceSummary           pgtype.Text `json:"trace_summary"`
+	OrderID                pgtype.Int8 `json:"order_id"`
+	ReservationID          pgtype.Int8 `json:"reservation_id"`
+	ClaimID                pgtype.Int8 `json:"claim_id"`
+	DecisionMode           pgtype.Text `json:"decision_mode"`
+	ResponsibilityDomain   pgtype.Text `json:"responsibility_domain"`
+	PayoutMode             pgtype.Text `json:"payout_mode"`
+	ConfidenceScore        pgtype.Int4 `json:"confidence_score"`
+	UserRiskScore          pgtype.Int4 `json:"user_risk_score"`
+	MerchantLiabilityScore pgtype.Int4 `json:"merchant_liability_score"`
+	RiderLiabilityScore    pgtype.Int4 `json:"rider_liability_score"`
+	FallbackReason         pgtype.Text `json:"fallback_reason"`
+	RestrictionReason      pgtype.Text `json:"restriction_reason"`
+	LiabilityShares        []byte      `json:"liability_shares"`
+	ScoreBreakdown         []byte      `json:"score_breakdown"`
+	GraphHits              []byte      `json:"graph_hits"`
+	FactSnapshot           []byte      `json:"fact_snapshot"`
+	SupersedesDecisionID   pgtype.Int8 `json:"supersedes_decision_id"`
+	OverturnedByDecisionID pgtype.Int8 `json:"overturned_by_decision_id"`
 }
 
 // ==============================
@@ -222,6 +270,22 @@ func (q *Queries) CreateBehaviorDecision(ctx context.Context, arg CreateBehavior
 		arg.TraceSummary,
 		arg.OrderID,
 		arg.ReservationID,
+		arg.ClaimID,
+		arg.DecisionMode,
+		arg.ResponsibilityDomain,
+		arg.PayoutMode,
+		arg.ConfidenceScore,
+		arg.UserRiskScore,
+		arg.MerchantLiabilityScore,
+		arg.RiderLiabilityScore,
+		arg.FallbackReason,
+		arg.RestrictionReason,
+		arg.LiabilityShares,
+		arg.ScoreBreakdown,
+		arg.GraphHits,
+		arg.FactSnapshot,
+		arg.SupersedesDecisionID,
+		arg.OverturnedByDecisionID,
 	)
 	var i BehaviorDecision
 	err := row.Scan(
@@ -239,6 +303,80 @@ func (q *Queries) CreateBehaviorDecision(ctx context.Context, arg CreateBehavior
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReservationID,
+		&i.ClaimID,
+		&i.DecisionMode,
+		&i.ResponsibilityDomain,
+		&i.PayoutMode,
+		&i.EffectiveStatus,
+		&i.ConfidenceScore,
+		&i.UserRiskScore,
+		&i.MerchantLiabilityScore,
+		&i.RiderLiabilityScore,
+		&i.FallbackReason,
+		&i.RestrictionReason,
+		&i.LiabilityShares,
+		&i.ScoreBreakdown,
+		&i.GraphHits,
+		&i.FactSnapshot,
+		&i.SupersedesDecisionID,
+		&i.OverturnedByDecisionID,
+		&i.ProfileEffectApplied,
+	)
+	return i, err
+}
+
+const createBehaviorDecisionEffect = `-- name: CreateBehaviorDecisionEffect :one
+
+INSERT INTO behavior_decision_effects (
+    decision_id,
+    entity_type,
+    entity_id,
+    metric_key,
+    delta_value,
+    status,
+    note
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7
+) RETURNING id, decision_id, entity_type, entity_id, metric_key, delta_value, status, applied_at, reverted_at, reverted_by_decision_id, note, created_at
+`
+
+type CreateBehaviorDecisionEffectParams struct {
+	DecisionID int64       `json:"decision_id"`
+	EntityType string      `json:"entity_type"`
+	EntityID   int64       `json:"entity_id"`
+	MetricKey  string      `json:"metric_key"`
+	DeltaValue int64       `json:"delta_value"`
+	Status     string      `json:"status"`
+	Note       pgtype.Text `json:"note"`
+}
+
+// ==============================
+// behavior_decision_effects
+// ==============================
+func (q *Queries) CreateBehaviorDecisionEffect(ctx context.Context, arg CreateBehaviorDecisionEffectParams) (BehaviorDecisionEffect, error) {
+	row := q.db.QueryRow(ctx, createBehaviorDecisionEffect,
+		arg.DecisionID,
+		arg.EntityType,
+		arg.EntityID,
+		arg.MetricKey,
+		arg.DeltaValue,
+		arg.Status,
+		arg.Note,
+	)
+	var i BehaviorDecisionEffect
+	err := row.Scan(
+		&i.ID,
+		&i.DecisionID,
+		&i.EntityType,
+		&i.EntityID,
+		&i.MetricKey,
+		&i.DeltaValue,
+		&i.Status,
+		&i.AppliedAt,
+		&i.RevertedAt,
+		&i.RevertedByDecisionID,
+		&i.Note,
+		&i.CreatedAt,
 	)
 	return i, err
 }
@@ -250,19 +388,40 @@ INSERT INTO behavior_trace_snapshots (
     abnormal_count,
     total_count,
     abnormal_rate,
-    association_hits
+    association_hits,
+    actor_type,
+    actor_id,
+    window_key,
+    stats_scope,
+    metric_payload,
+    association_payload,
+    snapshot_version
 ) VALUES (
-    $1, $2, $3, $4, $5, $6
-) RETURNING id, decision_id, window_days, abnormal_count, total_count, abnormal_rate, association_hits, created_at
+    $1, $2, $3, $4, $5, $6,
+    $7,
+    $8,
+    $9,
+    $10,
+    COALESCE($11, '{}'::jsonb),
+    COALESCE($12, '{}'::jsonb),
+    COALESCE($13, 'v2')
+) RETURNING id, decision_id, window_days, abnormal_count, total_count, abnormal_rate, association_hits, created_at, actor_type, actor_id, window_key, stats_scope, metric_payload, association_payload, snapshot_version
 `
 
 type CreateBehaviorTraceSnapshotParams struct {
-	DecisionID      int64          `json:"decision_id"`
-	WindowDays      int32          `json:"window_days"`
-	AbnormalCount   int32          `json:"abnormal_count"`
-	TotalCount      int32          `json:"total_count"`
-	AbnormalRate    pgtype.Numeric `json:"abnormal_rate"`
-	AssociationHits []string       `json:"association_hits"`
+	DecisionID         int64          `json:"decision_id"`
+	WindowDays         int32          `json:"window_days"`
+	AbnormalCount      int32          `json:"abnormal_count"`
+	TotalCount         int32          `json:"total_count"`
+	AbnormalRate       pgtype.Numeric `json:"abnormal_rate"`
+	AssociationHits    []string       `json:"association_hits"`
+	ActorType          pgtype.Text    `json:"actor_type"`
+	ActorID            pgtype.Int8    `json:"actor_id"`
+	WindowKey          pgtype.Text    `json:"window_key"`
+	StatsScope         pgtype.Text    `json:"stats_scope"`
+	MetricPayload      interface{}    `json:"metric_payload"`
+	AssociationPayload interface{}    `json:"association_payload"`
+	SnapshotVersion    interface{}    `json:"snapshot_version"`
 }
 
 func (q *Queries) CreateBehaviorTraceSnapshot(ctx context.Context, arg CreateBehaviorTraceSnapshotParams) (BehaviorTraceSnapshot, error) {
@@ -273,6 +432,13 @@ func (q *Queries) CreateBehaviorTraceSnapshot(ctx context.Context, arg CreateBeh
 		arg.TotalCount,
 		arg.AbnormalRate,
 		arg.AssociationHits,
+		arg.ActorType,
+		arg.ActorID,
+		arg.WindowKey,
+		arg.StatsScope,
+		arg.MetricPayload,
+		arg.AssociationPayload,
+		arg.SnapshotVersion,
 	)
 	var i BehaviorTraceSnapshot
 	err := row.Scan(
@@ -284,6 +450,13 @@ func (q *Queries) CreateBehaviorTraceSnapshot(ctx context.Context, arg CreateBeh
 		&i.AbnormalRate,
 		&i.AssociationHits,
 		&i.CreatedAt,
+		&i.ActorType,
+		&i.ActorID,
+		&i.WindowKey,
+		&i.StatsScope,
+		&i.MetricPayload,
+		&i.AssociationPayload,
+		&i.SnapshotVersion,
 	)
 	return i, err
 }
@@ -382,7 +555,7 @@ func (q *Queries) GetBehaviorAction(ctx context.Context, id int64) (BehaviorActi
 }
 
 const getBehaviorDecision = `-- name: GetBehaviorDecision :one
-SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id FROM behavior_decisions
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied FROM behavior_decisions
 WHERE id = $1
 LIMIT 1
 `
@@ -405,6 +578,77 @@ func (q *Queries) GetBehaviorDecision(ctx context.Context, id int64) (BehaviorDe
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ReservationID,
+		&i.ClaimID,
+		&i.DecisionMode,
+		&i.ResponsibilityDomain,
+		&i.PayoutMode,
+		&i.EffectiveStatus,
+		&i.ConfidenceScore,
+		&i.UserRiskScore,
+		&i.MerchantLiabilityScore,
+		&i.RiderLiabilityScore,
+		&i.FallbackReason,
+		&i.RestrictionReason,
+		&i.LiabilityShares,
+		&i.ScoreBreakdown,
+		&i.GraphHits,
+		&i.FactSnapshot,
+		&i.SupersedesDecisionID,
+		&i.OverturnedByDecisionID,
+		&i.ProfileEffectApplied,
+	)
+	return i, err
+}
+
+const getBehaviorEffectSummary = `-- name: GetBehaviorEffectSummary :one
+SELECT
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'claim_attempts' AND status = 'applied'), 0)::BIGINT AS claim_attempts,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'effective_claims' AND status = 'applied'), 0)::BIGINT AS effective_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'effective_liability_claims' AND status = 'applied'), 0)::BIGINT AS effective_liability_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'merchant_recovered_claims' AND status = 'applied'), 0)::BIGINT AS merchant_recovered_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'rider_recovered_claims' AND status = 'applied'), 0)::BIGINT AS rider_recovered_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'platform_fallback_claims' AND status = 'applied'), 0)::BIGINT AS platform_fallback_claims,
+        COALESCE(SUM(delta_value) FILTER (WHERE metric_key = 'malicious_confirmed_claims' AND status = 'applied'), 0)::BIGINT AS malicious_confirmed_claims
+FROM behavior_decision_effects
+WHERE entity_type = $1
+    AND entity_id = $2
+    AND created_at >= $3
+    AND created_at <= $4
+`
+
+type GetBehaviorEffectSummaryParams struct {
+	EntityType string    `json:"entity_type"`
+	EntityID   int64     `json:"entity_id"`
+	StartAt    time.Time `json:"start_at"`
+	EndAt      time.Time `json:"end_at"`
+}
+
+type GetBehaviorEffectSummaryRow struct {
+	ClaimAttempts            int64 `json:"claim_attempts"`
+	EffectiveClaims          int64 `json:"effective_claims"`
+	EffectiveLiabilityClaims int64 `json:"effective_liability_claims"`
+	MerchantRecoveredClaims  int64 `json:"merchant_recovered_claims"`
+	RiderRecoveredClaims     int64 `json:"rider_recovered_claims"`
+	PlatformFallbackClaims   int64 `json:"platform_fallback_claims"`
+	MaliciousConfirmedClaims int64 `json:"malicious_confirmed_claims"`
+}
+
+func (q *Queries) GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorEffectSummaryParams) (GetBehaviorEffectSummaryRow, error) {
+	row := q.db.QueryRow(ctx, getBehaviorEffectSummary,
+		arg.EntityType,
+		arg.EntityID,
+		arg.StartAt,
+		arg.EndAt,
+	)
+	var i GetBehaviorEffectSummaryRow
+	err := row.Scan(
+		&i.ClaimAttempts,
+		&i.EffectiveClaims,
+		&i.EffectiveLiabilityClaims,
+		&i.MerchantRecoveredClaims,
+		&i.RiderRecoveredClaims,
+		&i.PlatformFallbackClaims,
+		&i.MaliciousConfirmedClaims,
 	)
 	return i, err
 }
@@ -628,8 +872,47 @@ func (q *Queries) ListBehaviorAppealsByEntity(ctx context.Context, arg ListBehav
 	return items, nil
 }
 
+const listBehaviorDecisionEffectsByDecision = `-- name: ListBehaviorDecisionEffectsByDecision :many
+SELECT id, decision_id, entity_type, entity_id, metric_key, delta_value, status, applied_at, reverted_at, reverted_by_decision_id, note, created_at FROM behavior_decision_effects
+WHERE decision_id = $1
+ORDER BY created_at ASC
+`
+
+func (q *Queries) ListBehaviorDecisionEffectsByDecision(ctx context.Context, decisionID int64) ([]BehaviorDecisionEffect, error) {
+	rows, err := q.db.Query(ctx, listBehaviorDecisionEffectsByDecision, decisionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []BehaviorDecisionEffect{}
+	for rows.Next() {
+		var i BehaviorDecisionEffect
+		if err := rows.Scan(
+			&i.ID,
+			&i.DecisionID,
+			&i.EntityType,
+			&i.EntityID,
+			&i.MetricKey,
+			&i.DeltaValue,
+			&i.Status,
+			&i.AppliedAt,
+			&i.RevertedAt,
+			&i.RevertedByDecisionID,
+			&i.Note,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listBehaviorDecisionsByOrder = `-- name: ListBehaviorDecisionsByOrder :many
-SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id FROM behavior_decisions
+SELECT id, order_id, user_id, merchant_id, rider_id, decision_version, reason_codes, responsible_party, compensation_source, decision_status, trace_summary, created_at, updated_at, reservation_id, claim_id, decision_mode, responsibility_domain, payout_mode, effective_status, confidence_score, user_risk_score, merchant_liability_score, rider_liability_score, fallback_reason, restriction_reason, liability_shares, score_breakdown, graph_hits, fact_snapshot, supersedes_decision_id, overturned_by_decision_id, profile_effect_applied FROM behavior_decisions
 WHERE order_id = $1
 ORDER BY created_at DESC
 `
@@ -658,6 +941,24 @@ func (q *Queries) ListBehaviorDecisionsByOrder(ctx context.Context, orderID pgty
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ReservationID,
+			&i.ClaimID,
+			&i.DecisionMode,
+			&i.ResponsibilityDomain,
+			&i.PayoutMode,
+			&i.EffectiveStatus,
+			&i.ConfidenceScore,
+			&i.UserRiskScore,
+			&i.MerchantLiabilityScore,
+			&i.RiderLiabilityScore,
+			&i.FallbackReason,
+			&i.RestrictionReason,
+			&i.LiabilityShares,
+			&i.ScoreBreakdown,
+			&i.GraphHits,
+			&i.FactSnapshot,
+			&i.SupersedesDecisionID,
+			&i.OverturnedByDecisionID,
+			&i.ProfileEffectApplied,
 		); err != nil {
 			return nil, err
 		}
@@ -670,7 +971,7 @@ func (q *Queries) ListBehaviorDecisionsByOrder(ctx context.Context, orderID pgty
 }
 
 const listBehaviorTraceSnapshotsByDecision = `-- name: ListBehaviorTraceSnapshotsByDecision :many
-SELECT id, decision_id, window_days, abnormal_count, total_count, abnormal_rate, association_hits, created_at FROM behavior_trace_snapshots
+SELECT id, decision_id, window_days, abnormal_count, total_count, abnormal_rate, association_hits, created_at, actor_type, actor_id, window_key, stats_scope, metric_payload, association_payload, snapshot_version FROM behavior_trace_snapshots
 WHERE decision_id = $1
 ORDER BY created_at ASC
 `
@@ -693,6 +994,13 @@ func (q *Queries) ListBehaviorTraceSnapshotsByDecision(ctx context.Context, deci
 			&i.AbnormalRate,
 			&i.AssociationHits,
 			&i.CreatedAt,
+			&i.ActorType,
+			&i.ActorID,
+			&i.WindowKey,
+			&i.StatsScope,
+			&i.MetricPayload,
+			&i.AssociationPayload,
+			&i.SnapshotVersion,
 		); err != nil {
 			return nil, err
 		}
@@ -736,6 +1044,26 @@ func (q *Queries) ListPlatformConfigsByKey(ctx context.Context, configKey string
 		return nil, err
 	}
 	return items, nil
+}
+
+const revertBehaviorDecisionEffectsByDecision = `-- name: RevertBehaviorDecisionEffectsByDecision :exec
+UPDATE behavior_decision_effects
+SET status = 'reverted',
+    reverted_at = COALESCE($2, NOW()),
+    reverted_by_decision_id = $3
+WHERE decision_id = $1
+  AND status = 'applied'
+`
+
+type RevertBehaviorDecisionEffectsByDecisionParams struct {
+	DecisionID           int64              `json:"decision_id"`
+	RevertedAt           pgtype.Timestamptz `json:"reverted_at"`
+	RevertedByDecisionID pgtype.Int8        `json:"reverted_by_decision_id"`
+}
+
+func (q *Queries) RevertBehaviorDecisionEffectsByDecision(ctx context.Context, arg RevertBehaviorDecisionEffectsByDecisionParams) error {
+	_, err := q.db.Exec(ctx, revertBehaviorDecisionEffectsByDecision, arg.DecisionID, arg.RevertedAt, arg.RevertedByDecisionID)
+	return err
 }
 
 const updateBehaviorActionExecution = `-- name: UpdateBehaviorActionExecution :exec
@@ -813,6 +1141,23 @@ type UpdateBehaviorBlocklistStatusParams struct {
 
 func (q *Queries) UpdateBehaviorBlocklistStatus(ctx context.Context, arg UpdateBehaviorBlocklistStatusParams) error {
 	_, err := q.db.Exec(ctx, updateBehaviorBlocklistStatus, arg.ID, arg.Status)
+	return err
+}
+
+const updateBehaviorDecisionProfileEffectApplied = `-- name: UpdateBehaviorDecisionProfileEffectApplied :exec
+UPDATE behavior_decisions
+SET profile_effect_applied = $2,
+    updated_at = NOW()
+WHERE id = $1
+`
+
+type UpdateBehaviorDecisionProfileEffectAppliedParams struct {
+	ID                   int64 `json:"id"`
+	ProfileEffectApplied bool  `json:"profile_effect_applied"`
+}
+
+func (q *Queries) UpdateBehaviorDecisionProfileEffectApplied(ctx context.Context, arg UpdateBehaviorDecisionProfileEffectAppliedParams) error {
+	_, err := q.db.Exec(ctx, updateBehaviorDecisionProfileEffectApplied, arg.ID, arg.ProfileEffectApplied)
 	return err
 }
 

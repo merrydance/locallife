@@ -4,16 +4,35 @@
 INSERT INTO claim_recoveries (
   claim_id,
   order_id,
+  decision_id,
   responsible_party,
   recovery_target,
   recovery_amount,
   status,
   due_at,
-  decision_snapshot
+  decision_snapshot,
+  recovery_basis
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
 )
 RETURNING *;
+
+-- name: CreateClaimRecoveryEvent :one
+INSERT INTO claim_recovery_events (
+  recovery_id,
+  decision_id,
+  event_type,
+  payload
+) VALUES (
+  $1, sqlc.narg('decision_id'), $2, $3
+)
+RETURNING *;
+
+-- name: ListClaimRecoveryEventsByRecovery :many
+SELECT *
+FROM claim_recovery_events
+WHERE recovery_id = $1
+ORDER BY created_at ASC;
 
 -- name: GetClaimRecoveryByClaimID :one
 SELECT *

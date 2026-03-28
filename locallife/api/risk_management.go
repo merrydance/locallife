@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -104,6 +105,52 @@ func getBehaviorThresholds(ctx *gin.Context, store db.Store) behaviorThresholdCo
 		thresholds.RiderAbnormalRate = payload.RiderAbnormalRate
 	}
 	return thresholds
+}
+
+func normalizeClaimRuleAction(action string) string {
+	return strings.ReplaceAll(strings.ToLower(action), "_", "-")
+}
+
+func applyClaimRuleDecisionOverride(decision *algorithm.Decision, ruleDecision rules.Decision) string {
+	if decision == nil {
+		return ""
+	}
+
+	// 规则引擎在 API 层只允许覆盖正式 decision mode 与对外文案。
+	// 真正的正式副作用仍以下游事务返回的 persisted behavior decision/action 为准，
+	// 这里不要重新派生 payout/recovery/block/notify 等执行动作。
+	normalizedAction := normalizeClaimRuleAction(ruleDecision.Action)
+	switch normalizedAction {
+	case "platform-fallback":
+		decision.Type = algorithm.DecisionModePlatformFallback
+		decision.Approved = true
+		decision.CompensationSource = algorithm.CompensationSourcePlatform
+		decision.NeedsReview = false
+	case "merchant-recovery":
+		decision.Type = algorithm.DecisionModeMerchantRecovery
+		decision.Approved = true
+		decision.CompensationSource = algorithm.CompensationSourceMerchant
+	case "rider-recovery":
+		decision.Type = algorithm.DecisionModeRiderRecovery
+		decision.Approved = true
+		decision.CompensationSource = algorithm.CompensationSourceRider
+	case "user-restricted":
+		decision.Type = algorithm.DecisionModeUserRestricted
+		decision.Approved = true
+		decision.BehaviorStatus = algorithm.ClaimBehaviorUserRestricted
+		decision.CompensationSource = algorithm.CompensationSourcePlatform
+	case "instant", "auto":
+		decision.Type = normalizedAction
+	}
+
+	if ruleDecision.Reason != "" && normalizedAction != "" {
+		decision.Reason = ruleDecision.Reason
+		if normalizedAction == "platform-fallback" || normalizedAction == "user-restricted" {
+			decision.Warning = ruleDecision.Reason
+		}
+	}
+
+	return normalizedAction
 }
 
 // SubmitClaimRequest 提交索赔请求
@@ -420,10 +467,10 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 			log.Error().Err(err).
 				Int64("order_id", req.OrderID).
 				Int64("user_id", authPayload.UserID).
-				Msg("Rules engine evaluation failed, falling back to deterministic platform-pay adjudication")
+				Msg("Rules engine evaluation failed, falling back to deterministic platform_fallback adjudication")
 
 			ruleDecision = rules.Decision{
-				Action: "platform-pay",
+				Action: "platform-fallback",
 				Reason: "系统风控服务暂时不可用，已按平台自动裁定继续处理",
 			}
 		} else {
@@ -440,10 +487,16 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 	}
 
+	// SubmitClaim 的正式主链边界：
+	// 1. API 负责请求校验、规则覆盖标准化、证据采集与依赖注入；
+	// 2. algorithm 负责生成 claim 创建参数并消费事务返回的 persisted decision/action；
+	// 3. API 不再通过二次查询 behavior decision/action 自行拼接 payout 等副作用。
+	// 后续任何读路径（如申诉、对账、调度）如需读取 decision，只能作为只读消费者。
 	// 创建自动审核器
 	approver := algorithm.NewClaimAutoApproval(server.store, server.wsHub)
 	if server.taskDistributor != nil {
 		approver.SetNotificationDistributor(worker.NewNotificationAdapter(server.taskDistributor))
+		approver.SetClaimPayoutDistributor(worker.NewClaimPayoutAdapter(server.taskDistributor))
 	}
 
 	// 评估索赔（新设计）
@@ -466,26 +519,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 
 	// 规则引擎结果覆盖（如需）
 	if ruleDecision.Action != "" && ruleDecision.Action != "allow" && ruleDecision.Action != "alert" {
-		switch ruleDecision.Action {
-		case "manual":
-			decision.Type = "platform-pay"
-			decision.Approved = true
-			decision.CompensationSource = algorithm.CompensationSourcePlatform
-			decision.Reason = ruleDecision.Reason
-			decision.NeedsReview = false
-		case "platform-pay":
-			decision.Type = "platform-pay"
-			decision.Approved = true
-			decision.CompensationSource = algorithm.CompensationSourcePlatform
-			if ruleDecision.Reason != "" {
-				decision.Reason = ruleDecision.Reason
-			}
-		case "instant", "auto":
-			decision.Type = ruleDecision.Action
-			if ruleDecision.Reason != "" {
-				decision.Reason = ruleDecision.Reason
-			}
-		}
+		applyClaimRuleDecisionOverride(decision, ruleDecision)
 	}
 	if ruleDecision.Meta != nil {
 		if v, ok := ruleDecision.Meta["decision_reason"].(string); ok && v != "" && decision.Reason == "" {
@@ -538,22 +572,10 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		}
 	}
 	if responsibleParty == "platform_fallback" {
-		userSafe := !boolMeta(ruleDecision.Meta, "user_claims_7d_exceeded") &&
-			!boolMeta(ruleDecision.Meta, "user_claims_30d_exceeded") &&
-			!boolMeta(ruleDecision.Meta, "user_claim_rate_7d_exceeded") &&
-			!boolMeta(ruleDecision.Meta, "user_claim_rate_30d_exceeded")
-		merchantSafe := !boolMeta(ruleDecision.Meta, "merchant_abnormal_rate_7d_exceeded") &&
-			!boolMeta(ruleDecision.Meta, "merchant_abnormal_rate_30d_exceeded")
-		riderSafe := !boolMeta(ruleDecision.Meta, "rider_abnormal_rate_7d_exceeded") &&
-			!boolMeta(ruleDecision.Meta, "rider_abnormal_rate_30d_exceeded")
-		if userSafe && merchantSafe && riderSafe {
-			decision.CompensationSource = algorithm.CompensationSourcePlatform
-			decision.Type = "platform-pay"
-			recoveryRequired = false
-			recoveryTarget = ""
-		} else {
-			responsibleParty = "unknown"
-		}
+		decision.CompensationSource = algorithm.CompensationSourcePlatform
+		decision.Type = algorithm.DecisionModePlatformFallback
+		recoveryRequired = false
+		recoveryTarget = ""
 	}
 	if responsibleParty == "unknown" && decision.CompensationSource != "" {
 		switch decision.CompensationSource {
@@ -624,38 +646,6 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		return
 	}
 
-	// 平台先行赔付：入队失败时保留持久化赔付动作，由恢复调度器补偿重试。
-	if decision.Approved && decision.Amount > 0 {
-		decisions, err := server.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: req.OrderID, Valid: true})
-		if err != nil || len(decisions) == 0 {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("load payout decision actions: %w", err)))
-			return
-		}
-		actions, err := server.store.ListBehaviorActionsByDecision(ctx, decisions[0].ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("load payout behavior actions: %w", err)))
-			return
-		}
-		var payoutActionID int64
-		for _, action := range actions {
-			if action.ActionType == "payout" && action.TargetEntity == "user" {
-				payoutActionID = action.ID
-				break
-			}
-		}
-		if payoutActionID == 0 {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("payout action not created for approved claim")))
-			return
-		}
-
-		err = server.taskDistributor.DistributeTaskClaimPayout(ctx, &worker.ClaimPayoutPayload{
-			ActionID: payoutActionID,
-		}, asynq.Queue(worker.QueueCritical))
-		if err != nil {
-			log.Error().Err(err).Int64("claim_id", claim.ID).Int64("behavior_action_id", payoutActionID).Msg("failed to enqueue claim payout task, recovery scheduler will retry persisted payout action")
-		}
-	}
-
 	// 构造响应
 	resp := SubmitClaimResponse{
 		ClaimID:            claim.ID,
@@ -668,7 +658,7 @@ func (server *Server) SubmitClaim(ctx *gin.Context) {
 		resp.ApprovedAmount = &decision.Amount
 		resp.DecisionStatus = submitClaimDecisionStatusAutoAdjudicated
 		resp.PayoutStatus = submitClaimPayoutStatusProcessing
-		resp.PayoutETA = submitClaimPayoutETA(decision.Type)
+		resp.PayoutETA = submitClaimPayoutETA(algorithm.DecisionApprovalType(decision.Type))
 	}
 
 	// 如果有警告信息，添加到响应
