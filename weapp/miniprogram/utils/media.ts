@@ -187,12 +187,12 @@ interface CompleteUploadRequest {
 
 interface CompleteUploadResponse {
   media_id: number
-  urls: {
+  urls?: {
     thumb?: string
     card?: string
     detail?: string
     original?: string
-  }
+  } | null
   status: string
 }
 
@@ -273,15 +273,17 @@ export async function uploadMedia(
     object_key: session.object_key
   })
 
+  const urls = result.urls ?? {}
+
   const displayUrl =
-    result.urls.card ?? result.urls.detail ?? result.urls.original ?? ''
+    urls.card ?? urls.detail ?? urls.original ?? ''
 
   logger.debug('uploadMedia: 上传成功', { mediaId: result.media_id }, 'uploadMedia')
 
   return {
     mediaId: result.media_id,
     displayUrl,
-    urls: result.urls
+    urls
   }
 }
 

@@ -582,6 +582,7 @@ Page({
 
   async onChooseAvatar(e: WechatMiniprogram.CustomEvent) {
     const { avatarUrl } = e.detail
+    const previousAvatarUrl = this.data.userInfo.avatarUrl || ''
 
     // Optimistic Update
     this.setData({
@@ -593,25 +594,39 @@ Page({
     try {
       // 1. Upload to Server
       const { mediaId, displayUrl } = await UploadService.uploadImage(avatarUrl, 'avatar')
-      const remoteUrl = displayUrl
 
-      // 2. Persist locally with remote URL
-      wx.setStorageSync('user_avatar', remoteUrl)
+      // 2. Update Backend Profile
+      await updateUserInfo({ avatar_media_asset_id: mediaId })
 
-      // 3. Update Global Data
+      const resolvedAvatarUrl = displayUrl || avatarUrl
+
+      // 3. Persist the latest usable avatar after backend profile update succeeds
+      wx.setStorageSync('user_avatar', resolvedAvatarUrl)
+
+      // 4. Update Global Data and current page state
       app.globalData.userInfo = {
         ...(app.globalData.userInfo || {}),
-        avatarUrl: remoteUrl
+        avatarUrl: resolvedAvatarUrl
       } as WechatMiniprogram.UserInfo
 
       this.setData({
-        'userInfo.avatarUrl': remoteUrl
+        'userInfo.avatarUrl': resolvedAvatarUrl
       })
 
-      // 4. Update Backend Profile
-      await updateUserInfo({ avatar_media_asset_id: mediaId })
+      if (!displayUrl) {
+        wx.showToast({ title: '头像已提交，审核通过后自动更新', icon: 'none' })
+      }
 
     } catch (error) {
+      this.setData({
+        'userInfo.avatarUrl': previousAvatarUrl
+      })
+
+      app.globalData.userInfo = {
+        ...(app.globalData.userInfo || {}),
+        avatarUrl: previousAvatarUrl
+      } as WechatMiniprogram.UserInfo
+
       console.error('Failed to update avatar on backend', error)
       wx.showToast({ title: '头像上传失败', icon: 'none' })
     } finally {

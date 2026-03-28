@@ -167,6 +167,9 @@ func (server *Server) completeMediaUpload(ctx *gin.Context) {
 		return
 	}
 	variants := server.publicVariantsForAsset(asset)
+	if variants == nil {
+		variants = map[string]string{}
+	}
 
 	ctx.JSON(http.StatusOK, completeUploadResponse{
 		MediaID:  asset.ID,

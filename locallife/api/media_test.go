@@ -284,6 +284,36 @@ func TestCompleteMediaUploadAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "OK pending moderation returns empty urls object",
+			body: validReq,
+			setupAuth: func(t *testing.T, req *http.Request, server *Server) {
+				addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, tempDir string) {
+				session := randomUploadSession(user.ID, "avatar", "public", objectKey, false)
+				session.ID = validReq.UploadID
+
+				writeLocalFile(t, tempDir, objectKey)
+
+				asset := randomMediaAsset(11, user.ID, "public", objectKey)
+				asset.MediaCategory = string(media.CategoryAvatar)
+				asset.ModerationStatus = "pending"
+
+				store.EXPECT().GetUploadSession(gomock.Any(), validReq.UploadID).Times(1).Return(session, nil)
+				store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+				store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
+			},
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, rec.Code)
+				var resp completeUploadResponse
+				requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &resp)
+				require.EqualValues(t, 11, resp.MediaID)
+				require.Equal(t, "pending", resp.Status)
+				require.NotNil(t, resp.Variants)
+				require.Empty(t, resp.Variants)
+			},
+		},
+		{
 			name: "NotFound session not found",
 			body: validReq,
 			setupAuth: func(t *testing.T, req *http.Request, server *Server) {
