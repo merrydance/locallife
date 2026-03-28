@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/hmac"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -340,29 +339,28 @@ func (c *AliyunOpenAPIClient) Recognize(ctx context.Context, capability Capabili
 	if !ok {
 		return nil, fmt.Errorf("unsupported aliyun capability: %s", capability)
 	}
-	body := map[string]any{
-		"Action":    op.Action,
-		"Version":   op.Version,
-		"RegionId":  c.region,
-		"ImageType": normalizeAliyunImageType(req.ContentType),
-		"Body":      bytesToBase64(req.Data),
+	requestURL, err := url.Parse(c.endpoint)
+	if err != nil {
+		return nil, err
 	}
 	if capability == CapabilityAliyunIDCard && req.Side != DocumentSideUnknown {
-		body["Side"] = string(req.Side)
+		query := requestURL.Query()
+		query.Set("Side", string(req.Side))
+		requestURL.RawQuery = query.Encode()
 	}
-	encoded, err := json.Marshal(body)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, requestURL.String(), bytes.NewReader(req.Data))
 	if err != nil {
 		return nil, err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(encoded))
-	if err != nil {
-		return nil, err
+	contentType := strings.TrimSpace(req.ContentType)
+	if contentType == "" {
+		contentType = "application/octet-stream"
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Content-Type", contentType)
 	httpReq.Header.Set("Accept", "application/json")
 	httpReq.Header.Set("x-acs-version", op.Version)
 	httpReq.Header.Set("x-acs-action", op.Action)
-	if err := c.signer(httpReq, encoded); err != nil {
+	if err := c.signer(httpReq, req.Data); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrAliyunOCRSigning, err)
 	}
 	resp, err := c.httpClient.Do(httpReq)
@@ -439,34 +437,6 @@ func parseAliyunAPIError(statusCode int, payload []byte) error {
 		return &AliyunAPIError{StatusCode: statusCode, Code: fmt.Sprintf("http_%d", statusCode), Message: string(payload)}
 	}
 	return &AliyunAPIError{StatusCode: statusCode, Code: apiErr.Code, Message: apiErr.Message}
-}
-
-func bytesToBase64(data []byte) string {
-	if len(data) == 0 {
-		return ""
-	}
-	return base64.StdEncoding.EncodeToString(data)
-}
-
-func normalizeAliyunImageType(contentType string) string {
-	contentType = strings.TrimSpace(strings.ToLower(contentType))
-	switch contentType {
-	case "image/jpeg", "image/jpg":
-		return "jpg"
-	case "image/png":
-		return "png"
-	case "image/webp":
-		return "webp"
-	case "image/heic":
-		return "heic"
-	case "image/heif":
-		return "heif"
-	default:
-		if strings.HasPrefix(contentType, "image/") {
-			return strings.TrimPrefix(contentType, "image/")
-		}
-		return contentType
-	}
 }
 
 func buildAliyunCanonicalRequest(httpReq *http.Request, signedHeaders []string, payloadHash string) string {

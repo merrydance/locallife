@@ -3,7 +3,6 @@ package ocr
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -220,6 +219,9 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 		if got := r.Header.Get("x-acs-version"); got != "2021-07-07" {
 			t.Fatalf("x-acs-version = %s", got)
 		}
+		if got := r.Header.Get("Content-Type"); got != "image/jpeg" {
+			t.Fatalf("content-type = %s", got)
+		}
 		if got := r.Header.Get("Accept"); got != "application/json" {
 			t.Fatalf("accept = %s", got)
 		}
@@ -274,24 +276,8 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 	if capturedHash != hex.EncodeToString(wantHash[:]) {
 		t.Fatalf("x-acs-content-sha256 = %s", capturedHash)
 	}
-	var got map[string]any
-	if err := json.Unmarshal(capturedBody, &got); err != nil {
-		t.Fatalf("unmarshal request body: %v", err)
-	}
-	if got["Action"] != "RecognizeIdentityCard" {
-		t.Fatalf("body action = %v", got["Action"])
-	}
-	if got["RegionId"] != "cn-hangzhou" {
-		t.Fatalf("body region = %v", got["RegionId"])
-	}
-	if got["ImageType"] != "jpg" {
-		t.Fatalf("body image type = %v", got["ImageType"])
-	}
-	if got["Body"] != base64.StdEncoding.EncodeToString([]byte("img-bytes")) {
-		t.Fatalf("body image payload = %v", got["Body"])
-	}
-	if got["Side"] != string(DocumentSideFront) {
-		t.Fatalf("body side = %v", got["Side"])
+	if string(capturedBody) != "img-bytes" {
+		t.Fatalf("raw request body = %q", string(capturedBody))
 	}
 }
 
@@ -325,29 +311,6 @@ func TestBuildAliyunCanonicalRequest_MatchesACS3Shape(t *testing.T) {
 
 	if got != want {
 		t.Fatalf("canonical request mismatch\nwant:\n%s\n\ngot:\n%s", want, got)
-	}
-}
-
-func TestNormalizeAliyunImageType(t *testing.T) {
-	tests := []struct {
-		name        string
-		contentType string
-		want        string
-	}{
-		{name: "jpeg", contentType: "image/jpeg", want: "jpg"},
-		{name: "png", contentType: "image/png", want: "png"},
-		{name: "webp", contentType: "image/webp", want: "webp"},
-		{name: "heic", contentType: "image/heic", want: "heic"},
-		{name: "strip image prefix", contentType: "image/gif", want: "gif"},
-		{name: "passthrough", contentType: "pdf", want: "pdf"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := normalizeAliyunImageType(tc.contentType); got != tc.want {
-				t.Fatalf("normalizeAliyunImageType(%q) = %q, want %q", tc.contentType, got, tc.want)
-			}
-		})
 	}
 }
 
