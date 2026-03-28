@@ -60,7 +60,8 @@ Page({
     loading: false,
     refreshing: false,
     hasMore: true,
-    page: 1
+    page: 1,
+    total: 0
   },
 
   onLoad() {
@@ -83,11 +84,16 @@ Page({
     try {
       const page = reset ? 1 : this.data.page
       const type = this.data.activeType as NotificationType | undefined
-      const res = await notificationService.getNotifications({
-        page_id: page,
-        page_size: 20,
-        type: type || undefined
-      })
+      const [res, unreadResult] = await Promise.all([
+        notificationService.getNotifications({
+          page_id: page,
+          page_size: 20,
+          type: type || undefined
+        }),
+        reset
+          ? notificationService.getUnreadCount().catch(() => ({ count: this.data.unreadCount }))
+          : Promise.resolve({ count: this.data.unreadCount })
+      ])
 
       const notifs: NotifView[] = (res.notifications || []).map((n: Notification) => ({
         ...n,
@@ -95,14 +101,15 @@ Page({
         typeClass: TYPE_CLASS_MAP[n.type] || 'icon-gray',
         timeDisplay: formatTime(n.created_at)
       }))
-
-      const unreadCount = notifs.filter((n) => !n.is_read).length
+      const notifications = reset ? notifs : [...this.data.notifications, ...notifs]
+      const total = typeof res.total === 'number' ? res.total : notifications.length
 
       this.setData({
-        notifications: reset ? notifs : [...this.data.notifications, ...notifs],
-        hasMore: notifs.length === 20,
-        page: page + 1,
-        unreadCount: reset ? unreadCount : this.data.unreadCount,
+        notifications,
+        hasMore: res.hasMore,
+        page: res.page + 1,
+        total,
+        unreadCount: unreadResult.count,
         initialLoading: false,
         loading: false,
         refreshing: false

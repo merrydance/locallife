@@ -30,6 +30,7 @@ type Store interface {
 	ApproveRiderApplicationTx(ctx context.Context, arg ApproveRiderApplicationTxParams) (ApproveRiderApplicationTxResult, error)
 	// Combo transactions
 	CreateComboSetTx(ctx context.Context, arg CreateComboSetTxParams) (CreateComboSetTxResult, error)
+	UpdateComboSetTx(ctx context.Context, arg UpdateComboSetTxParams) (UpdateComboSetTxResult, error)
 	CreateOrderTx(ctx context.Context, arg CreateOrderTxParams) (CreateOrderTxResult, error)
 	ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrderPaymentTxParams) (ProcessOrderPaymentTxResult, error)
 	ProcessPaymentSuccessTx(ctx context.Context, arg ProcessPaymentSuccessTxParams) (ProcessPaymentSuccessTxResult, error)
@@ -75,6 +76,8 @@ type Store interface {
 	ReleaseReservationInventoryTx(ctx context.Context, arg ReleaseReservationInventoryTxParams) error
 	// M15: Order status transactions
 	UpdateOrderStatusTx(ctx context.Context, arg UpdateOrderStatusTxParams) (UpdateOrderStatusTxResult, error)
+	AcceptTakeoutOrderTx(ctx context.Context, arg AcceptTakeoutOrderTxParams) (AcceptTakeoutOrderTxResult, error)
+	MarkTakeoutOrderReadyTx(ctx context.Context, arg MarkTakeoutOrderReadyTxParams) (MarkTakeoutOrderReadyTxResult, error)
 	CompleteOrderTx(ctx context.Context, arg CompleteOrderTxParams) (CompleteOrderTxResult, error)
 	CancelOrderTx(ctx context.Context, arg CancelOrderTxParams) (CancelOrderTxResult, error)
 	// M5: Table transactions

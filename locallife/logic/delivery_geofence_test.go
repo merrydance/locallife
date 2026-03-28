@@ -3,6 +3,7 @@ package logic
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -67,8 +68,15 @@ func TestAutoConfirmDelivery_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 1, UserID: 10}
-	delivery := db.Delivery{ID: 2, OrderID: 3, Status: "delivering", DeliveryFee: 500}
+	rider := db.Rider{ID: 1, UserID: 10,
+		CurrentLongitude:  numericFromFloatStatus(120.0),
+		CurrentLatitude:   numericFromFloatStatus(30.0),
+		LocationUpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	delivery := db.Delivery{ID: 2, OrderID: 3, Status: "delivering", DeliveryFee: 500,
+		DeliveryLongitude: numericFromFloatStatus(120.0),
+		DeliveryLatitude:  numericFromFloatStatus(30.0),
+	}
 	order := db.Order{ID: 3, Status: "delivering"}
 
 	store.EXPECT().
@@ -84,8 +92,46 @@ func TestAutoConfirmDelivery_Success(t *testing.T) {
 		Times(1).
 		Return(db.OrderStatusLog{}, nil)
 
-	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 5000)
+	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120, 5000)
 	require.NoError(t, err)
 	require.True(t, result.Updated)
 	require.Equal(t, "rider_delivered", result.Order.Status)
+}
+
+func TestAutoConfirmDelivery_RiderLocationMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 1, UserID: 10}
+	delivery := db.Delivery{ID: 2, OrderID: 3, Status: "delivering", DeliveryFee: 500,
+		DeliveryLongitude: numericFromFloatStatus(120.0),
+		DeliveryLatitude:  numericFromFloatStatus(30.0),
+	}
+
+	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120, 5000)
+	require.Error(t, err)
+	require.Equal(t, "骑手定位缺失，无法确认送达，请先刷新定位", err.Error())
+	require.False(t, result.Updated)
+}
+
+func TestAutoConfirmDelivery_RiderLocationStale(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 1, UserID: 10,
+		CurrentLongitude:  numericFromFloatStatus(120.0),
+		CurrentLatitude:   numericFromFloatStatus(30.0),
+		LocationUpdatedAt: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true},
+	}
+	delivery := db.Delivery{ID: 2, OrderID: 3, Status: "delivering", DeliveryFee: 500,
+		DeliveryLongitude: numericFromFloatStatus(120.0),
+		DeliveryLatitude:  numericFromFloatStatus(30.0),
+	}
+
+	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120, 5000)
+	require.Error(t, err)
+	require.Equal(t, "骑手定位已过期，无法确认送达，请刷新定位后重试", err.Error())
+	require.False(t, result.Updated)
 }

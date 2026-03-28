@@ -1,5 +1,6 @@
 import { ReservationService } from '../../../api/reservation'
 import ReservationAdapter from '../../../adapters/reservation'
+import Navigation from '../../../utils/navigation'
 
 type ValueEvent<T> = WechatMiniprogram.CustomEvent<{ value: T }>
 
@@ -168,9 +169,7 @@ Page({
             wx.showToast({ title: '预订成功', icon: 'success' })
 
             setTimeout(() => {
-                wx.redirectTo({
-                    url: '/pages/reservation/list/index'
-                })
+                Navigation.redirectToReservationList()
             }, 1000)
 
         } catch (error: unknown) {

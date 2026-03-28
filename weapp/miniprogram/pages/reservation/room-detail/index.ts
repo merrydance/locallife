@@ -1,6 +1,9 @@
 import { getRoomDetail, Room } from '../../../api/reservation'
 import { checkRoomAvailability, RoomAvailabilityResponse, TimeSlot } from '../../../api/room'
 import { formatPriceNoSymbol } from '@/utils/util'
+import { settleAll } from '../../../utils/promise'
+
+const ROOM_AVAILABILITY_BATCH_SIZE = 3
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
   if (error && typeof error === 'object' && 'message' in error) {
@@ -121,18 +124,23 @@ Page({
 
     // 并行加载所有日期的可用时段
     try {
-      // 顺序加载，避免触发 API 速率限制
       const results: RoomAvailabilityResponse[] = []
-      
-      for (const d of calendarDays) {
-        try {
-          const res = await checkRoomAvailability(roomId, { date: d.date })
-          results.push(res)
-        } catch (err) {
-          console.error(`加载日期 ${d.date} 可用性失败:`, err)
-          // 失败时默认为空
+
+      for (let index = 0; index < calendarDays.length; index += ROOM_AVAILABILITY_BATCH_SIZE) {
+        const batch = calendarDays.slice(index, index + ROOM_AVAILABILITY_BATCH_SIZE)
+        const batchResults = await settleAll(
+          batch.map((day) => checkRoomAvailability(roomId, { date: day.date }))
+        )
+
+        batchResults.forEach((result, batchIndex) => {
+          if (result.status === 'fulfilled') {
+            results.push(result.value)
+            return
+          }
+
+          console.error(`加载日期 ${batch[batchIndex]?.date || ''} 可用性失败:`, result.reason)
           results.push({ time_slots: [] } as RoomAvailabilityResponse)
-        }
+        })
       }
 
       const updatedDays: DayAvailability[] = calendarDays.map((day, i) => {

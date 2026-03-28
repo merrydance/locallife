@@ -10,6 +10,7 @@ import {
   SearchSuggestion
 } from '../../../api/search'
 import { getPublicImageUrl } from '../../../utils/image'
+import { settleAll } from '../../../utils/promise'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
 const DEBOUNCE_MS = 300
@@ -79,10 +80,10 @@ Page({
     })
 
     try {
-      const [historyResult, hotWordsResult] = await Promise.allSettled([
+      const [historyResult, hotWordsResult] = await settleAll([
         getSearchHistory(10),
         getPopularKeywords('dish')
-      ])
+      ] as const)
 
       const history = historyResult.status === 'fulfilled' ? historyResult.value : []
       const hotWords = hotWordsResult.status === 'fulfilled' ? hotWordsResult.value : []

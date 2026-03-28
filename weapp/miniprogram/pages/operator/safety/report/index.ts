@@ -1,27 +1,67 @@
-import { operatorBasicManagementService } from '../../../../api/operator-basic-management'
+import {
+  operatorBasicManagementService,
+  SubmitSafetyReportRequest
+} from '../../../../api/operator-basic-management'
 
 type SafetyStatusFilter = '' | 'pending' | 'resolved' | 'rejected'
+
+type SafetyLevel = 'low' | 'medium' | 'high' | 'critical'
 
 interface TabChangeDetail {
   value: SafetyStatusFilter
 }
 
+interface LevelChangeDetail {
+  value: SafetyLevel
+}
+
+type SafetyReportView = {
+  id: number
+  title: string
+  level: SafetyLevel
+  level_label: string
+  status: 'pending' | 'resolved' | 'rejected'
+  status_label: string
+  created_at: string
+}
+
+function formatSafetyLevel(level: SafetyLevel): string {
+  const labels: Record<SafetyLevel, string> = {
+    low: '低',
+    medium: '中',
+    high: '高',
+    critical: '严重'
+  }
+  return labels[level]
+}
+
+function formatSafetyStatus(status: 'pending' | 'resolved' | 'rejected'): string {
+  const labels = {
+    pending: '待处理',
+    resolved: '已处理',
+    rejected: '已驳回'
+  }
+  return labels[status]
+}
+
 Page({
   data: {
-    reports: [] as Array<{
-      id: number
-      title: string
-      level: 'low' | 'medium' | 'high' | 'critical'
-      status: 'pending' | 'resolved' | 'rejected'
-      created_at: string
-    }>,
+    reports: [] as SafetyReportView[],
     loading: false,
+    loadingMore: false,
     initialLoading: true,
+    error: '',
     navBarHeight: 88,
     status: '' as SafetyStatusFilter,
     page: 1,
     limit: 20,
-    hasMore: false
+    hasMore: false,
+    submitVisible: false,
+    submitLoading: false,
+    submitTitle: '',
+    submitDescription: '',
+    submitLevel: 'medium' as SafetyLevel,
+    submitMerchantIdsRaw: ''
   },
 
   onLoad() {
@@ -38,10 +78,28 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
   },
 
+  onPullDownRefresh() {
+    this.loadReports(true).finally(() => {
+      wx.stopPullDownRefresh()
+    })
+  },
+
+  adaptReport(item: { id: number, title: string, level: SafetyLevel, status: 'pending' | 'resolved' | 'rejected', created_at: string }): SafetyReportView {
+    return {
+      ...item,
+      level_label: formatSafetyLevel(item.level),
+      status_label: formatSafetyStatus(item.status)
+    }
+  },
+
   async loadReports(reset = false) {
-    if (this.data.loading) return
+    if (this.data.loading || (this.data.loadingMore && !reset)) return
     const nextPage = reset ? 1 : this.data.page
-    this.setData({ loading: true })
+    if (reset) {
+      this.setData({ loading: true, error: '' })
+    } else {
+      this.setData({ loadingMore: true })
+    }
 
     try {
       const res = await operatorBasicManagementService.getSafetyReports({
@@ -51,16 +109,16 @@ Page({
       })
       const current = reset ? [] : this.data.reports
       this.setData({
-        reports: [...current, ...(res.items || [])],
+        reports: [...current, ...(res.items || []).map((item) => this.adaptReport(item))],
         page: nextPage + 1,
         hasMore: Boolean(res.has_more),
         loading: false,
+        loadingMore: false,
         initialLoading: false
       })
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : '加载食安事件失败'
-      this.setData({ loading: false, initialLoading: false })
-      wx.showToast({ title: message, icon: 'none' })
+      this.setData({ loading: false, loadingMore: false, initialLoading: false, error: message })
     }
   },
 
@@ -72,6 +130,70 @@ Page({
   onLoadMore() {
     if (!this.data.hasMore || this.data.loading) return
     this.loadReports(false)
+  },
+
+  onToggleSubmit() {
+    this.setData({ submitVisible: !this.data.submitVisible })
+  },
+
+  onSubmitTitleChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ submitTitle: e.detail.value || '' })
+  },
+
+  onSubmitDescriptionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ submitDescription: e.detail.value || '' })
+  },
+
+  onSubmitLevelChange(e: WechatMiniprogram.CustomEvent<LevelChangeDetail>) {
+    this.setData({ submitLevel: e.detail.value })
+  },
+
+  onSubmitMerchantIdsChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ submitMerchantIdsRaw: e.detail.value || '' })
+  },
+
+  parseMerchantIds(raw: string): number[] {
+    if (!raw.trim()) return []
+    return raw.split(',').map((token) => Number(token.trim())).filter((id) => Number.isInteger(id) && id > 0)
+  },
+
+  async onSubmitReport() {
+    if (!this.data.submitTitle.trim()) {
+      wx.showToast({ title: '请输入事件标题', icon: 'none' })
+      return
+    }
+    if (this.data.submitDescription.trim().length < 5) {
+      wx.showToast({ title: '事件描述至少 5 个字符', icon: 'none' })
+      return
+    }
+
+    const payload: SubmitSafetyReportRequest = {
+      title: this.data.submitTitle.trim(),
+      description: this.data.submitDescription.trim(),
+      level: this.data.submitLevel,
+      merchant_ids: this.parseMerchantIds(this.data.submitMerchantIdsRaw)
+    }
+
+    try {
+      this.setData({ submitLoading: true })
+      wx.showLoading({ title: '提交中', mask: true })
+      await operatorBasicManagementService.submitSafetyReport(payload)
+      wx.showToast({ title: '提交成功', icon: 'success' })
+      this.setData({
+        submitVisible: false,
+        submitTitle: '',
+        submitDescription: '',
+        submitLevel: 'medium',
+        submitMerchantIdsRaw: ''
+      })
+      this.loadReports(true)
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : '提交失败'
+      wx.showToast({ title: message, icon: 'none' })
+    } finally {
+      this.setData({ submitLoading: false })
+      wx.hideLoading()
+    }
   },
 
   onDetail(e: WechatMiniprogram.TouchEvent) {

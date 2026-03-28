@@ -1,16 +1,14 @@
 {
-    "navigationBarTitleText": "异常上报",
+    "navigationBarTitleText": "索赔与申诉",
     "usingComponents": {
         "custom-navbar": "/components/custom-navbar/index",
         "t-cell": "tdesign-miniprogram/cell/cell",
         "t-textarea": "tdesign-miniprogram/textarea/textarea",
         "t-button": "tdesign-miniprogram/button/button",
-        "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-image": "tdesign-miniprogram/image/image",
         "t-tag": "tdesign-miniprogram/tag/tag",
-        "t-picker": "tdesign-miniprogram/picker/picker",
-        "t-picker-item": "tdesign-miniprogram/picker-item/picker-item",
         "t-empty": "tdesign-miniprogram/empty/empty",
-        "t-loading": "tdesign-miniprogram/loading/loading"
+        "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel"
     }
 }

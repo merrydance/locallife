@@ -1,9 +1,8 @@
 import { logger } from '../../utils/logger'
-import { searchRooms, getRecommendedMerchants, searchMerchants, RoomSearchResult } from '../../api/search'
+import ConsumerDiscoveryAdapter from '../../adapters/consumer-discovery'
+import { searchRoomsWithMeta, getRecommendedMerchantsWithMeta, searchMerchantsWithMeta, RoomSearchResult } from '../../api/search'
 import { MerchantSummary } from '../../api/merchant'
 import { globalStore } from '../../utils/global-store'
-import { getPublicImageUrl } from '../../utils/image'
-import { DishAdapter } from '../../adapters/dish'
 
 const app = getApp<IAppOption>()
 
@@ -150,18 +149,21 @@ Page({
     }
 
     try {
-      const { activeTab, page, pageSize, keyword, appliedFilters } = this.data
+      const { activeTab, pageSize, keyword, appliedFilters } = this.data
+      const targetPage = reset ? 1 : this.data.page
       const latitude = app.globalData.latitude || undefined
       const longitude = app.globalData.longitude || undefined
 
       let newList: ReservationListItem[] = []
+      let hasMore = false
+      let nextPage = targetPage + 1
 
       if (activeTab === 'room') {
         // 统一走 search 路由；缺省日期/时段使用默认值
         const effectiveDate = appliedFilters.date || this.data.dateOptions[0]?.value || this.formatDateLocal(new Date())
         const effectiveTime = appliedFilters.startTime || this.data.timeOptions[0]?.value || '18:00'
 
-        const results = await searchRooms({
+        const results = await searchRoomsWithMeta({
           reservation_date: effectiveDate,
           reservation_time: effectiveTime,
           min_capacity: appliedFilters.guestCount,
@@ -169,27 +171,15 @@ Page({
           max_minimum_spend: appliedFilters.maxSpend,
           user_latitude: latitude,
           user_longitude: longitude,
-          page_id: page,
+          page_id: targetPage,
           page_size: pageSize
         })
-        // 在 TypeScript 中预处理距离和图片
-        newList = results.map((r: RoomSearchResult) => {
-          const room = r as RoomSearchResult & {
-            merchantName?: string
-            tableNo?: string
-            merchantAddress?: string
-          }
-
-          return {
-            ...r,
-            merchant_name: r.merchant_name || room.merchantName || '',
-            table_no: r.table_no || room.tableNo || r.name || '',
-            merchant_address: r.merchant_address || room.merchantAddress || '',
-            type: 'room',
-            primary_image: getPublicImageUrl(r.primary_image) || '',
-            distance_display: r.distance !== undefined ? DishAdapter.formatDistance(r.distance) : ''
-          }
-        })
+        newList = results.rooms.map((r: RoomSearchResult) => ({
+          ...ConsumerDiscoveryAdapter.toRoomSearchViewModel(r),
+          type: 'room'
+        }))
+        hasMore = results.hasMore
+        nextPage = results.page + 1
 
         if (reset && newList.length === 0) {
           const hasRestaurantsInArea = await this.checkRestaurantAvailability(latitude, longitude)
@@ -203,33 +193,42 @@ Page({
         let merchantResults: MerchantSummary[] = []
 
         if (keyword) {
-          merchantResults = await searchMerchants({
+          const result = await searchMerchantsWithMeta({
             keyword,
-            page_id: page,
+            page_id: targetPage,
             page_size: pageSize,
             user_latitude: latitude,
             user_longitude: longitude
           })
+          merchantResults = result.merchants
+          hasMore = result.hasMore
+          nextPage = result.page + 1
         } else {
-          const result = await getRecommendedMerchants({
+          const result = await getRecommendedMerchantsWithMeta({
             user_latitude: latitude,
             user_longitude: longitude,
-            limit: pageSize
+            limit: pageSize,
+            page: targetPage
           })
-          merchantResults = result
+          merchantResults = result.merchants
+          hasMore = result.hasMore
+          nextPage = result.page + 1
         }
 
         // 转换为与外卖页一致的 ViewModel 格式
-        newList = merchantResults.map((m: MerchantSummary) => ({
-          id: m.id,
-          name: m.name,
-          imageUrl: getPublicImageUrl(m.cover_image || m.logo_url) || '',
-          cuisineType: m.tags ? m.tags.slice(0, 2) : [],
-          distance: m.distance !== undefined ? DishAdapter.formatDistance(m.distance) : '',
-          address: m.address || '',
-          tags: m.tags ? m.tags.slice(0, 3) : [],
+        newList = merchantResults.map((m: MerchantSummary) => {
+          const merchant = ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(m)
+          return {
+          id: merchant.id,
+          name: merchant.name,
+          imageUrl: merchant.imageUrl,
+          cuisineType: merchant.tags.slice(0, 2),
+          distance: merchant.distanceDisplay,
+          address: merchant.address,
+          tags: merchant.tags.slice(0, 3),
           type: 'restaurant'
-        }))
+        }
+        })
 
         if (reset) {
           this.setData({ hasRestaurantsInArea: newList.length > 0 })
@@ -238,8 +237,9 @@ Page({
 
       this.setData({
         itemList: reset ? newList : [...this.data.itemList, ...newList],
+        page: nextPage,
         loading: false,
-        hasMore: newList.length === pageSize
+        hasMore
       })
 
     } catch (error: unknown) {
@@ -269,14 +269,14 @@ Page({
 
   async checkRestaurantAvailability(latitude?: number, longitude?: number): Promise<boolean> {
     try {
-      const merchants = await searchMerchants({
+      const result = await searchMerchantsWithMeta({
         keyword: '',
         page_id: 1,
         page_size: 1,
         user_latitude: latitude,
         user_longitude: longitude
       })
-      return merchants.length > 0
+      return result.merchants.length > 0
     } catch (error) {
       logger.warn('检查区域餐厅供给失败，默认按有餐厅处理', error, 'Reservation.checkRestaurantAvailability')
       return true
@@ -322,8 +322,7 @@ Page({
   },
 
   onReachBottom() {
-    if (this.data.hasMore) {
-      this.setData({ page: this.data.page + 1 })
+    if (this.data.hasMore && !this.data.loading) {
       this.loadItems(false)
     }
   },

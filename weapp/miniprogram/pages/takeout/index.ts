@@ -1,7 +1,7 @@
-import { DishAdapter } from '../../adapters/dish'
+import ConsumerDiscoveryAdapter from '../../adapters/consumer-discovery'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
-import { searchMerchants, MerchantSummary, getPublicMerchantDishes, getPublicMerchantDetail, getHasUserOrderedFromMerchant, PublicDiscountRule, PublicVoucher, PublicDeliveryPromotion } from '../../api/merchant'
+import { searchMerchantsWithMeta, MerchantSummary, getPublicMerchantDishes, getPublicMerchantDetail, getHasUserOrderedFromMerchant, PublicDiscountRule, PublicVoucher, PublicDeliveryPromotion } from '../../api/merchant'
 import { getActiveCategories, ActiveCategory } from '../../api/location'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
@@ -10,6 +10,7 @@ import { globalStore } from '../../utils/global-store'
 import { requestManager } from '../../utils/request-manager'
 import { getStableBarHeights } from '../../utils/responsive'
 import { getPublicImageUrl } from '../../utils/image'
+import { settleAll } from '../../utils/promise'
 import { formatPrice } from '../../utils/util'
 
 const PAGE_CONTEXT = 'takeout_index'
@@ -537,7 +538,7 @@ Page({
       const app = getApp<IAppOption>()
       const currentPage = reset ? 1 : this.data.page
 
-      const merchants = await searchMerchants({
+      const result = await searchMerchantsWithMeta({
         keyword: this.data.searchKeyword,
         page_id: currentPage,
         page_size: PAGE_SIZE,
@@ -545,27 +546,27 @@ Page({
         user_longitude: app.globalData.longitude || undefined
       })
 
-      const hasMore = merchants.length === PAGE_SIZE
+      const merchants = result.merchants
+      const hasMore = result.hasMore
 
       const feedItems: MerchantFeedViewModel[] = merchants.map((m: MerchantSummary) => {
+        const merchantSummary = ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(m)
         // 计算"新店"：入驻30天内
         const isNewStore = m.created_at
           ? (Date.now() - new Date(m.created_at).getTime()) < 30 * 24 * 60 * 60 * 1000
           : false
 
         return {
-          ...deriveMerchantPromotions(m.tags || [], m.estimated_delivery_fee),
-          id: m.id,
-          name: m.name,
-          imageUrl: getPublicImageUrl(m.cover_image || m.logo_url || ''),
-          isOpen: m.is_open ?? true,
+          ...deriveMerchantPromotions(merchantSummary.tags, merchantSummary.deliveryFee),
+          id: merchantSummary.id,
+          name: merchantSummary.name,
+          imageUrl: merchantSummary.imageUrl,
+          isOpen: merchantSummary.isOpen,
           isOrderingSuspended: false,
-          distance: DishAdapter.formatDistance(m.distance ?? 0),
-          monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
-          deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
-            ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
-            : '',
-          tags: m.tags ? m.tags.slice(0, 3) : [],
+          distance: merchantSummary.distanceDisplay,
+          monthlySales: merchantSummary.monthlySales,
+          deliveryFeeDisplay: merchantSummary.deliveryFeeDisplay,
+          tags: merchantSummary.tags.slice(0, 3),
           featuredDishes: [],
           dishesLoading: true,
           avgPrepMinutes: DEFAULT_AVG_PREP_MINUTES,
@@ -575,7 +576,7 @@ Page({
           isNewStore,
           hasOrdered: false,
           detailLoading: true,
-          label: m.label || ''
+          label: merchantSummary.label
         }
       })
 
@@ -644,7 +645,7 @@ Page({
   },
 
   async hydrateMerchantDishesBatch(merchantIds: number[], generation: number) {
-    const results = await Promise.allSettled(
+    const results = await settleAll(
       merchantIds.map(async (merchantId) => ({
         merchantId,
         dishesResp: await getPublicMerchantDishes(merchantId)
@@ -684,7 +685,7 @@ Page({
   },
 
   async hydrateMerchantMetaBatch(merchantIds: number[], generation: number) {
-    const results = await Promise.allSettled(
+    const results = await settleAll(
       merchantIds.map(async (merchantId) => ({
         merchantId,
         detail: await getPublicMerchantDetail(merchantId, true),

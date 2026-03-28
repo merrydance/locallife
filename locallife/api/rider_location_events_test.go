@@ -241,16 +241,21 @@ func TestMaybeAutoConfirmDelivery(t *testing.T) {
 	server.config.GeofenceAutoDeliverEnabled = true
 
 	rider := randomRider(101)
+	rider.CurrentLongitude = numericFromFloat(116.410)
+	rider.CurrentLatitude = numericFromFloat(39.920)
+	rider.LocationUpdatedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	delivery := db.Delivery{
-		ID:              11,
-		OrderID:         21,
-		RiderID:         pgtype.Int8{Int64: rider.ID, Valid: true},
-		Status:          "delivering",
-		DeliveryFee:     2000,
-		Distance:        1500,
-		CreatedAt:       time.Now(),
-		PickupAddress:   "pickup",
-		DeliveryAddress: "dropoff",
+		ID:                11,
+		OrderID:           21,
+		RiderID:           pgtype.Int8{Int64: rider.ID, Valid: true},
+		Status:            "delivering",
+		DeliveryFee:       2000,
+		Distance:          1500,
+		CreatedAt:         time.Now(),
+		PickupAddress:     "pickup",
+		DeliveryAddress:   "dropoff",
+		DeliveryLongitude: numericFromFloat(116.410),
+		DeliveryLatitude:  numericFromFloat(39.920),
 	}
 
 	order := db.Order{

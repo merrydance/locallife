@@ -9,15 +9,15 @@ import (
 func IsOrderStatusAllowedForDeliveryAction(status string, action string) bool {
 	switch action {
 	case "grab":
-		return status == "paid" || status == "preparing" || status == "ready"
+		return status == db.OrderStatusReady
 	case "start_pickup":
-		return status == "courier_accepted"
+		return status == db.OrderStatusCourierAccepted
 	case "confirm_pickup":
-		return status == "courier_accepted"
+		return status == db.OrderStatusCourierAccepted
 	case "start_delivery":
-		return status == "picked"
+		return status == db.OrderStatusPicked
 	case "confirm_delivery":
-		return status == "delivering"
+		return status == db.OrderStatusDelivering
 	default:
 		return false
 	}

@@ -1,88 +1,137 @@
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
-}
-
-.loading {
   display: flex;
-  justify-content: center;
-  padding: 100rpx 0;
+  flex-direction: column;
 }
 
-.merchants-list {
-  padding: var(--spacer-md);
+.header-tools {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--td-bg-color-container);
 }
 
-.merchants-grid {
-  display: grid;
-  grid-template-columns: 1fr;
+.search-bar {
+  padding: var(--spacer-md) 32rpx var(--spacer-sm);
+}
+
+.filter-tabs {
+  border-bottom: 1rpx solid var(--td-border-color, #eee);
+}
+
+.tabs-container {
+  --td-tab-item-active-color: var(--td-brand-color);
+  --td-tab-track-color: var(--td-brand-color);
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.merchants-scroll {
+  flex: 1;
+  height: 0;
+}
+
+.merchants-container {
+  padding: var(--spacer-md) 32rpx calc(var(--spacer-md) + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
   gap: var(--spacer-md);
 }
 
-@media (min-width: 1024rpx) {
-  .merchants-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1440rpx) {
-  .merchants-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
 .merchant-card {
-  background-color: var(--td-bg-color-container);
-  border-radius: var(--radius-md);
-  padding: var(--spacer-md);
-  box-shadow: var(--shadow-sm, 0 4rpx 12rpx rgba(0,0,0,0.05));
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  box-shadow: var(--shadow-sm, 0 4rpx 20rpx rgba(0, 0, 0, 0.05));
 }
 
-.card-header {
+.merchant-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: var(--spacer-sm);
-  padding-bottom: var(--spacer-sm);
-  border-bottom: 1rpx solid var(--td-border-color, #F0F0F0);
+  gap: var(--spacer-sm);
+}
+
+.merchant-info {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+  flex: 1;
 }
 
 .merchant-name {
-  font-size: 30rpx; /* Keeping custom size or use --font-size-heading (32) */
-  font-weight: bold;
+  font-size: var(--font-size-heading);
+  font-weight: 600;
   color: var(--td-text-color-primary, #333);
 }
 
-.card-body {
-  margin-bottom: var(--spacer-sm);
-}
-
-.info-row {
+.merchant-rating {
   display: flex;
-  justify-content: space-between;
-  padding: var(--spacer-xs) 0;
-  font-size: var(--font-size-sm);
+  align-items: center;
+  gap: 8rpx;
 }
 
-.label {
+.rating-text {
+  font-size: var(--font-size-base);
+  color: var(--td-warning-color, #faad14);
+  font-weight: 600;
+}
+
+.merchant-details {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.detail-row {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
+.detail-text {
+  font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary, #666);
 }
 
-.value {
-  color: var(--td-text-color-primary, #333);
-  font-weight: 500;
-}
-
-.rating {
-  color: var(--td-warning-color, #FF9C00);
-}
-
-.card-actions {
+.merchant-stats {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-around;
+  padding: var(--spacer-md) 0;
+  border-top: 1rpx solid var(--td-border-color, #f0f0f0);
+  border-bottom: 1rpx solid var(--td-border-color, #f0f0f0);
+}
+
+.stat-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.stat-value {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary, #333);
+}
+
+.stat-label {
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-placeholder, #999);
+}
+
+.merchant-actions {
+  display: flex;
   gap: var(--spacer-sm);
-  padding-top: var(--spacer-sm);
-  border-top: 1rpx solid var(--td-border-color, #F0F0F0);
+  justify-content: flex-end;
 }
 
 /* 异常状态 */
@@ -95,35 +144,31 @@
 
 /* 骨架屏 */
 .skeleton-container {
-  padding: var(--spacer-md);
-}
-
-.merchants-skeleton-grid {
-  display: grid;
-  grid-template-columns: 1fr;
-  gap: var(--spacer-md);
-}
-
-@media (min-width: 1024rpx) {
-  .merchants-skeleton-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (min-width: 1440rpx) {
-  .merchants-skeleton-grid {
-    grid-template-columns: repeat(3, 1fr);
-  }
-}
-
-.merchant-skeleton-item {
-  height: 380rpx;
+  padding: var(--spacer-md) 32rpx;
 }
 
 .load-more {
   display: flex;
+  flex-direction: column;
   justify-content: center;
+  align-items: center;
   padding: 32rpx 0;
+}
+
+.no-more-text {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder, #999);
+}
+
+.dialog-content {
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.empty-container {
+  padding: 120rpx 0;
 }
 
 /* 动画 */

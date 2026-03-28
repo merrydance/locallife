@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -285,8 +286,22 @@ func (server *Server) maybeAutoConfirmDelivery(ctx context.Context, delivery db.
 		return
 	}
 
-	result, err := logic.AutoConfirmDelivery(ctx, server.store, delivery, rider, 5000)
+	result, err := logic.AutoConfirmDelivery(ctx, server.store, delivery, rider, DeliveryConfirmRadiusMeters, DeliveryConfirmLocationMaxAgeSec, 5000)
 	if err != nil {
+		var confirmErr *logic.DeliveryConfirmValidationError
+		if errors.As(err, &confirmErr) {
+			log.Warn().
+				Err(err).
+				Int64("delivery_id", delivery.ID).
+				Int64("rider_id", rider.ID).
+				Str("reason", confirmErr.Reason).
+				Int("distance_m", confirmErr.DistanceMeters).
+				Int("radius_m", confirmErr.RadiusMeters).
+				Int("location_age_s", confirmErr.LocationAgeSec).
+				Int("location_max_age_s", confirmErr.MaxAgeSec).
+				Msg("failed geofence delivery confirm validation")
+			return
+		}
 		log.Warn().Err(err).Int64("delivery_id", delivery.ID).Msg("failed to auto confirm delivery")
 		return
 	}

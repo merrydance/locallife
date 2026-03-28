@@ -53,3 +53,50 @@ func TestOrderServiceListMerchantOrders_WithOrderTypeFilter(t *testing.T) {
 	require.Equal(t, expectedOrders, result.Orders)
 	require.Equal(t, int64(21), result.TotalCount)
 }
+
+func TestOrderServiceListUserOrders_ReturnsTotalCount(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	service := NewOrderService(store, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+
+	status := "paid"
+	orderType := "takeout"
+	reservationID := int64(0)
+	input := ListUserOrdersQueryInput{
+		UserID:        66,
+		Status:        &status,
+		OrderType:     &orderType,
+		ReservationID: &reservationID,
+		PageID:        3,
+		PageSize:      5,
+	}
+
+	expectedOrders := []db.ListOrdersByUserWithFiltersRow{{ID: 501, UserID: input.UserID, Status: status, OrderType: orderType}}
+	store.EXPECT().
+		ListOrdersByUserWithFilters(gomock.Any(), db.ListOrdersByUserWithFiltersParams{
+			UserID:        input.UserID,
+			Status:        pgtype.Text{String: status, Valid: true},
+			OrderType:     pgtype.Text{String: orderType, Valid: true},
+			ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+			Limit:         input.PageSize,
+			Offset:        10,
+		}).
+		Times(1).
+		Return(expectedOrders, nil)
+	store.EXPECT().
+		CountOrdersByUserWithFilters(gomock.Any(), db.CountOrdersByUserWithFiltersParams{
+			UserID:        input.UserID,
+			Status:        pgtype.Text{String: status, Valid: true},
+			OrderType:     pgtype.Text{String: orderType, Valid: true},
+			ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
+		}).
+		Times(1).
+		Return(int64(17), nil)
+
+	result, err := service.ListUserOrders(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, expectedOrders, result.Orders)
+	require.Equal(t, int64(17), result.TotalCount)
+}

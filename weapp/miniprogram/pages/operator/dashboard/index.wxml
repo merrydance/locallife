@@ -53,6 +53,10 @@
               <text class="income-value">{{finance.current_month_income_display}}</text>
             </view>
           </view>
+          <view class="finance-actions">
+            <navigator url="/pages/operator/finance/withdraw/index" class="finance-link-pill">佣金明细</navigator>
+            <navigator url="/pages/operator/applyment/index" class="finance-link-pill finance-link-pill--ghost">开户状态</navigator>
+          </view>
         </view>
       </view>
 
@@ -60,6 +64,7 @@
       <view class="data-section">
         <view class="section-header">
           <view class="section-title">核心体检</view>
+          <navigator url="/pages/operator/analytics/index" class="section-link">查看分析</navigator>
           <t-tabs t-class="dimension-tabs" value="{{timeDimension}}" bindchange="onTimeDimensionChange" theme="tag" space-evenly="{{false}}">
             <t-tab-panel label="今日" value="day" />
             <t-tab-panel label="近7天" value="week" />
@@ -113,6 +118,12 @@
           <view class="section-title">业务管理</view>
         </view>
         <view class="menu-grid">
+          <navigator url="/pages/operator/analytics/index" class="menu-item">
+            <view class="menu-icon-bg color-primary">
+              <t-icon name="chart-bar" size="48rpx" />
+            </view>
+            <text>数据分析</text>
+          </navigator>
           <navigator url="/pages/operator/merchants/index?region_id={{selectedRegionId}}" class="menu-item">
             <view class="menu-icon-bg color-info">
               <t-icon name="shop" size="48rpx" />

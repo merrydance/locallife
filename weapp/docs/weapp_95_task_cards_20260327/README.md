@@ -10,6 +10,7 @@
 - 任务卡完成后，直接回填状态、PR 链接、验证结果和残余风险。
 - Phase 1 的 P0 止血项完成前，不应宣称 weapp 已进入 95 分提升阶段。
 - 每张任务卡都必须输出对应的自动化校验和人工回归结果。
+- 所有任务卡在实现前必须先核对后端真实契约，不能只依据前端旧实现或历史对齐文档判断接口字段与动作语义。
 
 ## 任务卡列表
 
@@ -36,6 +37,7 @@
 
 - [ ] [CARD-11 商户侧能力缺口补齐批次](weapp/docs/weapp_95_task_cards_20260327/card-11-merchant-capability-gap-batch.md)
 - [ ] [CARD-12 运营商侧一致性补齐批次](weapp/docs/weapp_95_task_cards_20260327/card-12-operator-consistency-batch.md)
+	详细拆分：`weapp/docs/operator/task-cards/README.md`
 - [ ] [CARD-13 平台侧控制面板提升批次](weapp/docs/weapp_95_task_cards_20260327/card-13-platform-control-surface-batch.md)
 - [ ] [CARD-14 骑手侧钱包与异常链路提升批次](weapp/docs/weapp_95_task_cards_20260327/card-14-rider-wallet-and-exception-batch.md)
 

@@ -1,5 +1,6 @@
 import {
   applyRegionExpansion,
+  listAvailableRegions,
   listRegionExpansionApplications,
   listRegions,
   type RegionExpansionApplication
@@ -109,26 +110,29 @@ Page({
       const districts: RegionOption[] = []
       let pageID = 1
       for (;;) {
-        const items = await listRegions({
+        const response = await listAvailableRegions({
           page_id: pageID,
           page_size: 100,
           level: 3,
-          parent_id: cityID
+          parent_id: cityID,
+          keyword: keyword || undefined
         })
+        const items = response.regions || []
         if (!items || items.length === 0) break
-        items.forEach((r) => districts.push({ label: r.name, secondary: this.data.selectedCityName, value: r.id }))
+        items.forEach((r) => districts.push({
+          label: r.name,
+          secondary: r.parent_name || this.data.selectedCityName,
+          value: r.id
+        }))
         if (items.length < 100) break
         pageID++
       }
-      const filtered = keyword
-        ? districts.filter((r) => r.label.includes(keyword))
-        : districts
       this.setData({
         regionOptions:   districts,
-        filteredRegions: filtered,
+        filteredRegions: districts,
         selectedRegionId:   0,
         selectedRegionName: '',
-        regionKeyword:   ''
+        regionKeyword:   keyword
       })
     } catch (e: unknown) {
       logger.error('Fetch districts failed', e)
@@ -151,10 +155,8 @@ Page({
 
   onRegionSearch(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     const keyword = e.detail.value || ''
-    const filtered = this.data.regionOptions.filter((r) =>
-      r.label.includes(keyword) || r.secondary.includes(keyword)
-    )
-    this.setData({ filteredRegions: filtered, regionKeyword: keyword })
+    this.setData({ regionKeyword: keyword })
+    this.fetchRegionsByCity(this.data.selectedCityId, keyword)
   },
 
   onSelectRegion(e: WechatMiniprogram.TouchEvent) {

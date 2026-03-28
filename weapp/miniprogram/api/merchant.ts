@@ -3,6 +3,7 @@
  */
 
 import { request } from '../utils/request'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
 import type { CustomizationGroup } from './dish'
 
 // ==================== 数据类型定义 ====================
@@ -56,12 +57,7 @@ export interface SearchMerchantsResponse {
   page_size?: number
 }
 
-// ==================== 顾客端商户接口 ====================
-
-/**
- * 搜索商户 - 基于 /v1/search/merchants
- */
-export async function searchMerchants(params: {
+export interface SearchMerchantsParams {
   keyword?: string
   region_id?: number
   tag_id?: number
@@ -69,7 +65,42 @@ export async function searchMerchants(params: {
   page_size?: number
   user_latitude?: number
   user_longitude?: number
-}): Promise<MerchantSummary[]> {
+}
+
+export interface MerchantSummaryListResult extends PaginatedListResult<MerchantSummary> {
+  merchants: MerchantSummary[]
+}
+
+type SearchMerchantsEnvelope = PaginationEnvelope & {
+  merchants?: SearchMerchantItem[]
+}
+
+function normalizeMerchantSummary(item: SearchMerchantItem): MerchantSummary {
+  return {
+    id: item.id,
+    name: item.name,
+    address: item.address || '',
+    description: item.description || '',
+    logo_url: item.logo_url || '',
+    cover_image: item.cover_image || '',
+    distance: item.distance,
+    estimated_delivery_fee: item.estimated_delivery_fee,
+    total_orders: item.total_orders,
+    region_id: item.region_id,
+    status: item.status,
+    is_open: item.is_open,
+    tags: item.tags || [],
+    created_at: item.created_at,
+    label: item.label
+  }
+}
+
+// ==================== 顾客端商户接口 ====================
+
+/**
+ * 搜索商户 - 基于 /v1/search/merchants
+ */
+export async function searchMerchantsWithMeta(params: SearchMerchantsParams): Promise<MerchantSummaryListResult> {
   const requestParams: Record<string, unknown> = {
     keyword: params.keyword || '',
     page_id: params.page_id || 1,
@@ -91,7 +122,7 @@ export async function searchMerchants(params: {
     requestParams.tag_id = params.tag_id
   }
 
-  const response = await request<SearchMerchantsResponse>({
+  const response = await request<SearchMerchantsEnvelope>({
     url: '/v1/search/merchants',
     method: 'GET',
     data: requestParams,
@@ -99,23 +130,21 @@ export async function searchMerchants(params: {
     cacheTTL: 2 * 60 * 1000
   })
 
-  return (response.merchants || []).map((item) => ({
-    id: item.id,
-    name: item.name,
-    address: item.address || '',
-    description: item.description || '',
-    logo_url: item.logo_url || '',
-    cover_image: item.cover_image || '',
-    distance: item.distance,
-    estimated_delivery_fee: item.estimated_delivery_fee,
-    total_orders: item.total_orders,
-    region_id: item.region_id,
-    status: item.status,
-    is_open: item.is_open,
-    tags: item.tags || [],
-    created_at: item.created_at,
-    label: item.label
-  }))
+  const merchants = (response.merchants || []).map(normalizeMerchantSummary)
+  const normalized = normalizePaginatedResult(merchants, response, {
+    page: params.page_id || 1,
+    pageSize: params.page_size || 20
+  })
+
+  return {
+    ...normalized,
+    merchants
+  }
+}
+
+export async function searchMerchants(params: SearchMerchantsParams): Promise<MerchantSummary[]> {
+  const result = await searchMerchantsWithMeta(params)
+  return result.merchants
 }
 
 /**
@@ -139,32 +168,27 @@ export interface RecommendMerchantsResult {
   total: number
 }
 
+export async function getRecommendedMerchantsWithMeta(params?: RecommendMerchantsParams): Promise<MerchantSummaryListResult> {
+  return searchMerchantsWithMeta({
+    keyword: '',
+    region_id: params?.region_id,
+    user_latitude: params?.user_latitude,
+    user_longitude: params?.user_longitude,
+    page_id: params?.page ?? 1,
+    page_size: params?.limit ?? 20
+  })
+}
+
 /**
  * 获取推荐商户
  */
 export async function getRecommendedMerchants(params?: RecommendMerchantsParams): Promise<RecommendMerchantsResult> {
-  const page = params?.page ?? 1
-  const pageSize = params?.limit ?? 20
-  const response = await request<{ merchants: MerchantSummary[], total?: number, page_id?: number, page_size?: number }>({
-    url: '/v1/search/merchants',
-    method: 'GET',
-    data: {
-      keyword: '',
-      region_id: params?.region_id,
-      user_latitude: params?.user_latitude,
-      user_longitude: params?.user_longitude,
-      page_id: page,
-      page_size: pageSize
-    },
-    useCache: page === 1,
-    cacheTTL: 3 * 60 * 1000
-  })
-  const total = response.total ?? response.merchants?.length ?? 0
+  const result = await getRecommendedMerchantsWithMeta(params)
   return {
-    merchants: response.merchants || [],
-    has_more: page * pageSize < total,
-    page,
-    total
+    merchants: result.merchants,
+    has_more: result.hasMore,
+    page: result.page,
+    total: result.total
   }
 }
 

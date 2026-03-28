@@ -50,6 +50,8 @@ const (
 	MaxGrabOrderDistanceMeters = 5000 // 5公里
 	// P1-005 修复：配送确认半径（米）
 	DeliveryConfirmRadiusMeters = 500 // 500米
+	// P1-005 修复：配送确认定位最大时效（秒）
+	DeliveryConfirmLocationMaxAgeSec = 120 // 2分钟
 
 	// Appeal Constants (申诉相关常量)
 	// P1-010 修复：申诉有效期窗口

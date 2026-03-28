@@ -111,8 +111,33 @@ func TestProcessPaymentSuccessTx_RiderDepositIsIdempotent(t *testing.T) {
 
 func TestProcessPaymentSuccessTx_OrderSetsPaidFields(t *testing.T) {
 	user := createRandomUser(t)
-	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
-	order := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:          util.RandomString(20),
+			UserID:           user.ID,
+			MerchantID:       merchant.ID,
+			OrderType:        OrderTypeTakeout,
+			AddressID:        pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryFee:      800,
+			DeliveryDistance: pgtype.Int4{Int32: 2500, Valid: true},
+			Subtotal:         5000,
+			TotalAmount:      5800,
+			Status:           OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "支付成功外卖测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+	order := createResult.Order
 
 	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
 		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
@@ -144,4 +169,10 @@ func TestProcessPaymentSuccessTx_OrderSetsPaidFields(t *testing.T) {
 	require.True(t, updatedOrder.PaymentMethod.Valid)
 	require.Equal(t, "wechat", updatedOrder.PaymentMethod.String)
 	require.True(t, updatedOrder.PaidAt.Valid)
+
+	_, err = testStore.GetDeliveryByOrderID(context.Background(), order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
+
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }

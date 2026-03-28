@@ -51,6 +51,24 @@ type GrabOrderResult struct {
 	FreezeAmount   int64
 }
 
+func newGrabOrderStatusError(status string) error {
+	switch status {
+	case db.OrderStatusPending:
+		return NewRequestError(http.StatusBadRequest, errors.New("订单尚未支付完成，暂不可抢单"))
+	case db.OrderStatusPaid:
+		return NewRequestError(http.StatusBadRequest, errors.New("商户未接单，暂不可抢单"))
+	case db.OrderStatusPreparing:
+		return NewRequestError(http.StatusBadRequest, errors.New("商户未出餐，暂不可抢单"))
+	case db.OrderStatusCourierAccepted, db.OrderStatusPicked, db.OrderStatusDelivering,
+		db.OrderStatusRiderDelivered, db.OrderStatusUserDelivered, db.OrderStatusCompleted:
+		return NewRequestError(http.StatusBadRequest, errors.New("订单已被接走或已进入配送流程"))
+	case db.OrderStatusCancelled:
+		return NewRequestError(http.StatusBadRequest, errors.New("订单已取消，无法抢单"))
+	default:
+		return NewRequestError(http.StatusBadRequest, fmt.Errorf("当前订单状态(%s)不允许接单", status))
+	}
+}
+
 // GrabDeliveryOrder validates and executes the grab order flow.
 func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput) (GrabOrderResult, error) {
 	var result GrabOrderResult
@@ -148,7 +166,7 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	}
 	oldStatus := order.Status
 	if !IsOrderStatusAllowedForDeliveryAction(order.Status, "grab") {
-		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前订单状态(%s)不允许接单", order.Status))
+		return result, newGrabOrderStatusError(order.Status)
 	}
 
 	freezeAmount := OrderFreezeAmount(order)
@@ -166,20 +184,23 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 		return result, err
 	}
 
-	if _, err := store.UpdateOrderToCourierAccepted(ctx, input.OrderID); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+	if _, err := store.UpdateOrderToCourierAccepted(ctx, input.OrderID); err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return result, NewRequestError(http.StatusBadRequest, errors.New("订单状态已变化，请刷新后重试"))
+		}
 		return result, err
 	}
-	if oldStatus != "courier_accepted" {
+	if oldStatus != db.OrderStatusCourierAccepted {
 		_, _ = store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
 			OrderID:      order.ID,
 			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     "courier_accepted",
+			ToStatus:     db.OrderStatusCourierAccepted,
 			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
 			OperatorType: pgtype.Text{String: "rider", Valid: true},
 			Notes:        pgtype.Text{String: "骑手接单", Valid: true},
 		})
 	}
-	order.Status = "courier_accepted"
+	order.Status = db.OrderStatusCourierAccepted
 
 	result = GrabOrderResult{
 		Delivery:       txResult.Delivery,

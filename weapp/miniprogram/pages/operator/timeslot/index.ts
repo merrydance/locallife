@@ -19,6 +19,11 @@ interface DaysChangeEvent {
   detail: { value: Array<string | number> }
 }
 
+function timeToMinutes(value: string): number {
+  const [hours, minutes] = value.split(':').map((item) => parseInt(item, 10))
+  return (hours * 60) + minutes
+}
+
 Page({
   data: {
     selectedRegionId: 0,
@@ -67,6 +72,22 @@ Page({
   formatDays(days: number[]) {
     const map = ['日', '一', '二', '三', '四', '五', '六']
     return (days || []).map((d) => map[d] || '').filter(Boolean).join('、')
+  },
+
+  hasPeakConflict(startTime: string, endTime: string, days: number[]) {
+    const nextStart = timeToMinutes(startTime)
+    const nextEnd = timeToMinutes(endTime)
+
+    return this.data.peakConfigs.find((item) => {
+      const overlapDay = (item.days_of_week || []).some((day) => days.includes(day))
+      if (!overlapDay) {
+        return false
+      }
+
+      const currentStart = timeToMinutes(item.start_time)
+      const currentEnd = timeToMinutes(item.end_time)
+      return nextStart < currentEnd && nextEnd > currentStart
+    })
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
@@ -147,6 +168,15 @@ Page({
     }
     if (!peakForm.days.length) {
       wx.showToast({ title: '请至少选择一天', icon: 'none' })
+      return
+    }
+
+    const conflictItem = this.hasPeakConflict(peakForm.startTime, peakForm.endTime, peakForm.days)
+    if (conflictItem) {
+      wx.showToast({
+        title: `与 ${conflictItem.start_time}-${conflictItem.end_time} 冲突`,
+        icon: 'none'
+      })
       return
     }
 

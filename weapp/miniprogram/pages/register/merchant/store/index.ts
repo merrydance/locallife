@@ -840,8 +840,9 @@ Page({
         const arr = this.data[arrayName] as ImageFieldItem[]
         for (let i = 0; i < arr.length; i++) {
           if (arr[i].rawUrl === rawUrl) {
-            const newSignedUrl = arr[i].assetId
-              ? await getPrivateMediaUrl(arr[i].assetId)
+            const assetId = arr[i].assetId
+            const newSignedUrl = typeof assetId === 'number'
+              ? await getPrivateMediaUrl(assetId)
               : ''
             const newArr = [...arr]
             newArr[i] = { ...newArr[i], url: newSignedUrl }

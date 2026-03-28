@@ -75,7 +75,7 @@
       <!-- 数据概览 -->
       <view class="stats-grid">
         <!-- 商户统计 -->
-        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/merchants/list/list">
+        <view class="stat-card" bindtap="onQuickActionTap" data-url="/pages/operator/merchants/index">
           <view class="stat-header">
             <t-icon name="shop" size="24px" color="#1890ff" />
             <text class="stat-title">商户管理</text>

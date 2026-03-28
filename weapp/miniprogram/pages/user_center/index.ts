@@ -233,15 +233,15 @@ Page({
   },
 
   onTakeoutOrders() {
-    wx.navigateTo({ url: '/pages/orders/list/index?order_type=takeout' })
+    Navigation.toOrderList({ orderType: 'takeout' })
   },
 
   onReservationOrders() {
-	wx.navigateTo({ url: '/pages/user_center/reservations/index' })
+	Navigation.toUserReservations()
   },
 
   onDineInOrders() {
-    wx.navigateTo({ url: '/pages/orders/list/index?order_type=dine_in' })
+    Navigation.toOrderList({ orderType: 'dine_in' })
   },
 
   onAddresses() {
@@ -265,7 +265,7 @@ Page({
   },
 
   onMyReservations() {
-    wx.navigateTo({ url: '/pages/user_center/reservations/index' })
+    Navigation.toUserReservations()
   },
 
   onWallet() {

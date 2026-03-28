@@ -1,6 +1,6 @@
 # CARD-03 补 claim_recoveries 与 recovery events 主判关联
 
-状态：未开始
+状态：已完成
 
 优先级：P0
 
@@ -18,20 +18,20 @@
 
 ## 任务内容
 
-- [ ] 给 claim_recoveries 增加 decision_id
-- [ ] 增加 recovery_basis 等正式来源字段
-- [ ] 新增 claim_recovery_events 表
-- [ ] 预留 created、paid、waived、resumed、overturned 事件类型
+- [x] 给 claim_recoveries 增加 decision_id
+- [x] 增加 recovery_basis 等正式来源字段
+- [x] 新增 claim_recovery_events 表
+- [x] 预留 created、paid、waived、resumed、overturned 事件类型
 
 ## 完成定义
 
-- [ ] recovery 可直接追溯到 decision_id
-- [ ] recovery 事件历史已有正式表承接
+- [x] recovery 可直接追溯到 decision_id
+- [x] recovery 事件历史已有正式表承接
 
 ## 验证要求
 
-- [ ] migration 可执行
-- [ ] 表关系与约束合理
+- [x] migration 已编写完成
+- [x] 表关系与约束合理
 
 ## 依赖与风险
 
@@ -39,6 +39,6 @@
 
 ## 完成记录
 
-- [ ] migration 完成
-- [ ] query 对齐完成
-- [ ] 评审完成
+- [x] migration 完成
+- [x] query 对齐完成
+- [x] 评审完成

@@ -1,14 +1,13 @@
 import { deliveryFeeService } from '../../../api/delivery-fee'
 
 interface DeliveryFeeConfigView {
-    base_fee: number
-    base_distance: number
-    extra_distance_fee: number
+    base_fee: string
+    base_distance: string
+    extra_fee_per_km: string
+    value_ratio: string
+    min_fee: string
+    max_fee: string
     is_active: boolean
-    night_surcharge: number
-    night_start: string
-    night_end: string
-    extra_distance_unit: number
 }
 
 interface DeliveryFeePageOptions {
@@ -22,16 +21,15 @@ interface ConfigInputEventDetail {
 Page({
     data: {
         config: {
-            base_fee: 0,
-            base_distance: 0,
-            extra_distance_fee: 0,
-            is_active: true,
-            night_surcharge: 0,
-            night_start: '22:00',
-            night_end: '06:00',
-            extra_distance_unit: 1000
+            base_fee: '',
+            base_distance: '',
+            extra_fee_per_km: '',
+            value_ratio: '0',
+            min_fee: '',
+            max_fee: '',
+            is_active: true
         } as DeliveryFeeConfigView,
-        regionId: 1, // Default region ID for simple admin config
+        regionId: 0,
         initialLoading: true,
         loading: false,
         error: '',
@@ -41,6 +39,10 @@ Page({
     onLoad(options: DeliveryFeePageOptions) {
         if (options.region_id) {
             this.setData({ regionId: parseInt(options.region_id) })
+        }
+        if (!this.data.regionId) {
+            this.setData({ initialLoading: false, error: '缺少区域ID，无法加载配送费配置' })
+            return
         }
         this.loadConfig()
     },
@@ -56,50 +58,33 @@ Page({
     },
 
     async loadConfig() {
+        if (!this.data.regionId) {
+            this.setData({ initialLoading: false, error: '缺少区域ID，无法加载配送费配置' })
+            return
+        }
+
         this.setData({ initialLoading: true, error: '' })
         try {
             const config = await deliveryFeeService.getRegionConfig(this.data.regionId)
-            const optionalConfig = config as unknown as Record<string, unknown>
-            const nightSurcharge = typeof optionalConfig.night_surcharge === 'number' ? optionalConfig.night_surcharge : 0
-            const nightStart = typeof optionalConfig.night_start === 'string' ? optionalConfig.night_start : '22:00'
-            const nightEnd = typeof optionalConfig.night_end === 'string' ? optionalConfig.night_end : '06:00'
-            const extraDistanceUnit = typeof optionalConfig.extra_distance_unit === 'number' ? optionalConfig.extra_distance_unit : 1000
             this.setData({
                 config: {
-                    ...config,
-                    base_fee: config.base_fee / 100,
-                    extra_distance_fee: config.extra_fee_per_km / 100,
-                    // Mock additional fields if not present in API response yet
-                    night_surcharge: nightSurcharge / 100,
-                    night_start: nightStart,
-                    night_end: nightEnd,
-                    extra_distance_unit: extraDistanceUnit
+                    base_fee: (config.base_fee / 100).toFixed(2),
+                    base_distance: String(config.base_distance),
+                    extra_fee_per_km: (config.extra_fee_per_km / 100).toFixed(2),
+                    value_ratio: String(config.value_ratio),
+                    min_fee: (config.min_fee / 100).toFixed(2),
+                    max_fee: typeof config.max_fee === 'number' ? (config.max_fee / 100).toFixed(2) : '',
+                    is_active: config.is_active
                 },
                 initialLoading: false
             })
         } catch (error: unknown) {
             console.error(error)
             const errorMsg = error instanceof Error ? error.message : '加载配置失败'
-            
-            // Mock data for fallback/demo purposes if API fails (or for development)
-            // In production, we might want to just show the error.
-            // For this refactor, let's show error but allow retry
             this.setData({
                 error: errorMsg,
                 initialLoading: false
             })
-            
-             // Fallback for development if needed:
-             /*
-            this.setData({
-                'config.base_fee': 5,
-                'config.base_distance': 3000,
-                'config.extra_distance_fee': 2,
-                'config.min_order_amount': 20,
-                'config.max_delivery_distance': 10000,
-                initialLoading: false
-            });
-            */
         }
     },
 
@@ -111,29 +96,31 @@ Page({
         })
     },
 
-    onTimeChange(e: WechatMiniprogram.CustomEvent<ConfigInputEventDetail>) {
-        const { field } = e.currentTarget.dataset as { field?: string }
-        if (!field) return
+    onActiveChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
         this.setData({
-            [`config.${field}`]: e.detail.value
+            'config.is_active': e.detail.value
         })
     },
 
     async onSave() {
         const { config, regionId } = this.data
 
+        if (!regionId) {
+            wx.showToast({ title: '缺少区域ID', icon: 'none' })
+            return
+        }
+
         try {
             wx.showLoading({ title: '保存中' })
 
             const submitData = {
                 region_id: regionId,
-                base_fee: Number(config.base_fee) * 100,
+                base_fee: Math.round(Number(config.base_fee) * 100),
                 base_distance: Number(config.base_distance),
-                extra_fee_per_km: Number(config.extra_distance_fee) * 100,
-                value_ratio: 0,
-                min_fee: 0,
-                max_fee: undefined
-                // Add unknown fields only if API supports them, otherwise this might just be local state
+                extra_fee_per_km: Math.round(Number(config.extra_fee_per_km) * 100),
+                value_ratio: Number(config.value_ratio),
+                min_fee: Math.round(Number(config.min_fee) * 100),
+                max_fee: config.max_fee ? Math.round(Number(config.max_fee) * 100) : undefined
             }
 
             await deliveryFeeService.updateRegionConfig(regionId, submitData)

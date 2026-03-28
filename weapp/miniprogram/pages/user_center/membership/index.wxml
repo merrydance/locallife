@@ -59,8 +59,8 @@
                 <text class="stat-value">¥{{item.totalConsumedDisplay}}</text>
               </view>
               
-              <view class="action-btn" catchtap="onRechargeTap" data-item="{{item}}">
-                <text>立即充值</text>
+              <view class="action-btn {{rechargingMembershipId === item.id ? 'is-loading' : ''}}" catchtap="onRechargeTap" data-item="{{item}}">
+                <text>{{rechargingMembershipId === item.id ? '处理中' : '立即充值'}}</text>
                 <t-icon name="chevron-right" size="24rpx" color="#fff" />
               </view>
             </view>

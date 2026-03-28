@@ -1,6 +1,8 @@
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPaymentLedger, PaymentLedgerEntry } from '../../../api/payment'
+import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import MembershipService from '../../../api/membership'
+import Navigation from '../../../utils/navigation'
 
 interface MembershipDisplay {
   id: number
@@ -147,16 +149,7 @@ Page({
 
       // 1. Process Memberships
       const memberships: MembershipDisplay[] = (membershipRes.memberships || []).map((m) => {
-        const date = new Date(m.created_at)
-        const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-        return {
-          id: m.id,
-          merchant_id: m.merchant_id,
-          merchant_name: m.merchant_name || '商户会员卡',
-          logo_url: m.logo_url || '',
-          balance_display: formatPriceNoSymbol(m.balance || 0),
-          created_at_date: dateStr
-        }
+        return ConsumerProfileAdapter.toWalletMembershipViewModel(m)
       })
 
       const totalBalance = (membershipRes.memberships || []).reduce((sum, m) => sum + (m.balance || 0), 0)
@@ -204,7 +197,7 @@ Page({
        // Target specific membership recharge
        const m = this.data.memberships.find((item) => item.id === id)
        if (m) {
-         wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${m.merchant_id}&activeTab=recharge` })
+         Navigation.toMembership({ membershipId: m.id, autoRecharge: true })
          return
        }
     }
@@ -215,7 +208,7 @@ Page({
         content: '您目前还没有会员卡，去喜欢的餐厅看看吧',
         confirmText: '去逛逛',
         success: (res) => {
-          if (res.confirm) wx.switchTab({ url: '/pages/takeout/index' })
+          if (res.confirm) Navigation.toTakeoutHome()
         }
       })
       return
@@ -227,7 +220,7 @@ Page({
       itemList: names.slice(0, 6), // Wechat limit is 6
       success: (res) => {
         const m = this.data.memberships[res.tapIndex]
-        wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${m.merchant_id}&activeTab=recharge` })
+        Navigation.toMembership({ membershipId: m.id, autoRecharge: true })
       }
     })
   },
@@ -242,7 +235,7 @@ Page({
   },
 
   onGoToCoupons() {
-    wx.navigateTo({ url: '/pages/user_center/coupons/index' })
+    Navigation.toCoupons()
   },
 
   onShowBill() {
@@ -250,14 +243,14 @@ Page({
   },
 
   onManageMembership() {
-    wx.navigateTo({ url: '/pages/user_center/membership/index' })
+    Navigation.toMembership()
   },
 
   onViewMembership(e: MembershipEvent) {
     const id = e.currentTarget.dataset.id
     const m = this.data.memberships.find((item) => item.id === id)
     if (m) {
-      wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${m.merchant_id}` })
+      Navigation.toRestaurantDetail(m.merchant_id)
     }
   },
 

@@ -1,6 +1,6 @@
 # CARD-02 扩展 behavior_trace_snapshots 结构化快照
 
-状态：未开始
+状态：已完成
 
 优先级：P0
 
@@ -17,21 +17,21 @@
 
 ## 任务内容
 
-- [ ] 增加 actor_type、actor_id、window_key、stats_scope
-- [ ] 增加 metric_payload、association_payload、snapshot_version
-- [ ] 保留旧列 window_days、abnormal_count、total_count、abnormal_rate、association_hits 做兼容
-- [ ] 明确 user、merchant、rider 三类最小 metric_payload 键集合
+- [x] 增加 actor_type、actor_id、window_key、stats_scope
+- [x] 增加 metric_payload、association_payload、snapshot_version
+- [x] 保留旧列 window_days、abnormal_count、total_count、abnormal_rate、association_hits 做兼容
+- [x] 明确 user、merchant、rider 三类最小 metric_payload 键集合
 
 ## 完成定义
 
-- [ ] snapshots 已能表达三方结构化快照
-- [ ] 新旧列可以并存
-- [ ] 后续 tx 双写不需要再改表意图
+- [x] snapshots 已能表达三方结构化快照
+- [x] 新旧列可以并存
+- [x] 后续 tx 双写不需要再改表意图
 
 ## 验证要求
 
-- [ ] migration 可执行
-- [ ] query 草案可支撑 create 和 list 场景
+- [x] migration 已编写完成
+- [x] query 草案可支撑 create 和 list 场景
 
 ## 依赖与风险
 
@@ -39,6 +39,6 @@
 
 ## 完成记录
 
-- [ ] migration 完成
-- [ ] query 对齐完成
-- [ ] 评审完成
+- [x] migration 完成
+- [x] query 对齐完成
+- [x] 评审完成

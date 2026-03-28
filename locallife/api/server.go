@@ -108,6 +108,11 @@ func (server *Server) SetTaskDistributorForTest(distributor worker.TaskDistribut
 // rebuilt with the new client on the next request.
 func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInterface) {
 	server.ecommerceClient = client
+	newSvc := server.buildOrderCommandService()
+	server.orderCommandSvc = newSvc
+	if qs, ok := newSvc.(logic.OrderQueryService); ok {
+		server.orderQuerySvc = qs
+	}
 	server.paymentFacade = nil
 	server.refundOrchestrator = nil
 }

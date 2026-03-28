@@ -81,7 +81,7 @@ export class RiderExceptionHandlingService {
      */
     async reportException(orderId: number, exceptionData: ExceptionReportRequest): Promise<ExceptionReportResponse> {
         return request({
-            url: `/rider/orders/${orderId}/exception`,
+            url: `/v1/rider/orders/${orderId}/exception`,
             method: 'POST',
             data: exceptionData
         })
@@ -94,7 +94,7 @@ export class RiderExceptionHandlingService {
      */
     async reportDelay(orderId: number, delayData: DelayReportRequest): Promise<DelayReportResponse> {
         return request({
-            url: `/rider/orders/${orderId}/delay`,
+            url: `/v1/rider/orders/${orderId}/delay`,
             method: 'POST',
             data: delayData
         })

@@ -1,21 +1,6 @@
 <custom-navbar title="异常报备" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <!-- 顶部状态栏 -->
-  <view class="status-tabs">
-    <view 
-      class="tab-item {{activeTab === 'report' ? 'active' : ''}}" 
-      bindtap="switchTab" 
-      data-tab="report"
-    >异常报备</view>
-    <view 
-      class="tab-item {{activeTab === 'history' ? 'active' : ''}}" 
-      bindtap="switchTab" 
-      data-tab="history"
-    >报备历史</view>
-    <view class="tab-line" style="transform: translateX({{activeTab === 'report' ? '0' : '100%'}})"></view>
-  </view>
-
   <scroll-view 
     scroll-y 
     class="scroll-area"
@@ -23,8 +8,23 @@
     refresher-triggered="{{loading}}"
     bindrefresherrefresh="onRefresh"
   >
-    <!-- 1. 新增报备表单 -->
-    <view class="form-wrapper {{activeTab === 'report' ? 'show' : ''}}">
+    <view wx:if="{{errorMessage && !loading}}" class="state-shell">
+      <t-empty icon="error-circle" description="{{errorMessage}}" />
+      <t-button theme="primary" shape="round" bindtap="onRefresh">重新加载</t-button>
+    </view>
+
+    <view wx:else class="form-wrapper show">
+      <view class="card-group notice-card">
+        <view class="group-title">
+          <t-icon name="info-circle" size="32rpx" /> 处理说明
+        </view>
+        <view class="notice-block">
+          <text>本页仅提交配送异常。异常后进入索赔、追偿或申诉处理时，请前往“索赔与申诉”页查看。</text>
+          <text>如遇商户闭店、车辆故障等未单列场景，请选择“其他原因”并在描述里写明现场情况。</text>
+          <t-button theme="primary" variant="outline" shape="round" size="small" bindtap="onGoToClaims">查看索赔与申诉</t-button>
+        </view>
+      </view>
+
       <view class="card-group">
         <view class="group-title">
           <t-icon name="assignment" size="32rpx" /> 相关订单
@@ -87,21 +87,6 @@
         </view>
       </view>
 
-      <view class="card-group">
-        <view class="group-title">
-          <t-icon name="image" size="32rpx" /> 现场照片 (可选)
-        </view>
-        <view class="upload-box">
-          <t-upload
-            media-type="{{['image']}}"
-            files="{{fileList}}"
-            gridConfig="{{ { column: 3 } }}"
-            bind:add="onAddImage"
-            bind:remove="onRemoveImage"
-          />
-        </view>
-      </view>
-
       <view class="submit-footer">
         <t-button 
           theme="primary" 
@@ -114,40 +99,24 @@
         >立即上报</t-button>
         <view class="notice">上报后，平台将在2小时内完成初审</view>
       </view>
-    </view>
 
-    <!-- 2. 报备历史 -->
-    <view class="history-wrapper {{activeTab === 'history' ? 'show' : ''}}">
-      <view class="history-list" wx:if="{{historyApps.length > 0}}">
-        <view class="history-item" wx:for="{{historyApps}}" wx:key="id">
-          <view class="history-header">
-            <view class="history-type">
-              <t-icon name="error-circle" size="32rpx" color="#FA5151" />
-              <text>{{item.type_label || item.exception_type}}</text>
-            </view>
-            <view class="history-status {{item.status}}">
-              {{item.status_label}}
-            </view>
-          </view>
-          <view class="history-body">
-            <view class="info-row">
-              <text class="label">配送单号：</text>
-              <text class="value">{{item.order_id}}</text>
-            </view>
-            <view class="info-row">
-              <text class="label">上报时间：</text>
-              <text class="value">{{item.created_at}}</text>
-            </view>
-            <view class="desc-content">{{item.description}}</view>
-          </view>
-          <view class="history-footer" wx:if="{{item.resolution}}">
-            <view class="res-title">处理反馈：</view>
-            <view class="res-body">{{item.resolution}}</view>
-          </view>
+      <view class="card-group success-card" wx:if="{{lastSubmittedReport}}">
+        <view class="group-title">
+          <t-icon name="check-circle" size="32rpx" /> 最近一次提交
         </view>
+        <view class="submitted-row">
+          <text class="submitted-label">关联订单</text>
+          <text class="submitted-value">#{{lastSubmittedReport.orderId}}</text>
+        </view>
+        <view class="submitted-row">
+          <text class="submitted-label">异常类型</text>
+          <text class="submitted-value">{{lastSubmittedReport.typeLabel}}</text>
+        </view>
+        <view class="submitted-desc">{{lastSubmittedReport.description}}</view>
       </view>
-      <view class="empty-state" wx:else>
-        <t-empty icon="info-circle" description="暂无报备历史" />
+
+      <view class="card-group" wx:if="{{activeOrders.length === 0 && !loading}}">
+        <t-empty icon="info-circle" description="当前暂无可报备配送单" />
       </view>
     </view>
   </scroll-view>

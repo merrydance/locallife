@@ -2,40 +2,21 @@ import RiderService from '../../../api/rider'
 import { Delivery } from '../../../api/delivery'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
-import dayjs from 'dayjs'
 
-interface ExceptionAudit {
-  id: number
-  order_id: number
-  exception_type: string
-  description: string
-  status: 'pending' | 'resolved' | 'dismissed'
-  created_at: string
-  resolution?: string
-  type_label?: string
-  status_label?: string
-}
+type RiderExceptionType = 'customer_unreachable' | 'merchant_not_ready' | 'weather_issue' | 'road_blocked' | 'other'
 
 interface ExceptionOptions {
   orderId?: string
-  tab?: 'report' | 'history'
-}
-
-interface AppealHistoryItem {
-  id: number
-  order_id: number
-  exception_type: string
-  description: string
-  status: 'pending' | 'resolved' | 'dismissed'
-  created_at: string
-}
-
-interface UploadFileItem {
-  url: string
 }
 
 interface UserMessageError {
   userMessage?: string
+}
+
+interface LastSubmittedReport {
+  orderId: number
+  typeLabel: string
+  description: string
 }
 
 Page({
@@ -43,26 +24,23 @@ Page({
     navBarHeight: 88,
     loading: false,
     submitting: false,
-    activeTab: 'report', // report | history
+    errorMessage: '',
     
-    // 列表数据
-    historyApps: [] as ExceptionAudit[],
     activeOrders: [] as Delivery[],
+    lastSubmittedReport: null as LastSubmittedReport | null,
     
     // 表单数据
     formData: {
       orderId: 0,
-      type: 'customer_unreachable',
+      type: 'customer_unreachable' as RiderExceptionType,
       description: ''
     },
-    fileList: [] as UploadFileItem[],
     
     typeOptions: [
       { label: '无法联系顾客', value: 'customer_unreachable', icon: 'mobile-off' },
       { label: '商户未出餐', value: 'merchant_not_ready', icon: 'hourglass-low' },
-      { label: '商户已闭店', value: 'merchant_closed', icon: 'store' },
-      { label: '车辆故障', value: 'vehicle_breakdown', icon: 'tools' },
-      { label: '天气恶劣', value: 'bad_weather', icon: 'cloud-lightning' },
+      { label: '天气原因', value: 'weather_issue', icon: 'cloud-lightning' },
+      { label: '道路阻塞', value: 'road_blocked', icon: 'map-information-2' },
       { label: '其他原因', value: 'other', icon: 'more' }
     ]
   },
@@ -72,12 +50,7 @@ Page({
     this.setData({ navBarHeight })
     
     if (options.orderId) {
-      this.setData({ 
-        'formData.orderId': Number(options.orderId),
-        activeTab: 'report'
-      })
-    } else if (options.tab) {
-      this.setData({ activeTab: options.tab })
+      this.setData({ 'formData.orderId': Number(options.orderId) })
     }
     
     this.fetchData()
@@ -87,46 +60,24 @@ Page({
     this.fetchData()
   },
 
-  switchTab(e: WechatMiniprogram.TouchEvent) {
-    const { tab } = e.currentTarget.dataset as { tab?: 'report' | 'history' }
-    if (!tab) return
-    if (tab === this.data.activeTab) return
-    this.setData({ activeTab: tab })
-  },
-
   async fetchData() {
     this.setData({ loading: true })
     try {
       const { request } = require('../../../utils/request')
-      
-      // 并发请求活跃订单和历史记录
-      const [activeOrders, historyRes] = await Promise.all([
-        request({ url: '/v1/delivery/active', method: 'GET' }) as Promise<Delivery[]>,
-        request({ url: '/v1/rider/appeals', method: 'GET' }) as Promise<{ appeals: AppealHistoryItem[] }>
-      ])
-      
-      // 格式化历史记录
-      const history = (historyRes?.appeals || []).map((item) => {
-        const typeOpt = this.data.typeOptions.find((o) => o.value === item.exception_type)
-        const statusMap = {
-          'pending': '处理中',
-          'resolved': '已通过',
-          'dismissed': '已驳回'
-        }
-        return {
-          ...item,
-          type_label: typeOpt ? typeOpt.label : item.exception_type,
-          status_label: statusMap[item.status as keyof typeof statusMap] || item.status,
-          created_at: dayjs(item.created_at).format('YYYY-MM-DD HH:mm')
-        }
-      })
+      const activeOrders = await (request({ url: '/v1/delivery/active', method: 'GET' }) as Promise<Delivery[]>)
 
       this.setData({ 
         activeOrders: activeOrders || [],
-        historyApps: history
+        errorMessage: ''
       })
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Fetch exception data failed', err)
+      const userMessage = (err as UserMessageError).userMessage
+      const message = typeof userMessage === 'string' && userMessage ? userMessage : '异常页加载失败，请稍后重试'
+      this.setData({
+        activeOrders: [],
+        errorMessage: message
+      })
     } finally {
       this.setData({ loading: false })
     }
@@ -139,27 +90,13 @@ Page({
   },
 
   onTypeSelect(e: WechatMiniprogram.TouchEvent) {
-    const { value } = e.currentTarget.dataset as { value?: string }
+    const { value } = e.currentTarget.dataset as { value?: RiderExceptionType }
     if (!value) return
     this.setData({ 'formData.type': value })
   },
 
   onDescriptionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ 'formData.description': e.detail.value })
-  },
-
-  onAddImage(e: WechatMiniprogram.CustomEvent<{ files: UploadFileItem[] }>) {
-    const { files } = e.detail
-    this.setData({
-      fileList: [...this.data.fileList, ...files]
-    })
-  },
-
-  onRemoveImage(e: WechatMiniprogram.CustomEvent<{ index: number }>) {
-    const { index } = e.detail
-    const { fileList } = this.data
-    fileList.splice(index, 1)
-    this.setData({ fileList })
   },
 
   /**
@@ -182,23 +119,25 @@ Page({
     wx.showLoading({ title: '提交中...', mask: true })
     
     try {
-      // 模拟上报接口调用
       await RiderService.reportException(formData.orderId, {
         exception_type: formData.type,
         description: formData.description
       })
+
+      const selectedType = this.data.typeOptions.find((item) => item.value === formData.type)
       
       wx.showToast({ title: '上报成功', icon: 'success' })
       
-      // 提交成功后，重置表单并切换到历史 Tab
       this.setData({ 
         'formData.description': '',
-        fileList: [],
         submitting: false,
-        activeTab: 'history'
+        lastSubmittedReport: {
+          orderId: formData.orderId,
+          typeLabel: selectedType?.label || formData.type,
+          description: formData.description
+        }
       })
       
-      // 延迟刷新列表，避免立刻刷新导致感知不到新数据（如果后端有延迟）
       setTimeout(() => this.fetchData(), 500)
     } catch (err: unknown) {
       logger.error('Report exception failed', err)
@@ -212,5 +151,9 @@ Page({
     } finally {
       wx.hideLoading()
     }
+  },
+
+  onGoToClaims() {
+    wx.navigateTo({ url: '/pages/rider/claims/index' })
   }
 })

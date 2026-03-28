@@ -1,28 +1,44 @@
 import { riderBasicManagementService } from '../../../api/rider-basic-management'
 
-interface MetricItem {
+interface SummaryItem {
   label: string
   value: string
-  status: 'GOOD' | 'WARNING' | 'BAD'
+  tone: 'primary' | 'success' | 'warning' | 'danger'
 }
 
 interface HistoryItem {
   id: number
-  type: 'REWARD' | 'PENALTY'
-  amount: number
-  reason: string
+  type: 'positive' | 'negative' | 'neutral'
+  amount: string
+  title: string
+  subtitle: string
+  tagText: string
   created_at: string
+}
+
+interface QualificationInfo {
+  label: string
+  desc: string
+  tagTheme: 'success' | 'warning' | 'danger'
 }
 
 Page({
   data: {
     score: 0,
-    level: '普通骑手',
-    levelDesc: '服务正常',
-    metrics: [] as MetricItem[],
+    riderName: '',
+    qualificationLabel: '资格校验中',
+    qualificationDesc: '正在加载高值单资格信息',
+    qualificationTheme: 'default',
+    summary: [] as SummaryItem[],
     history: [] as HistoryItem[],
+    total: 0,
     loading: false,
-    navBarHeight: 88
+    loadingMore: false,
+    errorMessage: '',
+    navBarHeight: 88,
+    pageID: 1,
+    pageSize: 20,
+    hasMore: true
   },
 
   onLoad() {
@@ -37,72 +53,100 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  async loadCreditInfo() {
-    this.setData({ loading: true })
+  async loadCreditInfo(reset: boolean = true) {
+    if (this.data.loading || this.data.loadingMore) return
+
+    const nextPage = reset ? 1 : this.data.pageID + 1
+    this.setData(reset ? { loading: true } : { loadingMore: true })
     try {
-      // 获取骑手积分信息和历史
       const [scoreInfo, historyResponse] = await Promise.all([
         riderBasicManagementService.getRiderScore(),
-        riderBasicManagementService.getScoreHistory({ page_id: 1, page_size: 20 })
+        riderBasicManagementService.getScoreHistory({ page_id: nextPage, page_size: this.data.pageSize })
       ])
 
-      // 计算等级信息
-      const { level, levelDesc } = this.calculateLevelInfo(scoreInfo.current_score)
+      const qualification = this.getQualificationInfo(scoreInfo.premium_score, scoreInfo.can_accept_premium_order)
 
-      // 构建指标数据
-      const metrics: MetricItem[] = [
+      const summary: SummaryItem[] = [
         {
-          label: '当前积分',
-          value: scoreInfo.current_score.toString(),
-          status: scoreInfo.current_score >= 80 ? 'GOOD' : scoreInfo.current_score >= 60 ? 'WARNING' : 'BAD'
+          label: '当前资格分',
+          value: String(scoreInfo.premium_score),
+          tone: scoreInfo.premium_score >= 0 ? 'success' : 'danger'
         },
         {
-          label: '积分等级',
-          value: scoreInfo.score_level,
-          status: 'GOOD'
+          label: '当前资格',
+          value: scoreInfo.can_accept_premium_order ? '可接高值单' : '暂不可接高值单',
+          tone: scoreInfo.can_accept_premium_order ? 'success' : 'warning'
         },
         {
-          label: '可接高值单',
-          value: scoreInfo.can_take_high_value_orders ? '是' : '否',
-          status: scoreInfo.can_take_high_value_orders ? 'GOOD' : 'WARNING'
+          label: '变更记录',
+          value: String(historyResponse.total || 0),
+          tone: 'primary'
         }
       ]
 
-      // 转换历史记录
-      const history: HistoryItem[] = historyResponse.history.map((h) => ({
-        id: h.id,
-        type: h.score_change >= 0 ? 'REWARD' : 'PENALTY',
-        amount: h.score_change,
-        reason: h.reason,
-        created_at: h.created_at
-      }))
+      const history: HistoryItem[] = (historyResponse.logs || []).map((item) => {
+        const type = item.change_amount > 0 ? 'positive' : item.change_amount < 0 ? 'negative' : 'neutral'
+        const amount = item.change_amount > 0 ? `+${item.change_amount}` : `${item.change_amount}`
+        const relatedLabel = item.related_order_id ? `关联订单 #${item.related_order_id}` : item.related_delivery_id ? `配送单 #${item.related_delivery_id}` : '无关联单据'
+
+        return {
+          id: item.id,
+          type,
+          amount,
+          title: item.change_type_name || item.change_type,
+          subtitle: item.remark || relatedLabel,
+          tagText: item.change_type_name || item.change_type,
+          created_at: item.created_at
+        }
+      })
 
       this.setData({
-        score: scoreInfo.current_score,
-        level,
-        levelDesc,
-        metrics,
-        history,
-        loading: false
+        score: scoreInfo.premium_score,
+        riderName: scoreInfo.real_name,
+        qualificationLabel: qualification.label,
+        qualificationDesc: qualification.desc,
+        qualificationTheme: qualification.tagTheme,
+        summary,
+        history: reset ? history : [...this.data.history, ...history],
+        total: historyResponse.total || 0,
+        pageID: nextPage,
+        hasMore: nextPage * this.data.pageSize < (historyResponse.total || 0),
+        errorMessage: ''
       })
     } catch (error) {
       console.error('加载信用信息失败:', error)
-      wx.showToast({ title: '加载失败', icon: 'error' })
-      this.setData({ loading: false })
+      const message = error instanceof Error && error.message ? error.message : '高值单资格加载失败，请稍后重试'
+      if (reset) {
+        this.setData({ errorMessage: message, history: [] })
+      } else {
+        wx.showToast({ title: message, icon: 'none' })
+      }
+    } finally {
+      this.setData({ loading: false, loadingMore: false })
     }
   },
 
-  calculateLevelInfo(score: number): { level: string, levelDesc: string } {
-    if (score >= 95) {
-      return { level: '钻石骑手', levelDesc: '服务卓越' }
-    } else if (score >= 85) {
-      return { level: '金牌骑手', levelDesc: '服务优异' }
-    } else if (score >= 75) {
-      return { level: '银牌骑手', levelDesc: '服务良好' }
-    } else if (score >= 60) {
-      return { level: '普通骑手', levelDesc: '服务正常' }
-    } else {
-      return { level: '受限骑手', levelDesc: '需要改进' }
+  getQualificationInfo(score: number, canAcceptPremiumOrder: boolean): QualificationInfo {
+    if (canAcceptPremiumOrder && score >= 10) {
+      return { label: '资格稳定', desc: '当前可稳定承接高值单，继续保持履约质量。', tagTheme: 'success' }
+    }
+    if (canAcceptPremiumOrder) {
+      return { label: '已达资格线', desc: '当前可接高值单，近期波动较小时资格会更稳定。', tagTheme: 'success' }
+    }
+    if (score >= -10) {
+      return { label: '暂时受限', desc: '当前暂不可接高值单，继续正常履约可逐步恢复资格。', tagTheme: 'warning' }
+    }
+
+    return { label: '风险较高', desc: '近期资格分偏低，建议优先减少超时和异常履约。', tagTheme: 'danger' }
+  },
+
+  onRetry() {
+    this.loadCreditInfo(true)
+  },
+
+  onReachBottom() {
+    if (this.data.hasMore && !this.data.loading && !this.data.loadingMore) {
+      this.loadCreditInfo(false)
     }
   }
 })

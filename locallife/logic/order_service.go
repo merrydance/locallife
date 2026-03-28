@@ -521,16 +521,6 @@ func (s *OrderService) ConfirmOrder(ctx context.Context, input ConfirmOrderInput
 		}
 	}
 
-	if s.taskScheduler != nil {
-		po, getErr := s.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-			OrderID:      pgtype.Int8{Int64: result.Order.ID, Valid: true},
-			BusinessType: businessTypeOrder,
-		})
-		if getErr == nil && po.Status == "paid" && po.PaymentType == paymentTypeProfitSharing {
-			_ = s.taskScheduler.ScheduleProfitSharing(ctx, po.ID, result.Order.ID)
-		}
-	}
-
 	return result, nil
 }
 
@@ -626,6 +616,9 @@ func (s *OrderService) MarkMerchantOrderReady(ctx context.Context, input Merchan
 
 	if s.eventPublisher != nil {
 		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
+		if result.PoolItem != nil {
+			s.eventPublisher.PublishTakeoutOrderPooled(ctx, result.Order, *result.PoolItem)
+		}
 	}
 	return result, nil
 }

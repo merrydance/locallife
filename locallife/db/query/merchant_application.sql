@@ -24,12 +24,16 @@ ORDER BY created_at DESC
 LIMIT 1;
 
 -- name: UpdateMerchantApplicationBasicInfo :one
--- 更新基础信息（商户名、联系电话、地址、经纬度、区域）
+-- 更新基础信息（商户名、联系电话、地址、经纬度、区域、人工修正字段）
 UPDATE merchant_applications
 SET
   merchant_name = COALESCE(sqlc.narg(merchant_name), merchant_name),
   contact_phone = COALESCE(sqlc.narg(contact_phone), contact_phone),
   business_address = COALESCE(sqlc.narg(business_address), business_address),
+  business_license_number = COALESCE(sqlc.narg(business_license_number), business_license_number),
+  business_scope = COALESCE(sqlc.narg(business_scope), business_scope),
+  legal_person_name = COALESCE(sqlc.narg(legal_person_name), legal_person_name),
+  legal_person_id_number = COALESCE(sqlc.narg(legal_person_id_number), legal_person_id_number),
   longitude = COALESCE(sqlc.narg(longitude), longitude),
   latitude = COALESCE(sqlc.narg(latitude), latitude),
   region_id = COALESCE(sqlc.narg(region_id), region_id),

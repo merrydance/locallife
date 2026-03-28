@@ -276,3 +276,15 @@ func NewRedisTaskDistributor(redisOpt asynq.RedisClientOpt) TaskDistributor {
 		client: client,
 	}
 }
+
+func WithProfitSharingEnqueueDedupForTest(opts ...asynq.Option) []asynq.Option {
+	return withProfitSharingEnqueueDedup(opts...)
+}
+
+func ProfitSharingTaskIdempotencyKeyForTest(payload ProfitSharingPayload) string {
+	return profitSharingTaskIdempotencyKey(payload)
+}
+
+func NormalizeProfitSharingPayloadForTest(payload *ProfitSharingPayload) ProfitSharingPayload {
+	return normalizeProfitSharingPayload(payload)
+}

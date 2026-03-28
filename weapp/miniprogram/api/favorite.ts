@@ -28,6 +28,7 @@ export interface FavoriteMerchantListItem {
     id: number
     merchant_id: number
     merchant_name: string
+    merchant_logo_url?: string
     merchant_logo?: string
     address?: string
     status?: string

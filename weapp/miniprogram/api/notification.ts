@@ -1,4 +1,5 @@
 import { request } from '../utils/request'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
 
 export type NotificationType = 'order' | 'payment' | 'delivery' | 'system' | 'food_safety'
 
@@ -26,12 +27,20 @@ export interface ListNotificationsResponse {
     page_size: number
 }
 
+export interface NotificationListResult extends PaginatedListResult<Notification> {
+    notifications: Notification[]
+}
+
+type NotificationListResponse = PaginationEnvelope & {
+    notifications?: Notification[]
+}
+
 export class NotificationService {
-    async getNotifications(params: { page_id?: number, page_size?: number, type?: NotificationType, is_read?: boolean }) {
+    async getNotifications(params: { page_id?: number, page_size?: number, type?: NotificationType, is_read?: boolean }): Promise<NotificationListResult> {
         const pageId = params.page_id ?? 1
         const pageSize = params.page_size ?? 20
         const offset = (pageId - 1) * pageSize
-        return request<ListNotificationsResponse>({
+        const res = await request<NotificationListResponse>({
             url: '/v1/notifications',
             method: 'GET',
             data: {
@@ -41,6 +50,14 @@ export class NotificationService {
                 offset
             }
         })
+
+        const notifications = Array.isArray(res?.notifications) ? res.notifications : []
+        const normalized = normalizePaginatedResult(notifications, res, { page: pageId, pageSize })
+
+        return {
+            ...normalized,
+            notifications
+        }
     }
 
     async markAsRead(id: number) {

@@ -37,11 +37,17 @@ const countMerchantAppealsForMerchant = `-- name: CountMerchantAppealsForMerchan
 SELECT COUNT(*) FROM appeals
 WHERE appellant_type = 'merchant'
   AND appellant_id = $1
+  AND ($2::text IS NULL OR status = $2::text)
 `
 
+type CountMerchantAppealsForMerchantParams struct {
+	AppellantID int64       `json:"appellant_id"`
+	Status      pgtype.Text `json:"status"`
+}
+
 // 商户申诉计数
-func (q *Queries) CountMerchantAppealsForMerchant(ctx context.Context, appellantID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countMerchantAppealsForMerchant, appellantID)
+func (q *Queries) CountMerchantAppealsForMerchant(ctx context.Context, arg CountMerchantAppealsForMerchantParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMerchantAppealsForMerchant, arg.AppellantID, arg.Status)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -51,13 +57,44 @@ const countMerchantClaimsForMerchant = `-- name: CountMerchantClaimsForMerchant 
 SELECT COUNT(*) 
 FROM claims c
 JOIN orders o ON c.order_id = o.id
+LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN LATERAL (
+    SELECT status
+    FROM claim_recoveries
+    WHERE claim_id = c.id
+    ORDER BY id DESC
+    LIMIT 1
+) cr ON TRUE
 WHERE o.merchant_id = $1
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    $2::text IS NULL
+    OR (
+      $2::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      $2::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      $2::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 `
 
+type CountMerchantClaimsForMerchantParams struct {
+	MerchantID int64       `json:"merchant_id"`
+	Bucket     pgtype.Text `json:"bucket"`
+}
+
 // 商户收到的索赔计数
-func (q *Queries) CountMerchantClaimsForMerchant(ctx context.Context, merchantID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countMerchantClaimsForMerchant, merchantID)
+func (q *Queries) CountMerchantClaimsForMerchant(ctx context.Context, arg CountMerchantClaimsForMerchantParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countMerchantClaimsForMerchant, arg.MerchantID, arg.Bucket)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -918,14 +955,16 @@ JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'merchant'
   AND a.appellant_id = $1
+  AND ($2::text IS NULL OR a.status = $2::text)
 ORDER BY a.created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $4 OFFSET $3
 `
 
 type ListMerchantAppealsForMerchantParams struct {
-	AppellantID int64 `json:"appellant_id"`
-	Limit       int32 `json:"limit"`
-	Offset      int32 `json:"offset"`
+	AppellantID int64       `json:"appellant_id"`
+	Status      pgtype.Text `json:"status"`
+	Offset      int32       `json:"offset"`
+	Limit       int32       `json:"limit"`
 }
 
 type ListMerchantAppealsForMerchantRow struct {
@@ -951,7 +990,12 @@ type ListMerchantAppealsForMerchantRow struct {
 // =========================== 商户视角 ===========================
 // 商户查询自己的申诉列表
 func (q *Queries) ListMerchantAppealsForMerchant(ctx context.Context, arg ListMerchantAppealsForMerchantParams) ([]ListMerchantAppealsForMerchantRow, error) {
-	rows, err := q.db.Query(ctx, listMerchantAppealsForMerchant, arg.AppellantID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listMerchantAppealsForMerchant,
+		arg.AppellantID,
+		arg.Status,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -996,21 +1040,48 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     a.id AS appeal_id,
-    a.status AS appeal_status
+    a.status AS appeal_status,
+    cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN LATERAL (
+    SELECT status
+    FROM claim_recoveries
+    WHERE claim_id = c.id
+    ORDER BY id DESC
+    LIMIT 1
+) cr ON TRUE
 WHERE o.merchant_id = $1
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    $2::text IS NULL
+    OR (
+      $2::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      $2::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      $2::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 ORDER BY c.created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $4 OFFSET $3
 `
 
 type ListMerchantClaimsForMerchantParams struct {
-	MerchantID int64 `json:"merchant_id"`
-	Limit      int32 `json:"limit"`
-	Offset     int32 `json:"offset"`
+	MerchantID int64       `json:"merchant_id"`
+	Bucket     pgtype.Text `json:"bucket"`
+	Offset     int32       `json:"offset"`
+	Limit      int32       `json:"limit"`
 }
 
 type ListMerchantClaimsForMerchantRow struct {
@@ -1040,11 +1111,17 @@ type ListMerchantClaimsForMerchantRow struct {
 	UserName           string             `json:"user_name"`
 	AppealID           pgtype.Int8        `json:"appeal_id"`
 	AppealStatus       pgtype.Text        `json:"appeal_status"`
+	RecoveryStatus     string             `json:"recovery_status"`
 }
 
 // 商户查看收到的索赔列表（未申诉的+已申诉的）
 func (q *Queries) ListMerchantClaimsForMerchant(ctx context.Context, arg ListMerchantClaimsForMerchantParams) ([]ListMerchantClaimsForMerchantRow, error) {
-	rows, err := q.db.Query(ctx, listMerchantClaimsForMerchant, arg.MerchantID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listMerchantClaimsForMerchant,
+		arg.MerchantID,
+		arg.Bucket,
+		arg.Offset,
+		arg.Limit,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -1079,6 +1156,7 @@ func (q *Queries) ListMerchantClaimsForMerchant(ctx context.Context, arg ListMer
 			&i.UserName,
 			&i.AppealID,
 			&i.AppealStatus,
+			&i.RecoveryStatus,
 		); err != nil {
 			return nil, err
 		}

@@ -198,7 +198,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 // @Accept json
 // @Produce json
 // @Param request body createPaymentOrderRequest true "支付订单参数"
-// @Success 200 {object} paymentOrderResponse "支付订单(含小程序支付参数)"
+// @Success 201 {object} paymentOrderResponse "支付订单(含小程序支付参数)"
 // @Failure 400 {object} ErrorResponse "订单状态不允许支付"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前用户"

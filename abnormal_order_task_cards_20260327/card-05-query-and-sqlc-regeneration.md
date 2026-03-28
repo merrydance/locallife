@@ -1,6 +1,6 @@
 # CARD-05 补 query 与 sqlc 生成链路
 
-状态：未开始
+状态：已完成
 
 优先级：P0
 
@@ -19,23 +19,23 @@
 
 ## 任务内容
 
-- [ ] 更新 behavior_decisions create/get/list/update query
-- [ ] 更新 behavior_trace_snapshots create/list query
-- [ ] 更新 claim_recoveries 相关 query
-- [ ] 新增 claim_recovery_events query
-- [ ] 新增 behavior_decision_effects query
-- [ ] 执行 make sqlc
+- [x] 更新 behavior_decisions create/get/list/update query
+- [x] 更新 behavior_trace_snapshots create/list query
+- [x] 更新 claim_recoveries 相关 query
+- [x] 新增 claim_recovery_events query
+- [x] 新增 behavior_decision_effects query
+- [x] 执行 make sqlc
 
 ## 完成定义
 
-- [ ] 所有新字段已有正式 query 支撑
-- [ ] sqlc 生成成功
-- [ ] 没有遗留手写 SQL 与生成代码漂移
+- [x] 所有新字段已有正式 query 支撑
+- [x] sqlc 生成成功
+- [x] 没有遗留手写 SQL 与生成代码漂移
 
 ## 验证要求
 
-- [ ] make sqlc 成功
-- [ ] 生成代码可编译
+- [x] make sqlc 成功
+- [x] 生成代码可编译
 
 ## 依赖与风险
 
@@ -43,6 +43,6 @@
 
 ## 完成记录
 
-- [ ] query 完成
-- [ ] sqlc 生成完成
-- [ ] 评审完成
+- [x] query 完成
+- [x] sqlc 生成完成
+- [x] 评审完成

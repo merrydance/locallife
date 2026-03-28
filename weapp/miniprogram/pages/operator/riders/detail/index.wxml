@@ -32,11 +32,20 @@
         </view>
       </view>
 
+      <view class="action-row">
+        <t-button wx:if="{{detail.status === 'active'}}" theme="warning" size="small" bindtap="onOpenSuspendDialog" shape="round">暂停接单</t-button>
+        <t-button wx:elif="{{detail.status === 'suspended'}}" theme="success" size="small" bindtap="onOpenResumeDialog" shape="round">恢复接单</t-button>
+      </view>
+
       <view class="section-title">基本资料</view>
       <view class="row"><text class="label">手机号</text><text class="value">{{detail.phone}}</text></view>
       <view class="row"><text class="label">身份证(脱敏)</text><text class="value">{{detail.id_card_no || '-'}}</text></view>
-      <view class="row"><text class="label">所属区域</text><text class="value">{{detail.region_id}}</text></view>
+      <view class="row"><text class="label">所属区域</text><text class="value">{{detail.region_name}}</text></view>
       <view class="row"><text class="label">信用分</text><text class="value">{{detail.credit_score}}</text></view>
+      <view class="row"><text class="label">骑手评分</text><text class="value">{{detail.rating_display}}</text></view>
+      <view class="row"><text class="label">车辆类型</text><text class="value">{{detail.vehicle_type_display}}</text></view>
+      <view class="row"><text class="label">紧急联系人</text><text class="value">{{detail.emergency_contact}}</text></view>
+      <view class="row"><text class="label">紧急联系电话</text><text class="value">{{detail.emergency_phone}}</text></view>
       <view class="row"><text class="label">押金</text><text class="value">¥{{detail.deposit_amount_display}}</text></view>
       <view class="row"><text class="label">冻结押金</text><text class="value">¥{{detail.frozen_deposit_display}}</text></view>
       <view class="row"><text class="label">入驻时间</text><text class="value">{{detail.created_at}}</text></view>
@@ -99,4 +108,42 @@
       </block>
     </view>
   </block>
+
+  <t-dialog
+    visible="{{suspendDialogVisible}}"
+    title="暂停骑手"
+    confirm-btn="确认暂停"
+    cancel-btn="取消"
+    bind:confirm="onSuspendConfirm"
+    bind:cancel="onSuspendCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要暂停骑手 "{{detail.real_name}}" 吗？</text>
+      <t-textarea
+        placeholder="请输入暂停原因"
+        value="{{actionReason}}"
+        bind:change="onReasonChange"
+        maxlength="200"
+      />
+    </view>
+  </t-dialog>
+
+  <t-dialog
+    visible="{{resumeDialogVisible}}"
+    title="恢复骑手"
+    confirm-btn="确认恢复"
+    cancel-btn="取消"
+    bind:confirm="onResumeConfirm"
+    bind:cancel="onResumeCancel"
+  >
+    <view class="dialog-content">
+      <text>确定要恢复骑手 "{{detail.real_name}}" 吗？</text>
+      <t-textarea
+        placeholder="可选：输入恢复说明"
+        value="{{actionReason}}"
+        bind:change="onReasonChange"
+        maxlength="200"
+      />
+    </view>
+  </t-dialog>
 </view>

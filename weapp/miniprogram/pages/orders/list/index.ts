@@ -135,7 +135,6 @@ Page({
 
   onReachBottom() {
     if (this.data.hasMore && !this.data.loading) {
-      this.setData({ page: this.data.page + 1 })
       this.loadOrders(false)
     }
   },
@@ -230,6 +229,7 @@ Page({
 
       this.setData({
         orders,
+        page: targetPage + 1,
         selectedPayMap: this.pruneSelectedPayMap(orders),
         selectedPayCount: this.countSelectedPay(this.pruneSelectedPayMap(orders)),
         pendingPayableCount: this.getPayableOrderIDs(orders).length,
@@ -240,7 +240,7 @@ Page({
     } catch (error: unknown) {
       logger.error('Load orders failed:', error, 'List')
       // 仅在首屏（page=1 且无数据）时显示全屏错误
-      if (this.data.page === 1 && this.data.orders.length === 0) {
+      if (targetPage === 1 && this.data.orders.length === 0) {
         this.setData({ 
           loading: false, 
           isError: true, 

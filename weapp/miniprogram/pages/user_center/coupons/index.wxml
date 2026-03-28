@@ -4,8 +4,8 @@
   
   <!-- Tabs -->
   <t-tabs value="{{activeTab}}" bind:change="onTabChange" sticky offset-top="{{navBarHeight}}">
-    <t-tab-panel label="领券中心" value="AVAILABLE" />
-    <t-tab-panel label="我的优惠券" value="MY" />
+    <t-tab-panel label="可用优惠券" value="AVAILABLE" />
+    <t-tab-panel label="全部优惠券" value="ALL" />
   </t-tabs>
 
   <!-- 错误状态 -->
@@ -23,8 +23,8 @@
 
     <!-- Empty State -->
     <view wx:elif="{{coupons.length === 0}}" class="empty-state animate-fade-in">
-      <t-empty image="/assets/icons/empty.svg" description="{{activeTab === 'AVAILABLE' ? '暂无可领取的优惠券' : '暂无优惠券'}}" />
-      <t-button wx:if="{{activeTab === 'MY'}}" theme="primary" size="medium" shape="round" bindtap="onGoToCenter" class="empty-btn">去领券</t-button>
+      <t-empty image="/assets/icons/empty.svg" description="{{activeTab === 'AVAILABLE' ? '暂无可使用的优惠券' : '暂无优惠券'}}" />
+      <t-button wx:if="{{activeTab === 'ALL'}}" theme="primary" size="medium" shape="round" bindtap="onGoToAvailable" class="empty-btn">查看可用券</t-button>
     </view>
 
     <!-- Coupon List -->
@@ -52,22 +52,7 @@
 
             <!-- Right: Action -->
             <view class="coupon-right">
-               <!-- Available Tab -->
-               <t-button 
-                 wx:if="{{activeTab === 'AVAILABLE'}}" 
-                 size="small" 
-                 theme="{{item.isClaimed ? 'default' : 'primary'}}" 
-                 variant="{{item.isClaimed ? 'text' : 'base'}}"
-                 shape="round" 
-                 disabled="{{item.isClaimed}}" 
-                 bindtap="onClaim" 
-                 data-id="{{item.id}}"
-               >
-                 {{item.isClaimed ? '已领取' : '立即领取'}}
-               </t-button>
-
-               <!-- My Tab -->
-               <view wx:if="{{activeTab === 'MY'}}" class="status-badge {{item.status}}">
+              <view class="status-badge {{item.status}}">
                   <text>{{item.statusText}}</text>
                </view>
             </view>

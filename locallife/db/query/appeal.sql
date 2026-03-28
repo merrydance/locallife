@@ -66,15 +66,17 @@ FROM appeals a
 JOIN claims c ON a.claim_id = c.id
 JOIN orders o ON c.order_id = o.id
 WHERE a.appellant_type = 'merchant'
-  AND a.appellant_id = $1
+  AND a.appellant_id = sqlc.arg('appellant_id')
+  AND (sqlc.narg('status')::text IS NULL OR a.status = sqlc.narg('status')::text)
 ORDER BY a.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantAppealsForMerchant :one
 -- 商户申诉计数
 SELECT COUNT(*) FROM appeals
 WHERE appellant_type = 'merchant'
-  AND appellant_id = $1;
+  AND appellant_id = sqlc.arg('appellant_id')
+  AND (sqlc.narg('status')::text IS NULL OR status = sqlc.narg('status')::text);
 
 -- name: GetMerchantAppealDetail :one
 -- 商户查看自己的申诉详情
@@ -105,23 +107,75 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     a.id AS appeal_id,
-    a.status AS appeal_status
+    a.status AS appeal_status,
+    cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
-WHERE o.merchant_id = $1
+LEFT JOIN LATERAL (
+    SELECT status
+    FROM claim_recoveries
+    WHERE claim_id = c.id
+    ORDER BY id DESC
+    LIMIT 1
+) cr ON TRUE
+WHERE o.merchant_id = sqlc.arg('merchant_id')
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 ORDER BY c.created_at DESC
-LIMIT $2 OFFSET $3;
+LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
 -- name: CountMerchantClaimsForMerchant :one
 -- 商户收到的索赔计数
 SELECT COUNT(*) 
 FROM claims c
 JOIN orders o ON c.order_id = o.id
-WHERE o.merchant_id = $1
-  AND c.status IN ('approved', 'auto-approved');
+LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'merchant'
+LEFT JOIN LATERAL (
+    SELECT status
+    FROM claim_recoveries
+    WHERE claim_id = c.id
+    ORDER BY id DESC
+    LIMIT 1
+) cr ON TRUE
+WHERE o.merchant_id = sqlc.arg('merchant_id')
+  AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  );
 
 -- name: GetMerchantClaimDetailForMerchant :one
 -- 商户查看索赔详情

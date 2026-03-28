@@ -1,6 +1,6 @@
-import { searchMerchants, MerchantSummary } from '../../../api/merchant'
+import ConsumerDiscoveryAdapter from '../../../adapters/consumer-discovery'
+import { searchMerchantsWithMeta, MerchantSummary } from '../../../api/merchant'
 import { getUserCarts } from '../../../api/cart'
-import { DishAdapter } from '../../../adapters/dish'
 import { logger } from '../../../utils/logger'
 import { globalStore } from '../../../utils/global-store'
 import { getStableBarHeights } from '../../../utils/responsive'
@@ -112,7 +112,7 @@ Page({
     }
 
     try {
-      const merchants = await searchMerchants({
+      const result = await searchMerchantsWithMeta({
         tag_id: this._tagId,
         page_id: currentPage,
         page_size: PAGE_SIZE,
@@ -120,30 +120,32 @@ Page({
         user_longitude: app.globalData.longitude || undefined
       })
 
-      const hasMore = merchants.length === PAGE_SIZE
+      const merchants = result.merchants
+      const hasMore = result.hasMore
 
-      const viewModels: RestaurantViewModel[] = merchants.map((m: MerchantSummary) => ({
-        ...(deriveMerchantPromotions(m.tags || [], m.estimated_delivery_fee)),
-        id: m.id,
-        name: m.name,
-        imageUrl: m.logo_url,
-        cuisineType: m.tags ? m.tags.slice(0, 2) : [],
-        avgPrice: 0,
-        avgPriceDisplay: '人均未知',
-        distance: DishAdapter.formatDistance(m.distance ?? 0),
-        address: m.address || '',
-        businessHoursDisplay: m.is_open === false ? '休息中' : '营业中',
-        isOpen: m.is_open ?? true,
-        availableRooms: 0,
-        availableRoomsBadge: '',
-        tags: m.tags ? m.tags.slice(0, 3) : [],
-        monthlySales: m.total_orders ?? m.monthly_sales ?? 0,
-        deliveryFee: m.estimated_delivery_fee,
-        deliveryFeeDisplay: m.estimated_delivery_fee !== undefined
-          ? `配送费¥${(m.estimated_delivery_fee / 100).toFixed(0)}起`
-          : '',
-        label: m.label || ''
-      }))
+      const viewModels: RestaurantViewModel[] = merchants.map((m: MerchantSummary) => {
+        const merchant = ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(m)
+        return {
+          ...deriveMerchantPromotions(merchant.tags, merchant.deliveryFee),
+          id: merchant.id,
+          name: merchant.name,
+          imageUrl: merchant.imageUrl,
+          cuisineType: merchant.tags.slice(0, 2),
+          avgPrice: 0,
+          avgPriceDisplay: '人均未知',
+          distance: merchant.distanceDisplay,
+          address: merchant.address,
+          businessHoursDisplay: merchant.isOpen ? '营业中' : '休息中',
+          isOpen: merchant.isOpen,
+          availableRooms: 0,
+          availableRoomsBadge: '',
+          tags: merchant.tags.slice(0, 3),
+          monthlySales: merchant.monthlySales,
+          deliveryFee: merchant.deliveryFee,
+          deliveryFeeDisplay: merchant.deliveryFeeDisplay,
+          label: merchant.label
+        }
+      })
 
       if (reset) {
         this.setData({ merchants: viewModels, hasMore, page: 1 })
@@ -211,6 +213,6 @@ Page({
   },
 
   onCartTap() {
-    wx.switchTab({ url: '/pages/cart/index' })
+    wx.navigateTo({ url: '/pages/takeout/cart/index' })
   }
 })

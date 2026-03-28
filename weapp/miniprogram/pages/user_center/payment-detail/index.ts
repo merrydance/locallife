@@ -1,4 +1,4 @@
-import { closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, invokeWechatPay, PaymentOrder, RefundOrder } from '../../../api/payment'
+import { BusinessType, closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, invokeWechatPay, PaymentOrder, RefundOrder } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 
@@ -20,6 +20,12 @@ type CurrentPageWithOptions = {
                 id?: string
                 orderId?: string
         }
+}
+
+const BUSINESS_TYPES: BusinessType[] = ['order', 'reservation', 'reservation_addon', 'membership_recharge', 'rider_deposit', 'claim_recovery']
+
+function normalizeBusinessType(value?: string): BusinessType {
+    return BUSINESS_TYPES.includes(value as BusinessType) ? value as BusinessType : 'order'
 }
 
 Page({
@@ -146,7 +152,7 @@ Page({
             const latestPayment = await createPaymentOrder({
                 order_id: payment.order_id,
                 payment_type: 'miniprogram',
-                business_type: payment.business_type || 'order'
+                business_type: normalizeBusinessType(payment.business_type)
             })
 
             if (latestPayment.pay_params) {

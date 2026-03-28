@@ -225,13 +225,14 @@ type ProcessOrderPaymentTxParams struct {
 // ProcessOrderPaymentTxResult contains the result of order payment processing
 type ProcessOrderPaymentTxResult struct {
 	Order    Order
-	Delivery *Delivery     // 只有外卖订单才有配送单
-	PoolItem *DeliveryPool // 只有外卖订单才会进入配送池
+	Delivery *Delivery     // 外卖订单仅在后续显式投池动作后才会有配送单
+	PoolItem *DeliveryPool // 仅在订单已被投放到配送池时才有值
 }
 
 // ProcessOrderPaymentTx processes order payment and decrements inventory in a single transaction
 // This ensures inventory is only deducted when payment succeeds, preventing overselling
-// For takeout orders, it also creates delivery record and adds to delivery pool
+// For takeout orders, delivery creation and entering delivery pool both happen later
+// when the merchant explicitly advances the fulfillment flow.
 func (store *SQLStore) ProcessOrderPaymentTx(ctx context.Context, arg ProcessOrderPaymentTxParams) (ProcessOrderPaymentTxResult, error) {
 	var result ProcessOrderPaymentTxResult
 
@@ -372,155 +373,6 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, arg Process
 	})
 	if err != nil {
 		return result, fmt.Errorf("update order to paid: %w", err)
-	}
-
-	// 5. 🚀 如果是外卖订单(takeout)，创建配送单并推入配送池
-	if result.Order.OrderType == "takeout" {
-		// 获取商户信息（取餐地址）
-		merchant, err := q.GetMerchant(ctx, result.Order.MerchantID)
-		if err != nil {
-			return result, fmt.Errorf("get merchant: %w", err)
-		}
-
-		// 获取收货地址
-		if !result.Order.AddressID.Valid {
-			return result, fmt.Errorf("takeout order missing delivery address")
-		}
-		userAddress, err := q.GetUserAddress(ctx, result.Order.AddressID.Int64)
-		if err != nil {
-			return result, fmt.Errorf("get user address: %w", err)
-		}
-
-		// ========== 计算预估出餐时间 ==========
-		// 策略：取订单中各菜品制作时间的最大值
-		// 如果没有菜品制作时间数据，则使用商户平均出餐时间
-		// 如果商户也没有历史数据，使用入参中的默认值
-		const avgPrepareTimeCalcDays = 7 // 计算平均出餐时间的天数范围
-
-		riderSpeedMetersPerHour := arg.RiderAverageSpeed
-		if riderSpeedMetersPerHour <= 0 {
-			riderSpeedMetersPerHour = 15000 // Fallback
-		}
-
-		defaultPrepareTimeMinutes := arg.DefaultPrepareTime
-		if defaultPrepareTimeMinutes <= 0 {
-			defaultPrepareTimeMinutes = 20 // Fallback
-		}
-
-		now := time.Now()
-		var maxPrepareTime int16 = 0
-
-		// 遍历订单菜品，获取最长制作时间
-		for _, item := range orderItems {
-			if item.DishID.Valid {
-				dish, err := q.GetDish(ctx, item.DishID.Int64)
-				if err == nil && dish.PrepareTime > maxPrepareTime {
-					maxPrepareTime = dish.PrepareTime
-				}
-			}
-		}
-
-		// 如果没有找到菜品制作时间，尝试获取商户平均出餐时间
-		if maxPrepareTime == 0 {
-			calcStartTime := now.AddDate(0, 0, -avgPrepareTimeCalcDays)
-			avgTime, err := q.GetMerchantAvgPrepareTime(ctx, GetMerchantAvgPrepareTimeParams{
-				MerchantID: merchant.ID,
-				StartAt:    calcStartTime,
-			})
-			if err == nil && avgTime > 0 {
-				maxPrepareTime = int16(avgTime)
-			}
-		}
-
-		// 如果仍然没有数据，使用默认值
-		if maxPrepareTime == 0 {
-			maxPrepareTime = int16(defaultPrepareTimeMinutes)
-		}
-
-		// 预计出餐时间 = 当前时间 + 最大菜品制作时间
-		estimatedPickupAt := now.Add(time.Duration(maxPrepareTime) * time.Minute)
-
-		// ========== 计算预估送达时间 ==========
-		// 配送时间计算策略（SSOT原则）：
-		// 1. 优先使用订单落库时持久化的精准时间 (Consistent Content)
-		// 2. 其次使用当前事务传入的实时 LBS 时间
-		// 3. 最后回退到基于平均速度的物理估算
-		var deliveryDistance int32
-		if result.Order.DeliveryDistance.Valid {
-			deliveryDistance = result.Order.DeliveryDistance.Int32
-		}
-
-		var deliveryTimeMinutes float64
-		if result.Order.DeliveryDuration.Valid && result.Order.DeliveryDuration.Int32 > 0 {
-			deliveryTimeMinutes = float64(result.Order.DeliveryDuration.Int32) / 60.0
-		} else if arg.DeliveryDuration > 0 {
-			deliveryTimeMinutes = float64(arg.DeliveryDuration) / 60.0
-		} else {
-			// 配送时间（分钟）= 距离(米) / 速度(米/小时) * 60
-			deliveryTimeMinutes = float64(deliveryDistance) / float64(riderSpeedMetersPerHour) * 60
-		}
-
-		// 最少5分钟配送时间
-		if deliveryTimeMinutes < 5 {
-			deliveryTimeMinutes = 5
-		}
-
-		// 预计送达时间 = 预计出餐时间 + 配送时间
-		estimatedDeliveryAt := estimatedPickupAt.Add(time.Duration(deliveryTimeMinutes) * time.Minute)
-
-		// 创建配送单
-		delivery, err := q.CreateDelivery(ctx, CreateDeliveryParams{
-			OrderID:             result.Order.ID,
-			PickupAddress:       merchant.Address,
-			PickupLongitude:     merchant.Longitude,
-			PickupLatitude:      merchant.Latitude,
-			PickupContact:       pgtype.Text{String: merchant.Name, Valid: true},
-			PickupPhone:         pgtype.Text{String: merchant.Phone, Valid: true},
-			DeliveryAddress:     userAddress.DetailAddress,
-			DeliveryLongitude:   userAddress.Longitude,
-			DeliveryLatitude:    userAddress.Latitude,
-			DeliveryContact:     pgtype.Text{String: userAddress.ContactName, Valid: true},
-			DeliveryPhone:       pgtype.Text{String: userAddress.ContactPhone, Valid: true},
-			Distance:            deliveryDistance,
-			DeliveryFee:         result.Order.DeliveryFee,
-			EstimatedPickupAt:   pgtype.Timestamptz{Time: estimatedPickupAt, Valid: true},
-			EstimatedDeliveryAt: pgtype.Timestamptz{Time: estimatedDeliveryAt, Valid: true},
-		})
-		if err != nil {
-			return result, fmt.Errorf("create delivery: %w", err)
-		}
-		result.Delivery = &delivery
-
-		// 推入配送池
-		// 优先级根据运费金额设置：运费越高优先级越高，骑手更愿意接
-		priority := int32(1)
-		if result.Order.DeliveryFee >= 1000 { // 运费>=10元，提高优先级
-			priority = 2
-		}
-		if result.Order.DeliveryFee >= 2000 { // 运费>=20元，高优先级
-			priority = 3
-		}
-
-		// expires_at 字段不再用于过滤，设置一个很远的未来时间
-		// 外卖订单会一直在配送池中可见，直到被骑手接单或订单取消
-		poolItem, err := q.AddToDeliveryPool(ctx, AddToDeliveryPoolParams{
-			OrderID:            result.Order.ID,
-			MerchantID:         merchant.ID,
-			PickupLongitude:    merchant.Longitude,
-			PickupLatitude:     merchant.Latitude,
-			DeliveryLongitude:  userAddress.Longitude,
-			DeliveryLatitude:   userAddress.Latitude,
-			Distance:           deliveryDistance,
-			DeliveryFee:        result.Order.DeliveryFee,
-			ExpectedPickupAt:   estimatedPickupAt,
-			ExpectedDeliveryAt: pgtype.Timestamptz{Time: estimatedDeliveryAt, Valid: true},
-			ExpiresAt:          now.Add(365 * 24 * time.Hour), // 设置一年后，实际不再用于过滤
-			Priority:           priority,
-		})
-		if err != nil {
-			return result, fmt.Errorf("add to delivery pool: %w", err)
-		}
-		result.PoolItem = &poolItem
 	}
 
 	return result, nil

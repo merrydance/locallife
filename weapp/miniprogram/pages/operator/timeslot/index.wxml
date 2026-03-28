@@ -15,6 +15,11 @@
         </view>
       </view>
 
+      <view class="section-card notice-card">
+        <view class="notice-title">当前页职责</view>
+        <view class="notice-text">这里只处理峰时时段的新增、删除和冲突校验。后端当前不支持直接编辑已有时段，如需调整请删除后重建。</view>
+      </view>
+
       <view wx:if="{{initialLoading}}" class="section-card">
         <view wx:for="{{3}}" wx:key="index" class="skeleton-item"></view>
       </view>

@@ -1,6 +1,6 @@
 # CARD-06 接通 tx_claim_behavior V2 双写
 
-状态：未开始
+状态：已完成
 
 优先级：P0
 
@@ -16,22 +16,22 @@
 
 ## 任务内容
 
-- [ ] 继续保留旧字段写入，保证兼容
-- [ ] 同步写入 behavior_decisions V2 字段
-- [ ] 同步写入三方结构化 snapshots
-- [ ] 创建 recovery 时补 decision_id 和 created event
-- [ ] 写入 behavior_decision_effects 的最小 applied 记录
+- [x] 继续保留旧字段写入，保证兼容
+- [x] 同步写入 behavior_decisions V2 字段
+- [x] 同步写入三方结构化 snapshots
+- [x] 创建 recovery 时补 decision_id 和 created event
+- [x] 写入 behavior_decision_effects 的最小 applied 记录
 
 ## 完成定义
 
-- [ ] claim 事务已具备 V2 双写能力
-- [ ] 现有 claim 提交流程未被破坏
-- [ ] 后续 Phase 2 无需再回头补 Phase 1 数据结构写入
+- [x] claim 事务已具备 V2 双写能力
+- [x] 现有 claim 提交流程未被破坏
+- [x] 后续 Phase 2 无需再回头补 Phase 1 数据结构写入
 
 ## 验证要求
 
-- [ ] 相关 db/sqlc 或 logic 最小测试通过
-- [ ] 手工检查新老字段同时落库
+- [x] 相关 db/sqlc 或 logic 最小测试通过
+- [x] 新老字段已在双写路径中同时写入
 
 ## 依赖与风险
 
@@ -39,6 +39,6 @@
 
 ## 完成记录
 
-- [ ] 代码完成
-- [ ] 测试完成
-- [ ] 评审完成
+- [x] 代码完成
+- [x] 测试完成
+- [x] 评审完成

@@ -1,5 +1,6 @@
 import { request } from '../utils/request'
 import { uploadMedia, MediaUploadResult } from '../utils/media'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
 
 export interface Review {
     id: number
@@ -25,6 +26,14 @@ export interface ListReviewsResponse {
     page_size: number
 }
 
+export interface ReviewListResult extends PaginatedListResult<Review> {
+    reviews: Review[]
+}
+
+type ReviewsResponse = PaginationEnvelope & {
+    reviews?: Review[]
+}
+
 // Params
 export interface CreateReviewParams {
     order_id: number
@@ -39,12 +48,20 @@ export class ReviewService {
      * 获取我的评价列表
      * GET /v1/reviews/me
      */
-    static async listMyReviews(pageId: number = 1, pageSize: number = 10): Promise<ListReviewsResponse> {
-        return await request({
+    static async listMyReviews(pageId: number = 1, pageSize: number = 10): Promise<ReviewListResult> {
+        const res = await request<ReviewsResponse>({
             url: '/v1/reviews/me',
             method: 'GET',
             data: { page_id: pageId, page_size: pageSize }
         })
+
+        const reviews = Array.isArray(res?.reviews) ? res.reviews : []
+        const normalized = normalizePaginatedResult(reviews, res, { page: pageId, pageSize })
+
+        return {
+            ...normalized,
+            reviews
+        }
     }
 
     /**

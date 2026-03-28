@@ -77,6 +77,13 @@ WHERE o.user_id = sqlc.arg('user_id')
 ORDER BY o.created_at DESC
 LIMIT sqlc.arg('limit') OFFSET sqlc.arg('offset');
 
+-- name: CountOrdersByUserWithFilters :one
+SELECT COUNT(*) FROM orders o
+WHERE o.user_id = sqlc.arg('user_id')
+    AND (sqlc.narg('status')::text IS NULL OR o.status = sqlc.narg('status'))
+    AND (sqlc.narg('order_type')::text IS NULL OR o.order_type = sqlc.narg('order_type'))
+    AND (sqlc.narg('reservation_id')::bigint IS NULL OR o.reservation_id IS NOT DISTINCT FROM sqlc.narg('reservation_id'));
+
 -- name: ListOrdersByUserAndStatus :many
 SELECT 
     o.*,
@@ -200,7 +207,7 @@ SET
     status = 'picked',
     picked_at = COALESCE(picked_at, now()),
     updated_at = now()
-WHERE id = $1 AND status IN ('ready', 'courier_accepted', 'picked')
+WHERE id = $1 AND status IN ('courier_accepted', 'picked')
 RETURNING *;
 
 -- name: UpdateOrderToDelivering :one
@@ -335,7 +342,7 @@ SET
     fulfillment_status = 'ready',
     ready_at = COALESCE(ready_at, now()),
     updated_at = now()
-WHERE id = $1 AND status IN ('paid', 'preparing')
+WHERE id = $1 AND status = 'preparing'
 RETURNING *;
 
 -- name: GetMerchantAvgPrepareTime :one

@@ -1,17 +1,37 @@
 <custom-navbar title="骑手工作台" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initError && !loading}}" class="page-state-card">
+    <t-empty icon="error-circle" description="{{initError}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryLoad">重新加载工作台</t-button>
+  </view>
+
+  <block wx:else>
   <!-- 1. 骑手状态与简报 -->
   <view class="rider-header-card">
     <view class="header-top">
       <view class="rider-profile">
         <t-icon name="user-circle" size="48rpx" color="rgba(255,255,255,0.8)" />
         <view class="rider-name">{{riderInfo.real_name || '骑手用户'}}</view>
-        <t-tag size="small" variant="dark" theme="default" shape="round" class="credit-tag">信用分: {{riderInfo.credit_score || 100}}</t-tag>
+        <t-tag size="small" variant="dark" theme="default" shape="round" class="credit-tag" bindtap="onGoToPremiumScore">信用分: {{riderInfo.credit_score || 100}}</t-tag>
       </view>
-      <view class="wallet-entry" bindtap="onGoToWallet">
-        <text>押金与账单</text>
-        <t-icon name="chevron-right" size="32rpx" />
+      <view class="header-actions">
+        <view class="quick-entry" bindtap="onGoToWallet">
+          <text>押金与账单</text>
+          <t-icon name="chevron-right" size="32rpx" />
+        </view>
+        <view class="quick-entry" bindtap="onGoToPremiumScore">
+          <text>高值单资格</text>
+          <t-icon name="chevron-right" size="32rpx" />
+        </view>
+        <view class="quick-entry" bindtap="onGoToHistory">
+          <text>历史任务</text>
+          <t-icon name="chevron-right" size="32rpx" />
+        </view>
+        <view class="quick-entry" bindtap="onGoToClaims">
+          <text>索赔与申诉</text>
+          <t-icon name="chevron-right" size="32rpx" />
+        </view>
       </view>
     </view>
 
@@ -99,12 +119,23 @@
                     <view class="addr-name">{{item.merchant_name || '获取中...'}}</view>
                     <view class="addr-desc">{{item.merchant_address || '点击查看详情'}}</view>
                   </view>
+                  <view
+                    class="action-group"
+                    catchtap="onOpenLocation"
+                    data-latitude="{{item.pickup_latitude}}"
+                    data-longitude="{{item.pickup_longitude}}"
+                    data-name="{{item.merchant_name || '取货点'}}"
+                    data-address="{{item.merchant_address || '商家位置'}}"
+                    data-label="到店导航"
+                  >
+                    <t-icon name="map-location" size="44rpx" class="action-icon" />
+                  </view>
                 </view>
                 
                 <view class="route-divider hall-route">
                   <view class="line"></view>
                   <view class="route-info">
-                    <text class="dist">预计行程 {{item.real_distance || '--'}}km</text>
+                    <text class="dist">预计行程 {{item.route_distance_km || '--'}}km · {{item.estimated_minutes || '--'}}分钟</text>
                   </view>
                 </view>
 
@@ -116,6 +147,17 @@
                       <text class="label">抢单剩余</text>
                       <text class="time urgent">{{item.expires_at_format || '立即抢单'}}</text>
                     </view>
+                  </view>
+                  <view
+                    class="action-group"
+                    catchtap="onOpenLocation"
+                    data-latitude="{{item.delivery_latitude}}"
+                    data-longitude="{{item.delivery_longitude}}"
+                    data-name="送达点"
+                    data-address="{{item.customer_address || item.delivery_address}}"
+                    data-label="送达导航"
+                  >
+                    <t-icon name="map-location" size="44rpx" class="action-icon" />
                   </view>
                 </view>
               </view>
@@ -132,6 +174,11 @@
               </view>
             </view>
           </block>
+
+          <view wx:elif="{{loadError && !loading}}" class="inline-state-card">
+            <t-empty icon="error-circle" description="{{loadError}}" />
+            <t-button theme="primary" shape="round" bindtap="onRetryLoad" size="medium">重新加载</t-button>
+          </view>
           
           <t-empty 
             wx:elif="{{!loading}}"
@@ -177,8 +224,20 @@
                     <view class="addr-name">{{item.merchant_name || item.pickup_address}}</view>
                     <view class="addr-desc">{{item.pickup_address}}</view>
                   </view>
-                  <view class="action-group" catchtap="onCall" data-phone="{{item.pickup_phone}}" wx:if="{{item.pickup_phone}}">
-                    <t-icon name="call" size="44rpx" class="action-icon" />
+                  <view class="action-group">
+                    <view
+                      catchtap="onOpenLocation"
+                      data-latitude="{{item.pickup_latitude}}"
+                      data-longitude="{{item.pickup_longitude}}"
+                      data-name="{{item.merchant_name || '取货点'}}"
+                      data-address="{{item.pickup_address}}"
+                      data-label="到店导航"
+                    >
+                      <t-icon name="map-location" size="44rpx" class="action-icon" />
+                    </view>
+                    <view catchtap="onCall" data-phone="{{item.pickup_phone}}" wx:if="{{item.pickup_phone}}">
+                      <t-icon name="call" size="44rpx" class="action-icon" />
+                    </view>
                   </view>
                 </view>
                 
@@ -197,8 +256,20 @@
                       <text class="contact-text">{{item.delivery_contact || '客户'}}</text>
                     </view>
                   </view>
-                   <view class="action-group" catchtap="onCall" data-phone="{{item.delivery_phone}}" wx:if="{{item.delivery_phone}}">
-                    <t-icon name="call" size="44rpx" class="action-icon" />
+                   <view class="action-group">
+                    <view
+                      catchtap="onOpenLocation"
+                      data-latitude="{{item.delivery_latitude}}"
+                      data-longitude="{{item.delivery_longitude}}"
+                      data-name="{{item.delivery_contact || '送达点'}}"
+                      data-address="{{item.delivery_address}}"
+                      data-label="送达导航"
+                    >
+                      <t-icon name="map-location" size="44rpx" class="action-icon" />
+                    </view>
+                    <view catchtap="onCall" data-phone="{{item.delivery_phone}}" wx:if="{{item.delivery_phone}}">
+                      <t-icon name="call" size="44rpx" class="action-icon" />
+                    </view>
                   </view>
                 </view>
               </view>
@@ -223,9 +294,15 @@
             </view>
           </block>
 
+          <view wx:elif="{{loadError && !loading}}" class="inline-state-card">
+            <t-empty icon="error-circle" description="{{loadError}}" />
+            <t-button theme="primary" shape="round" bindtap="onRetryLoad" size="medium">重新加载</t-button>
+          </view>
+
           <t-empty wx:elif="{{!loading}}" icon="info-circle" description="当前没有进行中的任务" />
         </view>
       </t-tab-panel>
     </t-tabs>
   </view>
+  </block>
 </view>

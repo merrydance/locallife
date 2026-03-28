@@ -83,6 +83,20 @@ func (p apiOrderEventPublisher) PublishMerchantUserRiskAlert(ctx context.Context
 	})
 }
 
+func (p apiOrderEventPublisher) PublishTakeoutOrderPooled(ctx context.Context, order db.Order, poolItem db.DeliveryPool) {
+	if p.server.deliveryBroadcast == nil {
+		return
+	}
+
+	merchant, err := p.server.store.GetMerchant(ctx, order.MerchantID)
+	if err != nil {
+		log.Error().Err(err).Int64("merchant_id", order.MerchantID).Msg("get merchant for pooled takeout broadcast failed")
+		return
+	}
+
+	_ = p.server.deliveryBroadcast.BroadcastNewOrderNotification(ctx, merchant.RegionID, poolItem, merchant.Name)
+}
+
 type apiTaskScheduler struct {
 	server *Server
 }
@@ -123,6 +137,19 @@ func (s apiTaskScheduler) ScheduleProcessRefund(ctx context.Context, input logic
 func (s apiTaskScheduler) ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error {
 	if s.server.taskDistributor == nil {
 		return nil
+	}
+	if orderID > 0 {
+		order, err := s.server.store.GetOrder(ctx, orderID)
+		if err != nil {
+			return err
+		}
+		if order.OrderType == db.OrderTypeTakeout {
+			log.Info().
+				Int64("payment_order_id", paymentOrderID).
+				Int64("order_id", orderID).
+				Msg("skip takeout profit sharing scheduling outside settlement")
+			return nil
+		}
 	}
 	return s.server.taskDistributor.DistributeTaskProcessProfitSharing(ctx, &worker.ProfitSharingPayload{
 		PaymentOrderID: paymentOrderID,
@@ -255,7 +282,7 @@ func (server *Server) loadDishCustomizationMetaFromContext(ctx context.Context, 
 
 func (server *Server) buildOrderCommandService() logic.OrderCommandService {
 	var eventPublisher logic.OrderEventPublisher
-	if server.wsHub != nil {
+	if server.wsHub != nil || server.deliveryBroadcast != nil {
 		eventPublisher = apiOrderEventPublisher{server: server}
 	}
 

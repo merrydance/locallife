@@ -43,6 +43,21 @@ func (m *MockStore) EXPECT() *MockStoreMockRecorder {
 	return m.recorder
 }
 
+// AcceptTakeoutOrderTx mocks base method.
+func (m *MockStore) AcceptTakeoutOrderTx(ctx context.Context, arg db.AcceptTakeoutOrderTxParams) (db.AcceptTakeoutOrderTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AcceptTakeoutOrderTx", ctx, arg)
+	ret0, _ := ret[0].(db.AcceptTakeoutOrderTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AcceptTakeoutOrderTx indicates an expected call of AcceptTakeoutOrderTx.
+func (mr *MockStoreMockRecorder) AcceptTakeoutOrderTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AcceptTakeoutOrderTx", reflect.TypeOf((*MockStore)(nil).AcceptTakeoutOrderTx), ctx, arg)
+}
+
 // AddCartItem mocks base method.
 func (m *MockStore) AddCartItem(ctx context.Context, arg db.AddCartItemParams) (db.CartItem, error) {
 	m.ctrl.T.Helper()
@@ -1786,6 +1801,21 @@ func (m *MockStore) CountOrdersByMerchantWithFilters(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) CountOrdersByMerchantWithFilters(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOrdersByMerchantWithFilters", reflect.TypeOf((*MockStore)(nil).CountOrdersByMerchantWithFilters), ctx, arg)
+}
+
+// CountOrdersByUserWithFilters mocks base method.
+func (m *MockStore) CountOrdersByUserWithFilters(ctx context.Context, arg db.CountOrdersByUserWithFiltersParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOrdersByUserWithFilters", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOrdersByUserWithFilters indicates an expected call of CountOrdersByUserWithFilters.
+func (mr *MockStoreMockRecorder) CountOrdersByUserWithFilters(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOrdersByUserWithFilters", reflect.TypeOf((*MockStore)(nil).CountOrdersByUserWithFilters), ctx, arg)
 }
 
 // CountPaymentLedgerEntriesByUser mocks base method.
@@ -14810,6 +14840,21 @@ func (mr *MockStoreMockRecorder) MarkRiderDepositCreditExpired(ctx, arg any) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkRiderDepositCreditExpired", reflect.TypeOf((*MockStore)(nil).MarkRiderDepositCreditExpired), ctx, arg)
 }
 
+// MarkTakeoutOrderReadyTx mocks base method.
+func (m *MockStore) MarkTakeoutOrderReadyTx(ctx context.Context, arg db.MarkTakeoutOrderReadyTxParams) (db.MarkTakeoutOrderReadyTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkTakeoutOrderReadyTx", ctx, arg)
+	ret0, _ := ret[0].(db.MarkTakeoutOrderReadyTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// MarkTakeoutOrderReadyTx indicates an expected call of MarkTakeoutOrderReadyTx.
+func (mr *MockStoreMockRecorder) MarkTakeoutOrderReadyTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkTakeoutOrderReadyTx", reflect.TypeOf((*MockStore)(nil).MarkTakeoutOrderReadyTx), ctx, arg)
+}
+
 // MarkUserVoucherAsExpiredOnRollback mocks base method.
 func (m *MockStore) MarkUserVoucherAsExpiredOnRollback(ctx context.Context, arg db.MarkUserVoucherAsExpiredOnRollbackParams) (db.UserVoucher, error) {
 	m.ctrl.T.Helper()
@@ -16737,6 +16782,21 @@ func (m *MockStore) UpdateComboSetOnlineStatus(ctx context.Context, arg db.Updat
 func (mr *MockStoreMockRecorder) UpdateComboSetOnlineStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateComboSetOnlineStatus", reflect.TypeOf((*MockStore)(nil).UpdateComboSetOnlineStatus), ctx, arg)
+}
+
+// UpdateComboSetTx mocks base method.
+func (m *MockStore) UpdateComboSetTx(ctx context.Context, arg db.UpdateComboSetTxParams) (db.UpdateComboSetTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateComboSetTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateComboSetTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateComboSetTx indicates an expected call of UpdateComboSetTx.
+func (mr *MockStoreMockRecorder) UpdateComboSetTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateComboSetTx", reflect.TypeOf((*MockStore)(nil).UpdateComboSetTx), ctx, arg)
 }
 
 // UpdateDailyInventory mocks base method.

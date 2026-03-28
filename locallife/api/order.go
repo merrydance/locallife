@@ -774,7 +774,7 @@ func (server *Server) listOrders(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listOrdersResponse{
 		Orders:   resp,
-		Total:    int64(len(resp)),
+		Total:    result.TotalCount,
 		PageID:   req.PageID,
 		PageSize: req.PageSize,
 	})

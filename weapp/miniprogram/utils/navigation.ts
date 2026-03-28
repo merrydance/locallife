@@ -28,10 +28,12 @@ export class Navigation {
   /**
      * 跳转到商户详情页
      */
-  static toRestaurantDetail(merchantId: string) {
-    wx.navigateTo({
-      url: `/pages/takeout/restaurant-detail/index?id=${merchantId}`
-    })
+  static toRestaurantDetail(merchantId: string | number, options?: { activeTab?: string }) {
+    let url = `/pages/takeout/restaurant-detail/index?id=${merchantId}`
+    if (options?.activeTab) {
+      url += `&activeTab=${encodeURIComponent(options.activeTab)}`
+    }
+    wx.navigateTo({ url })
   }
 
   /**
@@ -60,6 +62,14 @@ export class Navigation {
     wx.navigateTo({
       url: '/pages/takeout/cart/index'
     })
+  }
+
+  static toTakeoutHome() {
+    wx.switchTab({ url: '/pages/takeout/index' })
+  }
+
+  static toUserCenterHome() {
+    wx.switchTab({ url: '/pages/user_center/index' })
   }
 
   /**
@@ -96,11 +106,23 @@ export class Navigation {
   /**
      * 跳转到订单列表页
      */
-  static toOrderList(tab?: 'all' | 'pending' | 'completed') {
-    const url = tab
-      ? `/pages/orders/list/index?tab=${tab}`
-      : '/pages/orders/list/index'
+  static toOrderList(tabOrOptions?: 'all' | 'pending' | 'completed' | { orderType?: 'takeout' | 'reservation' | 'dine_in' | 'takeaway' }) {
+    let url = '/pages/orders/list/index'
+
+    if (typeof tabOrOptions === 'object' && tabOrOptions?.orderType) {
+      url = `/pages/orders/list/index?order_type=${tabOrOptions.orderType}`
+    } else if (typeof tabOrOptions === 'string' && tabOrOptions !== 'all') {
+      url = `/pages/orders/list/index?tab=${tabOrOptions}`
+    }
+
     wx.navigateTo({ url })
+  }
+
+  static redirectToOrderList(options?: { orderType?: 'takeout' | 'reservation' | 'dine_in' | 'takeaway' }) {
+    const url = options?.orderType
+      ? `/pages/orders/list/index?order_type=${options.orderType}`
+      : '/pages/orders/list/index'
+    wx.redirectTo({ url })
   }
 
   /**
@@ -127,6 +149,10 @@ export class Navigation {
       ? `/pages/user_center/addresses/index?from=${from}`
       : '/pages/user_center/addresses/index'
     wx.navigateTo({ url })
+  }
+
+  static toAddressSelector() {
+    wx.navigateTo({ url: '/pages/user_center/addresses/index?select=true' })
   }
 
   /**
@@ -174,6 +200,30 @@ export class Navigation {
     })
   }
 
+  static toReservationCreate(params: { merchantId: string | number, merchantName?: string }) {
+    let url = `/pages/reservation/create/index?merchantId=${params.merchantId}`
+    if (params.merchantName) {
+      url += `&merchantName=${encodeURIComponent(params.merchantName)}`
+    }
+    wx.navigateTo({ url })
+  }
+
+  static toReservationList() {
+    wx.navigateTo({ url: '/pages/reservation/list/index' })
+  }
+
+  static redirectToReservationList() {
+    wx.redirectTo({ url: '/pages/reservation/list/index' })
+  }
+
+  static toUserReservations() {
+    wx.navigateTo({ url: '/pages/user_center/reservations/index' })
+  }
+
+  static toReservationHome() {
+    wx.switchTab({ url: '/pages/reservation/index' })
+  }
+
   // ==================== 堂食相关 ====================
 
   /**
@@ -208,10 +258,23 @@ export class Navigation {
   /**
      * 跳转到会员中心
      */
-  static toMembership() {
-    wx.navigateTo({
-      url: '/pages/user_center/membership/index'
-    })
+  static toMembership(options?: { membershipId?: string | number, autoRecharge?: boolean }) {
+    let url = '/pages/user_center/membership/index'
+    const params: string[] = []
+
+    if (options?.membershipId !== undefined) {
+      params.push(`membershipId=${encodeURIComponent(String(options.membershipId))}`)
+    }
+
+    if (options?.autoRecharge) {
+      params.push('autoRecharge=1')
+    }
+
+    if (params.length > 0) {
+      url = `${url}?${params.join('&')}`
+    }
+
+    wx.navigateTo({ url })
   }
 
   /**

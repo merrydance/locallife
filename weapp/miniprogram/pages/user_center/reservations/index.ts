@@ -63,7 +63,6 @@ Page({
 
     onReachBottom() {
         if (this.data.hasMore && !this.data.loading) {
-            this.setData({ page: this.data.page + 1 })
             this.loadReservations(false)
         }
     },
@@ -79,9 +78,10 @@ Page({
         }
 
         try {
-            const { currentStatus, page, pageSize } = this.data
+            const { currentStatus, pageSize } = this.data
+            const targetPage = reset ? 1 : this.data.page
             const params: ReservationListParams = {
-                page_id: page,
+                page_id: targetPage,
                 page_size: pageSize,
                 ...(currentStatus ? { status: currentStatus as ReservationStatus } : {})
             }
@@ -96,9 +96,10 @@ Page({
 
             this.setData({
                 reservations,
+                page: targetPage + 1,
                 loading: false,
                 initialLoading: false,
-                hasMore: page * pageSize < totalCount
+                hasMore: reservations.length < totalCount
             })
         } catch (error) {
             logger.error('加载预订列表失败', error, 'reservations.loadReservations')

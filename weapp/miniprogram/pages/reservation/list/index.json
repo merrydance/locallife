@@ -9,7 +9,7 @@
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-icon": "tdesign-miniprogram/icon/icon",
-        "t-load-more": "tdesign-miniprogram/load-more/load-more",
+        "t-loading": "tdesign-miniprogram/loading/loading",
         "t-button": "tdesign-miniprogram/button/button",
         "card-skeleton": "/components/card-skeleton/index"
     }

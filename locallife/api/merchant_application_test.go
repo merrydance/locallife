@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"math/big"
 	"net/http"
@@ -202,9 +203,13 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 		{
 			name: "OK",
 			body: updateMerchantBasicInfoRequest{
-				MerchantName:    "新店名",
-				ContactPhone:    "13800138001",
-				BusinessAddress: "北京市海淀区测试路200号",
+				MerchantName:          "新店名",
+				ContactPhone:          "13800138001",
+				BusinessAddress:       "北京市海淀区测试路200号",
+				BusinessLicenseNumber: "91110000MA12345678",
+				BusinessScope:         "餐饮服务;热食类食品制售",
+				LegalPersonName:       "李四",
+				LegalPersonIDNumber:   "110101199001011234",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -220,10 +225,23 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 				updatedApp.MerchantName = "新店名"
 				updatedApp.ContactPhone = "13800138001"
 				updatedApp.BusinessAddress = "北京市海淀区测试路200号"
+				updatedApp.BusinessLicenseNumber = "91110000MA12345678"
+				updatedApp.BusinessScope = pgtype.Text{String: "餐饮服务;热食类食品制售", Valid: true}
+				updatedApp.LegalPersonName = "李四"
+				updatedApp.LegalPersonIDNumber = "110101199001011234"
 				store.EXPECT().
 					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(updatedApp, nil)
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, "新店名", arg.MerchantName.String)
+						require.Equal(t, "13800138001", arg.ContactPhone.String)
+						require.Equal(t, "北京市海淀区测试路200号", arg.BusinessAddress.String)
+						require.Equal(t, "91110000MA12345678", arg.BusinessLicenseNumber.String)
+						require.Equal(t, "餐饮服务;热食类食品制售", arg.BusinessScope.String)
+						require.Equal(t, "李四", arg.LegalPersonName.String)
+						require.Equal(t, "110101199001011234", arg.LegalPersonIDNumber.String)
+						return updatedApp, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -247,6 +265,59 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "Approved_AutoResetToDraft",
+			body: updateMerchantBasicInfoRequest{
+				MerchantName:    "修正后的店名",
+				BusinessAddress: "北京市朝阳区修正路300号",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.Status = "approved"
+
+				resetApp := app
+				resetApp.Status = "draft"
+
+				updatedApp := resetApp
+				updatedApp.MerchantName = "修正后的店名"
+				updatedApp.BusinessAddress = "北京市朝阳区修正路300号"
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
+						ApplicationID: app.ID,
+						UserID:        user.ID,
+					}).
+					Times(1).
+					Return(db.ResetMerchantApplicationTxResult{Application: resetApp}, nil)
+
+				store.EXPECT().
+					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, resetApp.ID, arg.ID)
+						require.Equal(t, "修正后的店名", arg.MerchantName.String)
+						require.Equal(t, "北京市朝阳区修正路300号", arg.BusinessAddress.String)
+						return updatedApp, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "draft", resp.Status)
+				require.Equal(t, "修正后的店名", resp.MerchantName)
+				require.Equal(t, "北京市朝阳区修正路300号", resp.BusinessAddress)
 			},
 		},
 	}

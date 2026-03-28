@@ -5,6 +5,16 @@
   min-height: 100vh;
 }
 
+.state-shell,
+.inline-state-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  padding: 80rpx var(--spacer-md);
+}
+
 .wallet-card {
   margin: var(--spacer-md);
   padding: 48rpx;
@@ -76,9 +86,19 @@
   line-height: 1.6;
 }
 
+.wallet-tip-secondary {
+  color: var(--td-text-color-secondary);
+}
+
 /* 历史列表 */
 .history-section {
   padding: var(--spacer-md);
+}
+
+.loading {
+  display: flex;
+  justify-content: center;
+  padding: 48rpx 0;
 }
 
 .section-header {
@@ -120,6 +140,13 @@
   color: var(--td-text-color-placeholder);
 }
 
+.item-remark {
+  margin-top: 8rpx;
+  font-size: var(--font-size-xxs);
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+}
+
 .item-amount {
   font-size: var(--font-size-heading);
   font-weight: bold;
@@ -138,6 +165,10 @@
   font-size: var(--font-size-xxs);
   color: var(--td-text-color-placeholder);
   padding: 40rpx 0;
+}
+
+.error-tip {
+  color: var(--td-error-color);
 }
 
 /* 弹窗内容 */

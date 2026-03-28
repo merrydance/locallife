@@ -168,6 +168,7 @@ type Querier interface {
 	CountOrdersByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	CountOrdersByMerchantAndStatus(ctx context.Context, arg CountOrdersByMerchantAndStatusParams) (int64, error)
 	CountOrdersByMerchantWithFilters(ctx context.Context, arg CountOrdersByMerchantWithFiltersParams) (int64, error)
+	CountOrdersByUserWithFilters(ctx context.Context, arg CountOrdersByUserWithFiltersParams) (int64, error)
 	CountPaymentLedgerEntriesByUser(ctx context.Context, userID int64) (int64, error)
 	// 统计申请数量（包含 submitted/approved/rejected）
 	CountPendingOperatorApplications(ctx context.Context) (int64, error)
@@ -1605,7 +1606,7 @@ type Querier interface {
 	UpdateMembershipBalance(ctx context.Context, arg UpdateMembershipBalanceParams) (MerchantMembership, error)
 	// ✅ P1-2: 使用乐观锁(version)防止并发更新丢失
 	UpdateMerchant(ctx context.Context, arg UpdateMerchantParams) (Merchant, error)
-	// 更新基础信息（商户名、联系电话、地址、经纬度、区域）
+	// 更新基础信息（商户名、联系电话、地址、经纬度、区域、人工修正字段）
 	UpdateMerchantApplicationBasicInfo(ctx context.Context, arg UpdateMerchantApplicationBasicInfoParams) (MerchantApplication, error)
 	// 更新营业执照信息（图片URL和OCR结果）
 	UpdateMerchantApplicationBusinessLicense(ctx context.Context, arg UpdateMerchantApplicationBusinessLicenseParams) (MerchantApplication, error)

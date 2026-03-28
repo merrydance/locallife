@@ -823,26 +823,15 @@ func TestProcessOrderPaymentTx_TakeoutOrder(t *testing.T) {
 	// 验证订单已更新为支付完成且ID一致
 	require.Equal(t, createResult.Order.ID, result.Order.ID)
 
-	// ✅ 核心验证：外卖订单应该创建配送单
-	require.NotNil(t, result.Delivery, "外卖订单应该创建配送单")
-	require.Equal(t, createResult.Order.ID, result.Delivery.OrderID)
-	require.Equal(t, "pending", result.Delivery.Status)
-	require.Equal(t, merchant.Address, result.Delivery.PickupAddress)
-	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
-	require.Equal(t, int32(2500), result.Delivery.Distance)
-	require.Equal(t, int64(800), result.Delivery.DeliveryFee)
+	// ✅ 核心验证：外卖订单支付成功后既不创建配送单，也不立即进入配送池
+	require.Nil(t, result.Delivery, "外卖订单支付成功后不应立即创建配送单")
+	_, err = testStore.GetDeliveryByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 
-	// ✅ 核心验证：外卖订单应该进入配送池
-	require.NotNil(t, result.PoolItem, "外卖订单应该进入配送池")
-	require.Equal(t, createResult.Order.ID, result.PoolItem.OrderID)
-	require.Equal(t, merchant.ID, result.PoolItem.MerchantID)
-	require.Equal(t, int64(800), result.PoolItem.DeliveryFee)
-	require.Equal(t, int32(1), result.PoolItem.Priority) // 8元运费，优先级=1
-
-	// 验证配送池可以被查询到
-	poolItem, err := testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
-	require.NoError(t, err)
-	require.Equal(t, result.PoolItem.ID, poolItem.ID)
+	// ✅ 关键调整：支付成功后不立即进入配送池
+	require.Nil(t, result.PoolItem, "外卖订单支付成功后不应立即进入配送池")
+	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), createResult.Order.ID)
+	require.ErrorIs(t, err, ErrRecordNotFound)
 }
 
 func TestProcessOrderPaymentTx_TakeoutOrder_HighDeliveryFee(t *testing.T) {
@@ -885,9 +874,8 @@ func TestProcessOrderPaymentTx_TakeoutOrder_HighDeliveryFee(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// 验证高运费订单的优先级为3
-	require.NotNil(t, result.PoolItem)
-	require.Equal(t, int32(3), result.PoolItem.Priority, ">=20元运费应该是高优先级3")
+	// 验证高运费订单在支付成功后仍不会立即入池
+	require.Nil(t, result.PoolItem)
 }
 
 func TestProcessOrderPaymentTx_DineInOrder(t *testing.T) {
@@ -1052,7 +1040,6 @@ func TestProcessOrderPaymentTx_TakeoutOrder_MediumDeliveryFee(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, FulfillmentStatusPendingKitchen, result.Order.FulfillmentStatus)
 
-	// 验证中等运费订单的优先级为2
-	require.NotNil(t, result.PoolItem)
-	require.Equal(t, int32(2), result.PoolItem.Priority, ">=10元且<20元运费应该是中优先级2")
+	// 验证中等运费订单在支付成功后仍不会立即入池
+	require.Nil(t, result.PoolItem)
 }

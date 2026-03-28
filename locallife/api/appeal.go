@@ -114,8 +114,15 @@ func newAppealResponse(a db.Appeal) appealResponse {
 // ========================= Merchant Claims/Appeals ============================
 
 type listMerchantClaimsRequest struct {
-	PageID   int32 `form:"page_id" binding:"required,min=1"`
-	PageSize int32 `form:"page_size" binding:"required,min=1,max=50"`
+	PageID   int32  `form:"page_id" binding:"required,min=1"`
+	PageSize int32  `form:"page_size" binding:"required,min=1,max=50"`
+	Bucket   string `form:"bucket" binding:"omitempty,oneof=pending_action appealed closed"`
+}
+
+type listMerchantAppealsRequest struct {
+	PageID   int32  `form:"page_id" binding:"required,min=1"`
+	PageSize int32  `form:"page_size" binding:"required,min=1,max=50"`
+	Status   string `form:"status" binding:"omitempty,oneof=pending approved compensated rejected"`
 }
 
 type merchantClaimResponse struct {
@@ -134,6 +141,7 @@ type merchantClaimResponse struct {
 	ReviewedAt        *time.Time `json:"reviewed_at,omitempty"`
 	AppealID          *int64     `json:"appeal_id,omitempty"`
 	AppealStatus      *string    `json:"appeal_status,omitempty"`
+	RecoveryStatus    *string    `json:"recovery_status,omitempty"`
 	AppealReason      *string    `json:"appeal_reason,omitempty"`
 	AppealReviewNotes *string    `json:"appeal_review_notes,omitempty"`
 }
@@ -209,6 +217,7 @@ type merchantClaimsListResponse struct {
 	Total    int64                   `json:"total"`
 	PageID   int32                   `json:"page_id"`
 	PageSize int32                   `json:"page_size"`
+	HasMore  bool                    `json:"has_more"`
 }
 
 type merchantAppealsListResponse struct {
@@ -216,6 +225,7 @@ type merchantAppealsListResponse struct {
 	Total    int64            `json:"total"`
 	PageID   int32            `json:"page_id"`
 	PageSize int32            `json:"page_size"`
+	HasMore  bool             `json:"has_more"`
 }
 
 type operatorAppealsListResponse struct {
@@ -271,6 +281,7 @@ type operatorAppealDetailResponse struct {
 // @Security Bearer
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
+// @Param bucket query string false "运营视图筛选" Enums(pending_action,appealed,closed)
 // @Success 200 {object} map[string]interface{} "成功返回索赔列表"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
@@ -294,15 +305,25 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 
 	claims, err := server.store.ListMerchantClaimsForMerchant(ctx, db.ListMerchantClaimsForMerchantParams{
 		MerchantID: merchant.ID,
-		Limit:      req.PageSize,
-		Offset:     offset,
+		Bucket: pgtype.Text{
+			String: req.Bucket,
+			Valid:  req.Bucket != "",
+		},
+		Limit:  req.PageSize,
+		Offset: offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	total, err := server.store.CountMerchantClaimsForMerchant(ctx, merchant.ID)
+	total, err := server.store.CountMerchantClaimsForMerchant(ctx, db.CountMerchantClaimsForMerchantParams{
+		MerchantID: merchant.ID,
+		Bucket: pgtype.Text{
+			String: req.Bucket,
+			Valid:  req.Bucket != "",
+		},
+	})
 	if err != nil {
 		total = int64(len(claims))
 	}
@@ -334,9 +355,13 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 		if c.AppealStatus.Valid {
 			response[i].AppealStatus = &c.AppealStatus.String
 		}
+		if c.RecoveryStatus != "" {
+			response[i].RecoveryStatus = &c.RecoveryStatus
+		}
 	}
 
-	ctx.JSON(http.StatusOK, merchantClaimsListResponse{Claims: response, Total: total, PageID: req.PageID, PageSize: req.PageSize})
+	hasMore := int64(offset)+int64(len(response)) < total
+	ctx.JSON(http.StatusOK, merchantClaimsListResponse{Claims: response, Total: total, PageID: req.PageID, PageSize: req.PageSize, HasMore: hasMore})
 }
 
 // getMerchantClaimDetail 商户查看索赔详情
@@ -458,6 +483,9 @@ func (server *Server) getMerchantClaimDecision(ctx *gin.Context) {
 		return
 	}
 
+	// 这里是只读查询路径。
+	// 申诉侧只读取已持久化的 behavior decision 作为展示依据，
+	// 不在查看接口里追加 payout/recovery/block/notify 等执行副作用。
 	decisions, err := server.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: claim.OrderID, Valid: true})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -529,6 +557,9 @@ func (server *Server) getRiderClaimDecision(ctx *gin.Context) {
 		return
 	}
 
+	// 这里是只读查询路径。
+	// 骑手查看判定依据时只消费 persisted behavior decision，
+	// 不应在读取接口里重跑主判或派生新的行为动作。
 	decisions, err := server.store.ListBehaviorDecisionsByOrder(ctx, pgtype.Int8{Int64: claim.OrderID, Valid: true})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -611,11 +642,6 @@ func (server *Server) createMerchantAppeal(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, newAppealResponse(appeal))
 }
 
-type listMerchantAppealsRequest struct {
-	PageID   int32 `form:"page_id" binding:"required,min=1"`
-	PageSize int32 `form:"page_size" binding:"required,min=1,max=50"`
-}
-
 // listMerchantAppeals 商户查看申诉列表
 // @Summary 获取申诉列表
 // @Description 商户查看自己提交的申诉列表
@@ -625,6 +651,7 @@ type listMerchantAppealsRequest struct {
 // @Security Bearer
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
+// @Param status query string false "状态筛选" Enums(pending,approved,compensated,rejected)
 // @Success 200 {object} map[string]interface{} "成功返回申诉列表"
 // @Failure 400 {object} map[string]interface{} "参数错误"
 // @Failure 401 {object} map[string]interface{} "未授权"
@@ -648,6 +675,7 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 
 	result, err := logic.ListMerchantAppeals(ctx, server.store, logic.ListMerchantAppealsInput{
 		MerchantID: merchant.ID,
+		Status:     req.Status,
 		Limit:      req.PageSize,
 		Offset:     offset,
 	})
@@ -685,7 +713,8 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, merchantAppealsListResponse{Appeals: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize})
+	hasMore := int64(offset)+int64(len(response)) < result.Total
+	ctx.JSON(http.StatusOK, merchantAppealsListResponse{Appeals: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize, HasMore: hasMore})
 }
 
 // getMerchantAppealDetail 商户查看申诉详情

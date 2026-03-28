@@ -2753,6 +2753,8 @@ definitions:
         type: string
       id:
         type: integer
+      image_asset_id:
+        type: integer
       image_url:
         type: string
       ingredients:
@@ -6969,6 +6971,8 @@ definitions:
     properties:
       id:
         type: integer
+      image_url:
+        type: string
       is_primary:
         type: boolean
       media_asset_id:
@@ -7397,9 +7401,24 @@ definitions:
         maxLength: 200
         minLength: 5
         type: string
+      business_license_number:
+        maxLength: 32
+        minLength: 8
+        type: string
+      business_scope:
+        maxLength: 500
+        type: string
       contact_phone:
         type: string
       latitude:
+        type: string
+      legal_person_id_number:
+        maxLength: 32
+        minLength: 15
+        type: string
+      legal_person_name:
+        maxLength: 50
+        minLength: 2
         type: string
       longitude:
         type: string
@@ -13800,6 +13819,15 @@ paths:
         name: page_size
         required: true
         type: integer
+      - description: 状态筛选
+        enum:
+        - pending
+        - approved
+        - compensated
+        - rejected
+        in: query
+        name: status
+        type: string
       produces:
       - application/json
       responses:
@@ -14204,6 +14232,14 @@ paths:
         name: page_size
         required: true
         type: integer
+      - description: 运营视图筛选
+        enum:
+        - pending_action
+        - appealed
+        - closed
+        in: query
+        name: bucket
+        type: string
       produces:
       - application/json
       responses:
@@ -20330,7 +20366,7 @@ paths:
       produces:
       - application/json
       responses:
-        "200":
+        "201":
           description: 支付订单(含小程序支付参数)
           schema:
             $ref: '#/definitions/api.paymentOrderResponse'

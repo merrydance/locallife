@@ -113,7 +113,7 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
-	order := db.Order{ID: 2, Status: "paid", TotalAmount: 500}
+	order := db.Order{ID: 2, Status: db.OrderStatusReady, TotalAmount: 500}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -159,6 +159,96 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	result, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2, MaxDistanceMeters: 5000})
 	require.NoError(t, err)
 	require.Equal(t, delivery.ID, result.Delivery.ID)
+}
+
+func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	merchant := db.Merchant{ID: 20, RegionID: 9}
+	delivery := db.Delivery{ID: 30, OrderID: 2}
+	order := db.Order{ID: 2, Status: db.OrderStatusPreparing, TotalAmount: 500}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	store.EXPECT().
+		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
+	store.EXPECT().
+		GetRiderPremiumScore(gomock.Any(), rider.ID).
+		Times(1).
+		Return(int16(0), db.ErrRecordNotFound)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetDeliveryByOrderID(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(2)).
+		Times(1).
+		Return(order, nil)
+
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "商户未出餐，暂不可抢单", reqErr.Err.Error())
+}
+
+func TestGrabDeliveryOrder_PaidOrderRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	merchant := db.Merchant{ID: 20, RegionID: 9}
+	delivery := db.Delivery{ID: 30, OrderID: 2}
+	order := db.Order{ID: 2, Status: db.OrderStatusPaid, TotalAmount: 500}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetRiderProfile(gomock.Any(), rider.ID).
+		Times(1).
+		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+	store.EXPECT().
+		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
+		Times(1).
+		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
+	store.EXPECT().
+		GetRiderPremiumScore(gomock.Any(), rider.ID).
+		Times(1).
+		Return(int16(0), db.ErrRecordNotFound)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetDeliveryByOrderID(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(2)).
+		Times(1).
+		Return(order, nil)
+
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "商户未接单，暂不可抢单", reqErr.Err.Error())
 }
 
 func TestGrabDeliveryOrder_Suspended(t *testing.T) {
@@ -249,7 +339,7 @@ func TestGrabDeliveryOrder_GrabTxError(t *testing.T) {
 	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
-	order := db.Order{ID: 2, Status: "paid", TotalAmount: 500}
+	order := db.Order{ID: 2, Status: db.OrderStatusReady, TotalAmount: 500}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).

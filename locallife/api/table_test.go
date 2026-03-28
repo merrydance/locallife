@@ -1510,6 +1510,7 @@ func TestAddTableImageAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				asset := randomMediaAsset(1, user.ID, "public", "merchant/table/1/table_detail.jpg")
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
@@ -1532,13 +1533,21 @@ func TestAddTableImageAPI(t *testing.T) {
 					Return(db.TableImage{
 						ID:           1,
 						TableID:      table.ID,
-						MediaAssetID: pgtype.Int8{},
+						MediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
 						SortOrder:    1,
 						IsPrimary:    true,
 					}, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
+				body := recorder.Body.String()
+				require.Contains(t, body, "image_url")
+				require.Contains(t, body, "merchant/table/1/table_detail.jpg")
 			},
 		},
 		{
@@ -1553,6 +1562,7 @@ func TestAddTableImageAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				asset := randomMediaAsset(2, user.ID, "public", "merchant/table/2/table_detail.jpg")
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
@@ -1571,13 +1581,19 @@ func TestAddTableImageAPI(t *testing.T) {
 					Return(db.TableImage{
 						ID:           2,
 						TableID:      table.ID,
-						MediaAssetID: pgtype.Int8{},
+						MediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
 						SortOrder:    2,
 						IsPrimary:    false,
 					}, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "merchant/table/2/table_detail.jpg")
 			},
 		},
 		{
@@ -1684,17 +1700,38 @@ func TestListTableImagesAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				assetRows := []db.ListMediaAssetsByIDsRow{
+					{
+						ID:               11,
+						ObjectKey:        "merchant/table/11/table_1.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					},
+					{
+						ID:               12,
+						ObjectKey:        "merchant/table/12/table_2.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					},
+				}
 				// listTableImages 是公开API，不需要验证商户权限
 				store.EXPECT().
 					ListTableImages(gomock.Any(), table.ID).
 					Times(1).
 					Return([]db.TableImage{
-						{ID: 1, TableID: table.ID, IsPrimary: true},
-						{ID: 2, TableID: table.ID, IsPrimary: false},
+						{ID: 1, TableID: table.ID, MediaAssetID: pgtype.Int8{Int64: 11, Valid: true}, IsPrimary: true},
+						{ID: 2, TableID: table.ID, MediaAssetID: pgtype.Int8{Int64: 12, Valid: true}, IsPrimary: false},
 					}, nil)
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(assetRows, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				body := recorder.Body.String()
+				require.Contains(t, body, "merchant/table/11/table_1.jpg")
+				require.Contains(t, body, "merchant/table/12/table_2.jpg")
 			},
 		},
 		{
@@ -1876,6 +1913,7 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				asset := randomMediaAsset(1, user.ID, "public", "merchant/table/1/primary.jpg")
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), user.ID).
 					Times(1).
@@ -1897,13 +1935,20 @@ func TestSetTableImagePrimaryAPI(t *testing.T) {
 					SetTableImagePrimary(gomock.Any(), int64(1)).
 					Times(1).
 					Return(db.TableImage{
-						ID:        1,
-						TableID:   table.ID,
-						IsPrimary: true,
+						ID:           1,
+						TableID:      table.ID,
+						MediaAssetID: pgtype.Int8{Int64: asset.ID, Valid: true},
+						IsPrimary:    true,
 					}, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), asset.ID).
+					Times(1).
+					Return(asset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "merchant/table/1/primary.jpg")
 			},
 		},
 		{

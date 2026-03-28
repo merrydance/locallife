@@ -653,8 +653,22 @@ func (server *Server) confirmDelivery(ctx *gin.Context) {
 		UserID:              authPayload.UserID,
 		DeliveryID:          req.ID,
 		ConfirmRadiusMeters: DeliveryConfirmRadiusMeters,
+		LocationMaxAgeSec:   DeliveryConfirmLocationMaxAgeSec,
 	})
 	if err != nil {
+		var confirmErr *logic.DeliveryConfirmValidationError
+		if errors.As(err, &confirmErr) {
+			log.Warn().
+				Err(err).
+				Int64("delivery_id", req.ID).
+				Int64("user_id", authPayload.UserID).
+				Str("reason", confirmErr.Reason).
+				Int("distance_m", confirmErr.DistanceMeters).
+				Int("radius_m", confirmErr.RadiusMeters).
+				Int("location_age_s", confirmErr.LocationAgeSec).
+				Int("location_max_age_s", confirmErr.MaxAgeSec).
+				Msg("delivery confirm validation failed")
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -709,9 +723,10 @@ func (server *Server) getDeliveryByOrder(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	delivery, err := logic.GetDeliveryForOrderOwner(ctx, server.store, logic.DeliveryOrderAccessInput{
-		UserID:  authPayload.UserID,
-		OrderID: req.OrderID,
+	delivery, err := logic.GetDeliveryForViewerByOrder(ctx, server.store, logic.DeliveryOrderViewerInput{
+		UserID:           authPayload.UserID,
+		OrderID:          req.OrderID,
+		ForbiddenMessage: "无权查看此订单配送信息",
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {

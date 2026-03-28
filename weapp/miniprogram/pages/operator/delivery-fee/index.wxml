@@ -29,27 +29,20 @@
         </view>
 
         <view class="section">
-          <view class="section-title">距离加价</view>
+          <view class="section-title">距离与货值规则</view>
           <t-cell-group theme="card">
-            <t-input label="超距离加价" suffix="元" type="digit" value="{{config.extra_distance_fee}}" bind:change="onInput" data-field="extra_distance_fee" align="right" />
-            <t-input label="加价单位距离" suffix="米" type="number" value="{{config.extra_distance_unit}}" bind:change="onInput" data-field="extra_distance_unit" align="right" />
+            <t-input label="超距每公里加价" suffix="元" type="digit" value="{{config.extra_fee_per_km}}" bind:change="onInput" data-field="extra_fee_per_km" align="right" />
+            <t-input label="货值费率" suffix="倍率" type="digit" value="{{config.value_ratio}}" bind:change="onInput" data-field="value_ratio" align="right" />
           </t-cell-group>
         </view>
 
         <view class="section">
-          <view class="section-title">夜间加价</view>
+          <view class="section-title">费用边界</view>
           <t-cell-group theme="card">
-            <t-input label="夜间附加费" suffix="元" type="digit" value="{{config.night_surcharge}}" bind:change="onInput" data-field="night_surcharge" align="right" />
-            <t-cell title="夜间时段">
-                <view class="time-range" slot="note">
-                    <picker mode="time" value="{{config.night_start}}" bindchange="onTimeChange" data-field="night_start">
-                        <view class="time-picker">{{config.night_start || '00:00'}}</view>
-                    </picker>
-                    <text class="separator">-</text>
-                    <picker mode="time" value="{{config.night_end}}" bindchange="onTimeChange" data-field="night_end">
-                        <view class="time-picker">{{config.night_end || '00:00'}}</view>
-                    </picker>
-                </view>
+            <t-input label="最低运费" suffix="元" type="digit" value="{{config.min_fee}}" bind:change="onInput" data-field="min_fee" align="right" />
+            <t-input label="最高运费" suffix="元" type="digit" placeholder="留空表示不限" value="{{config.max_fee}}" bind:change="onInput" data-field="max_fee" align="right" />
+            <t-cell title="启用状态">
+                <t-switch slot="note" value="{{config.is_active}}" bind:change="onActiveChange" />
             </t-cell>
           </t-cell-group>
         </view>

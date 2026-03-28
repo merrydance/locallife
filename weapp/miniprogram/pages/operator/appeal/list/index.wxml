@@ -5,6 +5,7 @@
     <t-tab-panel label="待处理" value="pending" />
     <t-tab-panel label="已通过" value="approved" />
     <t-tab-panel label="已驳回" value="rejected" />
+    <t-tab-panel label="已赔付" value="compensated" />
   </t-tabs>
 
   <view class="content">
@@ -28,12 +29,21 @@
               <text class="type">{{item.reason || '申诉内容'}}</text>
               <text class="time">{{item.created_at}}</text>
             </view>
+            <view class="card-meta">
+              <text class="meta-text">{{item.summary_text}}</text>
+              <text class="meta-text">诉求 {{item.claim_amount_display}}</text>
+            </view>
             <view class="card-footer">
               <text class="user">申诉人ID: {{item.appellant_id}}</text>
-              <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="dark">
-                {{item.status === 'pending' ? '待处理' : (item.status === 'approved' ? '已通过' : '已驳回')}}
+              <t-tag theme="{{item.status === 'pending' ? 'warning' : ((item.status === 'approved' || item.status === 'compensated') ? 'success' : 'danger')}}" size="small" variant="dark">
+                {{item.status_label}}
               </t-tag>
             </view>
+          </view>
+
+          <view class="load-more">
+            <t-loading wx:if="{{loadingMore}}" theme="dots" size="40rpx" />
+            <text wx:elif="{{!hasMore && appeals.length > 0}}" class="load-text">没有更多申诉了</text>
           </view>
         </view>
         

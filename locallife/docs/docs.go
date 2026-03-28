@@ -8507,6 +8507,18 @@ const docTemplate = `{
                         "name": "page_size",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "enum": [
+                            "pending",
+                            "approved",
+                            "compensated",
+                            "rejected"
+                        ],
+                        "type": "string",
+                        "description": "状态筛选",
+                        "name": "status",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -9126,6 +9138,17 @@ const docTemplate = `{
                         "name": "page_size",
                         "in": "query",
                         "required": true
+                    },
+                    {
+                        "enum": [
+                            "pending_action",
+                            "appealed",
+                            "closed"
+                        ],
+                        "type": "string",
+                        "description": "运营视图筛选",
+                        "name": "bucket",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -18403,7 +18426,7 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "200": {
+                    "201": {
                         "description": "支付订单(含小程序支付参数)",
                         "schema": {
                             "$ref": "#/definitions/api.paymentOrderResponse"
@@ -30880,6 +30903,9 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "image_asset_id": {
+                    "type": "integer"
+                },
                 "image_url": {
                     "type": "string"
                 },
@@ -37084,6 +37110,9 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "image_url": {
+                    "type": "string"
+                },
                 "is_primary": {
                     "type": "boolean"
                 },
@@ -37712,11 +37741,30 @@ const docTemplate = `{
                     "maxLength": 200,
                     "minLength": 5
                 },
+                "business_license_number": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 8
+                },
+                "business_scope": {
+                    "type": "string",
+                    "maxLength": 500
+                },
                 "contact_phone": {
                     "type": "string"
                 },
                 "latitude": {
                     "type": "string"
+                },
+                "legal_person_id_number": {
+                    "type": "string",
+                    "maxLength": 32,
+                    "minLength": 15
+                },
+                "legal_person_name": {
+                    "type": "string",
+                    "maxLength": 50,
+                    "minLength": 2
                 },
                 "longitude": {
                     "type": "string"

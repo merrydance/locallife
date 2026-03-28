@@ -10,6 +10,11 @@
   border-radius: 16rpx;
 }
 
+.center-card {
+  display: flex;
+  justify-content: center;
+}
+
 .header-row {
   display: flex;
   justify-content: space-between;
@@ -35,4 +40,10 @@
   color: #111;
   font-weight: 500;
   margin-bottom: 16rpx;
+}
+
+.readonly-tip {
+  margin-top: 16rpx;
+  font-size: 24rpx;
+  color: #999;
 }

@@ -14,6 +14,13 @@ type DeliveryOrderAccessInput struct {
 	OrderID int64
 }
 
+// DeliveryOrderViewerInput defines viewer access parameters by order.
+type DeliveryOrderViewerInput struct {
+	UserID           int64
+	OrderID          int64
+	ForbiddenMessage string
+}
+
 // DeliveryViewerInput defines access parameters by delivery.
 type DeliveryViewerInput struct {
 	UserID           int64
@@ -53,6 +60,43 @@ func GetDeliveryForOrderOwner(ctx context.Context, store db.Store, input Deliver
 	return delivery, nil
 }
 
+// GetDeliveryForViewerByOrder loads delivery info for an order owner or the assigned rider.
+func GetDeliveryForViewerByOrder(ctx context.Context, store db.Store, input DeliveryOrderViewerInput) (db.Delivery, error) {
+	order, err := store.GetOrder(ctx, input.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("订单不存在"))
+		}
+		return db.Delivery{}, err
+	}
+
+	delivery, err := store.GetDeliveryByOrderID(ctx, input.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return db.Delivery{}, NewRequestError(http.StatusNotFound, errors.New("配送单不存在"))
+		}
+		return db.Delivery{}, err
+	}
+
+	if order.UserID == input.UserID {
+		return delivery, nil
+	}
+
+	isRider, err := isDeliveryAssignedToUserRider(ctx, store, input.UserID, delivery)
+	if err != nil {
+		return db.Delivery{}, err
+	}
+	if isRider {
+		return delivery, nil
+	}
+
+	msg := input.ForbiddenMessage
+	if msg == "" {
+		msg = "无权查看此订单配送信息"
+	}
+	return db.Delivery{}, NewRequestError(http.StatusForbidden, errors.New(msg))
+}
+
 // ValidateDeliveryViewer validates that the user can view delivery data.
 func ValidateDeliveryViewer(ctx context.Context, store db.Store, input DeliveryViewerInput) (DeliveryViewerResult, error) {
 	var result DeliveryViewerResult
@@ -74,7 +118,13 @@ func ValidateDeliveryViewer(ctx context.Context, store db.Store, input DeliveryV
 	}
 
 	isOwner := order.UserID == input.UserID
-	isRider := delivery.RiderID.Valid && delivery.RiderID.Int64 == input.UserID
+	isRider := false
+	if !isOwner {
+		isRider, err = isDeliveryAssignedToUserRider(ctx, store, input.UserID, delivery)
+		if err != nil {
+			return result, err
+		}
+	}
 	if !isOwner && !isRider {
 		msg := input.ForbiddenMessage
 		if msg == "" {
@@ -91,3 +141,18 @@ func ValidateDeliveryViewer(ctx context.Context, store db.Store, input DeliveryV
 	return result, nil
 }
 
+func isDeliveryAssignedToUserRider(ctx context.Context, store db.Store, userID int64, delivery db.Delivery) (bool, error) {
+	if !delivery.RiderID.Valid {
+		return false, nil
+	}
+
+	rider, err := store.GetRiderByUserID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return rider.ID == delivery.RiderID.Int64, nil
+}

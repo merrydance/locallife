@@ -115,10 +115,13 @@ func AutoConfirmPickup(ctx context.Context, store db.Store, delivery db.Delivery
 }
 
 // AutoConfirmDelivery completes a delivering delivery when the rider dwells at dropoff.
-func AutoConfirmDelivery(ctx context.Context, store db.Store, delivery db.Delivery, rider db.Rider, unfreezeAmount int64) (AutoStatusResult, error) {
+func AutoConfirmDelivery(ctx context.Context, store db.Store, delivery db.Delivery, rider db.Rider, confirmRadiusMeters int, locationMaxAgeSec int, unfreezeAmount int64) (AutoStatusResult, error) {
 	result := AutoStatusResult{Delivery: delivery}
 	if delivery.Status != "delivering" {
 		return result, nil
+	}
+	if err := validateDeliveryConfirmRadius(rider, delivery, confirmRadiusMeters, locationMaxAgeSec); err != nil {
+		return result, err
 	}
 
 	order, err := store.GetOrder(ctx, delivery.OrderID)

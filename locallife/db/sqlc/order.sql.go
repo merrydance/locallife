@@ -260,6 +260,33 @@ func (q *Queries) CountOrdersByMerchantWithFilters(ctx context.Context, arg Coun
 	return count, err
 }
 
+const countOrdersByUserWithFilters = `-- name: CountOrdersByUserWithFilters :one
+SELECT COUNT(*) FROM orders o
+WHERE o.user_id = $1
+    AND ($2::text IS NULL OR o.status = $2)
+    AND ($3::text IS NULL OR o.order_type = $3)
+    AND ($4::bigint IS NULL OR o.reservation_id IS NOT DISTINCT FROM $4)
+`
+
+type CountOrdersByUserWithFiltersParams struct {
+	UserID        int64       `json:"user_id"`
+	Status        pgtype.Text `json:"status"`
+	OrderType     pgtype.Text `json:"order_type"`
+	ReservationID pgtype.Int8 `json:"reservation_id"`
+}
+
+func (q *Queries) CountOrdersByUserWithFilters(ctx context.Context, arg CountOrdersByUserWithFiltersParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countOrdersByUserWithFilters,
+		arg.UserID,
+		arg.Status,
+		arg.OrderType,
+		arg.ReservationID,
+	)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createOrder = `-- name: CreateOrder :one
 INSERT INTO orders (
     order_no,
@@ -2632,7 +2659,7 @@ SET
     status = 'picked',
     picked_at = COALESCE(picked_at, now()),
     updated_at = now()
-WHERE id = $1 AND status IN ('ready', 'courier_accepted', 'picked')
+WHERE id = $1 AND status IN ('courier_accepted', 'picked')
 RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
 `
 
@@ -2765,7 +2792,7 @@ SET
     fulfillment_status = 'ready',
     ready_at = COALESCE(ready_at, now()),
     updated_at = now()
-WHERE id = $1 AND status IN ('paid', 'preparing')
+WHERE id = $1 AND status = 'preparing'
 RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
 `
 

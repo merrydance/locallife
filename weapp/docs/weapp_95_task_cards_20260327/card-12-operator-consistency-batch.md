@@ -1,6 +1,6 @@
 # CARD-12 运营商侧一致性补齐批次
 
-状态：未开始
+状态：已拆分待执行
 
 优先级：P1
 
@@ -9,6 +9,12 @@
 ## 问题目标
 
 统一运营商侧列表、详情、审核、提现、统计的权限表达、分页合同和状态反馈。
+
+详细审计与拆分见：
+
+- `weapp/docs/operator/OPERATOR_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md`
+- `weapp/docs/operator/OPERATOR_PHASE0_BASELINE_LEDGER_2026-03-28.md`
+- `weapp/docs/operator/task-cards/README.md`
 
 ## 影响范围
 
@@ -35,3 +41,10 @@
 - [ ] 权限矩阵完成
 - [ ] 页面收口完成
 - [ ] 回归完成
+
+## 当前拆分状态
+
+- [x] 已完成运营侧注册页与孤儿页全量审计
+- [x] 已形成 phase 修复计划
+- [x] 已拆分 5 张可执行任务卡
+- [ ] 进入逐卡修复阶段

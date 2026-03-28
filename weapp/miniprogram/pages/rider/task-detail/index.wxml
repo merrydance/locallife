@@ -23,7 +23,10 @@
 
     <!-- 2. 异常状态展示 (Only shows if not loading AND no data) -->
     <view class="error-placeholder" wx:if="{{!loading && !delivery}}">
-      <t-empty icon="info-circle" description="订单不存在或已被接走" />
+      <t-empty icon="info-circle" description="{{errorMessage || '订单不存在或已被接走'}}" />
+      <t-button theme="primary" variant="outline" shape="round" block size="large" bindtap="onRetry" style="margin-top: 24rpx;">
+        重试加载
+      </t-button>
       <t-button theme="primary" shape="round" block size="large" bindtap="onBack" style="margin-top: 40rpx;">
         返回大厅
       </t-button>
@@ -51,8 +54,21 @@
           <view class="info">
             <view class="title-row">
               <text class="name">{{delivery.merchant_name || delivery.pickup_address}}</text>
-              <view class="call-action" wx:if="{{delivery.pickup_phone}}" catchtap="onCallPhone" data-phone="{{delivery.pickup_phone}}">
-                <t-icon name="call" size="44rpx" color="var(--td-brand-color)" />
+              <view class="action-group">
+                <view
+                  class="icon-action"
+                  catchtap="onOpenLocation"
+                  data-latitude="{{delivery.pickup_latitude}}"
+                  data-longitude="{{delivery.pickup_longitude}}"
+                  data-name="{{delivery.merchant_name || '取货点'}}"
+                  data-address="{{delivery.pickup_address}}"
+                  data-label="到店导航"
+                >
+                  <t-icon name="map-location" size="44rpx" color="var(--td-brand-color)" />
+                </view>
+                <view class="icon-action" wx:if="{{delivery.pickup_phone}}" catchtap="onCallPhone" data-phone="{{delivery.pickup_phone}}">
+                  <t-icon name="call" size="44rpx" color="var(--td-brand-color)" />
+                </view>
               </view>
             </view>
             <view class="contact-sub">
@@ -68,8 +84,21 @@
           <view class="info">
             <view class="title-row">
               <text class="name">{{delivery.delivery_address}}</text>
-              <view class="call-action" wx:if="{{delivery.delivery_phone}}" catchtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">
-                <t-icon name="call" size="44rpx" color="var(--td-brand-color)" />
+              <view class="action-group">
+                <view
+                  class="icon-action"
+                  catchtap="onOpenLocation"
+                  data-latitude="{{delivery.delivery_latitude}}"
+                  data-longitude="{{delivery.delivery_longitude}}"
+                  data-name="{{delivery.delivery_contact || '送达点'}}"
+                  data-address="{{delivery.delivery_address}}"
+                  data-label="送达导航"
+                >
+                  <t-icon name="map-location" size="44rpx" color="var(--td-brand-color)" />
+                </view>
+                <view class="icon-action" wx:if="{{delivery.delivery_phone}}" catchtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">
+                  <t-icon name="call" size="44rpx" color="var(--td-brand-color)" />
+                </view>
               </view>
             </view>
              <view class="contact-sub">

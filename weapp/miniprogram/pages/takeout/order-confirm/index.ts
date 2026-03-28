@@ -7,6 +7,7 @@ import { createOrderPayment, createCombinedPaymentOrder, invokeWechatPay } from 
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
+import Navigation from '../../../utils/navigation'
 
 interface CartItemView {
   id: number
@@ -59,6 +60,8 @@ Page({
     navBarHeight: 88,
     initLoading: true, // 页面初始化加载标志（用于骨架屏）
     loading: false,    // 按钮提交加载标志
+    loadError: '',
+    pricingError: '',
     orderTotalDisplay: '0.00',
     summarySubtotalDisplay: '0.00',
     summaryDeliveryDisplay: '待计算',
@@ -98,7 +101,7 @@ Page({
 
   async loadCart() {
     try {
-      this.setData({ initLoading: true })
+      this.setData({ initLoading: true, loadError: '', pricingError: '' })
       console.log('[Order-confirm] Loading takeout cart...')
 
       // Step 1: 获取外卖类型的购物车列表
@@ -185,9 +188,15 @@ Page({
       await this.loadMemberships()
     } catch (error) {
       logger.error('Load cart failed', error, 'Order-confirm')
-      this.setData({ initLoading: false })
-      wx.showToast({ title: '加载失败', icon: 'error' })
+      this.setData({
+        initLoading: false,
+        loadError: error instanceof Error && error.message ? error.message : '购物车加载失败，请重试'
+      })
     }
+  },
+
+  onRetryLoad() {
+    this.loadCart()
   },
 
   async loadMemberships() {
@@ -248,7 +257,7 @@ Page({
   },
 
   onSelectAddress() {
-    wx.navigateTo({ url: '/pages/user_center/addresses/index?select=true' })
+    Navigation.toAddressSelector()
   },
 
   onRemarkInput(e: WechatMiniprogram.CustomEvent) {
@@ -312,6 +321,7 @@ Page({
 
     if (!address) {
       this.setData({
+        pricingError: '',
         summaryDeliveryDisplay: '待选择地址',
         orderTotalDisplay: formatPriceNoSymbol(currentCarts.reduce((s, c) => s + (c.subtotal || 0), 0))
       })
@@ -391,22 +401,23 @@ Page({
 
       this.setData({
         carts: updated,
+        pricingError: '',
         summarySubtotalDisplay: formatPriceNoSymbol(summarySubtotal),
         summaryDeliveryDisplay: summaryDelivery > 0 ? '¥' + formatPriceNoSymbol(summaryDelivery) : '免代取费',
         orderTotalDisplay: formatPriceNoSymbol(totalOrderAmount)
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
+      const pricingError = error instanceof Error && error.message ? error.message : '配送费计算失败，请重试'
+      this.setData({ pricingError })
       if (!silent) {
-        const errMessage = error instanceof Error ? error.message : String(error)
-        wx.showModal({
-          title: '调试',
-          content: `计算运费失败: ${errMessage || '未知错误'}`,
-          showCancel: false
-        })
+        wx.showToast({ title: '配送费计算失败', icon: 'none' })
       }
-      // 保留现有金额显示，不打断流程
     }
+  },
+
+  onRetryPricing() {
+    void this.calculateDeliveryFee()
   },
 
   formatEtaWindow(etaMinutes: number): string {
@@ -437,7 +448,17 @@ Page({
   },
 
   async onSubmitOrder() {
-    const { carts, address, remarks } = this.data
+    const { carts, address, remarks, loadError, pricingError } = this.data
+
+    if (loadError) {
+      wx.showToast({ title: '请先重试加载购物车', icon: 'none' })
+      return
+    }
+
+    if (pricingError) {
+      wx.showToast({ title: '请先重试配送费计算', icon: 'none' })
+      return
+    }
 
     if (!address || !address.id) {
       wx.showToast({ title: '请选择收货地址', icon: 'none' })
@@ -549,20 +570,20 @@ Page({
           wx.showToast({ title: '支付取消', icon: 'none' })
         } finally {
           setTimeout(() => {
-            wx.redirectTo({ url: '/pages/orders/list/index' })
+            Navigation.redirectToOrderList()
           }, 1500)
         }
       } else if (combinedPayment.status === 'paid') {
         wx.showToast({ title: '支付成功', icon: 'success' })
         setTimeout(() => {
-          wx.redirectTo({ url: '/pages/orders/list/index' })
+          Navigation.redirectToOrderList()
         }, 1500)
       } else {
         wx.showModal({
           title: '订单已创建',
           content: '合单支付创建失败，请在订单列表逐单支付。',
           showCancel: false,
-          success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
+          success: () => Navigation.redirectToOrderList()
         })
       }
     } catch (paymentError) {
@@ -571,7 +592,7 @@ Page({
         title: '订单已创建',
         content: '合单支付创建失败，请在订单列表逐单支付。',
         showCancel: false,
-        success: () => wx.redirectTo({ url: '/pages/orders/list/index' })
+        success: () => Navigation.redirectToOrderList()
       })
     } finally {
       this.setData({ loading: false })

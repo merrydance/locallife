@@ -5,6 +5,51 @@ import { operatorAnalyticsService, OperatorAppealService } from '../../../api/op
 import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
 import { operatorRiderManagementService } from '../../../api/operator-rider-management'
 
+type TimeDimension = 'day' | 'week' | 'month'
+
+interface PendingSummary {
+  merchants: number
+  riders: number
+  appeals: number
+}
+
+interface TrendSummary {
+  totalGmv: number
+  totalOrders: number
+  totalIncome: number
+}
+
+interface DailyTrendItemLike {
+  date?: string
+  total_gmv?: number
+  order_count?: number
+  operator_income?: number
+}
+
+function summarizeTrends(trends: DailyTrendItemLike[]): TrendSummary {
+  return trends.reduce<TrendSummary>((summary, item) => ({
+    totalGmv: summary.totalGmv + Number(item.total_gmv || 0),
+    totalOrders: summary.totalOrders + Number(item.order_count || 0),
+    totalIncome: summary.totalIncome + Number(item.operator_income || 0)
+  }), {
+    totalGmv: 0,
+    totalOrders: 0,
+    totalIncome: 0
+  })
+}
+
+function normalizeRankingRows(source: unknown): Array<Record<string, unknown>> {
+  if (Array.isArray(source)) {
+    return source as Array<Record<string, unknown>>
+  }
+
+  if (source && typeof source === 'object' && Array.isArray((source as { rankings?: unknown[] }).rankings)) {
+    return (source as { rankings: Array<Record<string, unknown>> }).rankings
+  }
+
+  return []
+}
+
 interface PendingApprovalItem {
   id: number
   type: 'MERCHANT' | 'RIDER' | 'APPEAL'
@@ -41,11 +86,16 @@ Page({
     },
 
     // 筛选维度: day | week | month
-    timeDimension: 'day',
+    timeDimension: 'day' as TimeDimension,
     
     // 待办事项
     pending_approvals: [] as PendingApprovalItem[],
     pending_count: 0,
+    pendingSummary: {
+      merchants: 0,
+      riders: 0,
+      appeals: 0
+    } as PendingSummary,
     
     // 排行榜
     merchantRankings: [] as Array<Record<string, unknown>>,
@@ -126,33 +176,36 @@ Page({
         operatorBasicManagementService.getFinanceOverview(undefined, undefined, regionId).catch(() => null),
         operatorAnalyticsService.getRealtimeStats(regionId),
         operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
-          .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }> })),
+          .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
         operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
-          .catch(() => ({ riders: [] as Array<{ id: number, name: string, created_at: string }> })),
+          .catch(() => ({ riders: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
         operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
-          .catch(() => []),
+          .catch(() => ({ rankings: [] })),
         operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
-          .catch(() => []),
+          .catch(() => ({ rankings: [] })),
         operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
           .catch(() => []),
         appealService.getAppealList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
-          .catch(() => ({ appeals: [] as Array<{ id: number, reason: string, created_at: string }> }))
+          .catch(() => ({ appeals: [] as Array<{ id: number, reason: string, created_at: string }>, total: 0 }))
       ])
 
-      // 格式化处理各维度数据，确保兼容性
-      const today = new Date().toISOString().split('T')[0]
-      const trends = Array.isArray(dailyTrends) ? dailyTrends : []
-      // 后端现在返回 operator_income 字段，直接使用无需前端计算
-      const todayTrend = trends.find((t) => t.date === today) || { total_gmv: 0, order_count: 0, operator_income: 0 }
-      
-      const merchantRankList = Array.isArray(merchantRanking) ? merchantRanking : []
-      const riderRankList = (Array.isArray(riderRanking) ? riderRanking : []).map((r: Record<string, unknown>) => ({
+      const trends = Array.isArray(dailyTrends) ? dailyTrends as DailyTrendItemLike[] : []
+      const currentPeriodSummary = summarizeTrends(trends)
+
+      const merchantRankList = normalizeRankingRows(merchantRanking)
+      const riderRankList = normalizeRankingRows(riderRanking).map((r: Record<string, unknown>) => ({
         ...r,
         completion_rate:
           typeof r.completion_rate === 'number'
             ? r.completion_rate.toFixed(1)
             : '0.0'
       }))
+
+      const pendingSummary: PendingSummary = {
+        merchants: Number(merchantsPending.total || merchantsPending.merchants?.length || 0),
+        riders: Number(ridersPending.total || ridersPending.riders?.length || 0),
+        appeals: Number(appeals.total || appeals.appeals?.length || 0)
+      }
 
       // 待办事项组合
       const pendingItems = [
@@ -165,17 +218,15 @@ Page({
 
       this.setData({
         stats: {
-          total_gmv_display: formatPriceNoSymbol(financeOverview?.total?.total_gmv ?? 0),
-          total_orders: financeOverview?.current_month?.total_orders ?? 0,
+          total_gmv_display: formatPriceNoSymbol(currentPeriodSummary.totalGmv),
+          total_orders: currentPeriodSummary.totalOrders,
           active_merchants: realtimeStats.active_merchant_count,
           active_riders: realtimeStats.active_rider_count,
-          today_gmv_display: formatPriceNoSymbol(todayTrend.total_gmv),
-          today_orders: todayTrend.order_count,
-          // 使用后端计算的运营商可得金额，不再前端硬编码分成比例
-          today_income_display: formatPriceNoSymbol(todayTrend.operator_income ?? 0)
+          today_gmv_display: formatPriceNoSymbol(currentPeriodSummary.totalGmv),
+          today_orders: currentPeriodSummary.totalOrders,
+          today_income_display: formatPriceNoSymbol(currentPeriodSummary.totalIncome)
         },
         finance: {
-          // 使用后端返回的 operator_income 字段，遵循 SSOT 原则
           balance_display: formatPriceNoSymbol(financeOverview?.total?.operator_income ?? 0),
           total_income_display: formatPriceNoSymbol(financeOverview?.total?.operator_income ?? 0),
           current_month_income_display: formatPriceNoSymbol(financeOverview?.current_month?.operator_income ?? 0)
@@ -183,7 +234,8 @@ Page({
         merchantRankings: merchantRankList,
         riderRankings: riderRankList,
         pending_approvals: pendingItems.slice(0, 5),
-        pending_count: pendingItems.length,
+        pending_count: pendingSummary.merchants + pendingSummary.riders + pendingSummary.appeals,
+        pendingSummary,
         loading: false,
         error: null
       })
@@ -211,7 +263,7 @@ Page({
   /**
    * 获取日期范围
    */
-  getDateRange(dimension: string) {
+  getDateRange(dimension: TimeDimension) {
     const end = new Date()
     const start = new Date()
     
@@ -243,7 +295,7 @@ Page({
   /**
    * 切换时间维度
    */
-  onTimeDimensionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+  onTimeDimensionChange(e: WechatMiniprogram.CustomEvent<{ value: TimeDimension }>) {
     const dimension = e.detail.value
     this.setData({ timeDimension: dimension }, () => {
       this.loadDashboardData()
@@ -276,8 +328,42 @@ Page({
 
   onPendingViewAll() {
     const { selectedRegionId } = this.data
-    const query = selectedRegionId ? `?region_id=${selectedRegionId}` : ''
-    wx.navigateTo({ url: `/pages/operator/appeal/list/index${query}` })
+    const query = selectedRegionId ? `region_id=${selectedRegionId}` : ''
+    const actions = [
+      {
+        label: `商户待审 (${this.data.pendingSummary.merchants})`,
+        enabled: this.data.pendingSummary.merchants > 0,
+        url: `/pages/operator/merchants/index?${query}${query ? '&' : ''}status=pending`
+      },
+      {
+        label: `骑手待审 (${this.data.pendingSummary.riders})`,
+        enabled: this.data.pendingSummary.riders > 0,
+        url: `/pages/operator/riders/index?${query}${query ? '&' : ''}status=pending`
+      },
+      {
+        label: `待处理申诉 (${this.data.pendingSummary.appeals})`,
+        enabled: this.data.pendingSummary.appeals > 0,
+        url: `/pages/operator/appeal/list/index${query ? `?${query}` : ''}`
+      }
+    ].filter((item) => item.enabled)
+
+    if (actions.length === 0) {
+      return
+    }
+
+    if (actions.length === 1) {
+      wx.navigateTo({ url: actions[0].url })
+      return
+    }
+
+    wx.showActionSheet({
+      itemList: actions.map((item) => item.label),
+      success: ({ tapIndex }) => {
+        const target = actions[tapIndex]
+        if (!target) return
+        wx.navigateTo({ url: target.url })
+      }
+    })
   },
 
   onOpenApplyment() {

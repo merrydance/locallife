@@ -47,3 +47,15 @@
 .empty-state {
   padding-top: 100rpx;
 }
+
+.load-more-wrap {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 16rpx 0 32rpx;
+}
+
+.load-more-text {
+  font-size: 24rpx;
+  color: #999;
+}

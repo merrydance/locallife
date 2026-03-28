@@ -1,6 +1,6 @@
 # CARD-04 新增 behavior_decision_effects 画像净值账本
 
-状态：未开始
+状态：已完成
 
 优先级：P0
 
@@ -17,19 +17,19 @@
 
 ## 任务内容
 
-- [ ] 新增 behavior_decision_effects 表
-- [ ] 定义 entity_type、entity_id、metric_key、delta_value、status、reverted_by_decision_id 等字段
-- [ ] 为 applied 和 reverted 场景设计最小约束与索引
+- [x] 新增 behavior_decision_effects 表
+- [x] 定义 entity_type、entity_id、metric_key、delta_value、status、reverted_by_decision_id 等字段
+- [x] 为 applied 和 reverted 场景设计最小约束与索引
 
 ## 完成定义
 
-- [ ] 主判净值影响已有正式账本承接
-- [ ] rollback 不再必须依赖业务代码猜测原始计数
+- [x] 主判净值影响已有正式账本承接
+- [x] rollback 不再必须依赖业务代码猜测原始计数
 
 ## 验证要求
 
-- [ ] migration 可执行
-- [ ] query 草案可支撑 insert 和 revert 场景
+- [x] migration 已编写完成
+- [x] query 草案可支撑 insert 和 revert 场景
 
 ## 依赖与风险
 
@@ -37,6 +37,6 @@
 
 ## 完成记录
 
-- [ ] migration 完成
-- [ ] query 对齐完成
-- [ ] 评审完成
+- [x] migration 完成
+- [x] query 对齐完成
+- [x] 评审完成

@@ -189,6 +189,10 @@
   backdrop-filter: blur(4px);
 }
 
+.action-btn.is-loading {
+  opacity: 0.7;
+}
+
 .loading-more {
   padding: var(--spacer-md);
   text-align: center;

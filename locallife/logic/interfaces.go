@@ -102,6 +102,7 @@ type MerchantUserRiskAlert struct {
 type OrderEventPublisher interface {
 	PublishMerchantOrderSnapshot(ctx context.Context, merchantID int64, order db.Order, messageType string)
 	PublishMerchantUserRiskAlert(ctx context.Context, merchantID int64, alert MerchantUserRiskAlert)
+	PublishTakeoutOrderPooled(ctx context.Context, order db.Order, poolItem db.DeliveryPool)
 }
 
 type ProcessRefundTaskInput struct {
@@ -254,7 +255,8 @@ type ListUserOrdersQueryInput struct {
 }
 
 type ListUserOrdersQueryResult struct {
-	Orders []db.ListOrdersByUserWithFiltersRow
+	Orders     []db.ListOrdersByUserWithFiltersRow
+	TotalCount int64
 }
 
 type GetMerchantOrderQueryInput struct {

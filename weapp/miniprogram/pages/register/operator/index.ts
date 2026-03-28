@@ -425,7 +425,6 @@ Page({
     }
   },
 
-  async resolveUploadPreviewURL(rawUrl: string, assetId?: number): Promise<string> {
   async resolveUploadPreviewURL(assetId?: number): Promise<string> {
     if (assetId && assetId > 0) {
       try {

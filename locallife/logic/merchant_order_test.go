@@ -122,6 +122,36 @@ func TestAcceptMerchantOrder(t *testing.T) {
 				require.Equal(t, "paid", result.Previous.Status)
 			},
 		},
+		{
+			name: "TakeoutSuccessDoesNotAddPoolEntry",
+			buildStubs: func(store *mockdb.MockStore) {
+				order := baseOrder
+				order.OrderType = db.OrderTypeTakeout
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), input.MerchantID).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: input.MerchantID, IsTakeoutSuspended: false}, nil)
+				store.EXPECT().
+					AcceptTakeoutOrderTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.AcceptTakeoutOrderTxParams) (db.AcceptTakeoutOrderTxResult, error) {
+						require.Equal(t, input.OrderID, arg.OrderID)
+						require.Equal(t, db.OrderStatusPaid, arg.OldStatus)
+						updated := order
+						updated.Status = db.OrderStatusPreparing
+						return db.AcceptTakeoutOrderTxResult{Order: updated}, nil
+					})
+			},
+			check: func(t *testing.T, result MerchantOrderUpdateResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, db.OrderStatusPreparing, result.Order.Status)
+				require.Nil(t, result.PoolItem)
+			},
+		},
 	}
 
 	for _, tc := range testCases {
@@ -255,6 +285,36 @@ func TestMarkMerchantOrderReady(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "ready", result.Order.Status)
 				require.Equal(t, "preparing", result.Previous.Status)
+			},
+		},
+		{
+			name: "TakeoutSuccessAddsPoolEntry",
+			buildStubs: func(store *mockdb.MockStore) {
+				order := baseOrder
+				order.OrderType = db.OrderTypeTakeout
+				store.EXPECT().
+					GetOrderForUpdate(gomock.Any(), input.OrderID).
+					Times(1).
+					Return(order, nil)
+				store.EXPECT().
+					MarkTakeoutOrderReadyTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.MarkTakeoutOrderReadyTxParams) (db.MarkTakeoutOrderReadyTxResult, error) {
+						require.Equal(t, input.OrderID, arg.OrderID)
+						require.Equal(t, db.OrderStatusPreparing, arg.OldStatus)
+						updated := order
+						updated.Status = db.OrderStatusReady
+						return db.MarkTakeoutOrderReadyTxResult{
+							Order:    updated,
+							PoolItem: db.DeliveryPool{OrderID: input.OrderID, MerchantID: input.MerchantID},
+						}, nil
+					})
+			},
+			check: func(t *testing.T, result MerchantOrderUpdateResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, db.OrderStatusReady, result.Order.Status)
+				require.NotNil(t, result.PoolItem)
+				require.Equal(t, input.OrderID, result.PoolItem.OrderID)
 			},
 		},
 	}

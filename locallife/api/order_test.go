@@ -2676,9 +2676,18 @@ func TestListOrdersAPI(t *testing.T) {
 					ListOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(orders, nil)
+				store.EXPECT().
+					CountOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(21), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response listOrdersResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Orders, 1)
+				require.Equal(t, int64(21), response.Total)
 			},
 		},
 		{
@@ -2692,6 +2701,10 @@ func TestListOrdersAPI(t *testing.T) {
 					ListOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.ListOrdersByUserWithFiltersRow{}, nil)
+				store.EXPECT().
+					CountOrdersByUserWithFilters(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

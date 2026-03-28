@@ -5,6 +5,16 @@
   min-height: 100vh;
 }
 
+.history-loading,
+.card-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 120rpx 40rpx;
+  gap: 24rpx;
+}
+
 .history-summary {
   display: flex;
   background: #FFFFFF;
@@ -59,11 +69,18 @@
   margin-bottom: var(--spacer-md);
 }
 
+.address-row {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
 .address {
   font-size: var(--font-size-sm);
   color: var(--td-text-color-primary);
   display: flex;
   align-items: center;
+  flex: 1;
 }
 
 .address t-icon {
@@ -74,6 +91,18 @@
 .arrow {
   padding: 8rpx 0 8rpx 36rpx;
   color: var(--td-border-level-1-color);
+}
+
+.nav-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56rpx;
+  height: 56rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-brand-color-light);
+  color: var(--td-brand-color);
+  flex-shrink: 0;
 }
 
 .card-footer {
@@ -100,4 +129,14 @@
   font-size: var(--font-size-xxs);
   color: var(--td-text-color-placeholder);
   padding: 40rpx 0;
+}
+
+.load-more-state {
+  padding: 32rpx 24rpx 48rpx;
+}
+
+.load-more-error {
+  font-size: var(--font-size-xs);
+  color: var(--td-error-color);
+  line-height: 1.6;
 }

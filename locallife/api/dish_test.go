@@ -415,6 +415,11 @@ func TestGetDishAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				completeDish.ImageMediaAssetID = pgtype.Int8{Int64: 321, Valid: true}
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), gomock.Eq(int64(321))).
+					Times(1).
+					Return(approvedAsset(321, "merchant/dish/1/detail.jpg"), nil)
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					AnyTimes().
@@ -427,6 +432,13 @@ func TestGetDishAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp struct {
+					Data dishResponse `json:"data"`
+				}
+				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
+				require.NoError(t, err)
+				require.NotNil(t, resp.Data.ImageAssetID)
+				require.Equal(t, int64(321), *resp.Data.ImageAssetID)
 			},
 		},
 		{
@@ -486,7 +498,7 @@ func TestGetDishAPI(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			server := newTestServer(t, store)
+			server, _ := newTestServerForMedia(t, store)
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/v1/dishes/%d", tc.dishID)
@@ -613,13 +625,19 @@ func TestUpdateDishAPI(t *testing.T) {
 			name:   "OK",
 			dishID: dish.ID,
 			body: gin.H{
-				"name":  "新菜名",
-				"price": 5000,
+				"name":           "新菜名",
+				"price":          5000,
+				"image_asset_id": int64(888),
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				dish.ImageMediaAssetID = pgtype.Int8{Int64: 888, Valid: true}
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), gomock.Eq(int64(888))).
+					Times(1).
+					Return(approvedAsset(888, "merchant/dish/1/update.jpg"), nil)
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					AnyTimes().
@@ -640,6 +658,13 @@ func TestUpdateDishAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp struct {
+					Data dishResponse `json:"data"`
+				}
+				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
+				require.NoError(t, err)
+				require.NotNil(t, resp.Data.ImageAssetID)
+				require.Equal(t, int64(888), *resp.Data.ImageAssetID)
 			},
 		},
 		{
@@ -678,7 +703,7 @@ func TestUpdateDishAPI(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			server := newTestServer(t, store)
+			server, _ := newTestServerForMedia(t, store)
 			recorder := httptest.NewRecorder()
 
 			data, err := json.Marshal(tc.body)

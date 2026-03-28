@@ -36,6 +36,23 @@
   box-shadow: var(--shadow-sm);
 }
 
+.notice-card {
+  background: rgba(0, 82, 217, 0.06);
+}
+
+.notice-title {
+  font-size: var(--font-size-base);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+  margin-bottom: var(--spacer-xxs);
+}
+
+.notice-text {
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
 .status-wrap {
   display: flex;
   align-items: center;

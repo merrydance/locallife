@@ -855,8 +855,20 @@ type tableImageResponse struct {
 	ID           int64  `json:"id"`
 	TableID      int64  `json:"table_id"`
 	MediaAssetID *int64 `json:"media_asset_id,omitempty"`
+	ImageURL     string `json:"image_url,omitempty"`
 	SortOrder    int32  `json:"sort_order"`
 	IsPrimary    bool   `json:"is_primary"`
+}
+
+func (server *Server) newTableImageResponse(img db.TableImage, imageURL string) tableImageResponse {
+	return tableImageResponse{
+		ID:           img.ID,
+		TableID:      img.TableID,
+		MediaAssetID: int64PtrFromPgInt8(img.MediaAssetID),
+		ImageURL:     imageURL,
+		SortOrder:    img.SortOrder,
+		IsPrimary:    img.IsPrimary,
+	}
 }
 
 type addTableImageRequest struct {
@@ -948,6 +960,7 @@ func (server *Server) addTableImage(ctx *gin.Context) {
 		ID:           image.ID,
 		TableID:      image.TableID,
 		MediaAssetID: int64PtrFromPgInt8(image.MediaAssetID),
+		ImageURL:     server.publicImageURL(ctx, int64PtrFromPgInt8(image.MediaAssetID), media.VariantDetail),
 		SortOrder:    image.SortOrder,
 		IsPrimary:    image.IsPrimary,
 	})
@@ -980,14 +993,15 @@ func (server *Server) listTableImages(ctx *gin.Context) {
 	}
 
 	resp := make([]tableImageResponse, len(images))
-	for i, img := range images {
-		resp[i] = tableImageResponse{
-			ID:           img.ID,
-			TableID:      img.TableID,
-			MediaAssetID: int64PtrFromPgInt8(img.MediaAssetID),
-			SortOrder:    img.SortOrder,
-			IsPrimary:    img.IsPrimary,
+	imageAssetIDs := make([]int64, 0, len(images))
+	for _, img := range images {
+		if img.MediaAssetID.Valid {
+			imageAssetIDs = append(imageAssetIDs, img.MediaAssetID.Int64)
 		}
+	}
+	imageURLs := server.batchPublicImageURLs(ctx, imageAssetIDs, media.VariantDetail)
+	for i, img := range images {
+		resp[i] = server.newTableImageResponse(img, imageURLs[img.MediaAssetID.Int64])
 	}
 
 	ctx.JSON(http.StatusOK, tableImagesListResponse{Images: resp})
@@ -1067,6 +1081,7 @@ func (server *Server) setTablePrimaryImage(ctx *gin.Context) {
 		ID:           image.ID,
 		TableID:      image.TableID,
 		MediaAssetID: int64PtrFromPgInt8(image.MediaAssetID),
+		ImageURL:     server.publicImageURL(ctx, int64PtrFromPgInt8(image.MediaAssetID), media.VariantDetail),
 		SortOrder:    image.SortOrder,
 		IsPrimary:    image.IsPrimary,
 	})

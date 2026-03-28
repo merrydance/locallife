@@ -1,5 +1,7 @@
 import FavoriteService, { FavoriteMerchantListItem, FavoriteType } from '../../../api/favorite'
+import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import { ErrorHandler } from '../../../utils/error-handler'
+import Navigation from '../../../utils/navigation'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
 type FavoriteDishItem = {
@@ -10,16 +12,6 @@ type FavoriteDishItem = {
     description?: string
     merchant_name?: string
     price: number
-    created_at?: string
-}
-
-type FavoriteMerchantItem = {
-    id: number
-    merchant_id: number
-    merchant_name: string
-    merchant_logo?: string
-    address?: string
-    is_ordering_suspended?: boolean
     created_at?: string
 }
 
@@ -102,18 +94,12 @@ Page({
             } else {
                 const res = await FavoriteService.getFavoriteMerchants(this.data.page, this.data.pageSize)
                 list = res.merchants.map((merchant) => {
-                    const m = merchant as FavoriteMerchantItem | FavoriteMerchantListItem
+                    const m = merchant as FavoriteMerchantListItem
+                    const viewModel = ConsumerProfileAdapter.toFavoriteMerchantViewModel(m)
                     return ({
-                    id: m.id,
-                    targetId: m.merchant_id,
+                    ...viewModel,
                     type: 'merchant',
-                    typeText: '餐厅',
-                    title: m.merchant_name,
-                    image: m.merchant_logo || '',
-                    subTitle: m.address || '',
-                    rating: 5.0,
-                    createdAt: m.created_at?.split('T')[0] || '',
-                    isOrderingSuspended: !!m.is_ordering_suspended
+                    typeText: '餐厅'
                     })
                 })
                 total = res.total
@@ -183,28 +169,17 @@ Page({
         if (!item) return
 
         if (item.type === 'dish') {
-            // Need merchant_id for dish detail? Usually yes.
-            // But we might only have DishID. 
-            // Existing dish detail page usually takes id (dish_id). 
-            // If it needs merchant_id, we might be missing it in the favorite response if not provided.
-            // The backend response `favoriteDishResponse` DOES have `MerchantID`.
-            // But we didn't map it. Let's map it if needed.
-            // However, typical detail page just needs ID.
-            wx.navigateTo({
-                url: `/pages/takeout/dish-detail/index?id=${item.targetId}`
-            })
+            Navigation.toDishDetail(String(item.targetId))
         } else {
-            wx.navigateTo({
-                url: `/pages/takeout/restaurant-detail/index?id=${item.targetId}`
-            })
+            Navigation.toRestaurantDetail(item.targetId)
         }
     },
     
     onGoHome() {
         if (this.data.activeTab === 'merchant') {
-            wx.switchTab({ url: '/pages/reservation/index' })
+            Navigation.toReservationHome()
         } else {
-            wx.switchTab({ url: '/pages/takeout/index' })
+            Navigation.toTakeoutHome()
         }
     }
 })

@@ -1,7 +1,9 @@
 import ReviewService, { Review } from '../../../api/review'
+import ConsumerProfileAdapter from '../../../adapters/consumer-profile'
 import { formatTime } from '../../../utils/util'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { ErrorHandler } from '../../../utils/error-handler'
+import Navigation from '../../../utils/navigation'
 
 interface MerchantDataset {
   id?: number
@@ -56,10 +58,8 @@ Page({
       const res = await ReviewService.listMyReviews(page, this.data.pageSize)
 
       const newReviews: ReviewDisplay[] = res.reviews.map((r: Review) => ({
+        ...ConsumerProfileAdapter.toReviewMerchantViewModel(r),
         id: r.id,
-        merchantId: r.merchant_id,
-        merchantName: r.merchant_name || `商户 #${r.merchant_id}`,
-        logoUrl: r.merchant_logo || '/assets/icons/shop.svg',
         rating: r.rating || 5,
         tags: r.tags || [],
         content: r.content,
@@ -74,8 +74,8 @@ Page({
 
       this.setData({
         reviews,
-        page: page + 1,
-        hasMore: newReviews.length === this.data.pageSize, 
+        page: res.page + 1,
+        hasMore: res.hasMore,
         loading: false,
         initialLoading: false,
         refreshing: false
@@ -105,9 +105,7 @@ Page({
   onMerchantClick(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as MerchantDataset
     if (!id) return
-    wx.navigateTo({
-        url: `/pages/takeout/restaurant-detail/index?id=${id}`
-    })
+    Navigation.toRestaurantDetail(id)
   },
 
   onImagePreview(e: WechatMiniprogram.TouchEvent) {
@@ -120,6 +118,6 @@ Page({
   },
 
   onGoHome() {
-    wx.switchTab({ url: '/pages/takeout/index' })
+    Navigation.toTakeoutHome()
   }
 })

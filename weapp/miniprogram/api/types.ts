@@ -18,6 +18,59 @@ export interface PagingData<T> {
     page_size?: number
 }
 
+export interface PaginationEnvelope {
+    total?: number
+    page?: number
+    page_id?: number
+    page_size?: number
+    limit?: number
+    total_pages?: number
+    total_page?: number
+    has_more?: boolean
+}
+
+export interface PaginatedListResult<T> {
+    items: T[]
+    total: number
+    page: number
+    pageSize: number
+    hasMore: boolean
+}
+
+function toSafeNumber(value: unknown): number | null {
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+}
+
+export function normalizePaginatedResult<T>(
+    items: T[],
+    response: PaginationEnvelope | null | undefined,
+    fallback: { page: number, pageSize: number }
+): PaginatedListResult<T> {
+    const page = toSafeNumber(response?.page) ?? toSafeNumber(response?.page_id) ?? fallback.page
+    const pageSize = toSafeNumber(response?.page_size) ?? toSafeNumber(response?.limit) ?? fallback.pageSize
+    const total = toSafeNumber(response?.total) ?? items.length
+    const totalPages = toSafeNumber(response?.total_pages) ?? toSafeNumber(response?.total_page)
+
+    let hasMore = false
+    if (typeof response?.has_more === 'boolean') {
+        hasMore = response.has_more
+    } else if (totalPages !== null) {
+        hasMore = page < totalPages
+    } else if (total > items.length) {
+        hasMore = page * pageSize < total
+    } else {
+        hasMore = items.length === pageSize && items.length > 0
+    }
+
+    return {
+        items,
+        total,
+        page,
+        pageSize,
+        hasMore
+    }
+}
+
 // ==================== 请求参数类型 ====================
 
 /**

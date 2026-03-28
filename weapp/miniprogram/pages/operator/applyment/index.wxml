@@ -9,7 +9,12 @@
       <view class="card-title">开户状态</view>
       <view wx:if="{{loading}}" class="status-item">加载中...</view>
       <block wx:else>
-        <view class="status-item">状态：{{statusView.statusDesc}}</view>
+        <view class="status-badge-row">
+          <text class="status-item">状态：{{statusView.statusDesc}}</text>
+          <t-tag theme="{{statusView.isOpened ? 'success' : (statusView.needsSign ? 'warning' : (statusView.isInReview ? 'primary' : (statusView.statusCode === 'rejected' || statusView.statusCode === 'rejected_sign' ? 'danger' : 'default')))}}" variant="dark" size="small">
+            {{statusView.statusCode}}
+          </t-tag>
+        </view>
         <view class="status-item">申请单号：{{statusView.applymentId}}</view>
         <view class="status-item">子商户号：{{statusView.subMchId}}</view>
         <view class="status-item">驳回原因：{{statusView.rejectReason}}</view>
@@ -28,8 +33,14 @@
 
     <view wx:if="{{statusView.isInReview && !statusView.isOpened}}" class="card">
       <view class="card-title">开户审核中</view>
-      <view class="status-item">微信支付开户信息已提交，请等待审核结果。</view>
+      <view class="status-item">{{statusView.guideText}}</view>
       <view class="status-item">审核期间无需重复填写开户信息。</view>
+    </view>
+
+    <view wx:if="{{statusView.needsSign && !statusView.isOpened}}" class="card">
+      <view class="card-title">待签约处理</view>
+      <view class="status-item">{{statusView.guideText}}</view>
+      <view class="status-item">如已复制签约链接，请在微信支付侧尽快完成签约。</view>
     </view>
 
     <view wx:if="{{statusView.canSubmitOpenInfo && !statusView.isOpened}}" class="card">

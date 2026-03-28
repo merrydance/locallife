@@ -117,7 +117,17 @@ func (s *OrderService) ListUserOrders(ctx context.Context, input ListUserOrdersQ
 		return ListUserOrdersQueryResult{}, err
 	}
 
-	return ListUserOrdersQueryResult{Orders: orders}, nil
+	total, err := s.store.CountOrdersByUserWithFilters(ctx, db.CountOrdersByUserWithFiltersParams{
+		UserID:        input.UserID,
+		Status:        status,
+		OrderType:     orderType,
+		ReservationID: reservationID,
+	})
+	if err != nil {
+		return ListUserOrdersQueryResult{}, err
+	}
+
+	return ListUserOrdersQueryResult{Orders: orders, TotalCount: total}, nil
 }
 
 func (s *OrderService) GetMerchantOrder(ctx context.Context, input GetMerchantOrderQueryInput) (GetMerchantOrderQueryResult, error) {

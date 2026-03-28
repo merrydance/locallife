@@ -49,7 +49,10 @@
           </view>
         </view>
         
-        <t-load-more status="{{loading ? 'loading' : (hasMore ? 'loading' : 'nomore')}}" />
+        <view class="load-more-wrap">
+          <t-loading wx:if="{{loading && reservations.length > 0}}" theme="dots" size="40rpx" />
+          <text wx:elif="{{!hasMore && reservations.length > 0}}" class="load-more-text">没有更多预订了</text>
+        </view>
       </view>
     </t-pull-down-refresh>
   </view>

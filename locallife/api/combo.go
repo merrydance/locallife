@@ -36,11 +36,11 @@ type createComboSetRequest struct {
 }
 
 type comboSetResponse struct {
-	ID          int64   `json:"id"`
-	Name        string  `json:"name"`
-	Description *string `json:"description,omitempty"`
-	ComboPrice  int64   `json:"combo_price"`
-	IsOnline    bool    `json:"is_online"`
+	ID            int64    `json:"id"`
+	Name          string   `json:"name"`
+	Description   *string  `json:"description,omitempty"`
+	ComboPrice    int64    `json:"combo_price"`
+	IsOnline      bool     `json:"is_online"`
 	DishImageURLs []string `json:"dish_image_urls,omitempty"`
 }
 
@@ -187,10 +187,10 @@ type comboSetWithDetailsResponse struct {
 }
 
 type dishInComboResponse struct {
-	ID           int64  `json:"dish_id"`
-	Name         string `json:"dish_name"`
-	Price        int64  `json:"dish_price,omitempty"`
-	Quantity     int32  `json:"quantity,omitempty"`
+	ID       int64  `json:"dish_id"`
+	Name     string `json:"dish_name"`
+	Price    int64  `json:"dish_price,omitempty"`
+	Quantity int32  `json:"quantity,omitempty"`
 }
 
 type tagResponse struct {
@@ -309,7 +309,7 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		isOpen = merchant.IsOpen && merchant.Status == "active"
 	}
 
-	ctx.JSON(http.StatusOK, comboSetWithDetailsResponse{
+	resp := comboSetWithDetailsResponse{
 		ID:            result.ID,
 		MerchantID:    result.MerchantID,
 		Name:          result.Name,
@@ -321,7 +321,10 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		Dishes:        dishes,
 		Tags:          tags,
 		IsOpen:        isOpen,
-	})
+	}
+
+	server.enrichSingleComboImages(ctx, &resp)
+	ctx.JSON(http.StatusOK, resp)
 }
 
 // getPublicComboDetail godoc
@@ -437,10 +440,10 @@ type listComboSetsRequest struct {
 }
 
 type listComboSetsResponse struct {
-	ComboSets  []comboSetResponse `json:"combo_sets"`
-	Total      int64              `json:"total"`
-	PageID     int32              `json:"page_id"`
-	PageSize   int32              `json:"page_size"`
+	ComboSets []comboSetResponse `json:"combo_sets"`
+	Total     int64              `json:"total"`
+	PageID    int32              `json:"page_id"`
+	PageSize  int32              `json:"page_size"`
 }
 
 // listComboSets godoc
@@ -636,16 +639,10 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		}
 	}
 
-	// 执行更新
-	updated, err := server.store.UpdateComboSet(ctx, params)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	// 如果请求中包含菜品列表，则同步更新菜品
+	var dishesWithQty *[]db.DishWithQuantity
 	if len(req.Dishes) > 0 {
 		// 验证所有菜品属于当前商户
+		nextDishes := make([]db.DishWithQuantity, 0, len(req.Dishes))
 		for _, d := range req.Dishes {
 			dish, err := server.store.GetDish(ctx, d.DishID)
 			if err != nil {
@@ -660,61 +657,46 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 				ctx.JSON(http.StatusForbidden, errorResponse(fmt.Errorf("dish %d does not belong to this merchant", d.DishID)))
 				return
 			}
-		}
 
-		// 先删除所有旧菜品关联
-		err = server.store.RemoveAllComboDishes(ctx, uriReq.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		// 添加新的菜品关联（带数量）
-		for _, d := range req.Dishes {
 			qty := d.Quantity
 			if qty <= 0 {
 				qty = 1
 			}
-			_, err = server.store.AddComboDish(ctx, db.AddComboDishParams{
-				ComboID:  uriReq.ID,
+			nextDishes = append(nextDishes, db.DishWithQuantity{
 				DishID:   d.DishID,
-				Quantity: int16(qty),
+				Quantity: qty,
 			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
 		}
+		dishesWithQty = &nextDishes
 	}
 
-	// 如果请求中包含标签列表，则同步更新标签
+	var tagIDs *[]int64
 	if req.TagIDs != nil {
-		// 先删除所有旧标签关联
-		err = server.store.RemoveAllComboTags(ctx, uriReq.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
+		tagIDs = &req.TagIDs
+	}
 
-		// 添加新的标签关联
-		for _, tagID := range req.TagIDs {
-			_, err = server.store.AddComboTag(ctx, db.AddComboTagParams{
-				ComboID: uriReq.ID,
-				TagID:   tagID,
-			})
-			if err != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-		}
+	updated, err := server.store.UpdateComboSetTx(ctx, db.UpdateComboSetTxParams{
+		ID:                params.ID,
+		Name:              params.Name,
+		Description:       params.Description,
+		ImageMediaAssetID: params.ImageMediaAssetID,
+		OriginalPrice:     params.OriginalPrice,
+		ComboPrice:        params.ComboPrice,
+		IsOnline:          params.IsOnline,
+		Dishes:            dishesWithQty,
+		TagIDs:            tagIDs,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
 	ctx.JSON(http.StatusOK, comboSetResponse{
-		ID:          updated.ID,
-		Name:        updated.Name,
-		Description: stringPtrFromPgText(updated.Description),
-		ComboPrice:  updated.ComboPrice,
-		IsOnline:    updated.IsOnline,
+		ID:          updated.ComboSet.ID,
+		Name:        updated.ComboSet.Name,
+		Description: stringPtrFromPgText(updated.ComboSet.Description),
+		ComboPrice:  updated.ComboSet.ComboPrice,
+		IsOnline:    updated.ComboSet.IsOnline,
 	})
 }
 

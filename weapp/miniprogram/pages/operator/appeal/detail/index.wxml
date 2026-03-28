@@ -24,8 +24,8 @@
         </view>
         <view class="row">
           <text class="label">申诉状态</text>
-          <t-tag theme="{{appeal.status === 'pending' ? 'warning' : (appeal.status === 'approved' ? 'success' : 'danger')}}" size="small" variant="dark">
-            {{appeal.status === 'pending' ? '待处理' : (appeal.status === 'approved' ? '已通过' : '已驳回')}}
+          <t-tag theme="{{appeal.status === 'pending' ? 'warning' : ((appeal.status === 'approved' || appeal.status === 'compensated') ? 'success' : 'danger')}}" size="small" variant="dark">
+            {{appeal.status_label}}
           </t-tag>
         </view>
         <view class="row">
@@ -34,14 +34,65 @@
         </view>
         <view class="row">
           <text class="label">关联单号</text>
-          <text class="value">{{appeal.claim_id || '无'}}</text>
+          <text class="value">{{appeal.related_order_view ? appeal.related_order_view.order_no : (appeal.claim_id || '无')}}</text>
+        </view>
+        <view class="row">
+          <text class="label">诉求金额</text>
+          <text class="value">{{appeal.claim_amount_display}}</text>
+        </view>
+        <view class="row" wx:if="{{appeal.compensation_amount}}">
+          <text class="label">已赔付金额</text>
+          <text class="value">{{appeal.compensation_amount_display}}</text>
         </view>
         <view class="divider"></view>
         <view class="row-vertical">
           <text class="label">申诉说明</text>
           <text class="value content">{{appeal.reason || '无详细说明'}}</text>
         </view>
-        
+      </view>
+
+      <view class="card" wx:if="{{appeal.claim_description || appeal.claim_type}}">
+        <view class="section-title">索赔信息</view>
+        <view class="row" wx:if="{{appeal.claim_type}}"><text class="label">索赔类型</text><text class="value">{{appeal.claim_type}}</text></view>
+        <view class="row" wx:if="{{appeal.claim_status}}"><text class="label">索赔状态</text><text class="value">{{appeal.claim_status}}</text></view>
+        <view class="row" wx:if="{{appeal.claim_approved_amount}}"><text class="label">已核金额</text><text class="value">{{appeal.approved_amount_display}}</text></view>
+        <view class="row-vertical" wx:if="{{appeal.claim_description}}">
+          <text class="label">索赔说明</text>
+          <text class="value content">{{appeal.claim_description}}</text>
+        </view>
+      </view>
+
+      <view class="card" wx:if="{{appeal.related_order_view}}">
+        <view class="section-title">关联订单</view>
+        <view class="row"><text class="label">订单号</text><text class="value">{{appeal.related_order_view.order_no}}</text></view>
+        <view class="row"><text class="label">商户</text><text class="value">{{appeal.related_order_view.merchant_name}}</text></view>
+        <view class="row"><text class="label">骑手</text><text class="value">{{appeal.related_order_view.rider_name}}</text></view>
+        <view class="row"><text class="label">订单金额</text><text class="value">{{appeal.related_order_view.order_amount_display}}</text></view>
+        <view class="row"><text class="label">订单状态</text><text class="value">{{appeal.related_order_view.status}}</text></view>
+      </view>
+
+      <view class="card" wx:if="{{appeal.evidence_files_view.length > 0}}">
+        <view class="section-title">证据材料</view>
+        <view class="images-grid">
+          <image wx:for="{{appeal.evidence_files_view}}" wx:key="*this" class="img" src="{{item}}" mode="aspectFill" bindtap="onPreviewEvidence" data-url="{{item}}" />
+        </view>
+      </view>
+
+      <view class="card" wx:if="{{appeal.timeline_view.length > 0}}">
+        <view class="section-title">处理时间线</view>
+        <view class="timeline-list">
+          <view wx:for="{{appeal.timeline_view}}" wx:key="timestamp" class="timeline-item">
+            <view class="timeline-dot"></view>
+            <view class="timeline-content">
+              <view class="timeline-header">
+                <text class="timeline-title">{{item.title}}</text>
+                <text class="timeline-time">{{item.timestamp}}</text>
+              </view>
+              <text class="timeline-operator">{{item.operator}}</text>
+              <text wx:if="{{item.notes}}" class="timeline-notes">{{item.notes}}</text>
+            </view>
+          </view>
+        </view>
       </view>
 
       <view class="card" wx:if="{{recovery}}">
@@ -68,7 +119,7 @@
       </view>
 
       <view class="card input-card" wx:if="{{appeal.status === 'pending'}}">
-        <view class="section-title">处理处理</view>
+        <view class="section-title">审核处理</view>
         <t-input
           label="补偿金额(元)"
           type="digit"

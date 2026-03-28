@@ -67,6 +67,13 @@
   flex-wrap: wrap;
 }
 
+.action-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-md);
+}
+
 /* 分区标题 */
 .section-header {
   display: flex;
@@ -156,5 +163,12 @@
   height: 1rpx;
   background: var(--td-component-stroke);
   margin: var(--spacer-sm) 0;
+}
+
+.dialog-content {
+  padding: 32rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
 }
 

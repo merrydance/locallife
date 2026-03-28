@@ -60,6 +60,6 @@
   </view>
 
   <!-- 浮动操作按钮 -->
-  <t-fab icon="add" bind:click="onAddRegion" aria-label="添加区域" wx:if="{{!initialLoading && !error && target !== 'rules'}}"></t-fab>
+  <t-fab icon="add" bind:click="onAddRegion" aria-label="申请更多区域" wx:if="{{!initialLoading && !error && target !== 'rules'}}"></t-fab>
 </view>
 

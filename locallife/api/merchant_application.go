@@ -150,10 +150,10 @@ func checkApplicationEditable(status string) (editable bool, needReset bool, err
 	switch status {
 	case "draft":
 		return true, false, ""
-	case "rejected":
-		// 被拒绝的申请允许编辑，但需要重置为草稿状态
+	case "rejected", "approved":
+		// 被拒绝或已通过的申请允许编辑，但需要先重置为草稿状态。
 		return true, true, ""
-	case "submitted", "approved":
+	case "submitted":
 		return false, false, "申请已提交审核，当前不可编辑"
 	default:
 		return false, false, "申请状态异常"
@@ -325,12 +325,16 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 // ==================== 更新基础信息 ====================
 
 type updateMerchantBasicInfoRequest struct {
-	MerchantName    string  `json:"merchant_name" binding:"omitempty,min=2,max=50"`
-	ContactPhone    string  `json:"contact_phone" binding:"omitempty,len=11"`
-	BusinessAddress string  `json:"business_address" binding:"omitempty,min=5,max=200"`
-	Longitude       *string `json:"longitude" binding:"omitempty"`
-	Latitude        *string `json:"latitude" binding:"omitempty"`
-	RegionID        *int64  `json:"region_id" binding:"omitempty"`
+	MerchantName          string  `json:"merchant_name" binding:"omitempty,min=2,max=50"`
+	ContactPhone          string  `json:"contact_phone" binding:"omitempty,len=11"`
+	BusinessAddress       string  `json:"business_address" binding:"omitempty,min=5,max=200"`
+	BusinessLicenseNumber string  `json:"business_license_number" binding:"omitempty,min=8,max=32"`
+	BusinessScope         string  `json:"business_scope" binding:"omitempty,max=500"`
+	LegalPersonName       string  `json:"legal_person_name" binding:"omitempty,min=2,max=50"`
+	LegalPersonIDNumber   string  `json:"legal_person_id_number" binding:"omitempty,min=15,max=32"`
+	Longitude             *string `json:"longitude" binding:"omitempty"`
+	Latitude              *string `json:"latitude" binding:"omitempty"`
+	RegionID              *int64  `json:"region_id" binding:"omitempty"`
 }
 
 // updateMerchantApplicationBasicInfo godoc
@@ -406,6 +410,18 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 	}
 	if req.BusinessAddress != "" {
 		arg.BusinessAddress = pgtype.Text{String: req.BusinessAddress, Valid: true}
+	}
+	if req.BusinessLicenseNumber != "" {
+		arg.BusinessLicenseNumber = pgtype.Text{String: req.BusinessLicenseNumber, Valid: true}
+	}
+	if req.BusinessScope != "" {
+		arg.BusinessScope = pgtype.Text{String: req.BusinessScope, Valid: true}
+	}
+	if req.LegalPersonName != "" {
+		arg.LegalPersonName = pgtype.Text{String: req.LegalPersonName, Valid: true}
+	}
+	if req.LegalPersonIDNumber != "" {
+		arg.LegalPersonIDNumber = pgtype.Text{String: req.LegalPersonIDNumber, Valid: true}
 	}
 	if req.Longitude != nil {
 		lon, err := parseNumericString(*req.Longitude)

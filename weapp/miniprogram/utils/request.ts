@@ -128,101 +128,6 @@ function isExpectedOperatorApplicationNotFound(
   return normalized.includes('您还没有申请记录') || normalized.includes('no application')
 }
 
-export function uploadFile<T = unknown>(filePath: string, url: string = '/upload/image', name: string = 'file', formData: Record<string, unknown> = {}): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const doUpload = () => {
-      wx.uploadFile({
-        url: `${API_BASE}${url}`,
-        filePath,
-        name,
-        header: {
-          'Authorization': `Bearer ${getToken()}`,
-          'X-Response-Envelope': '1'
-        },
-        formData,
-        success: (res) => {
-          // wx.uploadFile returns data as string
-          let data: unknown
-          try {
-            data = JSON.parse(res.data)
-          } catch (e) {
-            // If not JSON, probably error page or simple string
-            data = res.data
-          }
-
-          if (res.statusCode === 200 || res.statusCode === 201) {
-            // Verify code if it exists in envelope
-            if (isRecord(data) && typeof data.code === 'number') {
-              if (data.code === 0) {
-                logger.debug('文件上传成功', { url }, 'uploadFile')
-                // Return the data part as T, or the whole thing?
-                // request() returns response.data. 
-                // Existing uploadFile returned data.data.url string.
-                // To be generic, let's return data.data usually.
-                resolve(data.data as T)
-              } else {
-                const message = typeof data.message === 'string' ? data.message : '上传失败'
-                reject(new AppError({
-                  type: ErrorType.BUSINESS,
-                  message: `上传失败: ${message}`,
-                  userMessage: message
-                }))
-              }
-            } else {
-              // Legacy behavior or different format
-              resolve(data as T)
-            }
-          } else if (res.statusCode === 401) {
-            // Token expired
-            logger.warn('Token已过期(upload),尝试自动刷新', undefined, 'uploadFile')
-            performTokenRefresh(true).then(() => {
-              // Retry upload
-              doUpload()
-            }).catch((_err) => {
-              clearToken()
-              // User requested silent login, no redirect.
-              reject(new AppError({
-                type: ErrorType.AUTH,
-                message: '登录已过期且刷新失败',
-                userMessage: '登录状态失效，请重试'
-              }))
-            })
-          } else {
-            // 解析后端返回的错误信息
-            const errMsg = isRecord(data) && typeof data.message === 'string'
-              ? data.message
-              : isRecord(data) && typeof data.error === 'string'
-                ? data.error
-                : '文件上传失败'
-            const userMsg = isRecord(data) && typeof data.userMessage === 'string'
-              ? data.userMessage
-              : '文件上传失败'
-
-            logger.warn(`上传失败 HTTP ${res.statusCode}`, { url, response: data }, 'uploadFile')
-
-            reject(new AppError({
-              type: ErrorType.NETWORK,
-              message: `HTTP ${res.statusCode}: ${errMsg}`,
-              userMessage: userMsg
-            }, data))
-          }
-        },
-        fail: (err) => {
-          const error = ErrorHandler.handleNetworkError(err, 'uploadFile')
-          reject(error)
-        }
-      })
-    }
-
-    // Check token expiry before starting (optional optimization)
-    if (isTokenNearExpiry(60000)) {
-      refreshTokenOnce().then(doUpload).catch(() => doUpload())
-    } else {
-      doUpload()
-    }
-  })
-}
-
 export async function request<T = unknown>(options: RequestOptions): Promise<T> {
   const {
     url,
@@ -348,7 +253,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
     }
 
     // 检查HTTP状态码
-    if (result.statusCode !== 200 && result.statusCode !== 201) {
+    if (result.statusCode !== 200 && result.statusCode !== 201 && result.statusCode !== 202) {
       // 特殊处理 401 Unauthorized
       if (result.statusCode === 401) {
         logger.warn('Token无效(HTTP 401),尝试自动刷新', undefined, 'request')

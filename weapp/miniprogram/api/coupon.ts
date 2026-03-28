@@ -4,6 +4,7 @@
  */
 
 import { request } from '../utils/request'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
 
 // ==================== 数据类型定义 ====================
 
@@ -72,6 +73,34 @@ export interface UserCoupon {
     status: CouponStatus
     used_at?: string
     order_id?: number
+}
+
+export interface CouponListResult extends PaginatedListResult<Coupon> {
+    coupons: Coupon[]
+}
+
+export interface UserCouponListResult extends PaginatedListResult<UserCoupon> {
+    coupons: UserCoupon[]
+}
+
+type VoucherListResponse<T> = PaginationEnvelope & {
+    vouchers?: T[]
+    total_count?: number
+}
+
+function buildCouponListResult<T>(coupons: T[], response: VoucherListResponse<unknown>, params: { page_id: number, page_size: number }) {
+    const normalized = normalizePaginatedResult(coupons, {
+        ...response,
+        total: typeof response?.total === 'number' ? response.total : response?.total_count
+    }, {
+        page: params.page_id,
+        pageSize: params.page_size
+    })
+
+    return {
+        ...normalized,
+        coupons
+    }
 }
 
 function normalizeVoucherToCoupon(item: BackendVoucher): Coupon {
@@ -152,9 +181,9 @@ export class CouponService {
      * 获取可领取的优惠券列表
      * 优先使用商户可领券接口；无 merchant_id 时回退为“我的可用券”列表
      */
-    static async getAvailableCoupons(params: CouponListParams): Promise<{ coupons: Coupon[], total: number }> {
+    static async getAvailableCoupons(params: CouponListParams): Promise<CouponListResult> {
         if (params.merchant_id) {
-            const res = await request<{ vouchers: BackendVoucher[], total?: number, total_count?: number }>({
+            const res = await request<VoucherListResponse<BackendVoucher>>({
                 url: `/v1/merchants/${params.merchant_id}/vouchers/active`,
                 method: 'GET',
                 data: params
@@ -162,26 +191,37 @@ export class CouponService {
 
             const vouchers = Array.isArray(res?.vouchers) ? res.vouchers : []
             const coupons = vouchers.map(normalizeVoucherToCoupon)
-            const total = typeof res?.total === 'number'
-                ? res.total
-                : (typeof res?.total_count === 'number' ? res.total_count : coupons.length)
 
-            return { coupons, total }
+            return buildCouponListResult(coupons, res, params)
         }
 
-        const res = await request<{ vouchers: BackendUserVoucher[], total?: number, total_count?: number }>({
-            url: '/v1/vouchers/available',
+        const res = await request<VoucherListResponse<BackendUserVoucher>>({
+            url: '/v1/vouchers/me/available',
             method: 'GET',
             data: params
         })
 
         const vouchers = Array.isArray(res?.vouchers) ? res.vouchers : []
         const coupons = vouchers.map(normalizeUserVoucherToCoupon)
-        const total = typeof res?.total === 'number'
-            ? res.total
-            : (typeof res?.total_count === 'number' ? res.total_count : coupons.length)
 
-        return { coupons, total }
+        return buildCouponListResult(coupons, res, params)
+    }
+
+    /**
+     * 获取我的可用优惠券列表
+     * GET /v1/vouchers/me/available
+     */
+    static async getMyAvailableCoupons(params: MyCouponParams): Promise<UserCouponListResult> {
+        const res = await request<VoucherListResponse<BackendUserVoucher>>({
+            url: '/v1/vouchers/me/available',
+            method: 'GET',
+            data: params
+        })
+
+        const vouchers = Array.isArray(res?.vouchers) ? res.vouchers : []
+        const coupons = vouchers.map(normalizeUserVoucher)
+
+        return buildCouponListResult(coupons, res, params)
     }
 
     /**
@@ -200,8 +240,8 @@ export class CouponService {
      * 获取我的优惠券列表
      * GET /v1/vouchers/me
      */
-    static async getMyCoupons(params: MyCouponParams): Promise<{ coupons: UserCoupon[], total: number }> {
-        const res = await request<{ vouchers: BackendUserVoucher[], total?: number, total_count?: number }>({
+    static async getMyCoupons(params: MyCouponParams): Promise<UserCouponListResult> {
+        const res = await request<VoucherListResponse<BackendUserVoucher>>({
             url: '/v1/vouchers/me',
             method: 'GET',
             data: params
@@ -209,11 +249,8 @@ export class CouponService {
 
         const vouchers = Array.isArray(res?.vouchers) ? res.vouchers : []
         const coupons = vouchers.map(normalizeUserVoucher)
-        const total = typeof res?.total === 'number'
-            ? res.total
-            : (typeof res?.total_count === 'number' ? res.total_count : coupons.length)
 
-        return { coupons, total }
+        return buildCouponListResult(coupons, res, params)
     }
 }
 

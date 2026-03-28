@@ -77,29 +77,25 @@ export interface LocationUpdateResponse {
 
 // ==================== 积分管理相关类型 ====================
 
-/** 骑手积分响应 */
+/** 高值单资格积分响应 */
 export interface RiderScoreResponse {
     rider_id: number
-    current_score: number
-    can_take_high_value_orders: boolean
-    score_level: string
-    next_level_threshold?: number
-    score_rules: {
-        complete_normal_order: number
-        complete_high_value_order: number
-        timeout_penalty: number
-        damage_penalty: number
-    }
+    real_name: string
+    premium_score: number
+    can_accept_premium_order: boolean
 }
 
-/** 积分历史记录 */
+/** 高值单资格积分历史记录 */
 export interface ScoreHistoryItem {
     id: number
-    rider_id: number
-    order_id?: number
-    score_change: number
-    reason: string
-    description?: string
+    change_amount: number
+    old_score: number
+    new_score: number
+    change_type: string
+    change_type_name: string
+    related_order_id?: number
+    related_delivery_id?: number
+    remark?: string
     created_at: string
 }
 
@@ -185,11 +181,11 @@ export class RiderBasicManagementService {
      * @param params 查询参数
      */
     async getScoreHistory(params: ScoreHistoryParams): Promise<{
-        history: ScoreHistoryItem[]
+        current_score: number
         total: number
         page_id: number
         page_size: number
-        has_more: boolean
+        logs: ScoreHistoryItem[]
     }> {
         return request({
             url: '/v1/rider/score/history',
@@ -346,20 +342,26 @@ export class RiderBasicManagementAdapter {
      */
     static adaptScoreHistoryItem(data: ScoreHistoryItem): {
         id: number
-        riderId: number
-        orderId?: number
-        scoreChange: number
-        reason: string
-        description?: string
+        changeAmount: number
+        oldScore: number
+        newScore: number
+        changeType: string
+        changeTypeName: string
+        relatedOrderId?: number
+        relatedDeliveryId?: number
+        remark?: string
         createdAt: string
     } {
         return {
             id: data.id,
-            riderId: data.rider_id,
-            orderId: data.order_id,
-            scoreChange: data.score_change,
-            reason: data.reason,
-            description: data.description,
+            changeAmount: data.change_amount,
+            oldScore: data.old_score,
+            newScore: data.new_score,
+            changeType: data.change_type,
+            changeTypeName: data.change_type_name,
+            relatedOrderId: data.related_order_id,
+            relatedDeliveryId: data.related_delivery_id,
+            remark: data.remark,
             createdAt: data.created_at
         }
     }

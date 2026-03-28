@@ -57,10 +57,10 @@ function getFileSHA256AndSize(
 
     type WxWithFileInfo = WechatMiniprogram.Wx & {
       getFileInfo: (opts: {
-        filePath: string,
-        digestAlgorithm: string,
-        success: (res: { digest: string }) => void,
-        fail: () => void,
+        filePath: string
+        digestAlgorithm: string
+        success: (res: { digest: string }) => void
+        fail: () => void
       }) => void
     }
     (wx as WxWithFileInfo).getFileInfo({

@@ -11,6 +11,12 @@
     </view>
   </view>
 
+  <view wx:elif="{{loadError}}" class="error-shell card">
+    <t-empty icon="error-circle" description="{{loadError}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetryLoad" shape="round">重新加载</t-button>
+    </t-empty>
+  </view>
+
   <!-- 2. 正常内容 -->
   <block wx:else>
     <!-- 收货地址 -->
@@ -183,6 +189,10 @@
   <!-- 汇总 -->
   <view class="cost-section summary card">
     <view class="section-title">费用合计</view>
+    <view wx:if="{{pricingError}}" class="pricing-error-box">
+      <text class="pricing-error-text">{{pricingError}}</text>
+      <t-button size="small" theme="primary" variant="outline" shape="round" bindtap="onRetryPricing">重新计算</t-button>
+    </view>
     <view class="cost-row">
       <text class="cost-label">商品总额</text>
       <text class="cost-value">¥{{summarySubtotalDisplay}}</text>
@@ -211,6 +221,7 @@
     shape="round"
     size="large"
     loading="{{loading}}"
+    disabled="{{!!loadError || !!pricingError || !(address && address.id) || !(carts && carts.length)}}"
     bindtap="onSubmitOrder"
   >
     去支付

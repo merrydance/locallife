@@ -398,6 +398,7 @@ type dishResponse struct {
 	CategoryName        *string              `json:"category_name,omitempty"`
 	Name                string               `json:"name"`
 	Description         string               `json:"description"`
+	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
 	ImageURL            string               `json:"image_url,omitempty"`
 	Price               int64                `json:"price"`
 	OriginalPrice       int64                `json:"original_price"`
@@ -599,6 +600,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 		CategoryID:          toPtrInt64(txResult.Dish.CategoryID),
 		Name:                txResult.Dish.Name,
 		Description:         txResult.Dish.Description.String,
+		ImageAssetID:        assetID,
 		ImageURL:            server.publicImageURL(ctx, assetID, media.VariantCard),
 		Price:               txResult.Dish.Price,
 		OriginalPrice:       txResult.Dish.Price,
@@ -743,6 +745,7 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 			CategoryID:    toPtrInt64(dish.CategoryID),
 			Name:          dish.Name,
 			Description:   dish.Description.String,
+			ImageAssetID:  assetID,
 			ImageURL:      imgURL,
 			Price:         dish.Price,
 			OriginalPrice: dish.Price,
@@ -857,6 +860,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 		CategoryName:        toPtrString(dish.CategoryName),
 		Name:                dish.Name,
 		Description:         dish.Description.String,
+		ImageAssetID:        dishAssetID,
 		ImageURL:            server.publicImageURL(ctx, dishAssetID, media.VariantDetail),
 		Price:               dish.Price,
 		OriginalPrice:       dish.Price,
@@ -1157,19 +1161,20 @@ func (server *Server) updateDish(ctx *gin.Context) {
 
 	updatedAssetID := int64PtrFromPgInt8(txResult.Dish.ImageMediaAssetID)
 	ctx.JSON(http.StatusOK, dishResponse{
-		ID:          txResult.Dish.ID,
-		MerchantID:  txResult.Dish.MerchantID,
-		CategoryID:  toPtrInt64(txResult.Dish.CategoryID),
-		Name:        txResult.Dish.Name,
-		Description: txResult.Dish.Description.String,
-		ImageURL:    server.publicImageURL(ctx, updatedAssetID, media.VariantCard),
-		Price:       txResult.Dish.Price,
-		MemberPrice: toPtrInt64(txResult.Dish.MemberPrice),
-		IsAvailable: txResult.Dish.IsAvailable,
-		IsOnline:    txResult.Dish.IsOnline,
-		SortOrder:   txResult.Dish.SortOrder,
-		PrepareTime: txResult.Dish.PrepareTime,
-		Tags:        tags,
+		ID:           txResult.Dish.ID,
+		MerchantID:   txResult.Dish.MerchantID,
+		CategoryID:   toPtrInt64(txResult.Dish.CategoryID),
+		Name:         txResult.Dish.Name,
+		Description:  txResult.Dish.Description.String,
+		ImageAssetID: updatedAssetID,
+		ImageURL:     server.publicImageURL(ctx, updatedAssetID, media.VariantCard),
+		Price:        txResult.Dish.Price,
+		MemberPrice:  toPtrInt64(txResult.Dish.MemberPrice),
+		IsAvailable:  txResult.Dish.IsAvailable,
+		IsOnline:     txResult.Dish.IsOnline,
+		SortOrder:    txResult.Dish.SortOrder,
+		PrepareTime:  txResult.Dish.PrepareTime,
+		Tags:         tags,
 	})
 
 	server.writeAuditLog(ctx, AuditLogInput{

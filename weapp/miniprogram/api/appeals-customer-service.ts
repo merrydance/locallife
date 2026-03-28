@@ -64,6 +64,40 @@ export interface AppealResponse {
     user_phone?: string
 }
 
+export interface OperatorAppealDetailResponse extends AppealResponse {
+    claim_type?: ClaimType
+    claim_description?: string
+    claim_status?: ClaimStatus
+    claim_created_at?: string
+    claim_approved_amount?: number
+    lookback_result?: Record<string, unknown>
+    order_no?: string
+    order_amount?: number
+    order_status?: string
+    order_created_at?: string
+    merchant_id?: number
+    merchant_name?: string
+    merchant_phone?: string
+    user_name?: string
+    rider_id?: number
+    evidence_files?: string[]
+    related_order?: {
+        id?: number
+        order_number?: string
+        merchant_name?: string
+        rider_name?: string
+        order_amount?: number
+        status?: string
+        created_at?: string
+    }
+    timeline?: Array<{
+        action?: string
+        operator?: string
+        timestamp?: string
+        notes?: string
+    }>
+}
+
 /** 创建申诉请求 */
 export interface CreateAppealRequest extends Record<string, unknown> {
     claim_id: number
@@ -655,7 +689,7 @@ export class OperatorAppealReviewService {
      * 获取申诉详情
      * @param appealId 申诉ID
      */
-    async getAppealDetailForReview(appealId: number): Promise<AppealResponse> {
+    async getAppealDetailForReview(appealId: number): Promise<OperatorAppealDetailResponse> {
         return request({
             url: `/v1/operator/appeals/${appealId}`,
             method: 'GET'

@@ -1,5 +1,7 @@
 import { request } from '../utils/request'
 
+export type RiderExceptionType = 'customer_unreachable' | 'merchant_not_ready' | 'weather_issue' | 'road_blocked' | 'other'
+
 export interface RiderInfo {
     id: number
     user_id: number
@@ -27,6 +29,52 @@ export interface RiderStatus {
     online_block_reason?: string
 }
 
+export interface RiderDepositBalance {
+    total_deposit: number
+    frozen_deposit: number
+    available_deposit: number
+}
+
+export interface RiderDepositRecord {
+    id: number
+    rider_id: number
+    amount: number
+    type: string
+    balance_after: number
+    remark?: string
+    created_at: string
+}
+
+export interface RiderDepositListResponse {
+    deposits: RiderDepositRecord[]
+    total: number
+    page_id: number
+    page_size: number
+}
+
+export interface RiderDepositPayResponse {
+    payment_order_id?: number
+    out_trade_no?: string
+    amount?: number
+    expires_at?: string
+    pay_params?: WechatMiniprogram.RequestPaymentOption
+}
+
+export interface RiderWithdrawRefundItem {
+    refund_order_id: number
+    payment_order_id: number
+    out_refund_no: string
+    amount: number
+    status: string
+}
+
+export interface RiderWithdrawResponse {
+    status: string
+    requested_amount: number
+    accepted_amount: number
+    refunds: RiderWithdrawRefundItem[]
+}
+
 export class RiderService {
     static async getMe(): Promise<RiderInfo> {
         return await request({ url: '/v1/rider/me', method: 'GET' })
@@ -44,11 +92,40 @@ export class RiderService {
         return await request({ url: '/v1/rider/offline', method: 'POST' })
     }
 
+    static async getDepositBalance(): Promise<RiderDepositBalance> {
+        return await request({ url: '/v1/rider/deposit', method: 'GET' })
+    }
+
+    static async listDepositRecords(params: { page: number, limit: number }): Promise<RiderDepositListResponse> {
+        return await request({
+            url: '/v1/rider/deposits',
+            method: 'GET',
+            data: params
+        })
+    }
+
+    static async rechargeDeposit(data: { amount: number, remark?: string }): Promise<RiderDepositPayResponse> {
+        return await request({
+            url: '/v1/rider/deposit',
+            method: 'POST',
+            data
+        })
+    }
+
+    static async withdrawDeposit(data: { amount: number, remark?: string }): Promise<RiderWithdrawResponse> {
+        return await request({
+            url: '/v1/rider/withdraw',
+            method: 'POST',
+            data
+        })
+    }
+
     static async updateLocation(locations: Array<{
         longitude: number
         latitude: number
         recorded_at: string
         delivery_id?: number
+        source?: string
     }>): Promise<unknown> {
         return await request({
             url: '/v1/rider/location',
@@ -68,7 +145,7 @@ export class RiderService {
      * 上报异常
      */
     static async reportException(orderId: number, data: {
-        exception_type: string
+        exception_type: RiderExceptionType
         description: string
     }): Promise<unknown> {
         return await request({

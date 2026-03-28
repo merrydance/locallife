@@ -59,6 +59,17 @@ export interface RiderLocationResponse {
     updated_at: string                           // 更新时间
 }
 
+export interface RiderLocationReportInput {
+    latitude: number                             // 纬度
+    longitude: number                            // 经度
+    deliveryId?: number                          // 配送单ID
+    accuracy?: number                            // 定位精度（米）
+    speed?: number                               // 速度（m/s）
+    heading?: number                             // 航向角（度）
+    recordedAt?: string                          // 采样时间
+    source?: string                              // 上报来源
+}
+
 // ==================== 骑手信息数据类型定义 ====================
 
 /**
@@ -338,14 +349,24 @@ export class RiderInfoService {
      * 上报位置
      * POST /v1/rider/location
      */
-    static async reportLocation(data: {
-        latitude: number                           // 纬度
-        longitude: number                          // 经度
-    }): Promise<void> {
+    static async reportLocation(data: RiderLocationReportInput): Promise<void> {
         return await request({
             url: '/v1/rider/location',
             method: 'POST',
-            data
+            data: {
+                locations: [
+                    {
+                        latitude: data.latitude,
+                        longitude: data.longitude,
+                        delivery_id: data.deliveryId,
+                        accuracy: data.accuracy,
+                        speed: data.speed,
+                        heading: data.heading,
+                        recorded_at: data.recordedAt ?? new Date().toISOString(),
+                        source: data.source ?? 'weapp_rider_delivery_manage'
+                    }
+                ]
+            }
         })
     }
 

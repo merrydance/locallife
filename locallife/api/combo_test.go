@@ -194,6 +194,7 @@ func TestGetComboSetAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				const comboDishAssetID int64 = 31
 				// 首先获取商户信息
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
@@ -224,6 +225,24 @@ func TestGetComboSetAPI(t *testing.T) {
 					GetMerchant(gomock.Any(), combo.MerchantID).
 					Times(1).
 					Return(merchant, nil)
+
+				store.EXPECT().
+					GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+					Times(1).
+					Return([]db.GetComboMemberImagesByCombosRow{{
+						ComboID:           combo.ID,
+						ImageMediaAssetID: pgtype.Int8{Int64: comboDishAssetID, Valid: true},
+					}}, nil)
+
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{comboDishAssetID})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{{
+						ID:               comboDishAssetID,
+						ObjectKey:        "merchant/combo/31/member.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					}}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -233,6 +252,8 @@ func TestGetComboSetAPI(t *testing.T) {
 				require.Equal(t, combo.Name, response.Name)
 				require.Len(t, response.Dishes, 2)
 				require.Len(t, response.Tags, 1)
+				require.Len(t, response.DishImageURLs, 1)
+				require.Contains(t, response.DishImageURLs[0], "merchant/combo/31/member.jpg")
 			},
 		},
 		{
@@ -349,7 +370,7 @@ func TestGetComboSetAPI(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			server := newTestServer(t, store)
+			server, _ := newTestServerForMedia(t, store)
 			recorder := httptest.NewRecorder()
 
 			url := fmt.Sprintf("/v1/combos/%d", tc.comboID)
@@ -389,6 +410,7 @@ func TestListComboSetsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				const comboImageAssetID int64 = 41
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -410,13 +432,28 @@ func TestListComboSetsAPI(t *testing.T) {
 				store.EXPECT().
 					GetComboMemberImagesByCombos(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.GetComboMemberImagesByCombosRow{}, nil)
+					Return([]db.GetComboMemberImagesByCombosRow{{
+						ComboID:           combos[0].ID,
+						ImageMediaAssetID: pgtype.Int8{Int64: comboImageAssetID, Valid: true},
+					}}, nil)
+
+				store.EXPECT().
+					ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{comboImageAssetID})).
+					Times(1).
+					Return([]db.ListMediaAssetsByIDsRow{{
+						ID:               comboImageAssetID,
+						ObjectKey:        "merchant/combo/41/list.jpg",
+						Visibility:       "public",
+						ModerationStatus: "approved",
+					}}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response listComboSetsResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.ComboSets, n)
+				require.Len(t, response.ComboSets[0].DishImageURLs, 1)
+				require.Contains(t, response.ComboSets[0].DishImageURLs[0], "merchant/combo/41/list.jpg")
 			},
 		},
 		{
@@ -463,7 +500,7 @@ func TestListComboSetsAPI(t *testing.T) {
 			store := mockdb.NewMockStore(ctrl)
 			tc.buildStubs(store)
 
-			server := newTestServer(t, store)
+			server, _ := newTestServerForMedia(t, store)
 			recorder := httptest.NewRecorder()
 
 			url := "/v1/combos" + tc.query
@@ -520,9 +557,9 @@ func TestUpdateComboSetAPI(t *testing.T) {
 					Return(combo, nil)
 
 				store.EXPECT().
-					UpdateComboSet(gomock.Any(), gomock.Any()).
+					UpdateComboSetTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(updatedCombo, nil)
+					Return(db.UpdateComboSetTxResult{ComboSet: updatedCombo}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

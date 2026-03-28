@@ -48,10 +48,10 @@ flowchart TD
 
 ### M1 结构冻结
 
-- [ ] CARD-01 完成
-- [ ] CARD-02 完成
-- [ ] CARD-03 完成
-- [ ] CARD-04 完成
+- [x] CARD-01 完成
+- [x] CARD-02 完成
+- [x] CARD-03 完成
+- [x] CARD-04 完成
 
 目标：
 
@@ -59,8 +59,8 @@ flowchart TD
 
 ### M2 代码生成与双写
 
-- [ ] CARD-05 完成
-- [ ] CARD-06 完成
+- [x] CARD-05 完成
+- [x] CARD-06 完成
 
 目标：
 
@@ -68,7 +68,7 @@ flowchart TD
 
 ### M3 Phase 1 评审
 
-- [ ] CARD-07 完成
+- [x] CARD-07 完成
 
 目标：
 
@@ -76,10 +76,17 @@ flowchart TD
 
 ## 最低验证要求
 
-- [ ] migration 可执行
-- [ ] make sqlc 成功
-- [ ] tx_claim_behavior 相关测试或最小回归通过
-- [ ] 现有 claim 主链路未被破坏
+- [x] migration 已落库为新增 migration 文件
+- [x] make sqlc 成功
+- [x] tx_claim_behavior 相关最小回归通过
+- [x] 现有 claim 主链路最小测试未被破坏
+
+## 本轮验证结论
+
+1. `make sqlc` 和 `make mock` 成功。
+2. 相关文件级测试通过：risk_management、claim_auto_approval、tx_reservation。
+3. `go test ./db/sqlc -run '^$'` 编译通过，`go test ./db/sqlc -run 'TestMarkNoShowTx_Success'` 通过。
+4. `go test ./db/sqlc` 全包仍存在与本次改动无关的既有失败，未在本轮扩 scope 修复。
 
 ## 风险备注
 

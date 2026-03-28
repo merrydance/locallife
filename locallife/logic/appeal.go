@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
@@ -34,6 +35,7 @@ type CreateRiderAppealResult struct {
 
 type ListMerchantAppealsInput struct {
 	MerchantID int64
+	Status     string
 	Limit      int32
 	Offset     int32
 }
@@ -126,14 +128,24 @@ func ListMerchantAppeals(ctx context.Context, store db.Store, input ListMerchant
 
 	appeals, err := store.ListMerchantAppealsForMerchant(ctx, db.ListMerchantAppealsForMerchantParams{
 		AppellantID: input.MerchantID,
-		Limit:       input.Limit,
-		Offset:      input.Offset,
+		Status: pgtype.Text{
+			String: input.Status,
+			Valid:  input.Status != "",
+		},
+		Limit:  input.Limit,
+		Offset: input.Offset,
 	})
 	if err != nil {
 		return result, err
 	}
 
-	total, err := store.CountMerchantAppealsForMerchant(ctx, input.MerchantID)
+	total, err := store.CountMerchantAppealsForMerchant(ctx, db.CountMerchantAppealsForMerchantParams{
+		AppellantID: input.MerchantID,
+		Status: pgtype.Text{
+			String: input.Status,
+			Valid:  input.Status != "",
+		},
+	})
 	if err != nil {
 		total = int64(len(appeals))
 	}

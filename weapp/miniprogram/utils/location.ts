@@ -29,10 +29,23 @@ interface GlobalLocationData {
     district?: string
 }
 
+export interface OpenLocationOptions {
+    latitude?: number | null
+    longitude?: number | null
+    name?: string
+    address?: string
+    scale?: number
+    failMessage?: string
+}
+
 /**
  * 位置服务类
  */
 class LocationService {
+    private hasValidCoordinates(latitude?: number | null, longitude?: number | null): boolean {
+        return Number.isFinite(latitude) && Number.isFinite(longitude)
+    }
+
     /**
      * 获取当前位置（经纬度）
      */
@@ -131,6 +144,46 @@ class LocationService {
                 fail: (err) => {
                     logger.warn('用户取消选择位置', err, 'LocationService.chooseLocation')
                     resolve(null)
+                }
+            })
+        })
+    }
+
+    async openLocation(options: OpenLocationOptions): Promise<boolean> {
+        const {
+            latitude,
+            longitude,
+            name,
+            address,
+            scale = 18,
+            failMessage = '暂时无法打开导航，请稍后重试'
+        } = options
+
+        if (!this.hasValidCoordinates(latitude, longitude)) {
+            wx.showToast({ title: '当前缺少可导航坐标', icon: 'none' })
+            return false
+        }
+
+        return new Promise((resolve) => {
+            wx.openLocation({
+                latitude: Number(latitude),
+                longitude: Number(longitude),
+                name: name || address || '目的地',
+                address: address || name || '目的地',
+                scale,
+                fail: (err) => {
+                    logger.warn('打开位置失败', err, 'LocationService.openLocation')
+                    wx.showToast({ title: failMessage, icon: 'none' })
+                    resolve(false)
+                },
+                success: () => {
+                    logger.info('打开位置成功', {
+                        latitude,
+                        longitude,
+                        name,
+                        address
+                    }, 'LocationService.openLocation')
+                    resolve(true)
                 }
             })
         })

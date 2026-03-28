@@ -6,7 +6,13 @@
 import { request } from '../utils/request'
 import { logger } from '../utils/logger'
 import type { DishSummary } from './dish'
-import type { MerchantSummary } from './merchant'
+import {
+    getRecommendedMerchantsWithMeta as getRecommendedMerchantsWithMetaFromMerchant,
+    searchMerchantsWithMeta as searchMerchantsWithMetaFromMerchant,
+    type MerchantSummary,
+    type MerchantSummaryListResult
+} from './merchant'
+import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnvelope } from './types'
 
 // ==================== 数据类型定义 ====================
 
@@ -26,6 +32,7 @@ export interface RecommendMerchantsParams extends Record<string, unknown> {
     user_latitude?: number
     user_longitude?: number
     limit?: number
+    page?: number
 }
 
 /** 搜索包间参数 - 对齐后端 searchRoomsRequest */
@@ -112,6 +119,10 @@ interface SearchRoomsResponse {
     total?: number
 }
 
+export interface RoomSearchListResult extends PaginatedListResult<RoomSearchResult> {
+    rooms: RoomSearchResult[]
+}
+
 interface SearchDishesResponse {
     dishes: DishSummary[]
     total?: number
@@ -162,6 +173,10 @@ export async function searchMerchants(params: SearchMerchantsParams): Promise<Me
     return Array.isArray(res) ? res : (res.merchants || []) // Fallback if API changes
 }
 
+export async function searchMerchantsWithMeta(params: SearchMerchantsParams): Promise<MerchantSummaryListResult> {
+    return searchMerchantsWithMetaFromMerchant(params)
+}
+
 /**
  * 获取推荐商户
  * @param params 推荐参数
@@ -177,6 +192,16 @@ export async function getRecommendedMerchants(params: RecommendMerchantsParams =
         page_size: pageSize
     })
     return res
+}
+
+export async function getRecommendedMerchantsWithMeta(params: RecommendMerchantsParams = {}): Promise<MerchantSummaryListResult> {
+    return getRecommendedMerchantsWithMetaFromMerchant({
+        region_id: params.region_id,
+        user_latitude: params.user_latitude,
+        user_longitude: params.user_longitude,
+        limit: params.limit,
+        page: params.page
+    })
 }
 
 /**
@@ -213,12 +238,26 @@ export async function getRecommendedRooms(params: RecommendRoomsParams): Promise
  * @param params 搜索参数
  */
 export async function searchRooms(params: SearchRoomsParams): Promise<RoomSearchResult[]> {
+    const result = await searchRoomsWithMeta(params)
+    return result.rooms
+}
+
+export async function searchRoomsWithMeta(params: SearchRoomsParams): Promise<RoomSearchListResult> {
     const res = await request<SearchRoomsResponse | RoomSearchResult[]>({
         url: '/v1/search/rooms',
         method: 'GET',
         data: cleanParams(params)
     })
-    return Array.isArray(res) ? res : (res.rooms || [])
+    const rooms = Array.isArray(res) ? res : (res.rooms || [])
+    const normalized = normalizePaginatedResult(rooms, Array.isArray(res) ? null : (res as PaginationEnvelope), {
+        page: params.page_id,
+        pageSize: params.page_size
+    })
+
+    return {
+        ...normalized,
+        rooms
+    }
 }
 
 /**

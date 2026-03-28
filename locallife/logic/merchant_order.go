@@ -21,6 +21,7 @@ type MerchantOrderUpdateInput struct {
 type MerchantOrderUpdateResult struct {
 	Order    db.Order
 	Previous db.Order
+	PoolItem *db.DeliveryPool
 }
 
 // AcceptMerchantOrder validates and accepts a paid order.
@@ -44,6 +45,20 @@ func AcceptMerchantOrder(ctx context.Context, store db.Store, input MerchantOrde
 	}
 	if order.Status != db.OrderStatusPaid {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only paid orders can be accepted"))
+	}
+
+	if order.OrderType == db.OrderTypeTakeout {
+		result, err := store.AcceptTakeoutOrderTx(ctx, db.AcceptTakeoutOrderTxParams{
+			OrderID:      input.OrderID,
+			OldStatus:    order.Status,
+			OperatorID:   input.OperatorID,
+			OperatorType: "merchant",
+		})
+		if err != nil {
+			return MerchantOrderUpdateResult{}, err
+		}
+
+		return MerchantOrderUpdateResult{Order: result.Order, Previous: order}, nil
 	}
 
 	fulfillment := db.FulfillmentStatusPreparing
@@ -111,6 +126,20 @@ func MarkMerchantOrderReady(ctx context.Context, store db.Store, input MerchantO
 	}
 	if order.Status != db.OrderStatusPreparing {
 		return MerchantOrderUpdateResult{}, NewRequestError(http.StatusBadRequest, errors.New("only preparing orders can be marked as ready"))
+	}
+
+	if order.OrderType == db.OrderTypeTakeout {
+		result, err := store.MarkTakeoutOrderReadyTx(ctx, db.MarkTakeoutOrderReadyTxParams{
+			OrderID:      input.OrderID,
+			OldStatus:    order.Status,
+			OperatorID:   input.OperatorID,
+			OperatorType: "merchant",
+		})
+		if err != nil {
+			return MerchantOrderUpdateResult{}, err
+		}
+
+		return MerchantOrderUpdateResult{Order: result.Order, Previous: order, PoolItem: &result.PoolItem}, nil
 	}
 
 	fulfillment := db.FulfillmentStatusReady

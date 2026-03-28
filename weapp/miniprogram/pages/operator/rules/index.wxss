@@ -226,6 +226,12 @@
   margin-top: 2rpx;
 }
 
+.input-error {
+  margin-top: 12rpx;
+  font-size: 22rpx;
+  color: #FA5151;
+}
+
 .animate-fade-in {
   animation: fadeIn 0.4s ease-out forwards;
 }

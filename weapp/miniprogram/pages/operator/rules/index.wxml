@@ -89,6 +89,7 @@
           bind:change="onValueChange"
           bind:input="onValueChange"
         />
+        <view wx:if="{{valueError}}" class="input-error">{{valueError}}</view>
       </view>
       <view class="warning-tip">
         <t-icon name="error-circle" size="28rpx" />

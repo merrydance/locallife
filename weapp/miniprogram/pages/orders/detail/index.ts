@@ -190,8 +190,7 @@ Page({
   onEnterMerchant(e: WechatMiniprogram.BaseEvent) {
      const merchantId = e.currentTarget.dataset.id
      if (!merchantId) return
-     // 假设外卖商家详情页
-     wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${merchantId}` })
+      Navigation.toRestaurantDetail(merchantId)
   },
 
   // 联系商家
@@ -272,7 +271,10 @@ Page({
     }
 
     if (orderType === 'reservation') {
-        wx.navigateTo({ url: `/pages/reservation/create/index?merchantId=${order.merchantId}` })
+      Navigation.toReservationCreate({
+        merchantId: order.merchantId,
+        merchantName: order.merchantName || ''
+      })
         return
     }
 
@@ -303,7 +305,7 @@ Page({
 
       wx.showToast({ title: '已加入购物车', icon: 'success' })
       setTimeout(() => {
-        wx.navigateTo({ url: '/pages/takeout/cart/index' })
+        Navigation.toCart()
       }, 300)
     } catch (error) {
       logger.error('再次购买失败', error, 'Detail.onReorder')

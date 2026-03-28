@@ -70,7 +70,7 @@ Page({
             this.setData({
                 regions: reset ? newRegions : [...this.data.regions, ...newRegions],
                 page: this.data.page + 1,
-                hasMore: newRegions.length === this.data.pageSize,
+                hasMore: Boolean(res.has_more),
                 initialLoading: false,
                 loadingMore: false
             })
@@ -104,12 +104,13 @@ Page({
             return
         }
 
+        const regionName = name ? encodeURIComponent(name) : ''
         wx.navigateTo({
-            url: `/pages/operator/region/config?id=${id}`
+            url: `/pages/operator/region/config?id=${id}&region_name=${regionName}`
         })
     },
 
     onAddRegion() {
-        wx.showToast({ title: '添加功能暂未开放', icon: 'none' })
+        wx.navigateTo({ url: '/pages/operator/region-expansion/index' })
     }
 })

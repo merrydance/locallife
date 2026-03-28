@@ -107,6 +107,99 @@ func TestGetDeliveryForOrderOwner(t *testing.T) {
 	}
 }
 
+func TestGetDeliveryForViewerByOrder(t *testing.T) {
+	userID := int64(10)
+	orderID := int64(20)
+	riderID := int64(30)
+
+	testCases := []struct {
+		name       string
+		input      DeliveryOrderViewerInput
+		buildStubs func(store *mockdb.MockStore)
+		check      func(t *testing.T, delivery db.Delivery, err error)
+	}{
+		{
+			name:  "OwnerSuccess",
+			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单配送信息"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), orderID).
+					Times(1).
+					Return(db.Order{ID: orderID, UserID: userID}, nil)
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), orderID).
+					Times(1).
+					Return(db.Delivery{ID: 77, OrderID: orderID}, nil)
+			},
+			check: func(t *testing.T, delivery db.Delivery, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int64(77), delivery.ID)
+			},
+		},
+		{
+			name:  "AssignedRiderSuccess",
+			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单配送信息"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), orderID).
+					Times(1).
+					Return(db.Order{ID: orderID, UserID: userID + 1}, nil)
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), orderID).
+					Times(1).
+					Return(db.Delivery{ID: 88, OrderID: orderID, RiderID: pgtype.Int8{Int64: riderID, Valid: true}}, nil)
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), userID).
+					Times(1).
+					Return(db.Rider{ID: riderID, UserID: userID}, nil)
+			},
+			check: func(t *testing.T, delivery db.Delivery, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int64(88), delivery.ID)
+			},
+		},
+		{
+			name:  "ForbiddenForOtherUser",
+			input: DeliveryOrderViewerInput{UserID: userID, OrderID: orderID, ForbiddenMessage: "无权查看此订单配送信息"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetOrder(gomock.Any(), orderID).
+					Times(1).
+					Return(db.Order{ID: orderID, UserID: userID + 1}, nil)
+				store.EXPECT().
+					GetDeliveryByOrderID(gomock.Any(), orderID).
+					Times(1).
+					Return(db.Delivery{ID: 99, OrderID: orderID, RiderID: pgtype.Int8{Int64: riderID, Valid: true}}, nil)
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), userID).
+					Times(1).
+					Return(db.Rider{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ db.Delivery, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 403, reqErr.Status)
+				require.Equal(t, "无权查看此订单配送信息", reqErr.Err.Error())
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			if tc.buildStubs != nil {
+				tc.buildStubs(store)
+			}
+
+			delivery, err := GetDeliveryForViewerByOrder(context.Background(), store, tc.input)
+			tc.check(t, delivery, err)
+		})
+	}
+}
+
 func TestValidateDeliveryViewer(t *testing.T) {
 	userID := int64(10)
 	deliveryID := int64(20)
@@ -164,6 +257,10 @@ func TestValidateDeliveryViewer(t *testing.T) {
 					GetOrder(gomock.Any(), orderID).
 					Times(1).
 					Return(db.Order{ID: orderID, UserID: userID + 1}, nil)
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), userID).
+					Times(1).
+					Return(db.Rider{}, db.ErrRecordNotFound)
 			},
 			check: func(t *testing.T, _ DeliveryViewerResult, err error) {
 				reqErr := assertRequestError(t, err)
@@ -197,11 +294,15 @@ func TestValidateDeliveryViewer(t *testing.T) {
 				store.EXPECT().
 					GetDelivery(gomock.Any(), deliveryID).
 					Times(1).
-					Return(db.Delivery{ID: deliveryID, OrderID: orderID, RiderID: pgtype.Int8{Int64: userID, Valid: true}}, nil)
+					Return(db.Delivery{ID: deliveryID, OrderID: orderID, RiderID: pgtype.Int8{Int64: 88, Valid: true}}, nil)
 				store.EXPECT().
 					GetOrder(gomock.Any(), orderID).
 					Times(1).
 					Return(db.Order{ID: orderID, UserID: userID + 1}, nil)
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), userID).
+					Times(1).
+					Return(db.Rider{ID: 88, UserID: userID}, nil)
 			},
 			check: func(t *testing.T, result DeliveryViewerResult, err error) {
 				require.NoError(t, err)

@@ -106,6 +106,20 @@
   margin-bottom: 8rpx;
 }
 
+.action-group {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+  margin-left: 16rpx;
+}
+
+.icon-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rpx;
+}
+
 .title-row .name {
   font-size: var(--font-size-heading);
   font-weight: bold;
@@ -118,6 +132,11 @@
 .contact-sub {
   font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
+}
+
+.address-text {
+  display: block;
+  line-height: 1.5;
 }
 
 .contact-sub .phone {

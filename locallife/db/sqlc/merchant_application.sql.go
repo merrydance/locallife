@@ -431,31 +431,43 @@ SET
   merchant_name = COALESCE($2, merchant_name),
   contact_phone = COALESCE($3, contact_phone),
   business_address = COALESCE($4, business_address),
-  longitude = COALESCE($5, longitude),
-  latitude = COALESCE($6, latitude),
-  region_id = COALESCE($7, region_id),
+  business_license_number = COALESCE($5, business_license_number),
+  business_scope = COALESCE($6, business_scope),
+  legal_person_name = COALESCE($7, legal_person_name),
+  legal_person_id_number = COALESCE($8, legal_person_id_number),
+  longitude = COALESCE($9, longitude),
+  latitude = COALESCE($10, latitude),
+  region_id = COALESCE($11, region_id),
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
 `
 
 type UpdateMerchantApplicationBasicInfoParams struct {
-	ID              int64          `json:"id"`
-	MerchantName    pgtype.Text    `json:"merchant_name"`
-	ContactPhone    pgtype.Text    `json:"contact_phone"`
-	BusinessAddress pgtype.Text    `json:"business_address"`
-	Longitude       pgtype.Numeric `json:"longitude"`
-	Latitude        pgtype.Numeric `json:"latitude"`
-	RegionID        pgtype.Int8    `json:"region_id"`
+	ID                    int64          `json:"id"`
+	MerchantName          pgtype.Text    `json:"merchant_name"`
+	ContactPhone          pgtype.Text    `json:"contact_phone"`
+	BusinessAddress       pgtype.Text    `json:"business_address"`
+	BusinessLicenseNumber pgtype.Text    `json:"business_license_number"`
+	BusinessScope         pgtype.Text    `json:"business_scope"`
+	LegalPersonName       pgtype.Text    `json:"legal_person_name"`
+	LegalPersonIDNumber   pgtype.Text    `json:"legal_person_id_number"`
+	Longitude             pgtype.Numeric `json:"longitude"`
+	Latitude              pgtype.Numeric `json:"latitude"`
+	RegionID              pgtype.Int8    `json:"region_id"`
 }
 
-// 更新基础信息（商户名、联系电话、地址、经纬度、区域）
+// 更新基础信息（商户名、联系电话、地址、经纬度、区域、人工修正字段）
 func (q *Queries) UpdateMerchantApplicationBasicInfo(ctx context.Context, arg UpdateMerchantApplicationBasicInfoParams) (MerchantApplication, error) {
 	row := q.db.QueryRow(ctx, updateMerchantApplicationBasicInfo,
 		arg.ID,
 		arg.MerchantName,
 		arg.ContactPhone,
 		arg.BusinessAddress,
+		arg.BusinessLicenseNumber,
+		arg.BusinessScope,
+		arg.LegalPersonName,
+		arg.LegalPersonIDNumber,
 		arg.Longitude,
 		arg.Latitude,
 		arg.RegionID,

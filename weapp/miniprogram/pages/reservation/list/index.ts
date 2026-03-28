@@ -125,10 +125,8 @@ Page({
     },
 
     onToCreate() {
-        // For demo, list 10 dummy merchants or assume global merchant selection
-        // In real app, this might go to merchant list or take a specific merchant ID
-        wx.navigateTo({
-            url: '/pages/merchant/list/index?action=reservation' // Assuming this exists or just go to home
+        wx.switchTab({
+            url: '/pages/reservation/index'
         })
     }
 })

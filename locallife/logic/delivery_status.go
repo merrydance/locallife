@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
@@ -22,6 +23,7 @@ type ConfirmDeliveryInput struct {
 	UserID              int64
 	DeliveryID          int64
 	ConfirmRadiusMeters int
+	LocationMaxAgeSec   int
 }
 
 // DeliveryStatusResult returns updated delivery data and related entities.
@@ -30,6 +32,73 @@ type DeliveryStatusResult struct {
 	Order          db.Order
 	Rider          db.Rider
 	PreviousStatus string
+}
+
+func validateDeliveryConfirmRadius(rider db.Rider, delivery db.Delivery, confirmRadiusMeters int, locationMaxAgeSec int) error {
+	riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
+	riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
+	if !riderLngOk || !riderLatOk {
+		return &DeliveryConfirmValidationError{
+			Reason:       "rider_location_missing",
+			RadiusMeters: confirmRadiusMeters,
+			Message:      "骑手定位缺失，无法确认送达，请先刷新定位",
+		}
+	}
+
+	if locationMaxAgeSec > 0 {
+		if !rider.LocationUpdatedAt.Valid {
+			return &DeliveryConfirmValidationError{
+				Reason:    "rider_location_stale",
+				MaxAgeSec: locationMaxAgeSec,
+				Message:   "骑手定位已过期，无法确认送达，请刷新定位后重试",
+			}
+		}
+
+		locationAgeSec := int(time.Since(rider.LocationUpdatedAt.Time).Seconds())
+		if locationAgeSec < 0 {
+			locationAgeSec = 0
+		}
+		if locationAgeSec > locationMaxAgeSec {
+			return &DeliveryConfirmValidationError{
+				Reason:         "rider_location_stale",
+				LocationAgeSec: locationAgeSec,
+				MaxAgeSec:      locationMaxAgeSec,
+				Message:        "骑手定位已过期，无法确认送达，请刷新定位后重试",
+			}
+		}
+	}
+
+	if confirmRadiusMeters <= 0 {
+		return nil
+	}
+
+	deliveryLng, deliveryLngOk := floatFromNumeric(delivery.DeliveryLongitude)
+	deliveryLat, deliveryLatOk := floatFromNumeric(delivery.DeliveryLatitude)
+	if !deliveryLngOk || !deliveryLatOk {
+		return &DeliveryConfirmValidationError{
+			Reason:       "dropoff_location_missing",
+			RadiusMeters: confirmRadiusMeters,
+			Message:      "收货位置缺失，无法确认送达，请联系平台处理",
+		}
+	}
+
+	riderLoc := algorithm.Location{Longitude: riderLng, Latitude: riderLat}
+	deliveryLoc := algorithm.Location{Longitude: deliveryLng, Latitude: deliveryLat}
+	distance := algorithm.HaversineDistance(riderLoc, deliveryLoc)
+	if distance > confirmRadiusMeters {
+		return &DeliveryConfirmValidationError{
+			Reason:         "distance_too_far",
+			DistanceMeters: distance,
+			RadiusMeters:   confirmRadiusMeters,
+			Message: fmt.Sprintf(
+				"您距离配送地址%d米，请靠近后确认送达（需在%d米内）",
+				distance,
+				confirmRadiusMeters,
+			),
+		}
+	}
+
+	return nil
 }
 
 // StartPickup advances a delivery into picking status.
@@ -247,25 +316,8 @@ func ConfirmDelivery(ctx context.Context, store db.Store, input ConfirmDeliveryI
 		return result, NewRequestError(http.StatusBadRequest, fmt.Errorf("当前状态(%s)不允许确认送达", delivery.Status))
 	}
 
-	if input.ConfirmRadiusMeters > 0 {
-		riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
-		riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
-		deliveryLng, deliveryLngOk := floatFromNumeric(delivery.DeliveryLongitude)
-		deliveryLat, deliveryLatOk := floatFromNumeric(delivery.DeliveryLatitude)
-
-		if riderLngOk && riderLatOk && deliveryLngOk && deliveryLatOk {
-			riderLoc := algorithm.Location{Longitude: riderLng, Latitude: riderLat}
-			deliveryLoc := algorithm.Location{Longitude: deliveryLng, Latitude: deliveryLat}
-			distance := algorithm.HaversineDistance(riderLoc, deliveryLoc)
-
-			if distance > input.ConfirmRadiusMeters {
-				return result, NewRequestError(http.StatusBadRequest, fmt.Errorf(
-					"您距离配送地址%.0f米，请靠近后确认送达（需在%d米内）",
-					float64(distance),
-					input.ConfirmRadiusMeters,
-				))
-			}
-		}
+	if err := validateDeliveryConfirmRadius(rider, delivery, input.ConfirmRadiusMeters, input.LocationMaxAgeSec); err != nil {
+		return result, NewRequestError(http.StatusBadRequest, err)
 	}
 
 	order, err := store.GetOrder(ctx, delivery.OrderID)

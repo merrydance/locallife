@@ -14,6 +14,7 @@ const (
 	OrderStatusCompleted       = "completed"
 	OrderStatusCancelled       = "cancelled"
 
+	OrderTypeTakeout     = "takeout"
 	OrderTypeReservation = "reservation"
 
 	BehaviorDecisionModeMerchantRecovery = "merchant_recovery"

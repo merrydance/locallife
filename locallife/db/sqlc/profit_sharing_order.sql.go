@@ -823,6 +823,7 @@ WHERE
     po.status = 'paid' 
     AND po.payment_type = 'profit_sharing'
     AND o.status = 'completed'
+  AND o.order_type <> 'takeout'
     AND pso.id IS NULL
     AND o.updated_at > now() - INTERVAL '7 days'
 LIMIT $1

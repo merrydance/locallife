@@ -92,8 +92,7 @@ Page({
     onEnterMerchant() {
         const mid = this.data.reservation?.merchantId
         if (mid) {
-             // 假设商户详情页
-            wx.navigateTo({ url: `/pages/takeout/restaurant-detail/index?id=${mid}` })
+            Navigation.toRestaurantDetail(mid)
         }
     },
 
@@ -192,8 +191,9 @@ Page({
     onRebook() {
         const res = this.data.reservation
         if (!res) return
-        wx.navigateTo({
-            url: `/pages/reservation/create/index?merchantId=${res.merchantId}`
+        Navigation.toReservationCreate({
+            merchantId: res.merchantId,
+            merchantName: res.merchantName || ''
         })
     },
 

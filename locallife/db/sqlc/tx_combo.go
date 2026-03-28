@@ -32,6 +32,26 @@ type CreateComboSetTxResult struct {
 	Tags     []ComboTag
 }
 
+// UpdateComboSetTxParams contains input parameters for updating a combo set with dishes and tags.
+type UpdateComboSetTxParams struct {
+	ID                int64
+	Name              pgtype.Text
+	Description       pgtype.Text
+	ImageMediaAssetID pgtype.Int8
+	OriginalPrice     pgtype.Int8
+	ComboPrice        pgtype.Int8
+	IsOnline          pgtype.Bool
+	Dishes            *[]DishWithQuantity // nil means don't update, empty slice means clear all
+	TagIDs            *[]int64            // nil means don't update, empty slice means clear all
+}
+
+// UpdateComboSetTxResult contains the result of updating a combo set.
+type UpdateComboSetTxResult struct {
+	ComboSet ComboSet
+	Dishes   []ComboDish
+	Tags     []ComboTag
+}
+
 // CreateComboSetTx creates a combo set with its dish associations in a single transaction.
 // This ensures atomicity: if adding dishes fails, the combo set is rolled back.
 func (store *SQLStore) CreateComboSetTx(ctx context.Context, arg CreateComboSetTxParams) (CreateComboSetTxResult, error) {
@@ -82,6 +102,76 @@ func (store *SQLStore) CreateComboSetTx(ctx context.Context, arg CreateComboSetT
 				return fmt.Errorf("add combo tag %d: %w", tagID, err)
 			}
 			result.Tags = append(result.Tags, ct)
+		}
+
+		return nil
+	})
+
+	return result, err
+}
+
+// UpdateComboSetTx updates a combo set and its associations in a single transaction.
+func (store *SQLStore) UpdateComboSetTx(ctx context.Context, arg UpdateComboSetTxParams) (UpdateComboSetTxResult, error) {
+	var result UpdateComboSetTxResult
+
+	err := store.execTx(ctx, func(q *Queries) error {
+		var err error
+
+		result.ComboSet, err = q.UpdateComboSet(ctx, UpdateComboSetParams{
+			ID:                arg.ID,
+			Name:              arg.Name,
+			Description:       arg.Description,
+			ImageMediaAssetID: arg.ImageMediaAssetID,
+			OriginalPrice:     arg.OriginalPrice,
+			ComboPrice:        arg.ComboPrice,
+			IsOnline:          arg.IsOnline,
+		})
+		if err != nil {
+			return fmt.Errorf("update combo set: %w", err)
+		}
+
+		if arg.Dishes != nil {
+			err = q.RemoveAllComboDishes(ctx, arg.ID)
+			if err != nil {
+				return fmt.Errorf("delete combo dishes: %w", err)
+			}
+
+			result.Dishes = make([]ComboDish, 0, len(*arg.Dishes))
+			for _, dish := range *arg.Dishes {
+				qty := dish.Quantity
+				if qty <= 0 {
+					qty = 1
+				}
+
+				comboDish, err := q.AddComboDish(ctx, AddComboDishParams{
+					ComboID:  arg.ID,
+					DishID:   dish.DishID,
+					Quantity: int16(qty),
+				})
+				if err != nil {
+					return fmt.Errorf("add combo dish %d: %w", dish.DishID, err)
+				}
+				result.Dishes = append(result.Dishes, comboDish)
+			}
+		}
+
+		if arg.TagIDs != nil {
+			err = q.RemoveAllComboTags(ctx, arg.ID)
+			if err != nil {
+				return fmt.Errorf("delete combo tags: %w", err)
+			}
+
+			result.Tags = make([]ComboTag, 0, len(*arg.TagIDs))
+			for _, tagID := range *arg.TagIDs {
+				comboTag, err := q.AddComboTag(ctx, AddComboTagParams{
+					ComboID: arg.ID,
+					TagID:   tagID,
+				})
+				if err != nil {
+					return fmt.Errorf("add combo tag %d: %w", tagID, err)
+				}
+				result.Tags = append(result.Tags, comboTag)
+			}
 		}
 
 		return nil

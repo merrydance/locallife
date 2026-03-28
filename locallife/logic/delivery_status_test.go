@@ -4,6 +4,7 @@ import (
 	"context"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
@@ -141,8 +142,9 @@ func TestConfirmDelivery_DistanceTooFar(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	rider := db.Rider{ID: 10, UserID: 1,
-		CurrentLongitude: numericFromFloatStatus(120.0),
-		CurrentLatitude:  numericFromFloatStatus(30.0),
+		CurrentLongitude:  numericFromFloatStatus(120.0),
+		CurrentLatitude:   numericFromFloatStatus(30.0),
+		LocationUpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "delivering", RiderID: pgtype.Int8{Int64: 10, Valid: true},
 		DeliveryLongitude: numericFromFloatStatus(121.0),
@@ -158,9 +160,92 @@ func TestConfirmDelivery_DistanceTooFar(t *testing.T) {
 		Times(1).
 		Return(delivery, nil)
 
-	_, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 100})
+	_, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 100, LocationMaxAgeSec: 120})
 	reqErr := assertRequestError(t, err)
 	require.Equal(t, 400, reqErr.Status)
+}
+
+func TestConfirmDelivery_RiderLocationMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1}
+	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "delivering", RiderID: pgtype.Int8{Int64: 10, Valid: true},
+		DeliveryLongitude: numericFromFloatStatus(121.0),
+		DeliveryLatitude:  numericFromFloatStatus(31.0),
+	}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+
+	_, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 100, LocationMaxAgeSec: 120})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "骑手定位缺失，无法确认送达，请先刷新定位", reqErr.Err.Error())
+}
+
+func TestConfirmDelivery_DropoffLocationMissing(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1,
+		CurrentLongitude:  numericFromFloatStatus(120.0),
+		CurrentLatitude:   numericFromFloatStatus(30.0),
+		LocationUpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
+	}
+	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "delivering", RiderID: pgtype.Int8{Int64: 10, Valid: true}}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+
+	_, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 100, LocationMaxAgeSec: 120})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "收货位置缺失，无法确认送达，请联系平台处理", reqErr.Err.Error())
+}
+
+func TestConfirmDelivery_RiderLocationStale(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1,
+		CurrentLongitude:  numericFromFloatStatus(120.0),
+		CurrentLatitude:   numericFromFloatStatus(30.0),
+		LocationUpdatedAt: pgtype.Timestamptz{Time: time.Now().Add(-3 * time.Minute), Valid: true},
+	}
+	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "delivering", RiderID: pgtype.Int8{Int64: 10, Valid: true},
+		DeliveryLongitude: numericFromFloatStatus(120.0),
+		DeliveryLatitude:  numericFromFloatStatus(30.0),
+	}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+
+	_, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 100, LocationMaxAgeSec: 120})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "骑手定位已过期，无法确认送达，请刷新定位后重试", reqErr.Err.Error())
 }
 
 func TestConfirmDelivery_Success(t *testing.T) {
@@ -169,8 +254,9 @@ func TestConfirmDelivery_Success(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	rider := db.Rider{ID: 10, UserID: 1,
-		CurrentLongitude: numericFromFloatStatus(120.0),
-		CurrentLatitude:  numericFromFloatStatus(30.0),
+		CurrentLongitude:  numericFromFloatStatus(120.0),
+		CurrentLatitude:   numericFromFloatStatus(30.0),
+		LocationUpdatedAt: pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
 	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "delivering", RiderID: pgtype.Int8{Int64: 10, Valid: true},
 		DeliveryLongitude: numericFromFloatStatus(120.0),
@@ -200,7 +286,7 @@ func TestConfirmDelivery_Success(t *testing.T) {
 		Times(1).
 		Return(db.OrderStatusLog{}, nil)
 
-	result, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 1000})
+	result, err := ConfirmDelivery(context.Background(), store, ConfirmDeliveryInput{UserID: 1, DeliveryID: 2, ConfirmRadiusMeters: 1000, LocationMaxAgeSec: 120})
 	require.NoError(t, err)
 	require.Equal(t, "rider_delivered", result.Order.Status)
 }

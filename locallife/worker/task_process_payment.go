@@ -37,6 +37,15 @@ const (
 	AlertTypeOCRRetryExhausted   AlertType = "OCR_RETRY_EXHAUSTED"
 )
 
+const profitSharingEnqueueDedupWindow = 12 * time.Minute
+
+func withProfitSharingEnqueueDedup(opts ...asynq.Option) []asynq.Option {
+	merged := make([]asynq.Option, 0, len(opts)+1)
+	merged = append(merged, opts...)
+	merged = append(merged, asynq.Unique(profitSharingEnqueueDedupWindow))
+	return merged
+}
+
 // AlertLevel 告警级别
 type AlertLevel string
 
@@ -235,10 +244,10 @@ type RefundResultPayload struct {
 
 // ProfitSharingPayload 分账任务载荷
 type ProfitSharingPayload struct {
-	PaymentOrderID int64 `json:"payment_order_id"`
-	OrderID        int64 `json:"order_id,omitempty"`
-	ReservationID  int64 `json:"reservation_id,omitempty"`
-	RetryCount     int   `json:"retry_count,omitempty"`
+	PaymentOrderID int64  `json:"payment_order_id"`
+	OrderID        int64  `json:"order_id,omitempty"`
+	ReservationID  int64  `json:"reservation_id,omitempty"`
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 // ApplymentResultPayload 进件结果处理任务载荷
@@ -386,12 +395,13 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharing(
 	payload *ProfitSharingPayload,
 	opts ...asynq.Option,
 ) error {
-	jsonPayload, err := json.Marshal(payload)
+	normalizedPayload := normalizeProfitSharingPayload(payload)
+	jsonPayload, err := json.Marshal(normalizedPayload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
-	task := asynq.NewTask(TaskProcessProfitSharing, jsonPayload, opts...)
+	task := asynq.NewTask(TaskProcessProfitSharing, jsonPayload, withProfitSharingEnqueueDedup(opts...)...)
 	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
 		return fmt.Errorf("enqueue task: %w", err)
@@ -400,13 +410,14 @@ func (distributor *RedisTaskDistributor) DistributeTaskProcessProfitSharing(
 	event := log.Info().
 		Str("type", task.Type()).
 		Str("queue", info.Queue).
-		Int64("payment_order_id", payload.PaymentOrderID)
+		Int64("payment_order_id", normalizedPayload.PaymentOrderID).
+		Str("idempotency_key", normalizedPayload.IdempotencyKey)
 
-	if payload.OrderID > 0 {
-		event.Int64("order_id", payload.OrderID)
+	if normalizedPayload.OrderID > 0 {
+		event.Int64("order_id", normalizedPayload.OrderID)
 	}
-	if payload.ReservationID > 0 {
-		event.Int64("reservation_id", payload.ReservationID)
+	if normalizedPayload.ReservationID > 0 {
+		event.Int64("reservation_id", normalizedPayload.ReservationID)
 	}
 
 	event.Msg("enqueued task")
@@ -2590,7 +2601,6 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingResult(ctx context.
 					&ProfitSharingPayload{
 						PaymentOrderID: profitSharingOrder.PaymentOrderID,
 						OrderID:        paymentOrder.OrderID.Int64,
-						RetryCount:     1,
 					},
 					asynq.Queue(QueueCritical),
 					asynq.ProcessIn(5*time.Minute),
@@ -2696,6 +2706,31 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharingReturnResult(ctx co
 	default:
 		return fmt.Errorf("unknown profit sharing return result: %s", resp.Result)
 	}
+}
+
+func normalizeProfitSharingPayload(payload *ProfitSharingPayload) ProfitSharingPayload {
+	if payload == nil {
+		return ProfitSharingPayload{}
+	}
+
+	normalized := *payload
+	if normalized.IdempotencyKey == "" {
+		normalized.IdempotencyKey = profitSharingTaskIdempotencyKey(normalized)
+	}
+	return normalized
+}
+
+func profitSharingTaskIdempotencyKey(payload ProfitSharingPayload) string {
+	if payload.PaymentOrderID > 0 {
+		return fmt.Sprintf("profit_sharing:payment_order:%d", payload.PaymentOrderID)
+	}
+	if payload.OrderID > 0 {
+		return fmt.Sprintf("profit_sharing:order:%d", payload.OrderID)
+	}
+	if payload.ReservationID > 0 {
+		return fmt.Sprintf("profit_sharing:reservation:%d", payload.ReservationID)
+	}
+	return "profit_sharing:unknown"
 }
 
 func (processor *RedisTaskProcessor) tryInitiateRefundAfterReturns(ctx context.Context, refundOrderID int64) error {

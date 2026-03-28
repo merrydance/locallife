@@ -1,4 +1,4 @@
-import CouponService, { Coupon, UserCoupon, CouponListParams, MyCouponParams } from '../../../api/coupon'
+import CouponService, { UserCoupon, MyCouponParams } from '../../../api/coupon'
 import { ErrorHandler } from '../../../utils/error-handler'
 
 // ViewModel
@@ -17,7 +17,7 @@ interface CouponViewModel {
 
 Page({
     data: {
-        activeTab: 'AVAILABLE', // 'AVAILABLE' | 'MY'
+        activeTab: 'AVAILABLE', // 'AVAILABLE' | 'ALL'
         coupons: [] as CouponViewModel[],
         navBarHeight: 88,
         loading: false,
@@ -57,33 +57,35 @@ Page({
 
         try {
             let list: CouponViewModel[] = []
-            let total = 0
+            const page = reset ? 1 : this.data.page
+            let hasMore = false
+            let nextPage = page + 1
 
             if (this.data.activeTab === 'AVAILABLE') {
-                // Fetch Available Coupons
-                const params: CouponListParams = {
-                    page_id: this.data.page,
+                const params: MyCouponParams = {
+                    page_id: page,
                     page_size: this.data.pageSize
                 }
-                const res = await CouponService.getAvailableCoupons(params)
-                list = res.coupons.map((c) => this.mapCouponToView(c))
-                total = res.total
+                const res = await CouponService.getMyAvailableCoupons(params)
+                list = res.coupons.map((c) => this.mapUserCouponToView(c))
+                hasMore = res.hasMore
+                nextPage = res.page + 1
             } else {
-                // Fetch My Coupons
                 const params: MyCouponParams = {
-                    page_id: this.data.page,
+                    page_id: page,
                     page_size: this.data.pageSize
                 }
                 const res = await CouponService.getMyCoupons(params)
                 list = res.coupons.map((c) => this.mapUserCouponToView(c))
-                total = res.total
+                hasMore = res.hasMore
+                nextPage = res.page + 1
             }
 
             const newCoupons = reset ? list : [...this.data.coupons, ...list]
             this.setData({
                 coupons: newCoupons,
-                hasMore: newCoupons.length < total,
-                page: this.data.page + 1,
+                hasMore,
+                page: nextPage,
                 loading: false,
                 initialLoading: false
             })
@@ -104,57 +106,16 @@ Page({
     onReachBottom() {
         this.loadCoupons()
     },
-
-    async onClaim(e: WechatMiniprogram.BaseEvent) {
-        const id = e.currentTarget.dataset.id
-        if (!id) return
-
-        wx.showLoading({ title: '领取中' })
-        try {
-            await CouponService.claimCoupon(id)
-            wx.showToast({ title: '领取成功', icon: 'success' })
-            
-            // Optimistic update: mark as claimed
-            const coupons = this.data.coupons.map((c) => {
-                if (c.id === id) {
-                    return { ...c, isClaimed: true }
-                }
-                return c
-            })
-            this.setData({ coupons })
-        } catch (error) {
-           ErrorHandler.handle(error, 'Coupons.claim')
-        } finally {
-            wx.hideLoading()
-        }
-    },
     
-    // Switch to available tab
-    onGoToCenter() {
+    onGoToAvailable() {
          this.setData({ activeTab: 'AVAILABLE', page: 1, coupons: [] }, () => {
              this.loadCoupons(true)
          })
     },
 
-    // Mappers
-    mapCouponToView(item: Coupon): CouponViewModel {
-        return {
-            id: item.id,
-            title: item.title,
-            merchantName: item.merchant_name,
-            valueDisplay: item.type === 'discount' ? `${item.value}` : `${item.value / 100}`,
-            minSpendDisplay: `${item.min_spend / 100}`,
-            timeRange: `${this.formatDate(item.start_time)} - ${this.formatDate(item.end_time)}`,
-            status: item.is_claimed ? 'claimed' : 'available',
-            statusClass: item.is_claimed ? 'disabled' : 'normal',
-            statusText: item.is_claimed ? '已领取' : '立即领取',
-            isClaimed: !!item.is_claimed
-        }
-    },
-
     mapUserCouponToView(item: UserCoupon): CouponViewModel {
         const statusMap: Record<string, string> = {
-            'available': '未使用',
+            'available': '可使用',
             'used': '已使用',
             'expired': '已过期'
         }

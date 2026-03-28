@@ -76,6 +76,41 @@
   color: var(--td-text-color-secondary);
 }
 
+.commission-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.commission-item {
+  padding: var(--spacer-sm);
+  border-radius: var(--radius-sm);
+  background: var(--td-bg-color-page);
+}
+
+.commission-header,
+.commission-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.commission-date,
+.commission-value {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+}
+
+.commission-value {
+  font-weight: 600;
+}
+
+.commission-meta {
+  margin-top: var(--spacer-xs);
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
 .hint-row {
   margin: var(--spacer-sm) 0;
   display: flex;

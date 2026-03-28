@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,18 +78,19 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 	merchant.RegionID = region.ID
 
 	claim := db.ListMerchantClaimsForMerchantRow{
-		ID:          1,
-		OrderID:     100,
-		UserID:      200,
-		ClaimType:   "missing-item",
-		Description: "缺少饮料",
-		ClaimAmount: 500,
-		Status:      "approved",
-		OrderNo:     "20240101120000123456",
-		OrderAmount: 3000,
-		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
-		UserName:    "张三",
-		CreatedAt:   time.Now(),
+		ID:             1,
+		OrderID:        100,
+		UserID:         200,
+		ClaimType:      "missing-item",
+		Description:    "缺少饮料",
+		ClaimAmount:    500,
+		Status:         "approved",
+		OrderNo:        "20240101120000123456",
+		OrderAmount:    3000,
+		UserPhone:      pgtype.Text{String: "13800138000", Valid: true},
+		UserName:       "张三",
+		RecoveryStatus: "pending",
+		CreatedAt:      time.Now(),
 	}
 
 	testCases := []struct {
@@ -113,6 +115,7 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 				store.EXPECT().
 					ListMerchantClaimsForMerchant(gomock.Any(), db.ListMerchantClaimsForMerchantParams{
 						MerchantID: merchant.ID,
+						Bucket:     pgtype.Text{},
 						Limit:      10,
 						Offset:     0,
 					}).
@@ -120,7 +123,10 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 					Return([]db.ListMerchantClaimsForMerchantRow{claim}, nil)
 
 				store.EXPECT().
-					CountMerchantClaimsForMerchant(gomock.Any(), merchant.ID).
+					CountMerchantClaimsForMerchant(gomock.Any(), db.CountMerchantClaimsForMerchantParams{
+						MerchantID: merchant.ID,
+						Bucket:     pgtype.Text{},
+					}).
 					Times(1).
 					Return(int64(1), nil)
 			},
@@ -133,6 +139,49 @@ func TestListMerchantClaimsAPI(t *testing.T) {
 				claims := response["claims"].([]interface{})
 				require.Len(t, claims, 1)
 				require.Equal(t, float64(1), response["total"])
+				require.Equal(t, false, response["has_more"])
+			},
+		},
+		{
+			name:  "OKWithBucketFilter",
+			query: "?page_id=1&page_size=10&bucket=pending_action",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), user.ID).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					ListMerchantClaimsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.ListMerchantClaimsForMerchantParams) ([]db.ListMerchantClaimsForMerchantRow, error) {
+						require.Equal(t, merchant.ID, arg.MerchantID)
+						require.True(t, arg.Bucket.Valid)
+						require.Equal(t, "pending_action", arg.Bucket.String)
+						require.Equal(t, int32(10), arg.Limit)
+						require.Equal(t, int32(0), arg.Offset)
+						return []db.ListMerchantClaimsForMerchantRow{claim}, nil
+					})
+
+				store.EXPECT().
+					CountMerchantClaimsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.CountMerchantClaimsForMerchantParams) (int64, error) {
+						require.Equal(t, merchant.ID, arg.MerchantID)
+						require.True(t, arg.Bucket.Valid)
+						require.Equal(t, "pending_action", arg.Bucket.String)
+						return int64(1), nil
+					})
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response map[string]interface{}
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+
+				claims := response["claims"].([]interface{})
+				require.Len(t, claims, 1)
 			},
 		},
 		{
@@ -453,9 +502,55 @@ func TestListMerchantAppealsAPI(t *testing.T) {
 					Return([]db.ListMerchantAppealsForMerchantRow{appeal}, nil)
 
 				store.EXPECT().
-					CountMerchantAppealsForMerchant(gomock.Any(), merchant.ID).
+					CountMerchantAppealsForMerchant(gomock.Any(), db.CountMerchantAppealsForMerchantParams{
+						AppellantID: merchant.ID,
+						Status:      pgtype.Text{},
+					}).
 					Times(1).
 					Return(int64(1), nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response map[string]interface{}
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+
+				appeals := response["appeals"].([]interface{})
+				require.Len(t, appeals, 1)
+				require.Equal(t, false, response["has_more"])
+			},
+		},
+		{
+			name:  "OKWithStatusFilter",
+			query: "?page_id=1&page_size=10&status=pending",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), user.ID).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
+					ListMerchantAppealsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.ListMerchantAppealsForMerchantParams) ([]db.ListMerchantAppealsForMerchantRow, error) {
+						require.Equal(t, merchant.ID, arg.AppellantID)
+						require.True(t, arg.Status.Valid)
+						require.Equal(t, "pending", arg.Status.String)
+						require.Equal(t, int32(10), arg.Limit)
+						require.Equal(t, int32(0), arg.Offset)
+						return []db.ListMerchantAppealsForMerchantRow{appeal}, nil
+					})
+
+				store.EXPECT().
+					CountMerchantAppealsForMerchant(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.CountMerchantAppealsForMerchantParams) (int64, error) {
+						require.Equal(t, merchant.ID, arg.AppellantID)
+						require.True(t, arg.Status.Valid)
+						require.Equal(t, "pending", arg.Status.String)
+						return int64(1), nil
+					})
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2227,6 +2322,122 @@ func TestGetRiderClaimDecisionAPI(t *testing.T) {
 			tc.checkResponse(recorder)
 		})
 	}
+}
+
+func TestGetRiderClaimDecisionAPI_ReadOnlyConsumerDoesNotCreateBehaviorAction(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	rider := randomAppealRider(user.ID, region.ID)
+
+	claim := db.GetRiderClaimDetailForRiderRow{
+		ID:          1,
+		OrderID:     100,
+		UserID:      200,
+		ClaimType:   "damage",
+		Description: "餐损",
+		ClaimAmount: 300,
+		Status:      "approved",
+		OrderNo:     "20240101120000123456",
+		OrderAmount: 3000,
+		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
+		UserName:    "张三",
+		CreatedAt:   time.Now(),
+	}
+
+	decision := db.BehaviorDecision{
+		ID:                 11,
+		ResponsibleParty:   "rider",
+		CompensationSource: "rider",
+		DecisionStatus:     "decided",
+		ReasonCodes:        []string{"rider_recovery"},
+		TraceSummary:       pgtype.Text{String: "骑手责任，平台已先赔", Valid: true},
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetRiderByUserID(gomock.Any(), user.ID).Times(1).Return(rider, nil)
+	store.EXPECT().GetRiderClaimDetailForRider(gomock.Any(), gomock.Any()).Times(1).Return(claim, nil)
+	store.EXPECT().ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).Times(1).Return([]db.BehaviorDecision{decision}, nil)
+	store.EXPECT().CreateBehaviorAction(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/rider/claims/%d/decision", claim.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response merchantClaimDecisionResult
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.NotNil(t, response.Decision)
+	require.Equal(t, decision.ID, response.Decision.DecisionID)
+}
+
+func TestGetMerchantClaimDecisionAPI_ReadOnlyConsumerDoesNotCreateBehaviorAction(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+
+	claim := db.GetMerchantClaimDetailForMerchantRow{
+		ID:          1,
+		OrderID:     100,
+		UserID:      200,
+		ClaimType:   "foreign-object",
+		Description: "异物",
+		ClaimAmount: 300,
+		Status:      "approved",
+		OrderNo:     "20240101120000123456",
+		OrderAmount: 3000,
+		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
+		UserName:    "张三",
+		CreatedAt:   time.Now(),
+	}
+
+	decision := db.BehaviorDecision{
+		ID:                 21,
+		ResponsibleParty:   "merchant",
+		CompensationSource: "merchant",
+		DecisionStatus:     "decided",
+		ReasonCodes:        []string{"merchant_recovery"},
+		TraceSummary:       pgtype.Text{String: "商户责任，平台已先赔", Valid: true},
+		CreatedAt:          time.Now(),
+		UpdatedAt:          time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), user.ID).Times(1).Return(merchant, nil)
+	store.EXPECT().GetMerchantClaimDetailForMerchant(gomock.Any(), db.GetMerchantClaimDetailForMerchantParams{
+		ID:         claim.ID,
+		MerchantID: merchant.ID,
+	}).Times(1).Return(claim, nil)
+	store.EXPECT().ListBehaviorDecisionsByOrder(gomock.Any(), pgtype.Int8{Int64: claim.OrderID, Valid: true}).Times(1).Return([]db.BehaviorDecision{decision}, nil)
+	store.EXPECT().CreateBehaviorAction(gomock.Any(), gomock.Any()).Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	url := fmt.Sprintf("/v1/merchant/claims/%d/decision", claim.ID)
+	request, err := http.NewRequest(http.MethodGet, url, nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response merchantClaimDecisionResult
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.NotNil(t, response.Decision)
+	require.Equal(t, decision.ID, response.Decision.DecisionID)
 }
 
 // ====================== Get Rider Appeal Detail Tests ======================

@@ -7,41 +7,12 @@ import { getPublicMerchantDetail, getPublicMerchantDishes, getPublicMerchantComb
 import { getPublicMerchantRooms, PublicRoom } from '../../../api/room'
 import { getUserCarts } from '../../../api/cart'
 import CartService from '../../../services/cart'
+import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from '../../../adapters/consumer-merchant-detail'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
 
-interface BusinessHoursView {
-  day_of_week: number
-  open_time: string
-  close_time: string
-  is_closed: boolean
-  day_name: string
-}
-
-interface RestaurantViewModel {
-  id: number
-  name: string
-  cover_image?: string
-  logo_url: string
-  address: string
-  phone: string
-  latitude: number
-  longitude: number
-  tags: string[]
-  monthly_sales: number
-  avg_prep_minutes: number
-  biz_status: 'OPEN' | 'CLOSED'
-  description: string
-  business_license_image_url?: string
-  food_permit_url?: string
-  business_hours: BusinessHoursView[]
-  business_hours_display: string
-  discount_rules: PublicMerchantDetail['discount_rules']
-  vouchers: PublicMerchantDetail['vouchers']
-  delivery_promotions: PublicMerchantDetail['delivery_promotions']
-  is_ordering_suspended: boolean
-}
+type RestaurantViewModel = ConsumerMerchantDetailViewModel
 
 interface DishView {
   id: number
@@ -115,7 +86,7 @@ Page({
     headerCollapsed: false
   },
 
-  onLoad(options: { id?: string }) {
+  onLoad(options: { id?: string, activeTab?: 'dishes' | 'combos' | 'rooms' }) {
     wx.showShareMenu({
       withShareTicket: true,
       menus: ['shareAppMessage', 'shareTimeline']
@@ -127,7 +98,12 @@ Page({
       setTimeout(() => wx.navigateBack(), 1500)
       return
     }
-    this.setData({ restaurantId })
+    this.setData({
+      restaurantId,
+      activeTab: options.activeTab && ['dishes', 'combos', 'rooms'].includes(options.activeTab)
+        ? options.activeTab
+        : 'dishes'
+    })
     this.loadRestaurantDetail()
   },
 
@@ -204,53 +180,7 @@ Page({
   async loadMerchantInfo(merchantId: number): Promise<RestaurantViewModel | null> {
     try {
       const merchant: PublicMerchantDetail = await getPublicMerchantDetail(merchantId)
-
-      if (merchant) {
-        // 格式化营业时间
-        let businessHoursDisplay = ''
-        if (merchant.business_hours && merchant.business_hours.length > 0) {
-          const today = new Date().getDay()
-          const todayHours = merchant.business_hours.find((h) => h.day_of_week === today)
-          if (todayHours) {
-            businessHoursDisplay = `${todayHours.open_time} - ${todayHours.close_time}`
-          } else if (merchant.business_hours[0]) {
-            const first = merchant.business_hours[0]
-            businessHoursDisplay = `${first.open_time} - ${first.close_time}`
-          }
-        }
-
-        // 格式化所有营业时间
-        const dayNames = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
-        const formattedHours: BusinessHoursView[] = (merchant.business_hours || []).map((h) => ({
-          ...h,
-          day_name: dayNames[h.day_of_week]
-        }))
-
-        return {
-          id: merchant.id,
-          name: merchant.name,
-          cover_image: merchant.cover_image || merchant.logo_url || '',
-          logo_url: getPublicImageUrl(merchant.logo_url || ''),
-          address: merchant.address,
-          phone: merchant.phone,
-          latitude: merchant.latitude,
-          longitude: merchant.longitude,
-          tags: merchant.tags || [],
-          monthly_sales: merchant.monthly_sales || 0,
-          avg_prep_minutes: merchant.avg_prep_minutes || 15,
-          biz_status: merchant.is_open ? 'OPEN' : 'CLOSED',
-          description: merchant.description || '',
-          business_license_image_url: merchant.business_license_image_url,
-          food_permit_url: merchant.food_permit_url,
-          business_hours: formattedHours,
-          business_hours_display: businessHoursDisplay,
-          discount_rules: merchant.discount_rules || [],
-          vouchers: merchant.vouchers || [],
-          delivery_promotions: merchant.delivery_promotions || [],
-          is_ordering_suspended: !!merchant.is_ordering_suspended
-        }
-      }
-      return null
+      return merchant ? ConsumerMerchantDetailAdapter.toViewModel(merchant) : null
     } catch (error) {
       console.error('加载商户信息失败:', error)
       return null
@@ -477,7 +407,7 @@ Page({
       this.showOrderingSuspendedToast()
       return
     }
-    wx.navigateTo({ url: '/pages/takeout/cart/index' })
+    Navigation.toCart()
   },
 
   onCartTap() {
@@ -486,7 +416,7 @@ Page({
       return
     }
     // 点击购物车栏跳转到购物车页面
-    wx.navigateTo({ url: '/pages/takeout/cart/index' })
+    Navigation.toCart()
   },
 
   onCall() {
@@ -529,9 +459,7 @@ Page({
     }
     const roomId = e.currentTarget.dataset.id
     if (roomId) {
-      wx.navigateTo({
-        url: `/pages/reservation/room-detail/index?id=${roomId}`
-      })
+      Navigation.toRoomDetail(String(roomId))
     }
   },
 

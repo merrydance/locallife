@@ -30,6 +30,14 @@
   margin-bottom: var(--spacer-xs);
 }
 
+.status-badge-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-xs);
+}
+
 .field-group {
   margin-bottom: var(--spacer-sm);
 }
