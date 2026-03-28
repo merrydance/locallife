@@ -341,11 +341,11 @@ func (c *AliyunOpenAPIClient) Recognize(ctx context.Context, capability Capabili
 		return nil, fmt.Errorf("unsupported aliyun capability: %s", capability)
 	}
 	body := map[string]any{
-		"Action":      op.Action,
-		"Version":     op.Version,
-		"RegionId":    c.region,
-		"ImageType":   req.ContentType,
-		"ImageBase64": bytesToBase64(req.Data),
+		"Action":    op.Action,
+		"Version":   op.Version,
+		"RegionId":  c.region,
+		"ImageType": normalizeAliyunImageType(req.ContentType),
+		"Body":      bytesToBase64(req.Data),
 	}
 	if capability == CapabilityAliyunIDCard && req.Side != DocumentSideUnknown {
 		body["Side"] = string(req.Side)
@@ -446,6 +446,27 @@ func bytesToBase64(data []byte) string {
 		return ""
 	}
 	return base64.StdEncoding.EncodeToString(data)
+}
+
+func normalizeAliyunImageType(contentType string) string {
+	contentType = strings.TrimSpace(strings.ToLower(contentType))
+	switch contentType {
+	case "image/jpeg", "image/jpg":
+		return "jpg"
+	case "image/png":
+		return "png"
+	case "image/webp":
+		return "webp"
+	case "image/heic":
+		return "heic"
+	case "image/heif":
+		return "heif"
+	default:
+		if strings.HasPrefix(contentType, "image/") {
+			return strings.TrimPrefix(contentType, "image/")
+		}
+		return contentType
+	}
 }
 
 func buildAliyunCanonicalRequest(httpReq *http.Request, signedHeaders []string, payloadHash string) string {

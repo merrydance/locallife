@@ -284,8 +284,14 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 	if got["RegionId"] != "cn-hangzhou" {
 		t.Fatalf("body region = %v", got["RegionId"])
 	}
-	if got["ImageBase64"] != base64.StdEncoding.EncodeToString([]byte("img-bytes")) {
-		t.Fatalf("body image base64 = %v", got["ImageBase64"])
+	if got["ImageType"] != "jpg" {
+		t.Fatalf("body image type = %v", got["ImageType"])
+	}
+	if got["Body"] != base64.StdEncoding.EncodeToString([]byte("img-bytes")) {
+		t.Fatalf("body image payload = %v", got["Body"])
+	}
+	if got["Side"] != string(DocumentSideFront) {
+		t.Fatalf("body side = %v", got["Side"])
 	}
 }
 
@@ -319,6 +325,29 @@ func TestBuildAliyunCanonicalRequest_MatchesACS3Shape(t *testing.T) {
 
 	if got != want {
 		t.Fatalf("canonical request mismatch\nwant:\n%s\n\ngot:\n%s", want, got)
+	}
+}
+
+func TestNormalizeAliyunImageType(t *testing.T) {
+	tests := []struct {
+		name        string
+		contentType string
+		want        string
+	}{
+		{name: "jpeg", contentType: "image/jpeg", want: "jpg"},
+		{name: "png", contentType: "image/png", want: "png"},
+		{name: "webp", contentType: "image/webp", want: "webp"},
+		{name: "heic", contentType: "image/heic", want: "heic"},
+		{name: "strip image prefix", contentType: "image/gif", want: "gif"},
+		{name: "passthrough", contentType: "pdf", want: "pdf"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := normalizeAliyunImageType(tc.contentType); got != tc.want {
+				t.Fatalf("normalizeAliyunImageType(%q) = %q, want %q", tc.contentType, got, tc.want)
+			}
+		})
 	}
 }
 
