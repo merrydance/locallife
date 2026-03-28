@@ -8,6 +8,10 @@
 .section-state-block {
   display: flex;
   flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
 
 .refresh-banner {
   display: flex;
@@ -25,10 +29,6 @@
   flex: 1;
   font-size: var(--font-size-xs);
   line-height: 1.6;
-}
-  align-items: center;
-  justify-content: center;
-  gap: var(--spacer-md);
 }
 
 .state-block {

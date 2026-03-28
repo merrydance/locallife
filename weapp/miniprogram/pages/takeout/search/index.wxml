@@ -81,18 +81,19 @@
     <view wx:if="{{suggestions.length === 0}}" class="suggest-empty">
       <text class="suggest-empty-text">没有相关搜索建议，直接搜索试试</text>
     </view>
-    <view
-      wx:else
-      class="suggest-item"
-      wx:for="{{suggestions}}"
-      wx:key="keyword"
-      bindtap="onSuggestionTap"
-      data-keyword="{{item.keyword}}"
-    >
-      <t-icon name="search" size="32rpx" color="#aaa" />
-      <text class="suggest-text">{{item.keyword}}</text>
-      <text class="suggest-type">{{item.type === 'dish' ? '菜品' : (item.type === 'merchant' ? '商家' : '分类')}}</text>
-    </view>
+    <block wx:else>
+      <view
+        class="suggest-item"
+        wx:for="{{suggestions}}"
+        wx:key="keyword"
+        bindtap="onSuggestionTap"
+        data-keyword="{{item.keyword}}"
+      >
+        <t-icon name="search" size="32rpx" color="#aaa" />
+        <text class="suggest-text">{{item.keyword}}</text>
+        <text class="suggest-type">{{item.type === 'dish' ? '菜品' : (item.type === 'merchant' ? '商家' : '分类')}}</text>
+      </view>
+    </block>
   </view>
 
   <!-- ======= 结果态：搜索结果 ======= -->
