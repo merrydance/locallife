@@ -410,9 +410,13 @@ func TestCreateOrderTxWithBalance(t *testing.T) {
 
 	// 验证订单
 	require.NotZero(t, result.Order.ID)
+	require.Equal(t, OrderStatusPaid, result.Order.Status)
 	require.Equal(t, balancePaid, result.Order.BalancePaid)
 	require.True(t, result.Order.MembershipID.Valid)
 	require.Equal(t, membership.Membership.ID, result.Order.MembershipID.Int64)
+	require.True(t, result.Order.PaymentMethod.Valid)
+	require.Equal(t, "balance", result.Order.PaymentMethod.String)
+	require.True(t, result.Order.PaidAt.Valid)
 
 	// 验证会员余额已扣减
 	require.NotNil(t, result.Membership)

@@ -167,10 +167,11 @@ RETURNING *;
 UPDATE orders
 SET 
     status = 'paid',
-    payment_method = $2,
+    payment_method = sqlc.arg('payment_method'),
     paid_at = now(),
+    fulfillment_status = COALESCE(sqlc.narg('fulfillment_status'), fulfillment_status),
     updated_at = now()
-WHERE id = $1 AND status = 'pending'
+WHERE id = sqlc.arg('id') AND status = 'pending'
 RETURNING *;
 
 -- name: UpdateOrderToCompleted :one

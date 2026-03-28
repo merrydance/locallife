@@ -2557,20 +2557,22 @@ const updateOrderToPaid = `-- name: UpdateOrderToPaid :one
 UPDATE orders
 SET 
     status = 'paid',
-    payment_method = $2,
+    payment_method = $1,
     paid_at = now(),
+    fulfillment_status = COALESCE($2, fulfillment_status),
     updated_at = now()
-WHERE id = $1 AND status = 'pending'
+WHERE id = $3 AND status = 'pending'
 RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
 `
 
 type UpdateOrderToPaidParams struct {
-	ID            int64       `json:"id"`
-	PaymentMethod pgtype.Text `json:"payment_method"`
+	PaymentMethod     pgtype.Text `json:"payment_method"`
+	FulfillmentStatus pgtype.Text `json:"fulfillment_status"`
+	ID                int64       `json:"id"`
 }
 
 func (q *Queries) UpdateOrderToPaid(ctx context.Context, arg UpdateOrderToPaidParams) (Order, error) {
-	row := q.db.QueryRow(ctx, updateOrderToPaid, arg.ID, arg.PaymentMethod)
+	row := q.db.QueryRow(ctx, updateOrderToPaid, arg.PaymentMethod, arg.FulfillmentStatus, arg.ID)
 	var i Order
 	err := row.Scan(
 		&i.ID,

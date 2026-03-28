@@ -146,7 +146,10 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 			return result, NewRequestError(http.StatusBadRequest, errors.New("order is not in pending status"))
 		}
 
-		amount = order.TotalAmount
+		amount, err = db.OrderRemainingPayableAmount(order)
+		if err != nil {
+			return result, fmt.Errorf("resolve order payable amount: %w", err)
+		}
 		merchantID = order.MerchantID
 		attach = fmt.Sprintf("order_id:%d", order.ID)
 	}
@@ -170,26 +173,32 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 		})
 	}
 	if err == nil && existingPayment.Status == paymentStatusPending {
-		result.PaymentOrder = existingPayment
-		// 干等返回时，若已有 prepay_id 则重新签名生成 pay_params，
-		// 避免前端因收到 null pay_params 而无法调起支付。
-		if existingPayment.PrepayID.Valid {
-			switch existingPayment.PaymentType {
-			case "profit_sharing":
-				if svc.ecommerceClient != nil {
-					if payParams, signErr := svc.ecommerceClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
-						result.PayParams = payParams
+		if existingPayment.Amount != amount {
+			if _, closeErr := svc.closePendingPaymentOrder(ctx, existingPayment); closeErr != nil {
+				return result, closeErr
+			}
+		} else {
+			result.PaymentOrder = existingPayment
+			// 干等返回时，若已有 prepay_id 则重新签名生成 pay_params，
+			// 避免前端因收到 null pay_params 而无法调起支付。
+			if existingPayment.PrepayID.Valid {
+				switch existingPayment.PaymentType {
+				case "profit_sharing":
+					if svc.ecommerceClient != nil {
+						if payParams, signErr := svc.ecommerceClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+							result.PayParams = payParams
+						}
 					}
-				}
-			default:
-				if svc.paymentClient != nil {
-					if payParams, signErr := svc.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
-						result.PayParams = payParams
+				default:
+					if svc.paymentClient != nil {
+						if payParams, signErr := svc.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
+							result.PayParams = payParams
+						}
 					}
 				}
 			}
+			return result, nil
 		}
-		return result, nil
 	}
 
 	expiresAt := svc.now().Add(30 * time.Minute)
@@ -609,11 +618,15 @@ func (svc *PaymentOrderService) ClosePaymentOrder(ctx context.Context, input Clo
 	if paymentOrder.Status != paymentStatusPending {
 		return ClosePaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("only pending payment orders can be closed"))
 	}
+	return svc.closePendingPaymentOrder(ctx, paymentOrder)
+}
+
+func (svc *PaymentOrderService) closePendingPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
 	if paymentOrder.CombinedPaymentID.Valid && paymentOrder.PaymentType == "profit_sharing" {
 		return svc.closeCombinedPaymentOrder(ctx, paymentOrder)
 	}
 
-	updatedPayment, err := svc.store.UpdatePaymentOrderToClosed(ctx, input.PaymentOrderID)
+	updatedPayment, err := svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID)
 	if err != nil {
 		return ClosePaymentOrderResult{}, err
 	}

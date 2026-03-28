@@ -13,6 +13,132 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func TestPaymentOrderServiceCreatePaymentOrder_RecreatesPendingOrderWhenAmountChanged(t *testing.T) {
+	input := CreatePaymentOrderInput{
+		UserID:       1001,
+		OrderID:      2001,
+		PaymentType:  paymentTypeMiniProgram,
+		BusinessType: businessTypeOrder,
+		ClientIP:     "127.0.0.1",
+	}
+	order := db.Order{
+		ID:          input.OrderID,
+		UserID:      input.UserID,
+		MerchantID:  3001,
+		Status:      "pending",
+		TotalAmount: 1000,
+		BalancePaid: 300,
+	}
+	existingPayment := db.PaymentOrder{
+		ID:                4001,
+		UserID:            input.UserID,
+		Status:            paymentStatusPending,
+		PaymentType:       "profit_sharing",
+		Amount:            1000,
+		OutTradeNo:        "old-out-trade-no",
+		CombinedPaymentID: pgtype.Int8{Int64: 5001, Valid: true},
+	}
+	newPayment := db.PaymentOrder{
+		ID:                4002,
+		UserID:            input.UserID,
+		Status:            paymentStatusPending,
+		PaymentType:       "profit_sharing",
+		Amount:            700,
+		OutTradeNo:        "new-out-trade-no",
+		Attach:            pgtype.Text{String: "order_id:2001", Valid: true},
+		CombinedPaymentID: pgtype.Int8{Int64: 5002, Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetOrder(gomock.Any(), input.OrderID).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Times(1).
+		Return(existingPayment, nil)
+	store.EXPECT().
+		GetCombinedPaymentOrder(gomock.Any(), int64(5001)).
+		Times(1).
+		Return(db.CombinedPaymentOrder{ID: 5001, CombineOutTradeNo: "old-combine", Status: paymentStatusPending}, nil)
+	store.EXPECT().
+		ListCombinedPaymentSubOrders(gomock.Any(), int64(5001)).
+		Times(1).
+		Return([]db.CombinedPaymentSubOrder{{SubMchid: "sub-old", OutTradeNo: "old-out-trade-no"}}, nil)
+	ecommerceClient.EXPECT().
+		CloseCombineOrder(gomock.Any(), "old-combine", []wechat.SubOrderClose{{MchID: "sub-old", OutTradeNo: "old-out-trade-no"}}).
+		Times(1).
+		Return(nil)
+	store.EXPECT().
+		CloseCombinedPaymentOrderTx(gomock.Any(), db.CloseCombinedPaymentOrderTxParams{
+			CombinedPaymentOrderID: 5001,
+			SubOrderOutTradeNos:    []string{"old-out-trade-no"},
+		}).
+		Times(1).
+		Return(db.CloseCombinedPaymentOrderTxResult{}, nil)
+	store.EXPECT().
+		GetPaymentOrder(gomock.Any(), int64(4001)).
+		Times(1).
+		Return(db.PaymentOrder{ID: 4001, UserID: input.UserID, Status: "closed"}, nil)
+	store.EXPECT().
+		GetUser(gomock.Any(), input.UserID).
+		Times(1).
+		Return(db.User{ID: input.UserID, WechatOpenid: "openid"}, nil)
+	store.EXPECT().
+		CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateCombinedPaymentTxParams) (db.CreateCombinedPaymentTxResult, error) {
+			require.Equal(t, []int64{input.OrderID}, arg.OrderIDs)
+			return db.CreateCombinedPaymentTxResult{
+				CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 5002},
+				OrderInfos: []db.CombinedPaymentOrderInfo{{
+					Order:         order,
+					PaymentOrder:  newPayment,
+					PaymentConfig: db.MerchantPaymentConfig{SubMchID: "sub-new"},
+					Merchant:      db.Merchant{Name: "Merchant A"},
+				}},
+			}, nil
+		})
+	ecommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, req *wechat.CombineOrderRequest) (*wechat.CombineOrderResponse, *wechat.JSAPIPayParams, error) {
+			require.Len(t, req.SubOrders, 1)
+			require.Equal(t, int64(700), req.SubOrders[0].Amount)
+			return &wechat.CombineOrderResponse{PrepayID: "prepay-new"}, &wechat.JSAPIPayParams{NonceStr: "nonce"}, nil
+		})
+	store.EXPECT().
+		UpdatePaymentOrderPrepayId(gomock.Any(), db.UpdatePaymentOrderPrepayIdParams{
+			ID:       newPayment.ID,
+			PrepayID: pgtype.Text{String: "prepay-new", Valid: true},
+		}).
+		Times(1).
+		Return(db.PaymentOrder{ID: newPayment.ID, Amount: newPayment.Amount, PrepayID: pgtype.Text{String: "prepay-new", Valid: true}}, nil)
+	store.EXPECT().
+		UpdateCombinedPaymentOrderPrepay(gomock.Any(), db.UpdateCombinedPaymentOrderPrepayParams{
+			ID:       int64(5002),
+			PrepayID: pgtype.Text{String: "prepay-new", Valid: true},
+		}).
+		Times(1).
+		Return(db.CombinedPaymentOrder{}, nil)
+
+	svc := NewPaymentOrderService(store, nil, ecommerceClient)
+	result, err := svc.CreatePaymentOrder(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, int64(700), result.PaymentOrder.Amount)
+	require.True(t, result.PaymentOrder.PrepayID.Valid)
+	require.NotNil(t, result.PayParams)
+}
+
 func TestPaymentOrderServiceGetPaymentOrder(t *testing.T) {
 	input := GetPaymentOrderInput{UserID: 1001, PaymentOrderID: 2001}
 

@@ -108,3 +108,40 @@ func TestProcessPaymentSuccessTx_RiderDepositIsIdempotent(t *testing.T) {
 	require.Equal(t, paymentOrder.Amount, credit.RefundableAmount)
 	require.Equal(t, int64(0), credit.RefundedAmount)
 }
+
+func TestProcessPaymentSuccessTx_OrderSetsPaidFields(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	order := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+
+	paymentOrder, err := testStore.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+		OrderID:      pgtype.Int8{Int64: order.ID, Valid: true},
+		UserID:       user.ID,
+		PaymentType:  "profit_sharing",
+		BusinessType: "order",
+		Amount:       order.TotalAmount,
+		OutTradeNo:   "PO" + util.RandomString(30),
+		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(15 * time.Minute), Valid: true},
+	})
+	require.NoError(t, err)
+
+	paymentOrder, err = testStore.UpdatePaymentOrderToPaid(context.Background(), UpdatePaymentOrderToPaidParams{
+		ID:            paymentOrder.ID,
+		TransactionID: pgtype.Text{String: "TX" + util.RandomString(28), Valid: true},
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.(*SQLStore).ProcessPaymentSuccessTx(context.Background(), ProcessPaymentSuccessTxParams{
+		PaymentOrderID: paymentOrder.ID,
+	})
+	require.NoError(t, err)
+	require.True(t, result.Processed)
+	require.NotNil(t, result.OrderResult)
+
+	updatedOrder, err := testStore.GetOrder(context.Background(), order.ID)
+	require.NoError(t, err)
+	require.Equal(t, OrderStatusPaid, updatedOrder.Status)
+	require.True(t, updatedOrder.PaymentMethod.Valid)
+	require.Equal(t, "wechat", updatedOrder.PaymentMethod.String)
+	require.True(t, updatedOrder.PaidAt.Valid)
+}

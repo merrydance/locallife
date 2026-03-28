@@ -270,6 +270,7 @@ func (store *SQLStore) ProcessPaymentSuccessTx(ctx context.Context, arg ProcessP
 
 			orderResult, err := processOrderPaymentWithQueries(ctx, q, ProcessOrderPaymentTxParams{
 				OrderID:            paymentOrder.OrderID.Int64,
+				PaymentMethod:      orderPaymentMethodWechat,
 				RiderAverageSpeed:  arg.RiderAverageSpeed,
 				DefaultPrepareTime: arg.DefaultPrepareTime,
 			})

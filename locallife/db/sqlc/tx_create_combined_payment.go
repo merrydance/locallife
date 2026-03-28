@@ -49,6 +49,7 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 			Order         Order
 			Merchant      Merchant
 			PaymentConfig MerchantPaymentConfig
+			PayAmount     int64
 		}
 		tempInfos := make([]tempOrderInfo, 0, len(arg.OrderIDs))
 
@@ -69,6 +70,14 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 			}
 			if order.Status != "pending" {
 				return fmt.Errorf("order %d status is %s, expect pending", orderID, order.Status)
+			}
+
+			payAmount, err := OrderRemainingPayableAmount(order)
+			if err != nil {
+				return fmt.Errorf("resolve order %d payable amount: %w", orderID, err)
+			}
+			if payAmount <= 0 {
+				return fmt.Errorf("order %d has no remaining payable amount", orderID)
 			}
 
 			// 获取商户和配置
@@ -116,8 +125,9 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 				Order:         order,
 				Merchant:      merchant,
 				PaymentConfig: paymentConfig,
+				PayAmount:     payAmount,
 			})
-			totalAmount += order.TotalAmount
+			totalAmount += payAmount
 		}
 
 		// 2. 创建合单记录
@@ -146,7 +156,7 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 				UserID:        arg.UserID,
 				PaymentType:   "profit_sharing", // 合单支付走收付通渠道，子单必须标记为 profit_sharing
 				BusinessType:  "order",
-				Amount:        info.Order.TotalAmount,
+				Amount:        info.PayAmount,
 				OutTradeNo:    outTradeNo,
 				ExpiresAt:     pgtype.Timestamptz{Time: arg.ExpiresAt, Valid: true},
 				Attach:        pgtype.Text{String: fmt.Sprintf("合单:%s", arg.CombineOutTradeNo), Valid: true},
@@ -170,7 +180,7 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 				OrderID:           info.Order.ID,
 				MerchantID:        info.Order.MerchantID,
 				SubMchid:          info.PaymentConfig.SubMchID,
-				Amount:            info.Order.TotalAmount,
+				Amount:            info.PayAmount,
 				OutTradeNo:        po.OutTradeNo,
 				Description:       fmt.Sprintf("%s - 订单支付", info.Merchant.Name),
 			})

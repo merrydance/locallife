@@ -194,6 +194,7 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 		if arg.MembershipID != nil && arg.BalancePaid > 0 && arg.BalancePaid >= result.Order.TotalAmount {
 			paymentResult, err := processOrderPaymentWithQueries(ctx, q, ProcessOrderPaymentTxParams{
 				OrderID:            result.Order.ID,
+				PaymentMethod:      orderPaymentMethodBalance,
 				RiderAverageSpeed:  arg.RiderAverageSpeed,
 				DefaultPrepareTime: arg.DefaultPrepareTime,
 				DeliveryDuration:   arg.DeliveryDuration,
@@ -215,6 +216,7 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 // ProcessOrderPaymentTxParams contains the input parameters for processing order payment
 type ProcessOrderPaymentTxParams struct {
 	OrderID            int64
+	PaymentMethod      string
 	RiderAverageSpeed  int
 	DefaultPrepareTime int
 	DeliveryDuration   int32 // 配送预计在途时间（秒），由 LBS 提供
@@ -361,15 +363,15 @@ func processOrderPaymentWithQueries(ctx context.Context, q *Queries, arg Process
 	if order.OrderType != OrderTypeReservation {
 		newFulfillment = FulfillmentStatusPendingKitchen
 	}
+	paymentMethod := normalizeOrderPaymentMethod(arg.PaymentMethod)
 
-	result.Order, err = q.UpdateOrderStatus(ctx, UpdateOrderStatusParams{
+	result.Order, err = q.UpdateOrderToPaid(ctx, UpdateOrderToPaidParams{
 		ID:                order.ID,
-		Status:            OrderStatusPaid,
+		PaymentMethod:     pgtype.Text{String: paymentMethod, Valid: true},
 		FulfillmentStatus: pgtype.Text{String: newFulfillment, Valid: true},
-		ExpectedStatus:    OrderStatusPending,
 	})
 	if err != nil {
-		return result, fmt.Errorf("update order status: %w", err)
+		return result, fmt.Errorf("update order to paid: %w", err)
 	}
 
 	// 5. 🚀 如果是外卖订单(takeout)，创建配送单并推入配送池

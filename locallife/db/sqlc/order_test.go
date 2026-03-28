@@ -211,8 +211,9 @@ func TestUpdateOrderStatus(t *testing.T) {
 	require.Equal(t, "pending", order.Status)
 
 	arg := UpdateOrderStatusParams{
-		ID:     order.ID,
-		Status: "paid",
+		ID:             order.ID,
+		Status:         "paid",
+		ExpectedStatus: "pending",
 	}
 
 	updatedOrder, err := testStore.UpdateOrderStatus(context.Background(), arg)
@@ -228,8 +229,9 @@ func TestUpdateOrderToPaid(t *testing.T) {
 	require.Equal(t, "pending", order.Status)
 
 	arg := UpdateOrderToPaidParams{
-		ID:            order.ID,
-		PaymentMethod: pgtype.Text{String: "wechat", Valid: true},
+		ID:                order.ID,
+		PaymentMethod:     pgtype.Text{String: "wechat", Valid: true},
+		FulfillmentStatus: pgtype.Text{},
 	}
 
 	updatedOrder, err := testStore.UpdateOrderToPaid(context.Background(), arg)
@@ -248,8 +250,9 @@ func TestUpdateOrderToCompleted(t *testing.T) {
 
 	// 先设置为 paid 状态
 	_, err := testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
-		ID:     order.ID,
-		Status: "paid",
+		ID:             order.ID,
+		Status:         "paid",
+		ExpectedStatus: "pending",
 	})
 	require.NoError(t, err)
 
@@ -267,8 +270,9 @@ func TestUpdateOrderToCancelled(t *testing.T) {
 	require.Equal(t, "pending", order.Status)
 
 	arg := UpdateOrderToCancelledParams{
-		ID:           order.ID,
-		CancelReason: pgtype.Text{String: "用户取消", Valid: true},
+		ID:             order.ID,
+		CancelReason:   pgtype.Text{String: "用户取消", Valid: true},
+		ExpectedStatus: "pending",
 	}
 
 	updatedOrder, err := testStore.UpdateOrderToCancelled(context.Background(), arg)

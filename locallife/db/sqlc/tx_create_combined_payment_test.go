@@ -102,3 +102,51 @@ func TestCreateCombinedPaymentTx_OrderMismatch(t *testing.T) {
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "does not belong to user")
 }
+
+func TestCreateCombinedPaymentTx_UsesRemainingPayableAmount(t *testing.T) {
+	store := testStore
+	user := createRandomUser(t)
+
+	merchant1 := createRandomMerchantForTest(t)
+	_ = createRandomMerchantPaymentConfig(t, merchant1)
+	merchant2 := createRandomMerchantForTest(t)
+	_ = createRandomMerchantPaymentConfig(t, merchant2)
+
+	order1, err := store.CreateOrder(context.Background(), CreateOrderParams{
+		OrderNo:     util.RandomString(20),
+		UserID:      user.ID,
+		MerchantID:  merchant1.ID,
+		OrderType:   "takeaway",
+		Subtotal:    1000,
+		TotalAmount: 1000,
+		BalancePaid: 200,
+		Status:      "pending",
+	})
+	require.NoError(t, err)
+	order2, err := store.CreateOrder(context.Background(), CreateOrderParams{
+		OrderNo:     util.RandomString(20),
+		UserID:      user.ID,
+		MerchantID:  merchant2.ID,
+		OrderType:   "takeaway",
+		Subtotal:    2000,
+		TotalAmount: 2000,
+		Status:      "pending",
+	})
+	require.NoError(t, err)
+
+	result, err := store.CreateCombinedPaymentTx(context.Background(), CreateCombinedPaymentTxParams{
+		UserID:            user.ID,
+		OrderIDs:          []int64{order1.ID, order2.ID},
+		CombineOutTradeNo: "CP" + util.RandomString(10),
+		ExpiresAt:         time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(2800), result.CombinedPaymentOrder.TotalAmount)
+
+	amountByOrderID := make(map[int64]int64, len(result.OrderInfos))
+	for _, info := range result.OrderInfos {
+		amountByOrderID[info.Order.ID] = info.PaymentOrder.Amount
+	}
+	require.Equal(t, int64(800), amountByOrderID[order1.ID])
+	require.Equal(t, int64(2000), amountByOrderID[order2.ID])
+}
