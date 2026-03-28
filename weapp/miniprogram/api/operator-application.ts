@@ -1,5 +1,6 @@
 import { request } from '../utils/request'
-import { uploadMedia, postFormData } from '../utils/media'
+import { uploadMedia } from '../utils/media'
+import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 
@@ -108,21 +109,27 @@ export function updateOperatorBasic(data: UpdateOperatorBasicRequest) {
 }
 
 /**
- * 上传营业执照并识别
+ * 上传营业执照并通过统一 OCR job 识别
  */
 export async function ocrOperatorBusinessLicense(filePath: string) {
   const { mediaId } = await uploadMedia(filePath, {
     businessType: 'operator',
     mediaCategory: 'business_license'
   })
-  return postFormData<OperatorApplicationResponse>(
-    '/v1/operator/application/license/ocr',
-    { media_asset_id: mediaId }
+  const draft = await getOperatorApplication()
+  return enqueueOCRJobAndRefresh(
+    {
+      document_type: 'business_license',
+      media_asset_id: mediaId,
+      owner_type: 'operator_application',
+      owner_id: draft.id
+    },
+    getOperatorApplication
   )
 }
 
 /**
- * 上传身份证并识别
+ * 上传身份证并通过统一 OCR job 识别
  */
 export async function ocrOperatorIdCard(filePath: string, side: 'Front' | 'Back') {
   const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
@@ -130,9 +137,16 @@ export async function ocrOperatorIdCard(filePath: string, side: 'Front' | 'Back'
     businessType: 'operator',
     mediaCategory
   })
-  return postFormData<OperatorApplicationResponse>(
-    '/v1/operator/application/idcard/ocr',
-    { media_asset_id: mediaId, side }
+  const draft = await getOperatorApplication()
+  return enqueueOCRJobAndRefresh(
+    {
+      document_type: 'id_card',
+      media_asset_id: mediaId,
+      owner_type: 'operator_application',
+      owner_id: draft.id,
+      side: side === 'Front' ? 'front' : 'back'
+    },
+    getOperatorApplication
   )
 }
 

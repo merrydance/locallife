@@ -150,7 +150,7 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 				store.EXPECT().
 					GetMediaAssetByID(gomock.Any(), gomock.Eq(int64(101))).
 					Times(1).
-					Return(db.MediaAsset{ID: 101, ObjectKey: "user/avatar/101/profile.jpg", Visibility: "public"}, nil)
+					Return(db.MediaAsset{ID: 101, ObjectKey: "user/avatar/101/profile.jpg", Visibility: "public", ModerationStatus: "approved"}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -268,9 +268,10 @@ func TestGetCurrentUserAPI_WithAvatarURL(t *testing.T) {
 	user.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
 
 	avatarAsset := db.MediaAsset{
-		ID:         avatarAssetID,
-		ObjectKey:  "user/avatar/55/avatar.jpg",
-		Visibility: "public",
+		ID:               avatarAssetID,
+		ObjectKey:        "user/avatar/55/avatar.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
 	}
 
 	ctrl := gomock.NewController(t)
@@ -317,9 +318,10 @@ func TestUpdateCurrentUserAPI_WithAvatarAssetID(t *testing.T) {
 	updatedUser.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
 
 	avatarAsset := db.MediaAsset{
-		ID:         avatarAssetID,
-		ObjectKey:  "user/avatar/88/profile.jpg",
-		Visibility: "public",
+		ID:               avatarAssetID,
+		ObjectKey:        "user/avatar/88/profile.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
 	}
 
 	ctrl := gomock.NewController(t)
@@ -358,4 +360,52 @@ func TestUpdateCurrentUserAPI_WithAvatarAssetID(t *testing.T) {
 	require.NotNil(t, resp.AvatarURL)
 	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
 	require.Contains(t, *resp.AvatarURL, "user/avatar/88/profile.jpg")
+}
+
+func TestGetCurrentUserAPI_WithPendingAvatarVisibleToOwner(t *testing.T) {
+	user, _ := randomUser(t)
+	const avatarAssetID int64 = 109
+	user.AvatarMediaAssetID = pgtype.Int8{Int64: avatarAssetID, Valid: true}
+
+	avatarAsset := db.MediaAsset{
+		ID:               avatarAssetID,
+		ObjectKey:        "user/avatar/109/profile.jpg",
+		Visibility:       "public",
+		MediaCategory:    "avatar",
+		ModerationStatus: "pending",
+		UploadedBy:       user.ID,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUser(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{}, nil)
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
+		Times(1).
+		Return(avatarAsset, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/users/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotNil(t, resp.AvatarURL)
+	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
+	require.Contains(t, *resp.AvatarURL, "user/avatar/109/profile.jpg")
 }

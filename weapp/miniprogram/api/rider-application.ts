@@ -1,5 +1,6 @@
 import { request } from '../utils/request'
-import { uploadMedia, postFormData } from '../utils/media'
+import { uploadMedia } from '../utils/media'
+import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 
@@ -63,7 +64,7 @@ export function updateRiderApplicationBasic(data: UpdateRiderBasicRequest) {
 }
 
 /**
- * 上传并在识别身份证照片
+ * 上传身份证并通过统一 OCR job 识别
  */
 export async function ocrRiderIdCard(filePath: string, side: 'Front' | 'Back') {
   const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
@@ -71,23 +72,36 @@ export async function ocrRiderIdCard(filePath: string, side: 'Front' | 'Back') {
     businessType: 'rider',
     mediaCategory
   })
-  return postFormData<RiderApplicationResponse>(
-    '/v1/rider/application/idcard/ocr',
-    { media_asset_id: mediaId, side }
+  const draft = await getOrCreateRiderApplication()
+  return enqueueOCRJobAndRefresh(
+    {
+      document_type: 'id_card',
+      media_asset_id: mediaId,
+      owner_type: 'rider_application',
+      owner_id: draft.id,
+      side: side === 'Front' ? 'front' : 'back'
+    },
+    getOrCreateRiderApplication
   )
 }
 
 /**
- * 上传并在识别健康证照片
+ * 上传健康证并通过统一 OCR job 识别
  */
 export async function ocrRiderHealthCert(filePath: string) {
   const { mediaId } = await uploadMedia(filePath, {
     businessType: 'rider',
     mediaCategory: 'health_cert'
   })
-  return postFormData<RiderApplicationResponse>(
-    '/v1/rider/application/healthcert',
-    { media_asset_id: mediaId }
+  const draft = await getOrCreateRiderApplication()
+  return enqueueOCRJobAndRefresh(
+    {
+      document_type: 'health_cert',
+      media_asset_id: mediaId,
+      owner_type: 'rider_application',
+      owner_id: draft.id
+    },
+    getOrCreateRiderApplication
   )
 }
 

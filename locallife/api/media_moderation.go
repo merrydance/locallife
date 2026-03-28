@@ -59,6 +59,17 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 	if !strings.HasPrefix(asset.MimeType, "image/") {
 		return nil
 	}
+	if server.config.Environment == "development" && (server.wechatClient == nil || server.config.WechatMiniAppID == "" || server.config.WechatMiniAppSecret == "") {
+		updated, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
+			ID:               asset.ID,
+			ModerationStatus: "approved",
+		})
+		if err != nil {
+			return fmt.Errorf("auto approve media moderation in development: %w", err)
+		}
+		*asset = updated
+		return nil
+	}
 	if server.wechatClient == nil || server.config.WechatMiniAppID == "" || server.config.WechatMiniAppSecret == "" {
 		return nil
 	}

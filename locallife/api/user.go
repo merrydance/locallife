@@ -33,8 +33,29 @@ func newUserResponse(user db.User, roles []string) userResponse {
 	if user.Phone.Valid {
 		resp.Phone = &user.Phone.String
 	}
+	if user.AvatarUrl.Valid && user.AvatarUrl.String != "" {
+		avatarURL := user.AvatarUrl.String
+		resp.AvatarURL = &avatarURL
+	}
 
 	return resp
+}
+
+func (server *Server) resolveCurrentUserAvatarURL(ctx *gin.Context, user db.User) *string {
+	if user.AvatarMediaAssetID.Valid {
+		asset, err := server.store.GetMediaAssetByID(ctx, user.AvatarMediaAssetID.Int64)
+		if err == nil && asset.Visibility == string(media.VisibilityPublic) {
+			if asset.ModerationStatus == "approved" || (asset.MediaCategory == string(media.CategoryAvatar) && asset.UploadedBy == user.ID) {
+				avatarURL := server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantOriginal)
+				return &avatarURL
+			}
+		}
+	}
+	if user.AvatarUrl.Valid && user.AvatarUrl.String != "" {
+		avatarURL := user.AvatarUrl.String
+		return &avatarURL
+	}
+	return nil
 }
 
 // getCurrentUser godoc
@@ -75,10 +96,7 @@ func (server *Server) getCurrentUser(ctx *gin.Context) {
 	}
 
 	resp := newUserResponse(user, roles)
-	if user.AvatarMediaAssetID.Valid {
-		avatarURL := server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
-		resp.AvatarURL = &avatarURL
-	}
+	resp.AvatarURL = server.resolveCurrentUserAvatarURL(ctx, user)
 	ctx.JSON(http.StatusOK, resp)
 }
 
@@ -148,9 +166,6 @@ func (server *Server) updateCurrentUser(ctx *gin.Context) {
 	}
 
 	resp := newUserResponse(user, roles)
-	if user.AvatarMediaAssetID.Valid {
-		avatarURL := server.publicImageURL(ctx, &user.AvatarMediaAssetID.Int64, media.VariantOriginal)
-		resp.AvatarURL = &avatarURL
-	}
+	resp.AvatarURL = server.resolveCurrentUserAvatarURL(ctx, user)
 	ctx.JSON(http.StatusOK, resp)
 }

@@ -341,7 +341,7 @@
 - [x] `weapp/miniprogram/utils/media.ts`：实现 `ossDirectUpload(uploadHost, form, filePath)` — 使用 `wx.uploadFile` 直传 OSS
 - [x] `weapp/miniprogram/utils/media.ts`：实现 `completeMediaUpload(uploadId, objectKey)` → 返回 `mediaId`
 - [x] `weapp/miniprogram/utils/media.ts`：实现 `uploadMedia(tempFilePath, options)` — 含客户端压缩（最长边 4096，JPEG 质量 0.82）
-- [x] `weapp/miniprogram/utils/request.ts` 中旧业务接口的 `wx.uploadFile` 调用已从各 OCR 入口移除（改用 `uploadMedia`）；`uploadFile` 通用函数保留供 `api/group-application.ts` 临时使用（后端 `/v1/groups/applications/license/ocr` 尚未改造，留 TODO）
+- [x] `weapp/miniprogram/utils/request.ts` 中旧业务接口的 `wx.uploadFile` 调用已从各 OCR 入口移除；所有入驻 OCR 流程统一改为 `uploadMedia` + `POST /v1/ocr/jobs`
 
 ### 7.2 图片读取
 
@@ -357,7 +357,7 @@
 - [x] **入驻申请 — 商户证照**：`api/onboarding.ts` 中 `ocrBusinessLicense` / `ocrFoodPermit` / `ocrIdCard` 均已调用 `uploadMedia` + 传 `media_asset_id`
 - [x] **入驻申请 — 骑手证照**：`api/rider-application.ts` 中 `ocrRiderIdCard` / `ocrRiderHealthCert` 均已调用 `uploadMedia`
 - [x] **入驻申请 — 运营商证照**：`api/operator-application.ts` 中 `ocrOperatorBusinessLicense` / `ocrOperatorIdCard` 均已调用 `uploadMedia`
-- [x] **集团入驻申请**：`weapp/api/group-application.ts` 中 `ocrGroupBusinessLicense` 已改用 `uploadMedia` + `postFormData`；后端 `api/group.go` `uploadGroupBusinessLicenseOCR` handler 已支持 `media_asset_id` 流程（兼容旧 FormFile 直传），`LicenseMediaAssetID` 已正确写入 DB，移除了 TODO 注释
+- [x] **集团入驻申请**：`api/group-application.ts` 中 `ocrGroupBusinessLicense` 已改用 `uploadMedia` + `POST /v1/ocr/jobs`，通过统一 OCR 作业完成识别并刷新申请数据
 
 ### 7.4 验收
 

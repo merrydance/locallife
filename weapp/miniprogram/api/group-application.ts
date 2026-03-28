@@ -1,5 +1,6 @@
 import { request } from '../utils/request'
-import { uploadMedia, postFormData } from '../utils/media'
+import { uploadMedia } from '../utils/media'
+import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 
@@ -67,16 +68,22 @@ export function updateGroupApplicationBasic(data: UpdateGroupApplicationBasicReq
 }
 
 /**
- * 上传并识别集团营业执照
+ * 上传集团营业执照并通过统一 OCR job 识别
  */
 export async function ocrGroupBusinessLicense(filePath: string) {
   const { mediaId } = await uploadMedia(filePath, {
     businessType: 'group',
     mediaCategory: 'business_license'
   })
-  return postFormData<GroupApplicationResponse>(
-    '/v1/groups/applications/license/ocr',
-    { media_asset_id: mediaId }
+  const draft = await getOrCreateGroupApplication()
+  return enqueueOCRJobAndRefresh(
+    {
+      document_type: 'business_license',
+      media_asset_id: mediaId,
+      owner_type: 'group_application',
+      owner_id: draft.id
+    },
+    getOrCreateGroupApplication
   )
 }
 

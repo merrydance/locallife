@@ -1,5 +1,5 @@
 import { request } from '../utils/request'
-import { uploadMedia, postFormData, MediaUploadResult } from '../utils/media'
+import { uploadMedia, type MediaUploadResult } from '../utils/media'
 import type { AgreementConsentPayload } from './agreement-consent'
 
 // ==================== OCR Status Types ====================
@@ -78,6 +78,11 @@ export interface MerchantApplicationDraftResponse {
   updated_at: string
 }
 
+interface OCRJobResponse {
+  ocr_job_id: number
+  status: string
+}
+
 // 图片上传响应
 export interface UploadImageResponse {
   image_url: string
@@ -135,71 +140,74 @@ export function updateMerchantBasicInfo(data: UpdateMerchantBasicInfoRequest) {
   })
 }
 
+async function enqueueMerchantApplicationOCR(
+  mediaId: number,
+  documentType: 'business_license' | 'food_permit' | 'id_card',
+  side?: 'Front' | 'Back'
+) {
+  const draft = await getMerchantApplication()
+
+  await request<OCRJobResponse>({
+    url: '/v1/ocr/jobs',
+    method: 'POST',
+    data: {
+      document_type: documentType,
+      media_asset_id: mediaId,
+      owner_type: 'merchant_application',
+      owner_id: draft.id,
+      side: side ? side.toLowerCase() : undefined
+    }
+  })
+
+  return getMerchantApplication()
+}
+
 /**
  * 营业执照 OCR（异步）
- * POST /v1/merchant/application/license/ocr
- * 若传 filePath：先上传到媒体服务，再个 media_asset_id 调用 OCR
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=business_license
+ * 若传 filePath：先上传到媒体服务，再以 media_asset_id 创建 OCR 作业
  */
 export async function ocrBusinessLicense(filePath?: string) {
-  if (filePath) {
-    const { mediaId } = await uploadMedia(filePath, {
-      businessType: 'merchant',
-      mediaCategory: 'business_license'
-    })
-    return postFormData<MerchantApplicationDraftResponse>(
-      '/v1/merchant/application/license/ocr',
-      { media_asset_id: mediaId }
-    )
+  if (!filePath) {
+    throw new Error('missing filePath for merchant business license OCR')
   }
-  return request<MerchantApplicationDraftResponse>({
-    url: '/v1/merchant/application/license/ocr',
-    method: 'POST'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory: 'business_license'
   })
+  return enqueueMerchantApplicationOCR(mediaId, 'business_license')
 }
 
 /**
  * 食品经营许可证 OCR（异步）
- * POST /v1/merchant/application/foodpermit/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=food_permit
  */
 export async function ocrFoodPermit(filePath?: string) {
-  if (filePath) {
-    const { mediaId } = await uploadMedia(filePath, {
-      businessType: 'merchant',
-      mediaCategory: 'food_permit'
-    })
-    return postFormData<MerchantApplicationDraftResponse>(
-      '/v1/merchant/application/foodpermit/ocr',
-      { media_asset_id: mediaId }
-    )
+  if (!filePath) {
+    throw new Error('missing filePath for merchant food permit OCR')
   }
-  return request<MerchantApplicationDraftResponse>({
-    url: '/v1/merchant/application/foodpermit/ocr',
-    method: 'POST'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory: 'food_permit'
   })
+  return enqueueMerchantApplicationOCR(mediaId, 'food_permit')
 }
 
 /**
  * 身份证 OCR（异步）
- * POST /v1/merchant/application/idcard/ocr
+ * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=id_card
  * @param side 'Front' 或 'Back'
  */
 export async function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back') {
-  if (filePath) {
-    const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
-    const { mediaId } = await uploadMedia(filePath, {
-      businessType: 'merchant',
-      mediaCategory
-    })
-    return postFormData<MerchantApplicationDraftResponse>(
-      '/v1/merchant/application/idcard/ocr',
-      { media_asset_id: mediaId, side }
-    )
+  if (!filePath) {
+    throw new Error('missing filePath for merchant id card OCR')
   }
-  return request<MerchantApplicationDraftResponse>({
-    url: '/v1/merchant/application/idcard/ocr',
-    method: 'POST',
-    data: { side }
+  const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'merchant',
+    mediaCategory
   })
+  return enqueueMerchantApplicationOCR(mediaId, 'id_card', side)
 }
 
 /**

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
@@ -293,6 +294,265 @@ func (server *Server) enqueueOCRJob(ctx *gin.Context, job db.OcrJob) error {
 	return fmt.Errorf("unsupported ocr job dispatch: owner_type=%s document_type=%s side=%s", job.OwnerType, job.DocumentType, job.Side)
 }
 
+func (server *Server) markMerchantApplicationOCRPending(ctx *gin.Context, job db.OcrJob) error {
+	app, err := server.store.GetMerchantApplication(ctx, job.OwnerID)
+	if err != nil {
+		return err
+	}
+
+	editable, needReset, errMsg := checkApplicationEditable(app.Status)
+	if !editable {
+		return errors.New(errMsg)
+	}
+	if needReset {
+		resetResult, resetErr := server.store.ResetMerchantApplicationTx(ctx, db.ResetMerchantApplicationTxParams{
+			ApplicationID: app.ID,
+			UserID:        app.UserID,
+		})
+		if resetErr != nil {
+			return resetErr
+		}
+		app = resetResult.Application
+	}
+
+	queuedAt := job.CreatedAt.Format(time.RFC3339)
+	ocrJobID := job.ID
+
+	switch ocr.DocumentType(job.DocumentType) {
+	case ocr.DocumentTypeBusinessLicense:
+		payload, marshalErr := json.Marshal(BusinessLicenseOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, err = server.store.UpdateMerchantApplicationBusinessLicense(ctx, db.UpdateMerchantApplicationBusinessLicenseParams{
+			ID:                          app.ID,
+			BusinessLicenseMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+			BusinessLicenseOcr:          payload,
+		})
+		return err
+	case ocr.DocumentTypeFoodPermit:
+		payload, marshalErr := json.Marshal(FoodPermitOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, err = server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
+			ID:                     app.ID,
+			FoodPermitMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+			FoodPermitOcr:          payload,
+		})
+		return err
+	case ocr.DocumentTypeIDCard:
+		payload, marshalErr := json.Marshal(MerchantIDCardOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
+			_, err = server.store.UpdateMerchantApplicationIDCardBack(ctx, db.UpdateMerchantApplicationIDCardBackParams{
+				ID:                     app.ID,
+				IDCardBackMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+				IDCardBackOcr:          payload,
+			})
+			return err
+		}
+		_, err = server.store.UpdateMerchantApplicationIDCardFront(ctx, db.UpdateMerchantApplicationIDCardFrontParams{
+			ID:                      app.ID,
+			IDCardFrontMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+			IDCardFrontOcr:          payload,
+		})
+		return err
+	default:
+		return nil
+	}
+}
+
+func (server *Server) markOperatorApplicationOCRPending(ctx *gin.Context, job db.OcrJob) error {
+	app, err := server.store.GetOperatorApplicationByID(ctx, job.OwnerID)
+	if err != nil {
+		return err
+	}
+	if app.Status != "draft" {
+		return nil
+	}
+
+	queuedAt := job.CreatedAt.Format(time.RFC3339)
+	ocrJobID := job.ID
+
+	switch ocr.DocumentType(job.DocumentType) {
+	case ocr.DocumentTypeBusinessLicense:
+		payload, marshalErr := json.Marshal(BusinessLicenseOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, err = server.store.UpdateOperatorApplicationBusinessLicense(ctx, db.UpdateOperatorApplicationBusinessLicenseParams{
+			ID:                          app.ID,
+			BusinessLicenseMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+			BusinessLicenseOcr:          payload,
+		})
+		return err
+	case ocr.DocumentTypeIDCard:
+		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
+			payload, marshalErr := json.Marshal(OperatorIDCardBackOCR{
+				Status:   "pending",
+				QueuedAt: queuedAt,
+				OCRJobID: &ocrJobID,
+			})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			_, err = server.store.UpdateOperatorApplicationIDCardBack(ctx, db.UpdateOperatorApplicationIDCardBackParams{
+				ID:                     app.ID,
+				IDCardBackMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+				IDCardBackOcr:          payload,
+			})
+			return err
+		}
+		payload, marshalErr := json.Marshal(OperatorIDCardOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, err = server.store.UpdateOperatorApplicationIDCardFront(ctx, db.UpdateOperatorApplicationIDCardFrontParams{
+			ID:                      app.ID,
+			IDCardFrontMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+			IDCardFrontOcr:          payload,
+		})
+		return err
+	default:
+		return nil
+	}
+}
+
+func (server *Server) markRiderApplicationOCRPending(ctx *gin.Context, job db.OcrJob) error {
+	app, err := server.store.GetRiderApplication(ctx, job.OwnerID)
+	if err != nil {
+		return err
+	}
+	if app.Status != "draft" {
+		return nil
+	}
+
+	queuedAt := job.CreatedAt.Format(time.RFC3339)
+	ocrJobID := job.ID
+
+	switch ocr.DocumentType(job.DocumentType) {
+	case ocr.DocumentTypeIDCard:
+		payload, marshalErr := json.Marshal(IDCardOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		arg := db.UpdateRiderApplicationIDCardParams{
+			ID:        app.ID,
+			IDCardOcr: payload,
+		}
+		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
+			arg.IDCardBackMediaAssetID = pgtype.Int8{Int64: job.MediaAssetID, Valid: true}
+		} else {
+			arg.IDCardFrontMediaAssetID = pgtype.Int8{Int64: job.MediaAssetID, Valid: true}
+		}
+		_, err = server.store.UpdateRiderApplicationIDCard(ctx, arg)
+		return err
+	case ocr.DocumentTypeHealthCert:
+		payload, marshalErr := json.Marshal(HealthCertOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, err = server.store.UpdateRiderApplicationHealthCert(ctx, db.UpdateRiderApplicationHealthCertParams{
+			ID:                     app.ID,
+			HealthCertMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+			HealthCertOcr:          payload,
+		})
+		return err
+	default:
+		return nil
+	}
+}
+
+func mergeGroupApplicationData(data []byte) map[string]json.RawMessage {
+	result := map[string]json.RawMessage{}
+	if len(data) > 0 {
+		_ = json.Unmarshal(data, &result)
+	}
+	return result
+}
+
+func (server *Server) markGroupApplicationOCRPending(ctx *gin.Context, job db.OcrJob) error {
+	app, err := server.store.GetGroupApplication(ctx, job.OwnerID)
+	if err != nil {
+		return err
+	}
+	if app.Status != "draft" {
+		return nil
+	}
+	if ocr.DocumentType(job.DocumentType) != ocr.DocumentTypeBusinessLicense {
+		return nil
+	}
+
+	queuedAt := job.CreatedAt.Format(time.RFC3339)
+	ocrJobID := job.ID
+	payload, marshalErr := json.Marshal(BusinessLicenseOCRData{
+		Status:   "pending",
+		QueuedAt: queuedAt,
+		OCRJobID: &ocrJobID,
+	})
+	if marshalErr != nil {
+		return marshalErr
+	}
+	applicationData := mergeGroupApplicationData(app.ApplicationData)
+	applicationData["business_license_ocr"] = payload
+	merged, marshalErr := json.Marshal(applicationData)
+	if marshalErr != nil {
+		return marshalErr
+	}
+	_, err = server.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{
+		ID:                  app.ID,
+		LicenseMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+		ApplicationData:     merged,
+	})
+	return err
+}
+
+func (server *Server) markOCRPending(ctx *gin.Context, job db.OcrJob) error {
+	switch ocr.OwnerType(job.OwnerType) {
+	case ocr.OwnerTypeMerchantApplication:
+		return server.markMerchantApplicationOCRPending(ctx, job)
+	case ocr.OwnerTypeOperatorApplication:
+		return server.markOperatorApplicationOCRPending(ctx, job)
+	case ocr.OwnerTypeRiderApplication:
+		return server.markRiderApplicationOCRPending(ctx, job)
+	case ocr.OwnerTypeGroupApplication:
+		return server.markGroupApplicationOCRPending(ctx, job)
+	default:
+		return nil
+	}
+}
+
 // createOCRJob godoc
 // @Summary 创建统一 OCR 任务
 // @Description 统一创建 OCR 任务并返回可轮询的 ocr_job_id
@@ -379,6 +639,9 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 		log.Error().Int64("ocr_job_id", job.ID).Err(err).Msg("enqueue unified ocr job failed")
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, err))
 		return
+	}
+	if err := server.markOCRPending(ctx, job); err != nil {
+		log.Warn().Int64("ocr_job_id", job.ID).Err(err).Msg("mark unified ocr owner pending failed")
 	}
 	server.writeAuditLog(ctx, AuditLogInput{
 		ActorUserID: authPayload.UserID,

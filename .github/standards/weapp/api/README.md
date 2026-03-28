@@ -364,9 +364,10 @@ getPersonalCenterOverview()    // 获取个人中心概览
 - ✅ 重构商户申请：`/v1/merchants/applications`, `/v1/merchants/applications/me`
 - ✅ 重构申请流程：`/v1/merchant/application/*`, `/v1/merchant/application/submit`
 - ✅ 重构OCR识别和数据回填：
-  * 身份证OCR：`/v1/merchant/application/idcard/ocr` → 自动回填姓名、身份证号、地址等
-  * 营业执照OCR：`/v1/merchant/application/license/ocr` → 自动回填企业名称、统一社会信用代码、法定代表人、经营范围、地址等
-  * 食品经营许可证OCR：`/v1/merchant/application/foodpermit/ocr` → 自动回填许可证编号、有效期等
+  * 统一 OCR 作业接口：`POST /v1/ocr/jobs`
+  * 身份证OCR：`owner_type=merchant_application, document_type=id_card` → 自动回填姓名、身份证号、地址等
+  * 营业执照OCR：`owner_type=merchant_application, document_type=business_license` → 自动回填企业名称、统一社会信用代码、法定代表人、经营范围、地址等
+  * 食品经营许可证OCR：`owner_type=merchant_application, document_type=food_permit` → 自动回填许可证编号、有效期等
 - ✅ 重构银行绑定：`/v1/merchant/bindbank`, `/v1/merchant/applyment/status`
 
 说明：旧封装 `miniprogram/api/merchant-application.ts` 已移除，当前运行时主链路统一以 `miniprogram/api/onboarding.ts` 为准。
@@ -408,8 +409,9 @@ getApplicationStatusDescription()  // 获取状态描述
 - ✅ 重构骑手申请：`/v1/rider/apply`, `/v1/rider/application/*`
 - ✅ 重构申请流程：`/v1/rider/application/basic`, `/v1/rider/application/submit`
 - ✅ 重构OCR识别和数据回填：
-  * 身份证OCR：`/v1/rider/application/idcard/ocr` → 自动回填姓名、身份证号、地址、性别等
-  * 健康证OCR：`/v1/rider/application/healthcert` → 自动回填证书编号、有效期等
+  * 统一 OCR 作业接口：`POST /v1/ocr/jobs`
+  * 身份证OCR：`owner_type=rider_application, document_type=id_card` → 自动回填姓名、身份证号、地址、性别等
+  * 健康证OCR：`owner_type=rider_application, document_type=health_cert` → 自动回填证书编号、有效期等
 - ✅ 重构银行绑定：`/v1/rider/applyment/bindbank`, `/v1/rider/applyment/status`
 
 **核心功能**:
