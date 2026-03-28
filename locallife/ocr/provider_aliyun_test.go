@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -285,6 +286,39 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 	}
 	if got["ImageBase64"] != base64.StdEncoding.EncodeToString([]byte("img-bytes")) {
 		t.Fatalf("body image base64 = %v", got["ImageBase64"])
+	}
+}
+
+func TestBuildAliyunCanonicalRequest_MatchesACS3Shape(t *testing.T) {
+	reqURL, err := url.Parse("https://ocr-api.cn-hangzhou.aliyuncs.com")
+	if err != nil {
+		t.Fatalf("parse url: %v", err)
+	}
+	req := &http.Request{Method: http.MethodPost, URL: reqURL, Header: make(http.Header)}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Host", "ocr-api.cn-hangzhou.aliyuncs.com")
+	req.Header.Set("x-acs-action", "RecognizeBusinessLicense")
+	req.Header.Set("x-acs-content-sha256", "73d25da2e8017fd7e5c6340f8033661057fc73a6384dd77fffa955e08bbf3cdc")
+	req.Header.Set("x-acs-date", "2026-03-28T13:30:17Z")
+	req.Header.Set("x-acs-signature-nonce", "1774704617315644886")
+	req.Header.Set("x-acs-version", "2021-07-07")
+
+	signedHeaders := []string{"accept", "content-type", "host", "x-acs-action", "x-acs-content-sha256", "x-acs-date", "x-acs-signature-nonce", "x-acs-version"}
+	payloadHash := "73d25da2e8017fd7e5c6340f8033661057fc73a6384dd77fffa955e08bbf3cdc"
+
+	got := buildAliyunCanonicalRequest(req, signedHeaders, payloadHash)
+	want := strings.Join([]string{
+		"POST",
+		"/",
+		"",
+		"accept:application/json\ncontent-type:application/json\nhost:ocr-api.cn-hangzhou.aliyuncs.com\nx-acs-action:RecognizeBusinessLicense\nx-acs-content-sha256:73d25da2e8017fd7e5c6340f8033661057fc73a6384dd77fffa955e08bbf3cdc\nx-acs-date:2026-03-28T13:30:17Z\nx-acs-signature-nonce:1774704617315644886\nx-acs-version:2021-07-07\n",
+		"accept;content-type;host;x-acs-action;x-acs-content-sha256;x-acs-date;x-acs-signature-nonce;x-acs-version",
+		payloadHash,
+	}, "\n")
+
+	if got != want {
+		t.Fatalf("canonical request mismatch\nwant:\n%s\n\ngot:\n%s", want, got)
 	}
 }
 

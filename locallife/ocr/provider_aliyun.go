@@ -455,6 +455,9 @@ func buildAliyunCanonicalRequest(httpReq *http.Request, signedHeaders []string, 
 	}
 	canonicalQuery := canonicalQueryString(httpReq.URL)
 	canonicalHeaders := canonicalHeaderString(httpReq.Header, signedHeaders)
+	if canonicalHeaders != "" {
+		canonicalHeaders += "\n"
+	}
 	return strings.Join([]string{
 		httpReq.Method,
 		canonicalURI,
