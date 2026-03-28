@@ -52,72 +52,74 @@
 <!-- 新建/编辑弹窗 -->
 <t-popup visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
   <view class="form-popup">
-    <view class="form-title">{{isEdit ? '编辑配送优惠' : '新建配送优惠'}}</view>
+    <scroll-view scroll-y class="form-scroll">
+      <view class="form-title">{{isEdit ? '编辑配送优惠' : '新建配送优惠'}}</view>
 
-    <view class="form-item">
-      <text class="form-label required">优惠名称</text>
-      <input
-        class="form-input"
-        value="{{form.name}}"
-        placeholder="例如：满30减5"
-        maxlength="50"
-        data-field="name"
-        bindinput="onFormInput"
-      />
-    </view>
-
-    <view class="form-row">
-      <view class="form-item half">
-        <text class="form-label required">最低订单金额（元）</text>
+      <view class="form-item">
+        <text class="form-label required">优惠名称</text>
         <input
           class="form-input"
-          type="digit"
-          value="{{form.min_order_yuan}}"
-          placeholder="如 30.00"
-          data-field="min_order_yuan"
+          value="{{form.name}}"
+          placeholder="例如：满30减5"
+          maxlength="50"
+          data-field="name"
           bindinput="onFormInput"
         />
       </view>
-      <view class="form-item half">
-        <text class="form-label required">优惠金额（元）</text>
-        <input
-          class="form-input"
-          type="digit"
-          value="{{form.discount_yuan}}"
-          placeholder="如 5.00"
-          data-field="discount_yuan"
-          bindinput="onFormInput"
-        />
-      </view>
-    </view>
 
-    <view class="form-row">
-      <view class="form-item half">
-        <text class="form-label required">开始日期</text>
-        <picker mode="date" value="{{form.valid_from}}" bindchange="onFormInput" data-field="valid_from">
-          <view class="form-picker {{form.valid_from ? '' : 'placeholder'}}">
-            {{form.valid_from || '请选择'}}
-          </view>
-        </picker>
+      <view class="form-row">
+        <view class="form-item half">
+          <text class="form-label required">最低订单金额（元）</text>
+          <input
+            class="form-input"
+            type="digit"
+            value="{{form.min_order_yuan}}"
+            placeholder="如 30.00"
+            data-field="min_order_yuan"
+            bindinput="onFormInput"
+          />
+        </view>
+        <view class="form-item half">
+          <text class="form-label required">优惠金额（元）</text>
+          <input
+            class="form-input"
+            type="digit"
+            value="{{form.discount_yuan}}"
+            placeholder="如 5.00"
+            data-field="discount_yuan"
+            bindinput="onFormInput"
+          />
+        </view>
       </view>
-      <view class="form-item half">
-        <text class="form-label required">结束日期</text>
-        <picker mode="date" value="{{form.valid_until}}" bindchange="onFormInput" data-field="valid_until">
-          <view class="form-picker {{form.valid_until ? '' : 'placeholder'}}">
-            {{form.valid_until || '请选择'}}
-          </view>
-        </picker>
+
+      <view class="form-row">
+        <view class="form-item half">
+          <text class="form-label required">开始日期</text>
+          <picker mode="date" value="{{form.valid_from}}" bindchange="onFormInput" data-field="valid_from">
+            <view class="form-picker {{form.valid_from ? '' : 'placeholder'}}">
+              {{form.valid_from || '请选择'}}
+            </view>
+          </picker>
+        </view>
+        <view class="form-item half">
+          <text class="form-label required">结束日期</text>
+          <picker mode="date" value="{{form.valid_until}}" bindchange="onFormInput" data-field="valid_until">
+            <view class="form-picker {{form.valid_until ? '' : 'placeholder'}}">
+              {{form.valid_until || '请选择'}}
+            </view>
+          </picker>
+        </view>
       </view>
-    </view>
 
-    <view wx:if="{{isEdit}}" class="form-item form-item-row">
-      <text class="form-label">启用状态</text>
-      <t-switch value="{{form.is_active}}" bind:change="onToggleActive" />
-    </view>
+      <view wx:if="{{isEdit}}" class="form-item form-item-row">
+        <text class="form-label">启用状态</text>
+        <t-switch value="{{form.is_active}}" bind:change="onToggleActive" />
+      </view>
 
-    <view class="form-actions">
-      <t-button theme="default" variant="outline" size="medium" bind:tap="onCloseForm" style="flex: 1;">取消</t-button>
-      <t-button theme="primary" size="medium" loading="{{submitting}}" bind:tap="onSubmitForm" style="flex: 2;">保存</t-button>
-    </view>
+      <view class="form-actions">
+        <t-button theme="default" variant="outline" size="medium" bind:tap="onCloseForm" style="flex: 1;">取消</t-button>
+        <t-button theme="primary" size="medium" loading="{{submitting}}" bind:tap="onSubmitForm" style="flex: 2;">保存</t-button>
+      </view>
+    </scroll-view>
   </view>
 </t-popup>

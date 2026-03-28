@@ -11,13 +11,53 @@ interface TagItem extends MerchantCategoryTag {
   selected: boolean
 }
 
+function getErrorMessage(error: unknown, fallback: string) {
+  if (error && typeof error === 'object') {
+    const knownError = error as { userMessage?: string, message?: string }
+    return knownError.userMessage || knownError.message || fallback
+  }
+
+  return fallback
+}
+
+function buildTagItems(allTags: MerchantCategoryTag[], selectedTags: MerchantCategoryTag[]) {
+  const selectedIds = new Set((selectedTags || []).map((tag) => tag.id))
+
+  return {
+    tags: (allTags || []).map((tag) => ({
+      ...tag,
+      selected: selectedIds.has(tag.id)
+    })),
+    selectedCount: selectedIds.size,
+    persistedTagIds: [...selectedIds]
+  }
+}
+
+function hasSelectionChanged(currentTags: TagItem[], persistedTagIds: number[]) {
+  const currentSelectedIds = currentTags
+    .filter((tag) => tag.selected)
+    .map((tag) => tag.id)
+    .sort((left, right) => left - right)
+  const lastSavedIds = [...persistedTagIds].sort((left, right) => left - right)
+
+  if (currentSelectedIds.length !== lastSavedIds.length) {
+    return true
+  }
+
+  return currentSelectedIds.some((id, index) => id !== lastSavedIds[index])
+}
+
 Page({
   data: {
     navBarHeight: 88,
-    loading: true,
+    loading: false,
+    initialError: false,
+    initialErrorMessage: '',
     saving: false,
     tags: [] as TagItem[],
-    selectedCount: 0
+    selectedCount: 0,
+    persistedTagIds: [] as number[],
+    hasChanges: false
   },
 
   async onLoad() {
@@ -26,36 +66,56 @@ Page({
     await this.loadData()
   },
 
+  onPullDownRefresh() {
+    this.loadData()
+  },
+
   async loadData() {
-    this.setData({ loading: true })
+    if (this.data.loading) {
+      return
+    }
+
+    this.setData({
+      loading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
     try {
       const [currentRes, allRes] = await Promise.all([
         getMyMerchantTags(),
         getAvailableMerchantTags()
       ])
 
-      const selectedIds = new Set((currentRes.tags || []).map((t) => t.id))
-      const tags: TagItem[] = (allRes.tags || []).map((t) => ({
-        ...t,
-        selected: selectedIds.has(t.id)
-      }))
+      const nextState = buildTagItems(allRes.tags || [], currentRes.tags || [])
 
       this.setData({
-        tags,
-        selectedCount: selectedIds.size
+        ...nextState,
+        hasChanges: false
       })
     } catch (err) {
       logger.error('[MerchantCategories] 加载失败', err)
-      wx.showToast({ title: '加载失败', icon: 'error' })
+      this.setData({
+        initialError: true,
+        initialErrorMessage: getErrorMessage(err, '经营类目加载失败，请重试')
+      })
     } finally {
       this.setData({ loading: false })
+      wx.stopPullDownRefresh()
     }
   },
 
   onTagTap(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.saving || this.data.loading) {
+      return
+    }
+
     const index = e.currentTarget.dataset.index as number
     const tags = [...this.data.tags]
     const tag = tags[index]
+
+    if (!tag) {
+      return
+    }
 
     if (tag.selected) {
       tag.selected = false
@@ -68,10 +128,18 @@ Page({
     }
 
     const selectedCount = tags.filter((t) => t.selected).length
-    this.setData({ tags, selectedCount })
+    this.setData({
+      tags,
+      selectedCount,
+      hasChanges: hasSelectionChanged(tags, this.data.persistedTagIds)
+    })
   },
 
   async onSave() {
+    if (this.data.saving || this.data.loading || !this.data.hasChanges) {
+      return
+    }
+
     const selectedIds = this.data.tags
       .filter((t) => t.selected)
       .map((t) => t.id)
@@ -95,13 +163,26 @@ Page({
   async doSave(ids: number[]) {
     this.setData({ saving: true })
     try {
-      await setMyMerchantTags(ids)
+      const response = await setMyMerchantTags(ids)
+      const nextState = buildTagItems(this.data.tags, response.tags || [])
+
+      this.setData({
+        ...nextState,
+        hasChanges: false
+      })
       wx.showToast({ title: '经营类目已保存', icon: 'success' })
     } catch (err) {
       logger.error('[MerchantCategories] 保存失败', err)
-      wx.showToast({ title: '保存失败', icon: 'error' })
+      wx.showToast({
+        title: getErrorMessage(err, '保存失败，请稍后重试'),
+        icon: 'none'
+      })
     } finally {
       this.setData({ saving: false })
     }
+  },
+
+  onRetry() {
+    this.loadData()
   }
 })

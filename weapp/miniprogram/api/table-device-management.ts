@@ -75,6 +75,7 @@ export interface ListTablesResponse {
 /** 桌台图片响应 - 对齐 api.tableImageResponse */
 export interface TableImageResponse {
     id?: number
+    media_asset_id?: number
     image_url?: string
     is_primary?: boolean
     sort_order?: number

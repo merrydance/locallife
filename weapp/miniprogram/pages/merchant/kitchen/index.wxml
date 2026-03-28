@@ -11,6 +11,11 @@
   </view>
 
   <block wx:else>
+    <view wx:if="{{refreshErrorMessage}}" class="refresh-banner">
+      <text class="refresh-banner-text">{{refreshErrorMessage}}</text>
+      <t-button size="small" theme="primary" variant="outline" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
+    </view>
+
     <view class="summary-grid">
       <view class="summary-card brand-card">
         <text class="summary-label">待处理总数</text>

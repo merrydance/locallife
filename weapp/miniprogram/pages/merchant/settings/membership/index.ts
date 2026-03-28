@@ -48,6 +48,16 @@ function hasFormChanged(current: MembershipFormState, initial: MembershipFormSta
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
+    const userMessage = (err as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -55,6 +65,7 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     saving: false,
     merchantId: 0,
@@ -84,21 +95,37 @@ Page({
   },
 
   onShow() {
-    if (!this.data.initialLoading && !this.data.saving) {
+    if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
       this.loadSettings(false)
     }
   },
 
   onPullDownRefresh() {
+    if (this.data.hasChanges) {
+      wx.stopPullDownRefresh()
+      wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
+      return
+    }
+    this.loadSettings(false)
+  },
+
+  onRetryRefresh() {
     this.loadSettings(false)
   },
 
   async loadSettings(showLoading = true) {
     if (this.data.loading) return
 
+    const hasExistingData = !this.data.initialLoading
+    const isSilentRefresh = !showLoading && hasExistingData
+
     this.setData({
       loading: true,
-      ...(showLoading ? { initialError: false, initialErrorMessage: '' } : {})
+      ...(showLoading
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        : isSilentRefresh
+          ? { refreshErrorMessage: '' }
+          : {})
     })
 
     try {
@@ -111,13 +138,12 @@ Page({
         hasChanges: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (err: unknown) {
       logger.error('Load merchant membership settings failed', err)
-      const message = typeof err === 'object' && err !== null && 'userMessage' in err
-        ? (err as { userMessage?: string }).userMessage || '会员设置加载失败，请重试'
-        : '会员设置加载失败，请重试'
+      const message = getErrorMessage(err, '会员设置加载失败，请重试')
 
       if (this.data.initialLoading) {
         this.setData({
@@ -125,6 +151,8 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
+      } else if (isSilentRefresh) {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
       }
@@ -140,7 +168,7 @@ Page({
       ...this.data.form,
       [field]: e.detail.value
     }
-    this.setData({ form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   onPercentChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -148,7 +176,7 @@ Page({
       ...this.data.form,
       max_deduction_percent: e.detail.value
     }
-    this.setData({ form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   onToggleScene(e: WechatMiniprogram.TouchEvent) {
@@ -165,7 +193,7 @@ Page({
       ...this.data.form,
       [group]: nextGroup
     }
-    this.setData({ form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   validateForm() {
@@ -202,9 +230,7 @@ Page({
       wx.showToast({ title: '会员设置已保存', icon: 'success' })
     } catch (err: unknown) {
       logger.error('Save merchant membership settings failed', err)
-      const message = typeof err === 'object' && err !== null && 'userMessage' in err
-        ? (err as { userMessage?: string }).userMessage || '保存失败，请稍后重试'
-        : '保存失败，请稍后重试'
+      const message = getErrorMessage(err, '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()

@@ -1,6 +1,14 @@
 import { getStableBarHeights } from '../../../../utils/responsive'
-import { DishManagementService, CreateDishRequest, UpdateDishRequest } from '../../../../api/dish'
-import { getMediaDisplayUrl } from '../../../../utils/media'
+import {
+  DishManagementService,
+  DishResponse,
+  CreateDishRequest,
+  UpdateDishRequest,
+  TagService,
+  CustomizationGroup,
+  CustomizationGroupInput
+} from '../../../../api/dish'
+import { getPublicImageUrl } from '../../../../utils/image'
 import { logger } from '../../../../utils/logger'
 
 interface UploadFileItem {
@@ -22,6 +30,69 @@ interface CategoryOption {
   value: string
 }
 
+interface CustomizationOptionDraft {
+  key: string
+  name: string
+  extraPriceYuan: string
+}
+
+interface CustomizationGroupDraft {
+  key: string
+  name: string
+  is_required: boolean
+  options: CustomizationOptionDraft[]
+}
+
+const MAX_CUSTOMIZATION_GROUPS = 20
+
+function buildDraftKey(prefix: string): string {
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+}
+
+function createEmptyOptionDraft(): CustomizationOptionDraft {
+  return {
+    key: buildDraftKey('option'),
+    name: '',
+    extraPriceYuan: ''
+  }
+}
+
+function createEmptyGroupDraft(): CustomizationGroupDraft {
+  return {
+    key: buildDraftKey('group'),
+    name: '',
+    is_required: false,
+    options: [createEmptyOptionDraft()]
+  }
+}
+
+function mapCustomizationGroupsToDrafts(groups?: CustomizationGroup[]): CustomizationGroupDraft[] {
+  if (!Array.isArray(groups) || groups.length === 0) {
+    return []
+  }
+
+  return groups.map((group) => ({
+    key: `group_${group.id}`,
+    name: group.name || '',
+    is_required: !!group.is_required,
+    options: Array.isArray(group.options) && group.options.length > 0
+      ? group.options.map((option) => ({
+        key: `option_${option.id}`,
+        name: option.tag_name || '',
+        extraPriceYuan: option.extra_price ? (option.extra_price / 100).toFixed(2) : ''
+      }))
+      : [createEmptyOptionDraft()]
+  }))
+}
+
+function toDishPreviewUrl(imageUrl?: string | null): string {
+  return imageUrl ? getPublicImageUrl(imageUrl) : ''
+}
+
+function buildDishFileList(previewUrl: string): UploadFileItem[] {
+  return previewUrl ? [{ url: previewUrl, status: 'done' }] : []
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -30,6 +101,8 @@ Page({
     loading: false,
     submitting: false,
     imageUploading: false,
+    persistedImageAssetId: 0,
+    persistedImagePreviewUrl: '',
     isIPhoneX: false,
     isFeatured: false,  // 推荐
     isHotSelling: false, // 热卖
@@ -51,7 +124,8 @@ Page({
     selectedCategoryValue: '',
     categoryVisible: false,
     categoryOptions: [] as CategoryOption[],
-    fileList: [] as UploadFileItem[]
+    fileList: [] as UploadFileItem[],
+    customizationGroups: [] as CustomizationGroupDraft[]
   },
 
   onLoad(options: DishEditPageOptions) {
@@ -101,8 +175,17 @@ Page({
   async loadDishDetail() {
     this.setData({ loading: true })
     try {
-      // 这里的 API getDishDetail 获取的是详情
       const res = await DishManagementService.getDishDetail(this.data.dishId)
+      const previewUrl = toDishPreviewUrl(res.image_url)
+      let customizationGroups = mapCustomizationGroupsToDrafts(res.customization_groups)
+
+      try {
+        const customizationResponse = await DishManagementService.getDishCustomizations(this.data.dishId)
+        customizationGroups = mapCustomizationGroupsToDrafts(customizationResponse)
+      } catch (error) {
+        logger.error('Load dish customizations failed', error)
+      }
+
       this.setData({
         formData: {
           name: res.name,
@@ -113,16 +196,19 @@ Page({
           is_online: res.is_online,
           is_available: res.is_available,
           prepare_time: res.prepare_time || 15,
-          image_asset_id: 0,
-          image_preview_url: res.image_url ? getMediaDisplayUrl(res.image_url) : ''
+          image_asset_id: res.image_asset_id || 0,
+          image_preview_url: previewUrl
         },
+        persistedImageAssetId: res.image_asset_id || 0,
+        persistedImagePreviewUrl: previewUrl,
         displayPrice: (res.price / 100).toFixed(2),
         displayMemberPrice: res.member_price ? (res.member_price / 100).toFixed(2) : '',
-        fileList: res.image_url ? [{ url: getMediaDisplayUrl(res.image_url), status: 'done' }] : [],
+        fileList: buildDishFileList(previewUrl),
         selectedCategoryName: res.category_name || '',
         selectedCategoryValue: res.category_id ? String(res.category_id) : '',
         isFeatured: res.tags?.some((t: { name: string }) => t.name === '推荐') ?? false,
         isHotSelling: res.tags?.some((t: { name: string }) => t.name === '热卖') ?? false,
+        customizationGroups
       })
     } catch (err) {
       logger.error('Load dish detail failed', err)
@@ -182,7 +268,25 @@ Page({
   // ==================== 图片处理 ====================
 
   buildPreviewUrl(path: string): string {
-    return getMediaDisplayUrl(path)
+    return getPublicImageUrl(path)
+  },
+
+  applyPersistedDishState(dish: DishResponse, fallbackPreviewUrl = '') {
+    const previewUrl = toDishPreviewUrl(dish.image_url) || fallbackPreviewUrl
+    const imageAssetID = dish.image_asset_id || 0
+
+    this.setData({
+      dishId: dish.id || this.data.dishId,
+      isEdit: true,
+      persistedImageAssetId: imageAssetID,
+      persistedImagePreviewUrl: previewUrl,
+      'formData.image_asset_id': imageAssetID,
+      'formData.image_preview_url': previewUrl,
+      'formData.category_id': dish.category_id || this.data.formData.category_id,
+      fileList: buildDishFileList(previewUrl),
+      selectedCategoryName: dish.category_name || this.data.selectedCategoryName,
+      selectedCategoryValue: dish.category_id ? String(dish.category_id) : this.data.selectedCategoryValue
+    })
   },
 
   async onImageAdd(e: WechatMiniprogram.CustomEvent<{ files: Array<{ url: string }> }>) {
@@ -201,7 +305,7 @@ Page({
     try {
       const { mediaId, displayUrl } = await DishManagementService.uploadDishImage(localPath)
       this.setData({
-        fileList: [{ url: displayUrl, status: 'done' }],
+        fileList: buildDishFileList(displayUrl),
         'formData.image_asset_id': mediaId,
         'formData.image_preview_url': displayUrl
       })
@@ -230,6 +334,17 @@ Page({
   },
 
   onImageRemove() {
+    if (this.data.isEdit && this.data.persistedImageAssetId > 0) {
+      const persistedPreviewUrl = this.data.persistedImagePreviewUrl
+      this.setData({
+        fileList: buildDishFileList(persistedPreviewUrl),
+        'formData.image_asset_id': this.data.persistedImageAssetId,
+        'formData.image_preview_url': persistedPreviewUrl
+      })
+      wx.showToast({ title: '当前暂不支持删除已发布图片，可重新上传替换', icon: 'none' })
+      return
+    }
+
     this.setData({
       fileList: [],
       'formData.image_asset_id': 0,
@@ -271,6 +386,185 @@ Page({
 
   onCategoryCancel() {
     this.setData({ categoryVisible: false })
+  },
+
+  // ==================== 规格编辑 ====================
+
+  onAddCustomizationGroup() {
+    if (this.data.customizationGroups.length >= MAX_CUSTOMIZATION_GROUPS) {
+      wx.showToast({ title: `最多添加${MAX_CUSTOMIZATION_GROUPS}组规格`, icon: 'none' })
+      return
+    }
+
+    this.setData({
+      customizationGroups: [...this.data.customizationGroups, createEmptyGroupDraft()]
+    })
+  },
+
+  onRemoveCustomizationGroup(e: WechatMiniprogram.TouchEvent) {
+    const { groupIndex } = e.currentTarget.dataset as { groupIndex?: number }
+    if (typeof groupIndex !== 'number') return
+
+    const customizationGroups = [...this.data.customizationGroups]
+    customizationGroups.splice(groupIndex, 1)
+    this.setData({ customizationGroups })
+  },
+
+  onCustomizationGroupNameInput(
+    e: WechatMiniprogram.CustomEvent<FormInputDetail> & { currentTarget: { dataset: { groupIndex?: number } } }
+  ) {
+    const { groupIndex } = e.currentTarget.dataset
+    if (typeof groupIndex !== 'number') return
+
+    const customizationGroups = [...this.data.customizationGroups]
+    customizationGroups[groupIndex] = {
+      ...customizationGroups[groupIndex],
+      name: e.detail.value.replace(/^\s+/, '')
+    }
+    this.setData({ customizationGroups })
+  },
+
+  onCustomizationGroupRequiredChange(
+    e: WechatMiniprogram.CustomEvent<{ value: boolean }> & { currentTarget: { dataset: { groupIndex?: number } } }
+  ) {
+    const { groupIndex } = e.currentTarget.dataset
+    if (typeof groupIndex !== 'number') return
+
+    const customizationGroups = [...this.data.customizationGroups]
+    customizationGroups[groupIndex] = {
+      ...customizationGroups[groupIndex],
+      is_required: !!e.detail.value
+    }
+    this.setData({ customizationGroups })
+  },
+
+  onAddCustomizationOption(e: WechatMiniprogram.TouchEvent) {
+    const { groupIndex } = e.currentTarget.dataset as { groupIndex?: number }
+    if (typeof groupIndex !== 'number') return
+
+    const customizationGroups = [...this.data.customizationGroups]
+    const group = customizationGroups[groupIndex]
+    customizationGroups[groupIndex] = {
+      ...group,
+      options: [...group.options, createEmptyOptionDraft()]
+    }
+    this.setData({ customizationGroups })
+  },
+
+  onRemoveCustomizationOption(e: WechatMiniprogram.TouchEvent) {
+    const { groupIndex, optionIndex } = e.currentTarget.dataset as { groupIndex?: number, optionIndex?: number }
+    if (typeof groupIndex !== 'number' || typeof optionIndex !== 'number') return
+
+    const customizationGroups = [...this.data.customizationGroups]
+    const group = customizationGroups[groupIndex]
+    const nextOptions = [...group.options]
+    nextOptions.splice(optionIndex, 1)
+
+    customizationGroups[groupIndex] = {
+      ...group,
+      options: nextOptions.length > 0 ? nextOptions : [createEmptyOptionDraft()]
+    }
+    this.setData({ customizationGroups })
+  },
+
+  onCustomizationOptionNameInput(
+    e: WechatMiniprogram.CustomEvent<FormInputDetail> & { currentTarget: { dataset: { groupIndex?: number, optionIndex?: number } } }
+  ) {
+    const { groupIndex, optionIndex } = e.currentTarget.dataset
+    if (typeof groupIndex !== 'number' || typeof optionIndex !== 'number') return
+
+    const customizationGroups = [...this.data.customizationGroups]
+    const group = customizationGroups[groupIndex]
+    const options = [...group.options]
+    options[optionIndex] = {
+      ...options[optionIndex],
+      name: e.detail.value.replace(/^\s+/, '')
+    }
+    customizationGroups[groupIndex] = { ...group, options }
+    this.setData({ customizationGroups })
+  },
+
+  onCustomizationOptionPriceInput(
+    e: WechatMiniprogram.CustomEvent<FormInputDetail> & { currentTarget: { dataset: { groupIndex?: number, optionIndex?: number } } }
+  ) {
+    const { groupIndex, optionIndex } = e.currentTarget.dataset
+    if (typeof groupIndex !== 'number' || typeof optionIndex !== 'number') return
+
+    const customizationGroups = [...this.data.customizationGroups]
+    const group = customizationGroups[groupIndex]
+    const options = [...group.options]
+    options[optionIndex] = {
+      ...options[optionIndex],
+      extraPriceYuan: e.detail.value.trim()
+    }
+    customizationGroups[groupIndex] = { ...group, options }
+    this.setData({ customizationGroups })
+  },
+
+  async buildCustomizationPayload(): Promise<CustomizationGroupInput[]> {
+    const normalizedGroups = this.data.customizationGroups
+      .map((group) => ({
+        name: group.name.trim(),
+        is_required: group.is_required,
+        options: group.options
+          .map((option) => ({
+            name: option.name.trim(),
+            extraPriceYuan: option.extraPriceYuan.trim()
+          }))
+          .filter((option) => option.name)
+      }))
+      .filter((group) => group.name || group.options.length > 0)
+
+    if (!normalizedGroups.length) {
+      return []
+    }
+
+    for (const group of normalizedGroups) {
+      if (!group.name) {
+        throw new Error('请填写规格组名称')
+      }
+      if (!group.options.length) {
+        throw new Error(`规格组「${group.name}」至少需要一个选项`)
+      }
+
+      for (const option of group.options) {
+        if (option.extraPriceYuan) {
+          const extraPrice = Number(option.extraPriceYuan)
+          if (!Number.isFinite(extraPrice) || extraPrice < 0) {
+            throw new Error(`规格选项「${option.name}」加价金额不合法`)
+          }
+        }
+      }
+    }
+
+    const existingTags = await TagService.listCustomizationTags()
+    const tagIdByName = new Map(existingTags.map((tag) => [tag.name, tag.id]))
+
+    const optionNames = Array.from(new Set(
+      normalizedGroups.reduce<string[]>((result, group) => {
+        group.options.forEach((option) => {
+          result.push(option.name)
+        })
+        return result
+      }, [])
+    ))
+
+    for (const optionName of optionNames) {
+      if (tagIdByName.has(optionName)) continue
+      const created = await TagService.createTag({ name: optionName, type: 'customization' })
+      tagIdByName.set(created.name, created.id)
+    }
+
+    return normalizedGroups.map((group, groupIndex) => ({
+      name: group.name,
+      is_required: group.is_required,
+      sort_order: groupIndex,
+      options: group.options.map((option, optionIndex) => ({
+        tag_id: tagIdByName.get(option.name) || 0,
+        extra_price: option.extraPriceYuan ? Math.round(Number(option.extraPriceYuan) * 100) : 0,
+        sort_order: optionIndex
+      }))
+    }))
   },
 
   // ==================== 提交 ====================
@@ -350,19 +644,32 @@ Page({
     }
 
     this.setData({ submitting: true })
+    let currentDishId = this.data.dishId
+    let baseDishSaved = false
     try {
       const categoryId = await this.ensureCategoryForSubmit()
+      const customizationGroups = await this.buildCustomizationPayload()
       const payload = this.buildSubmitPayload(categoryId)
 
       if (this.data.isEdit) {
-        await DishManagementService.updateDish(this.data.dishId, payload as UpdateDishRequest)
+        const updatedDish = await DishManagementService.updateDish(this.data.dishId, payload as UpdateDishRequest)
+        currentDishId = this.data.dishId
+        baseDishSaved = true
+        this.applyPersistedDishState(updatedDish, this.data.formData.image_preview_url)
         // 更新推荐/热卖标签
         const featuredTags: string[] = []
         if (this.data.isFeatured) featuredTags.push('推荐')
         if (this.data.isHotSelling) featuredTags.push('热卖')
         await DishManagementService.setDishFeaturedTags(this.data.dishId, featuredTags)
       } else {
-        await DishManagementService.createDish(payload as CreateDishRequest)
+        const createdDish = await DishManagementService.createDish(payload as CreateDishRequest)
+        currentDishId = createdDish.id
+        baseDishSaved = true
+        this.applyPersistedDishState(createdDish, this.data.formData.image_preview_url)
+      }
+
+      if (currentDishId > 0 && (this.data.isEdit || customizationGroups.length > 0)) {
+        await DishManagementService.setDishCustomizations(currentDishId, { groups: customizationGroups })
       }
       
       wx.showToast({ title: '提交成功', icon: 'success' })
@@ -376,7 +683,11 @@ Page({
       }, 1500)
     } catch (err) {
       logger.error('Submit dish failed', err)
-      wx.showToast({ title: '提交失败，请重试', icon: 'none' })
+      if (baseDishSaved && currentDishId > 0) {
+        wx.showToast({ title: '基础信息已保存，规格或标签同步失败，请重试', icon: 'none' })
+      } else {
+        wx.showToast({ title: '提交失败，请重试', icon: 'none' })
+      }
     } finally {
       this.setData({ submitting: false })
     }

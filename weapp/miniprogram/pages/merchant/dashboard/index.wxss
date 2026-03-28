@@ -4,6 +4,42 @@
   padding-bottom: var(--spacer-lg);
 }
 
+.state-block,
+.section-state-block {
+  display: flex;
+  flex-direction: column;
+
+.refresh-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  margin: 0 var(--spacer-lg) var(--spacer-md);
+  padding: var(--spacer-sm) var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-error-color-1);
+  color: var(--td-text-color-primary);
+}
+
+.refresh-banner-text {
+  flex: 1;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
+
+.state-block {
+  min-height: 60vh;
+  padding: var(--spacer-lg);
+}
+
+.section-state-block {
+  padding: var(--spacer-lg) 0;
+}
+
 /* 头部卡片 */
 .merchant-header-card {
   padding: var(--spacer-lg) var(--spacer-lg) 60rpx;
@@ -58,6 +94,56 @@
   display: flex;
   justify-content: flex-end;
   margin-top: 28rpx;
+}
+
+.shortcut-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.shortcut-card {
+  position: relative;
+  padding: 20rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(8rpx);
+}
+
+.shortcut-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.shortcut-title {
+  font-size: 28rpx;
+  font-weight: 600;
+  color: var(--td-text-color-anti);
+}
+
+.shortcut-desc {
+  display: block;
+  margin-top: 8rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.shortcut-badge {
+  min-width: 36rpx;
+  height: 36rpx;
+  padding: 0 10rpx;
+  border-radius: 999rpx;
+  background: #ffffff;
+  color: var(--td-brand-color);
+  font-size: 20rpx;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .stats-item {
@@ -139,6 +225,19 @@
 
 .order-flow-list {
   padding: 0 24rpx;
+}
+
+.section-error-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm) var(--spacer-md);
+  margin-bottom: var(--spacer-sm);
+  border-radius: var(--radius-md);
+  background: var(--td-error-color-1);
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-xs);
 }
 
 .order-card {

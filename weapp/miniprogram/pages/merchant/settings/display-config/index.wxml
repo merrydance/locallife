@@ -1,0 +1,90 @@
+<custom-navbar title="显示与打印设置" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="loading-shell">
+    <view class="hero-card hero-card-loading">
+      <view class="skeleton-line skeleton-title skeleton-shimmer"></view>
+      <view class="skeleton-line skeleton-text skeleton-shimmer"></view>
+      <view class="skeleton-line skeleton-text skeleton-short skeleton-shimmer"></view>
+    </view>
+
+    <view class="section-block section-block-loading" wx:for="{{[1, 2, 3]}}" wx:key="*this">
+      <view class="skeleton-line skeleton-heading skeleton-shimmer"></view>
+      <view class="skeleton-cell" wx:for="{{[1, 2]}}" wx:key="*this">
+        <view class="skeleton-line skeleton-cell-title skeleton-shimmer"></view>
+        <view class="skeleton-circle skeleton-switch skeleton-shimmer"></view>
+      </view>
+    </view>
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '显示配置加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <block wx:else>
+    <view class="hero-card">
+      <text class="hero-title">订单分发与提醒</text>
+      <text class="hero-subtitle">统一维护打印、语音播报和 KDS 能力，保证后厨、前台和提醒链路的表现一致。</text>
+    </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">全局开关</view>
+      <t-cell-group theme="card">
+        <t-cell title="启用打印" description="关闭后，仅保留订单展示，不再向打印机分发小票">
+          <t-switch slot="note" value="{{form.enable_print}}" data-field="enable_print" bind:change="onToggleSwitch" size="large" />
+        </t-cell>
+        <t-cell title="启用语音播报" description="关闭后，新单与履约关键节点不再播报语音提示">
+          <t-switch slot="note" value="{{form.enable_voice}}" data-field="enable_voice" bind:change="onToggleSwitch" size="large" />
+        </t-cell>
+        <t-cell title="启用 KDS" description="开启后，后厨可接收 KDS 看板展示地址和分发配置">
+          <t-switch slot="note" value="{{form.enable_kds}}" data-field="enable_kds" bind:change="onToggleSwitch" size="large" />
+        </t-cell>
+      </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">打印场景</view>
+      <view wx:if="{{!form.enable_print}}" class="section-desc">打印总开关关闭时，细分打印场景会一并关闭，避免保存出自相矛盾的分发配置。</view>
+      <t-cell-group theme="card">
+        <t-cell title="打印外卖订单" description="顾客下单成功后向绑定打印机下发外卖小票">
+          <t-switch slot="note" value="{{form.print_takeout}}" data-field="print_takeout" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_print}}" />
+        </t-cell>
+        <t-cell title="打印堂食订单" description="堂食或扫码下单后打印后厨或前台小票">
+          <t-switch slot="note" value="{{form.print_dine_in}}" data-field="print_dine_in" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_print}}" />
+        </t-cell>
+        <t-cell title="打印预订订单" description="代客建预订或预订点餐后打印预订相关单据">
+          <t-switch slot="note" value="{{form.print_reservation}}" data-field="print_reservation" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_print}}" />
+        </t-cell>
+      </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">语音提醒</view>
+      <view wx:if="{{!form.enable_voice}}" class="section-desc">语音总开关关闭时，细分提醒场景会一起停用，避免页面显示与真实播报链路不一致。</view>
+      <t-cell-group theme="card">
+        <t-cell title="外卖语音提醒" description="新外卖订单到达时播报提醒，适合前台接单场景">
+          <t-switch slot="note" value="{{form.voice_takeout}}" data-field="voice_takeout" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_voice}}" />
+        </t-cell>
+        <t-cell title="堂食语音提醒" description="堂食新单和履约变化时播报，减少漏单和错单">
+          <t-switch slot="note" value="{{form.voice_dine_in}}" data-field="voice_dine_in" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_voice}}" />
+        </t-cell>
+      </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">KDS 地址</view>
+      <view class="section-desc">如已部署后厨看板地址，可在此统一维护，供后续多端分发和跳转复用。</view>
+      <t-input label="KDS URL" value="{{form.kds_url}}" placeholder="可选，填写 http:// 或 https:// 地址" bindchange="onKdsUrlChange" />
+    </view>
+
+    <view class="save-wrap">
+      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存显示配置</t-button>
+    </view>
+  </block>
+</view>

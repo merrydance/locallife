@@ -72,7 +72,7 @@ export function updateGroupApplicationBasic(data: UpdateGroupApplicationBasicReq
 export async function ocrGroupBusinessLicense(filePath: string) {
   const { mediaId } = await uploadMedia(filePath, {
     businessType: 'group',
-    mediaCategory: 'business_license',
+    mediaCategory: 'business_license'
   })
   return postFormData<GroupApplicationResponse>(
     '/v1/groups/applications/license/ocr',

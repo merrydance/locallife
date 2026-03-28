@@ -36,11 +36,27 @@ function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
 }
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
+    const userMessage = (err as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     navBarHeight: 88,
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     formSubmitting: false,
+    deletingPrinterId: 0,
+    testingPrinterId: 0,
     printers: [] as PrinterResponse[],
     formVisible: false,
     isEdit: false,
@@ -61,30 +77,99 @@ Page({
 
   onShow() {
     this.setData({ printers: ensureArray(this.data.printers) })
+    if (!this.data.initialLoading && !this.data.loading && this.data.printers.length > 0) {
+      this.loadPrinters(false)
+    }
   },
 
   onPullDownRefresh() {
-    this.loadPrinters()
+    this.loadPrinters(false)
   },
 
-  async loadPrinters() {
+  async loadPrinters(showLoading = true) {
     if (this.data.loading) return
-    this.setData({ loading: true })
+
+    const hasExistingPrinters = this.data.printers.length > 0
+    const isSilentRefresh = !showLoading && hasExistingPrinters
+
+    this.setData({
+      loading: true,
+      ...(showLoading
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        : isSilentRefresh
+          ? { refreshErrorMessage: '' }
+          : {})
+    })
+
     try {
       const res = await deviceManagementService.listPrinters()
       const list = Array.isArray(res?.printers) ? res.printers : []
-      this.setData({ printers: list })
+      this.setData({
+        printers: list,
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
+      })
     } catch (err) {
       logger.error('Load printers failed', err)
-      wx.showToast({ title: '加载打印机失败', icon: 'none' })
+      const message = getErrorMessage(err, '加载打印机失败，请稍后重试')
+
+      if (this.data.initialLoading) {
+        this.setData({
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message
+        })
+      } else if (isSilentRefresh) {
+        this.setData({
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
+      } else {
+        wx.showToast({ title: message, icon: 'none' })
+      }
     } finally {
       this.setData({ loading: false })
       wx.stopPullDownRefresh()
     }
   },
 
+  onRetry() {
+    this.loadPrinters()
+  },
+
+  onRetryRefresh() {
+    this.loadPrinters(false)
+  },
+
   printerTypeLabel(type: PrinterType): string {
     return PRINTER_TYPE_LABELS[type] || type
+  },
+
+  applyPrinters(printers: PrinterResponse[]) {
+    this.setData({ printers: ensureArray(printers) })
+  },
+
+  patchPrinter(printer: PrinterResponse) {
+    const exists = this.data.printers.some((item) => item.id === printer.id)
+    this.applyPrinters(
+      exists
+        ? this.data.printers.map((item) => item.id === printer.id ? printer : item)
+        : [printer, ...this.data.printers]
+    )
+  },
+
+  removePrinter(printerId: number) {
+    this.applyPrinters(this.data.printers.filter((item) => item.id !== printerId))
+  },
+
+  resetFormState() {
+    this.setData({
+      formVisible: false,
+      isEdit: false,
+      editingPrinterId: 0,
+      formData: createDefaultFormData()
+    })
   },
 
   onAddPrinter() {
@@ -119,7 +204,8 @@ Page({
   },
 
   onCloseForm() {
-    this.setData({ formVisible: false })
+    if (this.data.formSubmitting) return
+    this.resetFormState()
   },
 
   onTextInput(e: WechatMiniprogram.Input) {
@@ -152,6 +238,7 @@ Page({
 
     this.setData({ formSubmitting: true })
     try {
+      let savedPrinter: PrinterResponse
       if (isEdit) {
         const updateParams: UpdatePrinterRequest = {
           printer_name: formData.printer_name,
@@ -163,7 +250,7 @@ Page({
         if (formData.printer_key.trim()) {
           updateParams.printer_key = formData.printer_key
         }
-        await deviceManagementService.updatePrinter(editingPrinterId, updateParams)
+        savedPrinter = await deviceManagementService.updatePrinter(editingPrinterId, updateParams)
         wx.showToast({ title: '更新成功', icon: 'success' })
       } else {
         const createParams: CreatePrinterRequest = {
@@ -175,14 +262,16 @@ Page({
           print_dine_in: formData.print_dine_in,
           print_reservation: formData.print_reservation
         }
-        await deviceManagementService.createPrinter(createParams)
+        savedPrinter = await deviceManagementService.createPrinter(createParams)
         wx.showToast({ title: '添加成功', icon: 'success' })
       }
-      this.setData({ formVisible: false })
-      this.loadPrinters()
+      this.patchPrinter(savedPrinter)
+      this.setData({ refreshErrorMessage: '' })
+      this.resetFormState()
+      await this.loadPrinters(false)
     } catch (err) {
       logger.error('Submit printer form failed', err)
-      const msg = err instanceof Error ? err.message : '操作失败'
+      const msg = getErrorMessage(err, '操作失败，请稍后重试')
       wx.showToast({ title: msg, icon: 'none' })
     } finally {
       this.setData({ formSubmitting: false })
@@ -199,14 +288,22 @@ Page({
       confirmColor: '#e34d59',
       cancelText: '取消',
       success: async (res) => {
-        if (!res.confirm) return
+        if (!res.confirm || this.data.deletingPrinterId) return
+        this.setData({ deletingPrinterId: id })
         try {
           await deviceManagementService.deletePrinter(id)
+          this.removePrinter(id)
+          if (this.data.editingPrinterId === id) {
+            this.resetFormState()
+          }
           wx.showToast({ title: '已删除', icon: 'success' })
-          this.loadPrinters()
+          await this.loadPrinters(false)
         } catch (err) {
           logger.error('Delete printer failed', err)
-          wx.showToast({ title: '删除失败', icon: 'none' })
+          const message = getErrorMessage(err, '删除失败，请稍后重试')
+          wx.showToast({ title: message, icon: 'none' })
+        } finally {
+          this.setData({ deletingPrinterId: 0 })
         }
       }
     })
@@ -221,15 +318,21 @@ Page({
       confirmText: '发送',
       cancelText: '取消',
       success: async (res) => {
-        if (!res.confirm) return
+        if (!res.confirm || this.data.testingPrinterId) return
+        this.setData({ testingPrinterId: id })
         try {
           await deviceManagementService.testPrinter(id)
           wx.showToast({ title: '测试命令已发送', icon: 'success' })
         } catch (err) {
           logger.error('Test printer failed', err)
-          wx.showToast({ title: '发送失败', icon: 'none' })
+          const message = getErrorMessage(err, '发送失败，请稍后重试')
+          wx.showToast({ title: message, icon: 'none' })
+        } finally {
+          this.setData({ testingPrinterId: 0 })
         }
       }
     })
-  }
+  },
+
+  onActionsCatch() {}
 })

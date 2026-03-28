@@ -5,6 +5,8 @@ export interface MerchantAccountBalanceResponse {
   available_amount: number
   pending_amount: number
   withdrawable_amount: number
+  account_status: string
+  status_desc: string
 }
 
 export interface MerchantWithdrawRequest {
@@ -32,10 +34,164 @@ export interface ListMerchantWithdrawalsResponse {
   page: number
   limit: number
   total_pages: number
+  account_status: string
+  status_desc: string
 }
 
 export interface CreateMerchantWithdrawResponse {
   withdrawal: MerchantWithdrawItem
+  wechat?: {
+    status?: string
+    withdraw_id?: string
+    out_request_no?: string
+    fail_reason?: string
+  }
+}
+
+export interface MerchantFinanceRangeParams {
+  start_date: string
+  end_date: string
+}
+
+export interface MerchantFinanceOverviewResponse {
+  completed_orders: number
+  pending_orders: number
+  total_gmv: number
+  total_income: number
+  total_platform_fee: number
+  total_operator_fee: number
+  total_service_fee: number
+  pending_income: number
+  promotion_orders: number
+  total_promotion_exp: number
+  net_income: number
+}
+
+export interface MerchantFinanceOrderItem {
+  id: number
+  payment_order_id: number
+  order_id?: number
+  order_source: string
+  total_amount: number
+  platform_commission: number
+  operator_commission: number
+  merchant_amount: number
+  status: string
+  created_at: string
+  finished_at?: string
+}
+
+export interface MerchantFinanceOrdersResponse {
+  orders: MerchantFinanceOrderItem[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+}
+
+export interface MerchantServiceFeeItem {
+  date: string
+  order_source: string
+  order_count: number
+  total_amount: number
+  platform_fee: number
+  operator_fee: number
+  total_fee: number
+}
+
+export interface MerchantServiceFeeSummaryResponse {
+  details: MerchantServiceFeeItem[]
+  total_platform_fee: number
+  total_operator_fee: number
+  total_service_fee: number
+}
+
+export interface MerchantPromotionExpenseItem {
+  id: number
+  order_no: string
+  order_type: string
+  subtotal: number
+  delivery_fee: number
+  delivery_fee_discount: number
+  total_amount: number
+  created_at: string
+  completed_at?: string
+}
+
+export interface MerchantPromotionExpensesResponse {
+  orders: MerchantPromotionExpenseItem[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+  total_promo_orders: number
+  total_promo_amount: number
+}
+
+export interface MerchantDailyFinanceItem {
+  date: string
+  order_count: number
+  total_gmv: number
+  merchant_income: number
+  total_fee: number
+}
+
+export interface MerchantDailyFinanceSummaryResponse {
+  daily_stats: MerchantDailyFinanceItem[]
+}
+
+export interface MerchantSettlementItem {
+  id: number
+  payment_order_id: number
+  order_source?: string
+  total_amount: number
+  platform_commission: number
+  operator_commission: number
+  merchant_amount: number
+  out_order_no: string
+  sharing_order_id?: string
+  status: string
+  created_at: string
+  finished_at?: string
+}
+
+export interface MerchantSettlementsResponse {
+  settlements: MerchantSettlementItem[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
+  total_amount: number
+  total_merchant_amount: number
+  total_platform_fee: number
+  total_operator_fee: number
+}
+
+export interface MerchantSettlementTimelineItem {
+  record_type: string
+  id: number
+  payment_order_id: number
+  order_source?: string
+  total_amount: number
+  platform_commission: number
+  operator_commission: number
+  merchant_amount: number
+  out_order_no: string
+  sharing_order_id?: string
+  status: string
+  created_at: string
+  finished_at?: string
+  adjustment_type?: string
+  related_type?: string
+  related_id?: number
+}
+
+export interface MerchantSettlementTimelineResponse {
+  timeline: MerchantSettlementTimelineItem[]
+  total: number
+  page: number
+  limit: number
+  total_pages: number
 }
 
 export async function getMerchantAccountBalance(): Promise<MerchantAccountBalanceResponse> {
@@ -53,11 +209,82 @@ export async function createMerchantWithdraw(payload: MerchantWithdrawRequest): 
   })
 }
 
+export async function getMerchantWithdrawal(id: number): Promise<MerchantWithdrawItem> {
+  return request({
+    url: `/v1/merchant/finance/account/withdrawals/${id}`,
+    method: 'GET'
+  })
+}
+
 export async function listMerchantWithdrawals(page: number = 1, limit: number = 20): Promise<ListMerchantWithdrawalsResponse> {
   return request({
     url: '/v1/merchant/finance/account/withdrawals',
     method: 'GET',
     data: { page, limit }
+  })
+}
+
+export async function getMerchantFinanceOverview(params: MerchantFinanceRangeParams): Promise<MerchantFinanceOverviewResponse> {
+  return request({
+    url: '/v1/merchant/finance/overview',
+    method: 'GET',
+    data: params
+  })
+}
+
+export async function listMerchantFinanceOrders(
+  params: MerchantFinanceRangeParams & { page?: number, limit?: number }
+): Promise<MerchantFinanceOrdersResponse> {
+  return request({
+    url: '/v1/merchant/finance/orders',
+    method: 'GET',
+    data: params
+  })
+}
+
+export async function getMerchantServiceFees(params: MerchantFinanceRangeParams): Promise<MerchantServiceFeeSummaryResponse> {
+  return request({
+    url: '/v1/merchant/finance/service-fees',
+    method: 'GET',
+    data: params
+  })
+}
+
+export async function getMerchantPromotionExpenses(
+  params: MerchantFinanceRangeParams & { page?: number, limit?: number }
+): Promise<MerchantPromotionExpensesResponse> {
+  return request({
+    url: '/v1/merchant/finance/promotions',
+    method: 'GET',
+    data: params
+  })
+}
+
+export async function getMerchantDailyFinance(params: MerchantFinanceRangeParams): Promise<MerchantDailyFinanceSummaryResponse> {
+  return request({
+    url: '/v1/merchant/finance/daily',
+    method: 'GET',
+    data: params
+  })
+}
+
+export async function listMerchantSettlements(
+  params: MerchantFinanceRangeParams & { status?: string, page?: number, limit?: number }
+): Promise<MerchantSettlementsResponse> {
+  return request({
+    url: '/v1/merchant/finance/settlements',
+    method: 'GET',
+    data: params
+  })
+}
+
+export async function listMerchantSettlementTimeline(
+  params: MerchantFinanceRangeParams & { page?: number, limit?: number }
+): Promise<MerchantSettlementTimelineResponse> {
+  return request({
+    url: '/v1/merchant/finance/settlement-timeline',
+    method: 'GET',
+    data: params
   })
 }
 

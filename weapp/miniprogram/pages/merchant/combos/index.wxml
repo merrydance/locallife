@@ -9,6 +9,10 @@
 
   <view wx:else class="combo-list">
     <view class="combo-card" wx:for="{{combos}}" wx:key="id" bindtap="onEditCombo" data-id="{{item.id}}">
+      <view class="combo-cover" wx:if="{{item.coverImageUrl}}">
+        <image class="combo-cover-image" src="{{item.coverImageUrl}}" mode="aspectFill" />
+        <view class="combo-cover-badge" wx:if="{{item.imageCount > 1}}">{{item.imageCount}} 图</view>
+      </view>
       <view class="combo-main">
         <view class="combo-name">{{item.name}}</view>
         <view class="combo-desc">{{item.description || '无描述'}}</view>

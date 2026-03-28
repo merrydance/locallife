@@ -2,13 +2,23 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
 
-  <view wx:if="{{loading}}" class="loading-state">
+  <view wx:if="{{initialLoading}}" class="loading-state">
     <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '打印机数据加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <t-empty wx:elif="{{!(printers && printers.length)}}" icon="info-circle" description="暂无打印机，点击右下角添加" />
 
   <view wx:else class="printer-list">
+    <view wx:if="{{refreshErrorMessage}}" class="section-error-hint">
+      <text class="section-error-text">{{refreshErrorMessage}}</text>
+      <text class="section-error-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
     <view class="printer-card" wx:for="{{printers}}" wx:key="id" bindtap="onPrinterClick" data-id="{{item.id}}">
       <view class="printer-header">
         <view class="printer-name-row">
@@ -41,8 +51,8 @@
       </view>
 
       <view class="printer-actions" catchtap="onActionsCatch">
-        <t-button size="extra-small" theme="default" shape="round" catchtap="onTestPrinter" data-id="{{item.id}}" data-name="{{item.printer_name}}">测试</t-button>
-        <t-button size="extra-small" theme="danger" variant="outline" shape="round" catchtap="onDeletePrinter" data-id="{{item.id}}" data-name="{{item.printer_name}}">删除</t-button>
+        <t-button size="extra-small" theme="default" shape="round" loading="{{testingPrinterId === item.id}}" disabled="{{testingPrinterId === item.id || deletingPrinterId === item.id}}" catchtap="onTestPrinter" data-id="{{item.id}}" data-name="{{item.printer_name}}">测试</t-button>
+        <t-button size="extra-small" theme="danger" variant="outline" shape="round" loading="{{deletingPrinterId === item.id}}" disabled="{{testingPrinterId === item.id || deletingPrinterId === item.id}}" catchtap="onDeletePrinter" data-id="{{item.id}}" data-name="{{item.printer_name}}">删除</t-button>
       </view>
     </view>
   </view>
@@ -51,57 +61,59 @@
 
   <t-popup wx:if="{{formVisible}}" visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
     <view class="form-popup">
-      <view class="form-title">{{isEdit ? '编辑打印机' : '添加打印机'}}</view>
+      <scroll-view scroll-y class="form-scroll">
+        <view class="form-title">{{isEdit ? '编辑打印机' : '添加打印机'}}</view>
 
-      <view class="form-item">
-        <text class="form-label">打印机名称 <text class="required">*</text></text>
-        <input class="form-input" value="{{formData.printer_name}}" data-field="printer_name" placeholder="如 前台打印机" bindinput="onTextInput" />
-      </view>
+        <view class="form-item">
+          <text class="form-label">打印机名称 <text class="required">*</text></text>
+          <input class="form-input" value="{{formData.printer_name}}" data-field="printer_name" placeholder="如 前台打印机" bindinput="onTextInput" />
+        </view>
 
-      <view class="form-item" wx:if="{{!isEdit}}">
-        <text class="form-label">序列号 <text class="required">*</text></text>
-        <input class="form-input" value="{{formData.printer_sn}}" data-field="printer_sn" placeholder="打印机机身序列号" bindinput="onTextInput" />
-      </view>
+        <view class="form-item" wx:if="{{!isEdit}}">
+          <text class="form-label">序列号 <text class="required">*</text></text>
+          <input class="form-input" value="{{formData.printer_sn}}" data-field="printer_sn" placeholder="打印机机身序列号" bindinput="onTextInput" />
+        </view>
 
-      <view class="form-item">
-        <text class="form-label">密钥{{isEdit ? '（留空不修改）' : ''}} <text class="required" wx:if="{{!isEdit}}">*</text></text>
-        <input class="form-input" value="{{formData.printer_key}}" data-field="printer_key" placeholder="打印机密钥" bindinput="onTextInput" />
-      </view>
+        <view class="form-item">
+          <text class="form-label">密钥{{isEdit ? '（留空不修改）' : ''}} <text class="required" wx:if="{{!isEdit}}">*</text></text>
+          <input class="form-input" value="{{formData.printer_key}}" data-field="printer_key" placeholder="打印机密钥" bindinput="onTextInput" />
+        </view>
 
-      <view class="form-item" wx:if="{{!isEdit}}">
-        <text class="form-label">打印机品牌 <text class="required">*</text></text>
-        <radio-group class="inline-options" bindchange="onTypeChange">
-          <label class="inline-option" wx:for="{{printerTypeOptions}}" wx:key="value">
-            <radio value="{{item.value}}" checked="{{formData.printer_type === item.value}}" color="var(--td-brand-color)" />
-            <text>{{item.label}}</text>
-          </label>
-        </radio-group>
-      </view>
+        <view class="form-item" wx:if="{{!isEdit}}">
+          <text class="form-label">打印机品牌 <text class="required">*</text></text>
+          <radio-group class="inline-options" bindchange="onTypeChange">
+            <label class="inline-option" wx:for="{{printerTypeOptions}}" wx:key="value">
+              <radio value="{{item.value}}" checked="{{formData.printer_type === item.value}}" color="var(--td-brand-color)" />
+              <text>{{item.label}}</text>
+            </label>
+          </radio-group>
+        </view>
 
-      <view class="form-item form-item-switch">
-        <text class="form-label">打印外卖订单</text>
-        <t-switch value="{{formData.print_takeout}}" data-field="print_takeout" bind:change="onSwitchChange" size="large" />
-      </view>
+        <view class="form-item form-item-switch">
+          <text class="form-label">打印外卖订单</text>
+          <t-switch value="{{formData.print_takeout}}" data-field="print_takeout" bind:change="onSwitchChange" size="large" />
+        </view>
 
-      <view class="form-item form-item-switch">
-        <text class="form-label">打印堂食订单</text>
-        <t-switch value="{{formData.print_dine_in}}" data-field="print_dine_in" bind:change="onSwitchChange" size="large" />
-      </view>
+        <view class="form-item form-item-switch">
+          <text class="form-label">打印堂食订单</text>
+          <t-switch value="{{formData.print_dine_in}}" data-field="print_dine_in" bind:change="onSwitchChange" size="large" />
+        </view>
 
-      <view class="form-item form-item-switch">
-        <text class="form-label">打印预约订单</text>
-        <t-switch value="{{formData.print_reservation}}" data-field="print_reservation" bind:change="onSwitchChange" size="large" />
-      </view>
+        <view class="form-item form-item-switch">
+          <text class="form-label">打印预约订单</text>
+          <t-switch value="{{formData.print_reservation}}" data-field="print_reservation" bind:change="onSwitchChange" size="large" />
+        </view>
 
-      <view class="form-item form-item-switch" wx:if="{{isEdit}}">
-        <text class="form-label">启用打印机</text>
-        <t-switch value="{{formData.is_active}}" data-field="is_active" bind:change="onSwitchChange" size="large" />
-      </view>
+        <view class="form-item form-item-switch" wx:if="{{isEdit}}">
+          <text class="form-label">启用打印机</text>
+          <t-switch value="{{formData.is_active}}" data-field="is_active" bind:change="onSwitchChange" size="large" />
+        </view>
 
-      <view class="form-actions">
-        <t-button theme="default" bind:tap="onCloseForm" shape="round">取消</t-button>
-        <t-button theme="primary" loading="{{formSubmitting}}" bind:tap="onSubmitForm" shape="round">保存</t-button>
-      </view>
+        <view class="form-actions">
+          <t-button theme="default" bind:tap="onCloseForm" shape="round">取消</t-button>
+          <t-button theme="primary" loading="{{formSubmitting}}" bind:tap="onSubmitForm" shape="round">保存</t-button>
+        </view>
+      </scroll-view>
     </view>
   </t-popup>
 

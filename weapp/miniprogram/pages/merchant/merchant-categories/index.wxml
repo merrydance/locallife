@@ -16,21 +16,33 @@
     <t-loading theme="circular" size="40px" />
   </view>
 
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '经营类目加载失败，请重试'}}" />
+    <t-button theme="primary" shape="round" size="small" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
   <!-- 类目选择 -->
   <view wx:elif="{{tags.length === 0}}" class="empty-wrap">
-    <view class="empty-text">暂无可选类目，请联系平台配置</view>
+    <t-empty description="暂无可选类目，请联系平台配置" />
+    <t-button theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="tags-section">
     <view class="section-header">
-      <text class="section-title">选择经营类目</text>
-      <text class="section-count">已选 {{selectedCount}}/5</text>
+      <view>
+        <text class="section-title">选择经营类目</text>
+        <text class="section-tip">保存后将以平台返回的类目结果为准</text>
+      </view>
+      <view class="section-meta">
+        <text class="section-count">已选 {{selectedCount}}/5</text>
+        <text class="section-status {{hasChanges ? 'status-pending' : 'status-synced'}}">{{hasChanges ? '待保存' : '已同步'}}</text>
+      </view>
     </view>
     <view class="tags-grid">
       <view
         wx:for="{{tags}}"
         wx:key="id"
-        class="tag-item {{item.selected ? 'tag-selected' : ''}}"
+        class="tag-item {{item.selected ? 'tag-selected' : ''}} {{saving ? 'tag-disabled' : ''}}"
         data-index="{{index}}"
         bindtap="onTagTap"
       >
@@ -40,11 +52,15 @@
     </view>
 
     <view class="save-wrap">
-      <button
-        class="save-btn {{saving ? 'saving' : ''}}"
-        disabled="{{saving}}"
-        bindtap="onSave"
-      >{{saving ? '保存中...' : '保存经营类目'}}</button>
+      <t-button
+        theme="primary"
+        shape="round"
+        size="large"
+        block
+        loading="{{saving}}"
+        disabled="{{saving || !hasChanges || loading}}"
+        bind:tap="onSave"
+      >{{saving ? '保存中...' : (hasChanges ? '保存经营类目' : '当前无变更')}}</t-button>
     </view>
   </view>
 

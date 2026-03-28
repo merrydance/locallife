@@ -19,6 +19,11 @@
       <t-tag theme="{{isOpen ? 'success' : 'warning'}}" variant="light" size="small">{{isOpen ? '营业中' : '休息中'}}</t-tag>
     </view>
 
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
     <view class="meta-strip">
       <view class="meta-row">
         <text class="meta-label">商户 ID</text>
@@ -45,7 +50,10 @@
       <t-cell-group theme="card">
         <t-cell title="店铺图片管理" description="维护 Logo、门头照和环境照" arrow bindtap="onGoProfileImages" />
         <t-cell title="经营类目设置" description="选择影响曝光和分类筛选的经营类目" arrow bindtap="onGoMerchantCategories" />
+        <t-cell title="营业时间" description="维护每周营业时段并查看特殊日期安排" arrow bindtap="onGoBusinessHours" />
         <t-cell title="会员设置" description="配置余额与赠送金在各业务场景中的使用规则" arrow bindtap="onGoMembership" />
+        <t-cell title="主体申请" description="维护主体申请草稿、上传证照并提交审核" arrow bindtap="onGoApplication" />
+        <t-cell title="收付通进件" description="查看进件审核、复制签约链接和重提银行账户资料" arrow bindtap="onGoApplyment" />
       </t-cell-group>
     </view>
 

@@ -1,9 +1,17 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { ComboManagementService, ComboSetResponse } from '../../../api/dish'
+import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
 
 interface ComboViewItem extends ComboSetResponse {
+  coverImageUrl: string
+  imageCount: number
   submitting: boolean
+}
+
+function normalizeComboImages(urls?: string[]): string[] {
+  if (!Array.isArray(urls)) return []
+  return urls.map((url) => getPublicImageUrl(url)).filter((url) => !!url)
 }
 
 Page({
@@ -40,13 +48,19 @@ Page({
 
       const combos = (response.combo_sets || []).map((combo) => ({
         ...combo,
+        dish_image_urls: normalizeComboImages(combo.dish_image_urls),
+        coverImageUrl: normalizeComboImages(combo.dish_image_urls)[0] || '',
+        imageCount: normalizeComboImages(combo.dish_image_urls).length,
         submitting: false
       }))
 
+      const nextCombos = reset ? combos : [...this.data.combos, ...combos]
+      const total = Number(response.total || 0)
+
       this.setData({
-        combos: reset ? combos : [...this.data.combos, ...combos],
+        combos: nextCombos,
         pageId: pageId + 1,
-        hasMore: response.has_more
+        hasMore: nextCombos.length < total
       })
     } catch (err) {
       logger.error('Load combos failed', err)

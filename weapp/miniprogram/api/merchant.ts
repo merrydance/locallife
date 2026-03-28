@@ -398,6 +398,20 @@ export interface MerchantOpenStatusResponse {
   message: string
 }
 
+export interface MerchantBusinessHour {
+  id?: number
+  day_of_week: number
+  day_name?: string
+  open_time: string
+  close_time: string
+  is_closed: boolean
+  special_date?: string
+}
+
+export interface MerchantBusinessHoursResponse {
+  hours: MerchantBusinessHour[]
+}
+
 export interface UpdateMyMerchantProfileRequest {
   name?: string
   description?: string
@@ -407,6 +421,16 @@ export interface UpdateMyMerchantProfileRequest {
   longitude?: string
   logo_asset_id?: number | null
   version: number
+}
+
+export interface UpdateMerchantBusinessHoursRequest {
+  hours: Array<{
+    day_of_week: number
+    open_time: string
+    close_time: string
+    is_closed: boolean
+    special_date?: string
+  }>
 }
 
 export type MerchantMembershipScene = 'dine_in' | 'takeout' | 'reservation'
@@ -490,6 +514,29 @@ export function updateMyMerchantOpenStatus(isOpen: boolean, autoCloseAt?: string
   return request<MerchantOpenStatusResponse>({
     url: '/v1/merchants/me/status',
     method: 'PATCH',
+    data
+  })
+}
+
+/**
+ * 获取当前商户营业时间
+ * GET /v1/merchants/me/business-hours
+ */
+export function getMyMerchantBusinessHours() {
+  return request<MerchantBusinessHoursResponse>({
+    url: '/v1/merchants/me/business-hours',
+    method: 'GET'
+  })
+}
+
+/**
+ * 更新当前商户营业时间
+ * PUT /v1/merchants/me/business-hours
+ */
+export function updateMyMerchantBusinessHours(data: UpdateMerchantBusinessHoursRequest) {
+  return request<MerchantBusinessHoursResponse>({
+    url: '/v1/merchants/me/business-hours',
+    method: 'PUT',
     data
   })
 }

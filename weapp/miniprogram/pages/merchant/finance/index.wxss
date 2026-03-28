@@ -1,32 +1,200 @@
 .page {
   min-height: 100vh;
-  background: #f5f6f9;
+  background: var(--td-bg-color-page);
 }
 
 .content {
   height: calc(100vh - 88rpx);
   box-sizing: border-box;
-  padding: 24rpx;
+  padding: var(--spacer-md);
+}
+
+.state-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  padding: 140rpx var(--spacer-md);
+}
+
+.hero-card,
+.section,
+.stats-card {
+  border-radius: var(--radius-lg);
+}
+
+.hero-card {
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+  padding: 28rpx;
+  margin-bottom: var(--spacer-md);
+}
+
+.hero-title,
+.section-title,
+.record-amount,
+.stats-value {
+  color: var(--td-text-color-primary);
+}
+
+.hero-title {
+  display: block;
+  font-size: var(--font-size-heading);
+  font-weight: 700;
+}
+
+.hero-subtitle,
+.record-meta,
+.placeholder-text,
+.applyment-hint,
+.stats-label,
+.section-subtitle,
+.updated-at,
+.summary-label,
+.summary-meta,
+.finance-fee-row {
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.hero-subtitle,
+.record-meta,
+.placeholder-text,
+.stats-label,
+.section-subtitle,
+.updated-at,
+.summary-label,
+.summary-meta,
+.finance-fee-row {
+  color: var(--td-text-color-secondary);
+}
+
+.hero-subtitle {
+  display: block;
+  margin-top: var(--spacer-xs);
 }
 
 .section {
-  margin-bottom: 24rpx;
+  margin-bottom: var(--spacer-md);
+}
+
+.section-head,
+.toolbar,
+.range-group,
+.summary-grid,
+.fee-summary-grid,
+.finance-fee-row {
+  display: flex;
+}
+
+.section-head,
+.toolbar {
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
 }
 
 .section-title {
-  margin: 0 0 12rpx;
+  margin: 0 0 var(--spacer-sm);
   font-size: 30rpx;
   font-weight: 600;
-  color: #111827;
+}
+
+.section-subtitle,
+.updated-at {
+  white-space: nowrap;
+}
+
+.toolbar {
+  margin-bottom: var(--spacer-md);
+}
+
+.range-group {
+  gap: 16rpx;
+}
+
+.range-chip {
+  padding: 12rpx 24rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-secondary);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-size-sm);
+}
+
+.range-chip-active {
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+}
+
+.summary-grid,
+.fee-summary-grid {
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-sm);
+}
+
+.summary-card,
+.fee-summary-card {
+  flex: 1 1 calc(50% - var(--spacer-sm));
+  min-width: 0;
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg);
+  padding: var(--spacer-md);
+}
+
+.accent-income {
+  background: linear-gradient(135deg, var(--td-success-color-1), #f3fff3);
+}
+
+.accent-gmv {
+  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-brand-color-2));
+}
+
+.summary-value,
+.fee-value {
+  display: block;
+  margin-top: var(--spacer-xs);
+  color: var(--td-text-color-primary);
+  font-size: var(--font-size-title);
+  font-weight: 700;
+}
+
+.summary-meta {
+  display: block;
+  margin-top: 8rpx;
+}
+
+.finance-meta-strip {
+  margin-top: 0;
+}
+
+.fee-summary-card-span {
+  flex-basis: 100%;
+}
+
+.section-head .section-title {
+  margin-bottom: 0;
 }
 
 .submit-wrap {
-  margin-top: 20rpx;
+  margin-top: var(--spacer-sm);
 }
 
 .record-item {
   padding: 20rpx 0;
-  border-bottom: 1rpx solid #f0f2f5;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
+}
+
+.finance-record-item {
+  padding: 20rpx 0;
+  border-bottom: 1rpx solid var(--td-bg-color-secondarycontainer);
+}
+
+.finance-record-item:last-child {
+  border-bottom: none;
 }
 
 .record-item:last-child {
@@ -37,55 +205,54 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 8rpx;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-xs);
 }
 
 .record-amount {
   font-size: 30rpx;
   font-weight: 600;
-  color: #111827;
 }
 
 .record-meta {
   margin-top: 6rpx;
-  font-size: 24rpx;
-  color: #6b7280;
+}
+
+.finance-fee-row {
+  gap: 20rpx;
+  flex-wrap: wrap;
+  margin: 8rpx 0;
 }
 
 /* ── Applyment ── */
 
 .applyment-placeholder {
-  padding: 24rpx;
-}
-
-.placeholder-text {
-  font-size: 26rpx;
-  color: #9ca3af;
+  padding: var(--spacer-md);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
 }
 
 .applyment-hint {
   padding: 20rpx 24rpx;
-  border-radius: 12rpx;
-  font-size: 26rpx;
-  line-height: 1.6;
-  margin-bottom: 16rpx;
-  background: #f3f4f6;
-  color: #374151;
+  border-radius: var(--radius-md);
+  margin-bottom: var(--spacer-sm);
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-primary);
 }
 
 .applyment-warn {
-  background: #fffbeb;
-  color: #92400e;
+  background: var(--td-warning-color-1);
+  color: var(--td-text-color-primary);
 }
 
 .applyment-error {
-  background: #fff1f2;
-  color: #9f1239;
+  background: var(--td-error-color-1);
+  color: var(--td-text-color-primary);
 }
 
 .applyment-success {
-  background: #f0fdf4;
-  color: #166534;
+  background: var(--td-success-color-1);
+  color: var(--td-text-color-primary);
 }
 
 .hint-label {
@@ -93,43 +260,41 @@
   margin-right: 4rpx;
 }
 
-.sign-url {
-  margin-top: 8rpx;
-  padding: 12rpx;
-  background: rgba(0, 0, 0, 0.04);
-  border-radius: 8rpx;
-  font-size: 22rpx;
-  word-break: break-all;
-  font-family: monospace;
-  color: #4338ca;
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacer-sm);
 }
 
-/* ── Bind bank form ── */
-
-.bind-form {
-  margin-top: 16rpx;
+.stats-card {
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+  padding: var(--spacer-md);
 }
 
-.form-title {
-  font-size: 28rpx;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 16rpx;
+.accent-balance {
+  background: linear-gradient(135deg, var(--td-brand-color-1), var(--td-brand-color-2));
 }
 
-.form-radio-row {
-  padding: 20rpx 24rpx;
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-  background: #ffffff;
+.accent-available {
+  background: var(--td-success-color-1);
 }
 
-.form-label {
-  font-size: 28rpx;
-  color: #374151;
+.accent-pending-balance {
+  background: var(--td-warning-color-1);
 }
 
-.form-actions {
-  margin-top: 20rpx;
+.stats-card-span {
+  grid-column: span 2;
+}
+
+.stats-label {
+  display: block;
+}
+
+.stats-value {
+  display: block;
+  margin-top: var(--spacer-xs);
+  font-size: var(--font-size-title);
+  font-weight: 700;
 }

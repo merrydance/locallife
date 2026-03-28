@@ -20,6 +20,11 @@
       </view>
     </view>
 
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
     <view class="section-block" wx:for="{{weeklyHours}}" wx:key="day_of_week" wx:for-item="day">
       <view class="day-header">
         <view>

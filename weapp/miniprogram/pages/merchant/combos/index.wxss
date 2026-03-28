@@ -19,6 +19,29 @@
   margin-bottom: 20rpx;
 }
 
+.combo-cover {
+  position: relative;
+  margin-bottom: 18rpx;
+}
+
+.combo-cover-image {
+  width: 100%;
+  height: 240rpx;
+  border-radius: 16rpx;
+  background: var(--td-bg-color-component);
+}
+
+.combo-cover-badge {
+  position: absolute;
+  right: 16rpx;
+  bottom: 16rpx;
+  padding: 8rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(0, 0, 0, 0.58);
+  color: #fff;
+  font-size: 22rpx;
+}
+
 .combo-main {
   margin-bottom: 16rpx;
 }

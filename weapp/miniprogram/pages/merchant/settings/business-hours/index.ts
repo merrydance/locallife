@@ -112,24 +112,28 @@ function hasWeeklyHoursChanged(current: WeeklyBusinessHour[], initial: WeeklyBus
 }
 
 function buildPayload(weekly: WeeklyBusinessHour[], special: SpecialBusinessHour[]) {
-  const hours = weekly.flatMap((day) => {
+  const hours = weekly.reduce<Array<Pick<MerchantBusinessHour, 'day_of_week' | 'open_time' | 'close_time' | 'is_closed'>>>((accumulator, day) => {
     if (day.is_closed) {
       const firstSlot = day.slots[0] || createSlot('00:00', '00:00')
-      return [{
+      accumulator.push({
         day_of_week: day.day_of_week,
         open_time: firstSlot.open_time,
         close_time: firstSlot.close_time,
         is_closed: true
-      }]
+      })
+      return accumulator
     }
 
-    return sortSlots(day.slots).map((slot) => ({
-      day_of_week: day.day_of_week,
-      open_time: slot.open_time,
-      close_time: slot.close_time,
-      is_closed: false
-    }))
-  })
+    sortSlots(day.slots).forEach((slot) => {
+      accumulator.push({
+        day_of_week: day.day_of_week,
+        open_time: slot.open_time,
+        close_time: slot.close_time,
+        is_closed: false
+      })
+    })
+    return accumulator
+  }, [])
 
   return {
     hours: [
@@ -145,12 +149,23 @@ function buildPayload(weekly: WeeklyBusinessHour[], special: SpecialBusinessHour
   }
 }
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
+    const userMessage = (err as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     navBarHeight: 88,
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     saving: false,
     weeklyHours: createDefaultWeek() as WeeklyBusinessHour[],
@@ -166,21 +181,37 @@ Page({
   },
 
   onShow() {
-    if (!this.data.initialLoading && !this.data.saving) {
+    if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
       this.loadBusinessHours(false)
     }
   },
 
   onPullDownRefresh() {
+    if (this.data.hasChanges) {
+      wx.stopPullDownRefresh()
+      wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
+      return
+    }
+    this.loadBusinessHours(false)
+  },
+
+  onRetryRefresh() {
     this.loadBusinessHours(false)
   },
 
   async loadBusinessHours(showLoading = true) {
     if (this.data.loading) return
 
+    const hasExistingData = !this.data.initialLoading
+    const isSilentRefresh = !showLoading && hasExistingData
+
     this.setData({
       loading: true,
-      ...(showLoading ? { initialError: false, initialErrorMessage: '' } : {})
+      ...(showLoading
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        : isSilentRefresh
+          ? { refreshErrorMessage: '' }
+          : {})
     })
 
     try {
@@ -194,13 +225,12 @@ Page({
         hasChanges: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (err: unknown) {
       logger.error('Load merchant business hours failed', err)
-      const message = typeof err === 'object' && err !== null && 'userMessage' in err
-        ? (err as { userMessage?: string }).userMessage || '营业时间加载失败，请重试'
-        : '营业时间加载失败，请重试'
+      const message = getErrorMessage(err, '营业时间加载失败，请重试')
 
       if (this.data.initialLoading) {
         this.setData({
@@ -208,6 +238,8 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
+      } else if (isSilentRefresh) {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
       }
@@ -229,6 +261,7 @@ Page({
     }
 
     this.setData({
+      refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
     })
@@ -243,6 +276,7 @@ Page({
     const weeklyHours = cloneWeeklyHours(this.data.weeklyHours)
     const target = weeklyHours.find((item) => item.day_of_week === day)
     if (!target || !target.slots[slotIndex]) return
+    if (typeof e.detail.value !== 'string') return
 
     target.slots[slotIndex][field] = e.detail.value
     if (!target.is_closed) {
@@ -250,6 +284,7 @@ Page({
     }
 
     this.setData({
+      refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
     })
@@ -269,6 +304,7 @@ Page({
     target.slots.push(createSlot())
     target.slots = sortSlots(target.slots)
     this.setData({
+      refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
     })
@@ -282,6 +318,7 @@ Page({
 
     target.slots.splice(slotIndex, 1)
     this.setData({
+      refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
     })
@@ -334,9 +371,7 @@ Page({
       wx.showToast({ title: '营业时间已保存', icon: 'success' })
     } catch (err: unknown) {
       logger.error('Save merchant business hours failed', err)
-      const message = typeof err === 'object' && err !== null && 'userMessage' in err
-        ? (err as { userMessage?: string }).userMessage || '保存失败，请稍后重试'
-        : '保存失败，请稍后重试'
+      const message = getErrorMessage(err, '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()

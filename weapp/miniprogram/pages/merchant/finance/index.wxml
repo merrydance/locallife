@@ -7,126 +7,134 @@
 ></custom-navbar>
 
 <view class="page" style="padding-top: {{navBarHeight}}px;">
+  <view wx:if="{{loading && !balanceLoaded && !applymentLoaded}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载财务数据中..." vertical />
+  </view>
+
   <scroll-view
+    wx:else
     class="content"
     scroll-y
     refresher-enabled
     bindrefresherrefresh="onPullDownRefresh"
   >
+    <view class="hero-card">
+      <text class="hero-title">商户资金账户</text>
+      <text class="hero-subtitle">集中查看账户余额、提现状态与结算记录；进件、签约与银行账户维护已统一收口到独立的收付通进件页。</text>
+    </view>
 
-    <!-- ── 收付通进件状态 ── -->
+    <view class="toolbar">
+      <view class="range-group">
+        <view
+          wx:for="{{rangeOptions}}"
+          wx:key="key"
+          class="range-chip {{currentRange === item.key ? 'range-chip-active' : ''}}"
+          data-key="{{item.key}}"
+          bindtap="onSelectRange"
+        >
+          {{item.label}}
+        </view>
+      </view>
+      <text class="updated-at">更新于 {{financeUpdatedAtLabel}}</text>
+    </view>
+
     <view class="section">
-      <view class="section-title">收付通进件状态</view>
+      <view class="section-head">
+        <text class="section-title">财务概览</text>
+        <text class="section-subtitle">统计口径 {{financeDateRangeLabel}}</text>
+      </view>
 
-      <!-- Loading -->
+      <view wx:if="{{financeLoading && !financeLoaded}}" class="applyment-placeholder">
+        <text class="placeholder-text">财务概览加载中...</text>
+      </view>
+
+      <view wx:elif="{{financeError}}" class="applyment-hint applyment-error">
+        <text>{{financeErrorMessage}}</text>
+        <view class="submit-wrap">
+          <t-button theme="primary" size="medium" shape="round" bindtap="onRetrySection">
+            重新加载
+          </t-button>
+        </view>
+      </view>
+
+      <block wx:else>
+        <view class="summary-grid">
+          <view class="summary-card accent-income">
+            <text class="summary-label">净收入</text>
+            <text class="summary-value">{{formatAmountText(financeOverview.net_income)}}</text>
+            <text class="summary-meta">商户净收入口径</text>
+          </view>
+          <view class="summary-card accent-gmv">
+            <text class="summary-label">总交易额</text>
+            <text class="summary-value">{{formatAmountText(financeOverview.total_gmv)}}</text>
+            <text class="summary-meta">已完成与处理中订单</text>
+          </view>
+          <view class="summary-card">
+            <text class="summary-label">完成订单</text>
+            <text class="summary-value">{{financeOverview.completed_orders}}</text>
+            <text class="summary-meta">待结算 {{financeOverview.pending_orders}}</text>
+          </view>
+          <view class="summary-card">
+            <text class="summary-label">待结算收入</text>
+            <text class="summary-value">{{formatAmountText(financeOverview.pending_income)}}</text>
+            <text class="summary-meta">已入账前待结算部分</text>
+          </view>
+        </view>
+
+        <view class="meta-strip finance-meta-strip">
+          <view class="meta-row">
+            <text class="meta-label">商户收入</text>
+            <text class="meta-value">{{formatAmountText(financeOverview.total_income)}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">总服务费</text>
+            <text class="meta-value">{{formatAmountText(financeOverview.total_service_fee)}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">满返支出</text>
+            <text class="meta-value">{{formatAmountText(financeOverview.total_promotion_exp)}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">满返订单数</text>
+            <text class="meta-value">{{financeOverview.promotion_orders}}</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view class="section">
+      <view class="section-head">
+        <text class="section-title">收付通开通状态</text>
+        <t-button theme="primary" size="small" shape="round" bindtap="onGoApplymentSettings">
+          前往进件页
+        </t-button>
+      </view>
+
       <view wx:if="{{loadingApplyment}}" class="applyment-placeholder">
         <text class="placeholder-text">查询中...</text>
       </view>
 
-      <!-- Not applied yet -->
-      <view wx:elif="{{!hasApplyment && applymentLoaded}}">
-        <view class="applyment-hint">
-          <text>尚未提交进件申请，请填写银行结算账户信息以开通收付通。</text>
-        </view>
-
-        <view wx:if="{{!showBindForm}}" class="submit-wrap">
-          <t-button theme="primary" size="medium" shape="round" bindtap="onShowBindForm">
-            填写银行账户信息
+      <view wx:elif="{{applymentError}}" class="applyment-hint applyment-error">
+        <text>{{applymentErrorMessage}}</text>
+        <view class="submit-wrap">
+          <t-button theme="primary" size="medium" shape="round" bindtap="onRetrySection">
+            重新加载
           </t-button>
-        </view>
-
-        <!-- Bind bank form -->
-        <view wx:else class="bind-form">
-          <view class="form-title">填写银行结算账户</view>
-
-          <t-cell-group theme="card">
-            <view class="form-radio-row">
-              <text class="form-label">账户类型</text>
-              <t-radio-group value="{{bindAccountType}}" bindchange="onBindAccountTypeChange">
-                <t-radio value="ACCOUNT_TYPE_BUSINESS" label="对公账户" />
-                <t-radio value="ACCOUNT_TYPE_PRIVATE" label="对私（个人）" />
-              </t-radio-group>
-            </view>
-            <t-input
-              label="开户名称"
-              placeholder="{{bindAccountType === 'ACCOUNT_TYPE_BUSINESS' ? '企业/机构全称' : '持卡人姓名'}}"
-              value="{{bindAccountName}}"
-              data-field="bindAccountName"
-              bindchange="onBindFieldChange"
-            />
-            <t-input
-              label="银行账号"
-              placeholder="银行账户号码"
-              value="{{bindAccountNumber}}"
-              data-field="bindAccountNumber"
-              bindchange="onBindFieldChange"
-            />
-            <t-input
-              label="开户银行"
-              placeholder="如：中国工商银行"
-              value="{{bindAccountBank}}"
-              data-field="bindAccountBank"
-              bindchange="onBindFieldChange"
-            />
-            <t-input
-              label="省市编码"
-              placeholder="如：110000（北京市）"
-              value="{{bindBankAddressCode}}"
-              data-field="bindBankAddressCode"
-              bindchange="onBindFieldChange"
-            />
-            <t-input
-              label="开户支行"
-              placeholder="开户支行全称（选填）"
-              value="{{bindBankName}}"
-              data-field="bindBankName"
-              bindchange="onBindFieldChange"
-            />
-            <t-input
-              label="联系手机"
-              type="number"
-              placeholder="11位手机号"
-              value="{{bindContactPhone}}"
-              data-field="bindContactPhone"
-              bindchange="onBindFieldChange"
-            />
-            <t-input
-              label="联系邮箱"
-              placeholder="选填"
-              value="{{bindContactEmail}}"
-              data-field="bindContactEmail"
-              bindchange="onBindFieldChange"
-            />
-          </t-cell-group>
-
-          <view class="form-actions">
-            <t-button
-              theme="primary"
-              size="large"
-              block
-              shape="round"
-              loading="{{submittingBind}}"
-              disabled="{{submittingBind}}"
-              bindtap="onSubmitBindBank"
-            >
-              提交银行账户信息
-            </t-button>
-            <t-button
-              theme="light"
-              size="large"
-              block
-              shape="round"
-              disabled="{{submittingBind}}"
-              bindtap="onHideBindForm"
-              style="margin-top: 8px;"
-            >
-              取消
-            </t-button>
-          </view>
         </view>
       </view>
 
-      <!-- Has applyment status -->
+      <view wx:elif="{{!hasApplyment && applymentLoaded}}">
+        <view class="applyment-hint applyment-warn">
+          <text>尚未提交收付通进件资料。请前往“收付通进件”页统一填写银行账户、查看审核进度和继续签约。</text>
+        </view>
+
+        <view class="submit-wrap">
+          <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
+            去完成进件
+          </t-button>
+        </view>
+      </view>
+
       <view wx:elif="{{hasApplyment && applymentLoaded}}">
         <t-cell-group theme="card">
           <t-cell title="进件状态">
@@ -141,19 +149,25 @@
           <t-cell wx:if="{{applymentStatus.sub_mch_id}}" title="子商户号" note="{{applymentStatus.sub_mch_id}}" />
         </t-cell-group>
 
-        <!-- Sign URL -->
-        <view wx:if="{{applymentStatus.sign_url}}" class="applyment-hint applyment-warn">
-          <text>需要前往微信完成签约，请复制签约链接在浏览器中打开：</text>
-          <view class="sign-url">{{applymentStatus.sign_url}}</view>
+        <view wx:if="{{applymentStatus.status === 'to_be_signed' || applymentStatus.status === 'signing'}}" class="applyment-hint applyment-warn">
+          <text>当前还需要完成微信签约。签约链接复制和继续提交资料已统一放到“收付通进件”页处理。</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
+              去继续签约
+            </t-button>
+          </view>
         </view>
 
-        <!-- Reject reason -->
         <view wx:if="{{applymentStatus.reject_reason}}" class="applyment-hint applyment-error">
           <text class="hint-label">拒绝原因：</text>
           <text>{{applymentStatus.reject_reason}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
+              去修正资料
+            </t-button>
+          </view>
         </view>
 
-        <!-- Active success -->
         <view
           wx:if="{{applymentStatus.status === 'finish' || applymentStatus.status === 'active'}}"
           class="applyment-hint applyment-success"
@@ -161,51 +175,37 @@
           <text>✓ 收付通已开通，可正常收款和提现。</text>
         </view>
 
-        <!-- Rejected: re-apply -->
-        <view wx:if="{{applymentStatus.status === 'rejected' && !showBindForm}}" class="submit-wrap">
-          <t-button theme="primary" size="medium" shape="round" bindtap="onShowBindForm">
-            重新提交银行账户信息
+        <view wx:if="{{applymentStatus.status !== 'finish' && applymentStatus.status !== 'active'}}" class="submit-wrap">
+          <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
+            前往进件与签约
           </t-button>
-        </view>
-
-        <!-- Re-apply form -->
-        <view wx:if="{{showBindForm}}" class="bind-form">
-          <view class="form-title">重新填写银行结算账户</view>
-
-          <t-cell-group theme="card">
-            <view class="form-radio-row">
-              <text class="form-label">账户类型</text>
-              <t-radio-group value="{{bindAccountType}}" bindchange="onBindAccountTypeChange">
-                <t-radio value="ACCOUNT_TYPE_BUSINESS" label="对公账户" />
-                <t-radio value="ACCOUNT_TYPE_PRIVATE" label="对私（个人）" />
-              </t-radio-group>
-            </view>
-            <t-input label="开户名称" placeholder="开户名称" value="{{bindAccountName}}" data-field="bindAccountName" bindchange="onBindFieldChange" />
-            <t-input label="银行账号" placeholder="银行账户号码" value="{{bindAccountNumber}}" data-field="bindAccountNumber" bindchange="onBindFieldChange" />
-            <t-input label="开户银行" placeholder="如：中国工商银行" value="{{bindAccountBank}}" data-field="bindAccountBank" bindchange="onBindFieldChange" />
-            <t-input label="省市编码" placeholder="如：110000（北京市）" value="{{bindBankAddressCode}}" data-field="bindBankAddressCode" bindchange="onBindFieldChange" />
-            <t-input label="开户支行" placeholder="开户支行全称（选填）" value="{{bindBankName}}" data-field="bindBankName" bindchange="onBindFieldChange" />
-            <t-input label="联系手机" type="number" placeholder="11位手机号" value="{{bindContactPhone}}" data-field="bindContactPhone" bindchange="onBindFieldChange" />
-            <t-input label="联系邮箱" placeholder="选填" value="{{bindContactEmail}}" data-field="bindContactEmail" bindchange="onBindFieldChange" />
-          </t-cell-group>
-
-          <view class="form-actions">
-            <t-button theme="primary" size="large" block shape="round" loading="{{submittingBind}}" disabled="{{submittingBind}}" bindtap="onSubmitBindBank">
-              提交银行账户信息
-            </t-button>
-            <t-button theme="light" size="large" block shape="round" disabled="{{submittingBind}}" bindtap="onHideBindForm" style="margin-top: 8px;">
-              取消
-            </t-button>
-          </view>
         </view>
       </view>
     </view>
 
     <!-- ── 账户余额（收付通未激活时隐藏）── -->
-    <block wx:if="{{notConfigured}}">
+    <block wx:if="{{balanceError}}">
+      <view class="section">
+        <view class="applyment-hint applyment-error">
+          <text>{{balanceErrorMessage}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="medium" shape="round" bindtap="onRetrySection">
+              重新加载
+            </t-button>
+          </view>
+        </view>
+      </view>
+    </block>
+
+    <block wx:elif="{{notConfigured}}">
       <view class="section">
         <view class="applyment-hint applyment-warn">
-          <text>收付通账户尚未激活，完成进件签约后余额数据将自动显示。</text>
+          <text>{{balanceStatusDesc || '收付通账户尚未激活，完成进件签约后余额数据将自动显示。'}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
+              去完成进件
+            </t-button>
+          </view>
         </view>
       </view>
     </block>
@@ -213,10 +213,226 @@
     <block wx:else>
       <view class="section">
         <view class="section-title">账户余额</view>
+        <view class="stats-grid">
+          <view class="stats-card accent-balance">
+            <text class="stats-label">可提现余额</text>
+            <text class="stats-value">¥{{formatAmount(balance.withdrawable_amount)}}</text>
+          </view>
+          <view class="stats-card accent-available">
+            <text class="stats-label">账户可用余额</text>
+            <text class="stats-value">¥{{formatAmount(balance.available_amount)}}</text>
+          </view>
+          <view class="stats-card accent-pending-balance stats-card-span">
+            <text class="stats-label">待结算金额</text>
+            <text class="stats-value">¥{{formatAmount(balance.pending_amount)}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">订单收入明细</text>
+          <text class="section-subtitle">最近 5 笔</text>
+        </view>
         <t-cell-group theme="card">
-          <t-cell title="可提现余额" note="¥{{formatAmount(balance.withdrawable_amount)}}" />
-          <t-cell title="账户可用余额" note="¥{{formatAmount(balance.available_amount)}}" />
-          <t-cell title="待结算金额" note="¥{{formatAmount(balance.pending_amount)}}" />
+          <block wx:if="{{financeOrders.length > 0}}">
+            <view wx:for="{{financeOrders}}" wx:key="id" class="finance-record-item">
+              <view class="record-row">
+                <view>
+                  <text class="record-amount">{{formatAmountText(item.merchant_amount)}}</text>
+                  <view class="record-meta">{{getOrderSourceText(item.order_source)}} · 订单 #{{item.order_id || item.payment_order_id}}</view>
+                </view>
+                <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
+              </view>
+              <view class="finance-fee-row">
+                <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
+                <text>平台费 {{formatAmountText(item.platform_commission)}}</text>
+                <text>运营费 {{formatAmountText(item.operator_commission)}}</text>
+              </view>
+              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+              <view class="record-meta" wx:if="{{item.finished_at}}">完成时间：{{formatDateTime(item.finished_at)}}</view>
+            </view>
+          </block>
+          <t-empty wx:else description="当前区间暂无订单收入记录" />
+        </t-cell-group>
+      </view>
+
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">服务费明细</text>
+          <text class="section-subtitle">按日期与订单来源聚合</text>
+        </view>
+
+        <view class="fee-summary-grid">
+          <view class="fee-summary-card">
+            <text class="stats-label">平台服务费</text>
+            <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_platform_fee)}}</text>
+          </view>
+          <view class="fee-summary-card">
+            <text class="stats-label">运营服务费</text>
+            <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_operator_fee)}}</text>
+          </view>
+          <view class="fee-summary-card fee-summary-card-span">
+            <text class="stats-label">总服务费</text>
+            <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_service_fee)}}</text>
+          </view>
+        </view>
+
+        <t-cell-group theme="card">
+          <block wx:if="{{serviceFeeDetails.length > 0}}">
+            <view wx:for="{{serviceFeeDetails}}" wx:key="date" class="finance-record-item">
+              <view class="record-row">
+                <view>
+                  <text class="record-amount">{{formatAmountText(item.total_fee)}}</text>
+                  <view class="record-meta">{{item.date}} · {{getOrderSourceText(item.order_source)}}</view>
+                </view>
+                <text class="record-meta">{{item.order_count}} 单</text>
+              </view>
+              <view class="finance-fee-row">
+                <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
+                <text>平台费 {{formatAmountText(item.platform_fee)}}</text>
+                <text>运营费 {{formatAmountText(item.operator_fee)}}</text>
+              </view>
+            </view>
+          </block>
+          <t-empty wx:else description="当前区间暂无服务费记录" />
+        </t-cell-group>
+      </view>
+
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">营销支出</text>
+          <text class="section-subtitle">满返与配送优惠支出</text>
+        </view>
+
+        <view class="fee-summary-grid">
+          <view class="fee-summary-card">
+            <text class="stats-label">优惠订单数</text>
+            <text class="stats-value fee-value">{{promotionSummary.total_promo_orders}}</text>
+          </view>
+          <view class="fee-summary-card fee-summary-card-span">
+            <text class="stats-label">优惠支出总额</text>
+            <text class="stats-value fee-value">{{formatAmountText(promotionSummary.total_promo_amount)}}</text>
+          </view>
+        </view>
+
+        <t-cell-group theme="card">
+          <block wx:if="{{promotionOrders.length > 0}}">
+            <view wx:for="{{promotionOrders}}" wx:key="id" class="finance-record-item">
+              <view class="record-row">
+                <view>
+                  <text class="record-amount">{{formatAmountText(item.delivery_fee_discount)}}</text>
+                  <view class="record-meta">{{getOrderSourceText(item.order_type)}} · {{item.order_no}}</view>
+                </view>
+                <text class="record-meta">优惠单</text>
+              </view>
+              <view class="finance-fee-row">
+                <text>商品小计 {{formatAmountText(item.subtotal)}}</text>
+                <text>配送费 {{formatAmountText(item.delivery_fee)}}</text>
+                <text>优惠减免 {{formatAmountText(item.delivery_fee_discount)}}</text>
+              </view>
+              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+            </view>
+          </block>
+          <t-empty wx:else description="当前区间暂无营销支出记录" />
+        </t-cell-group>
+      </view>
+
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">财务日报</text>
+          <text class="section-subtitle">最近 7 个统计日</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <block wx:if="{{dailyFinanceRows.length > 0}}">
+            <view wx:for="{{dailyFinanceRows}}" wx:key="date" class="finance-record-item">
+              <view class="record-row">
+                <view>
+                  <text class="record-amount">{{formatAmountText(item.merchant_income)}}</text>
+                  <view class="record-meta">{{item.date}}</view>
+                </view>
+                <text class="record-meta">{{item.order_count}} 单</text>
+              </view>
+              <view class="finance-fee-row">
+                <text>交易额 {{formatAmountText(item.total_gmv)}}</text>
+                <text>服务费 {{formatAmountText(item.total_fee)}}</text>
+              </view>
+            </view>
+          </block>
+          <t-empty wx:else description="当前区间暂无日报数据" />
+        </t-cell-group>
+      </view>
+
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">结算记录</text>
+          <text class="section-subtitle">最近 5 笔</text>
+        </view>
+
+        <view class="fee-summary-grid">
+          <view class="fee-summary-card">
+            <text class="stats-label">结算总额</text>
+            <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_amount)}}</text>
+          </view>
+          <view class="fee-summary-card">
+            <text class="stats-label">商户入账</text>
+            <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_merchant_amount)}}</text>
+          </view>
+          <view class="fee-summary-card fee-summary-card-span">
+            <text class="stats-label">服务费合计</text>
+            <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_platform_fee + settlementsSummary.total_operator_fee)}}</text>
+          </view>
+        </view>
+
+        <t-cell-group theme="card">
+          <block wx:if="{{settlements.length > 0}}">
+            <view wx:for="{{settlements}}" wx:key="id" class="finance-record-item">
+              <view class="record-row">
+                <view>
+                  <text class="record-amount">{{formatAmountText(item.merchant_amount)}}</text>
+                  <view class="record-meta">{{getOrderSourceText(item.order_source)}} · {{item.out_order_no || ('#' + item.payment_order_id)}}</view>
+                </view>
+                <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
+              </view>
+              <view class="finance-fee-row">
+                <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
+                <text>平台费 {{formatAmountText(item.platform_commission)}}</text>
+                <text>运营费 {{formatAmountText(item.operator_commission)}}</text>
+              </view>
+              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+              <view class="record-meta" wx:if="{{item.finished_at}}">完成时间：{{formatDateTime(item.finished_at)}}</view>
+            </view>
+          </block>
+          <t-empty wx:else description="当前区间暂无结算记录" />
+        </t-cell-group>
+      </view>
+
+      <view class="section">
+        <view class="section-head">
+          <text class="section-title">结算流水</text>
+          <text class="section-subtitle">分账与调整统一时间线</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <block wx:if="{{settlementTimeline.length > 0}}">
+            <view wx:for="{{settlementTimeline}}" wx:key="id" class="finance-record-item">
+              <view class="record-row">
+                <view>
+                  <text class="record-amount">{{getTimelineAmountText(item)}}</text>
+                  <view class="record-meta">{{getTimelineRecordTypeText(item.record_type)}} · {{item.out_order_no || ('#' + item.payment_order_id)}}</view>
+                </view>
+                <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
+              </view>
+              <view class="finance-fee-row">
+                <text wx:if="{{item.record_type === 'adjustment'}}">{{getAdjustmentTypeText(item.adjustment_type)}}</text>
+                <text wx:elif="{{item.record_type === 'profit_sharing'}}">商户入账 {{formatAmountText(item.merchant_amount)}}</text>
+                <text wx:if="{{item.related_type}}">关联 {{item.related_type}} #{{item.related_id}}</text>
+              </view>
+              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+            </view>
+          </block>
+          <t-empty wx:else description="当前区间暂无结算流水" />
         </t-cell-group>
       </view>
 
@@ -262,10 +478,26 @@
                 <text class="record-amount">¥{{formatAmount(item.amount)}}</text>
                 <t-tag theme="{{getStatusTheme(item.status)}}" variant="dark">{{getStatusText(item.status)}}</t-tag>
               </view>
-              <view class="record-meta">创建时间：{{item.created_at}}</view>
-              <view class="record-meta" wx:if="{{item.completed_at}}">完成时间：{{item.completed_at}}</view>
-              <view class="record-meta" wx:if="{{item.remark}}">备注：{{item.remark}}</view>
-              <view class="record-meta" wx:if="{{item.failure_reason}}">失败原因：{{item.failure_reason}}</view>
+              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+              <view class="record-meta">更新时间：{{formatDateTime(item.updated_at)}}</view>
+              <view class="record-meta" wx:if="{{item.out_request_no}}">请求单号：{{item.out_request_no}}</view>
+              <view class="record-meta" wx:if="{{item.withdraw_id}}">微信提现单号：{{item.withdraw_id}}</view>
+              <view class="record-meta" wx:if="{{item.sub_mch_id}}">子商户号：{{item.sub_mch_id}}</view>
+              <view class="record-meta" wx:if="{{item.reason}}">原因：{{item.reason}}</view>
+              <view class="action-row">
+                <t-button
+                  size="small"
+                  theme="primary"
+                  variant="outline"
+                  shape="round"
+                  data-id="{{item.id}}"
+                  bindtap="onRefreshWithdrawal"
+                  loading="{{withdrawSyncingId === item.id}}"
+                  disabled="{{withdrawSyncingId === item.id}}"
+                >
+                  同步状态
+                </t-button>
+              </view>
             </view>
           </block>
           <t-empty wx:else description="暂无提现记录" />
@@ -274,6 +506,4 @@
     </block>
 
   </scroll-view>
-
-  <t-loading wx:if="{{loading}}" text="加载中" fullscreen />
 </view>

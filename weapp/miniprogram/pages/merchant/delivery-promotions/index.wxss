@@ -101,9 +101,14 @@
 /* ==================== 弹窗表单 ==================== */
 
 .form-popup {
-  padding: var(--spacer-lg);
   background-color: var(--td-bg-color-container);
   border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+}
+
+.form-scroll {
+  max-height: 80vh;
+  box-sizing: border-box;
+  padding: var(--spacer-lg);
   padding-bottom: calc(var(--spacer-lg) + env(safe-area-inset-bottom));
 }
 

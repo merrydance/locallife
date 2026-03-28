@@ -1,74 +1,116 @@
 <custom-navbar title="索赔与追偿" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <view class="page-head">
-    <view class="tips">
-      用户索赔由平台先行赔付；若判定商户责任，请在下方选择提交异议或确认回款。
-    </view>
-    <t-button size="small" variant="outline" shape="round" bindtap="onViewAppeals">异议记录</t-button>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载索赔列表中..." vertical />
   </view>
 
-  <view class="summary-grid">
-    <view class="summary-card accent-total">
-      <text class="summary-label">全部索赔</text>
-      <text class="summary-value">{{summary.total}}</text>
-    </view>
-    <view class="summary-card accent-pending">
-      <text class="summary-label">待处理</text>
-      <text class="summary-value">{{summary.pendingAction}}</text>
-    </view>
-    <view class="summary-card accent-appealed">
-      <text class="summary-label">异议中</text>
-      <text class="summary-value">{{summary.appealed}}</text>
-    </view>
-    <view class="summary-card accent-closed">
-      <text class="summary-label">已结案</text>
-      <text class="summary-value">{{summary.closed}}</text>
-    </view>
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '索赔列表加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
   </view>
 
-  <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="claims-tabs">
-    <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
-    <t-tab-panel label="待处理" value="pending_action"><view /></t-tab-panel>
-    <t-tab-panel label="异议中" value="appealed"><view /></t-tab-panel>
-    <t-tab-panel label="已结案" value="closed"><view /></t-tab-panel>
-  </t-tabs>
+  <block wx:else>
+    <view class="page-head">
+      <view class="tips">
+        用户索赔由平台先行赔付；若判定商户责任，请在下方选择提交异议或支付追偿款。
+      </view>
+      <t-button size="small" variant="outline" shape="round" bindtap="onViewAppeals">异议记录</t-button>
+    </view>
 
-  <t-loading wx:if="{{loading}}" theme="circular" text="加载中..." class="loading" />
+    <view class="summary-grid">
+      <view class="summary-card accent-total">
+        <text class="summary-label">全部索赔</text>
+        <text class="summary-value">{{summary.total}}</text>
+      </view>
+      <view class="summary-card accent-pending">
+        <text class="summary-label">待处理</text>
+        <text class="summary-value">{{summary.pendingAction}}</text>
+      </view>
+      <view class="summary-card accent-appealed">
+        <text class="summary-label">异议中</text>
+        <text class="summary-value">{{summary.appealed}}</text>
+      </view>
+      <view class="summary-card accent-closed">
+        <text class="summary-label">已结案</text>
+        <text class="summary-value">{{summary.closed}}</text>
+      </view>
+    </view>
 
-  <view wx:if="{{!loading && filteredClaims.length === 0}}" class="empty-wrap">
-    <t-empty description="暂无索赔记录" />
-  </view>
+    <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="claims-tabs">
+      <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
+      <t-tab-panel label="待处理" value="pending_action"><view /></t-tab-panel>
+      <t-tab-panel label="异议中" value="appealed"><view /></t-tab-panel>
+      <t-tab-panel label="已结案" value="closed"><view /></t-tab-panel>
+    </t-tabs>
 
-  <view wx:if="{{!loading && filteredClaims.length > 0}}" class="claims-list">
-    <view wx:for="{{filteredClaims}}" wx:key="id" class="claim-card" data-claim-id="{{item.id}}" bindtap="onViewDetail">
-      <view class="card-header">
-        <view class="left">
-          <text class="order-no">订单 {{item.orderNo}}</text>
-          <t-tag size="small" theme="primary" variant="dark">{{item.claimTypeLabel}}</t-tag>
+    <view wx:if="{{loading && !filteredClaims.length}}" class="state-block state-block-compact">
+      <t-loading theme="circular" size="40rpx" text="刷新索赔中..." vertical />
+    </view>
+
+    <view wx:elif="{{!loading && filteredClaims.length === 0}}" class="empty-wrap">
+      <t-empty description="当前筛选下暂无索赔记录" />
+    </view>
+
+    <view wx:else class="claims-list">
+      <view wx:for="{{filteredClaims}}" wx:key="id" class="claim-card" data-claim-id="{{item.id}}" bindtap="onViewDetail">
+        <view class="card-header">
+          <view class="left">
+            <text class="order-no">订单 {{item.orderNo}}</text>
+            <t-tag size="small" theme="{{item.claimTypeTheme}}" variant="dark">{{item.claimTypeLabel}}</t-tag>
+          </view>
+          <t-tag size="small" theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
         </view>
-        <text class="status">{{item.statusLabel}}</text>
+
+        <view class="status-strip">
+          <t-tag size="small" theme="{{item.appealStatusTheme}}" variant="light">{{item.appealStatusLabel}}</t-tag>
+          <t-tag size="small" theme="{{item.recoveryStatusTheme}}" variant="light">{{item.recoveryStatusLabel}}</t-tag>
+        </view>
+
+        <view class="card-tip">{{item.actionHint}}</view>
+
+        <view class="row">
+          <text class="label">顾客信息</text>
+          <text class="value">{{item.customerLabel}}</text>
+        </view>
+        <view class="row">
+          <text class="label">订单金额</text>
+          <text class="value">{{item.orderAmountText}}</text>
+        </view>
+        <view class="row">
+          <text class="label">索赔金额</text>
+          <text class="value">{{item.claimAmountText}}</text>
+        </view>
+        <view class="row">
+          <text class="label">批准金额</text>
+          <text class="value">{{item.approvedAmountText}}</text>
+        </view>
+        <view class="row">
+          <text class="label">责任判定</text>
+          <text class="value">{{item.responsibilityLabel}}</text>
+        </view>
+        <view class="row">
+          <text class="label">赔付来源</text>
+          <text class="value">{{item.compensationSourceLabel}}</text>
+        </view>
+        <view class="row">
+          <text class="label">提交时间</text>
+          <text class="value">{{item.createdAtLabel}}</text>
+        </view>
+
+        <view class="desc">
+          <text class="desc-label">索赔说明</text>
+          <text class="desc-value">{{item.description}}</text>
+        </view>
       </view>
 
-      <view class="card-tip">点击查看索赔详情与处理进度</view>
-
-      <view class="row">
-        <text class="label">索赔金额</text>
-        <text class="value">{{item.claimAmountText}}</text>
-      </view>
-      <view class="row">
-        <text class="label">批准金额</text>
-        <text class="value">{{item.approvedAmountText}}</text>
-      </view>
-      <view class="row">
-        <text class="label">异议状态</text>
-        <text class="value">{{item.appealStatusLabel}}</text>
+      <view wx:if="{{loadingMore}}" class="list-footer">
+        <t-loading theme="circular" size="32rpx" text="加载更多索赔中..." vertical />
       </view>
 
-      <view class="desc">
-        <text class="desc-label">索赔说明：</text>
-        <text class="desc-value">{{item.description}}</text>
+      <view wx:elif="{{!hasMore && filteredClaims.length > 0}}" class="list-footer list-footer-end">
+        <text>没有更多索赔记录了</text>
       </view>
     </view>
-  </view>
+  </block>
 </view>

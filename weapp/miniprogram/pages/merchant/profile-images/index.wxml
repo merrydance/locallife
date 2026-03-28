@@ -7,7 +7,17 @@
     <t-loading theme="circular" size="60rpx" text="加载中..." layout="vertical" />
   </view>
 
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '店铺图片加载失败，请重试'}}" />
+    <t-button theme="primary" shape="round" size="small" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
   <block wx:else>
+
+    <view wx:if="{{!hasAnyImages}}" class="state-block state-block-compact">
+      <t-empty description="还没有上传店铺图片，建议先补齐 Logo、门头照和环境照" />
+      <text class="state-tip">图片会影响顾客搜索、详情页展示和平台审核效率。</text>
+    </view>
 
     <!-- Logo -->
     <view class="section">
@@ -20,6 +30,7 @@
           mediaType="{{['image']}}"
           max="{{1}}"
           files="{{logoImage ? [logoImage] : []}}"
+          disabled="{{logoUploading || storefrontSaving || environmentSaving}}"
           bind:add="onLogoUpload"
           bind:remove="onLogoRemove"
         />
@@ -40,6 +51,7 @@
           mediaType="{{['image']}}"
           max="{{3}}"
           files="{{storefrontImages}}"
+          disabled="{{storefrontSaving || logoUploading || environmentSaving}}"
           bind:add="onStorefrontUpload"
           bind:remove="onStorefrontRemove"
         />
@@ -60,6 +72,7 @@
           mediaType="{{['image']}}"
           max="{{5}}"
           files="{{environmentImages}}"
+          disabled="{{environmentSaving || logoUploading || storefrontSaving}}"
           bind:add="onEnvironmentUpload"
           bind:remove="onEnvironmentRemove"
         />

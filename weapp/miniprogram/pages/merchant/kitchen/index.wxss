@@ -14,6 +14,24 @@
   padding: 140rpx 24rpx;
 }
 
+.refresh-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm) var(--spacer-md);
+  margin-bottom: 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-error-color-1);
+  color: var(--td-text-color-primary);
+}
+
+.refresh-banner-text {
+  flex: 1;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
 .summary-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -32,12 +32,23 @@ function hasFormChanged(current: MerchantProfileForm, initial: MerchantProfileFo
     || current.description !== initial.description
 }
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
+    const userMessage = (err as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  return fallback
+}
+
 Page({
   data: {
     navBarHeight: 88,
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     saving: false,
     isOpen: false,
@@ -56,21 +67,37 @@ Page({
   },
 
   onShow() {
-    if (!this.data.initialLoading && !this.data.saving) {
+    if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
       this.loadProfile(false)
     }
   },
 
   onPullDownRefresh() {
+    if (this.data.hasChanges) {
+      wx.stopPullDownRefresh()
+      wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
+      return
+    }
+    this.loadProfile(false)
+  },
+
+  onRetryRefresh() {
     this.loadProfile(false)
   },
 
   async loadProfile(showLoading = true) {
     if (this.data.loading) return
 
+    const hasExistingData = !this.data.initialLoading
+    const isSilentRefresh = !showLoading && hasExistingData
+
     this.setData({
       loading: true,
-      ...(showLoading ? { initialError: false, initialErrorMessage: '' } : {})
+      ...(showLoading
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        : isSilentRefresh
+          ? { refreshErrorMessage: '' }
+          : {})
     })
 
     try {
@@ -89,13 +116,12 @@ Page({
         hasChanges: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (err: unknown) {
       logger.error('Load merchant profile settings failed', err)
-      const message = typeof err === 'object' && err !== null && 'userMessage' in err
-        ? (err as { userMessage?: string }).userMessage || '店铺资料加载失败，请重试'
-        : '店铺资料加载失败，请重试'
+      const message = getErrorMessage(err, '店铺资料加载失败，请重试')
 
       if (this.data.initialLoading) {
         this.setData({
@@ -103,6 +129,8 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
+      } else if (isSilentRefresh) {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
       }
@@ -121,6 +149,7 @@ Page({
       [field]: e.detail.value
     }
     this.setData({
+      refreshErrorMessage: '',
       form: nextForm,
       hasChanges: hasFormChanged(nextForm, this.data.initialForm)
     })
@@ -187,9 +216,7 @@ Page({
       wx.showToast({ title: '店铺资料已保存', icon: 'success' })
     } catch (err: unknown) {
       logger.error('Save merchant profile settings failed', err)
-      const message = typeof err === 'object' && err !== null && 'userMessage' in err
-        ? (err as { userMessage?: string }).userMessage || '保存失败，请稍后重试'
-        : '保存失败，请稍后重试'
+      const message = getErrorMessage(err, '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()
@@ -205,8 +232,20 @@ Page({
     wx.navigateTo({ url: '/pages/merchant/merchant-categories/index' })
   },
 
+  onGoBusinessHours() {
+    wx.navigateTo({ url: '/pages/merchant/settings/business-hours/index' })
+  },
+
   onGoMembership() {
     wx.navigateTo({ url: '/pages/merchant/settings/membership/index' })
+  },
+
+  onGoApplication() {
+    wx.navigateTo({ url: '/pages/merchant/settings/application/index' })
+  },
+
+  onGoApplyment() {
+    wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
   },
 
   onRetry() {

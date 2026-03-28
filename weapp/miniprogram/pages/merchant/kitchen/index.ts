@@ -2,6 +2,9 @@ import dayjs from 'dayjs'
 import { KitchenDisplayService, KitchenOrderResponse, KitchenOrdersResponse, OrderManagementAdapter } from '../../../api/order-management'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { wsManager, WSMessageType } from '../../../utils/websocket'
+
+type WsUnsubscribe = () => void
 
 type KitchenActionType = '' | 'preparing' | 'ready'
 
@@ -61,12 +64,35 @@ function buildKitchenStats(response: KitchenOrdersResponse): KitchenBoardStats {
   }
 }
 
+function buildKitchenStatsFromLists(
+  newOrders: KitchenBoardOrder[],
+  preparingOrders: KitchenBoardOrder[],
+  readyOrders: KitchenBoardOrder[]
+): KitchenBoardStats {
+  const overduePreparing = preparingOrders.filter((order) => order.is_overdue).length
+  const preparationTimes = readyOrders
+    .map((order) => Number.parseInt(order.preparation_label, 10))
+    .filter((value) => Number.isFinite(value) && value >= 0)
+
+  return {
+    newCount: newOrders.length,
+    preparingCount: preparingOrders.length,
+    readyCount: readyOrders.length,
+    totalPending: newOrders.length + preparingOrders.length + readyOrders.length,
+    avgPreparationTime: preparationTimes.length
+      ? Math.round(preparationTimes.reduce((sum, value) => sum + value, 0) / preparationTimes.length)
+      : 0,
+    behindScheduleCount: overduePreparing
+  }
+}
+
 Page({
   data: {
     navBarHeight: 88,
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     actionOrderId: 0,
     actionType: '' as KitchenActionType,
@@ -80,31 +106,73 @@ Page({
     } as KitchenBoardStats,
     newOrders: [] as KitchenBoardOrder[],
     preparingOrders: [] as KitchenBoardOrder[],
-    readyOrders: [] as KitchenBoardOrder[]
+    readyOrders: [] as KitchenBoardOrder[],
+    _wsListeners: [] as WsUnsubscribe[]
   },
 
   onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
+    this.initWebSocket()
     this.loadKitchenOrders()
   },
 
   onPullDownRefresh() {
-    this.loadKitchenOrders()
+    this.loadKitchenOrders(Boolean(this.data.newOrders.length || this.data.preparingOrders.length || this.data.readyOrders.length))
   },
 
   onShow() {
+    this.initWebSocket()
     if (!this.data.initialLoading) {
       this.loadKitchenOrders(false)
+    }
+  },
+
+  onHide() {
+    this.cleanupWebSocket()
+  },
+
+  onUnload() {
+    this.cleanupWebSocket()
+  },
+
+  initWebSocket() {
+    this.cleanupWebSocket()
+    wsManager.connect()
+
+    const sub = wsManager.on(WSMessageType.NOTIFICATION, (data) => {
+      const notification = typeof data === 'object' && data !== null
+        ? (data as { type?: string })
+        : {}
+
+      if (notification.type === 'order') {
+        this.loadKitchenOrders(false)
+      }
+    })
+
+    this.data._wsListeners = [sub]
+  },
+
+  cleanupWebSocket() {
+    if (this.data._wsListeners?.length) {
+      this.data._wsListeners.forEach((unsubscribe) => unsubscribe())
+      this.data._wsListeners = []
     }
   },
 
   async loadKitchenOrders(showLoading = true) {
     if (this.data.loading) return
 
+    const hasExistingOrders = Boolean(this.data.newOrders.length || this.data.preparingOrders.length || this.data.readyOrders.length)
+    const isSilentRefresh = !showLoading && hasExistingOrders
+
     this.setData({
       loading: true,
-      ...(showLoading ? { initialError: false, initialErrorMessage: '' } : {})
+      ...(showLoading
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        : isSilentRefresh
+          ? { refreshErrorMessage: '' }
+          : {})
     })
 
     try {
@@ -116,7 +184,8 @@ Page({
         readyOrders: (response.ready_orders || []).map(formatKitchenOrder),
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (err: unknown) {
       logger.error('Load kitchen orders failed', err)
@@ -130,6 +199,8 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
+      } else if (isSilentRefresh) {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
       }
@@ -141,6 +212,36 @@ Page({
 
   onRetry() {
     this.loadKitchenOrders()
+  },
+
+  onRetryRefresh() {
+    this.loadKitchenOrders(false)
+  },
+
+  applyKitchenLists(newOrders: KitchenBoardOrder[], preparingOrders: KitchenBoardOrder[], readyOrders: KitchenBoardOrder[]) {
+    this.setData({
+      newOrders,
+      preparingOrders,
+      readyOrders,
+      stats: buildKitchenStatsFromLists(newOrders, preparingOrders, readyOrders)
+    })
+  },
+
+  syncKitchenOrder(order: KitchenOrderResponse) {
+    const formattedOrder = formatKitchenOrder(order)
+    const newOrders = this.data.newOrders.filter((item) => item.id !== order.id)
+    const preparingOrders = this.data.preparingOrders.filter((item) => item.id !== order.id)
+    const readyOrders = this.data.readyOrders.filter((item) => item.id !== order.id)
+
+    if (order.status === 'preparing') {
+      preparingOrders.unshift(formattedOrder)
+    } else if (order.status === 'ready') {
+      readyOrders.unshift(formattedOrder)
+    } else {
+      newOrders.unshift(formattedOrder)
+    }
+
+    this.applyKitchenLists(newOrders, preparingOrders, readyOrders)
   },
 
   async onStartPreparing(e: WechatMiniprogram.TouchEvent) {
@@ -160,7 +261,9 @@ Page({
 
     this.setData({ actionOrderId: orderId, actionType })
     try {
-      await requestPromise
+      const updatedOrder = await requestPromise
+      this.syncKitchenOrder(updatedOrder)
+      this.setData({ refreshErrorMessage: '' })
       wx.showToast({ title: successMessage, icon: 'success' })
       await this.loadKitchenOrders(false)
     } catch (err: unknown) {

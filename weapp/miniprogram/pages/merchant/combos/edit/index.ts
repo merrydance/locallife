@@ -5,6 +5,7 @@ import {
   DishManagementService,
   DishResponse
 } from '../../../../api/dish'
+import { getPublicImageUrl } from '../../../../utils/image'
 import { logger } from '../../../../utils/logger'
 
 type PricingMode = 'sum' | 'off_90' | 'off_80' | 'keep'
@@ -14,11 +15,23 @@ interface DishOption {
   name: string
   price: number
   is_online: boolean
+  image_url: string
   checked: boolean
 }
 
 interface ComboEditOptions {
   id?: string
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error && typeof error === 'object') {
+    const message = (error as { userMessage?: string, message?: string }).userMessage || (error as { message?: string }).message
+    if (typeof message === 'string' && message.trim()) {
+      return message.trim()
+    }
+  }
+
+  return fallback
 }
 
 const PRICING_MODE_OPTIONS = [
@@ -32,6 +45,8 @@ Page({
   data: {
     navBarHeight: 88,
     loading: true,
+    initialError: false,
+    initialErrorMessage: '',
     submitting: false,
     isEdit: false,
     comboId: 0,
@@ -46,7 +61,33 @@ Page({
     onlineChoice: 'online' as 'online' | 'offline',
     autoName: '精选套餐',
     originalTotal: 0,
-    comboPricePreview: 0
+    comboPricePreview: 0,
+    selectedDishPreviews: [] as string[],
+    dishEmptyDescription: '暂无可选菜品，请先创建菜品'
+  },
+
+  applyPersistedComboState(combo: Pick<ComboSetWithDetailsResponse, 'id' | 'name' | 'combo_price' | 'is_online'>, selectedDishIds: number[]) {
+    const selectedSet = new Set(selectedDishIds)
+    const allDishes = this.data.allDishes.map((dish) => ({
+      ...dish,
+      checked: selectedSet.has(dish.id)
+    }))
+
+    this.setData(
+      {
+        comboId: combo.id,
+        isEdit: combo.id > 0,
+        existingName: combo.name,
+        existingPrice: combo.combo_price,
+        onlineChoice: combo.is_online ? 'online' : 'offline',
+        selectedDishIds,
+        allDishes
+      },
+      () => {
+        this.syncVisibleDishes()
+        this.recomputePreview()
+      }
+    )
   },
 
   onLoad(options: ComboEditOptions) {
@@ -87,7 +128,11 @@ Page({
   },
 
   async loadData() {
-    this.setData({ loading: true })
+    this.setData({
+      loading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
     try {
       const [allDishesResponse, comboRes] = await Promise.all([
         this.fetchAllDishes(),
@@ -101,6 +146,7 @@ Page({
         name: dish.name,
         price: dish.price,
         is_online: dish.is_online,
+        image_url: getPublicImageUrl(dish.image_url || ''),
         checked: false
       }))
 
@@ -117,17 +163,26 @@ Page({
         selectedDishIds,
         existingName: comboRes?.name || '',
         existingPrice: comboRes?.combo_price || 0,
-        onlineChoice: comboRes?.is_online === false ? 'offline' : 'online'
+        onlineChoice: comboRes?.is_online === false ? 'offline' : 'online',
+        initialError: false,
+        initialErrorMessage: ''
       })
 
       this.syncVisibleDishes()
       this.recomputePreview()
     } catch (err) {
       logger.error('Load combo edit data failed', err)
-      wx.showToast({ title: '加载失败', icon: 'none' })
+      this.setData({
+        initialError: true,
+        initialErrorMessage: getErrorMessage(err, '套餐编辑页加载失败，请重试')
+      })
     } finally {
       this.setData({ loading: false })
     }
+  },
+
+  onRetry() {
+    this.loadData()
   },
 
   onDishCheckChange(e: WechatMiniprogram.CustomEvent) {
@@ -217,15 +272,16 @@ Page({
 
     this.setData({ submitting: true })
     try {
+      let savedCombo: Pick<ComboSetWithDetailsResponse, 'id' | 'name' | 'combo_price' | 'is_online'>
       if (this.data.isEdit) {
-        await ComboManagementService.updateCombo(this.data.comboId, {
+        savedCombo = await ComboManagementService.updateCombo(this.data.comboId, {
           name,
           combo_price: comboPrice,
           is_online: isOnline,
           dishes: this.data.selectedDishIds.map((dishId) => ({ dish_id: dishId, quantity: 1 }))
         })
       } else {
-        await ComboManagementService.createCombo({
+        savedCombo = await ComboManagementService.createCombo({
           name,
           combo_price: comboPrice,
           is_online: isOnline,
@@ -233,13 +289,15 @@ Page({
         })
       }
 
+      this.applyPersistedComboState(savedCombo, this.data.selectedDishIds)
+
       wx.showToast({ title: this.data.isEdit ? '套餐已更新' : '套餐已创建', icon: 'success' })
       setTimeout(() => {
         wx.navigateBack()
       }, 500)
     } catch (err) {
       logger.error('Submit combo failed', err)
-      wx.showToast({ title: '保存失败', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(err, '保存失败，请稍后重试'), icon: 'none' })
     } finally {
       this.setData({ submitting: false })
     }
@@ -249,13 +307,22 @@ Page({
     const originalTotal = this.calcOriginalTotal()
     const comboPricePreview = this.calcComboPrice(originalTotal)
     const autoName = this.buildAutoName()
-    this.setData({ originalTotal, comboPricePreview, autoName })
+    const selectedDishPreviews = this.data.allDishes
+      .filter((dish) => this.data.selectedDishIds.includes(dish.id) && dish.image_url)
+      .map((dish) => dish.image_url)
+      .slice(0, 4)
+    this.setData({ originalTotal, comboPricePreview, autoName, selectedDishPreviews })
   },
 
   syncVisibleDishes() {
     const dishes = this.data.showOnlineOnly
       ? this.data.allDishes.filter((dish) => dish.is_online || dish.checked)
       : this.data.allDishes
-    this.setData({ dishes })
+    const dishEmptyDescription = this.data.allDishes.length === 0
+      ? '暂无可选菜品，请先创建菜品'
+      : this.data.showOnlineOnly
+        ? '当前没有已上架菜品，可先关闭筛选或先去上架菜品'
+        : '暂无可选菜品，请先创建菜品'
+    this.setData({ dishes, dishEmptyDescription })
   }
 })

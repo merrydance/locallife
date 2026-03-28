@@ -3,9 +3,14 @@ import { MerchantStatsService, MerchantOverviewResponse, TopSellingDishRow } fro
 import { MerchantOrderManagementService, OrderStatsResponse } from '../../../api/order-management'
 import { ReservationService, ReservationStats } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
+import { settleAll } from '../../../utils/promise'
 import { getStableBarHeights } from '../../../utils/responsive'
 
 type StatsRangeKey = '7d' | '30d'
+
+type SettledResult<T> =
+  | { status: 'fulfilled', value: T }
+  | { status: 'rejected', reason: unknown }
 
 interface RangeOption {
   key: StatsRangeKey
@@ -119,15 +124,51 @@ function buildTopDishRows(rows: TopSellingDishRow[]): TopDishViewModel[] {
   }))
 }
 
+function getErrorMessage(err: unknown, fallback: string) {
+  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
+    const userMessage = (err as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  return fallback
+}
+
+function getSummaryErrorMessage(
+  overviewResult: SettledResult<MerchantOverviewResponse>,
+  orderStatsResult: SettledResult<OrderStatsResponse>
+) {
+  if (overviewResult.status === 'rejected' && orderStatsResult.status === 'rejected') {
+    return getErrorMessage(overviewResult.reason, '经营概览加载失败，请稍后重试')
+  }
+  if (overviewResult.status === 'rejected') {
+    return getErrorMessage(overviewResult.reason, '经营概览同步失败，请稍后重试')
+  }
+  if (orderStatsResult.status === 'rejected') {
+    return getErrorMessage(orderStatsResult.reason, '订单统计同步失败，请稍后重试')
+  }
+  return ''
+}
+
 Page({
   data: {
     navBarHeight: 88,
     rangeOptions: RANGE_OPTIONS,
     currentRange: '7d' as StatsRangeKey,
     initialLoading: true,
+    hasLoadedData: false,
     initialError: false,
     initialErrorMessage: '',
     loading: false,
+    summaryAvailable: false,
+    summaryError: false,
+    summaryErrorMessage: '',
+    topDishesAvailable: false,
+    topDishesError: false,
+    topDishesErrorMessage: '',
+    reservationStatsAvailable: false,
+    reservationStatsError: false,
+    reservationStatsErrorMessage: '',
     updatedAtLabel: '--',
     summary: buildSummary(EMPTY_OVERVIEW, EMPTY_ORDER_STATS, '--'),
     topDishes: [] as TopDishViewModel[],
@@ -142,57 +183,110 @@ Page({
 
   onShow() {
     if (!this.data.initialLoading) {
-      this.loadStats(false)
+      this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
     }
   },
 
   onPullDownRefresh() {
-    this.loadStats(false)
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
   },
 
-  async loadStats(showLoading = true) {
+  async loadStats(options: { showLoading?: boolean, silent?: boolean } = {}) {
+    const { showLoading = true, silent = false } = options
     if (this.data.loading) return
 
     const { params, label } = buildRange(this.data.currentRange)
     this.setData({
       loading: true,
-      ...(showLoading ? { initialError: false, initialErrorMessage: '' } : {})
+      ...(showLoading
+        ? {
+            initialError: false,
+            initialErrorMessage: '',
+            summaryError: false,
+            summaryErrorMessage: '',
+            topDishesError: false,
+            topDishesErrorMessage: '',
+            reservationStatsError: false,
+            reservationStatsErrorMessage: ''
+          }
+        : {})
     })
 
     try {
-      const [overviewResult, orderStatsResult, topDishesResult, reservationStatsResult] = await Promise.allSettled([
+      const [overviewResult, orderStatsResult, topDishesResult, reservationStatsResult] = await settleAll([
         MerchantStatsService.getOverview(params),
         MerchantOrderManagementService.getOrderStats(params),
         MerchantStatsService.getTopSellingDishes({ ...params, limit: 5 }),
         ReservationService.getReservationStats()
-      ])
+      ] as const)
 
-      const hasSuccessfulResult = [overviewResult, orderStatsResult, topDishesResult, reservationStatsResult]
-        .some((result) => result.status === 'fulfilled')
+      const summarySuccess = overviewResult.status === 'fulfilled' && orderStatsResult.status === 'fulfilled'
+      const topDishesSuccess = topDishesResult.status === 'fulfilled'
+      const reservationStatsSuccess = reservationStatsResult.status === 'fulfilled'
+      const hasSuccessfulResult = summarySuccess || topDishesSuccess || reservationStatsSuccess
+      const canPreserveExisting = silent && this.data.hasLoadedData
 
-      if (!hasSuccessfulResult) {
+      if (!hasSuccessfulResult && !canPreserveExisting) {
         throw new Error('all_stats_requests_failed')
       }
 
-      const overview = overviewResult.status === 'fulfilled' ? overviewResult.value : EMPTY_OVERVIEW
-      const orderStats = orderStatsResult.status === 'fulfilled' ? orderStatsResult.value : EMPTY_ORDER_STATS
-      const topDishes = topDishesResult.status === 'fulfilled' ? topDishesResult.value : []
-      const reservationStats = reservationStatsResult.status === 'fulfilled' ? reservationStatsResult.value : EMPTY_RESERVATION_STATS
-
-      this.setData({
-        summary: buildSummary(overview, orderStats, label),
-        topDishes: buildTopDishRows(topDishes || []),
-        reservationStats,
-        updatedAtLabel: dayjs().format('HH:mm'),
+      const nextState: Record<string, unknown> = {
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
-      })
+        initialErrorMessage: '',
+        hasLoadedData: this.data.hasLoadedData || hasSuccessfulResult,
+        updatedAtLabel: hasSuccessfulResult ? dayjs().format('HH:mm') : this.data.updatedAtLabel
+      }
+
+      if (summarySuccess) {
+        nextState.summary = buildSummary(overviewResult.value, orderStatsResult.value, label)
+        nextState.summaryAvailable = true
+        nextState.summaryError = false
+        nextState.summaryErrorMessage = ''
+      } else if (canPreserveExisting && this.data.summaryAvailable) {
+        nextState.summaryError = true
+        nextState.summaryErrorMessage = `${getSummaryErrorMessage(overviewResult, orderStatsResult)}，当前已保留上次统计结果`
+      } else {
+        nextState.summary = buildSummary(EMPTY_OVERVIEW, EMPTY_ORDER_STATS, label)
+        nextState.summaryAvailable = false
+        nextState.summaryError = true
+        nextState.summaryErrorMessage = getSummaryErrorMessage(overviewResult, orderStatsResult)
+      }
+
+      if (topDishesSuccess) {
+        nextState.topDishes = buildTopDishRows(topDishesResult.value || [])
+        nextState.topDishesAvailable = true
+        nextState.topDishesError = false
+        nextState.topDishesErrorMessage = ''
+      } else if (canPreserveExisting && this.data.topDishesAvailable) {
+        nextState.topDishesError = true
+        nextState.topDishesErrorMessage = `${getErrorMessage(topDishesResult.reason, '热销菜同步失败，请稍后重试')}，当前已保留上次结果`
+      } else {
+        nextState.topDishes = []
+        nextState.topDishesAvailable = false
+        nextState.topDishesError = true
+        nextState.topDishesErrorMessage = getErrorMessage(topDishesResult.reason, '热销菜加载失败，请稍后重试')
+      }
+
+      if (reservationStatsSuccess) {
+        nextState.reservationStats = reservationStatsResult.value
+        nextState.reservationStatsAvailable = true
+        nextState.reservationStatsError = false
+        nextState.reservationStatsErrorMessage = ''
+      } else if (canPreserveExisting && this.data.reservationStatsAvailable) {
+        nextState.reservationStatsError = true
+        nextState.reservationStatsErrorMessage = `${getErrorMessage(reservationStatsResult.reason, '预订池同步失败，请稍后重试')}，当前已保留上次结果`
+      } else {
+        nextState.reservationStats = EMPTY_RESERVATION_STATS
+        nextState.reservationStatsAvailable = false
+        nextState.reservationStatsError = true
+        nextState.reservationStatsErrorMessage = getErrorMessage(reservationStatsResult.reason, '预订池加载失败，请稍后重试')
+      }
+
+      this.setData(nextState)
     } catch (err: unknown) {
       logger.error('Load merchant stats failed', err)
-      const message = typeof err === 'object' && err !== null && 'userMessage' in err
-        ? (err as { userMessage?: string }).userMessage || '经营统计加载失败，请重试'
-        : '经营统计加载失败，请重试'
+      const message = getErrorMessage(err, '经营统计加载失败，请重试')
 
       if (this.data.initialLoading) {
         this.setData({
@@ -218,5 +312,17 @@ Page({
 
   onRetry() {
     this.loadStats()
+  },
+
+  onRetrySummary() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
+  onRetryTopDishes() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
+  onRetryReservationStats() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
   }
 })

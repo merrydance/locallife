@@ -1,0 +1,121 @@
+<custom-navbar title="投诉详情" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{loading && !detail}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载投诉详情中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '投诉详情加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <view wx:elif="{{detail}}" class="content">
+    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-warning">
+      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="hero-card">
+      <view class="hero-top">
+        <view class="hero-copy">
+          <text class="hero-title">投诉单 {{detail.complaintId}}</text>
+          <text class="hero-subtitle">投诉时间 {{detail.complaintTimeLabel}}</text>
+        </view>
+        <t-tag size="small" variant="dark" theme="{{detail.stateTheme}}">{{detail.stateLabel}}</t-tag>
+      </view>
+      <view class="hero-amount">涉及金额 {{detail.amountText}}</view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">处理进度</view>
+      <t-steps layout="vertical" current="{{detail.progressCurrent}}" theme="dot">
+        <t-step-item title="用户发起投诉" content="{{detail.complaintTimeLabel}}" />
+        <t-step-item title="商户回复处理" content="{{detail.respondedAtLabel}}" />
+        <t-step-item title="投诉完结" content="{{detail.completedAtLabel}}" />
+      </t-steps>
+    </view>
+
+    <view class="card">
+      <view class="card-title">投诉内容</view>
+      <view class="desc-block">{{detail.complaintDetail}}</view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">回复记录</view>
+      <view wx:if="{{detail.hasResponse}}" class="desc-block">{{detail.responseContent}}</view>
+      <view wx:else class="pending-tip">当前还没有提交商户回复，建议尽快说明处理方案或沟通结果。</view>
+      <view class="info-row">
+        <text class="label">回复时间</text>
+        <text class="value">{{detail.respondedAtLabel}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">完结时间</text>
+        <text class="value">{{detail.completedAtLabel}}</text>
+      </view>
+    </view>
+
+    <view class="card">
+      <view class="card-title">订单与同步信息</view>
+      <view class="info-row info-row-copy" data-value="{{detail.outTradeNoText}}" bindtap="onCopyValue">
+        <text class="label">商户订单号</text>
+        <text class="value">{{detail.outTradeNoText}}</text>
+      </view>
+      <view class="info-row info-row-copy" data-value="{{detail.transactionIdText}}" bindtap="onCopyValue">
+        <text class="label">微信交易单号</text>
+        <text class="value">{{detail.transactionIdText}}</text>
+      </view>
+      <view class="info-row info-row-copy" data-value="{{detail.payerOpenIdText}}" bindtap="onCopyValue">
+        <text class="label">投诉用户 OpenID</text>
+        <text class="value">{{detail.payerOpenIdText}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">微信侧更新时间</text>
+        <text class="value">{{detail.wxpayUpdatedAtLabel}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">最近同步时间</text>
+        <text class="value">{{detail.lastSyncedAtLabel}}</text>
+      </view>
+      <view class="info-row">
+        <text class="label">本地更新时间</text>
+        <text class="value">{{detail.updatedAtLabel}}</text>
+      </view>
+    </view>
+
+    <view class="action-bar">
+      <t-button wx:if="{{detail.canRespond}}" theme="primary" variant="outline" shape="round" bindtap="onOpenResponsePopup">{{detail.hasResponse ? '更新回复' : '回复投诉'}}</t-button>
+      <t-button wx:if="{{detail.canComplete}}" theme="primary" shape="round" loading="{{completing}}" bindtap="onCompleteComplaint">确认完结</t-button>
+    </view>
+  </view>
+
+  <t-popup wx:if="{{responsePopupVisible}}" visible="{{responsePopupVisible}}" placement="bottom" bind:visible-change="onResponsePopupVisibleChange">
+    <view class="popup-sheet">
+      <view class="popup-title">{{detail && detail.hasResponse ? '更新投诉回复' : '回复投诉'}}</view>
+      <text class="popup-subtitle">请明确告知处理方案、补偿进度或后续沟通方式，回复内容会同步给微信投诉单。</text>
+      <t-textarea
+        value="{{responseDraft}}"
+        placeholder="请输入回复内容，控制在 256 字内"
+        maxlength="256"
+        indicator
+        bindchange="onResponseInput"
+      />
+      <view class="jump-url-wrap">
+        <t-input
+          label="补充链接"
+          placeholder="如有售后说明页，可填写 https:// 开头链接"
+          value="{{responseJumpUrl}}"
+          bindchange="onJumpUrlInput"
+        />
+      </view>
+      <view class="popup-actions">
+        <t-button theme="default" shape="round" bindtap="onCloseResponsePopup">取消</t-button>
+        <t-button theme="primary" shape="round" loading="{{responseSubmitting}}" bindtap="onSubmitResponse">提交回复</t-button>
+      </view>
+    </view>
+  </t-popup>
+</view>

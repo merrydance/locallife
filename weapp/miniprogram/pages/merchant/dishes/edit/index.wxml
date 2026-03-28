@@ -67,6 +67,99 @@
     </view>
 
     <view class="card">
+      <view class="section-title">规格与加价</view>
+      <view class="helper-text">用于配置用户端可选规格、必选项和附加价格。</view>
+
+      <view wx:if="{{customizationGroups.length === 0}}" class="spec-empty">
+        当前还没有规格组，适合用于份量、辣度、加料等经营选项。
+      </view>
+
+      <view
+        wx:for="{{customizationGroups}}"
+        wx:key="key"
+        wx:for-item="group"
+        wx:for-index="groupIndex"
+        class="spec-group"
+      >
+        <view class="spec-group-header">
+          <input
+            class="spec-group-name"
+            placeholder="例如：规格 / 辣度 / 加料"
+            value="{{group.name}}"
+            data-group-index="{{groupIndex}}"
+            bindinput="onCustomizationGroupNameInput"
+          />
+          <view class="spec-group-tools">
+            <view class="spec-required-toggle">
+              <text class="spec-required-label">必选</text>
+              <t-switch
+                size="small"
+                value="{{group.is_required}}"
+                data-group-index="{{groupIndex}}"
+                bind:change="onCustomizationGroupRequiredChange"
+              />
+            </view>
+            <t-button
+              size="small"
+              theme="danger"
+              variant="text"
+              data-group-index="{{groupIndex}}"
+              bindtap="onRemoveCustomizationGroup"
+            >删除分组</t-button>
+          </view>
+        </view>
+
+        <view class="spec-options">
+          <view
+            wx:for="{{group.options}}"
+            wx:key="key"
+            wx:for-item="option"
+            wx:for-index="optionIndex"
+            class="spec-option-row"
+          >
+            <input
+              class="spec-option-name"
+              placeholder="规格选项，例如：大份 / 微辣"
+              value="{{option.name}}"
+              data-group-index="{{groupIndex}}"
+              data-option-index="{{optionIndex}}"
+              bindinput="onCustomizationOptionNameInput"
+            />
+            <input
+              class="spec-option-price"
+              type="digit"
+              placeholder="加价(元)"
+              value="{{option.extraPriceYuan}}"
+              data-group-index="{{groupIndex}}"
+              data-option-index="{{optionIndex}}"
+              bindinput="onCustomizationOptionPriceInput"
+            />
+            <t-button
+              size="small"
+              theme="danger"
+              variant="text"
+              data-group-index="{{groupIndex}}"
+              data-option-index="{{optionIndex}}"
+              bindtap="onRemoveCustomizationOption"
+            >删除</t-button>
+          </view>
+        </view>
+
+        <t-button
+          size="small"
+          theme="primary"
+          variant="outline"
+          data-group-index="{{groupIndex}}"
+          bindtap="onAddCustomizationOption"
+        >添加规格选项</t-button>
+      </view>
+
+      <t-button theme="primary" variant="outline" bindtap="onAddCustomizationGroup">
+        添加规格组
+      </t-button>
+    </view>
+
+    <view class="card">
       <view class="section-title">售卖设置</view>
       <t-cell-group theme="card">
         <t-cell title="是否上架">

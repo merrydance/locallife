@@ -5,6 +5,11 @@
     <t-loading theme="circular" text="加载中..." vertical />
   </view>
 
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '套餐编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
   <block wx:else>
     <view class="section">
       <view class="section-title">1. 选择菜品（可多选）</view>
@@ -14,6 +19,7 @@
       </view>
       <checkbox-group bindchange="onDishCheckChange">
         <view class="dish-option" wx:for="{{dishes}}" wx:key="id">
+          <image wx:if="{{item.image_url}}" class="dish-thumb" src="{{item.image_url}}" mode="aspectFill" />
           <checkbox
             value="{{item.id}}"
             checked="{{item.checked}}"
@@ -25,7 +31,7 @@
           </view>
         </view>
       </checkbox-group>
-      <t-empty wx:if="{{!dishes.length}}" icon="info-circle" description="暂无可选菜品，请先创建菜品" />
+      <t-empty wx:if="{{!dishes.length}}" icon="info-circle" description="{{dishEmptyDescription}}" />
     </view>
 
     <view class="section">
@@ -58,6 +64,9 @@
     </view>
 
     <view class="summary-card">
+      <view class="summary-previews" wx:if="{{selectedDishPreviews.length}}">
+        <image class="summary-preview-image" wx:for="{{selectedDishPreviews}}" wx:key="*this" src="{{item}}" mode="aspectFill" />
+      </view>
       <view class="summary-row">
         <text class="label">套餐名称</text>
         <text class="value">{{autoName}}</text>

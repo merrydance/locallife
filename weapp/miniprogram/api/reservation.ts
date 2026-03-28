@@ -368,7 +368,7 @@ export class ReservationService {
    * 商户获取预订列表
    * GET /v1/reservations/merchant
    */
-  static async getMerchantReservations(params: ReservationListParams): Promise<{ reservations: ReservationResponse[] }> {
+  static async getMerchantReservations(params: ReservationListParams): Promise<ReservationListResponse> {
     return await request({
       url: '/v1/reservations/merchant',
       method: 'GET',

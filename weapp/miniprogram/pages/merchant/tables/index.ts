@@ -1,7 +1,7 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { tableManagementService, CreateTableRequest, TableImageResponse, TableResponse, UpdateTableRequest } from '../../../api/table-device-management'
 import { TagService } from '../../../api/dish'
-import { API_BASE } from '../../../utils/request'
+import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
 
 type TableTab = 'all' | 'table' | 'room'
@@ -27,6 +27,24 @@ interface TableFormData {
   tag_ids: number[]
 }
 
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+    const userMessage = (error as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = (error as { message?: unknown }).message
+    if (typeof message === 'string' && message.trim()) {
+      return message
+    }
+  }
+
+  return fallback
+}
+
 function createDefaultFormData(): TableFormData {
   return {
     table_no: '',
@@ -40,26 +58,9 @@ function createDefaultFormData(): TableFormData {
   }
 }
 
-function normalizeMediaUrl(path?: string): string {
-  if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('wxfile://') || path.startsWith('data:')) {
-    return path
-  }
-  if (path.startsWith('//')) {
-    return `https:${path}`
-  }
-  if (path.startsWith('/')) {
-    return `${API_BASE}${path}`
-  }
-  return `${API_BASE}/${path}`
-}
-
 function normalizeQRCodeUrl(path?: string): string {
   if (!path) return ''
-  if (path.startsWith('http://') || path.startsWith('https://')) {
-    return path
-  }
-  return ''
+  return getPublicImageUrl(path)
 }
 
 function ensureArray<T>(value: T[] | null | undefined): T[] {
@@ -84,7 +85,7 @@ function toSafeTableImages(value: unknown): TableImageResponse[] {
   for (const item of value) {
     if (!item || typeof item !== 'object') continue
     const candidate = item as TableImageResponse
-    const normalizedImageUrl = normalizeMediaUrl(typeof candidate.image_url === 'string' ? candidate.image_url : '')
+    const normalizedImageUrl = getPublicImageUrl(typeof candidate.image_url === 'string' ? candidate.image_url : '')
     if (!normalizedImageUrl) continue
 
     result.push({
@@ -102,6 +103,9 @@ Page({
   data: {
     navBarHeight: 88,
     loading: false,
+    initialError: false,
+    initialErrorMessage: '',
+    listLoaded: false,
     formSubmitting: false,
     currentTab: 'all' as TableTab,
     tables: [] as TableView[],
@@ -111,6 +115,8 @@ Page({
     pendingMediaIds: [] as number[],
     pendingImagePreviews: [] as string[],
     imageUploading: false,
+    imageMutating: false,
+    imageMutatingImageId: 0,
     tagSubmitting: false,
     formVisible: false,
     isEdit: false,
@@ -156,7 +162,11 @@ Page({
 
   async loadTables() {
     if (this.data.loading) return
-    this.setData({ loading: true })
+    this.setData({
+      loading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
     
     try {
       // API 支持 table_type 过滤，但这里我们先拉取全部在前端切也行，或者根据 tab 传参
@@ -170,15 +180,30 @@ Page({
       const formatted = rawTables.map((t) => this.formatTable(t))
       this.setData({ 
         tables: formatted,
-        rawTables
+        rawTables,
+        listLoaded: true,
+        initialError: false,
+        initialErrorMessage: ''
       })
     } catch (err) {
       logger.error('Load tables failed', err)
-      wx.showToast({ title: '加载桌台失败', icon: 'none' })
+      const message = getErrorMessage(err, '加载桌台失败，请稍后重试')
+      if (!this.data.listLoaded) {
+        this.setData({
+          initialError: true,
+          initialErrorMessage: message
+        })
+      } else {
+        wx.showToast({ title: message, icon: 'none' })
+      }
     } finally {
       this.setData({ loading: false })
       wx.stopPullDownRefresh()
     }
+  },
+
+  onRetry() {
+    this.loadTables()
   },
 
   formatTable(t: TableResponse) {
@@ -248,6 +273,13 @@ Page({
         })
         .catch((err) => {
           logger.error('Get table qrcode failed', err)
+
+          const fallbackUrl = normalizeQRCodeUrl(url)
+          if (fallbackUrl) {
+            wx.previewImage({ urls: [fallbackUrl], current: fallbackUrl })
+            return
+          }
+
           wx.showToast({ title: '获取二维码失败', icon: 'none' })
         })
       return
@@ -323,7 +355,7 @@ Page({
   },
 
   async onChooseImage() {
-    if (this.data.imageUploading) return
+    if (this.data.imageUploading || this.data.imageMutating) return
 
     try {
       const chooseRes = await wx.chooseMedia({
@@ -336,6 +368,7 @@ Page({
       if (!filePath) return
 
       this.setData({ imageUploading: true })
+      wx.showLoading({ title: '添加图片中...' })
 
       const uploaded = await tableManagementService.uploadTableImageFile(filePath)
       const { mediaId, displayUrl } = uploaded
@@ -359,8 +392,9 @@ Page({
       wx.showToast({ title: '图片已添加', icon: 'success' })
     } catch (err) {
       logger.error('Choose/upload table image failed', err)
-      wx.showToast({ title: '上传失败', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(err, '图片上传失败，请稍后重试'), icon: 'none' })
     } finally {
+      wx.hideLoading()
       this.setData({ imageUploading: false })
     }
   },
@@ -368,14 +402,21 @@ Page({
   async onDeleteImage(e: WechatMiniprogram.TouchEvent) {
     const { imageId, index } = e.currentTarget.dataset as { imageId?: number, index?: number }
 
+    if (this.data.imageMutating || this.data.imageUploading) return
+
     if (this.data.isEdit && this.data.editingTableId > 0 && imageId) {
+      this.setData({ imageMutating: true, imageMutatingImageId: imageId })
+      wx.showLoading({ title: '删除图片中...' })
       try {
         await tableManagementService.deleteTableImage(this.data.editingTableId, imageId)
         await this.loadTableImages(this.data.editingTableId)
         wx.showToast({ title: '图片已删除', icon: 'success' })
       } catch (err) {
         logger.error('Delete table image failed', err)
-        wx.showToast({ title: '删除失败', icon: 'none' })
+        wx.showToast({ title: getErrorMessage(err, '删除图片失败，请稍后重试'), icon: 'none' })
+      } finally {
+        wx.hideLoading()
+        this.setData({ imageMutating: false, imageMutatingImageId: 0 })
       }
       return
     }
@@ -391,22 +432,62 @@ Page({
 
   async onSetPrimaryImage(e: WechatMiniprogram.TouchEvent) {
     const { imageId } = e.currentTarget.dataset as { imageId?: number }
-    if (!this.data.isEdit || !this.data.editingTableId || !imageId) return
+    if (!this.data.isEdit || !this.data.editingTableId || !imageId || this.data.imageMutating || this.data.imageUploading) return
 
+    this.setData({ imageMutating: true, imageMutatingImageId: imageId })
+    wx.showLoading({ title: '设置主图中...' })
     try {
       await tableManagementService.setPrimaryTableImage(this.data.editingTableId, imageId)
       await this.loadTableImages(this.data.editingTableId)
       wx.showToast({ title: '已设为主图', icon: 'success' })
     } catch (err) {
       logger.error('Set primary table image failed', err)
-      wx.showToast({ title: '设置失败', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(err, '设置主图失败，请稍后重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ imageMutating: false, imageMutatingImageId: 0 })
     }
+  },
+
+  resetFormState() {
+    this.setData({
+      formVisible: false,
+      isEdit: false,
+      editingTableId: 0,
+      tableImages: [],
+      pendingMediaIds: [],
+      pendingImagePreviews: [],
+      formData: createDefaultFormData()
+    })
+  },
+
+  async uploadPendingImages(tableId: number) {
+    const pendingMediaIds = ensureArray(this.data.pendingMediaIds)
+    if (!pendingMediaIds.length) {
+      return { failedCount: 0 }
+    }
+
+    let failedCount = 0
+    for (const mediaId of pendingMediaIds) {
+      try {
+        await tableManagementService.uploadTableImage(tableId, { media_asset_id: mediaId })
+      } catch (err) {
+        failedCount += 1
+        logger.error('Bind pending table image failed', err)
+      }
+    }
+
+    return { failedCount }
   },
 
   onPreviewImage(e: WechatMiniprogram.TouchEvent) {
     const { url } = e.currentTarget.dataset as { url?: string }
     if (!url) return
-    const finalUrl = normalizeMediaUrl(url)
+    const finalUrl = getPublicImageUrl(url)
+    if (!finalUrl) {
+      wx.showToast({ title: '图片地址无效', icon: 'none' })
+      return
+    }
     wx.previewImage({ urls: [finalUrl], current: finalUrl })
   },
 
@@ -485,28 +566,33 @@ Page({
     const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
     if (!id) return
 
+    const selectedTagIds = ensureArray(this.data.formData.tag_ids)
+    if (!selectedTagIds.includes(id)) return
+
+    const isEdit = this.data.isEdit && this.data.editingTableId > 0
+    const modalContent = isEdit
+      ? `确认取消标签「${name || ''}」与当前桌台的关联吗？`
+      : `确认取消标签「${name || ''}」的选择吗？`
+
     wx.showModal({
-      title: '移除标签',
-      content: `确认将标签「${name || ''}」从当前桌台移除吗？`,
+      title: isEdit ? '取消关联标签' : '取消选择标签',
+      content: modalContent,
       success: async (res) => {
         if (!res.confirm) return
 
         this.setData({ tagSubmitting: true })
         try {
-          if (this.data.isEdit && this.data.editingTableId > 0) {
+          if (isEdit) {
             await tableManagementService.deleteTableTag(this.data.editingTableId, id)
           }
 
-          const availableTags = ensureArray(this.data.availableTags)
-          const selectedTagIds = ensureArray(this.data.formData.tag_ids)
           this.setData({
-            availableTags: availableTags.filter((tag) => tag.id !== id),
             'formData.tag_ids': selectedTagIds.filter((tagId) => tagId !== id)
           })
-          wx.showToast({ title: '标签已移除', icon: 'success' })
+          wx.showToast({ title: isEdit ? '标签已取消关联' : '标签已取消选择', icon: 'success' })
         } catch (err) {
           logger.error('Remove table tag failed', err)
-          wx.showToast({ title: '移除标签失败', icon: 'none' })
+          wx.showToast({ title: isEdit ? '取消关联失败' : '取消选择失败', icon: 'none' })
         } finally {
           this.setData({ tagSubmitting: false })
         }
@@ -565,24 +651,26 @@ Page({
           status: formData.status
         }
         await tableManagementService.updateTable(this.data.editingTableId, updatePayload)
+        this.resetFormState()
+        this.loadTables()
         wx.showToast({ title: '桌台已更新', icon: 'success' })
       } else {
         const created = await tableManagementService.createTable(createPayload)
 
-        if (Array.isArray(this.data.pendingMediaIds) && this.data.pendingMediaIds.length > 0) {
-          for (const mediaId of this.data.pendingMediaIds) {
-            await tableManagementService.uploadTableImage(created.id, { media_asset_id: mediaId })
-          }
+        const { failedCount } = await this.uploadPendingImages(created.id)
+
+        this.resetFormState()
+        this.loadTables()
+
+        if (failedCount > 0) {
+          wx.showToast({ title: '桌台已创建，部分图片添加失败，请进入编辑页重试', icon: 'none', duration: 3000 })
+        } else {
+          wx.showToast({ title: '桌台已创建', icon: 'success' })
         }
-
-        wx.showToast({ title: '桌台已创建', icon: 'success' })
       }
-
-      this.setData({ formVisible: false })
-      this.loadTables()
     } catch (err) {
       logger.error('Submit table form failed', err)
-      wx.showToast({ title: '保存失败', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(err, '保存失败，请稍后重试'), icon: 'none' })
     } finally {
       this.setData({ formSubmitting: false })
     }

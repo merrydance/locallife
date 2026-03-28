@@ -4,6 +4,7 @@
  * 包含：申诉管理、索赔处理、评价回复
  */
 
+import type { MiniProgramPayParams } from './payment'
 import { request } from '../utils/request'
 
 // ==================== 数据类型定义 ====================
@@ -105,6 +106,7 @@ export interface ClaimResponse {
     user_name?: string
     appeal_id?: number
     appeal_status?: AppealStatus
+    recovery_status?: ClaimRecoveryStatus
     appeal_reason?: string
     appeal_review_notes?: string
 }
@@ -136,6 +138,43 @@ export interface ClaimRecoveryResponse {
     updated_at: string
 }
 
+export interface ClaimRecoveryPaymentResponse {
+    recovery: ClaimRecoveryResponse
+    payment_order_id: number
+    out_trade_no: string
+    amount: number
+    status: string
+    expires_at?: string
+    pay_params?: MiniProgramPayParams
+}
+
+export interface MerchantUserRiskResponse {
+    user_id: number
+    has_block: boolean
+    reason_code?: string
+    block_until?: string
+    reminder_text?: string
+}
+
+export interface BehaviorSummaryStat {
+    entity_type: string
+    entity_id: number
+    total_orders: number
+    abnormal_claims: number
+    abnormal_rate: number
+}
+
+export interface MerchantClaimBehaviorSummaryResponse {
+    order_id: number
+    window: {
+        start_date: string
+        end_date: string
+    }
+    user: BehaviorSummaryStat
+    merchant: BehaviorSummaryStat
+    rider?: BehaviorSummaryStat
+}
+
 /** 用户索赔列表查询参数 */
 export interface UserClaimsQueryParams extends Record<string, unknown> {
     page?: number
@@ -147,6 +186,7 @@ export interface ClaimsQueryParams extends Record<string, unknown> {
     page_id: number
     page_size: number
     status?: ClaimStatus
+    bucket?: 'pending_action' | 'appealed' | 'closed'
     claim_type?: ClaimType
 }
 
@@ -381,9 +421,19 @@ export class ClaimManagementService {
     }
 
     /**
+     * 获取商户顾客风险提示
+     */
+    async getMerchantUserRisk(userId: number): Promise<MerchantUserRiskResponse> {
+        return request({
+            url: `/v1/merchant/risk/users/${userId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
      * 商户支付追偿单
      */
-    async payMerchantClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+    async payMerchantClaimRecovery(claimId: number): Promise<ClaimRecoveryPaymentResponse> {
         return request({
             url: `/v1/merchant/claims/${claimId}/recovery/pay`,
             method: 'POST'
@@ -403,7 +453,7 @@ export class ClaimManagementService {
     /**
      * 骑手支付追偿单
      */
-    async payRiderClaimRecovery(claimId: number): Promise<ClaimRecoveryResponse> {
+    async payRiderClaimRecovery(claimId: number): Promise<ClaimRecoveryPaymentResponse> {
         return request({
             url: `/v1/rider/claims/${claimId}/recovery/pay`,
             method: 'POST'
@@ -478,6 +528,20 @@ export class ClaimManagementService {
         return request({
             url: `/v1/merchant/claims/${claimId}/decision`,
             method: 'GET'
+        })
+    }
+
+    /**
+     * 获取商户索赔行为回溯摘要
+     * @param orderId 订单ID
+     */
+    async getMerchantClaimBehaviorSummary(orderId: number): Promise<MerchantClaimBehaviorSummaryResponse> {
+        return request({
+            url: '/v1/merchant/claims/behavior-summary',
+            method: 'GET',
+            data: {
+                order_id: orderId
+            }
         })
     }
 

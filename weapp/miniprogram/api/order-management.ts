@@ -5,6 +5,13 @@
 
 import { request } from '../utils/request'
 
+export const MERCHANT_REJECT_REASON_OPTIONS = [
+    '门店临时打烊',
+    '商品已售罄',
+    '配送资源不足',
+    '订单信息异常'
+] as const
+
 // ==================== 订单数据类型定义 ====================
 
 /**
@@ -14,7 +21,7 @@ export interface OrderResponse {
     id: number                                   // 订单ID
     order_no: string                             // 订单编号
     order_type: 'takeout' | 'dine_in' | 'takeaway' | 'reservation'  // 订单类型
-    status: 'pending' | 'paid' | 'preparing' | 'ready' | 'delivering' | 'completed' | 'cancelled'  // 订单状态
+    status: 'pending' | 'paid' | 'preparing' | 'ready' | 'courier_accepted' | 'picked' | 'delivering' | 'rider_delivered' | 'user_delivered' | 'completed' | 'cancelled'  // 订单状态
     user_id: number                              // 用户ID
     merchant_id: number                          // 商户ID
     merchant_name: string                        // 商户名称
@@ -27,15 +34,41 @@ export interface OrderResponse {
     delivery_fee_discount: number                // 配送费优惠（分）
     discount_amount: number                      // 优惠金额（分）
     total_amount: number                         // 订单总金额（分）
-    payment_method: 'wechat' | 'balance'         // 支付方式
+    fulfillment_status?: 'scheduled' | 'pending_kitchen' | 'preparing' | 'ready' | 'completed' | 'cancelled'
+    payment_method?: 'wechat' | 'balance'        // 支付方式
     notes?: string                               // 订单备注
+    status_hint?: string
+    actions?: string[]
+    exception_state?: string
+    claim_channel?: string
+    overtime?: boolean
+    delivery_eta_minutes?: number
+    estimated_delivery_at?: string
+    pickup_code?: string
+    pickup_code_masked?: string
+    merchant_phone?: string
+    delivery_contact_name?: string
+    delivery_contact_phone?: string
+    delivery_address?: string
     delivery_distance?: number                   // 配送距离（米）
     created_at: string                           // 创建时间
     paid_at?: string                             // 支付时间
+    prep_start_at?: string
+    ready_at?: string
+    courier_accept_at?: string
+    picked_at?: string
+    rider_delivered_at?: string
+    user_delivered_at?: string
+    auto_user_delivered_at?: string
     completed_at?: string                        // 完成时间
     cancelled_at?: string                        // 取消时间
     cancel_reason?: string                       // 取消原因
     updated_at: string                           // 更新时间
+    badges?: Array<{
+        text?: string
+        type?: string
+        locale?: string
+    }>
 }
 
 /**
@@ -165,7 +198,7 @@ export class MerchantOrderManagementService {
     static async getOrderList(params: {
         page_id: number                            // 页码（必填）
         page_size: number                          // 每页数量（必填，5-50）
-        status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'delivering' | 'completed' | 'cancelled'  // 状态筛选
+        status?: 'pending' | 'paid' | 'preparing' | 'ready' | 'courier_accepted' | 'picked' | 'delivering' | 'rider_delivered' | 'user_delivered' | 'completed' | 'cancelled'  // 状态筛选
         order_type?: OrderResponse['order_type']   // 订单类型筛选
     }): Promise<MerchantOrderListResult> {
         const response = await request<OrderResponse[] | MerchantOrderListResult | { orders?: OrderResponse[], total?: number, page_id?: number, page_size?: number }>({
@@ -330,10 +363,14 @@ export class OrderManagementAdapter {
     static formatOrderStatus(status: string): string {
         const statusMap: Record<string, string> = {
             'pending': '待支付',
-            'paid': '已支付',
+            'paid': '待接单',
             'preparing': '制作中',
-            'ready': '待配送/待取餐',
+            'ready': '待交付',
+            'courier_accepted': '骑手已接单',
+            'picked': '骑手已取餐',
             'delivering': '配送中',
+            'rider_delivered': '骑手已送达',
+            'user_delivered': '用户已确认',
             'completed': '已完成',
             'cancelled': '已取消'
         }
@@ -402,7 +439,7 @@ export class OrderManagementAdapter {
      * 判断订单是否可以拒单
      */
     static canRejectOrder(order: OrderResponse): boolean {
-        return ['paid', 'preparing'].includes(order.status)
+        return order.status === 'paid'
     }
 
     /**
@@ -428,7 +465,11 @@ export class OrderManagementAdapter {
             'paid': '#3498db',         // 蓝色
             'preparing': '#e74c3c',    // 红色
             'ready': '#f39c12',        // 橙色
-            'delivering': '#9b59b6',   // 紫色
+            'courier_accepted': '#2563eb',
+            'picked': '#0f766e',
+            'delivering': '#0284c7',
+            'rider_delivered': '#0d9488',
+            'user_delivered': '#16a34a',
             'completed': '#27ae60',    // 绿色
             'cancelled': '#95a5a6'     // 灰色
         }

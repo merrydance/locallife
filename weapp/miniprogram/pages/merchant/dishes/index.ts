@@ -1,11 +1,32 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { DishManagementService, DishResponse, DishCategory } from '../../../api/dish'
-import { API_BASE } from '../../../utils/request'
+import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
+
+function getErrorMessage(err: unknown, fallback: string) {
+  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
+    const userMessage = (err as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  return fallback
+}
+
+function normalizeDish(dish: DishResponse): DishResponse {
+  return {
+    ...dish,
+    image_url: getPublicImageUrl(dish.image_url)
+  }
+}
 
 Page({
   data: {
     navBarHeight: 88,
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     dishes: [] as DishResponse[],
     categories: [] as DishCategory[],
@@ -22,11 +43,11 @@ Page({
     this.refreshAll()
   },
 
-  async refreshAll() {
-    this.setData({ pageId: 1, dishes: [], hasMore: true })
+  async refreshAll(showLoading = true) {
+    this.setData({ pageId: 1, hasMore: true })
     await Promise.all([
       this.loadCategories(),
-      this.loadDishes()
+      this.loadDishesInternal(true, showLoading)
     ])
   },
 
@@ -41,16 +62,51 @@ Page({
   },
 
   async loadDishes() {
-    if (this.data.loading || !this.data.hasMore) return
-    
-    this.setData({ loading: true })
+    return this.loadDishesInternal(false)
+  },
+
+  async loadDishesInternal(reset = false, showLoading = true) {
+    if (this.data.loading) return
+
+    const keyword = this.data.searchKeyword.trim()
+    const isSearchMode = keyword.length > 0
+    if (!reset && !isSearchMode && !this.data.hasMore) return
+    if (!reset && isSearchMode) return
+
+    const hasExistingDishes = this.data.dishes.length > 0
+    const isSilentRefresh = reset && !showLoading && hasExistingDishes
+
+    this.setData({
+      loading: true,
+      ...(showLoading
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        : isSilentRefresh
+          ? { refreshErrorMessage: '' }
+          : {})
+    })
+
     try {
+      if (isSearchMode) {
+        const matchedDishes = await this.searchAllDishes(keyword)
+        this.setData({
+          dishes: matchedDishes,
+          pageId: 1,
+          hasMore: false,
+          initialLoading: false,
+          initialError: false,
+          initialErrorMessage: '',
+          refreshErrorMessage: ''
+        })
+        return
+      }
+
+      const pageId = reset ? 1 : this.data.pageId
       const params: {
         category_id?: number
         page_id: number
         page_size: number
       } = {
-        page_id: this.data.pageId,
+        page_id: pageId,
         page_size: this.data.pageSize
       }
       if (this.data.currentCategoryId > 0) {
@@ -58,29 +114,74 @@ Page({
       }
 
       const res = await DishManagementService.listDishes(params)
-
-      const sourceDishes = Array.isArray(res?.dishes) ? res.dishes.filter((dish) => !!dish) : []
-      const newDishes = sourceDishes.map((dish) => ({
-        ...dish,
-        image_url: this.normalizeImageUrl(dish.image_url)
-      }))
-      // 客户端搜索过滤 (若后端未完全支持 keyword 筛选)
-      const filteredDishes = this.data.searchKeyword 
-        ? newDishes.filter((d) => d.name.includes(this.data.searchKeyword))
-        : newDishes
+      const sourceDishes = Array.isArray(res?.dishes) ? res.dishes.filter((dish): dish is DishResponse => !!dish) : []
+      const newDishes = sourceDishes.map(normalizeDish)
+      const total = typeof res?.total === 'number' ? res.total : 0
 
       this.setData({
-        dishes: [...this.data.dishes, ...filteredDishes],
-        pageId: this.data.pageId + 1,
-        hasMore: newDishes.length === this.data.pageSize
+        dishes: reset ? newDishes : [...this.data.dishes, ...newDishes],
+        pageId: pageId + 1,
+        hasMore: total > 0 ? pageId * this.data.pageSize < total : newDishes.length === this.data.pageSize,
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (err) {
       logger.error('Failed to load dishes', err)
-      wx.showToast({ title: '加载失败', icon: 'error' })
+      const message = getErrorMessage(err, '菜品加载失败，请稍后重试')
+
+      if (this.data.initialLoading || (!hasExistingDishes && reset)) {
+        this.setData({
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message
+        })
+      } else if (isSilentRefresh) {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+      } else {
+        wx.showToast({ title: message, icon: 'none' })
+      }
     } finally {
       this.setData({ loading: false })
       wx.stopPullDownRefresh()
     }
+  },
+
+  async searchAllDishes(keyword: string) {
+    const dishes: DishResponse[] = []
+    let pageId = 1
+    let hasMorePages = true
+
+    while (hasMorePages) {
+      const params: {
+        category_id?: number
+        page_id: number
+        page_size: number
+      } = {
+        page_id: pageId,
+        page_size: 50
+      }
+
+      if (this.data.currentCategoryId > 0) {
+        params.category_id = this.data.currentCategoryId
+      }
+
+      const response = await DishManagementService.listDishes(params)
+      const pageDishes = Array.isArray(response?.dishes)
+        ? response.dishes.filter((dish): dish is DishResponse => !!dish).map(normalizeDish)
+        : []
+
+      dishes.push(...pageDishes)
+
+      const total = typeof response?.total === 'number' ? response.total : 0
+      hasMorePages = !(pageDishes.length < params.page_size || (total > 0 && dishes.length >= total))
+      if (hasMorePages) {
+        pageId += 1
+      }
+    }
+
+    return dishes.filter((dish) => dish.name.includes(keyword))
   },
 
   onTabChange(e: WechatMiniprogram.CustomEvent<{ value: string | number }>) {
@@ -88,10 +189,9 @@ Page({
     this.setData({ 
       currentCategoryId: Number.isFinite(nextCategoryId) ? nextCategoryId : 0,
       pageId: 1,
-      dishes: [],
       hasMore: true
     }, () => {
-      this.loadDishes()
+      this.loadDishesInternal(true)
     })
   },
 
@@ -100,17 +200,17 @@ Page({
   },
 
   onSearchSubmit() {
-    this.setData({ pageId: 1, dishes: [], hasMore: true }, () => {
-      this.loadDishes()
+    this.setData({ pageId: 1, hasMore: true }, () => {
+      this.loadDishesInternal(true)
     })
   },
 
   onPullDownRefresh() {
-    this.refreshAll()
+    this.refreshAll(false)
   },
 
   onReachBottom() {
-    this.loadDishes()
+    this.loadDishesInternal(false)
   },
 
   onManageCategories() {
@@ -118,21 +218,15 @@ Page({
   },
 
   onLoadMore() {
-    this.loadDishes()
+    this.loadDishesInternal(false)
   },
 
-  normalizeImageUrl(path?: string) {
-    if (!path) return ''
-    if (path.startsWith('http://') || path.startsWith('https://') || path.startsWith('wxfile://') || path.startsWith('data:')) {
-      return path
-    }
-    if (path.startsWith('//')) {
-      return `https:${path}`
-    }
-    if (path.startsWith('/')) {
-      return `${API_BASE}${path}`
-    }
-    return `${API_BASE}/${path}`
+  onRetry() {
+    this.refreshAll()
+  },
+
+  onRetryRefresh() {
+    this.loadDishesInternal(true, false)
   },
 
   // ==================== 状态切换 ====================

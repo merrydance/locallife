@@ -1,0 +1,270 @@
+.page-container {
+  min-height: 100vh;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background: var(--td-bg-color-page);
+}
+
+.state-block,
+.popup-state,
+.empty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+}
+
+.state-block,
+.empty-wrap {
+  padding: 140rpx 24rpx;
+}
+
+.retry-button {
+  padding: 18rpx 36rpx;
+  border-radius: 999rpx;
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+  font-size: 26rpx;
+}
+
+.inline-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+}
+
+.inline-banner-danger {
+  background: var(--td-error-color-1);
+}
+
+.inline-banner-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.inline-banner-action {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-brand-color);
+  font-weight: 600;
+}
+
+.hero-card,
+.summary-strip,
+.staff-card,
+.popup-sheet {
+  background: var(--td-bg-color-container);
+  border-radius: 20rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-card {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24rpx;
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+}
+
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.hero-title,
+.summary-value,
+.staff-name,
+.popup-title,
+.invite-code,
+.role-label {
+  color: var(--td-text-color-primary);
+}
+
+.hero-title,
+.popup-title {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.hero-subtitle,
+.summary-label,
+.staff-submeta,
+.pending-tip,
+.popup-subtitle,
+.invite-expire,
+.invite-tip,
+.role-desc {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.summary-strip {
+  display: flex;
+  margin-bottom: 24rpx;
+  overflow: hidden;
+}
+
+.summary-item {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8rpx;
+  padding: 24rpx 16rpx;
+}
+
+.summary-item + .summary-item {
+  border-left: 1px solid var(--td-component-stroke);
+}
+
+.summary-value {
+  font-size: 40rpx;
+  font-weight: 700;
+}
+
+.staff-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.staff-card {
+  padding: 24rpx;
+}
+
+.staff-header,
+.staff-profile,
+.staff-actions,
+.popup-actions,
+.role-option {
+  display: flex;
+  align-items: center;
+  gap: 16rpx;
+}
+
+.staff-header {
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.staff-profile {
+  flex: 1;
+  min-width: 0;
+}
+
+.staff-avatar {
+  width: 84rpx;
+  height: 84rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  flex-shrink: 0;
+}
+
+.staff-avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--td-brand-color);
+}
+
+.staff-meta,
+.staff-tags,
+.invite-body,
+.role-copy {
+  display: flex;
+  flex-direction: column;
+}
+
+.staff-meta,
+.role-copy {
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.staff-name {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.staff-tags {
+  gap: 12rpx;
+  align-items: flex-end;
+}
+
+.pending-tip {
+  margin-top: 18rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  background: var(--td-warning-color-1);
+}
+
+.staff-actions {
+  justify-content: flex-end;
+  margin-top: 20rpx;
+}
+
+.popup-sheet {
+  padding: 32rpx 24rpx 40rpx;
+}
+
+.popup-state {
+  padding: 48rpx 0 24rpx;
+}
+
+.popup-subtitle {
+  margin-top: 12rpx;
+}
+
+.invite-body {
+  align-items: center;
+  gap: 20rpx;
+  padding-top: 28rpx;
+}
+
+.invite-code {
+  font-size: 48rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+
+.invite-expire,
+.invite-tip {
+  text-align: center;
+}
+
+.role-options {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 28rpx;
+}
+
+.role-option {
+  align-items: flex-start;
+  padding: 20rpx;
+  border-radius: 18rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.role-label {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.popup-actions {
+  justify-content: flex-end;
+  margin-top: 28rpx;
+}

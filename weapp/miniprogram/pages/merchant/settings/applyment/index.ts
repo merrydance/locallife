@@ -1,0 +1,305 @@
+import {
+  ApplymentStatusResponse,
+  getMerchantApplymentStatus,
+  merchantBindBank
+} from '../../../../api/merchant-finance'
+import { logger } from '../../../../utils/logger'
+import { getStableBarHeights } from '../../../../utils/responsive'
+
+type InputChangeDetail = {
+  value: string
+}
+
+const EMPTY_APPLYMENT: ApplymentStatusResponse = {
+  status: '',
+  status_desc: ''
+}
+
+function hasExistingApplyment(status?: string) {
+  return Boolean(status && status !== 'not_applied' && status !== 'pending')
+}
+
+function canEditApplyment(status?: string) {
+  return !status || status === 'not_applied' || status === 'pending' || status === 'rejected' || status === 'rejected_sign'
+}
+
+function getApplymentActionLabel(status?: string) {
+  if (!hasExistingApplyment(status)) {
+    return '填写进件资料'
+  }
+  if (status === 'rejected' || status === 'rejected_sign') {
+    return '重新提交资料'
+  }
+  return '填写进件资料'
+}
+
+function getApplymentActionHint(status?: string) {
+  if (!status || status === 'not_applied' || status === 'pending' || status === 'rejected' || status === 'rejected_sign') {
+    return ''
+  }
+  if (status === 'submitted' || status === 'auditing' || status === 'bindbank_submitted') {
+    return '当前资料正在审核中，暂不支持重复提交。若状态长时间未更新，可点击“刷新状态”重新拉取结果。'
+  }
+  if (status === 'to_be_signed' || status === 'signing') {
+    return '当前已进入微信签约环节，请先完成签约，再点击“刷新状态”查看最新结果。'
+  }
+  if (status === 'finish' || status === 'active') {
+    return '当前账户已开通，无需重复提交进件资料。余额、提现和结算结果请前往资金账户查看。'
+  }
+  return '当前状态暂不支持重新提交资料，请先刷新状态。'
+}
+
+function getErrorMessage(err: unknown, fallback: string) {
+  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
+    const userMessage = (err as { userMessage?: unknown }).userMessage
+    if (typeof userMessage === 'string' && userMessage.trim()) {
+      return userMessage
+    }
+  }
+  return fallback
+}
+
+Page({
+  data: {
+    navBarHeight: 88,
+    loading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    loadingApplyment: true,
+    applymentLoaded: false,
+    applymentStatus: EMPTY_APPLYMENT as ApplymentStatusResponse | null,
+    hasApplyment: false,
+    canEditCurrentApplyment: true,
+    applymentActionLabel: '填写进件资料',
+    applymentActionHint: '',
+    showBindForm: false,
+    submittingBind: false,
+    refreshingStatus: false,
+    bindAccountType: 'ACCOUNT_TYPE_BUSINESS',
+    bindAccountBank: '',
+    bindBankAddressCode: '',
+    bindBankName: '',
+    bindAccountNumber: '',
+    bindAccountName: '',
+    bindContactPhone: '',
+    bindContactEmail: ''
+  },
+
+  onLoad() {
+    const { navBarHeight } = getStableBarHeights()
+    this.setData({ navBarHeight })
+    this.loadApplyment()
+  },
+
+  onShow() {
+    if (!this.data.loading && !this.data.submittingBind) {
+      this.loadApplyment(true)
+    }
+  },
+
+  onPullDownRefresh() {
+    this.loadApplyment()
+  },
+
+  async loadApplyment(silent = false) {
+    if (!silent) {
+      this.setData({ loading: true, initialError: false, initialErrorMessage: '' })
+    }
+    this.setData({ loadingApplyment: true })
+
+    try {
+      const data = await getMerchantApplymentStatus()
+      const status = data.status || ''
+      const exists = hasExistingApplyment(status)
+      const canEdit = canEditApplyment(status)
+
+      this.setData({
+        applymentStatus: data,
+        hasApplyment: exists,
+        applymentLoaded: true,
+        loading: false,
+        loadingApplyment: false,
+        canEditCurrentApplyment: canEdit,
+        applymentActionLabel: getApplymentActionLabel(status),
+        applymentActionHint: getApplymentActionHint(status),
+        showBindForm: canEdit ? this.data.showBindForm : false,
+        initialError: false,
+        initialErrorMessage: ''
+      })
+    } catch (error: unknown) {
+      logger.error('Load merchant applyment page failed', error, 'merchant-applyment-page')
+      const message = getErrorMessage(error, '进件状态加载失败，请稍后重试')
+      if (!silent || !this.data.applymentLoaded) {
+        this.setData({
+          loading: false,
+          loadingApplyment: false,
+          applymentLoaded: false,
+          initialError: true,
+          initialErrorMessage: message
+        })
+      } else {
+        this.setData({ loading: false, loadingApplyment: false })
+        wx.showToast({ title: message, icon: 'none' })
+      }
+    } finally {
+      wx.stopPullDownRefresh()
+    }
+  },
+
+  onShowBindForm() {
+    if (!this.data.canEditCurrentApplyment) {
+      wx.showToast({ title: this.data.applymentActionHint || '当前状态暂不支持重提资料', icon: 'none' })
+      return
+    }
+    this.setData({ showBindForm: true })
+  },
+
+  onHideBindForm() {
+    this.setData({ showBindForm: false })
+  },
+
+  onBindAccountTypeChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({ bindAccountType: e.detail.value })
+  },
+
+  onBindFieldChange(
+    e: WechatMiniprogram.CustomEvent<InputChangeDetail> & {
+      currentTarget: { dataset: { field: string } }
+    }
+  ) {
+    const field = e.currentTarget.dataset.field as
+      | 'bindAccountBank'
+      | 'bindBankAddressCode'
+      | 'bindBankName'
+      | 'bindAccountNumber'
+      | 'bindAccountName'
+      | 'bindContactPhone'
+      | 'bindContactEmail'
+    this.setData({ [field]: e.detail.value })
+  },
+
+  async onSubmitBindBank() {
+    if (this.data.submittingBind) return
+
+    const {
+      bindAccountType,
+      bindAccountBank,
+      bindBankAddressCode,
+      bindAccountNumber,
+      bindAccountName,
+      bindContactPhone,
+      bindBankName,
+      bindContactEmail
+    } = this.data
+
+    if (!bindAccountBank.trim() || !bindBankAddressCode.trim() || !bindAccountNumber.trim() || !bindAccountName.trim() || !bindContactPhone.trim()) {
+      wx.showToast({ title: '请填写必填项', icon: 'none' })
+      return
+    }
+
+    this.setData({ submittingBind: true })
+    wx.showLoading({ title: '提交中...' })
+
+    try {
+      await merchantBindBank({
+        account_type: bindAccountType as 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE',
+        account_bank: bindAccountBank.trim(),
+        bank_address_code: bindBankAddressCode.trim(),
+        bank_name: bindBankName.trim() || undefined,
+        account_number: bindAccountNumber.trim(),
+        account_name: bindAccountName.trim(),
+        contact_phone: bindContactPhone.trim(),
+        contact_email: bindContactEmail.trim() || undefined
+      })
+
+      wx.showToast({ title: '进件资料已提交', icon: 'success' })
+      this.setData({
+        showBindForm: false,
+        bindAccountBank: '',
+        bindBankAddressCode: '',
+        bindBankName: '',
+        bindAccountNumber: '',
+        bindAccountName: '',
+        bindContactPhone: '',
+        bindContactEmail: ''
+      })
+      await this.loadApplyment(true)
+    } catch (error) {
+      logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-page')
+      wx.showToast({ title: getErrorMessage(error, '提交进件资料失败，请稍后重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ submittingBind: false })
+    }
+  },
+
+  onCopySignUrl() {
+    const signUrl = this.data.applymentStatus?.sign_url
+    if (!signUrl) return
+
+    wx.setClipboardData({
+      data: signUrl,
+      success: () => {
+        wx.showToast({ title: '签约链接已复制', icon: 'success' })
+      }
+    })
+  },
+
+  async onRefreshStatus() {
+    if (this.data.refreshingStatus || this.data.loadingApplyment) return
+
+    this.setData({ refreshingStatus: true })
+    try {
+      await this.loadApplyment(true)
+      wx.showToast({ title: '进件状态已刷新', icon: 'success' })
+    } finally {
+      this.setData({ refreshingStatus: false })
+    }
+  },
+
+  onGoFinance() {
+    wx.navigateTo({ url: '/pages/merchant/finance/index' })
+  },
+
+  onRetry() {
+    this.loadApplyment()
+  },
+
+  getApplymentStatusText(status: string): string {
+    const map: Record<string, string> = {
+      submitted: '已提交',
+      bindbank_submitted: '进件审核中',
+      auditing: '审核中',
+      to_be_signed: '待签约',
+      signing: '签约中',
+      finish: '已开通',
+      active: '已开通',
+      rejected: '已拒绝'
+    }
+    return map[status] || status || '未开始'
+  },
+
+  getApplymentStatusTheme(status: string): string {
+    switch (status) {
+      case 'finish':
+      case 'active':
+        return 'success'
+      case 'rejected':
+        return 'danger'
+      case 'to_be_signed':
+      case 'signing':
+        return 'primary'
+      default:
+        return 'warning'
+    }
+  },
+
+  getProgressCurrent(status?: string) {
+    if (!status) return 0
+    if (status === 'submitted' || status === 'bindbank_submitted' || status === 'auditing') return 1
+    if (status === 'to_be_signed' || status === 'signing') return 2
+    if (status === 'finish' || status === 'active') return 3
+    if (status === 'rejected') return 2
+    return 0
+  }
+})

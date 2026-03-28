@@ -29,6 +29,12 @@
   opacity: 0.9;
 }
 
+.status-subdesc {
+  font-size: 24rpx;
+  line-height: 1.6;
+  opacity: 0.88;
+}
+
 /* 内容卡片 */
 .content-section {
   padding: 32rpx;
@@ -68,6 +74,10 @@
 
 .info-value {
   flex: 1;
+}
+
+.contact-row {
+  margin-top: 20rpx;
 }
 
 .address-text {
@@ -170,6 +180,12 @@
   z-index: 100;
 }
 
+.footer-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+}
+
 .footer-bar.iphone-x {
   padding-bottom: 64rpx;
 }
@@ -184,4 +200,39 @@
   padding: 200rpx 0;
   display: flex;
   justify-content: center;
+}
+
+.loading-state-page {
+  min-height: 100vh;
+  flex-direction: column;
+  align-items: center;
+  gap: 24rpx;
+}
+
+.retry-button {
+  padding: 18rpx 36rpx;
+  border-radius: 999rpx;
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+  font-size: 26rpx;
+}
+
+.section-error-hint {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 0 32rpx 16rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  background: var(--td-error-color-1);
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.section-error-action {
+  flex-shrink: 0;
+  color: var(--td-brand-color);
+  font-weight: 600;
 }

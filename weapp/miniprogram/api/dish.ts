@@ -19,6 +19,7 @@ export interface DishResponse {
     price: number                                // 价格（分）
     original_price?: number                      // 原价（分）
     member_price?: number                        // 会员价（分）
+    image_asset_id?: number                      // 菜品图片媒体资产ID
     image_url: string                            // 菜品图片URL
     category_id?: number                         // 分类ID
     category_name?: string                       // 分类名称
@@ -188,6 +189,7 @@ export interface ComboSetResponse {
     description?: string                         // 套餐描述
     combo_price: number                          // 套餐价格（分）
     is_online: boolean                           // 是否上架
+    dish_image_urls?: string[]                   // 成员菜品图片列表（后端真实字段）
 }
 
 /**
@@ -216,6 +218,7 @@ export interface ComboSetWithDetailsResponse {
     dishes: DishInComboResponse[]                // 套餐包含的菜品
     tags?: TagInfo[]                             // 标签信息
     is_open?: boolean                            // 商户是否营业
+    dish_image_urls?: string[]                   // 子菜品图片列表（后端真实字段）
     dish_images?: string[]                       // 子菜品图片列表
 }
 
@@ -482,6 +485,9 @@ export interface ToggleComboOnlineBodyRequest extends Record<string, unknown> {
  */
 export interface ListComboSetsResponse {
     combo_sets: ComboSetResponse[]               // 套餐列表
+    total: number                                // 总数
+    page_id: number                              // 当前页码
+    page_size: number                            // 每页数量
 }
 
 /**
@@ -841,13 +847,7 @@ export class ComboManagementService {
         page_id: number
         page_size: number
         is_online?: boolean
-    }): Promise<{
-        combo_sets: ComboSetResponse[]
-        total: number
-        page_id: number
-        page_size: number
-        has_more: boolean
-    }> {
+    }): Promise<ListComboSetsResponse> {
         return await request({
             url: '/v1/combos',
             method: 'GET',
@@ -1232,7 +1232,7 @@ export async function getRecommendedCombos(params?: RecommendCombosParams): Prom
         combos: response.combos || [],
         has_more: page * pageSize < total,
         page,
-        total: total
+        total
     }
 }
 

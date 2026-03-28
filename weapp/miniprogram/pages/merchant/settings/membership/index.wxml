@@ -17,6 +17,11 @@
       <text class="hero-meta">商户 ID {{merchantId}}</text>
     </view>
 
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
     <view class="section-block">
       <view class="section-title">叠加规则</view>
       <t-cell-group theme="card">
