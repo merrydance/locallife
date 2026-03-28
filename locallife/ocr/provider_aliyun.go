@@ -29,6 +29,8 @@ var (
 	ErrAliyunOCRBadRequest   = errors.New("aliyun ocr bad request")
 )
 
+const aliyunACSDateFormat = "2006-01-02T15:04:05Z"
+
 type aliyunOperation struct {
 	Action  string
 	Version string
@@ -384,7 +386,7 @@ func (c *AliyunOpenAPIClient) defaultSigner(httpReq *http.Request, payload []byt
 	}
 	now := c.clock().UTC()
 	httpReq.Header.Set("Host", httpReq.URL.Host)
-	httpReq.Header.Set("x-acs-date", now.Format(http.TimeFormat))
+	httpReq.Header.Set("x-acs-date", now.Format(aliyunACSDateFormat))
 	httpReq.Header.Set("x-acs-signature-nonce", c.nonce())
 	payloadHash := hexSHA256(payload)
 	httpReq.Header.Set("x-acs-content-sha256", payloadHash)

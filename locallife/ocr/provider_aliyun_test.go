@@ -257,7 +257,7 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 	if capturedNonce != "nonce-123" {
 		t.Fatalf("nonce = %s", capturedNonce)
 	}
-	if capturedDate != "Wed, 25 Mar 2026 03:04:05 GMT" {
+	if capturedDate != "2026-03-25T03:04:05Z" {
 		t.Fatalf("date = %s", capturedDate)
 	}
 	if !strings.Contains(capturedAuth, "ACS3-HMAC-SHA256 Credential=test-ak") {
