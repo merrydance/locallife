@@ -64,6 +64,17 @@ func TestCheckRiderApplicationApproval_IgnoresHealthCertIDNumber(t *testing.T) {
 	require.Empty(t, rejectReason)
 }
 
+func TestCheckRiderApplicationApproval_AcceptsIDCardDateRangeWithDots(t *testing.T) {
+	server := &Server{}
+	app := randomRiderApplicationWithData(1)
+	app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2020.01.01-2035.01.01"}`)
+
+	approved, rejectReason := server.checkRiderApplicationApproval(app)
+
+	require.True(t, approved)
+	require.Empty(t, rejectReason)
+}
+
 // ==================== 创建/获取草稿测试 ====================
 
 func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
@@ -663,6 +674,45 @@ func TestSubmitRiderApplication(t *testing.T) {
 				// 长期有效身份证
 				app := randomRiderApplicationWithData(user.ID)
 				app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"长期"}`)
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitRiderApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				rider := randomRider(user.ID)
+				store.EXPECT().
+					ApproveRiderApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveRiderApplicationTxResult{
+						Application: approvedApp,
+						Rider:       rider,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp riderApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
+			name: "Approved_IDCardDateRangeWithDots",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2020.01.01-2035.01.01"}`)
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).

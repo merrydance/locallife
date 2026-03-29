@@ -80,6 +80,41 @@ func parseChineseYMD(dateStr string) (time.Time, error) {
 	return parseISODate(year+"-"+month+"-"+day, "")
 }
 
+func parseFlexibleDocumentEndDate(dateStr string) (time.Time, error) {
+	trimmed := strings.TrimSpace(dateStr)
+	if trimmed == "" {
+		return time.Time{}, fmt.Errorf("empty date")
+	}
+
+	eightDigitRegex := regexp.MustCompile(`\d{8}`)
+	if match := eightDigitRegex.FindAllString(trimmed, -1); len(match) > 0 {
+		return time.Parse("20060102", match[len(match)-1])
+	}
+
+	dateRegex := regexp.MustCompile(`\d{4}\s*(?:年|[./-])\s*\d{1,2}\s*(?:月|[./-])\s*\d{1,2}\s*日?`)
+	matches := dateRegex.FindAllString(trimmed, -1)
+	if len(matches) == 0 {
+		return time.Time{}, fmt.Errorf("no date found in %q", dateStr)
+	}
+
+	last := matches[len(matches)-1]
+	normalized := strings.TrimSpace(last)
+	normalized = strings.ReplaceAll(normalized, " 年", "年")
+	normalized = strings.ReplaceAll(normalized, "年 ", "年")
+	normalized = strings.ReplaceAll(normalized, " 月", "月")
+	normalized = strings.ReplaceAll(normalized, "月 ", "月")
+	normalized = strings.ReplaceAll(normalized, " 日", "日")
+	normalized = strings.ReplaceAll(normalized, "日 ", "日")
+	normalized = strings.ReplaceAll(normalized, ".", "-")
+	normalized = strings.ReplaceAll(normalized, "/", "-")
+	normalized = strings.ReplaceAll(normalized, "年", "-")
+	normalized = strings.ReplaceAll(normalized, "月", "-")
+	normalized = strings.ReplaceAll(normalized, "日", "")
+	normalized = strings.ReplaceAll(normalized, " ", "")
+
+	return parseISODate(normalized, "")
+}
+
 // riderApplicationResponse 骑手申请响应
 type riderApplicationResponse struct {
 	ID                 int64              `json:"id"`
@@ -513,16 +548,9 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 		return false, "身份证有效期未识别，请上传身份证背面照片"
 	}
 
-	// "长期"有效，但不能绕过后续健康证校验
-	if ocrData.ValidEnd != "长期" {
-		// 解析有效期
-		validEnd := ocrData.ValidEnd
-		if len(validEnd) > 8 {
-			// 取最后8位作为结束日期
-			validEnd = validEnd[len(validEnd)-8:]
-		}
-
-		endDate, err := time.Parse("20060102", validEnd)
+	// "长期"/"永久"有效，但不能绕过后续健康证校验
+	if !strings.Contains(ocrData.ValidEnd, "长期") && !strings.Contains(ocrData.ValidEnd, "永久") {
+		endDate, err := parseFlexibleDocumentEndDate(ocrData.ValidEnd)
 		if err != nil {
 			log.Error().Err(err).Str("valid_end", ocrData.ValidEnd).Msg("解析身份证有效期失败")
 			return false, "身份证有效期格式无法识别，请联系客服"
