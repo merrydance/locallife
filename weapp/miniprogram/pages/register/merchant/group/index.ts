@@ -140,6 +140,8 @@ Page({
     consentPopupVisible: false
   },
 
+  previewRefreshVersion: 0,
+
   async onLoad() {
     await this.fetchDraft()
   },
@@ -191,6 +193,7 @@ Page({
   },
 
   async refreshUploadPreviewURLs() {
+    const refreshVersion = ++this.previewRefreshVersion
     const uploads: Array<{ key: 'license' | 'idFront' | 'idBack', value: UploadFieldValue }> = [
       { key: 'license', value: this.data.license },
       { key: 'idFront', value: this.data.idFront },
@@ -201,7 +204,13 @@ Page({
       const assetId = item.value?.assetId
       if (!assetId) continue
       const resolved = await this.resolveUploadPreviewURL(assetId)
-      if (resolved && resolved !== item.value.url) {
+      const latestValue = this.data[item.key] as UploadFieldValue | undefined
+      if (
+        refreshVersion === this.previewRefreshVersion
+        && latestValue?.assetId === assetId
+        && resolved
+        && resolved !== latestValue?.url
+      ) {
         this.setData({ [`${item.key}.url`]: resolved })
       }
     }

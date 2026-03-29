@@ -107,6 +107,8 @@ Page({
     consentPopupVisible: false
   },
 
+  previewRefreshVersion: 0,
+
   async onLoad() {
     await this.initApplication()
   },
@@ -257,6 +259,7 @@ Page({
   },
 
   async refreshUploadPreviewURLs() {
+    const refreshVersion = ++this.previewRefreshVersion
     const uploads: Array<{ key: 'idFront' | 'idBack' | 'healthCert', value: UploadFieldValue }> = [
       { key: 'idFront', value: this.data.idFront },
       { key: 'idBack', value: this.data.idBack },
@@ -268,7 +271,13 @@ Page({
       if (!assetId) continue
 
       const resolved = await this.resolveUploadPreviewURL(assetId)
-      if (resolved && resolved !== item.value.url) {
+      const latestValue = this.data[item.key] as UploadFieldValue | undefined
+      if (
+        refreshVersion === this.previewRefreshVersion
+        && latestValue?.assetId === assetId
+        && resolved
+        && resolved !== latestValue?.url
+      ) {
         this.setData({ [`${item.key}.url`]: resolved })
       }
     }

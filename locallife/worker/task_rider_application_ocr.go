@@ -97,6 +97,20 @@ func readRiderHealthCertOCR(data []byte) riderHealthCertOCRData {
 	return result
 }
 
+func riderIDCardAssetStillBound(app db.RiderApplication, side string, mediaAssetID int64) bool {
+	if mediaAssetID <= 0 {
+		return false
+	}
+	if strings.EqualFold(side, string(ocr.DocumentSideBack)) {
+		return app.IDCardBackMediaAssetID.Valid && app.IDCardBackMediaAssetID.Int64 == mediaAssetID
+	}
+	return app.IDCardFrontMediaAssetID.Valid && app.IDCardFrontMediaAssetID.Int64 == mediaAssetID
+}
+
+func riderHealthCertAssetStillBound(app db.RiderApplication, mediaAssetID int64) bool {
+	return mediaAssetID > 0 && app.HealthCertMediaAssetID.Valid && app.HealthCertMediaAssetID.Int64 == mediaAssetID
+}
+
 func normalizeRiderOCRDateText(value string) string {
 	value = strings.ReplaceAll(value, " 年", "年")
 	value = strings.ReplaceAll(value, "年 ", "年")
@@ -233,6 +247,10 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		app, getErr := processor.store.GetRiderApplication(ctx, payload.ApplicationID)
 		if getErr == nil {
+			if !riderIDCardAssetStillBound(app, payload.Side, payload.MediaAssetID) {
+				log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", payload.OCRJobID).Int64("media_asset_id", payload.MediaAssetID).Str("side", payload.Side).Msg("skip stale rider id card OCR failure writeback")
+				return nil
+			}
 			ocrData := readRiderIDCardOCR(app.IDCardOcr)
 			ocrData.Status = string(ocr.JobStatusFailed)
 			ocrData.Error = err.Error()
@@ -260,6 +278,10 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 	app, err := processor.store.GetRiderApplication(ctx, payload.ApplicationID)
 	if err != nil {
 		return fmt.Errorf("get rider application: %w", err)
+	}
+	if !riderIDCardAssetStillBound(app, payload.Side, payload.MediaAssetID) {
+		log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Int64("media_asset_id", payload.MediaAssetID).Str("side", payload.Side).Msg("skip stale rider id card OCR success writeback")
+		return nil
 	}
 
 	ocrData := readRiderIDCardOCR(app.IDCardOcr)
@@ -333,6 +355,10 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		app, getErr := processor.store.GetRiderApplication(ctx, payload.ApplicationID)
 		if getErr == nil {
+			if !riderHealthCertAssetStillBound(app, payload.MediaAssetID) {
+				log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", payload.OCRJobID).Int64("media_asset_id", payload.MediaAssetID).Msg("skip stale rider health cert OCR failure writeback")
+				return nil
+			}
 			ocrData := readRiderHealthCertOCR(app.HealthCertOcr)
 			ocrData.Status = string(ocr.JobStatusFailed)
 			ocrData.Error = err.Error()
@@ -356,6 +382,10 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 	app, err := processor.store.GetRiderApplication(ctx, payload.ApplicationID)
 	if err != nil {
 		return fmt.Errorf("get rider application: %w", err)
+	}
+	if !riderHealthCertAssetStillBound(app, payload.MediaAssetID) {
+		log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Int64("media_asset_id", payload.MediaAssetID).Msg("skip stale rider health cert OCR success writeback")
+		return nil
 	}
 	ocrData := readRiderHealthCertOCR(app.HealthCertOcr)
 	ocrData.Status = "done"

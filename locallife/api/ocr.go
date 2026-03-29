@@ -746,6 +746,10 @@ func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, 
 			if err != nil {
 				return err
 			}
+			if !riderApplicationMatchesIDCardAsset(app, job.Side, job.MediaAssetID) {
+				log.Info().Int64("application_id", job.OwnerID).Int64("ocr_job_id", job.ID).Int64("media_asset_id", job.MediaAssetID).Str("side", job.Side).Msg("skip stale rider id card OCR failure writeback")
+				return nil
+			}
 			payload := readRiderIDCardOCRData(app.IDCardOcr)
 			payload.Status = string(ocr.JobStatusFailed)
 			payload.Error = errorMessage
@@ -763,6 +767,10 @@ func (server *Server) markOCRFailed(ctx *gin.Context, job db.OcrJob, errorCode, 
 			app, err := server.store.GetRiderApplication(ctx, job.OwnerID)
 			if err != nil {
 				return err
+			}
+			if !riderApplicationMatchesHealthCertAsset(app, job.MediaAssetID) {
+				log.Info().Int64("application_id", job.OwnerID).Int64("ocr_job_id", job.ID).Int64("media_asset_id", job.MediaAssetID).Msg("skip stale rider health cert OCR failure writeback")
+				return nil
 			}
 			payload := readRiderHealthCertOCRData(app.HealthCertOcr)
 			payload.Status = string(ocr.JobStatusFailed)
@@ -865,6 +873,20 @@ func (server *Server) processPendingOCRJobsForMediaModeration(ctx *gin.Context, 
 	}
 
 	return nil
+}
+
+func riderApplicationMatchesIDCardAsset(app db.RiderApplication, side string, mediaAssetID int64) bool {
+	if mediaAssetID <= 0 {
+		return false
+	}
+	if strings.EqualFold(side, string(ocr.DocumentSideBack)) {
+		return app.IDCardBackMediaAssetID.Valid && app.IDCardBackMediaAssetID.Int64 == mediaAssetID
+	}
+	return app.IDCardFrontMediaAssetID.Valid && app.IDCardFrontMediaAssetID.Int64 == mediaAssetID
+}
+
+func riderApplicationMatchesHealthCertAsset(app db.RiderApplication, mediaAssetID int64) bool {
+	return mediaAssetID > 0 && app.HealthCertMediaAssetID.Valid && app.HealthCertMediaAssetID.Int64 == mediaAssetID
 }
 
 // createOCRJob godoc

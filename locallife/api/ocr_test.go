@@ -141,6 +141,33 @@ func TestCreateOCRJob_SetsIDCardRetentionUntil(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
+func TestMarkOCRFailed_SkipsStaleRiderIDCardWriteback(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomRiderApplication(user.ID)
+	app.IDCardFrontMediaAssetID = pgtype.Int8{}
+	app.IDCardBackMediaAssetID = pgtype.Int8{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil)
+
+	server := newTestServer(t, store)
+	ctx, _ := gin.CreateTestContext(httptest.NewRecorder())
+	job := db.OcrJob{
+		ID:           901,
+		DocumentType: string(ocr.DocumentTypeIDCard),
+		MediaAssetID: 801,
+		OwnerType:    string(ocr.OwnerTypeRiderApplication),
+		OwnerID:      app.ID,
+		Side:         string(ocr.DocumentSideBack),
+		CreatedAt:    time.Now(),
+	}
+
+	err := server.markOCRFailed(ctx, job, "ocr_provider_timeout", "timeout")
+	require.NoError(t, err)
+}
+
 func TestCreateOCRJob_MarksRiderHealthCertPending(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomRiderApplication(user.ID)
