@@ -28,74 +28,6 @@ type merchantApplicationOCRPayload struct {
 	Side          string `json:"side,omitempty"` // Front/Back
 }
 
-func summarizeMerchantBusinessLicenseOCRData(data map[string]any) map[string]any {
-	return map[string]any{
-		"status":                       stringValueFromMap(data, "status"),
-		"enterprise_name_present":      hasStringValueInMap(data, "enterprise_name"),
-		"credit_code_present":          hasStringValueInMap(data, "credit_code"),
-		"registration_number_present":  hasStringValueInMap(data, "reg_num"),
-		"legal_representative_present": hasStringValueInMap(data, "legal_representative"),
-		"address_present":              hasStringValueInMap(data, "address"),
-		"business_scope_present":       hasStringValueInMap(data, "business_scope"),
-		"valid_period_present":         hasStringValueInMap(data, "valid_period"),
-	}
-}
-
-func summarizeMerchantFoodPermitOCRData(data foodPermitOCRData) map[string]any {
-	return map[string]any{
-		"status":                data.Status,
-		"raw_text_present":      strings.TrimSpace(data.RawText) != "",
-		"raw_text_length":       len(strings.TrimSpace(data.RawText)),
-		"permit_no_present":     strings.TrimSpace(data.PermitNo) != "",
-		"company_name_present":  strings.TrimSpace(data.CompanyName) != "",
-		"operator_name_present": strings.TrimSpace(data.OperatorName) != "",
-		"valid_from_present":    strings.TrimSpace(data.ValidFrom) != "",
-		"valid_to_present":      strings.TrimSpace(data.ValidTo) != "",
-	}
-}
-
-func summarizeMerchantIDCardOCRData(data merchantIDCardOCRData) map[string]any {
-	return map[string]any{
-		"status":             data.Status,
-		"name_present":       strings.TrimSpace(data.Name) != "",
-		"id_number_present":  strings.TrimSpace(data.IDNumber) != "",
-		"gender_present":     strings.TrimSpace(data.Gender) != "",
-		"nation_present":     strings.TrimSpace(data.Nation) != "",
-		"address_present":    strings.TrimSpace(data.Address) != "",
-		"valid_date_present": strings.TrimSpace(data.ValidDate) != "",
-	}
-}
-
-func hasStringValueInMap(data map[string]any, key string) bool {
-	return strings.TrimSpace(stringValueFromMap(data, key)) != ""
-}
-
-func stringValueFromMap(data map[string]any, key string) string {
-	value, ok := data[key]
-	if !ok || value == nil {
-		return ""
-	}
-	text, ok := value.(string)
-	if !ok {
-		return ""
-	}
-	return text
-}
-
-func logMerchantOCRDebugPayload(job db.OcrJob, applicationID int64, side string, message string) {
-	event := log.Warn().
-		Int64("application_id", applicationID).
-		Int64("ocr_job_id", job.ID).
-		Str("document_type", job.DocumentType).
-		Str("provider", job.Provider).
-		Str("raw_result", string(job.RawResult)).
-		Str("normalized_result", string(job.NormalizedResult))
-	if side != "" {
-		event = event.Str("side", side)
-	}
-	event.Msg(message)
-}
-
 func (distributor *RedisTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(
 	ctx context.Context,
 	applicationID int64,
@@ -230,16 +162,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOC
 		if normalized.BusinessLicense.BusinessScope != "" {
 			arg.BusinessScope = pgtype.Text{String: normalized.BusinessLicense.BusinessScope, Valid: true}
 		}
-	} else {
-		logMerchantOCRDebugPayload(job, payload.ApplicationID, "", "merchant application business license ocr normalized payload empty")
 	}
-	log.Info().
-		Int64("application_id", payload.ApplicationID).
-		Int64("ocr_job_id", job.ID).
-		Str("document_type", job.DocumentType).
-		Str("provider", job.Provider).
-		Interface("ocr_summary", summarizeMerchantBusinessLicenseOCRData(ocrData)).
-		Msg("merchant application business license ocr summary")
 	ocrJSON, _ := json.Marshal(ocrData)
 	arg.BusinessLicenseOcr = ocrJSON
 	_, err = processor.store.UpdateMerchantApplicationBusinessLicense(ctx, arg)
@@ -304,16 +227,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 	if normalized.FoodPermit != nil {
 		ocrData.RawText = normalized.FoodPermit.RawText
 		parseFoodPermitOCRText(&ocrData, normalized.FoodPermit.RawText)
-	} else {
-		logMerchantOCRDebugPayload(job, payload.ApplicationID, "", "merchant application food permit ocr normalized payload empty")
 	}
-	log.Info().
-		Int64("application_id", payload.ApplicationID).
-		Int64("ocr_job_id", job.ID).
-		Str("document_type", job.DocumentType).
-		Str("provider", job.Provider).
-		Interface("ocr_summary", summarizeMerchantFoodPermitOCRData(ocrData)).
-		Msg("merchant application food permit ocr summary")
 	ocrJSON, _ := json.Marshal(ocrData)
 	_, err = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
 		ID:            payload.ApplicationID,
@@ -388,17 +302,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx 
 		ocrData.Nation = normalized.IDCard.Ethnicity
 		ocrData.Address = normalized.IDCard.Address
 		ocrData.ValidDate = normalized.IDCard.ValidPeriod
-	} else {
-		logMerchantOCRDebugPayload(job, payload.ApplicationID, payload.Side, "merchant application id card ocr normalized payload empty")
 	}
-	log.Info().
-		Int64("application_id", payload.ApplicationID).
-		Int64("ocr_job_id", job.ID).
-		Str("document_type", job.DocumentType).
-		Str("provider", job.Provider).
-		Str("side", payload.Side).
-		Interface("ocr_summary", summarizeMerchantIDCardOCRData(ocrData)).
-		Msg("merchant application id card ocr summary")
 	ocrJSON, _ := json.Marshal(ocrData)
 	if payload.Side == "Front" {
 		arg := db.UpdateMerchantApplicationIDCardFrontParams{ID: payload.ApplicationID, IDCardFrontOcr: ocrJSON}

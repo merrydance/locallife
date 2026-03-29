@@ -108,6 +108,9 @@ func (p *AliyunProvider) Recognize(ctx context.Context, capability Capability, r
 	if capability == CapabilityAliyunIDCard {
 		normalized.IDCard = normalizeAliyunIDCardResult(raw)
 	}
+	if capability == CapabilityAliyunHealthCert {
+		normalized.HealthCert = normalizeAliyunHealthCertResult(raw)
+	}
 	return RecognizeResponse{
 		Provider:   ProviderNameAliyun,
 		RawResult:  raw,
@@ -210,6 +213,32 @@ func normalizeAliyunIDCardResult(raw json.RawMessage) *IDCardResult {
 	}
 }
 
+func normalizeAliyunHealthCertResult(raw json.RawMessage) *HealthCertResult {
+	fields := collectAliyunStringFields(raw)
+	name := firstAliyunField(fields,
+		"holder_name", "holdername", "person_name", "personname", "name", "fullname")
+	certificate := firstAliyunField(fields,
+		"certificate_number", "certificatenumber", "certificate_no", "certificateno",
+		"health_cert_no", "healthcertno", "certificate", "registrationnumber")
+	validPeriod := firstAliyunField(fields,
+		"valid_period", "validperiod", "valid_to", "validto", "todate", "enddate",
+		"expiredate", "expirydate", "expirationdate")
+	rawText := firstAliyunField(fields,
+		"raw_text", "rawtext", "ocr_text", "ocrtext", "alltext", "fulltext", "content", "text")
+	if rawText == "" {
+		rawText = buildAliyunHealthCertRawText(name, certificate, validPeriod)
+	}
+	if name == "" && certificate == "" && validPeriod == "" && rawText == "" {
+		return nil
+	}
+	return &HealthCertResult{
+		Name:        name,
+		Certificate: certificate,
+		ValidPeriod: validPeriod,
+		RawText:     rawText,
+	}
+}
+
 func buildAliyunFoodPermitRawText(licenseNumber, businessName, operatorName, address, validFrom, validTo, validPeriod string) string {
 	lines := make([]string, 0, 5)
 	if businessName != "" {
@@ -230,6 +259,20 @@ func buildAliyunFoodPermitRawText(licenseNumber, businessName, operatorName, add
 		lines = append(lines, "有效期："+validPeriod)
 	} else if validFrom != "" {
 		lines = append(lines, "有效期自："+validFrom)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func buildAliyunHealthCertRawText(name, certificate, validPeriod string) string {
+	lines := make([]string, 0, 3)
+	if name != "" {
+		lines = append(lines, "姓名："+name)
+	}
+	if certificate != "" {
+		lines = append(lines, "健康证号："+certificate)
+	}
+	if validPeriod != "" {
+		lines = append(lines, "有效期至："+validPeriod)
 	}
 	return strings.Join(lines, "\n")
 }
@@ -262,12 +305,30 @@ func collectAliyunFieldValues(prefix string, value any, fields map[string]string
 			collectAliyunFieldValues(prefix, item, fields)
 		}
 	case string:
+		if nested, ok := decodeAliyunEmbeddedJSON(v); ok {
+			collectAliyunFieldValues(prefix, nested, fields)
+		}
 		storeAliyunFieldValue(prefix, v, fields)
 	case float64:
 		storeAliyunFieldValue(prefix, fmt.Sprintf("%v", v), fields)
 	case bool:
 		storeAliyunFieldValue(prefix, fmt.Sprintf("%t", v), fields)
 	}
+}
+
+func decodeAliyunEmbeddedJSON(value string) (any, bool) {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return nil, false
+	}
+	if trimmed[0] != '{' && trimmed[0] != '[' {
+		return nil, false
+	}
+	var nested any
+	if err := json.Unmarshal([]byte(trimmed), &nested); err != nil {
+		return nil, false
+	}
+	return nested, true
 }
 
 func storeAliyunFieldValue(prefix, value string, fields map[string]string) {

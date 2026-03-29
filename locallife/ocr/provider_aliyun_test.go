@@ -199,6 +199,145 @@ func TestAliyunProviderRecognizeNormalizesIDCard(t *testing.T) {
 	}
 }
 
+func TestAliyunProviderRecognizeNormalizesStringifiedBusinessLicenseData(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"data\":{\"creditCode\":\"91130532MA7JHADD6E\",\"companyName\":\"平乡县牛门宴餐饮服务有限公司\",\"businessAddress\":\"河北省邢台市平乡县城向阳街中段东侧\",\"legalPerson\":\"陈洪刚\",\"businessScope\":\"正餐服务\",\"validPeriod\":\"2022年03月18日至长期\"},\"prism_keyValueInfo\":[{\"key\":\"creditCode\",\"value\":\"91130532MA7JHADD6E\"}]}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunBusinessLicense, RecognizeRequest{DocumentType: DocumentTypeBusinessLicense})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.BusinessLicense == nil {
+		t.Fatal("expected normalized business license result")
+	}
+	if resp.Normalized.BusinessLicense.CreditCode != "91130532MA7JHADD6E" {
+		t.Fatalf("credit code = %s", resp.Normalized.BusinessLicense.CreditCode)
+	}
+	if resp.Normalized.BusinessLicense.EnterpriseName != "平乡县牛门宴餐饮服务有限公司" {
+		t.Fatalf("enterprise name = %s", resp.Normalized.BusinessLicense.EnterpriseName)
+	}
+	if resp.Normalized.BusinessLicense.LegalRepresentative != "陈洪刚" {
+		t.Fatalf("legal representative = %s", resp.Normalized.BusinessLicense.LegalRepresentative)
+	}
+	if resp.Normalized.BusinessLicense.Address != "河北省邢台市平乡县城向阳街中段东侧" {
+		t.Fatalf("address = %s", resp.Normalized.BusinessLicense.Address)
+	}
+	if resp.Normalized.BusinessLicense.BusinessScope != "正餐服务" {
+		t.Fatalf("business scope = %s", resp.Normalized.BusinessLicense.BusinessScope)
+	}
+	if resp.Normalized.BusinessLicense.ValidPeriod != "2022年03月18日至长期" {
+		t.Fatalf("valid period = %s", resp.Normalized.BusinessLicense.ValidPeriod)
+	}
+}
+
+func TestAliyunProviderRecognizeNormalizesStringifiedFoodPermitData(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"data\":{\"operatorName\":\"平乡县牛门宴餐饮服务有限公司\",\"legalRepresentative\":\"陈洪刚\",\"businessAddress\":\"河北省邢台市平乡县城向阳街中段陈侧\",\"businessScope\":\"热食类食品制售,冷食类食品制售\",\"licenceNumber\":\"JY21305320011643\",\"validToDate\":\"2027年04月23日\"},\"prism_keyValueInfo\":[{\"key\":\"licenceNumber\",\"value\":\"JY21305320011643\"}]}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunFoodPermit, RecognizeRequest{DocumentType: DocumentTypeFoodPermit})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.FoodPermit == nil {
+		t.Fatal("expected normalized food permit result")
+	}
+	if resp.Normalized.FoodPermit.LicenseNumber != "JY21305320011643" {
+		t.Fatalf("license number = %s", resp.Normalized.FoodPermit.LicenseNumber)
+	}
+	if resp.Normalized.FoodPermit.BusinessName != "平乡县牛门宴餐饮服务有限公司" {
+		t.Fatalf("business name = %s", resp.Normalized.FoodPermit.BusinessName)
+	}
+	if resp.Normalized.FoodPermit.OperatorName != "陈洪刚" {
+		t.Fatalf("operator name = %s", resp.Normalized.FoodPermit.OperatorName)
+	}
+	if resp.Normalized.FoodPermit.Address != "河北省邢台市平乡县城向阳街中段陈侧" {
+		t.Fatalf("address = %s", resp.Normalized.FoodPermit.Address)
+	}
+	if resp.Normalized.FoodPermit.ValidPeriod != "2027年04月23日" {
+		t.Fatalf("valid period = %s", resp.Normalized.FoodPermit.ValidPeriod)
+	}
+	if !strings.Contains(resp.Normalized.FoodPermit.RawText, "许可证编号：JY21305320011643") {
+		t.Fatalf("raw text = %s", resp.Normalized.FoodPermit.RawText)
+	}
+}
+
+func TestAliyunProviderRecognizeNormalizesStringifiedHealthCertData(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"data\":{\"holderName\":\"张三\",\"certificateNumber\":\"JK20260001\",\"validPeriod\":\"2030年12月31日\",\"text\":\"姓名：张三\\n健康证号：JK20260001\\n有效期至：2030年12月31日\\n110101199001011234\"}}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunHealthCert, RecognizeRequest{DocumentType: DocumentTypeHealthCert})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.HealthCert == nil {
+		t.Fatal("expected normalized health cert result")
+	}
+	if resp.Normalized.HealthCert.Name != "张三" {
+		t.Fatalf("name = %s", resp.Normalized.HealthCert.Name)
+	}
+	if resp.Normalized.HealthCert.Certificate != "JK20260001" {
+		t.Fatalf("certificate = %s", resp.Normalized.HealthCert.Certificate)
+	}
+	if resp.Normalized.HealthCert.ValidPeriod != "2030年12月31日" {
+		t.Fatalf("valid period = %s", resp.Normalized.HealthCert.ValidPeriod)
+	}
+	if !strings.Contains(resp.Normalized.HealthCert.RawText, "110101199001011234") {
+		t.Fatalf("raw text = %s", resp.Normalized.HealthCert.RawText)
+	}
+}
+
+func TestAliyunProviderRecognizeNormalizesStringifiedIDCardFrontData(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"data\":{\"face\":{\"data\":{\"name\":\"张泽强\",\"sex\":\"男\",\"ethnicity\":\"汉\",\"birthDate\":\"1978年11月6日\",\"address\":\"河北省邢台市宁晋县耿庄桥镇西周家庄村永富西街1胡同1号\",\"idNumber\":\"132229197811067791\"}}}}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunIDCard, RecognizeRequest{DocumentType: DocumentTypeIDCard, Side: DocumentSideFront})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.IDCard == nil {
+		t.Fatal("expected normalized id card result")
+	}
+	if resp.Normalized.IDCard.Name != "张泽强" {
+		t.Fatalf("name = %s", resp.Normalized.IDCard.Name)
+	}
+	if resp.Normalized.IDCard.IDNumber != "132229197811067791" {
+		t.Fatalf("id number = %s", resp.Normalized.IDCard.IDNumber)
+	}
+	if resp.Normalized.IDCard.Gender != "男" {
+		t.Fatalf("gender = %s", resp.Normalized.IDCard.Gender)
+	}
+	if resp.Normalized.IDCard.Ethnicity != "汉" {
+		t.Fatalf("ethnicity = %s", resp.Normalized.IDCard.Ethnicity)
+	}
+	if resp.Normalized.IDCard.BirthDate != "1978年11月6日" {
+		t.Fatalf("birth date = %s", resp.Normalized.IDCard.BirthDate)
+	}
+}
+
+func TestAliyunProviderRecognizeNormalizesStringifiedIDCardBackData(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"data\":{\"back\":{\"data\":{\"issueAuthority\":\"宁晋县公安局\",\"validPeriod\":\"2008.05.07-2028.05.07\"}}}}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunIDCard, RecognizeRequest{DocumentType: DocumentTypeIDCard, Side: DocumentSideBack})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.IDCard == nil {
+		t.Fatal("expected normalized id card result")
+	}
+	if resp.Normalized.IDCard.Authority != "宁晋县公安局" {
+		t.Fatalf("authority = %s", resp.Normalized.IDCard.Authority)
+	}
+	if resp.Normalized.IDCard.ValidPeriod != "2008.05.07-2028.05.07" {
+		t.Fatalf("valid period = %s", resp.Normalized.IDCard.ValidPeriod)
+	}
+}
+
 func TestMapAliyunOCRAPIError(t *testing.T) {
 	tests := []struct {
 		name string

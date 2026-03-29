@@ -54,12 +54,31 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 		return nil
 	}
 	if asset.ModerationStatus != "pending" || asset.ModerationTraceID.Valid {
+		log.Info().
+			Int64("media_id", asset.ID).
+			Str("object_key", asset.ObjectKey).
+			Str("moderation_status", asset.ModerationStatus).
+			Str("moderation_trace_id", asset.ModerationTraceID.String).
+			Msg("media moderation skipped because asset is already processed or queued")
 		return nil
 	}
 	if !strings.HasPrefix(asset.MimeType, "image/") {
+		log.Info().
+			Int64("media_id", asset.ID).
+			Str("object_key", asset.ObjectKey).
+			Str("mime_type", asset.MimeType).
+			Msg("media moderation skipped because asset is not an image")
 		return nil
 	}
 	if server.config.Environment == "development" && (server.wechatClient == nil || server.config.WechatMiniAppID == "" || server.config.WechatMiniAppSecret == "") {
+		log.Warn().
+			Int64("media_id", asset.ID).
+			Str("object_key", asset.ObjectKey).
+			Str("environment", server.config.Environment).
+			Bool("wechat_client_configured", server.wechatClient != nil).
+			Bool("wechat_app_id_configured", server.config.WechatMiniAppID != "").
+			Bool("wechat_app_secret_configured", server.config.WechatMiniAppSecret != "").
+			Msg("media moderation auto-approved in development because wechat moderation is not configured")
 		updated, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
 			ID:               asset.ID,
 			ModerationStatus: "approved",
@@ -68,9 +87,21 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 			return fmt.Errorf("auto approve media moderation in development: %w", err)
 		}
 		*asset = updated
+		log.Info().
+			Int64("media_id", asset.ID).
+			Str("moderation_status", asset.ModerationStatus).
+			Msg("media moderation development auto-approval persisted")
 		return nil
 	}
 	if server.wechatClient == nil || server.config.WechatMiniAppID == "" || server.config.WechatMiniAppSecret == "" {
+		log.Warn().
+			Int64("media_id", asset.ID).
+			Str("object_key", asset.ObjectKey).
+			Str("environment", server.config.Environment).
+			Bool("wechat_client_configured", server.wechatClient != nil).
+			Bool("wechat_app_id_configured", server.config.WechatMiniAppID != "").
+			Bool("wechat_app_secret_configured", server.config.WechatMiniAppSecret != "").
+			Msg("media moderation skipped because wechat moderation is not configured")
 		return nil
 	}
 
@@ -79,6 +110,11 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 		return fmt.Errorf("load uploader for media moderation: %w", err)
 	}
 	if user.WechatOpenid == "" {
+		log.Error().
+			Int64("media_id", asset.ID).
+			Int64("uploader_id", uploaderID).
+			Str("object_key", asset.ObjectKey).
+			Msg("media moderation failed because uploader wechat_openid is missing")
 		return fmt.Errorf("user %d missing wechat_openid for media moderation", uploaderID)
 	}
 
@@ -86,6 +122,15 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 	if err != nil {
 		return err
 	}
+
+	log.Info().
+		Int64("media_id", asset.ID).
+		Int64("uploader_id", uploaderID).
+		Str("object_key", asset.ObjectKey).
+		Str("mime_type", asset.MimeType).
+		Str("visibility", asset.Visibility).
+		Str("source_client", asset.SourceClient).
+		Msg("requesting async media moderation")
 
 	result, err := server.wechatClient.MediaCheckAsync(ctx, wechat.MediaCheckAsyncRequest{
 		MediaURL:  mediaURL,
@@ -95,17 +140,41 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 		Scene:     miniProgramMediaCheckScene,
 	})
 	if err != nil {
+		log.Error().
+			Err(err).
+			Int64("media_id", asset.ID).
+			Int64("uploader_id", uploaderID).
+			Str("object_key", asset.ObjectKey).
+			Msg("async media moderation request failed")
 		return fmt.Errorf("request wechat media moderation: %w", err)
 	}
+
+	log.Info().
+		Int64("media_id", asset.ID).
+		Int64("uploader_id", uploaderID).
+		Str("object_key", asset.ObjectKey).
+		Str("trace_id", result.TraceID).
+		Msg("async media moderation request accepted")
 
 	updated, err := server.store.SetMediaAssetModerationTraceID(ctx, db.SetMediaAssetModerationTraceIDParams{
 		ID:                asset.ID,
 		ModerationTraceID: pgtype.Text{String: result.TraceID, Valid: true},
 	})
 	if err != nil {
+		log.Error().
+			Err(err).
+			Int64("media_id", asset.ID).
+			Str("object_key", asset.ObjectKey).
+			Str("trace_id", result.TraceID).
+			Msg("persist media moderation trace id failed")
 		return fmt.Errorf("persist media moderation trace id: %w", err)
 	}
 	*asset = updated
+	log.Info().
+		Int64("media_id", asset.ID).
+		Str("object_key", asset.ObjectKey).
+		Str("trace_id", result.TraceID).
+		Msg("async media moderation trace id persisted")
 	return nil
 }
 
@@ -156,17 +225,39 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 	}
 
 	moderationStatus := mapMediaModerationStatus(payload)
+	log.Info().
+		Str("trace_id", payload.TraceID).
+		Str("appid", payload.AppID).
+		Str("event", payload.Event).
+		Str("msg_type", payload.MsgType).
+		Str("suggest", payload.Result.Suggest).
+		Str("label", payload.Result.Label).
+		Str("is_risky", payload.IsRisky).
+		Str("mapped_status", moderationStatus).
+		Msg("media moderation callback received")
 	asset, err := server.store.SetMediaAssetModerationStatusByTraceID(ctx, db.SetMediaAssetModerationStatusByTraceIDParams{
 		ModerationTraceID: pgtype.Text{String: payload.TraceID, Valid: true},
 		ModerationStatus:  moderationStatus,
 	})
 	if err != nil {
-		log.Error().Err(err).Str("trace_id", payload.TraceID).Msg("update media moderation status by trace id")
+		log.Error().
+			Err(err).
+			Str("trace_id", payload.TraceID).
+			Str("suggest", payload.Result.Suggest).
+			Str("label", payload.Result.Label).
+			Str("mapped_status", moderationStatus).
+			Msg("update media moderation status by trace id failed")
 		ctx.String(http.StatusNotFound, "media asset not found")
 		return
 	}
 
-	log.Info().Int64("media_id", asset.ID).Str("trace_id", payload.TraceID).Str("moderation_status", moderationStatus).Msg("media moderation callback processed")
+	log.Info().
+		Int64("media_id", asset.ID).
+		Str("trace_id", payload.TraceID).
+		Str("object_key", asset.ObjectKey).
+		Str("moderation_status", moderationStatus).
+		Str("label", payload.Result.Label).
+		Msg("media moderation callback processed")
 	ctx.String(http.StatusOK, "success")
 }
 
