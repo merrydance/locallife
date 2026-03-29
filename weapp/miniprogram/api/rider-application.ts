@@ -3,6 +3,7 @@ import { uploadMedia } from '../utils/media'
 import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
+import { AppError, ErrorType } from '../utils/error-handler'
 
 export interface RiderApplicationResponse {
   id: number
@@ -43,6 +44,31 @@ export interface RiderApplicationResponse {
 
 function hasRiderText(value?: string) {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function buildRiderApplicationReadonlyMessage(status: ApplicationStatus) {
+  switch (status) {
+    case 'submitted':
+      return '申请已提交，暂时不能修改资料'
+    case 'approved':
+      return '入驻已通过，无需重复上传资料'
+    case 'rejected':
+      return '申请已驳回，请先重置后再修改资料'
+    default:
+      return '当前申请状态暂不支持修改资料'
+  }
+}
+
+function assertRiderApplicationEditable(application: RiderApplicationResponse) {
+  if (application.status === 'draft') {
+    return
+  }
+
+  throw new AppError({
+    type: ErrorType.BUSINESS,
+    message: `rider application is not editable in status ${application.status}`,
+    userMessage: buildRiderApplicationReadonlyMessage(application.status)
+  })
 }
 
 function checkRiderIDCardWriteback(latest: RiderApplicationResponse, side: 'Front' | 'Back') {
@@ -107,12 +133,14 @@ export function updateRiderApplicationBasic(data: UpdateRiderBasicRequest) {
  * 上传身份证并通过统一 OCR job 识别
  */
 export async function ocrRiderIdCard(filePath: string, side: 'Front' | 'Back') {
+  const draft = await getOrCreateRiderApplication()
+  assertRiderApplicationEditable(draft)
+
   const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
   const { mediaId } = await uploadMedia(filePath, {
     businessType: 'rider',
     mediaCategory
   })
-  const draft = await getOrCreateRiderApplication()
   return enqueueOCRJobAndRefresh(
     {
       document_type: 'id_card',
@@ -134,11 +162,13 @@ export async function ocrRiderIdCard(filePath: string, side: 'Front' | 'Back') {
  * 上传健康证并通过统一 OCR job 识别
  */
 export async function ocrRiderHealthCert(filePath: string) {
+  const draft = await getOrCreateRiderApplication()
+  assertRiderApplicationEditable(draft)
+
   const { mediaId } = await uploadMedia(filePath, {
     businessType: 'rider',
     mediaCategory: 'health_cert'
   })
-  const draft = await getOrCreateRiderApplication()
   return enqueueOCRJobAndRefresh(
     {
       document_type: 'health_cert',

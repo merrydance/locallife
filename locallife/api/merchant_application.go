@@ -154,11 +154,9 @@ func checkApplicationEditable(status string) (editable bool, needReset bool, err
 	switch status {
 	case "draft":
 		return true, false, ""
-	case "rejected", "approved":
-		// 被拒绝或已通过的申请允许编辑，但需要先重置为草稿状态。
+	case "rejected", "approved", "submitted":
+		// 被拒绝、已通过或历史遗留 submitted 的申请允许编辑，但需要先重置为草稿状态。
 		return true, true, ""
-	case "submitted":
-		return false, false, "申请已提交审核，当前不可编辑"
 	default:
 		return false, false, "申请状态异常"
 	}
@@ -340,6 +338,18 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
+	}
+
+	if app.Status == "submitted" {
+		resetResult, resetErr := server.store.ResetMerchantApplicationTx(ctx, db.ResetMerchantApplicationTxParams{
+			ApplicationID: app.ID,
+			UserID:        authPayload.UserID,
+		})
+		if resetErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, resetErr))
+			return
+		}
+		app = resetResult.Application
 	}
 
 	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), app))
@@ -849,6 +859,12 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
+	if approved, rejectReason := server.checkMerchantApplicationApproval(ctx, app); !approved {
+		log.Warn().Str("request_id", requestID).Str("reject_reason", rejectReason).Msg("submit blocked: merchant application remains editable")
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(rejectReason)))
+		return
+	}
+
 	// 提交申请：支持从 draft, rejected, approved 状态提交
 	// 如果已经是 submitted 状态，则直接使用当前记录（支持重试自动审核）
 	var submittedApp db.MerchantApplication
@@ -863,89 +879,64 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		}
 	}
 
-	// 执行自动审核
-	approved, rejectReason := server.checkMerchantApplicationApproval(ctx, submittedApp)
+	// 审核通过 - 使用事务确保原子性
+	var storefrontImages []string
+	if len(submittedApp.StorefrontImages) > 0 {
+		json.Unmarshal(submittedApp.StorefrontImages, &storefrontImages) //nolint:errcheck
+	}
+	var environmentImages []string
+	if len(submittedApp.EnvironmentImages) > 0 {
+		json.Unmarshal(submittedApp.EnvironmentImages, &environmentImages) //nolint:errcheck
+	}
+	appData, _ := json.Marshal(map[string]interface{}{
+		"business_license_number":         submittedApp.BusinessLicenseNumber,
+		"legal_person_name":               submittedApp.LegalPersonName,
+		"legal_person_id_number":          submittedApp.LegalPersonIDNumber,
+		"business_license_media_asset_id": submittedApp.BusinessLicenseMediaAssetID.Int64,
+		"id_card_front_media_asset_id":    submittedApp.IDCardFrontMediaAssetID.Int64,
+		"id_card_back_media_asset_id":     submittedApp.IDCardBackMediaAssetID.Int64,
+		"food_permit_media_asset_id":      submittedApp.FoodPermitMediaAssetID.Int64,
+		"storefront_images":               storefrontImages,
+		"environment_images":              environmentImages,
+	})
 
-	if approved {
-		// 审核通过 - 使用事务确保原子性
-		var storefrontImages []string
-		if len(submittedApp.StorefrontImages) > 0 {
-			json.Unmarshal(submittedApp.StorefrontImages, &storefrontImages) //nolint:errcheck
-		}
-		var environmentImages []string
-		if len(submittedApp.EnvironmentImages) > 0 {
-			json.Unmarshal(submittedApp.EnvironmentImages, &environmentImages) //nolint:errcheck
-		}
-		appData, _ := json.Marshal(map[string]interface{}{
-			"business_license_number":         submittedApp.BusinessLicenseNumber,
-			"legal_person_name":               submittedApp.LegalPersonName,
-			"legal_person_id_number":          submittedApp.LegalPersonIDNumber,
-			"business_license_media_asset_id": submittedApp.BusinessLicenseMediaAssetID.Int64,
-			"id_card_front_media_asset_id":    submittedApp.IDCardFrontMediaAssetID.Int64,
-			"id_card_back_media_asset_id":     submittedApp.IDCardBackMediaAssetID.Int64,
-			"food_permit_media_asset_id":      submittedApp.FoodPermitMediaAssetID.Int64,
-			"storefront_images":               storefrontImages,
-			"environment_images":              environmentImages,
-		})
-
-		var regionID int64
-		if submittedApp.RegionID.Valid {
-			regionID = submittedApp.RegionID.Int64
-		}
-
-		// 事务性审核：更新申请状态 + 创建商户 + 创建用户角色
-		txResult, err := server.store.ApproveMerchantApplicationTx(ctx, db.ApproveMerchantApplicationTxParams{
-			ApplicationID: submittedApp.ID,
-			UserID:        submittedApp.UserID,
-			MerchantName:  submittedApp.MerchantName,
-			Phone:         submittedApp.ContactPhone,
-			Address:       submittedApp.BusinessAddress,
-			Latitude:      submittedApp.Latitude,
-			Longitude:     submittedApp.Longitude,
-			RegionID:      regionID,
-			AppData:       appData,
-		})
-		if err != nil {
-			log.Error().Err(err).Int64("application_id", submittedApp.ID).Msg("商户审核通过事务失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if strings.TrimSpace(txResult.Application.MerchantName) == "" {
-			txResult.Application.MerchantName = submittedApp.MerchantName
-		}
-		if strings.TrimSpace(txResult.Application.ContactPhone) == "" {
-			txResult.Application.ContactPhone = submittedApp.ContactPhone
-		}
-
-		log.Info().
-			Int64("application_id", txResult.Application.ID).
-			Int64("merchant_id", txResult.Merchant.ID).
-			Int64("user_role_id", txResult.UserRole.ID).
-			Msg("商户审核通过事务完成")
-
-		ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), txResult.Application))
-		return
+	var regionID int64
+	if submittedApp.RegionID.Valid {
+		regionID = submittedApp.RegionID.Int64
 	}
 
-	// 审核拒绝
-	rejectedApp, err := server.store.RejectMerchantApplication(ctx, db.RejectMerchantApplicationParams{
-		ID:           submittedApp.ID,
-		RejectReason: pgtype.Text{String: rejectReason, Valid: true},
+	// 事务性审核：更新申请状态 + 创建商户 + 创建用户角色
+	txResult, err := server.store.ApproveMerchantApplicationTx(ctx, db.ApproveMerchantApplicationTxParams{
+		ApplicationID: submittedApp.ID,
+		UserID:        submittedApp.UserID,
+		MerchantName:  submittedApp.MerchantName,
+		Phone:         submittedApp.ContactPhone,
+		Address:       submittedApp.BusinessAddress,
+		Latitude:      submittedApp.Latitude,
+		Longitude:     submittedApp.Longitude,
+		RegionID:      regionID,
+		AppData:       appData,
 	})
 	if err != nil {
+		log.Error().Err(err).Int64("application_id", submittedApp.ID).Msg("商户审核通过事务失败")
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if strings.TrimSpace(rejectedApp.MerchantName) == "" {
-		rejectedApp.MerchantName = submittedApp.MerchantName
+	if strings.TrimSpace(txResult.Application.MerchantName) == "" {
+		txResult.Application.MerchantName = submittedApp.MerchantName
 	}
-	if strings.TrimSpace(rejectedApp.ContactPhone) == "" {
-		rejectedApp.ContactPhone = submittedApp.ContactPhone
+	if strings.TrimSpace(txResult.Application.ContactPhone) == "" {
+		txResult.Application.ContactPhone = submittedApp.ContactPhone
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), rejectedApp))
+	log.Info().
+		Int64("application_id", txResult.Application.ID).
+		Int64("merchant_id", txResult.Merchant.ID).
+		Int64("user_role_id", txResult.UserRole.ID).
+		Msg("商户审核通过事务完成")
+
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), txResult.Application))
 }
 
 // validateMerchantApplicationRequired 验证必填字段

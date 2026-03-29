@@ -173,6 +173,10 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
     return '申请已提交，请等待审核'
   }
 
+  if (normalized.includes('application can only be modified in draft state')) {
+    return '申请已提交，暂时不能修改资料'
+  }
+
   if (normalized.includes('already approved') || normalized.includes('application approved')) {
     return '申请已通过，无需重复提交'
   }

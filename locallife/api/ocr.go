@@ -983,6 +983,14 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 			return
 		}
 	}
+	if err := server.validateOCRJobOwnerEditable(ctx, ownerType, req.OwnerID); err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("ocr owner not found")))
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 	moderationStatus, err := server.getOCRMediaModerationStatus(ctx, req.MediaAssetID)
 	if err != nil {
 		if isNotFoundError(err) {
@@ -1051,6 +1059,21 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 		},
 	})
 	ctx.JSON(http.StatusOK, newOCRJobResponse(job))
+}
+
+func (server *Server) validateOCRJobOwnerEditable(ctx *gin.Context, ownerType ocr.OwnerType, ownerID int64) error {
+	switch ownerType {
+	case ocr.OwnerTypeRiderApplication:
+		app, err := server.store.GetRiderApplication(ctx, ownerID)
+		if err != nil {
+			return err
+		}
+		if app.Status != "draft" {
+			return ErrApplicationNotDraft
+		}
+	}
+
+	return nil
 }
 
 // getOCRJob godoc

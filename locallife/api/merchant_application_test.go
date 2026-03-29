@@ -172,6 +172,33 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 			},
 		},
 		{
+			name: "GetExisting_SubmittedAutoResetToDraft",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				existingApp := randomMerchantAppDraft(user.ID)
+				existingApp.Status = "submitted"
+				resetApp := existingApp
+				resetApp.Status = "draft"
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(existingApp, nil)
+				store.EXPECT().
+					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
+						ApplicationID: existingApp.ID,
+						UserID:        user.ID,
+					}).
+					Times(1).
+					Return(db.ResetMerchantApplicationTxResult{Application: resetApp}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
 			name: "AlreadyApproved",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -280,7 +307,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			},
 		},
 		{
-			name: "NotEditable_Submitted",
+			name: "Submitted_AutoResetToDraft",
 			body: updateMerchantBasicInfoRequest{
 				MerchantName: "新店名",
 			},
@@ -290,13 +317,32 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomMerchantAppDraft(user.ID)
 				app.Status = "submitted"
+				resetApp := app
+				resetApp.Status = "draft"
+				updatedApp := resetApp
+				updatedApp.MerchantName = "新店名"
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
+				store.EXPECT().
+					ResetMerchantApplicationTx(gomock.Any(), db.ResetMerchantApplicationTxParams{
+						ApplicationID: app.ID,
+						UserID:        user.ID,
+					}).
+					Times(1).
+					Return(db.ResetMerchantApplicationTxResult{Application: resetApp}, nil)
+				store.EXPECT().
+					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, resetApp.ID, arg.ID)
+						require.Equal(t, "新店名", arg.MerchantName.String)
+						return updatedApp, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 		{
@@ -540,7 +586,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "Rejected_NoBusinessScope",
+			name: "BadRequest_NoBusinessScopeKeepsDraft",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -559,30 +605,10 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					Return(submittedApp, nil)
-
-				store.EXPECT().
-					RejectMerchantApplication(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.MerchantApplication{
-						ID:           app.ID,
-						Status:       "rejected",
-						RejectReason: pgtype.Text{String: "经营范围不包含餐饮相关内容", Valid: true},
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp merchantApplicationDraftResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "rejected", resp.Status)
-				require.NotNil(t, resp.RejectReason)
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "经营范围不包含餐饮相关内容")
 			},
 		},
 		{
@@ -751,7 +777,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "Rejected_AddressAlreadyExists",
+			name: "BadRequest_AddressAlreadyExistsKeepsDraft",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -761,13 +787,6 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
-
-				submittedApp := app
-				submittedApp.Status = "submitted"
-				store.EXPECT().
-					SubmitMerchantApplication(gomock.Any(), app.ID).
-					Times(1).
-					Return(submittedApp, nil)
 
 				store.EXPECT().
 					ListMerchantLocationsInRegion(gomock.Any(), gomock.Any()).
@@ -781,23 +800,10 @@ func TestSubmitMerchantApplication(t *testing.T) {
 						},
 					}, nil)
 
-				store.EXPECT().
-					RejectMerchantApplication(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.MerchantApplication{
-						ID:           app.ID,
-						Status:       "rejected",
-						RejectReason: pgtype.Text{String: "该位置已有其他商户注册（坐标距离过近）", Valid: true},
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp merchantApplicationDraftResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "rejected", resp.Status)
-				require.NotNil(t, resp.RejectReason)
-				require.Contains(t, *resp.RejectReason, "坐标距离过近")
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "坐标距离过近")
 			},
 		},
 	}

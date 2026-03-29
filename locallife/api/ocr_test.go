@@ -180,6 +180,7 @@ func TestCreateOCRJob_MarksRiderHealthCertPending(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(701)).Return(db.MediaAsset{ID: 701, ModerationStatus: "approved"}, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeHealthCert), arg.DocumentType)
@@ -230,6 +231,7 @@ func TestCreateOCRJob_MarksRiderIDCardPending_PreservesExistingFields(t *testing
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(702)).Return(db.MediaAsset{ID: 702, ModerationStatus: "approved"}, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
@@ -267,6 +269,37 @@ func TestCreateOCRJob_MarksRiderIDCardPending_PreservesExistingFields(t *testing
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestCreateOCRJob_RejectsSubmittedRiderApplication(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomRiderApplication(user.ID)
+	app.Status = "submitted"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+	)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "id_card", MediaAssetID: 799, OwnerType: "rider_application", OwnerID: app.ID, Side: "front"})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), "application can only be modified in draft state")
 }
 
 func TestCreateOCRJob_MarksGroupBusinessLicensePending(t *testing.T) {
@@ -437,6 +470,7 @@ func TestCreateOCRJob_AllowsPrivateHealthCertDespiteModerationStatus(t *testing.
 	distributor := mockworker.NewMockTaskDistributor(ctrl)
 
 	gomock.InOrder(
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
 		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(804)).Return(db.MediaAsset{ID: 804, Visibility: "private", MediaCategory: "health_cert", ModerationStatus: "quarantined"}, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {

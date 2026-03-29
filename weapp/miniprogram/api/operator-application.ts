@@ -160,6 +160,13 @@ export function deleteOperatorApplicationDocument(
   })
 }
 
+export function resetOperatorApplication() {
+  return request<OperatorApplicationResponse>({
+    url: '/v1/operator/application/reset',
+    method: 'POST'
+  })
+}
+
 /**
  * 上传营业执照并通过统一 OCR job 识别
  */

@@ -123,6 +123,8 @@ Page({
     navBarHeight: 88,
     currentStep: 0,
     submitting: false,
+    applicationStatus: 'draft' as GroupApplicationResponse['status'],
+    rejectReason: '',
     idFront: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     idBack: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     license: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
@@ -218,6 +220,8 @@ Page({
 
   mapResponseToData(res: GroupApplicationResponse) {
     this.setData({
+      applicationStatus: res.status || 'draft',
+      rejectReason: res.reject_reason || '',
       'formData.groupName': res.group_name || '',
       'formData.contactPhone': res.contact_phone || '',
       'formData.address': res.address || '',
@@ -232,6 +236,25 @@ Page({
     }, () => {
       void this.refreshUploadPreviewURLs()
     })
+  },
+
+  syncFlowWithStatus(res: GroupApplicationResponse) {
+    if (res.status === 'submitted' || res.status === 'approved') {
+      this.setData({ currentStep: 4 })
+      return
+    }
+
+    if (res.status === 'rejected') {
+      wx.showModal({
+        title: '审核未通过',
+        content: `原因：${res.reject_reason || '资料核验失败'}`,
+        confirmText: '重新填写资料',
+        showCancel: false,
+        success: () => {
+          this.setData({ currentStep: 1 })
+        }
+      })
+    }
   },
 
   buildGroupUploadFeedback(res?: GroupApplicationResponse): GroupUploadFeedback {
@@ -287,6 +310,7 @@ Page({
       const res = await getOrCreateGroupApplication()
       if (res) {
         this.mapResponseToData(res)
+        this.syncFlowWithStatus(res)
       }
     } catch (e) {
       logger.error('Fetch group draft failed', e)
@@ -529,22 +553,17 @@ Page({
 
     this.setData({ submitting: true })
     try {
-      await submitGroupApplication(consentPayload)
+      const res = await submitGroupApplication(consentPayload)
+      this.mapResponseToData(res)
       this.setData({ currentStep: 4 })
-      
-      setTimeout(() => {
-        wx.showModal({
-          title: '提交成功',
-          content: '您的集团入驻申请已进入审核，请耐心等待。',
-          showCancel: false,
-          success: () => {
-            wx.switchTab({ url: '/pages/user_center/index' })
-          }
-        })
-      }, 2000)
     } catch (e: unknown) {
-      this.setData({ submitting: false })
       wx.showToast({ title: getErrorMessage(e, '提交失败'), icon: 'none' })
+    } finally {
+      this.setData({ submitting: false })
     }
+  },
+
+  onBackHome() {
+    wx.switchTab({ url: '/pages/user_center/index' })
   }
 })

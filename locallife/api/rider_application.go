@@ -227,6 +227,17 @@ func newRiderApplicationResponse(app db.RiderApplication) riderApplicationRespon
 	return resp
 }
 
+func (server *Server) ensureEditableRiderApplication(ctx *gin.Context, app db.RiderApplication) (db.RiderApplication, error) {
+	if app.Status == "draft" {
+		return app, nil
+	}
+	if app.Status == "submitted" || app.Status == "rejected" {
+		return server.store.ResetRiderApplicationToDraft(ctx, app.ID)
+	}
+
+	return app, ErrApplicationNotDraft
+}
+
 // ==================== 创建/获取草稿 ====================
 
 // createOrGetRiderApplicationDraft godoc
@@ -247,6 +258,14 @@ func (server *Server) createOrGetRiderApplicationDraft(ctx *gin.Context) {
 	// 检查是否已有申请
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err == nil {
+		if app.Status == "submitted" || app.Status == "rejected" {
+			reset, resetErr := server.store.ResetRiderApplicationToDraft(ctx, app.ID)
+			if resetErr != nil {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reset stale rider application to draft: %w", resetErr)))
+				return
+			}
+			app = reset
+		}
 		ctx.JSON(http.StatusOK, newRiderApplicationResponse(app))
 		return
 	}
@@ -305,6 +324,16 @@ func (server *Server) updateRiderApplicationBasic(ctx *gin.Context) {
 		return
 	}
 
+	app, err = server.ensureEditableRiderApplication(ctx, app)
+	if err != nil {
+		if errors.Is(err, ErrApplicationNotDraft) {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("ensure rider application editable: %w", err)))
+		return
+	}
+
 	if app.Status != "draft" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
@@ -346,6 +375,28 @@ func (server *Server) deleteRiderApplicationDocumentByType(ctx *gin.Context, doc
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
+		return
+	}
+
+	app, err = server.ensureEditableRiderApplication(ctx, app)
+	if err != nil {
+		if errors.Is(err, ErrApplicationNotDraft) {
+			log.Warn().
+				Int64("application_id", app.ID).
+				Int64("user_id", authPayload.UserID).
+				Str("status", app.Status).
+				Str("document_type", string(documentType)).
+				Bool("front_asset_bound", app.IDCardFrontMediaAssetID.Valid).
+				Bool("back_asset_bound", app.IDCardBackMediaAssetID.Valid).
+				Bool("health_asset_bound", app.HealthCertMediaAssetID.Valid).
+				Int64("front_asset_id", app.IDCardFrontMediaAssetID.Int64).
+				Int64("back_asset_id", app.IDCardBackMediaAssetID.Int64).
+				Int64("health_asset_id", app.HealthCertMediaAssetID.Int64).
+				Msg("reject deleting rider application document because application is not draft")
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("ensure rider application editable: %w", err)))
 		return
 	}
 
@@ -513,6 +564,12 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		return
 	}
 
+	idCardOCR, err := validateRiderApplicationSubmissionReadiness(app)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	// 自动审核：检查是否符合条件
 	approved, rejectReason := server.checkRiderApplicationApproval(app)
 	if server.config.RulesEngineEnabled && server.rulesEngine != nil {
@@ -542,21 +599,11 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 			return
 		}
 
-		// 自动通过
-		var ocrData IDCardOCRData
-		if len(submitted.IDCardOcr) > 0 {
-			_ = json.Unmarshal(submitted.IDCardOcr, &ocrData)
-		}
-		if ocrData.IDNumber == "" {
-			ctx.JSON(http.StatusBadRequest, errorResponse(ErrIDNumberRequired))
-			return
-		}
-
 		approvedResult, err := server.store.ApproveRiderApplicationTx(ctx, db.ApproveRiderApplicationTxParams{
 			ApplicationID: submitted.ID,
 			ReviewedBy:    pgtype.Int8{},
 			RiderRealName: submitted.RealName.String,
-			RiderIDCardNo: ocrData.IDNumber,
+			RiderIDCardNo: idCardOCR.IDNumber,
 			RiderPhone:    submitted.Phone.String,
 			RegionID:      pgtype.Int8{},
 		})
@@ -570,24 +617,49 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		return
 	}
 
-	// 不符合条件，直接拒绝
-	submitted, err := server.store.SubmitRiderApplication(ctx, app.ID)
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("submit rider application: %w", err)))
-		return
+	ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(rejectReason)))
+}
+
+func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCardOCRData, error) {
+	if len(app.IDCardOcr) == 0 {
+		return nil, errors.New("身份证信息未识别，请重新上传清晰的身份证照片")
 	}
 
-	rejected, err := server.store.RejectRiderApplication(ctx, db.RejectRiderApplicationParams{
-		ID:           submitted.ID,
-		RejectReason: pgtype.Text{String: rejectReason, Valid: true},
-	})
-	if err != nil {
-		log.Error().Err(err).Msg("拒绝骑手申请失败")
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reject rider application: %w", err)))
-		return
+	decodedIDCardOCR, err := decodeIDCardOCRData(app.IDCardOcr)
+	if err != nil || decodedIDCardOCR == nil {
+		return nil, errors.New("身份证信息解析失败，请重新上传")
 	}
 
-	ctx.JSON(http.StatusOK, newRiderApplicationResponse(rejected))
+	idName := normalizePersonName(decodedIDCardOCR.Name)
+	if idName == "" && app.RealName.Valid {
+		idName = normalizePersonName(app.RealName.String)
+	}
+	if idName == "" {
+		return nil, errors.New("身份证姓名未识别，请重新上传清晰的身份证正面照片")
+	}
+	if strings.TrimSpace(decodedIDCardOCR.IDNumber) == "" {
+		return nil, errors.New("身份证号未识别，请重新上传清晰的身份证正面照片")
+	}
+	if strings.TrimSpace(decodedIDCardOCR.ValidEnd) == "" {
+		return nil, errors.New("身份证有效期未识别，请上传身份证背面照片")
+	}
+
+	if len(app.HealthCertOcr) == 0 {
+		return nil, errors.New("健康证信息未识别，请重新上传清晰的健康证照片")
+	}
+
+	decodedHealthOCR, err := decodeHealthCertOCRData(app.HealthCertOcr)
+	if err != nil || decodedHealthOCR == nil {
+		return nil, errors.New("健康证信息解析失败，请重新上传")
+	}
+	if normalizePersonName(decodedHealthOCR.Name) == "" {
+		return nil, errors.New("健康证姓名未识别，请重新上传清晰的健康证照片")
+	}
+	if strings.TrimSpace(decodedHealthOCR.ValidEnd) == "" {
+		return nil, errors.New("健康证有效期未识别，请重新上传清晰的健康证照片")
+	}
+
+	return decodedIDCardOCR, nil
 }
 
 // checkRiderApplicationApproval 检查申请是否符合通过条件
@@ -608,6 +680,9 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 		return false, "身份证信息解析失败，请重新上传"
 	}
 	ocrData := *decodedIDCardOCR
+	if strings.TrimSpace(ocrData.IDNumber) == "" {
+		return false, "身份证号未识别，请重新上传清晰的身份证正面照片"
+	}
 
 	// 3. 身份证必须在有效期内
 	if ocrData.ValidEnd == "" {

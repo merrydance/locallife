@@ -255,6 +255,24 @@
   align-items: center;
 }
 
+.result-status {
+  text-align: center;
+  margin-bottom: 64rpx;
+}
+
+.status-text {
+  font-size: 40rpx;
+  font-weight: bold;
+  margin: 40rpx 0 24rpx;
+  color: var(--td-text-color-primary);
+}
+
+.status-hint {
+  font-size: 26rpx;
+  color: var(--td-text-color-secondary);
+  line-height: 1.6;
+}
+
 .loading-sub {
   font-size: 24rpx;
   color: var(--td-text-color-placeholder);

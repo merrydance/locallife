@@ -230,6 +230,20 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function isMerchantCorrectionError(message: string): boolean {
+  return [
+    '营业执照',
+    '食品经营许可证',
+    '身份证',
+    '过期',
+    '不一致',
+    '未识别',
+    '位置',
+    '坐标距离过近',
+    '经营范围'
+  ].some((keyword) => message.includes(keyword))
+}
+
 function toSafeString(value: unknown): string {
   if (value === null || value === undefined || value === true || value === 'true') {
     return ''
@@ -1826,8 +1840,17 @@ Page({
     } catch (err: unknown) {
       logger.error('[MerchantRegister] Submit failed', err)
       const errMsg = getErrorMessage(err, '提交失败，请重试')
-      wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
       this.setData({ isSubmitting: false, currentStep: 4 })
+      wx.showModal({
+        title: isMerchantCorrectionError(errMsg) ? '请修改资料后重试' : '提交失败',
+        content: errMsg,
+        showCancel: false,
+        success: () => {
+          if (isMerchantCorrectionError(errMsg)) {
+            this.setData({ currentStep: 1 })
+          }
+        }
+      })
     }
   },
 

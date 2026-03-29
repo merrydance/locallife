@@ -12,6 +12,7 @@ import { getPrivateMediaUrl } from '../../../utils/image-security'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
+import type { ApplicationStatus } from '../../../api/onboarding'
 
 type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
@@ -74,6 +75,17 @@ function createUploadFeedback(state: UploadFeedbackState, title = '', descriptio
   return { state, title, description }
 }
 
+function isDocumentCorrectionError(message: string): boolean {
+  return [
+    '身份证',
+    '健康证',
+    '过期',
+    '不一致',
+    '未识别',
+    '资料核验'
+  ].some((keyword) => message.includes(keyword))
+}
+
 function pickOCRText(payload: Record<string, unknown> | undefined, ...keys: string[]): string {
   for (const key of keys) {
     const value = payload?.[key]
@@ -104,7 +116,8 @@ Page({
     },
     phoneError: '',
     consentChecked: false,
-    consentPopupVisible: false
+    consentPopupVisible: false,
+    applicationStatus: 'draft' as ApplicationStatus
   },
 
   previewRefreshVersion: 0,
@@ -130,7 +143,10 @@ Page({
         this.mapResponseToData(res)
         
         // 如果已被拒绝，自动重置或提示
-        if (res.status === 'rejected') {
+        if (res.status === 'submitted') {
+          this.setData({ currentStep: 4, isSubmitting: true })
+          wx.showToast({ title: '申请审核中', icon: 'none' })
+        } else if (res.status === 'rejected') {
           wx.showModal({
             title: '申请未通过',
             content: `驳回原因：${res.reject_reason || '资料不全'}. 是否修改重试？`,
@@ -168,6 +184,8 @@ Page({
       'formData.healthCertNo': pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate') || currentForm.healthCertNo || '',
       'formData.healthCertDate': pickOCRText(healthCertOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.healthCertDate || '',
       phoneError: nextPhone.trim() ? '' : this.data.phoneError,
+      applicationStatus: res.status,
+      isSubmitting: res.status === 'submitted',
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
       healthCert: { url: '', assetId: res.health_cert_asset_id },
@@ -307,6 +325,30 @@ Page({
     this.setData({ [`uploadFeedback.${field}`]: feedback })
   },
 
+  isApplicationEditable() {
+    return this.data.applicationStatus === 'draft'
+  },
+
+  ensureApplicationEditable() {
+    if (this.isApplicationEditable()) {
+      return true
+    }
+
+    const status = this.data.applicationStatus
+    let message = '当前申请状态暂不支持修改资料'
+    if (status === 'submitted') {
+      message = '申请已提交，暂时不能修改资料'
+      this.setData({ currentStep: 4, isSubmitting: true })
+    } else if (status === 'approved') {
+      message = '入驻已通过，无需重复上传资料'
+    } else if (status === 'rejected') {
+      message = '申请已驳回，请先重置后再修改资料'
+    }
+
+    wx.showToast({ title: message, icon: 'none' })
+    return false
+  },
+
   async resolveUploadPreviewURL(assetId?: number): Promise<string> {
     if (assetId && assetId > 0) {
       try {
@@ -345,6 +387,7 @@ Page({
   },
 
   async onIdFrontUpload(e: UploadEvent) {
+    if (!this.ensureApplicationEditable()) return
     const { path } = e.detail
     if (!path) return
     this.setData({ 'idFront.url': path, 'idFront.rawUrl': path })
@@ -357,6 +400,7 @@ Page({
   },
 
   async onIdBackUpload(e: UploadEvent) {
+    if (!this.ensureApplicationEditable()) return
     const { path } = e.detail
     if (!path) return
     this.setData({ 'idBack.url': path, 'idBack.rawUrl': path })
@@ -369,6 +413,7 @@ Page({
   },
 
   async onHealthCertUpload(e: UploadEvent) {
+    if (!this.ensureApplicationEditable()) return
     const { path } = e.detail
     if (!path) return
     this.setData({ 'healthCert.url': path, 'healthCert.rawUrl': path })
@@ -381,6 +426,8 @@ Page({
   },
 
   async removeUploadedDocument(field: UploadField) {
+    if (!this.ensureApplicationEditable()) return
+
     const documentMap: Record<UploadField, {
       documentType: 'id_card_front' | 'id_card_back' | 'health_cert'
       data: Record<string, unknown>
@@ -601,8 +648,19 @@ Page({
         }
       }, 1500)
     } catch (e: unknown) {
-      this.setData({ isSubmitting: false, currentStep: 3 })
-      wx.showToast({ title: getErrorMessage(e, '提交失败'), icon: 'none' })
+      const message = getErrorMessage(e, '提交失败')
+      const shouldReturnToEdit = isDocumentCorrectionError(message)
+      this.setData({ isSubmitting: false, currentStep: shouldReturnToEdit ? 2 : 3 })
+      wx.showModal({
+        title: shouldReturnToEdit ? '请修改资料后重试' : '提交失败',
+        content: message,
+        showCancel: false,
+        success: () => {
+          if (shouldReturnToEdit) {
+            this.setData({ currentStep: 1 })
+          }
+        }
+      })
     }
   }
 })

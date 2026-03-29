@@ -161,15 +161,24 @@
       </view>
     </view>
 
-    <!-- Step 4: Loading/Polling -->
+    <!-- Step 4: 审核状态 -->
     <view class="step-view center" wx:if="{{currentStep === 4}}">
-      <t-loading theme="circular" size="80rpx" layout="vertical" text="申请处理中..." />
-      <view class="loading-sub">请勿关闭页面</view>
+      <view class="result-status">
+        <t-icon
+          name="{{applicationStatus === 'approved' ? 'check-circle-filled' : 'time-filled'}}"
+          size="160rpx"
+          color="{{applicationStatus === 'approved' ? 'var(--td-success-color)' : '#FF9800'}}"
+        />
+        <view class="status-text">{{applicationStatus === 'approved' ? '申请已通过' : '申请已提交，审核中'}}</view>
+        <view class="status-hint" wx:if="{{applicationStatus === 'approved'}}">平台已完成审核，请返回个人中心继续后续操作。</view>
+        <view class="status-hint" wx:else>平台将在 24 小时内完成审核，请留意站内消息与电话联系。</view>
+      </view>
+      <t-button theme="primary" block size="large" bindtap="onBackHome" shape="round">返回个人中心</t-button>
     </view>
   </view>
 
   <!-- Navigation Buttons -->
-  <view class="action-bar animate-slide-up">
+  <view class="action-bar animate-slide-up" wx:if="{{currentStep < 4}}">
     <view class="consent-row" wx:if="{{currentStep === 0 || currentStep === 3}}">
       <checkbox-group bindchange="onConsentChange">
         <label class="consent-label">

@@ -1,6 +1,7 @@
 import { 
   getOrCreateOperatorApplication, 
   getOperatorApplication,
+  resetOperatorApplication,
   updateOperatorBasic, 
   deleteOperatorApplicationDocument,
   ocrOperatorBusinessLicense, 
@@ -232,7 +233,7 @@ Page({
     try {
       // 使用 GET 获取已有申请草稿
       const res = await getOperatorApplication()
-      if (res) {
+      if (res?.id) {
         this.mapResponseToData(res)
         
         // 根据状态跳转
@@ -261,7 +262,13 @@ Page({
           wx.showModal({
             title: '审核未通过',
             content: `原因：${res.reject_reason || '资料核验失败'}`,
-            confirmText: '修改资料'
+            confirmText: '重新填写资料',
+            cancelText: '稍后再说',
+            success: (result) => {
+              if (result.confirm) {
+                void this.restartRejectedApplication()
+              }
+            }
           })
         }
       }
@@ -277,6 +284,20 @@ Page({
       } else {
         logger.error('Init operator application failed', e)
       }
+    }
+  },
+
+  async restartRejectedApplication() {
+    wx.showLoading({ title: '恢复可编辑状态...', mask: true })
+    try {
+      const draft = await resetOperatorApplication()
+      this.mapResponseToData(draft)
+      this.setData({ currentStep: 1 })
+    } catch (e: unknown) {
+      logger.error('Reset rejected operator application failed', e)
+      wx.showToast({ title: getErrorText(e, '恢复失败，请稍后重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
     }
   },
 
