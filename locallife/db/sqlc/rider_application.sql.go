@@ -407,11 +407,11 @@ SET
     reviewed_at = NULL,
     submitted_at = NULL,
     updated_at = now()
-WHERE id = $1 AND status = 'rejected'
+WHERE id = $1 AND status IN ('submitted', 'rejected')
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
-// 重置申请为草稿状态（被拒绝后可重新编辑）
+// 重置申请为草稿状态（支持待审核或被拒绝后重新编辑）
 func (q *Queries) ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error) {
 	row := q.db.QueryRow(ctx, resetRiderApplicationToDraft, id)
 	var i RiderApplication

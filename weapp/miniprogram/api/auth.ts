@@ -141,7 +141,7 @@ export function wechatLogin(data: WechatLoginRequest) {
 }
 
 /**
- * 刷新访问令牌 - 基于 /v1/auth/renew-access
+ * 刷新访问令牌 - 基于 /v1/auth/refresh
  * 后端已启用统一响应信封（X-Response-Envelope: 1），返回 { code, message, data } 格式
  */
 export function renewAccessToken(data: RefreshTokenRequest) {

@@ -1493,7 +1493,7 @@ type Querier interface {
 	ResetMerchantApplicationToDraft(ctx context.Context, id int64) (MerchantApplication, error)
 	// 重置被拒绝的申请为草稿（允许重新编辑提交）
 	ResetOperatorApplicationToDraft(ctx context.Context, id int64) (OperatorApplication, error)
-	// 重置申请为草稿状态（被拒绝后可重新编辑）
+	// 重置申请为草稿状态（支持待审核或被拒绝后重新编辑）
 	ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error)
 	ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error
 	RestoreRiderDepositCreditByPaymentOrderID(ctx context.Context, arg RestoreRiderDepositCreditByPaymentOrderIDParams) (RiderDepositCredit, error)

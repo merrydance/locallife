@@ -154,7 +154,7 @@ WHERE id = $1 AND status = 'submitted'
 RETURNING *;
 
 -- name: ResetRiderApplicationToDraft :one
--- 重置申请为草稿状态（被拒绝后可重新编辑）
+-- 重置申请为草稿状态（支持待审核或被拒绝后重新编辑）
 UPDATE rider_applications
 SET 
     status = 'draft',
@@ -163,7 +163,7 @@ SET
     reviewed_at = NULL,
     submitted_at = NULL,
     updated_at = now()
-WHERE id = $1 AND status = 'rejected'
+WHERE id = $1 AND status IN ('submitted', 'rejected')
 RETURNING *;
 
 -- name: ListRiderApplications :many

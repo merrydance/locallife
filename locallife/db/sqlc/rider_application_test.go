@@ -334,6 +334,37 @@ func TestResetRiderApplicationToDraft(t *testing.T) {
 	require.False(t, reset.SubmittedAt.Valid)
 }
 
+func TestResetSubmittedRiderApplicationToDraft(t *testing.T) {
+	app := createRandomRiderApplication(t)
+
+	_, _ = testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
+		ID:       app.ID,
+		RealName: pgtype.Text{String: "张三", Valid: true},
+		Phone:    pgtype.Text{String: "13812345678", Valid: true},
+	})
+	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:                      app.ID,
+		IDCardFrontMediaAssetID: pgtype.Int8{},
+		IDCardBackMediaAssetID:  pgtype.Int8{},
+	})
+	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
+	})
+	submitted, err := testStore.SubmitRiderApplication(context.Background(), app.ID)
+	require.NoError(t, err)
+	require.Equal(t, "submitted", submitted.Status)
+	require.True(t, submitted.SubmittedAt.Valid)
+
+	reset, err := testStore.ResetRiderApplicationToDraft(context.Background(), app.ID)
+	require.NoError(t, err)
+	require.Equal(t, "draft", reset.Status)
+	require.False(t, reset.RejectReason.Valid)
+	require.False(t, reset.SubmittedAt.Valid)
+	require.False(t, reset.ReviewedAt.Valid)
+	require.False(t, reset.ReviewedBy.Valid)
+}
+
 // ==================== List Tests ====================
 
 func TestListRiderApplications(t *testing.T) {

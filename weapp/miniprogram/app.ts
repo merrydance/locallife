@@ -1,5 +1,5 @@
 import { tracker, EventType } from './utils/tracker'
-import { wechatLogin, getUserInfo, getDeviceId } from './api/auth'
+import { wechatLogin, getUserInfo, getDeviceId, type UserResponse } from './api/auth'
 import { setToken } from './utils/auth'
 import { logger } from './utils/logger'
 import { AppError, ErrorHandler, ErrorType } from './utils/error-handler'
@@ -292,7 +292,7 @@ App<IAppOption>({
       const refreshToken = getRefreshToken() as string
       if (refreshToken) {
         logger.info('Token 已过期，尝试 refresh_token 静默续期', undefined, 'App.silentLogin')
-        this._refreshThenLoadUser(refreshToken, MAX_LOGIN_RETRIES, RETRY_DELAYS)
+        this._refreshThenLoadUser(MAX_LOGIN_RETRIES, RETRY_DELAYS)
         return
       }
 
@@ -333,53 +333,28 @@ App<IAppOption>({
     }
   },
 
-  /** 使用 refresh_token 静默续期，成功后拉取用户信息；失败则降级到 wx.login */
-  _refreshThenLoadUser(refreshToken: string, max: number, delays: number[]) {
-    const { API_BASE } = require('./utils/request')
+  /** 使用统一刷新锁执行静默续期，成功后拉取用户信息；失败则降级到 wx.login */
+  _refreshThenLoadUser(max: number, delays: number[]) {
+    const { refreshAuthToken } = require('./utils/request')
     const { clearToken } = require('./utils/auth')
 
-    wx.request({
-      url: `${API_BASE}/v1/auth/refresh`,
-      method: 'POST',
-      data: { refresh_token: refreshToken },
-      header: { 'Content-Type': 'application/json', 'X-Response-Envelope': '1' },
-      timeout: 10000,
-      success: (res) => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const body = res.data as any
-        if (res.statusCode === 200 && body?.code === 0 && body?.data?.access_token) {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const d = body.data as any
-          const expiresAt = d.access_token_expires_at
-            ? new Date(d.access_token_expires_at).getTime()
-            : undefined
-          setToken(d.access_token, expiresAt, d.refresh_token)
-          logger.info('refresh_token 续期成功，拉取用户信息', undefined, 'App._refreshThenLoadUser')
-          getUserInfo()
-            .then((user) => {
-              this._applyUserInfo(user)
-              logger.info('✅ 静默登录成功 (refresh_token)', { userId: user.id }, 'App._refreshThenLoadUser')
-              if (this.globalData.latitude && this.globalData.longitude) {
-                this.reverseGeocodeWhenReady()
-              }
-            })
-            .catch((_err: unknown) => {
-              logger.warn('refresh_token 续期后 getUserInfo 失败，降级到 wx.login', _err, 'App._refreshThenLoadUser')
-              clearToken()
-              this._doWxLogin(0, max, delays)
-            })
-        } else {
-          logger.warn('refresh_token 已失效，降级到 wx.login', { statusCode: res.statusCode, code: body?.code }, 'App._refreshThenLoadUser')
-          clearToken()
-          this._doWxLogin(0, max, delays)
+    refreshAuthToken(true)
+      .then(() => {
+        logger.info('refresh_token 续期成功，拉取用户信息', undefined, 'App._refreshThenLoadUser')
+        return getUserInfo()
+      })
+      .then((user: UserResponse) => {
+        this._applyUserInfo(user)
+        logger.info('✅ 静默登录成功 (refresh_token)', { userId: user.id }, 'App._refreshThenLoadUser')
+        if (this.globalData.latitude && this.globalData.longitude) {
+          this.reverseGeocodeWhenReady()
         }
-      },
-      fail: (err) => {
-        logger.warn('refresh_token 请求失败，降级到 wx.login', err, 'App._refreshThenLoadUser')
+      })
+      .catch((err: unknown) => {
+        logger.warn('refresh_token 静默续期失败，降级到 wx.login', err, 'App._refreshThenLoadUser')
         clearToken()
         this._doWxLogin(0, max, delays)
-      }
-    })
+      })
   },
 
   /** 完整的 wx.login → 后端 wechatLogin 流程（慢速路径及重试） */
