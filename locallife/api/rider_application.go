@@ -615,6 +615,9 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 
 	// 5. 健康证姓名必须与身份证一致
 	idName := normalizePersonName(ocrData.Name)
+	if idName == "" && app.RealName.Valid {
+		idName = normalizePersonName(app.RealName.String)
+	}
 	healthName := normalizePersonName(healthOCR.Name)
 	if idName == "" {
 		return false, "身份证姓名未识别，请重新上传清晰的身份证正面照片"

@@ -88,6 +88,18 @@ func TestCheckRiderApplicationApproval_AcceptsStringifiedHealthCertOCR(t *testin
 	require.Empty(t, rejectReason)
 }
 
+func TestCheckRiderApplicationApproval_FallsBackToApplicationRealName(t *testing.T) {
+	server := &Server{}
+	app := randomRiderApplicationWithData(1)
+	app.IDCardOcr = []byte(`{"id_number":"110101199001011234","valid_end":"20350101"}`)
+	app.RealName = pgtype.Text{String: "张三", Valid: true}
+
+	approved, rejectReason := server.checkRiderApplicationApproval(app)
+
+	require.True(t, approved)
+	require.Empty(t, rejectReason)
+}
+
 // ==================== 创建/获取草稿测试 ====================
 
 func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
