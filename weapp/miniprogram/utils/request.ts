@@ -688,11 +688,15 @@ async function performTokenRefresh(force: boolean = false): Promise<void> {
 /**
  * 确保Token有效性(请求前检查)
  */
-async function ensureValidToken(): Promise<void> {
+export async function ensureValidToken(): Promise<void> {
   if (!hasToken()) {
     return performTokenRefresh(true)
   }
   return performTokenRefresh(false)
+}
+
+export async function refreshAuthToken(force: boolean = false): Promise<void> {
+  return performTokenRefresh(force)
 }
 
 /**

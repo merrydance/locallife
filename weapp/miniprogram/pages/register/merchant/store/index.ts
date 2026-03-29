@@ -255,14 +255,14 @@ Page({
         return ''
       }
 
-      const licenseUrl = await safeResolve(data.business_license_media_asset_id)
-      const foodLicenseUrl = await safeResolve(data.food_permit_media_asset_id)
+      const licenseUrl = getMediaDisplayUrl(data.business_license_url || '')
+      const foodLicenseUrl = getMediaDisplayUrl(data.food_permit_url || '')
       const idCardFrontUrl = await safeResolve(data.id_card_front_media_asset_id)
       const idCardBackUrl = await safeResolve(data.id_card_back_media_asset_id)
 
-      // 私有材料保留稳定标识用于失败重试，但不再依赖旧 URL 字段。
-      const licenseImages = licenseUrl ? [{ url: licenseUrl, rawUrl: buildPrivateAssetKey(data.business_license_media_asset_id), assetId: data.business_license_media_asset_id ?? undefined }] : []
-      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, rawUrl: buildPrivateAssetKey(data.food_permit_media_asset_id), assetId: data.food_permit_media_asset_id ?? undefined }] : []
+      // 公开证照直接使用后端返回的本人可见 URL；仅身份证保留私有重签名标识。
+      const licenseImages = licenseUrl ? [{ url: licenseUrl, assetId: data.business_license_media_asset_id ?? undefined }] : []
+      const foodLicenseImages = foodLicenseUrl ? [{ url: foodLicenseUrl, assetId: data.food_permit_media_asset_id ?? undefined }] : []
       const idCardFrontImages = idCardFrontUrl ? [{ url: idCardFrontUrl, rawUrl: buildPrivateAssetKey(data.id_card_front_media_asset_id), assetId: data.id_card_front_media_asset_id ?? undefined }] : []
       const idCardBackImages = idCardBackUrl ? [{ url: idCardBackUrl, rawUrl: buildPrivateAssetKey(data.id_card_back_media_asset_id), assetId: data.id_card_back_media_asset_id ?? undefined }] : []
       const accountPermitImages: Array<{ url: string }> = []

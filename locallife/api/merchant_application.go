@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
 	"github.com/rs/zerolog/log"
@@ -113,10 +115,12 @@ type merchantApplicationDraftResponse struct {
 	Latitude                    *string                 `json:"latitude,omitempty"`
 	RegionID                    *int64                  `json:"region_id,omitempty"`
 	BusinessLicenseMediaAssetID *int64                  `json:"business_license_media_asset_id,omitempty"`
+	BusinessLicenseURL          *string                 `json:"business_license_url,omitempty"`
 	BusinessLicenseNumber       string                  `json:"business_license_number"`
 	BusinessScope               *string                 `json:"business_scope,omitempty"`
 	BusinessLicenseOCR          *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
 	FoodPermitMediaAssetID      *int64                  `json:"food_permit_media_asset_id,omitempty"`
+	FoodPermitURL               *string                 `json:"food_permit_url,omitempty"`
 	FoodPermitOCR               *FoodPermitOCRData      `json:"food_permit_ocr,omitempty"`
 	LegalPersonName             string                  `json:"legal_person_name"`
 	LegalPersonIDNumber         string                  `json:"legal_person_id_number"`
@@ -160,7 +164,24 @@ func checkApplicationEditable(status string) (editable bool, needReset bool, err
 	}
 }
 
-func (server *Server) newMerchantApplicationDraftResponse(app db.MerchantApplication) merchantApplicationDraftResponse {
+func (server *Server) applicantVisiblePublicMediaURL(ctx context.Context, assetID *int64, userID int64) *string {
+	if assetID == nil || server.store == nil || server.mediaResolver == nil {
+		return nil
+	}
+
+	asset, err := server.store.GetMediaAssetByID(ctx, *assetID)
+	if err != nil || asset.Visibility != string(media.VisibilityPublic) {
+		return nil
+	}
+	if asset.ModerationStatus != "approved" && asset.UploadedBy != userID {
+		return nil
+	}
+
+	url := server.mediaResolver.PublicURL(asset.ObjectKey, media.VariantOriginal)
+	return &url
+}
+
+func (server *Server) newMerchantApplicationDraftResponse(ctx context.Context, app db.MerchantApplication) merchantApplicationDraftResponse {
 	resp := merchantApplicationDraftResponse{
 		ID:                          app.ID,
 		UserID:                      app.UserID,
@@ -217,6 +238,8 @@ func (server *Server) newMerchantApplicationDraftResponse(app db.MerchantApplica
 
 	// 食品许可证媒体资产ID
 	resp.FoodPermitMediaAssetID = int64PtrFromPgInt8(app.FoodPermitMediaAssetID)
+	resp.BusinessLicenseURL = server.applicantVisiblePublicMediaURL(ctx, resp.BusinessLicenseMediaAssetID, app.UserID)
+	resp.FoodPermitURL = server.applicantVisiblePublicMediaURL(ctx, resp.FoodPermitMediaAssetID, app.UserID)
 
 	// 拒绝原因
 	if app.RejectReason.Valid {
@@ -312,14 +335,14 @@ func (server *Server) getOrCreateMerchantApplicationDraft(ctx *gin.Context) {
 				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 				return
 			}
-			ctx.JSON(http.StatusCreated, server.newMerchantApplicationDraftResponse(newApp))
+			ctx.JSON(http.StatusCreated, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), newApp))
 			return
 		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(app))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), app))
 }
 
 // ==================== 更新基础信息 ====================
@@ -483,7 +506,7 @@ func (server *Server) updateMerchantApplicationBasicInfo(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(updatedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
 }
 
 // ==================== 更新门头照和环境照 ====================
@@ -618,7 +641,7 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 		}
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(updatedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
 }
 
 // ==================== 上传营业执照并OCR识别 ====================
@@ -748,7 +771,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 			Int64("user_role_id", txResult.UserRole.ID).
 			Msg("商户审核通过事务完成")
 
-		ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(txResult.Application))
+		ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), txResult.Application))
 		return
 	}
 
@@ -762,7 +785,7 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(rejectedApp))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), rejectedApp))
 }
 
 // validateMerchantApplicationRequired 验证必填字段
@@ -1663,5 +1686,5 @@ func (server *Server) resetMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(resetResult.Application))
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), resetResult.Application))
 }

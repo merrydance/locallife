@@ -91,6 +91,38 @@ func randomMerchantAppDraftWithData(userID int64) db.MerchantApplication {
 	}
 }
 
+func expectMerchantApplicationPublicDocumentLookups(store *mockdb.MockStore, userID int64) {
+	assets := map[int64]db.MediaAsset{
+		1: {
+			ID:               1,
+			UploadedBy:       userID,
+			Visibility:       "public",
+			MediaCategory:    "food_permit",
+			ModerationStatus: "pending",
+			ObjectKey:        "merchant/applications/1/food-permit.jpg",
+		},
+		2: {
+			ID:               2,
+			UploadedBy:       userID,
+			Visibility:       "public",
+			MediaCategory:    "business_license",
+			ModerationStatus: "pending",
+			ObjectKey:        "merchant/applications/1/business-license.jpg",
+		},
+	}
+
+	store.EXPECT().
+		GetMediaAssetByID(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		DoAndReturn(func(_ context.Context, mediaID int64) (db.MediaAsset, error) {
+			asset, ok := assets[mediaID]
+			if !ok {
+				return db.MediaAsset{}, db.ErrRecordNotFound
+			}
+			return asset, nil
+		})
+}
+
 // ==================== 获取或创建草稿测试 ====================
 
 func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
@@ -173,6 +205,7 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -329,6 +362,7 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -602,6 +636,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -687,6 +722,7 @@ func TestResetMerchantApplication(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -813,6 +849,7 @@ func TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 	store.EXPECT().
 		GetMerchantApplicationDraft(gomock.Any(), user.ID).
 		Times(1).
@@ -832,8 +869,12 @@ func TestGetOrCreateMerchantApplicationDraft_WithMediaAssetIDs(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.NotNil(t, resp.BusinessLicenseMediaAssetID)
 	require.Equal(t, int64(2), *resp.BusinessLicenseMediaAssetID)
+	require.NotNil(t, resp.BusinessLicenseURL)
+	require.Contains(t, *resp.BusinessLicenseURL, "business-license.jpg")
 	require.NotNil(t, resp.FoodPermitMediaAssetID)
 	require.Equal(t, int64(1), *resp.FoodPermitMediaAssetID)
+	require.NotNil(t, resp.FoodPermitURL)
+	require.Contains(t, *resp.FoodPermitURL, "food-permit.jpg")
 	require.NotNil(t, resp.IDCardFrontMediaAssetID)
 	require.Equal(t, int64(3), *resp.IDCardFrontMediaAssetID)
 	require.NotNil(t, resp.IDCardBackMediaAssetID)
@@ -879,6 +920,7 @@ func TestGetOrCreateMerchantApplicationDraft_ReturnsAsyncOCRFields(t *testing.T)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 	store.EXPECT().
 		GetMerchantApplicationDraft(gomock.Any(), user.ID).
 		Times(1).
@@ -932,6 +974,7 @@ func TestGetOrCreateMerchantApplicationDraft_RewritesPublicImageArraysInLocalMod
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	expectMerchantApplicationPublicDocumentLookups(store, user.ID)
 	store.EXPECT().
 		GetMerchantApplicationDraft(gomock.Any(), user.ID).
 		Times(1).

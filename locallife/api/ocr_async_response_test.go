@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
@@ -62,7 +63,7 @@ func TestNewMerchantApplicationDraftResponse_PreservesAsyncOCRFields(t *testing.
 	}
 
 	server := &Server{}
-	resp := server.newMerchantApplicationDraftResponse(app)
+	resp := server.newMerchantApplicationDraftResponse(context.Background(), app)
 
 	require.NotNil(t, resp.BusinessLicenseOCR)
 	require.Equal(t, "processing", resp.BusinessLicenseOCR.Status)

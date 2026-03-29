@@ -58,11 +58,11 @@ func TestAliyunProviderRecognizeReturnsRawPayload(t *testing.T) {
 func TestAliyunProviderRecognizeNormalizesFoodPermit(t *testing.T) {
 	raw := json.RawMessage(`{
 		"Data": {
-			"LicenseNumber": "JY12345678901234",
-			"CompanyName": "本地生活餐饮店",
-			"OperatorName": "张三",
-			"Address": "测试路1号",
-			"ValidTo": "2027年01月08日"
+			"operatorName": "本地生活餐饮店",
+			"legalRepresentative": "张三",
+			"businessAddress": "测试路1号",
+			"licenceNumber": "JY12345678901234",
+			"validToDate": "2027年01月08日"
 		}
 	}`)
 	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
@@ -82,6 +82,9 @@ func TestAliyunProviderRecognizeNormalizesFoodPermit(t *testing.T) {
 	if resp.Normalized.FoodPermit.OperatorName != "张三" {
 		t.Fatalf("operator name = %s", resp.Normalized.FoodPermit.OperatorName)
 	}
+	if resp.Normalized.FoodPermit.Address != "测试路1号" {
+		t.Fatalf("address = %s", resp.Normalized.FoodPermit.Address)
+	}
 	if resp.Normalized.FoodPermit.ValidPeriod != "2027年01月08日" {
 		t.Fatalf("valid period = %s", resp.Normalized.FoodPermit.ValidPeriod)
 	}
@@ -93,6 +96,46 @@ func TestAliyunProviderRecognizeNormalizesFoodPermit(t *testing.T) {
 	}
 	if !strings.Contains(resp.Normalized.FoodPermit.RawText, "经营者姓名：张三") {
 		t.Fatalf("raw text = %s", resp.Normalized.FoodPermit.RawText)
+	}
+}
+
+func TestAliyunOpenAPIClientRecognizeFoodPermitUsesCorrectAction(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		if got := r.Header.Get("x-acs-action"); got != "RecognizeFoodManageLicense" {
+			t.Fatalf("x-acs-action = %s", got)
+		}
+		if got := r.URL.RawQuery; got != "" {
+			t.Fatalf("raw query = %q", got)
+		}
+		_, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"RequestId":"food-123"}`))
+	}))
+	defer server.Close()
+
+	client := &AliyunOpenAPIClient{
+		endpoint:        server.URL,
+		region:          "cn-hangzhou",
+		accessKeyID:     "test-ak",
+		accessKeySecret: "test-sk",
+		httpClient:      server.Client(),
+		clock: func() time.Time {
+			return time.Date(2026, time.March, 29, 1, 2, 3, 0, time.UTC)
+		},
+		nonce: func() string {
+			return "nonce-food-123"
+		},
+	}
+	client.signer = client.defaultSigner
+
+	_, err := client.Recognize(context.Background(), CapabilityAliyunFoodPermit, RecognizeRequest{
+		DocumentType: DocumentTypeFoodPermit,
+		ContentType:  "image/jpeg",
+		Data:         []byte("food-license-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
 	}
 }
 
@@ -209,11 +252,14 @@ func TestAliyunOpenAPIClientRecognizeSignsAndSendsRequest(t *testing.T) {
 			t.Fatalf("read body: %v", err)
 		}
 		capturedBody = payload
+		if got := r.URL.RawQuery; got != "" {
+			t.Fatalf("raw query = %q", got)
+		}
 		capturedAuth = r.Header.Get("Authorization")
 		capturedHash = r.Header.Get("x-acs-content-sha256")
 		capturedNonce = r.Header.Get("x-acs-signature-nonce")
 		capturedDate = r.Header.Get("x-acs-date")
-		if got := r.Header.Get("x-acs-action"); got != "RecognizeIdentityCard" {
+		if got := r.Header.Get("x-acs-action"); got != "RecognizeIdcard" {
 			t.Fatalf("x-acs-action = %s", got)
 		}
 		if got := r.Header.Get("x-acs-version"); got != "2021-07-07" {

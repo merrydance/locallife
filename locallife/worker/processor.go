@@ -163,9 +163,7 @@ func newMerchantApplicationOCRService(store db.Store, reader ocr.BinaryReader, w
 		}
 		routes[ocr.DocumentTypeBusinessLicense] = ocr.Route{Provider: aliyunProvider, Capability: ocr.CapabilityAliyunBusinessLicense}
 		routes[ocr.DocumentTypeIDCard] = ocr.Route{Provider: aliyunProvider, Capability: ocr.CapabilityAliyunIDCard}
-		if wechatClient != nil {
-			routes[ocr.DocumentTypeFoodPermit] = ocr.Route{Provider: ocr.NewWechatPrintedTextProvider(wechatClient), Capability: ocr.CapabilityWechatPrintedText}
-		}
+		routes[ocr.DocumentTypeFoodPermit] = ocr.Route{Provider: aliyunProvider, Capability: ocr.CapabilityAliyunFoodPermit}
 	} else if wechatClient != nil {
 		routes[ocr.DocumentTypeFoodPermit] = ocr.Route{Provider: ocr.NewWechatPrintedTextProvider(wechatClient), Capability: ocr.CapabilityWechatPrintedText}
 		routes[ocr.DocumentTypeBusinessLicense] = ocr.Route{Provider: ocr.NewWechatBusinessLicenseProvider(wechatClient), Capability: ocr.CapabilityWechatBusinessLicense}

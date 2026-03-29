@@ -59,10 +59,12 @@ export interface MerchantApplicationDraftResponse {
   latitude: string | null
   region_id: number | null
   business_license_media_asset_id?: number | null
+  business_license_url?: string | null
   business_license_number: string
   business_scope: string | null
   business_license_ocr: BusinessLicenseOCRData | null
   food_permit_media_asset_id?: number | null
+  food_permit_url?: string | null
   food_permit_ocr: FoodPermitOCRData | null
   legal_person_name: string
   legal_person_id_number: string

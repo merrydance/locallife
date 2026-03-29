@@ -32395,6 +32395,9 @@ const docTemplate = `{
                 "business_license_ocr": {
                     "$ref": "#/definitions/api.BusinessLicenseOCRData"
                 },
+                "business_license_url": {
+                    "type": "string"
+                },
                 "business_scope": {
                     "type": "string"
                 },
@@ -32415,6 +32418,9 @@ const docTemplate = `{
                 },
                 "food_permit_ocr": {
                     "$ref": "#/definitions/api.FoodPermitOCRData"
+                },
+                "food_permit_url": {
+                    "type": "string"
                 },
                 "id": {
                     "type": "integer"

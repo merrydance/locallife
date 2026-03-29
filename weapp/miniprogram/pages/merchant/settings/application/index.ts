@@ -13,6 +13,7 @@ import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 import { AppError, ErrorType } from '../../../../utils/error-handler'
 import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { logger } from '../../../../utils/logger'
+import { getMediaDisplayUrl } from '../../../../utils/media'
 import { getStableBarHeights } from '../../../../utils/responsive'
 
 type ApplicationForm = {
@@ -178,6 +179,10 @@ function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSucc
   return address || name || ''
 }
 
+function resolveDraftPublicAssetUrl(url?: string | null) {
+  return getMediaDisplayUrl(url || '')
+}
+
 function isPendingOcrStatus(status?: string) {
   return status === 'pending' || status === 'processing'
 }
@@ -305,12 +310,12 @@ Page({
   },
 
   async applyDraftToPage(draft: MerchantApplicationDraftResponse, keepDirty: boolean) {
-    const [licenseUrl, foodPermitUrl, idCardFrontUrl, idCardBackUrl] = await Promise.all([
-      this.resolvePrivateAssetUrl(draft.business_license_media_asset_id),
-      this.resolvePrivateAssetUrl(draft.food_permit_media_asset_id),
+    const [idCardFrontUrl, idCardBackUrl] = await Promise.all([
       this.resolvePrivateAssetUrl(draft.id_card_front_media_asset_id),
       this.resolvePrivateAssetUrl(draft.id_card_back_media_asset_id)
     ])
+    const licenseUrl = resolveDraftPublicAssetUrl(draft.business_license_url)
+    const foodPermitUrl = resolveDraftPublicAssetUrl(draft.food_permit_url)
 
     const form = keepDirty ? this.data.form : buildForm(draft)
     const initialForm = buildForm(draft)
@@ -683,12 +688,12 @@ Page({
       nextForm.legalPersonIdNumber = draft.id_card_front_ocr?.id_number || draft.legal_person_id_number || nextForm.legalPersonIdNumber
     }
 
-    const [licenseUrl, foodPermitUrl, idCardFrontUrl, idCardBackUrl] = await Promise.all([
-      draft.business_license_media_asset_id ? this.resolvePrivateAssetUrl(draft.business_license_media_asset_id) : Promise.resolve(''),
-      draft.food_permit_media_asset_id ? this.resolvePrivateAssetUrl(draft.food_permit_media_asset_id) : Promise.resolve(''),
+    const [idCardFrontUrl, idCardBackUrl] = await Promise.all([
       draft.id_card_front_media_asset_id ? this.resolvePrivateAssetUrl(draft.id_card_front_media_asset_id) : Promise.resolve(''),
       draft.id_card_back_media_asset_id ? this.resolvePrivateAssetUrl(draft.id_card_back_media_asset_id) : Promise.resolve('')
     ])
+    const licenseUrl = resolveDraftPublicAssetUrl(draft.business_license_url)
+    const foodPermitUrl = resolveDraftPublicAssetUrl(draft.food_permit_url)
 
     const ocrStatuses = [
       (draft.business_license_ocr?.status || this.data.licenseOcrStatus || '') as OcrStatus,

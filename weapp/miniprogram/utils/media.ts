@@ -7,7 +7,7 @@
  *   3. POST /v1/media/complete         — 通知后端完成，获取 media_id 与 CDN 链接
  */
 
-import { API_BASE } from './request'
+import { API_BASE, ensureValidToken, refreshAuthToken } from './request'
 import { getToken } from './auth'
 import { AppError, ErrorType } from './error-handler'
 import { logger } from './logger'
@@ -107,7 +107,7 @@ interface CreateSessionResponse {
 function createMediaUploadSession(
   req: CreateSessionRequest
 ): Promise<CreateSessionResponse> {
-  return new Promise((resolve, reject) => {
+  const doRequest = (): Promise<CreateSessionResponse> => new Promise((resolve, reject) => {
     wx.request({
       url: `${API_BASE}/v1/media/upload-sessions`,
       method: 'POST',
@@ -122,28 +122,33 @@ function createMediaUploadSession(
         if (res.statusCode === 200 || res.statusCode === 201) {
           if (body?.code === 0 && body?.data) {
             resolve(body.data as CreateSessionResponse)
-          } else {
-            reject(
-              new AppError({
-                type: ErrorType.BUSINESS,
-                message: String(body?.message ?? '创建上传会话失败'),
-                userMessage: '上传失败'
-              })
-            )
+            return
           }
-        } else {
           reject(
             new AppError({
-              type: ErrorType.NETWORK,
-              message: `HTTP ${res.statusCode}`,
+              type: ErrorType.BUSINESS,
+              message: String(body?.message ?? '创建上传会话失败'),
               userMessage: '上传失败'
             })
           )
+          return
         }
+        reject({ statusCode: res.statusCode, body })
       },
       fail: (err) => reject(err)
     })
   })
+
+  return ensureValidToken()
+    .then(() => doRequest())
+    .catch(async (err) => {
+      const statusCode = (err as { statusCode?: number })?.statusCode
+      if (statusCode === 401) {
+        await refreshAuthToken(true)
+        return doRequest()
+      }
+      throw normalizeMediaRequestError(err, '创建上传会话失败', '上传失败')
+    })
 }
 
 /**
@@ -199,7 +204,7 @@ interface CompleteUploadResponse {
 function completeMediaUpload(
   req: CompleteUploadRequest
 ): Promise<CompleteUploadResponse> {
-  return new Promise((resolve, reject) => {
+  const doRequest = (): Promise<CompleteUploadResponse> => new Promise((resolve, reject) => {
     wx.request({
       url: `${API_BASE}/v1/media/complete`,
       method: 'POST',
@@ -214,28 +219,33 @@ function completeMediaUpload(
         if (res.statusCode === 200 || res.statusCode === 201) {
           if (body?.code === 0 && body?.data) {
             resolve(body.data as CompleteUploadResponse)
-          } else {
-            reject(
-              new AppError({
-                type: ErrorType.BUSINESS,
-                message: String(body?.message ?? '完成上传失败'),
-                userMessage: '上传失败'
-              })
-            )
+            return
           }
-        } else {
           reject(
             new AppError({
-              type: ErrorType.NETWORK,
-              message: `HTTP ${res.statusCode}`,
+              type: ErrorType.BUSINESS,
+              message: String(body?.message ?? '完成上传失败'),
               userMessage: '上传失败'
             })
           )
+          return
         }
+        reject({ statusCode: res.statusCode, body })
       },
       fail: (err) => reject(err)
     })
   })
+
+  return ensureValidToken()
+    .then(() => doRequest())
+    .catch(async (err) => {
+      const statusCode = (err as { statusCode?: number })?.statusCode
+      if (statusCode === 401) {
+        await refreshAuthToken(true)
+        return doRequest()
+      }
+      throw normalizeMediaRequestError(err, '完成上传失败', '上传失败')
+    })
 }
 
 // ==================== 公开 API ====================
@@ -296,7 +306,7 @@ export function postFormData<T = unknown>(
   url: string,
   data: Record<string, string | number>
 ): Promise<T> {
-  return new Promise((resolve, reject) => {
+  const doRequest = (): Promise<T> => new Promise((resolve, reject) => {
     wx.request({
       url: `${API_BASE}${url}`,
       method: 'POST',
@@ -311,27 +321,51 @@ export function postFormData<T = unknown>(
         if (res.statusCode === 200 || res.statusCode === 201) {
           if (body?.code === 0) {
             resolve(body.data as T)
-          } else {
-            reject(
-              new AppError({
-                type: ErrorType.BUSINESS,
-                message: String(body?.message ?? '请求失败'),
-                userMessage: String(body?.message ?? '操作失败')
-              })
-            )
+            return
           }
-        } else {
           reject(
             new AppError({
-              type: ErrorType.NETWORK,
-              message: `HTTP ${res.statusCode}`,
-              userMessage: '操作失败'
+              type: ErrorType.BUSINESS,
+              message: String(body?.message ?? '请求失败'),
+              userMessage: String(body?.message ?? '操作失败')
             })
           )
+          return
         }
+        reject({ statusCode: res.statusCode, body })
       },
       fail: (err) => reject(err)
     })
+  })
+
+  return ensureValidToken()
+    .then(() => doRequest())
+    .catch(async (err) => {
+      const statusCode = (err as { statusCode?: number })?.statusCode
+      if (statusCode === 401) {
+        await refreshAuthToken(true)
+        return doRequest()
+      }
+      throw normalizeMediaRequestError(err, '请求失败', '操作失败')
+    })
+}
+
+function normalizeMediaRequestError(err: unknown, message: string, userMessage: string): AppError {
+  if (err instanceof AppError) {
+    return err
+  }
+  const statusCode = (err as { statusCode?: number })?.statusCode
+  if (typeof statusCode === 'number') {
+    return new AppError({
+      type: statusCode === 401 ? ErrorType.AUTH : ErrorType.NETWORK,
+      message: `HTTP ${statusCode}: ${message}`,
+      userMessage: statusCode === 401 ? '登录已失效，请重试' : userMessage
+    })
+  }
+  return new AppError({
+    type: ErrorType.NETWORK,
+    message,
+    userMessage
   })
 }
 

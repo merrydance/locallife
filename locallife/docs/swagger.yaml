@@ -3753,6 +3753,8 @@ definitions:
         type: string
       business_license_ocr:
         $ref: '#/definitions/api.BusinessLicenseOCRData'
+      business_license_url:
+        type: string
       business_scope:
         type: string
       contact_phone:
@@ -3767,6 +3769,8 @@ definitions:
         type: integer
       food_permit_ocr:
         $ref: '#/definitions/api.FoodPermitOCRData'
+      food_permit_url:
+        type: string
       id:
         type: integer
       id_card_back_media_asset_id:

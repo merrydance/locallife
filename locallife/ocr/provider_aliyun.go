@@ -37,8 +37,8 @@ type aliyunOperation struct {
 
 var aliyunCapabilityMap = map[Capability]aliyunOperation{
 	CapabilityAliyunBusinessLicense: {Action: "RecognizeBusinessLicense", Version: "2021-07-07"},
-	CapabilityAliyunIDCard:          {Action: "RecognizeIdentityCard", Version: "2021-07-07"},
-	CapabilityAliyunFoodPermit:      {Action: "RecognizeFoodPermit", Version: "2021-07-07"},
+	CapabilityAliyunIDCard:          {Action: "RecognizeIdcard", Version: "2021-07-07"},
+	CapabilityAliyunFoodPermit:      {Action: "RecognizeFoodManageLicense", Version: "2021-07-07"},
 	CapabilityAliyunHealthCert:      {Action: "RecognizeHealthCert", Version: "2021-07-07"},
 }
 
@@ -119,18 +119,23 @@ func normalizeAliyunFoodPermitResult(raw json.RawMessage) *FoodPermitResult {
 	fields := collectAliyunStringFields(raw)
 	licenseNumber := firstAliyunField(fields,
 		"license_number", "licensenumber", "permit_no", "permitnumber", "foodpermitnumber",
-		"registrationnumber", "registernumber", "certificatenumber", "number")
+		"registrationnumber", "registernumber", "certificatenumber", "number",
+		"licence_number", "licencenumber", "licence_no", "licenceno")
 	businessName := firstAliyunField(fields,
 		"business_name", "businessname", "company_name", "companyname", "merchantname",
-		"unitname", "entityname", "shopname", "subjectname")
+		"unitname", "entityname", "shopname", "subjectname",
+		"operator_name", "operatorname")
 	operatorName := firstAliyunField(fields,
-		"operator_name", "operatorname", "legal_person", "legalperson", "legalrepresentative",
+		"legal_representative", "legalrepresentative", "legal_person", "legalperson",
 		"ownername", "managername", "principal", "personincharge")
-	address := firstAliyunField(fields, "address", "business_address", "businessaddress", "site")
+	address := firstAliyunField(fields,
+		"address", "business_address", "businessaddress", "office_address", "officeaddress", "site")
 	validFrom := firstAliyunField(fields,
-		"valid_from", "validfrom", "fromdate", "startdate", "effective_date", "effectivedate")
+		"valid_from", "validfrom", "fromdate", "startdate", "effective_date", "effectivedate",
+		"issue_date", "issuedate")
 	validTo := firstAliyunField(fields,
-		"valid_to", "validto", "todate", "enddate", "expiredate", "expirydate", "expirationdate")
+		"valid_to", "validto", "todate", "enddate", "expiredate", "expirydate", "expirationdate",
+		"valid_to_date", "validtodate", "standardized_valid_to_date", "standardizedvalidtodate")
 	validPeriod := firstAliyunField(fields, "valid_period", "validperiod")
 	rawText := firstAliyunField(fields, "raw_text", "rawtext", "ocr_text", "ocrtext", "alltext", "fulltext", "content", "text")
 	if rawText == "" {
@@ -342,11 +347,6 @@ func (c *AliyunOpenAPIClient) Recognize(ctx context.Context, capability Capabili
 	requestURL, err := url.Parse(c.endpoint)
 	if err != nil {
 		return nil, err
-	}
-	if capability == CapabilityAliyunIDCard && req.Side != DocumentSideUnknown {
-		query := requestURL.Query()
-		query.Set("Side", string(req.Side))
-		requestURL.RawQuery = query.Encode()
 	}
 	if len(req.Data) == 0 {
 		return nil, fmt.Errorf("aliyun ocr request body is empty for capability=%s media_asset_id=%d", capability, req.MediaAssetID)
