@@ -285,6 +285,8 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 	}
 
 	ocrData := readRiderIDCardOCR(app.IDCardOcr)
+	existingIDNumberPreview := maskRiderOCRIDPreview(ocrData.IDNumber)
+	existingNamePreview := maskRiderOCRPreview(ocrData.Name)
 	ocrData.Status = "done"
 	ocrData.Error = ""
 	ocrData.QueuedAt = job.CreatedAt.Format(time.RFC3339)
@@ -308,6 +310,31 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 		}
 	}
 
+	validPeriodRaw := ""
+	if normalized.IDCard != nil {
+		validPeriodRaw = normalized.IDCard.ValidPeriod
+	}
+	log.Info().
+		Int64("application_id", payload.ApplicationID).
+		Int64("ocr_job_id", job.ID).
+		Int64("media_asset_id", payload.MediaAssetID).
+		Str("provider", job.Provider).
+		Str("side", payload.Side).
+		Bool("has_id_card_result", normalized.IDCard != nil).
+		Bool("has_name", ocrData.Name != "").
+		Bool("has_id_number", ocrData.IDNumber != "").
+		Bool("has_valid_end", ocrData.ValidEnd != "").
+		Str("name_preview", maskRiderOCRPreview(ocrData.Name)).
+		Str("id_number_preview", maskRiderOCRIDPreview(ocrData.IDNumber)).
+		Str("valid_period_raw", truncateString(normalizeRiderOCRDateText(validPeriodRaw), 80)).
+		Str("existing_name_preview", existingNamePreview).
+		Str("existing_id_number_preview", existingIDNumberPreview).
+		Bool("front_asset_bound", app.IDCardFrontMediaAssetID.Valid).
+		Bool("back_asset_bound", app.IDCardBackMediaAssetID.Valid).
+		Int64("front_asset_id", app.IDCardFrontMediaAssetID.Int64).
+		Int64("back_asset_id", app.IDCardBackMediaAssetID.Int64).
+		Msg("rider id card OCR normalized")
+
 	ocrJSON, _ := json.Marshal(ocrData)
 	arg.IDCardOcr = ocrJSON
 	_, err = processor.store.UpdateRiderApplicationIDCard(ctx, arg)
@@ -316,7 +343,19 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 	}
 	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
 
-	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Str("side", payload.Side).Msg("✅ rider id card OCR updated from ocr job")
+	log.Info().
+		Int64("application_id", payload.ApplicationID).
+		Int64("ocr_job_id", job.ID).
+		Int64("media_asset_id", payload.MediaAssetID).
+		Str("provider", job.Provider).
+		Str("side", payload.Side).
+		Bool("has_name", ocrData.Name != "").
+		Bool("has_id_number", ocrData.IDNumber != "").
+		Bool("has_valid_end", ocrData.ValidEnd != "").
+		Str("name_preview", maskRiderOCRPreview(ocrData.Name)).
+		Str("id_number_preview", maskRiderOCRIDPreview(ocrData.IDNumber)).
+		Str("valid_end_preview", truncateString(ocrData.ValidEnd, 80)).
+		Msg("✅ rider id card OCR updated from ocr job")
 	return nil
 }
 
