@@ -114,6 +114,25 @@
   width: 100%;
 }
 
+.field-block {
+  margin: 0;
+}
+
+.field-block-error {
+  margin: 0 0 12rpx;
+  border: 2rpx solid var(--td-error-color);
+  border-radius: 16rpx;
+  background: #FFF6F6;
+  overflow: hidden;
+}
+
+.field-error-text {
+  padding: 0 8rpx 8rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: var(--td-error-color);
+}
+
 .upload-container {
   background: #fff;
   padding: 24rpx;
@@ -334,6 +353,11 @@
 
 .half-btn {
   flex: 1;
+  width: 100%;
+}
+
+.submit-bar t-button {
+  width: 100%;
 }
 
 .review-title {

@@ -241,6 +241,39 @@ function createUploadFeedback(state: UploadFeedbackState, title = '', descriptio
   return { state, title, description }
 }
 
+function hasMerchantBusinessLicenseResult(data?: MerchantDraftExt): boolean {
+  return Boolean(
+    String(data?.business_license_number || '').trim()
+    || String(data?.business_license_ocr?.enterprise_name || '').trim()
+    || String(data?.business_license_ocr?.credit_code || '').trim()
+    || String(data?.business_license_ocr?.reg_num || '').trim()
+    || String(data?.business_license_ocr?.address || '').trim()
+  )
+}
+
+function hasMerchantFoodPermitResult(data?: MerchantDraftExt): boolean {
+  return Boolean(
+    String(data?.food_permit_ocr?.valid_to || '').trim()
+    || String(data?.food_permit_ocr?.permit_no || '').trim()
+    || String(data?.food_permit_ocr?.company_name || '').trim()
+    || String(data?.food_permit_ocr?.raw_text || '').trim()
+  )
+}
+
+function hasMerchantIDCardFrontResult(data?: MerchantDraftExt): boolean {
+  return Boolean(
+    String(data?.id_card_front_ocr?.name || '').trim()
+    || String(data?.legal_person_name || '').trim()
+    || String(data?.business_license_ocr?.legal_representative || '').trim()
+    || String(data?.id_card_front_ocr?.id_number || '').trim()
+    || String(data?.legal_person_id_number || '').trim()
+  )
+}
+
+function hasMerchantIDCardBackResult(data?: MerchantDraftExt): boolean {
+  return Boolean(String(data?.id_card_back_ocr?.valid_date || '').trim())
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -250,6 +283,7 @@ Page({
     ocrProgressMessage: '',
     ocrDisplayState: DEFAULT_MERCHANT_OCR_DISPLAY_STATE,
     uploadFeedback: DEFAULT_MERCHANT_UPLOAD_FEEDBACK,
+    phoneError: '',
     formData: {
       // 基本信息
       name: '',
@@ -578,23 +612,27 @@ Page({
     const checks = [
       {
         uploaded: Boolean((data?.business_license_media_asset_id && data.business_license_media_asset_id > 0) || this.data.licenseImages.length > 0),
-        status: data?.business_license_ocr?.status || ''
+        status: data?.business_license_ocr?.status || '',
+        ready: hasMerchantBusinessLicenseResult(data)
       },
       {
         uploaded: Boolean((data?.food_permit_media_asset_id && data.food_permit_media_asset_id > 0) || this.data.foodLicenseImages.length > 0),
-        status: data?.food_permit_ocr?.status || ''
+        status: data?.food_permit_ocr?.status || '',
+        ready: hasMerchantFoodPermitResult(data)
       },
       {
         uploaded: Boolean((data?.id_card_front_media_asset_id && data.id_card_front_media_asset_id > 0) || this.data.idCardFrontImages.length > 0),
-        status: data?.id_card_front_ocr?.status || ''
+        status: data?.id_card_front_ocr?.status || '',
+        ready: hasMerchantIDCardFrontResult(data)
       },
       {
         uploaded: Boolean((data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || this.data.idCardBackImages.length > 0),
-        status: data?.id_card_back_ocr?.status || ''
+        status: data?.id_card_back_ocr?.status || '',
+        ready: hasMerchantIDCardBackResult(data)
       }
     ]
 
-    const hasInProgress = checks.some((item) => item.uploaded && item.status !== 'done' && item.status !== 'failed')
+    const hasInProgress = checks.some((item) => item.uploaded && item.status !== 'failed' && item.status !== 'done' && !item.ready)
     if (!hasInProgress) {
       return ''
     }
@@ -621,30 +659,30 @@ Page({
     const idCardFrontStatus = data?.id_card_front_ocr?.status || ''
     const idCardBackStatus = data?.id_card_back_ocr?.status || ''
 
-    const businessLicenseDone = businessLicenseStatus === 'done'
-    const foodPermitDone = foodPermitStatus === 'done'
-    const idCardFrontDone = idCardFrontStatus === 'done'
-    const idCardBackDone = idCardBackStatus === 'done'
+    const businessLicenseDone = businessLicenseStatus === 'done' || hasMerchantBusinessLicenseResult(data)
+    const foodPermitDone = foodPermitStatus === 'done' || hasMerchantFoodPermitResult(data)
+    const idCardFrontDone = idCardFrontStatus === 'done' || hasMerchantIDCardFrontResult(data)
+    const idCardBackDone = idCardBackStatus === 'done' || hasMerchantIDCardBackResult(data)
 
     return {
-      businessLicense: businessLicenseStatus === 'failed'
-        ? 'failed'
-        : businessLicenseDone
+      businessLicense: businessLicenseDone
           ? 'done'
+        : businessLicenseStatus === 'failed'
+          ? 'failed'
           : businessLicenseUploaded
             ? 'processing'
             : 'idle',
-      foodPermit: foodPermitStatus === 'failed'
-        ? 'failed'
-        : foodPermitDone
+      foodPermit: foodPermitDone
           ? 'done'
+        : foodPermitStatus === 'failed'
+          ? 'failed'
           : foodPermitUploaded
             ? 'processing'
             : 'idle',
-      idCard: idCardFrontStatus === 'failed' || idCardBackStatus === 'failed'
-        ? 'failed'
-        : idCardFrontDone && idCardBackDone
+      idCard: idCardFrontDone && idCardBackDone
           ? 'done'
+        : idCardFrontStatus === 'failed' || idCardBackStatus === 'failed'
+          ? 'failed'
           : idCardFrontUploaded || idCardBackUploaded
             ? 'processing'
             : 'idle'
@@ -669,33 +707,37 @@ Page({
     const foodPermitStatus = data?.food_permit_ocr?.status || ''
     const idCardFrontStatus = data?.id_card_front_ocr?.status || ''
     const idCardBackStatus = data?.id_card_back_ocr?.status || ''
+    const businessLicenseReady = businessLicenseStatus === 'done' || hasMerchantBusinessLicenseResult(data)
+    const foodPermitReady = foodPermitStatus === 'done' || hasMerchantFoodPermitResult(data)
+    const idCardFrontReady = idCardFrontStatus === 'done' || hasMerchantIDCardFrontResult(data)
+    const idCardBackReady = idCardBackStatus === 'done' || hasMerchantIDCardBackResult(data)
 
     return {
       license: businessLicenseUploaded
         ? businessLicenseStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', data?.business_license_ocr?.error || '请重新上传清晰、完整的营业执照')
-          : businessLicenseStatus === 'done'
+          : businessLicenseReady
             ? createUploadFeedback('success', '识别成功', '已回填主体名称、统一信用代码和经营范围')
             : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       foodPermit: foodPermitUploaded
         ? foodPermitStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', data?.food_permit_ocr?.error || '请重新上传清晰、完整的食品经营许可证')
-          : foodPermitStatus === 'done'
+          : foodPermitReady
             ? createUploadFeedback('success', '识别成功', '已回填食品经营许可证有效期')
             : createUploadFeedback('processing', '证照识别中', '正在识别食品经营许可证信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idCardFront: idCardFrontUploaded
         ? idCardFrontStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', data?.id_card_front_ocr?.error || '请重新上传清晰、完整的身份证人像面')
-          : idCardFrontStatus === 'done'
+          : idCardFrontReady
             ? createUploadFeedback('success', '识别成功', '已回填法人姓名和身份证号')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idCardBack: idCardBackUploaded
         ? idCardBackStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', data?.id_card_back_ocr?.error || '请重新上传清晰、完整的身份证国徽面')
-          : idCardBackStatus === 'done'
+          : idCardBackReady
             ? createUploadFeedback('success', '识别成功', '已回填身份证有效期')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
         : { ...EMPTY_UPLOAD_FEEDBACK }
@@ -939,7 +981,15 @@ Page({
   },
 
   onNameInput(e: WechatMiniprogram.Input) { this.updateFormData('name', e.detail.value) },
-  onPhoneInput(e: WechatMiniprogram.Input) { this.updateFormData('phone', e.detail.value) },
+  onPhoneInput(e: WechatMiniprogram.Input) {
+    const value = e.detail.value || ''
+    const nextData: Record<string, unknown> = { 'formData.phone': value }
+    if (value.trim()) {
+      nextData.phoneError = ''
+    }
+    this.setData(nextData)
+    this.saveDraft()
+  },
   onAddressDetailInput(e: WechatMiniprogram.Input) { this.updateFormData('addressDetail', e.detail.value) },
 
   // 证照信息输入
@@ -1138,7 +1188,14 @@ Page({
     // Step 4 check (Location)
     if (currentStep === 3) {
       // 使用 address 字段（地图选择时设置的）而不是 addressDetail
-      const { address, latitude, longitude } = this.data.formData
+      const { address, latitude, longitude, phone } = this.data.formData
+      const normalizedPhone = (phone || '').trim()
+      if (!normalizedPhone || normalizedPhone.length !== 11) {
+        this.setData({ phoneError: '请填写 11 位联系电话，方便平台联系门店' })
+        wx.showToast({ title: '请输入11位联系电话', icon: 'none' })
+        return
+      }
+      this.setData({ phoneError: '' })
       if (!address) {
         wx.showToast({ title: '请选择店铺地址', icon: 'none' })
         return
@@ -1681,6 +1738,8 @@ Page({
     // ========== 前端校验 ==========
     const missingFields: string[] = []
 
+    if (!formData.phone?.trim()) missingFields.push('联系电话')
+    if (formData.phone?.trim() && formData.phone.trim().length !== 11) missingFields.push('11位联系电话')
     if (!formData.address?.trim()) missingFields.push('店铺地址')
     if (!toSafeNumber(formData.regionId)) missingFields.push('所属区域')
 

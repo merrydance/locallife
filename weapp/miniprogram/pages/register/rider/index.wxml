@@ -97,8 +97,24 @@
 
     <!-- Step 2: 信息确认 -->
     <view class="step-view animate-fade-in" wx:if="{{currentStep === 2}}">
-      <view class="section-title">基本信息核对</view>
+      <view class="section-title">联系信息</view>
       <view class="card-group">
+        <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
+          <t-input 
+            label="联系电话" 
+            type="number" 
+            placeholder="请输入联系电话" 
+            value="{{formData.phone}}" 
+            bindchange="onInput" 
+            data-field="phone" 
+          />
+        </view>
+        <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
+      </view>
+
+      <view class="section-title">资质信息回填</view>
+      <view class="card-group gray-bg ocr-section-card">
+        <view class="ocr-section-title">身份证信息</view>
         <t-input 
           label="真实姓名" 
           placeholder="请填写真实姓名" 
@@ -106,33 +122,15 @@
           bindchange="onInput" 
           data-field="realName" 
         />
-        <t-input 
-          label="联系电话" 
-          type="number" 
-          placeholder="请输入联系电话" 
-          value="{{formData.phone}}" 
-          bindchange="onInput" 
-          data-field="phone" 
-        />
-        <t-cell title="常驻地区" arrow bindtap="onChooseAddress">
-           <view class="cell-value {{formData.address ? '' : 'placeholder'}}">
-             {{formData.address || '选择配送常驻地'}}
-           </view>
-        </t-cell>
-      </view>
-
-      <view class="section-title">资质信息回填</view>
-      <view class="card-group gray-bg ocr-section-card">
-        <view class="ocr-section-title">身份证信息</view>
-        <block wx:if="{{ocrDisplayState.identity === 'done'}}">
+        <block wx:if="{{formData.idNumber || formData.idValidity}}">
           <t-cell title="身份证号" note="{{formData.idNumber || '--'}}" />
           <t-cell title="身份证有效期" note="{{formData.idValidity || '--'}}" />
         </block>
-        <view class="ocr-status-card" wx:elif="{{ocrDisplayState.identity === 'processing'}}">
+        <view class="ocr-status-card" wx:if="{{ocrDisplayState.identity === 'processing'}}">
           <view class="ocr-status-title">身份证识别中</view>
-          <view class="ocr-status-desc">身份证正反面都识别完成后，再统一展示实名信息。</view>
+          <view class="ocr-status-desc">已识别到的身份证字段会先展示，剩余字段完成后继续回填。</view>
         </view>
-        <view class="ocr-status-card error" wx:elif="{{ocrDisplayState.identity === 'failed'}}">
+        <view class="ocr-status-card error" wx:if="{{ocrDisplayState.identity === 'failed'}}">
           <view class="ocr-status-title">身份证识别失败</view>
           <view class="ocr-status-desc">请重新上传清晰、完整的身份证正反面。</view>
         </view>
@@ -140,20 +138,20 @@
 
       <view class="card-group gray-bg ocr-section-card">
         <view class="ocr-section-title">健康证信息</view>
-        <block wx:if="{{ocrDisplayState.health === 'done'}}">
+        <block wx:if="{{formData.healthCertNo || formData.healthCertDate}}">
           <t-cell title="健康证号" note="{{formData.healthCertNo || '--'}}" />
           <t-cell title="健康证过期日" note="{{formData.healthCertDate || '--'}}" />
         </block>
-        <view class="ocr-status-card" wx:elif="{{ocrDisplayState.health === 'processing'}}">
+        <view class="ocr-status-card" wx:if="{{ocrDisplayState.health === 'processing'}}">
           <view class="ocr-status-title">健康证识别中</view>
-          <view class="ocr-status-desc">健康证识别完成后，再统一回填证号和有效期。</view>
+          <view class="ocr-status-desc">已识别到的健康证字段会先展示，剩余字段完成后继续回填。</view>
         </view>
-        <view class="ocr-status-card error" wx:elif="{{ocrDisplayState.health === 'failed'}}">
+        <view class="ocr-status-card error" wx:if="{{ocrDisplayState.health === 'failed'}}">
           <view class="ocr-status-title">健康证识别失败</view>
           <view class="ocr-status-desc">请重新上传清晰、无遮挡的健康证照片。</view>
         </view>
       </view>
-      <view class="info-tip">若识别还在进行中，可以先继续填写手机号和常驻地区。</view>
+      <view class="info-tip">若识别还在进行中，可以先继续填写手机号。</view>
     </view>
 
     <!-- Step 3: 预览与提交 -->
@@ -208,18 +206,18 @@
     </view>
 
     <block wx:if="{{currentStep === 0}}">
-      <t-button block theme="primary" size="large" bindtap="onNext" shape="round">立即入驻</t-button>
+      <t-button block class="footer-action-btn" theme="primary" size="large" bindtap="onNext" shape="round">立即入驻</t-button>
     </block>
     <block wx:elif="{{currentStep === 3}}">
       <view class="btn-group">
-        <t-button size="large" bindtap="onPrev" shape="round">返回修改</t-button>
-        <t-button theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" shape="round">确认并提交</t-button>
+        <t-button block class="footer-action-btn" size="large" bindtap="onPrev" shape="round">返回修改</t-button>
+        <t-button block class="footer-action-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" shape="round">确认并提交</t-button>
       </view>
     </block>
     <block wx:elif="{{currentStep < 3}}">
       <view class="btn-group">
-        <t-button size="large" bindtap="onPrev" shape="round">上一步</t-button>
-        <t-button theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
+        <t-button block class="footer-action-btn" size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button block class="footer-action-btn" theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
       </view>
     </block>
   </view>

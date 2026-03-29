@@ -225,8 +225,11 @@ func normalizeAliyunHealthCertResult(raw json.RawMessage) *HealthCertResult {
 		"expiredate", "expirydate", "expirationdate")
 	rawText := firstAliyunField(fields,
 		"raw_text", "rawtext", "ocr_text", "ocrtext", "alltext", "fulltext", "content", "text")
+	textFragments := collectAliyunTextFragments(raw, "content", "text", "word")
 	if rawText == "" {
-		rawText = strings.Join(collectAliyunTextFragments(raw, "content", "text", "word"), "\n")
+		rawText = strings.Join(textFragments, "\n")
+	} else {
+		rawText = mergeAliyunTextFragments(rawText, textFragments)
 	}
 	if rawText == "" {
 		rawText = buildAliyunHealthCertRawText(name, certificate, validPeriod)
@@ -312,6 +315,38 @@ func collectAliyunTextFragments(raw json.RawMessage, keys ...string) []string {
 	seen := make(map[string]struct{})
 	collectAliyunTextFragmentValues("", payload, allowed, seen, &fragments)
 	return fragments
+}
+
+func mergeAliyunTextFragments(base string, fragments []string) string {
+	base = strings.TrimSpace(base)
+	if len(fragments) == 0 {
+		return base
+	}
+	merged := make([]string, 0, len(fragments)+1)
+	seen := make(map[string]struct{}, len(fragments)+1)
+	for _, item := range strings.Split(base, "\n") {
+		trimmed := strings.TrimSpace(item)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		merged = append(merged, trimmed)
+	}
+	for _, fragment := range fragments {
+		trimmed := strings.TrimSpace(fragment)
+		if trimmed == "" {
+			continue
+		}
+		if _, ok := seen[trimmed]; ok {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		merged = append(merged, trimmed)
+	}
+	return strings.Join(merged, "\n")
 }
 
 func collectAliyunTextFragmentValues(prefix string, value any, allowed map[string]struct{}, seen map[string]struct{}, fragments *[]string) {
@@ -499,6 +534,9 @@ func (c *AliyunOpenAPIClient) Recognize(ctx context.Context, capability Capabili
 	if resp.StatusCode >= 400 {
 		return nil, fmt.Errorf("%w: action=%s body_len=%d media_asset_id=%d", parseAliyunAPIError(resp.StatusCode, payload), op.Action, len(req.Data), req.MediaAssetID)
 	}
+	if apiErr, ok := decodeAliyunAPIError(resp.StatusCode, payload); ok {
+		return nil, fmt.Errorf("%w: action=%s body_len=%d media_asset_id=%d", apiErr, op.Action, len(req.Data), req.MediaAssetID)
+	}
 	return json.RawMessage(payload), nil
 }
 
@@ -553,14 +591,27 @@ func MapAliyunOCRAPIError(err error) error {
 }
 
 func parseAliyunAPIError(statusCode int, payload []byte) error {
+	apiErr, ok := decodeAliyunAPIError(statusCode, payload)
+	if !ok {
+		return &AliyunAPIError{StatusCode: statusCode, Code: fmt.Sprintf("http_%d", statusCode), Message: string(payload)}
+	}
+	return apiErr
+}
+
+func decodeAliyunAPIError(statusCode int, payload []byte) (*AliyunAPIError, bool) {
 	var apiErr struct {
 		Code    string `json:"Code"`
 		Message string `json:"Message"`
 	}
 	if err := json.Unmarshal(payload, &apiErr); err != nil {
-		return &AliyunAPIError{StatusCode: statusCode, Code: fmt.Sprintf("http_%d", statusCode), Message: string(payload)}
+		return nil, false
 	}
-	return &AliyunAPIError{StatusCode: statusCode, Code: apiErr.Code, Message: apiErr.Message}
+	code := strings.TrimSpace(apiErr.Code)
+	message := strings.TrimSpace(apiErr.Message)
+	if code == "" && message == "" {
+		return nil, false
+	}
+	return &AliyunAPIError{StatusCode: statusCode, Code: code, Message: message}, true
 }
 
 func buildAliyunCanonicalRequest(httpReq *http.Request, signedHeaders []string, payloadHash string) string {

@@ -115,6 +115,14 @@
 
     <!-- Step 3: 位置与图片 -->
     <view class="step-content" wx:if="{{currentStep === 3}}">
+           <view class="section-header">联系信息</view>
+           <view class="form-group">
+               <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
+                 <t-input label="联系电话" placeholder="请输入商户联系电话" type="number" value="{{formData.phone}}" bindchange="onPhoneInput" bindblur="onFieldBlur" data-field="phone" />
+               </view>
+               <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
+           </view>
+
         <view class="section-header">店铺位置</view>
         <view class="form-group">
              <view class="external-field">
@@ -143,6 +151,7 @@
          <view class="review-title">请确认以下信息</view>
          <view class="form-group">
              <t-cell title="营业执照名" note="{{formData.licenseName || '--'}}" />
+             <t-cell title="联系电话" note="{{formData.phone || '--'}}" />
              <t-cell title="店铺地址" note="{{formData.address}}" />
              <t-cell title="法人姓名" note="{{formData.legalPerson}}" />
          </view>
@@ -177,18 +186,18 @@
         </view>
 
     <block wx:if="{{currentStep === 0}}">
-                 <t-button class="submit-btn" theme="primary" size="large" bindtap="nextStep" shape="round">开始入驻</t-button>
+                  <t-button block class="submit-btn" theme="primary" size="large" bindtap="nextStep" shape="round">开始入驻</t-button>
     </block>
     <block wx:if="{{currentStep > 0 && currentStep < 4}}">
          <view class="btn-row">
-            <t-button class="half-btn" theme="default" size="large" bindtap="prevStep" shape="round">上一步</t-button>
-            <t-button class="half-btn" theme="primary" size="large" bindtap="nextStep" shape="round">下一步</t-button>
+              <t-button block class="half-btn" theme="default" size="large" bindtap="prevStep" shape="round">上一步</t-button>
+              <t-button block class="half-btn" theme="primary" size="large" bindtap="nextStep" shape="round">下一步</t-button>
          </view>
     </block>
     <block wx:if="{{currentStep === 4}}">
          <view class="btn-row">
-            <t-button class="half-btn" theme="default" size="large" bindtap="prevStep" disabled="{{isSubmitting}}" shape="round">上一步</t-button>
-                        <t-button class="half-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}" shape="round">提交入驻</t-button>
+              <t-button block class="half-btn" theme="default" size="large" bindtap="prevStep" disabled="{{isSubmitting}}" shape="round">上一步</t-button>
+                        <t-button block class="half-btn" theme="primary" size="large" bindtap="onSubmit" loading="{{isSubmitting}}" disabled="{{isSubmitting}}" shape="round">提交入驻</t-button>
          </view>
     </block>
   </view>

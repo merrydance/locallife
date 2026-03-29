@@ -84,14 +84,17 @@
           bindchange="onInput" 
           data-field="contactName" 
         />
-        <t-input 
-          label="联系人电话" 
-          type="number" 
-          placeholder="请输入负责人手机号" 
-          value="{{formData.contactPhone}}" 
-          bindchange="onInput" 
-          data-field="contactPhone" 
-        />
+        <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
+          <t-input 
+            label="联系人电话" 
+            type="number" 
+            placeholder="请输入负责人手机号" 
+            value="{{formData.contactPhone}}" 
+            bindchange="onInput" 
+            data-field="contactPhone" 
+          />
+        </view>
+        <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
       </view>
 
       <view class="section-title">合伙方案</view>
@@ -211,8 +214,8 @@
     </block>
     <block wx:else>
       <view class="btn-group">
-        <t-button size="large" bindtap="onPrev" shape="round">上一步</t-button>
-        <t-button theme="primary" size="large" bindtap="onNextOrSubmit" loading="{{isSubmitting}}" shape="round">
+        <t-button block size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button block theme="primary" size="large" bindtap="onNextOrSubmit" loading="{{isSubmitting}}" shape="round">
           {{currentStep === 3 ? '确认提交申请' : '下一步'}}
         </t-button>
       </view>

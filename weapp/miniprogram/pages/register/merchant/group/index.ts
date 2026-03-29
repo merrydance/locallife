@@ -97,6 +97,24 @@ const createUploadFeedback = (state: UploadFeedbackState, title = '', descriptio
   description
 })
 
+const hasGroupText = (value?: string): boolean => typeof value === 'string' && value.trim().length > 0
+
+const hasGroupLicenseResult = (res?: GroupApplicationResponse): boolean => Boolean(
+  hasGroupText(res?.license_number)
+  || hasGroupText(res?.business_license_ocr?.credit_code)
+  || hasGroupText(res?.business_license_ocr?.reg_num)
+  || hasGroupText(res?.business_license_ocr?.enterprise_name)
+)
+
+const hasGroupIdentityFrontResult = (res?: GroupApplicationResponse): boolean => Boolean(
+  hasGroupText(res?.legal_person_name)
+  || hasGroupText(res?.legal_person_id_number)
+  || hasGroupText(res?.id_card_front_ocr?.name)
+  || hasGroupText(res?.id_card_front_ocr?.id_number)
+)
+
+const hasGroupIdentityBackResult = (res?: GroupApplicationResponse): boolean => hasGroupText(res?.id_card_back_ocr?.valid_date)
+
 Page({
   data: {
     navBarHeight: 88,
@@ -114,6 +132,7 @@ Page({
       licenseNumber: '',
       legalPerson: ''
     },
+    phoneError: '',
     consentChecked: false,
     consentPopupVisible: false
   },
@@ -137,15 +156,22 @@ Page({
       (res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
     )
 
-    const licenseDone = licenseStatus === 'done'
-    const identityDone = idFrontStatus === 'done' && idBackStatus === 'done'
+    const licenseDone = licenseStatus === 'done' || hasGroupLicenseResult(res)
+    const identityDone = (idFrontStatus === 'done' || hasGroupIdentityFrontResult(res))
+      && (idBackStatus === 'done' || hasGroupIdentityBackResult(res))
 
     return {
-      license: licenseStatus === 'failed' ? 'failed' : licenseDone ? 'done' : licenseUploaded ? 'processing' : 'idle',
-      identity: idFrontStatus === 'failed' || idBackStatus === 'failed'
-        ? 'failed'
-        : identityDone
-          ? 'done'
+      license: licenseDone
+        ? 'done'
+        : licenseStatus === 'failed'
+          ? 'failed'
+          : licenseUploaded
+            ? 'processing'
+            : 'idle',
+      identity: identityDone
+        ? 'done'
+        : idFrontStatus === 'failed' || idBackStatus === 'failed'
+          ? 'failed'
           : identityUploaded
             ? 'processing'
             : 'idle'
@@ -185,6 +211,7 @@ Page({
       'formData.address': res.address || '',
       'formData.licenseNumber': res.license_number || '',
       'formData.legalPerson': res.legal_person_name || res.id_card_front_ocr?.name || '',
+      phoneError: (res.contact_phone || '').trim() ? '' : this.data.phoneError,
       license: { url: '', rawUrl: '', assetId: res.license_image_asset_id },
       idFront: { url: '', rawUrl: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', rawUrl: '', assetId: res.id_card_back_asset_id },
@@ -206,26 +233,29 @@ Page({
     const licenseUploaded = Boolean(res?.license_image_asset_id || this.data.license.assetId || this.data.license.url)
     const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
     const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+    const licenseReady = licenseStatus === 'done' || hasGroupLicenseResult(res)
+    const idFrontReady = idFrontStatus === 'done' || hasGroupIdentityFrontResult(res)
+    const idBackReady = idBackStatus === 'done' || hasGroupIdentityBackResult(res)
 
     return {
       license: licenseUploaded
         ? licenseStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', licenseError || '请重新上传清晰、完整的营业执照')
-          : licenseStatus === 'done'
+          : licenseReady
             ? createUploadFeedback('success', '识别成功', '已识别营业执照主体信息')
             : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idFront: idFrontUploaded
         ? idFrontStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', idFrontError || '请重新上传清晰、完整的身份证人像面')
-          : idFrontStatus === 'done'
+          : idFrontReady
             ? createUploadFeedback('success', '识别成功', '已识别负责人姓名和身份证号')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idBack: idBackUploaded
         ? idBackStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', idBackError || '请重新上传清晰、完整的身份证国徽面')
-          : idBackStatus === 'done'
+          : idBackReady
             ? createUploadFeedback('success', '识别成功', '已识别证件有效期')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
         : { ...EMPTY_UPLOAD_FEEDBACK }
@@ -310,7 +340,15 @@ Page({
     if (!field) {
       return
     }
-    this.setData({ [`formData.${field}`]: e.detail.value })
+
+    const value = e.detail.value || ''
+    const nextData: Record<string, string> = {
+      [`formData.${field}`]: value
+    }
+    if (field === 'contactPhone' && value.trim()) {
+      nextData.phoneError = ''
+    }
+    this.setData(nextData)
   },
 
   onChooseAddress() {
@@ -371,17 +409,26 @@ Page({
     }
 
     if (currentStep === 2) {
-      if (!formData.groupName || !formData.contactPhone) {
-        wx.showToast({ title: '请填写基本信息', icon: 'none' })
+      const groupName = formData.groupName.trim()
+      const contactPhone = formData.contactPhone.trim()
+
+      if (!groupName) {
+        wx.showToast({ title: '请填写集团/品牌名', icon: 'none' })
         return
       }
+      if (!contactPhone || contactPhone.length !== 11) {
+        this.setData({ phoneError: '请填写 11 位联系电话，方便平台联系你' })
+        wx.showToast({ title: '请输入11位手机号', icon: 'none' })
+        return
+      }
+      this.setData({ phoneError: '' })
       
       // Update basic info to backend
       wx.showLoading({ title: '同步信息...' })
       try {
         await updateGroupApplicationBasic({
-          group_name: formData.groupName,
-          contact_phone: formData.contactPhone,
+          group_name: groupName,
+          contact_phone: contactPhone,
           address: formData.address,
           license_number: formData.licenseNumber,
           license_image_asset_id: this.data.license.assetId

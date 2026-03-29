@@ -146,6 +146,31 @@ function buildRegionFullName(region: RegionOption): string {
   return region.secondary ? `${region.secondary} - ${region.label}` : region.label
 }
 
+function hasOperatorBusinessLicenseResult(res?: OperatorApplicationResponse): boolean {
+  return Boolean(
+    String(res?.business_license_number || '').trim()
+    || getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'enterprise_name')
+    || getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'credit_code')
+    || getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'reg_num')
+  )
+}
+
+function hasOperatorIDCardFrontResult(res?: OperatorApplicationResponse): boolean {
+  return Boolean(
+    String(res?.legal_person_name || '').trim()
+    || String(res?.legal_person_id_number || '').trim()
+    || getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'name')
+    || getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'id_number')
+  )
+}
+
+function hasOperatorIDCardBackResult(res?: OperatorApplicationResponse): boolean {
+  return Boolean(
+    getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'valid_end')
+    || getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'valid_date')
+  )
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -179,6 +204,7 @@ Page({
     filteredRegions: [] as RegionOption[],   // 搜索过滤后的列表
     ocrDisplayState: DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
     uploadFeedback: DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
+    phoneError: '',
     consentChecked: false,
     consentPopupVisible: false
   },
@@ -517,6 +543,7 @@ Page({
       'formData.contactName': String(res.contact_name || ''),
       'formData.contactPhone': String(res.contact_phone || ''),
       'formData.years': Number(res.requested_contract_years || 3),
+      phoneError: String(res.contact_phone || '').trim() ? '' : this.data.phoneError,
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
       license: { url: '', assetId: res.business_license_asset_id },
@@ -561,15 +588,22 @@ Page({
     const businessLicenseStatus = getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'status')
     const idCardFrontStatus = getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'status')
     const idCardBackStatus = getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'status')
-    const businessLicenseDone = businessLicenseStatus === 'done'
-    const idCardDone = idCardFrontStatus === 'done' && idCardBackStatus === 'done'
+    const businessLicenseDone = businessLicenseStatus === 'done' || hasOperatorBusinessLicenseResult(res)
+    const idCardDone = (idCardFrontStatus === 'done' || hasOperatorIDCardFrontResult(res))
+      && (idCardBackStatus === 'done' || hasOperatorIDCardBackResult(res))
 
     return {
-      businessLicense: businessLicenseStatus === 'failed' ? 'failed' : businessLicenseDone ? 'done' : businessLicenseUploaded ? 'processing' : 'idle',
-      idCard: idCardFrontStatus === 'failed' || idCardBackStatus === 'failed'
-        ? 'failed'
-        : idCardDone
-          ? 'done'
+      businessLicense: businessLicenseDone
+        ? 'done'
+        : businessLicenseStatus === 'failed'
+          ? 'failed'
+          : businessLicenseUploaded
+            ? 'processing'
+            : 'idle',
+      idCard: idCardDone
+        ? 'done'
+        : idCardFrontStatus === 'failed' || idCardBackStatus === 'failed'
+          ? 'failed'
           : idCardUploaded
             ? 'processing'
             : 'idle'
@@ -587,26 +621,29 @@ Page({
     const licenseUploaded = Boolean(res?.business_license_asset_id || this.data.license.assetId || this.data.license.url)
     const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
     const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+    const licenseReady = licenseStatus === 'done' || hasOperatorBusinessLicenseResult(res)
+    const idFrontReady = idFrontStatus === 'done' || hasOperatorIDCardFrontResult(res)
+    const idBackReady = idBackStatus === 'done' || hasOperatorIDCardBackResult(res)
 
     return {
       license: licenseUploaded
         ? licenseStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', licenseError || '请重新上传清晰、完整的营业执照')
-          : licenseStatus === 'done'
+          : licenseReady
             ? createUploadFeedback('success', '识别成功', '已识别主体名称和营业执照信息')
             : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idFront: idFrontUploaded
         ? idFrontStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', idFrontError || '请重新上传清晰、完整的身份证人像面')
-          : idFrontStatus === 'done'
+          : idFrontReady
             ? createUploadFeedback('success', '识别成功', '已识别负责人姓名和身份证号')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idBack: idBackUploaded
         ? idBackStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', idBackError || '请重新上传清晰、完整的身份证国徽面')
-          : idBackStatus === 'done'
+          : idBackReady
             ? createUploadFeedback('success', '识别成功', '已识别证件有效期')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
         : { ...EMPTY_UPLOAD_FEEDBACK }
@@ -770,7 +807,13 @@ Page({
   onInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
     const field = (e.currentTarget.dataset as { field?: keyof FormDataValue }).field
     if (!field) return
-    this.setData({ [`formData.${field}`]: e.detail.value || '' })
+
+    const value = e.detail.value || ''
+    const nextData: Record<string, string> = { [`formData.${field}`]: value }
+    if (field === 'contactPhone' && value.trim()) {
+      nextData.phoneError = ''
+    }
+    this.setData(nextData)
   },
 
   onYearsChange(e: WechatMiniprogram.CustomEvent<{ value?: number }>) {
@@ -895,7 +938,11 @@ Page({
       // 1. 本地前置校验
       if (!regionId) return wx.showToast({ title: '请选择运营区域', icon: 'none' })
       if (!normalizedContactName || normalizedContactName.length < 2) return wx.showToast({ title: '负责人姓名至少2位', icon: 'none' })
-      if (!contactPhone || contactPhone.length !== 11) return wx.showToast({ title: '请输入11位手机号', icon: 'none' })
+      if (!contactPhone || contactPhone.length !== 11) {
+        this.setData({ phoneError: '请填写 11 位联系电话，方便总部联系你' })
+        return wx.showToast({ title: '请输入11位手机号', icon: 'none' })
+      }
+      this.setData({ phoneError: '' })
       
       wx.showLoading({ title: '锁定区域中...', mask: true })
       try {

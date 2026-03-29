@@ -72,6 +72,16 @@ function createUploadFeedback(state: UploadFeedbackState, title = '', descriptio
   return { state, title, description }
 }
 
+function pickOCRText(payload: Record<string, unknown> | undefined, ...keys: string[]): string {
+  for (const key of keys) {
+    const value = payload?.[key]
+    if (typeof value === 'string' && value.trim()) {
+      return value.trim()
+    }
+  }
+  return ''
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -85,12 +95,12 @@ Page({
     formData: {
       realName: '',
       phone: '',
-      address: '',
       idNumber: '',
       idValidity: '',
       healthCertNo: '',
       healthCertDate: ''
     },
+    phoneError: '',
     consentChecked: false,
     consentPopupVisible: false
   },
@@ -137,13 +147,18 @@ Page({
   },
 
   mapResponseToData(res: RiderApplicationResponse) {
+    const currentForm = this.data.formData
+    const nextPhone = res.phone || currentForm.phone || ''
+    const idCardOCR = res.id_card_ocr as Record<string, unknown> | undefined
+    const healthCertOCR = res.health_cert_ocr as Record<string, unknown> | undefined
     this.setData({
-      'formData.realName': res.real_name || res.id_card_ocr?.name || '',
-      'formData.phone': res.phone || '',
-      'formData.idNumber': res.id_card_ocr?.id_number || '',
-      'formData.idValidity': res.id_card_ocr?.valid_end || '',
-      'formData.healthCertNo': res.health_cert_ocr?.cert_number || '',
-      'formData.healthCertDate': res.health_cert_ocr?.valid_end || '',
+      'formData.realName': res.real_name || pickOCRText(idCardOCR, 'name') || currentForm.realName || '',
+      'formData.phone': nextPhone,
+      'formData.idNumber': pickOCRText(idCardOCR, 'id_number', 'id_num') || currentForm.idNumber || '',
+      'formData.idValidity': pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.idValidity || '',
+      'formData.healthCertNo': pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate') || currentForm.healthCertNo || '',
+      'formData.healthCertDate': pickOCRText(healthCertOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.healthCertDate || '',
+      phoneError: nextPhone.trim() ? '' : this.data.phoneError,
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
       healthCert: { url: '', assetId: res.health_cert_asset_id },
@@ -155,18 +170,20 @@ Page({
   },
 
   buildRiderUploadFeedback(res?: RiderApplicationResponse): RiderUploadFeedback {
-    const idStatus = res?.id_card_ocr?.status || ''
-    const idError = res?.id_card_ocr?.error || ''
-    const healthStatus = res?.health_cert_ocr?.status || ''
-    const healthError = res?.health_cert_ocr?.error || ''
+    const idCardOCR = res?.id_card_ocr as Record<string, unknown> | undefined
+    const healthCertOCR = res?.health_cert_ocr as Record<string, unknown> | undefined
+    const idStatus = pickOCRText(idCardOCR, 'status')
+    const idError = pickOCRText(idCardOCR, 'error')
+    const healthStatus = pickOCRText(healthCertOCR, 'status')
+    const healthError = pickOCRText(healthCertOCR, 'error')
 
     const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
     const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
     const healthUploaded = Boolean(res?.health_cert_asset_id || this.data.healthCert.assetId || this.data.healthCert.url)
 
-    const idFrontReady = Boolean(res?.id_card_ocr?.name || res?.id_card_ocr?.id_number || idStatus === 'done')
-    const idBackReady = Boolean(res?.id_card_ocr?.valid_end || idStatus === 'done')
-    const healthReady = Boolean(res?.health_cert_ocr?.cert_number || res?.health_cert_ocr?.valid_end || healthStatus === 'done')
+    const idFrontReady = Boolean(pickOCRText(idCardOCR, 'name', 'id_number', 'id_num') || idStatus === 'done')
+    const idBackReady = Boolean(pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period') || idStatus === 'done')
+    const healthReady = Boolean(pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate', 'valid_end', 'valid_date', 'valid_period', 'name') || healthStatus === 'done')
 
     return {
       idFront: idFrontUploaded
@@ -187,7 +204,7 @@ Page({
         ? healthStatus === 'failed'
           ? createUploadFeedback('error', '识别失败', healthError || '请重新上传清晰、无遮挡的健康证照片')
           : healthReady
-            ? createUploadFeedback('success', '识别成功', '已识别健康证号和有效期')
+            ? createUploadFeedback('success', '识别成功', '已识别健康证信息')
             : createUploadFeedback('processing', '证照识别中', '正在识别健康证信息')
         : { ...EMPTY_UPLOAD_FEEDBACK }
     }
@@ -199,9 +216,17 @@ Page({
       && (res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
     )
     const healthUploaded = Boolean(res?.health_cert_asset_id || this.data.healthCert.assetId || this.data.healthCert.url)
+    const idCardOCR = res?.id_card_ocr as Record<string, unknown> | undefined
+    const healthCertOCR = res?.health_cert_ocr as Record<string, unknown> | undefined
 
-    const identityDone = Boolean(res?.id_card_ocr?.name && res.id_card_ocr?.id_number && res.id_card_ocr?.valid_end)
-    const healthDone = Boolean(res?.health_cert_ocr?.cert_number && res.health_cert_ocr?.valid_end)
+    const identityDone = Boolean(
+      pickOCRText(idCardOCR, 'status') === 'done'
+      || (pickOCRText(idCardOCR, 'name') && pickOCRText(idCardOCR, 'id_number', 'id_num') && pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period'))
+    )
+    const healthDone = Boolean(
+      pickOCRText(healthCertOCR, 'status') === 'done'
+      || pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate', 'valid_end', 'valid_date', 'valid_period', 'name')
+    )
 
     return {
       identity: identityDone ? 'done' : identityUploaded ? 'processing' : 'idle',
@@ -314,15 +339,15 @@ Page({
   onInput(e: WechatMiniprogram.CustomEvent<{ value?: string }>) {
     const field = (e.currentTarget.dataset as { field?: string }).field
     if (!field) return
-    this.setData({ [`formData.${field}`]: e.detail.value || '' })
-  },
 
-  onChooseAddress() {
-    wx.chooseLocation({
-      success: (res) => {
-        this.setData({ 'formData.address': res.address || res.name })
-      }
-    })
+    const value = e.detail.value || ''
+    const nextData: Record<string, string> = {
+      [`formData.${field}`]: value
+    }
+    if (field === 'phone' && value.trim()) {
+      nextData.phoneError = ''
+    }
+    this.setData(nextData)
   },
 
   onPrev() {
@@ -374,15 +399,24 @@ Page({
     }
 
     if (currentStep === 2) {
-      if (!formData.realName || !formData.phone) {
-        return wx.showToast({ title: '请确认真实姓名和手机号', icon: 'none' })
+      const realName = formData.realName.trim()
+      const phone = formData.phone.trim()
+
+      if (!realName) {
+        return wx.showToast({ title: '请确认真实姓名', icon: 'none' })
       }
+      if (!phone) {
+        this.setData({ phoneError: '请填写联系电话，方便平台与你联系' })
+        return wx.showToast({ title: '请填写联系电话', icon: 'none' })
+      }
+
+      this.setData({ phoneError: '' })
       // 同步基础信息
       wx.showLoading({ title: '保存信息...' })
       try {
         await updateRiderApplicationBasic({
-          real_name: formData.realName,
-          phone: formData.phone
+          real_name: realName,
+          phone
         })
       } catch (e) {
         logger.error('Update basic failed', e)

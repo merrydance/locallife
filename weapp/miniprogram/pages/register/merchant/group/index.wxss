@@ -127,6 +127,25 @@
   box-shadow: var(--shadow-sm);
 }
 
+.field-block {
+  margin: 0;
+}
+
+.field-block-error {
+  margin: 12rpx 16rpx 0;
+  border: 2rpx solid var(--td-error-color);
+  border-radius: var(--radius-md);
+  background: #FFF6F6;
+  overflow: hidden;
+}
+
+.field-error-text {
+  padding: 12rpx 24rpx 20rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: var(--td-error-color);
+}
+
 .addr-picker {
   padding: 32rpx;
   display: flex;
@@ -222,6 +241,11 @@
   display: grid;
   grid-template-columns: 1fr 1.5fr;
   gap: 24rpx;
+}
+
+.btn-group t-button,
+.action-bar t-button {
+  width: 100%;
 }
 
 .step-view.center {

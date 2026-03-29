@@ -179,6 +179,65 @@ func TestAliyunOpenAPIClientRecognizeHealthCertUsesRecognizeAdvanced(t *testing.
 	}
 }
 
+func TestAliyunOpenAPIClientRecognizeTreatsTopLevelCodeAsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"RequestId":"43A29C77-405E-4CC0-BC55-EE694AD00655","Data":"{\"content\":\"2017年河北区实验小学\",\"prism_wordsInfo\":[{\"word\":\"2017年河北区实验小学\"}]}","Code":"noPermission","Message":"You are not authorized to perform this operation."}`))
+	}))
+	defer server.Close()
+
+	client := &AliyunOpenAPIClient{
+		endpoint:        server.URL,
+		region:          "cn-hangzhou",
+		accessKeyID:     "test-ak",
+		accessKeySecret: "test-sk",
+		httpClient:      server.Client(),
+		clock: func() time.Time {
+			return time.Date(2026, time.March, 29, 1, 2, 3, 0, time.UTC)
+		},
+		nonce: func() string {
+			return "nonce-health-err"
+		},
+	}
+	client.signer = client.defaultSigner
+
+	_, err := client.Recognize(context.Background(), CapabilityAliyunHealthCert, RecognizeRequest{
+		DocumentType: DocumentTypeHealthCert,
+		ContentType:  "image/jpeg",
+		Data:         []byte("health-cert-bytes"),
+	})
+	if err == nil {
+		t.Fatal("expected error when top-level Code is present")
+	}
+	if !errors.Is(MapAliyunOCRAPIError(err), ErrAliyunOCRForbidden) {
+		t.Fatalf("expected forbidden error, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "noPermission") {
+		t.Fatalf("error = %v, want noPermission", err)
+	}
+}
+
+func TestAliyunProviderRecognizeNormalizesAdvancedHealthCertPrismWordsInfo(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"content\":\"2017年河北区实验小学\",\"prism_wordsInfo\":[{\"word\":\"2017年河北区实验小学\"},{\"word\":\"常熟市人民法院\"},{\"word\":\"送达证\"}]}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunHealthCert, RecognizeRequest{DocumentType: DocumentTypeHealthCert})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.HealthCert == nil {
+		t.Fatal("expected normalized health cert result")
+	}
+	if !strings.Contains(resp.Normalized.HealthCert.RawText, "常熟市人民法院") {
+		t.Fatalf("raw text = %s", resp.Normalized.HealthCert.RawText)
+	}
+	if !strings.Contains(resp.Normalized.HealthCert.RawText, "送达证") {
+		t.Fatalf("raw text = %s", resp.Normalized.HealthCert.RawText)
+	}
+}
+
 func TestAliyunProviderRecognizeNormalizesBusinessLicense(t *testing.T) {
 	raw := json.RawMessage(`{
 		"Data": {

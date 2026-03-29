@@ -144,6 +144,25 @@
   box-shadow: var(--shadow-sm);
 }
 
+.field-block {
+  margin: 0;
+}
+
+.field-block-error {
+  margin: 12rpx 16rpx 0;
+  border: 2rpx solid var(--td-error-color);
+  border-radius: var(--radius-md);
+  background: #FFF6F6;
+  overflow: hidden;
+}
+
+.field-error-text {
+  padding: 12rpx 24rpx 20rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: var(--td-error-color);
+}
+
 .cell-value {
   font-size: 28rpx;
 }
@@ -268,6 +287,11 @@
 
 .btn-group t-button {
   flex: 1;
+  width: 100%;
+}
+
+.bottom-action t-button {
+  width: 100%;
 }
 
 /* Animation */

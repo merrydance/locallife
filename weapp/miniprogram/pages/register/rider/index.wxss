@@ -123,6 +123,25 @@
   box-shadow: var(--shadow-sm);
 }
 
+.field-block {
+  margin: 0;
+}
+
+.field-block-error {
+  margin: 12rpx 16rpx 0;
+  border: 2rpx solid var(--td-error-color);
+  border-radius: var(--radius-md);
+  background: #FFF6F6;
+  overflow: hidden;
+}
+
+.field-error-text {
+  padding: 12rpx 24rpx 20rpx;
+  font-size: 22rpx;
+  line-height: 1.5;
+  color: var(--td-error-color);
+}
+
 .card-group.gray-bg {
   background: #F9FAFB;
 }
@@ -178,14 +197,6 @@
 
 .ocr-status-card.error .ocr-status-desc {
   color: #C62828;
-}
-
-.cell-value {
-  font-size: 28rpx;
-}
-
-.cell-value.placeholder {
-  color: var(--td-text-color-placeholder);
 }
 
 .info-tip {
@@ -255,8 +266,8 @@
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24rpx;
-  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  padding: 28rpx 24rpx;
+  padding-bottom: calc(28rpx + env(safe-area-inset-bottom));
   background: #FFFFFF;
   box-shadow: 0 -4rpx 16rpx rgba(0,0,0,0.05);
   z-index: 100;
@@ -266,6 +277,11 @@
   display: grid;
   grid-template-columns: 1fr 1.5fr;
   gap: 24rpx;
+}
+
+.footer-bar t-button,
+.footer-action-btn {
+  width: 100%;
 }
 
 /* animations */

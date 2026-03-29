@@ -102,14 +102,17 @@
           bindchange="onInput" 
           data-field="groupName" 
         />
-        <t-input 
-          label="联系电话" 
-          type="number" 
-          placeholder="请输入手机号" 
-          value="{{formData.contactPhone}}" 
-          bindchange="onInput" 
-          data-field="contactPhone" 
-        />
+        <view class="field-block {{phoneError ? 'field-block-error' : ''}}">
+          <t-input 
+            label="联系电话" 
+            type="number" 
+            placeholder="请输入手机号" 
+            value="{{formData.contactPhone}}" 
+            bindchange="onInput" 
+            data-field="contactPhone" 
+          />
+        </view>
+        <view class="field-error-text" wx:if="{{phoneError}}">{{phoneError}}</view>
       </view>
 
       <view class="section-title">办公地址</view>
@@ -183,14 +186,14 @@
     </block>
     <block wx:elif="{{currentStep === 3}}">
       <view class="btn-group">
-        <t-button size="large" bindtap="onPrev" shape="round">返回修改</t-button>
-        <t-button theme="primary" size="large" bindtap="onSubmit" loading="{{submitting}}" shape="round">确认提交</t-button>
+        <t-button block size="large" bindtap="onPrev" shape="round">返回修改</t-button>
+        <t-button block theme="primary" size="large" bindtap="onSubmit" loading="{{submitting}}" shape="round">确认提交</t-button>
       </view>
     </block>
     <block wx:elif="{{currentStep < 3}}">
       <view class="btn-group">
-        <t-button size="large" bindtap="onPrev" shape="round">上一步</t-button>
-        <t-button theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
+        <t-button block size="large" bindtap="onPrev" shape="round">上一步</t-button>
+        <t-button block theme="primary" size="large" bindtap="onNext" shape="round">下一步</t-button>
       </view>
     </block>
   </view>

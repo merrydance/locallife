@@ -121,7 +121,11 @@ function buildMerchantDraftOCRCheck(
       const status = draft.business_license_ocr?.status || ''
       const error = draft.business_license_ocr?.error || ''
       return {
-        ready: status === 'done',
+        ready: status === 'done'
+          || !!String(draft.business_license_number || '').trim()
+          || !!String(draft.business_license_ocr?.enterprise_name || '').trim()
+          || !!String(draft.business_license_ocr?.credit_code || '').trim()
+          || !!String(draft.business_license_ocr?.reg_num || '').trim(),
         failed: status === 'failed',
         errorMessage: error
       }
@@ -131,7 +135,11 @@ function buildMerchantDraftOCRCheck(
       const status = draft.food_permit_ocr?.status || ''
       const error = draft.food_permit_ocr?.error || ''
       return {
-        ready: status === 'done',
+        ready: status === 'done'
+          || !!String(draft.food_permit_ocr?.valid_to || '').trim()
+          || !!String(draft.food_permit_ocr?.permit_no || '').trim()
+          || !!String(draft.food_permit_ocr?.company_name || '').trim()
+          || !!String(draft.food_permit_ocr?.raw_text || '').trim(),
         failed: status === 'failed',
         errorMessage: error
       }
@@ -141,7 +149,7 @@ function buildMerchantDraftOCRCheck(
       const status = draft.id_card_back_ocr?.status || ''
       const error = draft.id_card_back_ocr?.error || ''
       return {
-        ready: status === 'done',
+        ready: status === 'done' || !!String(draft.id_card_back_ocr?.valid_date || '').trim(),
         failed: status === 'failed',
         errorMessage: error
       }
@@ -150,7 +158,11 @@ function buildMerchantDraftOCRCheck(
     const status = draft.id_card_front_ocr?.status || ''
     const error = draft.id_card_front_ocr?.error || ''
     return {
-      ready: status === 'done',
+      ready: status === 'done'
+        || !!String(draft.legal_person_name || '').trim()
+        || !!String(draft.legal_person_id_number || '').trim()
+        || !!String(draft.id_card_front_ocr?.name || '').trim()
+        || !!String(draft.id_card_front_ocr?.id_number || '').trim(),
       failed: status === 'failed',
       errorMessage: error
     }
