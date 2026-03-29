@@ -142,7 +142,7 @@
         <view class="ocr-section-title">健康证信息</view>
         <block wx:if="{{formData.healthCertNo || formData.healthCertDate}}">
           <t-cell title="健康证号" note="{{formData.healthCertNo || '--'}}" />
-          <t-cell title="健康证过期日" note="{{formData.healthCertDate || '--'}}" />
+          <t-cell title="有效期至" note="{{formData.healthCertDate || '--'}}" />
         </block>
         <view class="ocr-status-card" wx:if="{{ocrDisplayState.health === 'processing'}}">
           <view class="ocr-status-title">健康证识别中</view>

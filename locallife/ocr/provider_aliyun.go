@@ -221,8 +221,9 @@ func normalizeAliyunHealthCertResult(raw json.RawMessage) *HealthCertResult {
 		"certificate_number", "certificatenumber", "certificate_no", "certificateno",
 		"health_cert_no", "healthcertno", "certificate", "registrationnumber")
 	validPeriod := firstAliyunField(fields,
-		"valid_period", "validperiod", "valid_to", "validto", "todate", "enddate",
-		"expiredate", "expirydate", "expirationdate")
+		"valid_period", "validperiod", "valid_to", "validto", "valid_end", "validend",
+		"validity", "valid_until", "validuntil", "todate", "enddate", "end_date",
+		"expiry", "expiry_date", "expiredate", "expirydate", "expirationdate", "expiration_date")
 	rawText := firstAliyunField(fields,
 		"raw_text", "rawtext", "ocr_text", "ocrtext", "alltext", "fulltext", "content", "text")
 	textFragments := collectAliyunTextFragments(raw, "content", "text", "word")

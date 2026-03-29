@@ -189,3 +189,38 @@ func TestProcessTaskRiderApplicationHealthCertOCR_UsesOCRJob(t *testing.T) {
 	err = processor.ProcessTaskRiderApplicationHealthCertOCR(context.Background(), task)
 	require.NoError(t, err)
 }
+
+func TestParseRiderHealthCertOCRText_ExtractsFlexibleValidEnd(t *testing.T) {
+	testCases := []struct {
+		name            string
+		text            string
+		expectValidFrom string
+		expectValidEnd  string
+	}{
+		{
+			name:           "ExplicitDeadlineWithDash",
+			text:           "姓名：张三\n健康证号：JK20260001\n有效截止日期：2030-12-31",
+			expectValidEnd: "2030-12-31",
+		},
+		{
+			name:            "DateRangeWithDots",
+			text:            "有效期：2024.01.01-2030.12.31",
+			expectValidFrom: "2024.01.01",
+			expectValidEnd:  "2030.12.31",
+		},
+		{
+			name:           "DeadlineWithSpacesAndSlash",
+			text:           "有效期限至: 2030 / 12 / 31",
+			expectValidEnd: "2030/12/31",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			var data riderHealthCertOCRData
+			parseRiderHealthCertOCRText(&data, tc.text)
+			require.Equal(t, tc.expectValidFrom, data.ValidStart)
+			require.Equal(t, tc.expectValidEnd, data.ValidEnd)
+		})
+	}
+}

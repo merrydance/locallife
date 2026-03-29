@@ -79,6 +79,68 @@ func readRiderHealthCertOCR(data []byte) riderHealthCertOCRData {
 	return result
 }
 
+func normalizeRiderOCRDateText(value string) string {
+	value = strings.ReplaceAll(value, " 年", "年")
+	value = strings.ReplaceAll(value, "年 ", "年")
+	value = strings.ReplaceAll(value, " 月", "月")
+	value = strings.ReplaceAll(value, "月 ", "月")
+	value = strings.ReplaceAll(value, " 日", "日")
+	value = strings.ReplaceAll(value, "日 ", "日")
+	separatorSpaceRegex := regexp.MustCompile(`\s*([./-])\s*`)
+	value = separatorSpaceRegex.ReplaceAllString(value, "$1")
+	return strings.TrimSpace(value)
+}
+
+func applyRiderHealthCertValidPeriod(data *riderHealthCertOCRData, raw string) {
+	normalized := normalizeRiderOCRDateText(raw)
+	if normalized == "" {
+		return
+	}
+
+	datePattern := `\d{4}\s*(?:年|[./-])\s*\d{1,2}\s*(?:月|[./-])\s*\d{1,2}\s*日?`
+	validRangeRegex := regexp.MustCompile(`(` + datePattern + `)\s*(?:至|到|-|—|~|～)\s*(` + datePattern + `|长期)`)
+	if match := validRangeRegex.FindStringSubmatch(normalized); len(match) > 2 {
+		data.ValidStart = normalizeRiderOCRDateText(match[1])
+		data.ValidEnd = normalizeRiderOCRDateText(match[2])
+		return
+	}
+
+	if strings.Contains(normalized, "长期") {
+		data.ValidEnd = "长期"
+		return
+	}
+
+	data.ValidEnd = normalized
+}
+
+func maskRiderOCRPreview(value string) string {
+	runes := []rune(strings.TrimSpace(value))
+	switch len(runes) {
+	case 0:
+		return ""
+	case 1:
+		return "*"
+	case 2:
+		return string(runes[0]) + "*"
+	default:
+		return string(runes[0]) + strings.Repeat("*", len(runes)-2) + string(runes[len(runes)-1])
+	}
+}
+
+func maskRiderOCRIDPreview(value string) string {
+	runes := []rune(strings.TrimSpace(value))
+	if len(runes) == 0 {
+		return ""
+	}
+	if len(runes) <= 8 {
+		if len(runes) == 1 {
+			return "*"
+		}
+		return string(runes[0]) + strings.Repeat("*", len(runes)-2) + string(runes[len(runes)-1])
+	}
+	return string(runes[:6]) + strings.Repeat("*", len(runes)-10) + string(runes[len(runes)-4:])
+}
+
 func parseRiderHealthCertOCRText(data *riderHealthCertOCRData, text string) {
 	idRegex := regexp.MustCompile(`\b\d{17}[0-9Xx]\b`)
 	if match := idRegex.FindString(text); match != "" {
@@ -92,14 +154,24 @@ func parseRiderHealthCertOCRText(data *riderHealthCertOCRData, text string) {
 	if match := certRegex.FindStringSubmatch(text); len(match) > 1 {
 		data.CertNumber = strings.TrimSpace(match[1])
 	}
-	validToRegex := regexp.MustCompile(`(?:有效期至|有效期到|有效期)\s*[:：]?\s*(\d{4}年\d{1,2}月\d{1,2}日|长期)`)
-	if match := validToRegex.FindStringSubmatch(text); len(match) > 1 {
-		data.ValidEnd = strings.TrimSpace(match[1])
+	datePattern := `\d{4}\s*(?:年|[./-])\s*\d{1,2}\s*(?:月|[./-])\s*\d{1,2}\s*日?`
+	validToPatterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?:有效期至|有效期限至|有效截止日期|截止日期|截止到|到期日期|到期日|有效日期至|有效期到)\s*[:：]?\s*(` + datePattern + `|长期)`),
+		regexp.MustCompile(`(?:有效日期|有效期|有效期限)\s*[:：]?\s*` + datePattern + `\s*(?:至|到|-|—|~|～)\s*(` + datePattern + `|长期)`),
 	}
-	validRangeRegex := regexp.MustCompile(`(\d{4}年\d{1,2}月\d{1,2}日)\s*[至到-]\s*(\d{4}年\d{1,2}月\d{1,2}日|长期)`)
+	for _, validToRegex := range validToPatterns {
+		if match := validToRegex.FindStringSubmatch(text); len(match) > 1 {
+			applyRiderHealthCertValidPeriod(data, match[1])
+			break
+		}
+	}
+	validRangeRegex := regexp.MustCompile(`(` + datePattern + `)\s*(?:至|到|-|—|~|～)\s*(` + datePattern + `|长期)`)
 	if match := validRangeRegex.FindStringSubmatch(text); len(match) > 2 {
-		data.ValidStart = strings.TrimSpace(match[1])
-		data.ValidEnd = strings.TrimSpace(match[2])
+		data.ValidStart = normalizeRiderOCRDateText(match[1])
+		data.ValidEnd = normalizeRiderOCRDateText(match[2])
+	}
+	if data.ValidEnd == "" && strings.Contains(text, "长期") {
+		data.ValidEnd = "长期"
 	}
 }
 
@@ -285,10 +357,14 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 			ocrData.CertNumber = normalized.HealthCert.Certificate
 		}
 		if normalized.HealthCert.ValidPeriod != "" {
-			ocrData.ValidEnd = normalized.HealthCert.ValidPeriod
+			applyRiderHealthCertValidPeriod(&ocrData, normalized.HealthCert.ValidPeriod)
 		}
 	} else if normalized.FoodPermit != nil && normalized.FoodPermit.RawText != "" {
 		parseRiderHealthCertOCRText(&ocrData, normalized.FoodPermit.RawText)
+	}
+	validPeriodRaw := ""
+	if normalized.HealthCert != nil {
+		validPeriodRaw = normalized.HealthCert.ValidPeriod
 	}
 	log.Info().
 		Int64("application_id", payload.ApplicationID).
@@ -300,6 +376,11 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 		Bool("has_name", ocrData.Name != "").
 		Bool("has_cert_number", ocrData.CertNumber != "").
 		Bool("has_valid_end", ocrData.ValidEnd != "").
+		Str("valid_period_raw", truncateString(normalizeRiderOCRDateText(validPeriodRaw), 80)).
+		Str("name_preview", maskRiderOCRPreview(ocrData.Name)).
+		Str("cert_number_preview", maskRiderOCRPreview(ocrData.CertNumber)).
+		Str("id_number_preview", maskRiderOCRIDPreview(ocrData.IDNumber)).
+		Str("valid_end_preview", truncateString(ocrData.ValidEnd, 80)).
 		Msg("rider health cert OCR normalized")
 	ocrJSON, _ := json.Marshal(ocrData)
 	_, err = processor.store.UpdateRiderApplicationHealthCert(ctx, db.UpdateRiderApplicationHealthCertParams{ID: payload.ApplicationID, HealthCertOcr: ocrJSON})

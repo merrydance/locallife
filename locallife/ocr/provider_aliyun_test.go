@@ -428,6 +428,23 @@ func TestAliyunProviderRecognizeNormalizesAdvancedHealthCertWordFragments(t *tes
 	}
 }
 
+func TestAliyunProviderRecognizeNormalizesHealthCertValidityAliases(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"data\":{\"holderName\":\"张三\",\"certificateNumber\":\"JK20260001\",\"expiryDate\":\"2030-12-31\"}}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunHealthCert, RecognizeRequest{DocumentType: DocumentTypeHealthCert})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.HealthCert == nil {
+		t.Fatal("expected normalized health cert result")
+	}
+	if resp.Normalized.HealthCert.ValidPeriod != "2030-12-31" {
+		t.Fatalf("valid period = %s", resp.Normalized.HealthCert.ValidPeriod)
+	}
+}
+
 func TestAliyunProviderRecognizeNormalizesStringifiedIDCardFrontData(t *testing.T) {
 	raw := json.RawMessage(`{
 		"Data": "{\"data\":{\"face\":{\"data\":{\"name\":\"张泽强\",\"sex\":\"男\",\"ethnicity\":\"汉\",\"birthDate\":\"1978年11月6日\",\"address\":\"河北省邢台市宁晋县耿庄桥镇西周家庄村永富西街1胡同1号\",\"idNumber\":\"132229197811067791\"}}}}"
