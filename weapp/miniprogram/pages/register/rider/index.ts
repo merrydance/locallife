@@ -20,9 +20,10 @@ type UploadFieldValue = {
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const message = (error as { message?: string }).message
-    if (message) return message
+  if (error && typeof error === 'object') {
+    const maybeError = error as { userMessage?: string, message?: string }
+    if (maybeError.userMessage) return maybeError.userMessage
+    if (maybeError.message) return maybeError.message
   }
   return fallback
 }
@@ -166,6 +167,7 @@ Page({
     } catch (e) {
       wx.hideLoading()
       logger.error('OCR failed', e)
+      wx.showToast({ title: getErrorMessage(e, '图片已上传，系统处理中'), icon: 'none', duration: 3000 })
     }
   },
 

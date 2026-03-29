@@ -31,6 +31,7 @@
     <!-- Step 1: 证照上传 -->
     <view class="step-content" wx:if="{{currentStep === 1}}">
         <view class="section-header">证照上传 (自动识别)</view>
+        <view class="ocr-progress-notice" wx:if="{{ocrProgressMessage}}">{{ocrProgressMessage}}</view>
         <view class="upload-group">
             <view class="upload-item">
                 <view class="upload-label">营业执照 (必传)</view>
@@ -56,23 +57,24 @@
     <!-- Step 2: 信息确认 (OCR 识别结果，只读) -->
     <view class="step-content" wx:if="{{currentStep === 2}}">
         <view class="section-header">证照信息 (OCR识别)</view>
+        <view class="ocr-progress-notice" wx:if="{{ocrProgressMessage}}">{{ocrProgressMessage}}</view>
         <view class="form-group readonly-group">
-            <t-cell title="营业执照名" note="{{formData.licenseName || '待识别'}}" />
-            <t-cell title="统一信用代码" note="{{formData.creditCode || '待识别'}}" />
-            <t-cell title="注册地址" note="{{formData.registerAddress || '待识别'}}" />
-            <t-cell title="营业期限" note="{{formData.licenseValidity || '待识别'}}" />
+            <t-cell title="营业执照名" note="{{formData.licenseName || ocrFieldPlaceholder}}" />
+            <t-cell title="统一信用代码" note="{{formData.creditCode || ocrFieldPlaceholder}}" />
+            <t-cell title="注册地址" note="{{formData.registerAddress || ocrFieldPlaceholder}}" />
+            <t-cell title="营业期限" note="{{formData.licenseValidity || ocrFieldPlaceholder}}" />
             <view class="scope-cell">
                 <view class="scope-label">经营范围</view>
-                <view class="scope-content">{{formData.businessScope || '待识别'}}</view>
+                <view class="scope-content">{{formData.businessScope || ocrFieldPlaceholder}}</view>
             </view>
-            <t-cell title="许可证有效期" note="{{formData.foodLicenseValidity || '待识别'}}" />
+            <t-cell title="许可证有效期" note="{{formData.foodLicenseValidity || ocrFieldPlaceholder}}" />
         </view>
 
         <view class="section-header">法人信息 (OCR识别)</view>
         <view class="form-group readonly-group">
-            <t-cell title="法人姓名" note="{{formData.legalPerson || '待识别'}}" />
-            <t-cell title="身份证号" note="{{formData.idCard || '待识别'}}" />
-            <t-cell title="身份证有效期" note="{{formData.idCardValidity || '待识别'}}" />
+            <t-cell title="法人姓名" note="{{formData.legalPerson || ocrFieldPlaceholder}}" />
+            <t-cell title="身份证号" note="{{formData.idCard || ocrFieldPlaceholder}}" />
+            <t-cell title="身份证有效期" note="{{formData.idCardValidity || ocrFieldPlaceholder}}" />
         </view>
         
         <view class="section-header">基本信息 (可编辑)</view>

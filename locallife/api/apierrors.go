@@ -119,6 +119,7 @@ var (
 	ErrOperatorApplicationPending  = apierr(40962, "there is already a pending operator application")
 	ErrRegionHasOperator           = apierr(40963, "the selected region already has an active operator")
 	ErrRegionHasPendingApplication = apierr(40964, "the selected region already has a pending application")
+	ErrImageModerationPending      = apierr(40965, "image moderation is pending, please retry later")
 )
 
 // ==================== 图片/文件上传 (Image/Upload) ====================

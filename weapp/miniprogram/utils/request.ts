@@ -109,6 +109,99 @@ function mapSearchBadRequestMessage(url: string, backendMessage: string, fallbac
   return '当前区域暂无可用内容'
 }
 
+function containsChinese(text: string): boolean {
+  return /[\u4e00-\u9fff]/.test(text)
+}
+
+function isEnglishOnlyMessage(text: string): boolean {
+  return /[a-zA-Z]/.test(text) && !containsChinese(text)
+}
+
+function mapKnownBackendMessage(url: string, backendMessage: string): string | undefined {
+  const normalized = backendMessage.trim().toLowerCase()
+  if (!normalized) {
+    return undefined
+  }
+
+  if (normalized === 'merchant is closed') {
+    return '商户休息中～'
+  }
+
+  if (normalized.includes('image moderation is pending')) {
+    return '图片已上传，系统处理中'
+  }
+
+  if (normalized.includes('invalid media id')) {
+    return '图片处理失败，请重新上传'
+  }
+
+  if (
+    normalized.includes('upload session not found') ||
+    normalized.includes('session not found') ||
+    normalized.includes('asset not found') ||
+    normalized.includes('media: asset')
+  ) {
+    if (url.includes('/v1/media') || url.includes('/v1/ocr')) {
+      return '图片已失效，请重新上传'
+    }
+  }
+
+  if (normalized.includes('ocr timeout') || normalized.includes('recognize timeout') || normalized.includes('recognition timeout')) {
+    return '系统识别时间较长，请稍后查看结果'
+  }
+
+  if (
+    normalized.includes('ocr failed') ||
+    normalized.includes('recognize failed') ||
+    normalized.includes('recognition failed')
+  ) {
+    return '图片识别失败，请重新上传清晰图片'
+  }
+
+  if (normalized.includes('invalid coordinates')) {
+    return '位置信息无效，请重新定位'
+  }
+
+  if (normalized.includes('no application') || normalized.includes('application not found')) {
+    return '您还没有申请记录'
+  }
+
+  if (normalized.includes('already submitted') || normalized.includes('application submitted')) {
+    return '申请已提交，请等待审核'
+  }
+
+  if (normalized.includes('already approved') || normalized.includes('application approved')) {
+    return '申请已通过，无需重复提交'
+  }
+
+  if (normalized.includes('unauthorized') || normalized.includes('forbidden')) {
+    return '当前无权限执行该操作'
+  }
+
+  return undefined
+}
+
+function normalizeBackendUserMessage(url: string, backendMessage: string, fallback: string): string {
+  if (!backendMessage) {
+    return fallback
+  }
+
+  const mappedMessage = mapKnownBackendMessage(url, backendMessage)
+  if (mappedMessage) {
+    return mappedMessage
+  }
+
+  if (containsChinese(backendMessage)) {
+    return backendMessage
+  }
+
+  if (isEnglishOnlyMessage(backendMessage)) {
+    return fallback
+  }
+
+  return backendMessage
+}
+
 function isExpectedOperatorApplicationNotFound(
   method: string,
   url: string,
@@ -313,23 +406,20 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       }
 
       if (envelopeCode !== undefined) {
-        let userMessage = backendMessage || '服务器响应异常,请稍后重试'
+        let userMessage = normalizeBackendUserMessage(url, backendMessage, '服务器响应异常,请稍后重试')
         const displayCode = rawEnvelopeCode ?? envelopeCode
         let errorDetail = `API ${displayCode}`
         let errorType = ErrorType.BUSINESS
 
         if (envelopeCode === ErrorCode.BAD_REQUEST) {
-          userMessage = backendMessage || '请求参数错误'
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '请求参数错误')
           userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
-          if (backendMessage === 'merchant is closed') {
-            userMessage = '商户休息中～'
-          }
           errorDetail = `参数错误(${displayCode}): ${backendMessage}`
         } else if (envelopeCode === ErrorCode.CONFLICT) {
-          userMessage = backendMessage || '操作冲突，请稍后重试'
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '操作冲突，请稍后重试')
           errorDetail = `冲突(${displayCode}): ${backendMessage}`
         } else if (envelopeCode === ErrorCode.NOT_FOUND) {
-          userMessage = backendMessage || '服务暂时不可用,请稍后重试'
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '服务暂时不可用,请稍后重试')
           errorDetail = backendMessage ? `服务未找到(${displayCode}): ${backendMessage}` : `服务未找到(${displayCode})`
         } else if (
           envelopeCode === ErrorCode.BAD_GATEWAY ||
@@ -348,11 +438,11 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
           errorDetail = `认证失败(${displayCode})`
           errorType = ErrorType.AUTH
         } else if (envelopeCode === ErrorCode.FORBIDDEN) {
-          userMessage = backendMessage || '无权限操作'
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '无权限操作')
           errorDetail = `权限不足(${displayCode}): ${backendMessage}`
           errorType = ErrorType.PERMISSION
         } else if (envelopeCode === ErrorCode.UNPROCESSABLE) {
-          userMessage = backendMessage || '请求语义错误'
+          userMessage = normalizeBackendUserMessage(url, backendMessage, '请求语义错误')
           errorDetail = `语义错误(${displayCode}): ${backendMessage}`
         } else if (envelopeCode === ErrorCode.TOO_MANY_REQUESTS) {
           userMessage = '请求过于频繁，请稍后重试'
@@ -367,29 +457,24 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         }
 
       // 常见HTTP错误处理
-      let userMessage = backendMessage || '服务器响应异常,请稍后重试'
+      let userMessage = normalizeBackendUserMessage(url, backendMessage, '服务器响应异常,请稍后重试')
       let errorDetail = `HTTP ${result.statusCode}`
       let errorType = ErrorType.NETWORK
 
       if (result.statusCode === 400) {
         // 400 Bad Request - 请求参数错误，显示后端返回的具体错误信息
-        userMessage = backendMessage || '请求参数错误'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '请求参数错误')
         userMessage = mapSearchBadRequestMessage(url, backendMessage, userMessage)
-        
-        // 关键逻辑：如果是商户休息中，返回更友好的提示
-        if (backendMessage === 'merchant is closed') {
-            userMessage = '商户休息中～'
-        }
-        
+
         errorDetail = `参数错误(400): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       } else if (result.statusCode === 409) {
         // 409 Conflict - 冲突错误（如时间段已被预订），显示后端返回的具体错误信息
-        userMessage = backendMessage || '操作冲突，请稍后重试'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '操作冲突，请稍后重试')
         errorDetail = `冲突(409): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       } else if (result.statusCode === 404) {
-        userMessage = backendMessage || '服务暂时不可用,请稍后重试'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '服务暂时不可用,请稍后重试')
         errorDetail = backendMessage ? `服务未找到(404): ${backendMessage}` : '服务未找到(404) - 可能是后端服务未启动'
       } else if (result.statusCode === 502 || result.statusCode === 503 || result.statusCode === 504) {
         userMessage = '服务暂时不可用,请稍后重试'
@@ -399,7 +484,7 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         errorDetail = `服务器错误(${result.statusCode})`
       } else if (result.statusCode >= 400) {
         // 其他 4xx 客户端错误，优先使用后端返回的消息
-        userMessage = backendMessage || '请求失败，请稍后重试'
+        userMessage = normalizeBackendUserMessage(url, backendMessage, '请求失败，请稍后重试')
         errorDetail = `客户端错误(${result.statusCode}): ${backendMessage}`
         errorType = ErrorType.BUSINESS
       }
@@ -527,11 +612,12 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       // 业务错误
       const errorCode = response.code || 'UNKNOWN'
       const errorMessage = response.message || '未知错误'
+      const friendlyMessage = normalizeBackendUserMessage(url, errorMessage, '操作失败，请稍后重试')
       logger.warn(`API业务错误: ${method} ${url}`, { code: errorCode, message: errorMessage, fullResponse: response }, 'request')
       throw new AppError({
         type: ErrorType.BUSINESS,
         message: `API错误 [${errorCode}]: ${errorMessage}`,
-        userMessage: errorMessage
+        userMessage: friendlyMessage
       })
     }
     } catch (error) {

@@ -2,6 +2,10 @@ import { request } from '../utils/request'
 import { uploadMedia, type MediaUploadResult } from '../utils/media'
 import type { AgreementConsentPayload } from './agreement-consent'
 
+const OCR_ENQUEUE_RETRY_DELAY_MS = 1500
+const OCR_ENQUEUE_MAX_ATTEMPTS = 3
+const IMAGE_MODERATION_PENDING_MARKERS = ['image moderation is pending', '内容审核中']
+
 // ==================== OCR Status Types ====================
 
 export type OCRStatus = 'pending' | 'processing' | 'done' | 'failed'
@@ -85,6 +89,21 @@ interface OCRJobResponse {
   status: string
 }
 
+export type MerchantApplicationOCRDocumentType = 'business_license' | 'food_permit' | 'id_card'
+
+export type MerchantApplicationOCRSubmissionState = 'queued' | 'moderation_pending'
+
+export interface MerchantApplicationOCRSubmissionResult {
+  draft: MerchantApplicationDraftResponse
+  mediaId: number
+  state: MerchantApplicationOCRSubmissionState
+}
+
+interface MerchantApplicationOCRRequestOptions {
+  maxAttempts?: number
+  retryDelayMs?: number
+}
+
 // 图片上传响应
 export interface UploadImageResponse {
   image_url: string
@@ -144,24 +163,88 @@ export function updateMerchantBasicInfo(data: UpdateMerchantBasicInfoRequest) {
 
 async function enqueueMerchantApplicationOCR(
   mediaId: number,
-  documentType: 'business_license' | 'food_permit' | 'id_card',
-  side?: 'Front' | 'Back'
-) {
+  documentType: MerchantApplicationOCRDocumentType,
+  side?: 'Front' | 'Back',
+  options?: MerchantApplicationOCRRequestOptions
+): Promise<MerchantApplicationOCRSubmissionResult> {
   const draft = await getMerchantApplication()
 
-  await request<OCRJobResponse>({
-    url: '/v1/ocr/jobs',
-    method: 'POST',
-    data: {
-      document_type: documentType,
-      media_asset_id: mediaId,
-      owner_type: 'merchant_application',
-      owner_id: draft.id,
-      side: side ? side.toLowerCase() : undefined
-    }
-  })
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? OCR_ENQUEUE_MAX_ATTEMPTS)
+  const retryDelayMs = Math.max(0, options?.retryDelayMs ?? OCR_ENQUEUE_RETRY_DELAY_MS)
 
-  return getMerchantApplication()
+  for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+    try {
+      await request<OCRJobResponse>({
+        url: '/v1/ocr/jobs',
+        method: 'POST',
+        data: {
+          document_type: documentType,
+          media_asset_id: mediaId,
+          owner_type: 'merchant_application',
+          owner_id: draft.id,
+          side: side ? side.toLowerCase() : undefined
+        }
+      })
+
+      return {
+        draft: await getMerchantApplication(),
+        mediaId,
+        state: 'queued' as const
+      }
+    } catch (error) {
+      if (!isImageModerationPendingError(error)) {
+        throw error
+      }
+
+      if (attempt >= maxAttempts - 1) {
+        return {
+          draft,
+          mediaId,
+          state: 'moderation_pending' as const
+        }
+      }
+
+      await sleep(retryDelayMs)
+    }
+  }
+
+  return {
+    draft,
+    mediaId,
+    state: 'moderation_pending'
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, ms)
+  })
+}
+
+function extractErrorMessage(error: unknown) {
+  if (!error || typeof error !== 'object') return ''
+
+  const maybeError = error as {
+    userMessage?: string
+    message?: string
+    originalError?: { message?: string }
+  }
+
+  return String(maybeError.userMessage || maybeError.message || maybeError.originalError?.message || '')
+}
+
+function isImageModerationPendingError(error: unknown) {
+  const message = extractErrorMessage(error).toLowerCase()
+  return IMAGE_MODERATION_PENDING_MARKERS.some((marker) => message.includes(marker))
+}
+
+export function enqueueMerchantApplicationOCRForMedia(
+  mediaId: number,
+  documentType: MerchantApplicationOCRDocumentType,
+  side?: 'Front' | 'Back',
+  options?: MerchantApplicationOCRRequestOptions
+) {
+  return enqueueMerchantApplicationOCR(mediaId, documentType, side, options)
 }
 
 /**
@@ -169,7 +252,7 @@ async function enqueueMerchantApplicationOCR(
  * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=business_license
  * 若传 filePath：先上传到媒体服务，再以 media_asset_id 创建 OCR 作业
  */
-export async function ocrBusinessLicense(filePath?: string) {
+export async function ocrBusinessLicense(filePath?: string): Promise<MerchantApplicationOCRSubmissionResult> {
   if (!filePath) {
     throw new Error('missing filePath for merchant business license OCR')
   }
@@ -184,7 +267,7 @@ export async function ocrBusinessLicense(filePath?: string) {
  * 食品经营许可证 OCR（异步）
  * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=food_permit
  */
-export async function ocrFoodPermit(filePath?: string) {
+export async function ocrFoodPermit(filePath?: string): Promise<MerchantApplicationOCRSubmissionResult> {
   if (!filePath) {
     throw new Error('missing filePath for merchant food permit OCR')
   }
@@ -200,7 +283,7 @@ export async function ocrFoodPermit(filePath?: string) {
  * 统一走 POST /v1/ocr/jobs，owner_type=merchant_application，document_type=id_card
  * @param side 'Front' 或 'Back'
  */
-export async function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back') {
+export async function ocrIdCard(filePath: string | undefined, side: 'Front' | 'Back'): Promise<MerchantApplicationOCRSubmissionResult> {
   if (!filePath) {
     throw new Error('missing filePath for merchant id card OCR')
   }
@@ -277,6 +360,13 @@ export function updateMerchantImages(data: UpdateMerchantImagesRequest) {
     url: '/v1/merchant/application/images',
     method: 'PUT',
     data
+  })
+}
+
+export function deleteMediaAsset(mediaId: number) {
+  return request<void>({
+    url: `/v1/media/${mediaId}`,
+    method: 'DELETE'
   })
 }
 

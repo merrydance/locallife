@@ -33,10 +33,13 @@ type InputEvent = {
 }
 
 const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
+  if (error && typeof error === 'object') {
+    const maybeError = error as { userMessage?: unknown, message?: unknown }
+    if (typeof maybeError.userMessage === 'string' && maybeError.userMessage.trim()) {
+      return maybeError.userMessage
+    }
+    if (typeof maybeError.message === 'string' && maybeError.message.trim()) {
+      return maybeError.message
     }
   }
   return fallback
@@ -92,13 +95,15 @@ Page({
     wx.showLoading({ title: '识别身份证...' })
     try {
       const res = await ocrIdCard(path, 'Front')
-      if (res.id_card_front_ocr) {
-        this.setData({ 'formData.legalPerson': res.id_card_front_ocr.name || '' })
+      if (res.draft.id_card_front_ocr?.name) {
+        this.setData({ 'formData.legalPerson': res.draft.id_card_front_ocr.name || '' })
+      } else if (res.state === 'moderation_pending') {
+        wx.showToast({ title: '身份证已上传，系统处理中', icon: 'none' })
       }
       wx.hideLoading()
     } catch (e) {
       wx.hideLoading()
-      wx.showToast({ title: '识别失败，请手动确认', icon: 'none' })
+      wx.showToast({ title: getErrorMessage(e, '识别失败，请手动确认'), icon: 'none' })
     }
   },
 
@@ -118,6 +123,7 @@ Page({
       wx.hideLoading()
     } catch (e) {
       wx.hideLoading()
+      wx.showToast({ title: getErrorMessage(e, '图片已上传，系统处理中'), icon: 'none' })
     }
   },
 

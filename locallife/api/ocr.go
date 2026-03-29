@@ -553,6 +553,21 @@ func (server *Server) markOCRPending(ctx *gin.Context, job db.OcrJob) error {
 	}
 }
 
+func (server *Server) validateOCRMediaAsset(ctx *gin.Context, mediaAssetID int64) error {
+	asset, err := server.store.GetMediaAssetByID(ctx, mediaAssetID)
+	if err != nil {
+		return err
+	}
+	switch asset.ModerationStatus {
+	case "approved":
+		return nil
+	case "pending":
+		return ErrImageModerationPending
+	default:
+		return ErrImageContentSafetyFailed
+	}
+}
+
 // createOCRJob godoc
 // @Summary 创建统一 OCR 任务
 // @Description 统一创建 OCR 任务并返回可轮询的 ocr_job_id
@@ -613,6 +628,22 @@ func (server *Server) createOCRJob(ctx *gin.Context) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("forbidden")))
 			return
 		}
+	}
+	if err := server.validateOCRMediaAsset(ctx, req.MediaAssetID); err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("media asset not found")))
+			return
+		}
+		if apiErr := AsAPIError(err); apiErr != nil {
+			status := http.StatusBadRequest
+			if apiErr.Code >= 40900 && apiErr.Code < 41000 {
+				status = http.StatusConflict
+			}
+			ctx.JSON(status, errorResponse(apiErr))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 	idempotencyKey := strings.TrimSpace(req.IdempotencyKey)
 	if idempotencyKey == "" {

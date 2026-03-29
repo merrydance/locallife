@@ -1,5 +1,6 @@
 import {
   type MerchantApplicationDraftResponse,
+  enqueueMerchantApplicationOCRForMedia,
   getMerchantApplication,
   getMyApplication,
   ocrBusinessLicense,
@@ -7,6 +8,8 @@ import {
   ocrIdCard,
   resetMerchantApplication,
   submitMerchantApplication,
+  type MerchantApplicationOCRDocumentType,
+  type MerchantApplicationOCRSubmissionResult,
   updateMerchantBasicInfo
 } from '../../../../api/onboarding'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
@@ -199,10 +202,10 @@ function buildOcrNoticeMessage(statuses: OcrStatus[], refreshRecommended: boolea
   }
 
   if (refreshRecommended) {
-    return '证照已上传，OCR 识别耗时较长，请点击“刷新识别结果”或下拉刷新查看最新状态。'
+    return '证照已上传，OCR 识别耗时较长，可点击“刷新识别结果”查看最新状态。'
   }
 
-  return '部分证照仍在识别中，识别较慢时可稍后下拉刷新查看最新结果。'
+  return '部分证照仍在识别中，识别较慢时可稍后点击“刷新识别结果”查看最新状态。'
 }
 
 Page({
@@ -576,31 +579,35 @@ Page({
     this.setData({ [uploadingKey]: true })
     wx.showLoading({ title: '识别中...' })
 
-    let draft: MerchantApplicationDraftResponse | null = null
+    let submissionResult: MerchantApplicationOCRSubmissionResult | null = null
     try {
       if (field === 'license') {
-        draft = await ocrBusinessLicense(path)
+        submissionResult = await ocrBusinessLicense(path)
       } else if (field === 'foodPermit') {
-        draft = await ocrFoodPermit(path)
+        submissionResult = await ocrFoodPermit(path)
       } else if (field === 'idCardFront') {
-        draft = await ocrIdCard(path, 'Front')
+        submissionResult = await ocrIdCard(path, 'Front')
       } else {
-        draft = await ocrIdCard(path, 'Back')
+        submissionResult = await ocrIdCard(path, 'Back')
       }
 
-      const latestDraft = await this.waitForOcrDraft(field, draft)
+      if (!submissionResult) {
+        throw new Error('证照上传失败，请稍后重试')
+      }
+
+      const latestDraft = await this.waitForOcrDraft(field, submissionResult)
       await this.mergeOcrDraft(field, latestDraft, path)
       wx.showToast({ title: '识别完成，请确认回填信息', icon: 'success' })
     } catch (error) {
       logger.error('Upload merchant application document failed', error, 'merchant-application-page')
 
-      if (draft && isOcrTimeoutError(error)) {
+      if (submissionResult && isOcrTimeoutError(error)) {
         try {
-          await this.mergeOcrDraft(field, draft, path, { refreshRecommended: true })
+          await this.mergeOcrDraft(field, submissionResult.draft, path, { refreshRecommended: true })
         } catch (mergeError) {
           logger.warn('Apply OCR timeout draft failed', mergeError, 'merchant-application-page')
         }
-        wx.showToast({ title: '证照已上传，识别耗时较长，请刷新查看结果', icon: 'none' })
+        wx.showToast({ title: '证照已上传，识别耗时较长，可稍后点击“刷新识别结果”查看', icon: 'none' })
         return
       }
 
@@ -624,20 +631,40 @@ Page({
     }
   },
 
-  async waitForOcrDraft(field: UploadField, draft: MerchantApplicationDraftResponse) {
+  async waitForOcrDraft(field: UploadField, submissionResult: MerchantApplicationOCRSubmissionResult) {
     const fieldKey = this.getOcrFieldKey(field)
-    const initialResult = draft[fieldKey]
+    let latestDraft = submissionResult.draft
+    const retryConfig = this.getOcrRetryConfig(field, submissionResult.mediaId)
+    const initialResult = latestDraft[fieldKey]
     const initialStatus = initialResult?.status
     if (initialStatus === 'failed') {
       throw new Error(initialResult?.error || '识别失败，请重新上传清晰图片')
     }
     if (initialStatus === 'done') {
-      return draft
+      return latestDraft
     }
 
     for (let attempt = 0; attempt < 15; attempt += 1) {
+      if (!latestDraft[fieldKey]?.status && retryConfig) {
+        try {
+          const retryResult = await enqueueMerchantApplicationOCRForMedia(
+            retryConfig.mediaId,
+            retryConfig.documentType,
+            retryConfig.side,
+            { maxAttempts: 1, retryDelayMs: 0 }
+          )
+          latestDraft = retryResult.draft
+        } catch (error) {
+          logger.warn('Retry merchant application OCR enqueue failed', {
+            field,
+            mediaId: retryConfig.mediaId,
+            error
+          }, 'merchant-application-page')
+        }
+      }
+
       await this.sleep(2000)
-      const latestDraft = await getMerchantApplication()
+      latestDraft = await getMerchantApplication()
       const latestResult = latestDraft[fieldKey]
       const latestStatus = latestResult?.status
       if (latestStatus === 'failed') {
@@ -651,8 +678,21 @@ Page({
     throw new AppError({
       type: ErrorType.UNKNOWN,
       message: 'OCR timeout',
-      userMessage: '识别超时，请稍后下拉刷新查看结果'
+      userMessage: '识别超时，请稍后点击“刷新识别结果”查看状态'
     })
+  },
+
+  getOcrRetryConfig(field: UploadField, mediaId: number) {
+    switch (field) {
+      case 'license':
+        return { mediaId, documentType: 'business_license' as MerchantApplicationOCRDocumentType }
+      case 'foodPermit':
+        return { mediaId, documentType: 'food_permit' as MerchantApplicationOCRDocumentType }
+      case 'idCardFront':
+        return { mediaId, documentType: 'id_card' as MerchantApplicationOCRDocumentType, side: 'Front' as const }
+      default:
+        return { mediaId, documentType: 'id_card' as MerchantApplicationOCRDocumentType, side: 'Back' as const }
+    }
   },
 
   getOcrFieldKey(field: UploadField): OcrFieldKey {
@@ -739,12 +779,7 @@ Page({
     const idCardName = draft.id_card_front_ocr?.name || form.legalPersonName
     if (!licenseLegalPerson || !idCardName || licenseLegalPerson === idCardName) return
 
-    wx.showModal({
-      title: '法人信息待确认',
-      content: `营业执照法人“${licenseLegalPerson}”与身份证姓名“${idCardName}”不一致，提交前请确认，否则可能审核失败。`,
-      showCancel: false,
-      confirmText: '我知道了'
-    })
+    wx.showToast({ title: '请上传法人身份证', icon: 'none', duration: 3000 })
   },
 
   sleep(ms: number) {
@@ -780,13 +815,13 @@ Page({
       if (item.status === 'done') continue
       if (item.status === 'processing' || item.status === 'pending') {
         return this.data.ocrRefreshRecommended
-          ? `${item.label}识别耗时较长，请先刷新识别结果后再提交`
+          ? `${item.label}识别耗时较长，请先点击“刷新识别结果”后再提交`
           : `${item.label}仍在识别中，请稍候提交`
       }
       if (item.status === 'failed') {
         return `${item.label}识别失败，请重新上传清晰图片`
       }
-      return `${item.label}识别结果未就绪，请下拉刷新后重试`
+      return `${item.label}识别结果未就绪，请先点击“刷新识别结果”后再试`
     }
 
     return ''

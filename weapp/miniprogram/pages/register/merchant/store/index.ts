@@ -5,6 +5,7 @@ import { DraftStorage } from '../../../../utils/draft-storage'
 import {
   getMerchantApplication,
   updateMerchantBasicInfo,
+  enqueueMerchantApplicationOCRForMedia,
   ocrBusinessLicense,
   ocrFoodPermit,
   ocrIdCard,
@@ -13,6 +14,9 @@ import {
   resetMerchantApplication,
   uploadMerchantImage,
   updateMerchantImages,
+  deleteMediaAsset,
+  type MerchantApplicationOCRDocumentType,
+  type MerchantApplicationOCRSubmissionResult,
   type MerchantApplicationDraftResponse
 } from '../../../../api/onboarding'
 import { getPrivateMediaUrl } from '../../../../utils/image-security'
@@ -60,6 +64,21 @@ type ImageFieldItem = {
   assetId?: number
 }
 
+type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
+
+type OCRFieldKey = 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr'
+
+type OCRPollOptions = {
+  retryQueue?: {
+    mediaId: number
+    documentType: MerchantApplicationOCRDocumentType
+    side?: 'Front' | 'Back'
+  }
+  timeoutMessage?: string
+}
+
+const activeOcrPollers: Partial<Record<OCRFieldKey, number>> = {}
+
 function buildPrivateAssetKey(assetId?: number | null): string | undefined {
   return assetId && assetId > 0 ? `asset:${assetId}` : undefined
 }
@@ -105,6 +124,8 @@ Page({
     currentStep: 0, // 0: Intro, 1: Upload, 2: Info, 3: Location, 4: Review, 5: Polling
     isSubmitting: false, // 防止重复提交
     applicationInitialized: false, // 标记申请草稿是否已成功创建
+    ocrProgressMessage: '',
+    ocrFieldPlaceholder: '系统识别中，完成后自动回填',
     formData: {
       // 基本信息
       name: '',
@@ -341,6 +362,10 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
+  onUnload() {
+    this.clearAllOcrPollers()
+  },
+
   applyLatestOcrDraft(data: MerchantDraftExt) {
     this.setData({
       formData: {
@@ -362,8 +387,43 @@ Page({
         idCard: data.id_card_front_ocr || null
       }
     }, () => {
+      this.updateOcrProgressMessage(data)
       this.saveDraft()
       this.checkLegalPersonConsistency()
+    })
+  },
+
+  buildOcrProgressMessage(data?: MerchantDraftExt) {
+    const checks = [
+      {
+        uploaded: Boolean((data?.business_license_media_asset_id && data.business_license_media_asset_id > 0) || this.data.licenseImages.length > 0),
+        status: data?.business_license_ocr?.status || ''
+      },
+      {
+        uploaded: Boolean((data?.food_permit_media_asset_id && data.food_permit_media_asset_id > 0) || this.data.foodLicenseImages.length > 0),
+        status: data?.food_permit_ocr?.status || ''
+      },
+      {
+        uploaded: Boolean((data?.id_card_front_media_asset_id && data.id_card_front_media_asset_id > 0) || this.data.idCardFrontImages.length > 0),
+        status: data?.id_card_front_ocr?.status || ''
+      },
+      {
+        uploaded: Boolean((data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || this.data.idCardBackImages.length > 0),
+        status: data?.id_card_back_ocr?.status || ''
+      }
+    ]
+
+    const hasInProgress = checks.some((item) => item.uploaded && item.status !== 'done' && item.status !== 'failed')
+    if (!hasInProgress) {
+      return ''
+    }
+
+    return '证照已上传，系统正在自动识别，完成后会自动回填。你可以先继续填写后续信息。'
+  },
+
+  updateOcrProgressMessage(data?: MerchantDraftExt) {
+    this.setData({
+      ocrProgressMessage: this.buildOcrProgressMessage(data)
     })
   },
 
@@ -390,6 +450,132 @@ Page({
         error: data.id_card_back_ocr?.error
       }
     ]
+  },
+
+  clearAllOcrPollers() {
+    (Object.keys(activeOcrPollers) as OCRFieldKey[]).forEach((fieldKey) => {
+      const intervalId = activeOcrPollers[fieldKey]
+      if (intervalId) {
+        clearInterval(intervalId)
+        delete activeOcrPollers[fieldKey]
+      }
+    })
+  },
+
+  stopOcrPolling(fieldKey: OCRFieldKey) {
+    const intervalId = activeOcrPollers[fieldKey]
+    if (!intervalId) return
+    clearInterval(intervalId)
+    delete activeOcrPollers[fieldKey]
+  },
+
+  setUploadedImage(field: UploadField, path: string, assetId?: number) {
+    const image = [{ url: path, assetId }]
+    switch (field) {
+      case 'license':
+        this.setData({ licenseImages: image })
+        break
+      case 'foodPermit':
+        this.setData({ foodLicenseImages: image })
+        break
+      case 'idCardFront':
+        this.setData({ idCardFrontImages: image })
+        break
+      default:
+        this.setData({ idCardBackImages: image })
+        break
+    }
+  },
+
+  handleDocumentOCRSubmission(
+    label: string,
+    fieldKey: OCRFieldKey,
+    result: MerchantApplicationOCRSubmissionResult,
+    onRecognized: (ocr: OCRResult) => void,
+    options?: {
+      documentType: MerchantApplicationOCRDocumentType
+      side?: 'Front' | 'Back'
+    }
+  ) {
+    if (result.state === 'queued') {
+      wx.hideLoading()
+      wx.showToast({ title: '上传成功，识别中...', icon: 'none' })
+      this.updateOcrProgressMessage(result.draft as MerchantDraftExt)
+      this.pollOcrStatus(fieldKey, onRecognized)
+      return
+    }
+
+    wx.hideLoading()
+    wx.showToast({
+      title: `${label}已上传，系统处理中`,
+      icon: 'none',
+      duration: 2500
+    })
+    this.updateOcrProgressMessage(result.draft as MerchantDraftExt)
+    this.pollOcrStatus(fieldKey, onRecognized, {
+      retryQueue: {
+        mediaId: result.mediaId,
+        documentType: options?.documentType || 'business_license',
+        side: options?.side
+      }
+    })
+  },
+
+  async ensureUploadStepOCRQueued(data: MerchantDraftExt) {
+    const retryTargets: Array<{
+      fieldKey: OCRFieldKey
+      assetId?: number
+      documentType: MerchantApplicationOCRDocumentType
+      side?: 'Front' | 'Back'
+    }> = [
+      {
+        fieldKey: 'business_license_ocr',
+        assetId: data.business_license_media_asset_id ?? this.data.licenseImages[0]?.assetId,
+        documentType: 'business_license'
+      },
+      {
+        fieldKey: 'food_permit_ocr',
+        assetId: data.food_permit_media_asset_id ?? this.data.foodLicenseImages[0]?.assetId,
+        documentType: 'food_permit'
+      },
+      {
+        fieldKey: 'id_card_front_ocr',
+        assetId: data.id_card_front_media_asset_id ?? this.data.idCardFrontImages[0]?.assetId,
+        documentType: 'id_card',
+        side: 'Front'
+      },
+      {
+        fieldKey: 'id_card_back_ocr',
+        assetId: data.id_card_back_media_asset_id ?? this.data.idCardBackImages[0]?.assetId,
+        documentType: 'id_card',
+        side: 'Back'
+      }
+    ]
+
+    let latestDraft = data
+    for (const target of retryTargets) {
+      if (!target.assetId || latestDraft[target.fieldKey]?.status) {
+        continue
+      }
+
+      try {
+        const retryResult = await enqueueMerchantApplicationOCRForMedia(
+          target.assetId,
+          target.documentType,
+          target.side,
+          { maxAttempts: 1, retryDelayMs: 0 }
+        )
+        latestDraft = retryResult.draft as MerchantDraftExt
+      } catch (error) {
+        logger.warn('[MerchantRegister] 补建 OCR 任务失败', {
+          fieldKey: target.fieldKey,
+          assetId: target.assetId,
+          error
+        }, 'ensureUploadStepOCRQueued')
+      }
+    }
+
+    return latestDraft
   },
 
   // ==================== 草稿管理 ====================
@@ -640,23 +826,14 @@ Page({
 
       wx.showLoading({ title: '校验识别结果...' })
       try {
-        const latestDraft = await getMerchantApplication() as MerchantDraftExt
+        let latestDraft = await getMerchantApplication() as MerchantDraftExt
+        latestDraft = await this.ensureUploadStepOCRQueued(latestDraft)
         this.applyLatestOcrDraft(latestDraft)
 
         const failedCheck = this.getUploadStepOcrChecks(latestDraft).find((item) => item.status === 'failed')
         if (failedCheck) {
           wx.showToast({
             title: failedCheck.error || `${failedCheck.label}识别失败，请重新上传`,
-            icon: 'none',
-            duration: 3000
-          })
-          return
-        }
-
-        const pendingCheck = this.getUploadStepOcrChecks(latestDraft).find((item) => item.status !== 'done')
-        if (pendingCheck) {
-          wx.showToast({
-            title: `${pendingCheck.label}仍在识别中，请稍后再试`,
             icon: 'none',
             duration: 3000
           })
@@ -679,20 +856,46 @@ Page({
 
     // Step 3 check (Info) - 必填字段校验
     if (currentStep === 2) {
-      const { name, phone, creditCode, legalPerson, idCard } = this.data.formData
-      const missingFields: string[] = []
+      let latestDraft: MerchantDraftExt | null = null
+      try {
+        latestDraft = await getMerchantApplication() as MerchantDraftExt
+        this.applyLatestOcrDraft(latestDraft)
+      } catch (error) {
+        logger.warn('[MerchantRegister] 刷新 OCR 草稿失败', error, 'nextStep')
+      }
 
-      if (!name?.trim()) missingFields.push('店铺名称')
-      if (!phone?.trim()) missingFields.push('联系电话')
-      if (!creditCode?.trim()) missingFields.push('统一信用代码')
-      if (!legalPerson?.trim()) missingFields.push('法人姓名')
-      if (!idCard?.trim()) missingFields.push('身份证号')
+      const currentFormData = this.data.formData
+      const mergedCreditCode = currentFormData.creditCode
+        || toSafeString(latestDraft?.business_license_number || latestDraft?.business_license_ocr?.reg_num || latestDraft?.business_license_ocr?.credit_code)
+      const mergedLegalPerson = currentFormData.legalPerson
+        || toSafeString(latestDraft?.id_card_front_ocr?.name || latestDraft?.legal_person_name || latestDraft?.business_license_ocr?.legal_representative)
+      const mergedIdCard = currentFormData.idCard
+        || toSafeString(latestDraft?.id_card_front_ocr?.id_number || latestDraft?.legal_person_id_number)
 
-      if (missingFields.length > 0) {
-        const message = missingFields.length <= 3
-          ? `请填写: ${missingFields.join('、')}`
-          : `还有 ${missingFields.length} 项必填信息未完善`
+      const { name, phone } = currentFormData
+      const missingBasicFields: string[] = []
+      const missingOCRFields: string[] = []
+
+      if (!name?.trim()) missingBasicFields.push('店铺名称')
+      if (!phone?.trim()) missingBasicFields.push('联系电话')
+      if (!mergedCreditCode?.trim()) missingOCRFields.push('统一信用代码')
+      if (!mergedLegalPerson?.trim()) missingOCRFields.push('法人姓名')
+      if (!mergedIdCard?.trim()) missingOCRFields.push('身份证号')
+
+      if (missingBasicFields.length > 0) {
+        const message = missingBasicFields.length <= 3
+          ? `请填写: ${missingBasicFields.join('、')}`
+          : `还有 ${missingBasicFields.length} 项必填信息未完善`
         wx.showToast({ title: message, icon: 'none', duration: 3000 })
+        return
+      }
+
+      if (missingOCRFields.length > 0) {
+        wx.showToast({
+          title: '证照信息处理中',
+          icon: 'none',
+          duration: 3000
+        })
         return
       }
 
@@ -741,19 +944,16 @@ Page({
     }
 
     // 先显示本地图片
-    this.setData({ licenseImages: [{ url: path }] })
+    this.setUploadedImage('license', path)
     this.saveDraft()
 
     wx.showLoading({ title: '上传中...' })
     try {
-      // 上传并触发异步 OCR
       const result = await ocrBusinessLicense(path)
-      logger.info('[MerchantRegister] 营业执照上传成功，OCR已入队', result, 'onLicenseUpload')
-      wx.hideLoading()
-      wx.showToast({ title: '上传成功，识别中...', icon: 'none' })
-
-      // 开始轮询 OCR 结果
-      this.pollOcrStatus('business_license_ocr', (ocr) => {
+      this.setUploadedImage('license', path, result.mediaId)
+      this.saveDraft()
+      logger.info('[MerchantRegister] 营业执照上传成功', result, 'onLicenseUpload')
+      this.handleDocumentOCRSubmission('营业执照', 'business_license_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.licenseName': ocr.enterprise_name || '',
@@ -768,6 +968,8 @@ Page({
           this.checkLegalPersonConsistency()
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
+      }, {
+        documentType: 'business_license'
       })
     } catch (error: unknown) {
       wx.hideLoading()
@@ -778,8 +980,7 @@ Page({
     }
   },
   onLicenseRemove() {
-    this.setData({ licenseImages: [] })
-    this.saveDraft()
+    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
   },
 
   // 食品经营许可证
@@ -792,17 +993,16 @@ Page({
       return
     }
 
-    this.setData({ foodLicenseImages: [{ url: path }] })
+    this.setUploadedImage('foodPermit', path)
     this.saveDraft()
 
     wx.showLoading({ title: '上传中...' })
     try {
       const result = await ocrFoodPermit(path)
+      this.setUploadedImage('foodPermit', path, result.mediaId)
+      this.saveDraft()
       logger.info('[MerchantRegister] 食品许可证上传成功', result, 'onFoodLicenseUpload')
-      wx.hideLoading()
-      wx.showToast({ title: '上传成功，识别中...', icon: 'none' })
-
-      this.pollOcrStatus('food_permit_ocr', (ocr) => {
+      this.handleDocumentOCRSubmission('食品经营许可证', 'food_permit_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.foodLicenseValidity': ocr.valid_to || ''
@@ -810,6 +1010,8 @@ Page({
           this.saveDraft()
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
+      }, {
+        documentType: 'food_permit'
       })
     } catch (error: unknown) {
       wx.hideLoading()
@@ -819,8 +1021,7 @@ Page({
     }
   },
   onFoodLicenseRemove() {
-    this.setData({ foodLicenseImages: [] })
-    this.saveDraft()
+    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
   },
 
   // 身份证正面
@@ -833,17 +1034,16 @@ Page({
       return
     }
 
-    this.setData({ idCardFrontImages: [{ url: path }] })
+    this.setUploadedImage('idCardFront', path)
     this.saveDraft()
 
     wx.showLoading({ title: '上传中...' })
     try {
       const result = await ocrIdCard(path, 'Front')
+      this.setUploadedImage('idCardFront', path, result.mediaId)
+      this.saveDraft()
       logger.info('[MerchantRegister] 身份证正面上传成功', result, 'onIdCardFrontUpload')
-      wx.hideLoading()
-      wx.showToast({ title: '上传成功，识别中...', icon: 'none' })
-
-      this.pollOcrStatus('id_card_front_ocr', (ocr) => {
+      this.handleDocumentOCRSubmission('身份证正面', 'id_card_front_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.legalPerson': ocr.name || '',
@@ -856,6 +1056,9 @@ Page({
           this.checkLegalPersonConsistency()
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
+      }, {
+        documentType: 'id_card',
+        side: 'Front'
       })
     } catch (error: unknown) {
       wx.hideLoading()
@@ -865,8 +1068,7 @@ Page({
     }
   },
   onIdCardFrontRemove() {
-    this.setData({ idCardFrontImages: [] })
-    this.saveDraft()
+    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
   },
 
   // 身份证反面
@@ -879,17 +1081,16 @@ Page({
       return
     }
 
-    this.setData({ idCardBackImages: [{ url: path }] })
+    this.setUploadedImage('idCardBack', path)
     this.saveDraft()
 
     wx.showLoading({ title: '上传中...' })
     try {
       const result = await ocrIdCard(path, 'Back')
+      this.setUploadedImage('idCardBack', path, result.mediaId)
+      this.saveDraft()
       logger.info('[MerchantRegister] 身份证反面上传成功', result, 'onIdCardBackUpload')
-      wx.hideLoading()
-      wx.showToast({ title: '上传成功，识别中...', icon: 'none' })
-
-      this.pollOcrStatus('id_card_back_ocr', (ocr) => {
+      this.handleDocumentOCRSubmission('身份证反面', 'id_card_back_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.idCardValidity': ocr.valid_date || ''
@@ -897,6 +1098,9 @@ Page({
           this.saveDraft()
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
+      }, {
+        documentType: 'id_card',
+        side: 'Back'
       })
     } catch (error: unknown) {
       wx.hideLoading()
@@ -906,8 +1110,7 @@ Page({
     }
   },
   onIdCardBackRemove() {
-    this.setData({ idCardBackImages: [] })
-    this.saveDraft()
+    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
   },
 
   // 开户许可证
@@ -1040,7 +1243,7 @@ Page({
       const displayUrl = result.displayUrl
       console.log('[MerchantRegister] 门头照显示 URL:', displayUrl)
 
-      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
+      currentImages.push({ url: displayUrl, rawUrl: displayUrl, assetId: result.mediaId })
       this.setData({ storefrontImages: currentImages })
 
       // 保存到后端（使用相对路径）
@@ -1060,15 +1263,24 @@ Page({
 
   async onStorefrontImageRemove(e: WechatMiniprogram.CustomEvent) {
     const { index } = e.detail
+    const removedImage = this.data.storefrontImages[index]
     const images = [...this.data.storefrontImages]
     images.splice(index, 1)
     this.setData({ storefrontImages: images })
 
     try {
-      // 884 require REMOVED
       await updateMerchantImages({
         storefront_images: images.map((img) => img.rawUrl || img.url)
       })
+
+      if (removedImage?.assetId) {
+        try {
+          await deleteMediaAsset(removedImage.assetId)
+        } catch (deleteError) {
+          logger.warn('[MerchantRegister] 门头照 media asset 软删除失败', deleteError)
+        }
+      }
+
       this.saveDraft()
     } catch (error) {
       logger.error('[MerchantRegister] 删除门头照失败', error)
@@ -1107,7 +1319,7 @@ Page({
       const displayUrl = result.displayUrl
       console.log('[MerchantRegister] 环境照显示 URL:', displayUrl)
 
-      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
+      currentImages.push({ url: displayUrl, rawUrl: displayUrl, assetId: result.mediaId })
       this.setData({ environmentImages: currentImages })
 
       // 保存到后端（使用相对路径）
@@ -1127,15 +1339,24 @@ Page({
 
   async onEnvironmentImageRemove(e: WechatMiniprogram.CustomEvent) {
     const { index } = e.detail
+    const removedImage = this.data.environmentImages[index]
     const images = [...this.data.environmentImages]
     images.splice(index, 1)
     this.setData({ environmentImages: images })
 
     try {
-      // 960 require REMOVED
       await updateMerchantImages({
         environment_images: images.map((img) => img.rawUrl || img.url)
       })
+
+      if (removedImage?.assetId) {
+        try {
+          await deleteMediaAsset(removedImage.assetId)
+        } catch (deleteError) {
+          logger.warn('[MerchantRegister] 环境照 media asset 软删除失败', deleteError)
+        }
+      }
+
       this.saveDraft()
     } catch (error) {
       logger.error('[MerchantRegister] 删除环境照失败', error)
@@ -1160,41 +1381,66 @@ Page({
     })
 
     if (licenseName && idName && licenseName !== idName) {
-      wx.showModal({
-        title: '法人信息不一致',
-        content: `营业执照法人(${licenseName})与身份证/填写姓名(${idName})不一致，可能导致审核不通过，请确认。`,
-        showCancel: false,
-        confirmText: '我知道了'
-      })
+      wx.showToast({ title: '请上传法人身份证', icon: 'none', duration: 3000 })
     }
   },
 
   // ==================== OCR 轮询 ====================
 
-  pollOcrStatus(fieldKey: 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr', callback: (ocr: OCRResult) => void) {
+  pollOcrStatus(fieldKey: OCRFieldKey, callback: (ocr: OCRResult) => void, options?: OCRPollOptions) {
+    this.stopOcrPolling(fieldKey)
+
     let attempts = 0
-    const maxAttempts = 30 // 30 * 2s = 60s max
+    const maxAttempts = 150 // 最长约 5 分钟，避免后台处理中时过早停止自动回填
+    let retryingQueue = false
+
     const intervalId = setInterval(async () => {
       attempts++
       try {
-        const res = await getMerchantApplication()
+        const res = await getMerchantApplication() as MerchantDraftExt
+        this.updateOcrProgressMessage(res)
         const ocrData = res[fieldKey]
         if (ocrData?.status === 'done') {
-          clearInterval(intervalId)
+          this.stopOcrPolling(fieldKey)
+          this.updateOcrProgressMessage(res)
           callback(ocrData as OCRResult)
+          return
         } else if (ocrData?.status === 'failed') {
-          clearInterval(intervalId)
+          this.stopOcrPolling(fieldKey)
+          this.updateOcrProgressMessage(res)
           wx.showToast({ title: `识别失败: ${ocrData.error || '未知错误'}`, icon: 'none' })
+          return
+        }
+
+        if (options?.retryQueue && !ocrData?.status && !retryingQueue) {
+          retryingQueue = true
+          try {
+            await enqueueMerchantApplicationOCRForMedia(
+              options.retryQueue.mediaId,
+              options.retryQueue.documentType,
+              options.retryQueue.side,
+              { maxAttempts: 1, retryDelayMs: 0 }
+            )
+          } catch (error) {
+            logger.warn('[MerchantRegister] OCR 建单重试失败', {
+              fieldKey,
+              mediaId: options.retryQueue.mediaId,
+              error
+            }, 'pollOcrStatus')
+          } finally {
+            retryingQueue = false
+          }
         }
       } catch (e) {
         console.error('[pollOcrStatus] Error:', e)
       }
 
       if (attempts >= maxAttempts) {
-        clearInterval(intervalId)
-        wx.showToast({ title: '识别超时，请重试', icon: 'none' })
+        this.stopOcrPolling(fieldKey)
       }
     }, 2000)
+
+    activeOcrPollers[fieldKey] = intervalId as unknown as number
   },
 
   // ==================== 提交申请 ====================

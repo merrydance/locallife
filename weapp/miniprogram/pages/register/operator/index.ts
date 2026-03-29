@@ -728,6 +728,7 @@ Page({
     } catch (e) {
       wx.hideLoading()
       logger.error('OCR failed', e)
+      wx.showToast({ title: getErrorText(e, '图片已上传，系统处理中'), icon: 'none', duration: 3000 })
     }
   },
 

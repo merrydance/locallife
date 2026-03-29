@@ -50,6 +50,7 @@ func TestCreateOCRJob_CreatesMerchantBusinessLicenseJob(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(501)).Return(db.MediaAsset{ID: 501, ModerationStatus: "approved"}, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, int64(501), arg.MediaAssetID)
 			require.Equal(t, "merchant_application", arg.OwnerType)
@@ -105,6 +106,7 @@ func TestCreateOCRJob_SetsIDCardRetentionUntil(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(601)).Return(db.MediaAsset{ID: 601, ModerationStatus: "approved"}, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
 			require.Equal(t, string(ocr.DocumentSideFront), arg.Side)
@@ -151,6 +153,7 @@ func TestCreateOCRJob_MarksRiderHealthCertPending(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(701)).Return(db.MediaAsset{ID: 701, ModerationStatus: "approved"}, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeHealthCert), arg.DocumentType)
 			require.Equal(t, string(ocr.OwnerTypeRiderApplication), arg.OwnerType)
@@ -200,6 +203,7 @@ func TestCreateOCRJob_MarksGroupBusinessLicensePending(t *testing.T) {
 
 	gomock.InOrder(
 		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(801)).Return(db.MediaAsset{ID: 801, ModerationStatus: "approved"}, nil),
 		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
 			require.Equal(t, string(ocr.DocumentTypeBusinessLicense), arg.DocumentType)
 			require.Equal(t, string(ocr.OwnerTypeGroupApplication), arg.OwnerType)
@@ -239,6 +243,60 @@ func TestCreateOCRJob_MarksGroupBusinessLicensePending(t *testing.T) {
 	server.router.ServeHTTP(recorder, request)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
+func TestCreateOCRJob_RejectsPendingModerationMedia(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(901)).Return(db.MediaAsset{ID: 901, ModerationStatus: "pending"}, nil),
+	)
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "business_license", MediaAssetID: 901, OwnerType: "merchant_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusConflict, recorder.Code)
+	require.Contains(t, recorder.Body.String(), ErrImageModerationPending.Message)
+}
+
+func TestCreateOCRJob_RejectsRejectedModerationMedia(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(902)).Return(db.MediaAsset{ID: 902, ModerationStatus: "rejected"}, nil),
+	)
+
+	server := newTestServer(t, store)
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "business_license", MediaAssetID: 902, OwnerType: "merchant_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+	require.Contains(t, recorder.Body.String(), ErrImageContentSafetyFailed.Message)
 }
 
 func TestGetOCRJob_ReturnsOwnedJob(t *testing.T) {
