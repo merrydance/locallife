@@ -82,6 +82,61 @@ func TestCompleteMediaUploadTriggersAsyncModeration(t *testing.T) {
 	require.Len(t, resp.Variants, 0)
 }
 
+func TestCompleteMediaUploadSkipsModerationForOwnerOnlyPrivateMedia(t *testing.T) {
+	user, _ := randomUser(t)
+	objectKey := "id_card/front/1/20260329/private-id-card.jpg"
+	uploadID := "up_test_private_id_card"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wxClient := mockwechat.NewMockWechatClient(ctrl)
+
+	session := randomUploadSession(user.ID, "id_card_front", "private", objectKey, false)
+	session.ID = uploadID
+	asset := randomMediaAsset(11, user.ID, "private", objectKey)
+	asset.MediaCategory = "id_card_front"
+	asset.ModerationStatus = "pending"
+	approvedAsset := asset
+	approvedAsset.ModerationStatus = "approved"
+
+	store.EXPECT().GetUploadSession(gomock.Any(), uploadID).Times(1).Return(session, nil)
+	store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+	store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
+	store.EXPECT().SetMediaAssetModerationStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
+		func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+			require.Equal(t, asset.ID, arg.ID)
+			require.Equal(t, "approved", arg.ModerationStatus)
+			return approvedAsset, nil
+		},
+	)
+
+	server, tempDir := newTestServerForMedia(t, store)
+	server.config.WechatMiniAppID = "wx-test-app"
+	server.config.WechatMiniAppSecret = "secret"
+	server.wechatClient = wxClient
+	writeLocalFile(t, tempDir, objectKey)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/v1/media/complete", marshalBody(t, completeUploadRequest{
+		UploadID:  uploadID,
+		ObjectKey: objectKey,
+	}))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp completeUploadResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.EqualValues(t, 11, resp.MediaID)
+	require.Equal(t, "approved", resp.Status)
+	require.Len(t, resp.Variants, 0)
+}
+
 func TestMiniProgramMediaCheckNotify(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

@@ -62,6 +62,23 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 	if asset == nil {
 		return nil
 	}
+	if asset.Visibility == string(media.VisibilityPrivate) && isOwnerOnlyPrivateMedia(asset.MediaCategory) {
+		updated, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
+			ID:               asset.ID,
+			ModerationStatus: "approved",
+		})
+		if err != nil {
+			return fmt.Errorf("auto approve owner-only private media moderation: %w", err)
+		}
+		*asset = updated
+		log.Info().
+			Int64("media_id", asset.ID).
+			Str("object_key", asset.ObjectKey).
+			Str("media_category", asset.MediaCategory).
+			Str("visibility", asset.Visibility).
+			Msg("media moderation skipped for owner-only private media")
+		return nil
+	}
 	if asset.ModerationStatus != "pending" || asset.ModerationTraceID.Valid {
 		log.Info().
 			Int64("media_id", asset.ID).

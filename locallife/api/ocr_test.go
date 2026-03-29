@@ -304,6 +304,49 @@ func TestCreateOCRJob_MarksGroupIDCardPending(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
+func TestCreateOCRJob_AllowsOwnerOnlyPrivateIDCardDespiteModerationStatus(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomMerchantAppDraft(user.ID)
+	job := db.OcrJob{ID: 333, Status: "pending", DocumentType: string(ocr.DocumentTypeIDCard), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 803, OwnerType: string(ocr.OwnerTypeMerchantApplication), OwnerID: app.ID, Side: string(ocr.DocumentSideFront), CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(803)).Return(db.MediaAsset{ID: 803, Visibility: "private", MediaCategory: "id_card_front", ModerationStatus: "quarantined"}, nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
+			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
+			require.Equal(t, int64(803), arg.MediaAssetID)
+			return job, nil
+		}),
+		store.EXPECT().GetMerchantApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateMerchantApplicationIDCardFront(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpdateMerchantApplicationIDCardFrontParams) (db.MerchantApplication, error) {
+			require.Equal(t, app.ID, arg.ID)
+			require.True(t, arg.IDCardFrontMediaAssetID.Valid)
+			require.Equal(t, int64(803), arg.IDCardFrontMediaAssetID.Int64)
+			return app, nil
+		}),
+	)
+	distributor.EXPECT().DistributeTaskMerchantApplicationIDCardOCR(gomock.Any(), app.ID, int64(803), int64(333), "Front").Return(nil)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "id_card", MediaAssetID: 803, OwnerType: "merchant_application", OwnerID: app.ID, Side: "front"})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestCreateOCRJob_DelaysDispatchWhileMediaModerationPending(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)

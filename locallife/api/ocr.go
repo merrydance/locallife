@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
 	"github.com/rs/zerolog/log"
@@ -607,6 +608,9 @@ func (server *Server) getOCRMediaModerationStatus(ctx *gin.Context, mediaAssetID
 	asset, err := server.store.GetMediaAssetByID(ctx, mediaAssetID)
 	if err != nil {
 		return "", err
+	}
+	if asset.Visibility == string(media.VisibilityPrivate) && isOwnerOnlyPrivateMedia(asset.MediaCategory) {
+		return "approved", nil
 	}
 	return strings.ToLower(strings.TrimSpace(asset.ModerationStatus)), nil
 }
