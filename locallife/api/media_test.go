@@ -164,6 +164,32 @@ func TestCreateMediaUploadSessionAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "OK merchant storefront category",
+			body: createUploadSessionRequest{
+				BusinessType:   "merchant",
+				MediaCategory:  "storefront",
+				ContentType:    "image/jpeg",
+				ContentLength:  1024,
+				ChecksumSha256: fmt.Sprintf("%064x", 4),
+			},
+			setupAuth: func(t *testing.T, req *http.Request, server *Server) {
+				addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetPendingUploadSessionByIdempotencyKey(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.MediaUploadSession{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					CreateUploadSession(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(randomUploadSession(user.ID, "storefront", "public", "merchant/storefront/1/20260318/up_storefront.jpeg", false), nil)
+			},
+			checkResponse: func(t *testing.T, rec *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, rec.Code)
+			},
+		},
+		{
 			name: "BadRequest unsupported content type",
 			body: createUploadSessionRequest{
 				BusinessType:   "merchant",

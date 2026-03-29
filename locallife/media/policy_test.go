@@ -34,7 +34,7 @@ func TestPolicy_Lookup(t *testing.T) {
 func TestPolicy_AllCategoriesAreRegistered(t *testing.T) {
 	p := Policy{}
 	known := []Category{
-		CategoryMerchantLogo, CategoryDishImage, CategoryComboImage,
+		CategoryMerchantLogo, CategoryStorefrontImage, CategoryEnvironmentImage, CategoryDishImage, CategoryComboImage,
 		CategoryTableImage, CategoryReviewImage, CategoryAvatar,
 		CategoryBusinessLicense, CategoryFoodPermit, CategoryIDCardFront,
 		CategoryIDCardBack, CategoryHealthCert, CategoryGroupLicense,
@@ -50,7 +50,7 @@ func TestPolicy_VisibilityMapping(t *testing.T) {
 	p := Policy{}
 
 	publicCats := []Category{
-		CategoryMerchantLogo, CategoryDishImage, CategoryComboImage,
+		CategoryMerchantLogo, CategoryStorefrontImage, CategoryEnvironmentImage, CategoryDishImage, CategoryComboImage,
 		CategoryTableImage, CategoryReviewImage, CategoryAvatar,
 		CategoryBusinessLicense, CategoryFoodPermit,
 	}
@@ -142,6 +142,12 @@ func TestPolicy_ObjectKey(t *testing.T) {
 		key, err := p.ObjectKey(CategoryBusinessLicense, 99, "up_lic", "jpg", fixedTime)
 		require.NoError(t, err)
 		require.Equal(t, "merchant/license/business/99/20260318/up_lic.jpg", key)
+	})
+
+	t.Run("storefront category uses merchant storefront prefix", func(t *testing.T) {
+		key, err := p.ObjectKey(CategoryStorefrontImage, 7, "up_storefront", "jpg", fixedTime)
+		require.NoError(t, err)
+		require.Equal(t, "merchant/storefront/7/20260318/up_storefront.jpg", key)
 	})
 }
 

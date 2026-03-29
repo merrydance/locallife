@@ -11,6 +11,8 @@ type Category string
 
 const (
 	CategoryMerchantLogo      Category = "logo"
+	CategoryStorefrontImage   Category = "storefront"
+	CategoryEnvironmentImage  Category = "environment"
 	CategoryDishImage         Category = "dish"
 	CategoryComboImage        Category = "combo"
 	CategoryTableImage        Category = "table"
@@ -43,6 +45,8 @@ type categoryMeta struct {
 // registry 是全局 category 策略表。
 var registry = map[Category]categoryMeta{
 	CategoryMerchantLogo:      {VisibilityPublic, "merchant/logo", imageTypes},
+	CategoryStorefrontImage:   {VisibilityPublic, "merchant/storefront", imageTypes},
+	CategoryEnvironmentImage:  {VisibilityPublic, "merchant/environment", imageTypes},
 	CategoryDishImage:         {VisibilityPublic, "merchant/dish", imageTypes},
 	CategoryComboImage:        {VisibilityPublic, "merchant/combo", imageTypes},
 	CategoryTableImage:        {VisibilityPublic, "merchant/table", imageTypes},
