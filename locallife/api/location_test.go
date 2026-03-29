@@ -115,3 +115,37 @@ func TestMatchRegionID_UsesDistrictFallback(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, districtRegion.ID, regionID)
 }
+
+func TestMatchRegionID_UsesCountyLevelFallback(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	mapClient := stubMapClient{reverseResult: &maps.ReverseGeocodeResult{Adcode: "100000", City: "衡水市", District: "景县"}}
+	server := &Server{store: store, mapClient: mapClient}
+
+	lat := 37.0611534
+	lon := 115.0554199
+	countyRegion := db.Region{ID: 30, Name: "景县", Level: 4}
+
+	store.EXPECT().
+		GetRegionByCode(gomock.Any(), "100000").
+		Times(1).
+		Return(db.Region{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetRegionByNameAndLevel(gomock.Any(), db.GetRegionByNameAndLevelParams{Name: "衡水市", Level: 2}).
+		Times(1).
+		Return(db.Region{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetRegionByNameAndLevel(gomock.Any(), db.GetRegionByNameAndLevelParams{Name: "景县", Level: 3}).
+		Times(1).
+		Return(db.Region{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetRegionByNameAndLevel(gomock.Any(), db.GetRegionByNameAndLevelParams{Name: "景县", Level: 4}).
+		Times(1).
+		Return(countyRegion, nil)
+
+	regionID, err := server.matchRegionID(context.Background(), lat, lon)
+	require.NoError(t, err)
+	require.Equal(t, countyRegion.ID, regionID)
+}

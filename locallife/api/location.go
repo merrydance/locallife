@@ -288,11 +288,13 @@ func (server *Server) matchRegionID(ctx context.Context, lat, lon float64) (int6
 					}
 				}
 
-				if district, err := server.store.GetRegionByNameAndLevel(ctx, db.GetRegionByNameAndLevelParams{
-					Name:  res.District,
-					Level: 3,
-				}); err == nil {
-					return district.ID, nil
+				for _, level := range []int16{3, 4} {
+					if district, err := server.store.GetRegionByNameAndLevel(ctx, db.GetRegionByNameAndLevelParams{
+						Name:  res.District,
+						Level: level,
+					}); err == nil {
+						return district.ID, nil
+					}
 				}
 			}
 		}

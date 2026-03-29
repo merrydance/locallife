@@ -146,7 +146,9 @@ OFFSET $2;
 -- name: GetClosestRegion :one
 -- 根据经纬度获取最近的区县级区域
 SELECT * FROM regions
-WHERE level = 3
+WHERE level IN (3, 4)
+  AND longitude IS NOT NULL
+  AND latitude IS NOT NULL
 ORDER BY (
     6371000 * acos(
         cos(radians(sqlc.arg(lat)::float8)) * cos(radians(latitude)) * 

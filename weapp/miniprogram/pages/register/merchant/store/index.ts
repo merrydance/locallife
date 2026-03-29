@@ -1,4 +1,3 @@
-
 import { logger } from '../../../../utils/logger'
 import { ErrorHandler } from '../../../../utils/error-handler'
 import { DraftStorage } from '../../../../utils/draft-storage'
@@ -15,6 +14,7 @@ import {
   updateMerchantImages,
   deleteMerchantApplicationDocument,
   deleteMediaAsset,
+  waitForPublicMediaDisplayUrl,
   type MerchantApplicationOCRSubmissionResult,
   type MerchantApplicationDraftResponse
 } from '../../../../api/onboarding'
@@ -22,6 +22,7 @@ import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { getMediaDisplayUrl } from '../../../../utils/media'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
+import { getCurrentRegion } from '../../../../api/location'
 
 const DRAFT_KEY = 'merchant_register_draft'
 
@@ -55,6 +56,16 @@ type ImageFieldItem = {
   url: string
   rawUrl?: string
   assetId?: number
+}
+function toPersistedImageUrls(images: ImageFieldItem[]): string[] {
+  return images
+    .map((image) => image.rawUrl)
+    .filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+}
+
+function toSafeNumber(value: unknown): number {
+  const num = Number(value)
+  return Number.isFinite(num) ? num : 0
 }
 
 type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
@@ -281,6 +292,7 @@ Page({
         phone: safeStr(data.contact_phone),
         address: safeStr(data.business_address),
         addressDetail: safeStr(data.business_address_detail),
+        regionId: Number(data.region_id || 0),
         latitude: data.latitude ? parseFloat(data.latitude) : 0,
         longitude: data.longitude ? parseFloat(data.longitude) : 0,
 
@@ -666,12 +678,13 @@ Page({
     DraftStorage.save(DRAFT_KEY, data)
   },
 
-  async syncToBackend() {
-    if (!this.data.applicationInitialized) return
+  async syncToBackend(): Promise<MerchantApplicationDraftResponse | null> {
+    if (!this.data.applicationInitialized) return null
     const { formData } = this.data
     const merchantName = formData.name?.trim() || formData.licenseName?.trim()
     const contactPhone = formData.phone?.trim()
     const businessAddress = formData.addressDetail || formData.address
+    const regionId = toSafeNumber(formData.regionId)
 
     const hasSyncableFields = Boolean(
       merchantName
@@ -679,12 +692,12 @@ Page({
       || businessAddress
       || formData.longitude
       || formData.latitude
-      || formData.regionId
+      || regionId
     )
 
     if (!hasSyncableFields) {
       logger.debug('[MerchantRegister] syncToBackend skipped: no syncable fields')
-      return
+      return null
     }
 
     try {
@@ -695,12 +708,16 @@ Page({
         business_address: businessAddress || undefined,
         longitude: formData.longitude ? String(formData.longitude) : undefined,
         latitude: formData.latitude ? String(formData.latitude) : undefined,
-        region_id: formData.regionId || undefined
+        region_id: regionId || undefined
       }
 
       console.log('[MerchantRegister] syncToBackend payload:', JSON.stringify(payload, null, 2))
 
-      await updateMerchantBasicInfo(payload)
+      const updated = await updateMerchantBasicInfo(payload)
+
+      if (updated.region_id && Number(updated.region_id) > 0 && Number(updated.region_id) !== regionId) {
+        this.setData({ 'formData.regionId': Number(updated.region_id) })
+      }
 
       // 门头照/环境照通过单独接口保存（PUT /basic 不处理这两个字段）
       const storefrontImages = this.data.storefrontImages || []
@@ -713,12 +730,47 @@ Page({
       }
 
       console.log('[MerchantRegister] Sync to backend success')
+      return updated
     } catch (err: unknown) {
       console.error('[MerchantRegister] Sync to backend failed', err)
       const errData = err as { originalError?: unknown, data?: unknown, message?: string }
       console.error('[MerchantRegister] Error details:', errData.originalError || errData.data || errData.message)
       // Silent fail to not interrupt user flow, unless final submit
+      return null
     }
+  },
+
+  async resolveRegionIdByLocation(latitude?: number, longitude?: number): Promise<number> {
+    const lat = Number(latitude)
+    const lng = Number(longitude)
+
+    if (!Number.isFinite(lat) || !Number.isFinite(lng) || !lat || !lng) {
+      return 0
+    }
+
+    try {
+      const region = await getCurrentRegion({ latitude: lat, longitude: lng })
+      const resolvedRegionId = Number(region?.region_id || 0)
+
+      if (resolvedRegionId && resolvedRegionId !== toSafeNumber(this.data.formData.regionId)) {
+        this.setData({ 'formData.regionId': resolvedRegionId })
+      }
+
+      return resolvedRegionId
+    } catch (error) {
+      logger.warn('[MerchantRegister] 坐标解析所属区域失败', error)
+      return 0
+    }
+  },
+
+  async resolveAndSyncRegionId(latitude?: number, longitude?: number): Promise<number> {
+    const resolvedRegionId = await this.resolveRegionIdByLocation(latitude, longitude)
+    if (!resolvedRegionId) {
+      return 0
+    }
+
+    const syncedDraft = await this.syncToBackend()
+    return Number(syncedDraft?.region_id || resolvedRegionId)
   },
 
   loadDraft() {
@@ -744,6 +796,8 @@ Page({
 
           // 3. 类型赋值
           if (key === 'latitude' || key === 'longitude') {
+            (safeFormData as Record<string, unknown>)[key] = Number(val) || 0
+          } else if (key === 'regionId') {
             (safeFormData as Record<string, unknown>)[key] = Number(val) || 0
           } else {
             (safeFormData as Record<string, unknown>)[key] = String(val)
@@ -804,7 +858,7 @@ Page({
 
   onChooseAddress() {
     wx.chooseLocation({
-      success: (res) => {
+      success: async (res) => {
         // 用户强调需要显示详细地址 (省市区+街道+门牌+名称)
         // 无论返回结构如何，都要尽可能组合出完整地址
         const addr = res.address || ''
@@ -832,10 +886,17 @@ Page({
         this.setData({
           'formData.address': fullAddress,
           'formData.addressDetail': fullAddress, // 同时设置 addressDetail 保持一致性
+          'formData.regionId': 0,
           'formData.latitude': res.latitude,
           'formData.longitude': res.longitude
         }, () => {
           this.saveDraft()
+          void (async () => {
+            const resolvedRegionId = await this.resolveAndSyncRegionId(res.latitude, res.longitude)
+            if (!resolvedRegionId) {
+              await this.syncToBackend()
+            }
+          })()
         })
       },
       fail: (err) => {
@@ -969,12 +1030,36 @@ Page({
         wx.showToast({ title: '请选择店铺地址', icon: 'none' })
         return
       }
-      // regionId 由后端根据经纬度自动匹配，不强制前端校验
       if (!latitude || !longitude) {
         wx.showToast({ title: '请通过地图选择精确位置', icon: 'none' })
         return
       }
-      this.syncToBackend()
+
+      let resolvedRegionId = await this.resolveAndSyncRegionId(latitude, longitude)
+
+      if (!resolvedRegionId) {
+        const syncedDraft = await this.syncToBackend()
+        resolvedRegionId = Number(syncedDraft?.region_id || this.data.formData.regionId || 0)
+      }
+
+      if (!resolvedRegionId) {
+        try {
+          const latestDraft = await getMerchantApplication() as MerchantDraftExt
+          resolvedRegionId = Number(latestDraft.region_id || 0)
+        } catch (error) {
+          logger.warn('[MerchantRegister] 第三步回读草稿失败', error)
+        }
+      }
+
+      if (!resolvedRegionId) {
+        wx.showToast({ title: '未识别到所属区域，请重新选择店铺位置', icon: 'none', duration: 3000 })
+        return
+      }
+
+      if (resolvedRegionId !== toSafeNumber(this.data.formData.regionId)) {
+        this.setData({ 'formData.regionId': resolvedRegionId })
+      }
+
       this.setData({ currentStep: 4 })
       return
     }
@@ -1271,24 +1356,32 @@ Page({
     console.log('[MerchantRegister] 门头照上传开始:', newFile.url)
     wx.showLoading({ title: '上传中...' })
     try {
-      // 842-843 require REMOVED
-
       const result = await uploadMerchantImage(newFile.url, 'storefront')
       console.log('[MerchantRegister] 门头照上传响应:', JSON.stringify(result))
 
-      const displayUrl = result.displayUrl
+      const displayUrl = result.displayUrl || newFile.url
       console.log('[MerchantRegister] 门头照显示 URL:', displayUrl)
 
-      currentImages.push({ url: displayUrl, rawUrl: displayUrl, assetId: result.mediaId })
+      currentImages.push({
+        url: displayUrl,
+        rawUrl: result.displayUrl || undefined,
+        assetId: result.mediaId
+      })
       this.setData({ storefrontImages: currentImages })
 
-      // 保存到后端（使用相对路径）
-      await updateMerchantImages({
-        storefront_images: currentImages.map((img) => img.rawUrl || img.url)
-      })
+      if (result.displayUrl) {
+        await updateMerchantImages({
+          storefront_images: toPersistedImageUrls(currentImages)
+        })
+      } else {
+        void this.finalizePendingShopImage('storefront', currentImages.length - 1, result.mediaId)
+      }
 
       wx.hideLoading()
-      wx.showToast({ title: '上传成功', icon: 'success' })
+      wx.showToast({
+        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
+        icon: 'success'
+      })
       this.saveDraft()
     } catch (error) {
       wx.hideLoading()
@@ -1306,7 +1399,7 @@ Page({
 
     try {
       await updateMerchantImages({
-        storefront_images: images.map((img) => img.rawUrl || img.url)
+        storefront_images: toPersistedImageUrls(images)
       })
 
       if (removedImage?.assetId) {
@@ -1347,24 +1440,32 @@ Page({
     console.log('[MerchantRegister] 环境照上传开始:', newFile.url)
     wx.showLoading({ title: '上传中...' })
     try {
-      // 918-919 require REMOVED
-
       const result = await uploadMerchantImage(newFile.url, 'environment')
       console.log('[MerchantRegister] 环境照上传响应:', JSON.stringify(result))
 
-      const displayUrl = result.displayUrl
+      const displayUrl = result.displayUrl || newFile.url
       console.log('[MerchantRegister] 环境照显示 URL:', displayUrl)
 
-      currentImages.push({ url: displayUrl, rawUrl: displayUrl, assetId: result.mediaId })
+      currentImages.push({
+        url: displayUrl,
+        rawUrl: result.displayUrl || undefined,
+        assetId: result.mediaId
+      })
       this.setData({ environmentImages: currentImages })
 
-      // 保存到后端（使用相对路径）
-      await updateMerchantImages({
-        environment_images: currentImages.map((img) => img.rawUrl || img.url)
-      })
+      if (result.displayUrl) {
+        await updateMerchantImages({
+          environment_images: toPersistedImageUrls(currentImages)
+        })
+      } else {
+        void this.finalizePendingShopImage('environment', currentImages.length - 1, result.mediaId)
+      }
 
       wx.hideLoading()
-      wx.showToast({ title: '上传成功', icon: 'success' })
+      wx.showToast({
+        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
+        icon: 'success'
+      })
       this.saveDraft()
     } catch (error) {
       wx.hideLoading()
@@ -1382,7 +1483,7 @@ Page({
 
     try {
       await updateMerchantImages({
-        environment_images: images.map((img) => img.rawUrl || img.url)
+        environment_images: toPersistedImageUrls(images)
       })
 
       if (removedImage?.assetId) {
@@ -1396,6 +1497,44 @@ Page({
       this.saveDraft()
     } catch (error) {
       logger.error('[MerchantRegister] 删除环境照失败', error)
+    }
+  },
+
+  async finalizePendingShopImage(
+    kind: 'storefront' | 'environment',
+    index: number,
+    mediaId: number
+  ) {
+    try {
+      const remoteUrl = await waitForPublicMediaDisplayUrl(mediaId)
+      if (!remoteUrl) {
+        return
+      }
+
+      const fieldName = kind === 'storefront' ? 'storefrontImages' : 'environmentImages'
+      const currentImages = [...this.data[fieldName]] as ImageFieldItem[]
+      const target = currentImages[index]
+      if (!target || target.assetId !== mediaId) {
+        return
+      }
+
+      currentImages[index] = {
+        ...target,
+        url: remoteUrl,
+        rawUrl: remoteUrl,
+        assetId: mediaId
+      }
+
+      this.setData({ [fieldName]: currentImages } as Record<string, unknown>)
+
+      await updateMerchantImages({
+        storefront_images: kind === 'storefront' ? toPersistedImageUrls(currentImages) : toPersistedImageUrls(this.data.storefrontImages),
+        environment_images: kind === 'environment' ? toPersistedImageUrls(currentImages) : toPersistedImageUrls(this.data.environmentImages)
+      })
+
+      this.saveDraft()
+    } catch (error) {
+      logger.warn('[MerchantRegister] 等待图片审核通过后持久化失败', { kind, mediaId, error })
     }
   },
 
@@ -1430,6 +1569,7 @@ Page({
     const missingFields: string[] = []
 
     if (!formData.address?.trim()) missingFields.push('店铺地址')
+    if (!toSafeNumber(formData.regionId)) missingFields.push('所属区域')
 
     // 证照图片
     if (!licenseImages || licenseImages.length === 0) missingFields.push('营业执照')
@@ -1454,7 +1594,26 @@ Page({
 
     try {
       // 1. Sync latest data to backend (prevent "empty merchant name" error)
+      if (!toSafeNumber(this.data.formData.regionId)) {
+        const resolvedRegionId = await this.resolveAndSyncRegionId(formData.latitude, formData.longitude)
+        if (resolvedRegionId && resolvedRegionId !== toSafeNumber(this.data.formData.regionId)) {
+          this.setData({ 'formData.regionId': resolvedRegionId })
+        }
+      }
+
       await this.syncToBackend()
+
+      const latestDraft = await getMerchantApplication() as MerchantDraftExt
+      const latestRegionId = Number(latestDraft.region_id || 0)
+      if (!latestRegionId) {
+        this.setData({ isSubmitting: false, currentStep: 4 })
+        wx.showToast({ title: '所属区域缺失，请重新选择店铺位置', icon: 'none', duration: 3000 })
+        return
+      }
+
+      if (latestRegionId !== toSafeNumber(this.data.formData.regionId)) {
+        this.setData({ 'formData.regionId': latestRegionId })
+      }
 
       // 2. Enter Polling State UI
       this.setData({ currentStep: 5 })
@@ -1496,7 +1655,7 @@ Page({
       logger.error('[MerchantRegister] Submit failed', err)
       const errMsg = getErrorMessage(err, '提交失败，请重试')
       wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
-      this.setData({ isSubmitting: false })
+      this.setData({ isSubmitting: false, currentStep: 4 })
     }
   },
 
@@ -1558,7 +1717,7 @@ Page({
       wx.hideLoading()
       wx.showToast({ title: '已重置，可重新编辑', icon: 'success' })
       this.setData({ currentStep: 1 })
-      this.initApplication()
+      void this.initApplication()
     } catch (e) {
       wx.hideLoading()
       logger.error('[MerchantRegister] Reset failed', e)

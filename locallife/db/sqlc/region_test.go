@@ -141,6 +141,37 @@ func TestRegionQueries_ListRegionChildren(t *testing.T) {
 	require.Equal(t, child2.ID, children[1].ID)
 }
 
+func TestRegionQueries_GetClosestRegion_IncludesCountyLevel(t *testing.T) {
+	ctx := context.Background()
+
+	city, err := testStore.CreateRegion(ctx, CreateRegionParams{
+		Code:      util.RandomString(6),
+		Name:      "city_" + util.RandomString(6),
+		Level:     2,
+		ParentID:  pgtype.Int8{Valid: false},
+		Longitude: pgtype.Numeric{},
+		Latitude:  pgtype.Numeric{},
+	})
+	require.NoError(t, err)
+
+	county, err := testStore.CreateRegion(ctx, CreateRegionParams{
+		Code:      util.RandomString(6),
+		Name:      "county_" + util.RandomString(6),
+		Level:     4,
+		ParentID:  pgtype.Int8{Int64: city.ID, Valid: true},
+		Longitude: numericFromFloat(115.0554199),
+		Latitude:  numericFromFloat(37.0611534),
+	})
+	require.NoError(t, err)
+
+	got, err := testStore.GetClosestRegion(ctx, GetClosestRegionParams{
+		Lat: 37.0611534,
+		Lon: 115.0554199,
+	})
+	require.NoError(t, err)
+	require.Equal(t, county.ID, got.ID)
+}
+
 func TestRegionQueries_SearchRegionsByName(t *testing.T) {
 	ctx := context.Background()
 	keyword := "kw_" + util.RandomString(6)

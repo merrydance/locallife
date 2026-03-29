@@ -456,6 +456,47 @@ export interface UpdateShopImagesResponse {
   storefront_images: string[] | null
   environment_images: string[] | null
 }
+interface MediaAssetDetailResponse {
+  id: number
+  upload_status: string
+  moderation_status: string
+  urls?: {
+    thumb?: string
+    card?: string
+    detail?: string
+    original?: string
+  } | null
+}
+
+export async function waitForPublicMediaDisplayUrl(
+  mediaId: number,
+  options?: { maxAttempts?: number, intervalMs?: number }
+): Promise<string> {
+  const maxAttempts = Math.max(1, options?.maxAttempts ?? 8)
+  const intervalMs = Math.max(300, options?.intervalMs ?? 1500)
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const asset = await request<MediaAssetDetailResponse>({
+      url: `/v1/media/${mediaId}`,
+      method: 'GET'
+    })
+
+    const displayUrl = asset.urls?.card || asset.urls?.detail || asset.urls?.original || ''
+    if (displayUrl) {
+      return displayUrl
+    }
+
+    if (asset.moderation_status && asset.moderation_status !== 'pending') {
+      return ''
+    }
+
+    if (attempt < maxAttempts - 1) {
+      await sleep(intervalMs)
+    }
+  }
+
+  return ''
+}
 
 /**
  * 更新已入驻商户的门头照/环境照

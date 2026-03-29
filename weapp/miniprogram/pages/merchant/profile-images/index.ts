@@ -1,10 +1,16 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { logger } from '../../../utils/logger'
-import { uploadMerchantImage, getMerchantApplication, updateShopImages } from '../../../api/onboarding'
+import { uploadMerchantImage, getMerchantApplication, updateShopImages, waitForPublicMediaDisplayUrl } from '../../../api/onboarding'
 import { getMyMerchantProfile, updateMyMerchantLogo } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
 
-type ImageItem = { url: string, rawUrl?: string }
+type ImageItem = { url: string, rawUrl?: string, assetId?: number }
+
+function toPersistedImageUrls(images: ImageItem[]): string[] {
+  return images
+    .map((image) => image.rawUrl)
+    .filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+}
 
 function hasAnyImages(logoImage: ImageItem | null, storefrontImages: ImageItem[], environmentImages: ImageItem[]) {
   return !!logoImage || storefrontImages.length > 0 || environmentImages.length > 0
@@ -214,21 +220,38 @@ Page({
     this.setData({ storefrontSaving: true })
     wx.showLoading({ title: '上传中...' })
     try {
-      const { displayUrl } = await uploadMerchantImage(newFile.url, 'storefront')
-      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
-
-      const updated = await updateShopImages({
-        storefront_images: currentImages.map((img) => img.rawUrl || img.url)
+      const result = await uploadMerchantImage(newFile.url, 'storefront')
+      currentImages.push({
+        url: result.displayUrl || newFile.url,
+        rawUrl: result.displayUrl || undefined,
+        assetId: result.mediaId
       })
 
-      const storefrontImages = toImageItems(updated.storefront_images)
       this.setData({
-        storefrontImages,
-        hasAnyImages: hasAnyImages(this.data.logoImage, storefrontImages, this.data.environmentImages),
+        storefrontImages: currentImages,
+        hasAnyImages: hasAnyImages(this.data.logoImage, currentImages, this.data.environmentImages),
         storefrontSaving: false
       })
+
+      if (result.displayUrl) {
+        const updated = await updateShopImages({
+          storefront_images: toPersistedImageUrls(currentImages)
+        })
+
+        const storefrontImages = toImageItems(updated.storefront_images)
+        this.setData({
+          storefrontImages,
+          hasAnyImages: hasAnyImages(this.data.logoImage, storefrontImages, this.data.environmentImages)
+        })
+      } else {
+        void this.finalizePendingShopImage('storefront', currentImages.length - 1, result.mediaId)
+      }
+
       wx.hideLoading()
-      wx.showToast({ title: '上传成功', icon: 'success' })
+      wx.showToast({
+        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
+        icon: 'success'
+      })
     } catch (err) {
       wx.hideLoading()
       this.setData({ storefrontSaving: false })
@@ -247,7 +270,7 @@ Page({
     wx.showLoading({ title: '保存中...' })
     try {
       const updated = await updateShopImages({
-        storefront_images: images.map((img) => img.rawUrl || img.url)
+        storefront_images: toPersistedImageUrls(images)
       })
       const storefrontImages = toImageItems(updated.storefront_images)
       this.setData({
@@ -285,21 +308,38 @@ Page({
     this.setData({ environmentSaving: true })
     wx.showLoading({ title: '上传中...' })
     try {
-      const { displayUrl } = await uploadMerchantImage(newFile.url, 'environment')
-      currentImages.push({ url: displayUrl, rawUrl: displayUrl })
-
-      const updated = await updateShopImages({
-        environment_images: currentImages.map((img) => img.rawUrl || img.url)
+      const result = await uploadMerchantImage(newFile.url, 'environment')
+      currentImages.push({
+        url: result.displayUrl || newFile.url,
+        rawUrl: result.displayUrl || undefined,
+        assetId: result.mediaId
       })
 
-      const environmentImages = toImageItems(updated.environment_images)
       this.setData({
-        environmentImages,
-        hasAnyImages: hasAnyImages(this.data.logoImage, this.data.storefrontImages, environmentImages),
+        environmentImages: currentImages,
+        hasAnyImages: hasAnyImages(this.data.logoImage, this.data.storefrontImages, currentImages),
         environmentSaving: false
       })
+
+      if (result.displayUrl) {
+        const updated = await updateShopImages({
+          environment_images: toPersistedImageUrls(currentImages)
+        })
+
+        const environmentImages = toImageItems(updated.environment_images)
+        this.setData({
+          environmentImages,
+          hasAnyImages: hasAnyImages(this.data.logoImage, this.data.storefrontImages, environmentImages)
+        })
+      } else {
+        void this.finalizePendingShopImage('environment', currentImages.length - 1, result.mediaId)
+      }
+
       wx.hideLoading()
-      wx.showToast({ title: '上传成功', icon: 'success' })
+      wx.showToast({
+        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
+        icon: 'success'
+      })
     } catch (err) {
       wx.hideLoading()
       this.setData({ environmentSaving: false })
@@ -318,7 +358,7 @@ Page({
     wx.showLoading({ title: '保存中...' })
     try {
       const updated = await updateShopImages({
-        environment_images: images.map((img) => img.rawUrl || img.url)
+        environment_images: toPersistedImageUrls(images)
       })
       const environmentImages = toImageItems(updated.environment_images)
       this.setData({
@@ -333,6 +373,55 @@ Page({
       this.setData({ environmentSaving: false })
       wx.hideLoading()
       wx.showToast({ title: getErrorMessage(err, '删除环境照失败，请稍后重试'), icon: 'none' })
+    }
+  },
+
+  async finalizePendingShopImage(kind: 'storefront' | 'environment', index: number, mediaId: number) {
+    try {
+      const remoteUrl = await waitForPublicMediaDisplayUrl(mediaId)
+      if (!remoteUrl) {
+        return
+      }
+
+      const fieldName = kind === 'storefront' ? 'storefrontImages' : 'environmentImages'
+      const currentImages = [...this.data[fieldName]] as ImageItem[]
+      const target = currentImages[index]
+      if (!target || target.assetId !== mediaId) {
+        return
+      }
+
+      currentImages[index] = {
+        ...target,
+        url: remoteUrl,
+        rawUrl: remoteUrl,
+        assetId: mediaId
+      }
+
+      this.setData({
+        [fieldName]: currentImages,
+        hasAnyImages: hasAnyImages(
+          this.data.logoImage,
+          kind === 'storefront' ? currentImages : this.data.storefrontImages,
+          kind === 'environment' ? currentImages : this.data.environmentImages
+        )
+      } as Record<string, unknown>)
+
+      const updated = await updateShopImages({
+        storefront_images: kind === 'storefront' ? toPersistedImageUrls(currentImages) : toPersistedImageUrls(this.data.storefrontImages),
+        environment_images: kind === 'environment' ? toPersistedImageUrls(currentImages) : toPersistedImageUrls(this.data.environmentImages)
+      })
+
+      this.setData({
+        storefrontImages: toImageItems(updated.storefront_images),
+        environmentImages: toImageItems(updated.environment_images),
+        hasAnyImages: hasAnyImages(
+          this.data.logoImage,
+          toImageItems(updated.storefront_images),
+          toImageItems(updated.environment_images)
+        )
+      })
+    } catch (err) {
+      logger.warn('[ProfileImages] 等待图片审核通过后持久化失败', { kind, mediaId, err })
     }
   }
 })

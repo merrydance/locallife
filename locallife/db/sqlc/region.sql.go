@@ -71,7 +71,9 @@ func (q *Queries) DeleteRegion(ctx context.Context, id int64) error {
 
 const getClosestRegion = `-- name: GetClosestRegion :one
 SELECT id, code, name, level, parent_id, longitude, latitude, created_at, qweather_location_id, status FROM regions
-WHERE level = 3
+WHERE level IN (3, 4)
+  AND longitude IS NOT NULL
+  AND latitude IS NOT NULL
 ORDER BY (
     6371000 * acos(
         cos(radians($1::float8)) * cos(radians(latitude)) * 

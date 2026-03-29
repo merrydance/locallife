@@ -2,7 +2,7 @@ import { tracker, EventType } from './utils/tracker'
 import { wechatLogin, getUserInfo, getDeviceId } from './api/auth'
 import { setToken } from './utils/auth'
 import { logger } from './utils/logger'
-import { ErrorHandler } from './utils/error-handler'
+import { AppError, ErrorHandler, ErrorType } from './utils/error-handler'
 import { networkMonitor } from './utils/network-monitor'
 import { themeManager } from './utils/theme'
 import { locationService } from './utils/location'
@@ -179,6 +179,7 @@ App<IAppOption>({
   onUnhandledRejection(res: { reason?: unknown, promise?: unknown }) {
     // 后端服务不可用时使用简洁日志
     const reason = res.reason
+    const isNetworkAppError = reason instanceof AppError && reason.type === ErrorType.NETWORK
     const reasonMessage =
       reason && typeof reason === 'object' && 'message' in reason
         ? (reason as { message?: string }).message
@@ -188,6 +189,11 @@ App<IAppOption>({
 
     if (isBackendError) {
       logger.warn('[后端服务不可用] Promise rejected', { reason: reasonStr }, 'App.onUnhandledRejection')
+    } else if (isNetworkAppError) {
+      logger.warn('未处理的网络 Promise 拒绝（已抑制弹窗）', {
+        reason: reasonStr,
+        promise: res.promise
+      }, 'App.onUnhandledRejection')
     } else {
       logger.error('未处理的Promise拒绝', {
         reason: res.reason,
@@ -197,7 +203,7 @@ App<IAppOption>({
     }
 
     // 后端不可用时不上报
-    if (!isBackendError) {
+    if (!isBackendError && !isNetworkAppError) {
       this.reportErrorToMonitor(res.reason, 'onUnhandledRejection')
     }
   },
