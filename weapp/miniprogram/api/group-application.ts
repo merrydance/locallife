@@ -80,6 +80,48 @@ export interface GroupJoinRequestResponse {
   created_at: string
 }
 
+function hasGroupText(value?: string) {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function checkGroupBusinessLicenseWriteback(latest: GroupApplicationResponse) {
+  const status = latest.business_license_ocr?.status || ''
+  const error = latest.business_license_ocr?.error || ''
+  return {
+    ready: status === 'done'
+      || hasGroupText(latest.license_number)
+      || hasGroupText(latest.business_license_ocr?.credit_code)
+      || hasGroupText(latest.business_license_ocr?.reg_num)
+      || hasGroupText(latest.business_license_ocr?.enterprise_name),
+    failed: status === 'failed',
+    errorMessage: error
+  }
+}
+
+function checkGroupIDCardWriteback(latest: GroupApplicationResponse, side: 'Front' | 'Back') {
+  const payload = side === 'Front' ? latest.id_card_front_ocr : latest.id_card_back_ocr
+  const status = payload?.status || ''
+  const error = payload?.error || ''
+
+  if (side === 'Front') {
+    return {
+      ready: status === 'done'
+        || hasGroupText(latest.legal_person_name)
+        || hasGroupText(latest.legal_person_id_number)
+        || hasGroupText(payload?.name)
+        || hasGroupText(payload?.id_number),
+      failed: status === 'failed',
+      errorMessage: error
+    }
+  }
+
+  return {
+    ready: status === 'done' || hasGroupText(payload?.valid_date),
+    failed: status === 'failed',
+    errorMessage: error
+  }
+}
+
 /**
  * 获取或创建集团入驻草稿
  */
@@ -117,7 +159,12 @@ export async function ocrGroupBusinessLicense(filePath: string) {
       owner_type: 'group_application',
       owner_id: draft.id
     },
-    getOrCreateGroupApplication
+    getOrCreateGroupApplication,
+    {
+      verifyResult: checkGroupBusinessLicenseWriteback,
+      maxAttempts: 20,
+      intervalMs: 1000
+    }
   )
 }
 
@@ -139,7 +186,12 @@ export async function ocrGroupIdCard(filePath: string, side: 'Front' | 'Back') {
       owner_id: draft.id,
       side: side === 'Front' ? 'front' : 'back'
     },
-    getOrCreateGroupApplication
+    getOrCreateGroupApplication,
+    {
+      verifyResult: (latest) => checkGroupIDCardWriteback(latest, side),
+      maxAttempts: 20,
+      intervalMs: 1000
+    }
   )
 }
 

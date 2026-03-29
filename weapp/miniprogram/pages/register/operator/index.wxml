@@ -113,13 +113,6 @@
     <!-- Step 2: 企业与法人资质 -->
     <view class="step-view animate-fade-in" wx:if="{{currentStep === 2}}">
       <view class="section-title">资质上传（身份证必填，营业执照可选）</view>
-      <view class="ocr-status-banner" wx:if="{{ocrDisplayState.idCard === 'processing' || ocrDisplayState.businessLicense === 'processing'}}">
-        资质图片已上传，系统仍在自动识别。你可以继续下一步，提交时会按最新识别结果核验。
-      </view>
-      <view class="ocr-status-banner error" wx:if="{{ocrDisplayState.idCard === 'failed' || ocrDisplayState.businessLicense === 'failed'}}">
-        部分资质识别未完成，建议重新上传清晰图片后再提交。
-      </view>
-      
       <view class="upload-section">
         <view class="label-row">
           <text class="label">企业营业执照（可选）</text>
@@ -129,6 +122,9 @@
           title="点击上传企业营业执照" 
           value="{{license.url}}" 
           rawUrl="{{license.rawUrl}}"
+          feedbackState="{{uploadFeedback.license.state}}"
+          feedbackTitle="{{uploadFeedback.license.title}}"
+          feedbackDescription="{{uploadFeedback.license.description}}"
           bind:change="onLicenseUpload" 
         />
       </view>
@@ -143,6 +139,9 @@
             title="法人身份证人像面" 
             value="{{idFront.url}}" 
             rawUrl="{{idFront.rawUrl}}"
+            feedbackState="{{uploadFeedback.idFront.state}}"
+            feedbackTitle="{{uploadFeedback.idFront.title}}"
+            feedbackDescription="{{uploadFeedback.idFront.description}}"
             bind:change="onIdFrontUpload" 
           />
           <view class="upload-spacer"></view>
@@ -151,6 +150,9 @@
             title="法人身份证国徽面" 
             value="{{idBack.url}}" 
             rawUrl="{{idBack.rawUrl}}"
+            feedbackState="{{uploadFeedback.idBack.state}}"
+            feedbackTitle="{{uploadFeedback.idBack.title}}"
+            feedbackDescription="{{uploadFeedback.idBack.description}}"
             bind:change="onIdBackUpload" 
           />
         </view>

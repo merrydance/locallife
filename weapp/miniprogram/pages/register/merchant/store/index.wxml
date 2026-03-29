@@ -35,21 +35,21 @@
         <view class="upload-group">
             <view class="upload-item">
                 <view class="upload-label">营业执照 (必传)</view>
-                <document-uploader type="license" title="点击上传营业执照" value="{{licenseImages.length > 0 ? licenseImages[0].url : ''}}" rawUrl="{{licenseImages.length > 0 ? licenseImages[0].rawUrl : ''}}" bind:change="onLicenseUpload" bind:remove="onLicenseRemove" bind:imageerror="onImageError" />
+                <document-uploader type="license" title="点击上传营业执照" value="{{licenseImages.length > 0 ? licenseImages[0].url : ''}}" rawUrl="{{licenseImages.length > 0 ? licenseImages[0].rawUrl : ''}}" feedbackState="{{uploadFeedback.license.state}}" feedbackTitle="{{uploadFeedback.license.title}}" feedbackDescription="{{uploadFeedback.license.description}}" bind:change="onLicenseUpload" bind:remove="onLicenseRemove" bind:imageerror="onImageError" />
             </view>
             <view class="upload-item">
                 <view class="upload-label">食品经营许可证 (必传)</view>
-                <document-uploader type="permit" title="点击上传许可证" value="{{foodLicenseImages.length > 0 ? foodLicenseImages[0].url : ''}}" rawUrl="{{foodLicenseImages.length > 0 ? foodLicenseImages[0].rawUrl : ''}}" bind:change="onFoodLicenseUpload" bind:remove="onFoodLicenseRemove" bind:imageerror="onImageError" />
+                <document-uploader type="permit" title="点击上传许可证" value="{{foodLicenseImages.length > 0 ? foodLicenseImages[0].url : ''}}" rawUrl="{{foodLicenseImages.length > 0 ? foodLicenseImages[0].rawUrl : ''}}" feedbackState="{{uploadFeedback.foodPermit.state}}" feedbackTitle="{{uploadFeedback.foodPermit.title}}" feedbackDescription="{{uploadFeedback.foodPermit.description}}" bind:change="onFoodLicenseUpload" bind:remove="onFoodLicenseRemove" bind:imageerror="onImageError" />
             </view>
         </view>
         <view class="upload-group">
             <view class="upload-item">
                 <view class="upload-label">法人身份证正面 (必传)</view>
-                <document-uploader type="id-front" title="上传人像页" value="{{idCardFrontImages.length > 0 ? idCardFrontImages[0].url : ''}}" rawUrl="{{idCardFrontImages.length > 0 ? idCardFrontImages[0].rawUrl : ''}}" bind:change="onIdCardFrontUpload" bind:remove="onIdCardFrontRemove" bind:imageerror="onImageError" />
+                <document-uploader type="id-front" title="上传人像页" value="{{idCardFrontImages.length > 0 ? idCardFrontImages[0].url : ''}}" rawUrl="{{idCardFrontImages.length > 0 ? idCardFrontImages[0].rawUrl : ''}}" feedbackState="{{uploadFeedback.idCardFront.state}}" feedbackTitle="{{uploadFeedback.idCardFront.title}}" feedbackDescription="{{uploadFeedback.idCardFront.description}}" bind:change="onIdCardFrontUpload" bind:remove="onIdCardFrontRemove" bind:imageerror="onImageError" />
             </view>
             <view class="upload-item">
                 <view class="upload-label">法人身份证反面 (必传)</view>
-                <document-uploader type="id-back" title="上传国徽页" value="{{idCardBackImages.length > 0 ? idCardBackImages[0].url : ''}}" rawUrl="{{idCardBackImages.length > 0 ? idCardBackImages[0].rawUrl : ''}}" bind:change="onIdCardBackUpload" bind:remove="onIdCardBackRemove" bind:imageerror="onImageError" />
+                <document-uploader type="id-back" title="上传国徽页" value="{{idCardBackImages.length > 0 ? idCardBackImages[0].url : ''}}" rawUrl="{{idCardBackImages.length > 0 ? idCardBackImages[0].rawUrl : ''}}" feedbackState="{{uploadFeedback.idCardBack.state}}" feedbackTitle="{{uploadFeedback.idCardBack.title}}" feedbackDescription="{{uploadFeedback.idCardBack.description}}" bind:change="onIdCardBackUpload" bind:remove="onIdCardBackRemove" bind:imageerror="onImageError" />
             </view>
         </view>
     </view>

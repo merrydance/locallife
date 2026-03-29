@@ -28,6 +28,12 @@ WHERE owner_type = $1
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4;
 
+-- name: ListPendingOCRJobsByMediaAsset :many
+SELECT * FROM ocr_jobs
+WHERE media_asset_id = $1
+  AND status = 'pending'
+ORDER BY created_at ASC, id ASC;
+
 -- name: ListOCRDeadLetterJobs :many
 SELECT * FROM ocr_jobs
 WHERE status IN ('failed', 'cancelled')
@@ -101,4 +107,18 @@ SET status = $2,
     updated_at = now()
 WHERE id = $1
   AND status = 'processing'
+RETURNING *;
+
+-- name: FailPendingOCRJob :one
+UPDATE ocr_jobs
+SET status = 'failed',
+    error_code = $2,
+    error_message = $3,
+    next_retry_at = NULL,
+    leased_at = NULL,
+    lease_owner = NULL,
+    finished_at = now(),
+    updated_at = now()
+WHERE id = $1
+  AND status = 'pending'
 RETURNING *;

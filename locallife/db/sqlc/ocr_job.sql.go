@@ -144,6 +144,61 @@ func (q *Queries) FailOCRJob(ctx context.Context, arg FailOCRJobParams) (OcrJob,
 	return i, err
 }
 
+const failPendingOCRJob = `-- name: FailPendingOCRJob :one
+UPDATE ocr_jobs
+SET status = 'failed',
+    error_code = $2,
+    error_message = $3,
+    next_retry_at = NULL,
+    leased_at = NULL,
+    lease_owner = NULL,
+    finished_at = now(),
+    updated_at = now()
+WHERE id = $1
+  AND status = 'pending'
+RETURNING id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at
+`
+
+type FailPendingOCRJobParams struct {
+	ID           int64       `json:"id"`
+	ErrorCode    pgtype.Text `json:"error_code"`
+	ErrorMessage pgtype.Text `json:"error_message"`
+}
+
+func (q *Queries) FailPendingOCRJob(ctx context.Context, arg FailPendingOCRJobParams) (OcrJob, error) {
+	row := q.db.QueryRow(ctx, failPendingOCRJob, arg.ID, arg.ErrorCode, arg.ErrorMessage)
+	var i OcrJob
+	err := row.Scan(
+		&i.ID,
+		&i.IdempotencyKey,
+		&i.DocumentType,
+		&i.Provider,
+		&i.ProviderTaskID,
+		&i.MediaAssetID,
+		&i.OwnerType,
+		&i.OwnerID,
+		&i.Side,
+		&i.Status,
+		&i.AttemptCount,
+		&i.MaxAttempts,
+		&i.NextRetryAt,
+		&i.LeasedAt,
+		&i.LeaseOwner,
+		&i.ErrorCode,
+		&i.ErrorMessage,
+		&i.RawResult,
+		&i.NormalizedResult,
+		&i.ResultVersion,
+		&i.RetentionUntil,
+		&i.RequestedBy,
+		&i.CreatedAt,
+		&i.StartedAt,
+		&i.FinishedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getOCRJob = `-- name: GetOCRJob :one
 SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
 WHERE id = $1
@@ -285,6 +340,60 @@ func (q *Queries) ListOCRJobsByOwner(ctx context.Context, arg ListOCRJobsByOwner
 		arg.Limit,
 		arg.Offset,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []OcrJob{}
+	for rows.Next() {
+		var i OcrJob
+		if err := rows.Scan(
+			&i.ID,
+			&i.IdempotencyKey,
+			&i.DocumentType,
+			&i.Provider,
+			&i.ProviderTaskID,
+			&i.MediaAssetID,
+			&i.OwnerType,
+			&i.OwnerID,
+			&i.Side,
+			&i.Status,
+			&i.AttemptCount,
+			&i.MaxAttempts,
+			&i.NextRetryAt,
+			&i.LeasedAt,
+			&i.LeaseOwner,
+			&i.ErrorCode,
+			&i.ErrorMessage,
+			&i.RawResult,
+			&i.NormalizedResult,
+			&i.ResultVersion,
+			&i.RetentionUntil,
+			&i.RequestedBy,
+			&i.CreatedAt,
+			&i.StartedAt,
+			&i.FinishedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingOCRJobsByMediaAsset = `-- name: ListPendingOCRJobsByMediaAsset :many
+SELECT id, idempotency_key, document_type, provider, provider_task_id, media_asset_id, owner_type, owner_id, side, status, attempt_count, max_attempts, next_retry_at, leased_at, lease_owner, error_code, error_message, raw_result, normalized_result, result_version, retention_until, requested_by, created_at, started_at, finished_at, updated_at FROM ocr_jobs
+WHERE media_asset_id = $1
+  AND status = 'pending'
+ORDER BY created_at ASC, id ASC
+`
+
+func (q *Queries) ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error) {
+	rows, err := q.db.Query(ctx, listPendingOCRJobsByMediaAsset, mediaAssetID)
 	if err != nil {
 		return nil, err
 	}

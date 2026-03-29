@@ -36,9 +36,35 @@ type GroupOCRDisplayState = {
   identity: OCRDisplayStateValue
 }
 
+type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
+
+type UploadFeedback = {
+  state: UploadFeedbackState
+  title: string
+  description: string
+}
+
+type GroupUploadFeedback = {
+  license: UploadFeedback
+  idFront: UploadFeedback
+  idBack: UploadFeedback
+}
+
 const DEFAULT_GROUP_OCR_DISPLAY_STATE: GroupOCRDisplayState = {
   license: 'idle',
   identity: 'idle'
+}
+
+const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
+  state: 'idle',
+  title: '',
+  description: ''
+}
+
+const DEFAULT_GROUP_UPLOAD_FEEDBACK: GroupUploadFeedback = {
+  license: { ...EMPTY_UPLOAD_FEEDBACK },
+  idFront: { ...EMPTY_UPLOAD_FEEDBACK },
+  idBack: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
 type InputEvent = {
@@ -65,6 +91,12 @@ const getErrorMessage = (error: unknown, fallback: string): string => {
   return fallback
 }
 
+const createUploadFeedback = (state: UploadFeedbackState, title = '', description = ''): UploadFeedback => ({
+  state,
+  title,
+  description
+})
+
 Page({
   data: {
     navBarHeight: 88,
@@ -74,6 +106,7 @@ Page({
     idBack: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     license: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     ocrDisplayState: DEFAULT_GROUP_OCR_DISPLAY_STATE,
+    uploadFeedback: DEFAULT_GROUP_UPLOAD_FEEDBACK,
     formData: {
       groupName: '',
       contactPhone: '',
@@ -104,7 +137,7 @@ Page({
       (res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
     )
 
-    const licenseDone = licenseStatus === 'done' || Boolean(res?.license_number)
+    const licenseDone = licenseStatus === 'done'
     const identityDone = idFrontStatus === 'done' && idBackStatus === 'done'
 
     return {
@@ -155,18 +188,56 @@ Page({
       license: { url: '', rawUrl: '', assetId: res.license_image_asset_id },
       idFront: { url: '', rawUrl: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', rawUrl: '', assetId: res.id_card_back_asset_id },
-      ocrDisplayState: this.buildGroupOCRDisplayState(res)
+      ocrDisplayState: this.buildGroupOCRDisplayState(res),
+      uploadFeedback: this.buildGroupUploadFeedback(res)
     }, () => {
       void this.refreshUploadPreviewURLs()
     })
+  },
+
+  buildGroupUploadFeedback(res?: GroupApplicationResponse): GroupUploadFeedback {
+    const licenseStatus = res?.business_license_ocr?.status || ''
+    const licenseError = res?.business_license_ocr?.error || ''
+    const idFrontStatus = res?.id_card_front_ocr?.status || ''
+    const idFrontError = res?.id_card_front_ocr?.error || ''
+    const idBackStatus = res?.id_card_back_ocr?.status || ''
+    const idBackError = res?.id_card_back_ocr?.error || ''
+
+    const licenseUploaded = Boolean(res?.license_image_asset_id || this.data.license.assetId || this.data.license.url)
+    const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
+    const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+
+    return {
+      license: licenseUploaded
+        ? licenseStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', licenseError || '请重新上传清晰、完整的营业执照')
+          : licenseStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已识别营业执照主体信息')
+            : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      idFront: idFrontUploaded
+        ? idFrontStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', idFrontError || '请重新上传清晰、完整的身份证人像面')
+          : idFrontStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已识别负责人姓名和身份证号')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      idBack: idBackUploaded
+        ? idBackStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', idBackError || '请重新上传清晰、完整的身份证国徽面')
+          : idBackStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已识别证件有效期')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK }
+    }
   },
 
   setOCRState(type: keyof GroupOCRDisplayState, status: OCRDisplayStateValue) {
     this.setData({ [`ocrDisplayState.${type}`]: status })
   },
 
-  isPendingOCRMessage(message: string): boolean {
-    return message.includes('处理中') || message.includes('审核中') || message.includes('识别中')
+  setUploadFeedback(field: keyof GroupUploadFeedback, feedback: UploadFeedback) {
+    this.setData({ [`uploadFeedback.${field}`]: feedback })
   },
 
   async fetchDraft() {
@@ -188,18 +259,14 @@ Page({
       'idFront.rawUrl': path
     })
     this.setOCRState('identity', 'processing')
-    wx.showLoading({ title: '识别身份证...' })
+    this.setUploadFeedback('idFront', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const res = await ocrGroupIdCard(path, 'Front')
-      const nextState = this.buildGroupOCRDisplayState(res)
       this.mapResponseToData(res)
-      wx.hideLoading()
-      wx.showToast({ title: nextState.identity === 'done' ? '身份证识别成功' : '身份证已上传，系统继续识别中', icon: 'none' })
     } catch (error) {
-      wx.hideLoading()
-      const message = getErrorMessage(error, '身份证已上传，系统处理中')
-      this.setOCRState('identity', this.isPendingOCRMessage(message) ? 'processing' : 'failed')
-      wx.showToast({ title: message, icon: 'none' })
+      const message = getErrorMessage(error, '识别失败，请提供更清晰更规整的图片重试')
+      this.setOCRState('identity', 'failed')
+      this.setUploadFeedback('idFront', createUploadFeedback('error', '识别失败', message))
     }
   },
 
@@ -211,18 +278,14 @@ Page({
       'idBack.rawUrl': path
     })
     this.setOCRState('identity', 'processing')
-    wx.showLoading({ title: '识别身份证...' })
+    this.setUploadFeedback('idBack', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const res = await ocrGroupIdCard(path, 'Back')
-      const nextState = this.buildGroupOCRDisplayState(res)
       this.mapResponseToData(res)
-      wx.hideLoading()
-      wx.showToast({ title: nextState.identity === 'done' ? '身份证识别成功' : '身份证已上传，系统继续识别中', icon: 'none' })
     } catch (error) {
-      wx.hideLoading()
-      const message = getErrorMessage(error, '身份证已上传，系统处理中')
-      this.setOCRState('identity', this.isPendingOCRMessage(message) ? 'processing' : 'failed')
-      wx.showToast({ title: message, icon: 'none' })
+      const message = getErrorMessage(error, '识别失败，请提供更清晰更规整的图片重试')
+      this.setOCRState('identity', 'failed')
+      this.setUploadFeedback('idBack', createUploadFeedback('error', '识别失败', message))
     }
   },
 
@@ -231,18 +294,14 @@ Page({
     if (!path) return
     this.setData({ 'license.url': path, 'license.rawUrl': path })
     this.setOCRState('license', 'processing')
-    wx.showLoading({ title: '识别执照...' })
+    this.setUploadFeedback('license', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const res = await ocrGroupBusinessLicense(path)
-      const nextState = this.buildGroupOCRDisplayState(res)
       this.mapResponseToData(res)
-      wx.hideLoading()
-      wx.showToast({ title: nextState.license === 'done' ? '营业执照识别成功' : '营业执照已上传，系统继续识别中', icon: 'none' })
     } catch (e) {
-      wx.hideLoading()
-      const message = getErrorMessage(e, '图片已上传，系统处理中')
-      this.setOCRState('license', this.isPendingOCRMessage(message) ? 'processing' : 'failed')
-      wx.showToast({ title: message, icon: 'none' })
+      const message = getErrorMessage(e, '识别失败，请提供更清晰更规整的图片重试')
+      this.setOCRState('license', 'failed')
+      this.setUploadFeedback('license', createUploadFeedback('error', '识别失败', message))
     }
   },
 

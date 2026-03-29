@@ -27,6 +27,9 @@ interface RequestOptions {
 }
 
 const cache = new CacheManager()
+const MEDIA_SECURITY_BLOCKED_MESSAGE = '图片被微信多媒体内容安全审查系统拦截，请更换图片再试'
+const OCR_TIMEOUT_MESSAGE = '识别超时，请稍后重试'
+const OCR_FAILURE_MESSAGE = '识别失败，请提供更清晰更规整的图片重试'
 
 interface RefreshTokenPayload {
   access_token: string
@@ -128,7 +131,7 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
   }
 
   if (normalized.includes('image moderation is pending')) {
-    return '图片已上传，系统处理中'
+    return MEDIA_SECURITY_BLOCKED_MESSAGE
   }
 
   if (normalized.includes('invalid media id')) {
@@ -147,7 +150,7 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
   }
 
   if (normalized.includes('ocr timeout') || normalized.includes('recognize timeout') || normalized.includes('recognition timeout')) {
-    return '系统识别时间较长，请稍后查看结果'
+    return OCR_TIMEOUT_MESSAGE
   }
 
   if (
@@ -155,7 +158,7 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
     normalized.includes('recognize failed') ||
     normalized.includes('recognition failed')
   ) {
-    return '图片识别失败，请重新上传清晰图片'
+    return OCR_FAILURE_MESSAGE
   }
 
   if (normalized.includes('invalid coordinates')) {

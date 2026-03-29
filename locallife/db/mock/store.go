@@ -5324,6 +5324,21 @@ func (mr *MockStoreMockRecorder) FailOCRJob(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailOCRJob", reflect.TypeOf((*MockStore)(nil).FailOCRJob), ctx, arg)
 }
 
+// FailPendingOCRJob mocks base method.
+func (m *MockStore) FailPendingOCRJob(ctx context.Context, arg db.FailPendingOCRJobParams) (db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FailPendingOCRJob", ctx, arg)
+	ret0, _ := ret[0].(db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FailPendingOCRJob indicates an expected call of FailPendingOCRJob.
+func (mr *MockStoreMockRecorder) FailPendingOCRJob(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailPendingOCRJob", reflect.TypeOf((*MockStore)(nil).FailPendingOCRJob), ctx, arg)
+}
+
 // FreezeUserBalance mocks base method.
 func (m *MockStore) FreezeUserBalance(ctx context.Context, arg db.FreezeUserBalanceParams) (db.UserBalance, error) {
 	m.ctrl.T.Helper()
@@ -13297,6 +13312,21 @@ func (m *MockStore) ListPendingEcommerceApplyments(ctx context.Context, arg db.L
 func (mr *MockStoreMockRecorder) ListPendingEcommerceApplyments(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingEcommerceApplyments", reflect.TypeOf((*MockStore)(nil).ListPendingEcommerceApplyments), ctx, arg)
+}
+
+// ListPendingOCRJobsByMediaAsset mocks base method.
+func (m *MockStore) ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]db.OcrJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPendingOCRJobsByMediaAsset", ctx, mediaAssetID)
+	ret0, _ := ret[0].([]db.OcrJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPendingOCRJobsByMediaAsset indicates an expected call of ListPendingOCRJobsByMediaAsset.
+func (mr *MockStoreMockRecorder) ListPendingOCRJobsByMediaAsset(ctx, mediaAssetID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingOCRJobsByMediaAsset", reflect.TypeOf((*MockStore)(nil).ListPendingOCRJobsByMediaAsset), ctx, mediaAssetID)
 }
 
 // ListPendingOperatorApplications mocks base method.

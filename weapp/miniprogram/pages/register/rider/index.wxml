@@ -57,6 +57,9 @@
             title="身份证人像面" 
             value="{{idFront.url}}" 
             rawUrl="{{idFront.rawUrl}}"
+            feedbackState="{{uploadFeedback.idFront.state}}"
+            feedbackTitle="{{uploadFeedback.idFront.title}}"
+            feedbackDescription="{{uploadFeedback.idFront.description}}"
             bind:change="onIdFrontUpload" 
           />
           <view class="upload-spacer"></view>
@@ -65,6 +68,9 @@
             title="身份证国徽面" 
             value="{{idBack.url}}" 
             rawUrl="{{idBack.rawUrl}}"
+            feedbackState="{{uploadFeedback.idBack.state}}"
+            feedbackTitle="{{uploadFeedback.idBack.title}}"
+            feedbackDescription="{{uploadFeedback.idBack.description}}"
             bind:change="onIdBackUpload" 
           />
         </view>
@@ -80,6 +86,9 @@
           title="点击上传本人健康证" 
           value="{{healthCert.url}}" 
           rawUrl="{{healthCert.rawUrl}}"
+          feedbackState="{{uploadFeedback.healthCert.state}}"
+          feedbackTitle="{{uploadFeedback.healthCert.title}}"
+          feedbackDescription="{{uploadFeedback.healthCert.description}}"
           bind:change="onHealthCertUpload"
           bind:remove="onHealthCertRemove" 
         />

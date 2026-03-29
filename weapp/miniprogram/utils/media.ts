@@ -354,6 +354,24 @@ function normalizeMediaRequestError(err: unknown, message: string, userMessage: 
   if (err instanceof AppError) {
     return err
   }
+
+  const backendMessage = String(
+    (err as { body?: { message?: string } })?.body?.message
+    || (err as { message?: string })?.message
+    || ''
+  ).toLowerCase()
+  const isMediaSecurityBlocked = backendMessage.includes('image moderation is pending')
+    || backendMessage.includes('内容审核中')
+    || backendMessage.includes('多媒体内容安全审查')
+
+  if (isMediaSecurityBlocked) {
+    return new AppError({
+      type: ErrorType.BUSINESS,
+      message: message || '媒体内容安全拦截',
+      userMessage: '图片被微信多媒体内容安全审查系统拦截，请更换图片再试'
+    })
+  }
+
   const statusCode = (err as { statusCode?: number })?.statusCode
   if (typeof statusCode === 'number') {
     return new AppError({

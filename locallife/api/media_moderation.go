@@ -258,6 +258,16 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		Str("moderation_status", moderationStatus).
 		Str("label", payload.Result.Label).
 		Msg("media moderation callback processed")
+	if err := server.processPendingOCRJobsForMediaModeration(ctx, asset); err != nil {
+		log.Error().
+			Err(err).
+			Int64("media_id", asset.ID).
+			Str("trace_id", payload.TraceID).
+			Str("moderation_status", moderationStatus).
+			Msg("process pending ocr jobs for media moderation failed")
+		ctx.String(http.StatusInternalServerError, "ocr moderation linkage failed")
+		return
+	}
 	ctx.String(http.StatusOK, "success")
 }
 

@@ -1,6 +1,5 @@
 import {
   type MerchantApplicationDraftResponse,
-  enqueueMerchantApplicationOCRForMedia,
   getMerchantApplication,
   getMyApplication,
   ocrBusinessLicense,
@@ -8,13 +7,11 @@ import {
   ocrIdCard,
   resetMerchantApplication,
   submitMerchantApplication,
-  type MerchantApplicationOCRDocumentType,
   type MerchantApplicationOCRSubmissionResult,
   updateMerchantBasicInfo,
   deleteMerchantApplicationDocument
 } from '../../../../api/onboarding'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
-import { AppError, ErrorType } from '../../../../utils/error-handler'
 import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { logger } from '../../../../utils/logger'
 import { getMediaDisplayUrl } from '../../../../utils/media'
@@ -191,22 +188,13 @@ function isPendingOcrStatus(status?: string) {
   return status === 'pending' || status === 'processing'
 }
 
-function isOcrTimeoutError(error: unknown) {
-  const message = extractErrorMessage(error, '').toLowerCase()
-  return message.includes('ocr timeout') || message.includes('识别超时')
-}
-
-function buildOcrNoticeMessage(statuses: OcrStatus[], refreshRecommended: boolean) {
+function buildOcrNoticeMessage(statuses: OcrStatus[]) {
   const hasPendingStatus = statuses.some((status) => isPendingOcrStatus(status))
   if (!hasPendingStatus) {
     return ''
   }
 
-  if (refreshRecommended) {
-    return '证照已上传，OCR 识别耗时较长，可点击“刷新识别结果”查看最新状态。'
-  }
-
-  return '部分证照仍在识别中，识别较慢时可稍后点击“刷新识别结果”查看最新状态。'
+  return '部分证照仍在识别中，请等待本次识别完成后再提交审核。'
 }
 
 Page({
@@ -244,8 +232,6 @@ Page({
     idCardFrontOcrStatus: '' as OcrStatus,
     idCardBackOcrStatus: '' as OcrStatus,
     ocrNoticeMessage: '',
-    ocrRefreshRecommended: false,
-    ocrRefreshing: false,
     licenseUploading: false,
     foodPermitUploading: false,
     idCardFrontUploading: false,
@@ -330,7 +316,6 @@ Page({
       (draft.id_card_front_ocr?.status || '') as OcrStatus,
       (draft.id_card_back_ocr?.status || '') as OcrStatus
     ]
-    const ocrRefreshRecommended = this.data.ocrRefreshRecommended && ocrStatuses.some((status) => isPendingOcrStatus(status))
 
     this.setData({
       applicationId: draft.id,
@@ -357,8 +342,7 @@ Page({
       foodPermitOcrStatus: (draft.food_permit_ocr?.status || '') as OcrStatus,
       idCardFrontOcrStatus: (draft.id_card_front_ocr?.status || '') as OcrStatus,
       idCardBackOcrStatus: (draft.id_card_back_ocr?.status || '') as OcrStatus,
-      ocrRefreshRecommended,
-      ocrNoticeMessage: buildOcrNoticeMessage(ocrStatuses, ocrRefreshRecommended)
+      ocrNoticeMessage: buildOcrNoticeMessage(ocrStatuses)
     })
   },
 
@@ -603,10 +587,10 @@ Page({
 
     const uploadingKey = this.getUploadingKey(field)
     this.setData({ [uploadingKey]: true })
-    wx.showLoading({ title: '识别中...' })
+    wx.showLoading({ title: '证照识别中' })
 
-    let submissionResult: MerchantApplicationOCRSubmissionResult | null = null
     try {
+      let submissionResult: MerchantApplicationOCRSubmissionResult
       if (field === 'license') {
         submissionResult = await ocrBusinessLicense(path)
       } else if (field === 'foodPermit') {
@@ -621,22 +605,10 @@ Page({
         throw new Error('证照上传失败，请稍后重试')
       }
 
-      const latestDraft = await this.waitForOcrDraft(field, submissionResult)
-      await this.mergeOcrDraft(field, latestDraft, path)
+      await this.mergeOcrDraft(field, submissionResult.draft, path)
       wx.showToast({ title: '识别完成，请确认回填信息', icon: 'success' })
     } catch (error) {
       logger.error('Upload merchant application document failed', error, 'merchant-application-page')
-
-      if (submissionResult && isOcrTimeoutError(error)) {
-        try {
-          await this.mergeOcrDraft(field, submissionResult.draft, path, { refreshRecommended: true })
-        } catch (mergeError) {
-          logger.warn('Apply OCR timeout draft failed', mergeError, 'merchant-application-page')
-        }
-        wx.showToast({ title: '证照已上传，识别耗时较长，可稍后点击“刷新识别结果”查看', icon: 'none' })
-        return
-      }
-
       wx.showToast({ title: extractErrorMessage(error, '证照上传或识别失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
@@ -657,70 +629,6 @@ Page({
     }
   },
 
-  async waitForOcrDraft(field: UploadField, submissionResult: MerchantApplicationOCRSubmissionResult) {
-    const fieldKey = this.getOcrFieldKey(field)
-    let latestDraft = submissionResult.draft
-    const retryConfig = this.getOcrRetryConfig(field, submissionResult.mediaId)
-    const initialResult = latestDraft[fieldKey]
-    const initialStatus = initialResult?.status
-    if (initialStatus === 'failed') {
-      throw new Error(initialResult?.error || '识别失败，请重新上传清晰图片')
-    }
-    if (initialStatus === 'done') {
-      return latestDraft
-    }
-
-    for (let attempt = 0; attempt < 15; attempt += 1) {
-      if (!latestDraft[fieldKey]?.status && retryConfig) {
-        try {
-          const retryResult = await enqueueMerchantApplicationOCRForMedia(
-            retryConfig.mediaId,
-            retryConfig.documentType,
-            retryConfig.side,
-            { maxAttempts: 1, retryDelayMs: 0 }
-          )
-          latestDraft = retryResult.draft
-        } catch (error) {
-          logger.warn('Retry merchant application OCR enqueue failed', {
-            field,
-            mediaId: retryConfig.mediaId,
-            error
-          }, 'merchant-application-page')
-        }
-      }
-
-      await this.sleep(2000)
-      latestDraft = await getMerchantApplication()
-      const latestResult = latestDraft[fieldKey]
-      const latestStatus = latestResult?.status
-      if (latestStatus === 'failed') {
-        throw new Error(latestResult?.error || '识别失败，请重新上传清晰图片')
-      }
-      if (latestStatus === 'done') {
-        return latestDraft
-      }
-    }
-
-    throw new AppError({
-      type: ErrorType.UNKNOWN,
-      message: 'OCR timeout',
-      userMessage: '识别超时，请稍后点击“刷新识别结果”查看状态'
-    })
-  },
-
-  getOcrRetryConfig(field: UploadField, mediaId: number) {
-    switch (field) {
-      case 'license':
-        return { mediaId, documentType: 'business_license' as MerchantApplicationOCRDocumentType }
-      case 'foodPermit':
-        return { mediaId, documentType: 'food_permit' as MerchantApplicationOCRDocumentType }
-      case 'idCardFront':
-        return { mediaId, documentType: 'id_card' as MerchantApplicationOCRDocumentType, side: 'Front' as const }
-      default:
-        return { mediaId, documentType: 'id_card' as MerchantApplicationOCRDocumentType, side: 'Back' as const }
-    }
-  },
-
   getOcrFieldKey(field: UploadField): OcrFieldKey {
     switch (field) {
       case 'license':
@@ -737,8 +645,7 @@ Page({
   async mergeOcrDraft(
     field: UploadField,
     draft: MerchantApplicationDraftResponse,
-    fallbackPath: string,
-    options?: { refreshRecommended?: boolean }
+    fallbackPath: string
   ) {
     const nextForm = { ...this.data.form }
 
@@ -767,8 +674,6 @@ Page({
       (draft.id_card_front_ocr?.status || this.data.idCardFrontOcrStatus || '') as OcrStatus,
       (draft.id_card_back_ocr?.status || this.data.idCardBackOcrStatus || '') as OcrStatus
     ]
-    const ocrRefreshRecommended = (options?.refreshRecommended || this.data.ocrRefreshRecommended)
-      && ocrStatuses.some((status) => isPendingOcrStatus(status))
 
     this.setData({
       status: draft.status || this.data.status,
@@ -793,16 +698,9 @@ Page({
       foodPermitOcrStatus: (draft.food_permit_ocr?.status || this.data.foodPermitOcrStatus || '') as OcrStatus,
       idCardFrontOcrStatus: (draft.id_card_front_ocr?.status || this.data.idCardFrontOcrStatus || '') as OcrStatus,
       idCardBackOcrStatus: (draft.id_card_back_ocr?.status || this.data.idCardBackOcrStatus || '') as OcrStatus,
-      ocrRefreshRecommended,
-      ocrNoticeMessage: buildOcrNoticeMessage(ocrStatuses, ocrRefreshRecommended)
+      ocrNoticeMessage: buildOcrNoticeMessage(ocrStatuses)
     })
 
-  },
-
-  sleep(ms: number) {
-    return new Promise<void>((resolve) => {
-      setTimeout(() => resolve(), ms)
-    })
   },
 
   getOcrStatusText(status?: string) {
@@ -831,14 +729,12 @@ Page({
     for (const item of checks) {
       if (item.status === 'done') continue
       if (item.status === 'processing' || item.status === 'pending') {
-        return this.data.ocrRefreshRecommended
-          ? `${item.label}识别耗时较长，请先点击“刷新识别结果”后再提交`
-          : `${item.label}仍在识别中，请稍候提交`
+        return `${item.label}仍在识别中，请等待识别完成后再提交`
       }
       if (item.status === 'failed') {
-        return `${item.label}识别失败，请重新上传清晰图片`
+        return `${item.label}识别失败，请提供更清晰更规整的图片重试`
       }
-      return `${item.label}识别结果未就绪，请先点击“刷新识别结果”后再试`
+      return `${item.label}识别结果未就绪，请重新上传后再试`
     }
 
     return ''
@@ -910,17 +806,6 @@ Page({
 
   onGoApplyment() {
     wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
-  },
-
-  async onRefreshOcrStatus() {
-    if (this.data.ocrRefreshing || this.data.loading) return
-
-    this.setData({ ocrRefreshing: true })
-    try {
-      await this.loadApplication(false)
-    } finally {
-      this.setData({ ocrRefreshing: false })
-    }
   },
 
   onRetry() {

@@ -43,8 +43,6 @@
     <!-- Step 1: Upload (ID mandatory, License optional) -->
     <view class="step-view" wx:if="{{currentStep === 1}}">
       <view class="section-title">身份与资质 (必填项标记 *)</view>
-      <view class="ocr-banner" wx:if="{{ocrDisplayState.identity === 'processing' || ocrDisplayState.license === 'processing'}}">图片已上传，系统正在自动识别。识别完成后会统一更新资料。</view>
-      <view class="ocr-banner error" wx:if="{{ocrDisplayState.identity === 'failed' || ocrDisplayState.license === 'failed'}}">部分证照识别未完成，请重新上传清晰图片后重试。</view>
       
       <view class="upload-section">
         <view class="label-row">
@@ -56,6 +54,9 @@
             title="身份证人像面" 
             value="{{idFront.url}}" 
             rawUrl="{{idFront.rawUrl}}"
+            feedbackState="{{uploadFeedback.idFront.state}}"
+            feedbackTitle="{{uploadFeedback.idFront.title}}"
+            feedbackDescription="{{uploadFeedback.idFront.description}}"
             bind:change="onIdFrontUpload" 
           />
           <document-uploader 
@@ -63,6 +64,9 @@
             title="身份证国徽面" 
             value="{{idBack.url}}" 
             rawUrl="{{idBack.rawUrl}}"
+            feedbackState="{{uploadFeedback.idBack.state}}"
+            feedbackTitle="{{uploadFeedback.idBack.title}}"
+            feedbackDescription="{{uploadFeedback.idBack.description}}"
             bind:change="onIdBackUpload" 
           />
         </view>
@@ -78,6 +82,9 @@
           title="点击上传营业执照" 
           value="{{license.url}}" 
           rawUrl="{{license.rawUrl}}"
+          feedbackState="{{uploadFeedback.license.state}}"
+          feedbackTitle="{{uploadFeedback.license.title}}"
+          feedbackDescription="{{uploadFeedback.license.description}}"
           bind:change="onLicenseUpload" 
         />
       </view>

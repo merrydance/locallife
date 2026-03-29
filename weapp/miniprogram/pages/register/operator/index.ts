@@ -52,9 +52,35 @@ type OperatorOCRDisplayState = {
   idCard: OCRDisplayStateValue
 }
 
+type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
+
+type UploadFeedback = {
+  state: UploadFeedbackState
+  title: string
+  description: string
+}
+
+type OperatorUploadFeedback = {
+  license: UploadFeedback
+  idFront: UploadFeedback
+  idBack: UploadFeedback
+}
+
 const DEFAULT_OPERATOR_OCR_DISPLAY_STATE: OperatorOCRDisplayState = {
   businessLicense: 'idle',
   idCard: 'idle'
+}
+
+const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
+  state: 'idle',
+  title: '',
+  description: ''
+}
+
+const DEFAULT_OPERATOR_UPLOAD_FEEDBACK: OperatorUploadFeedback = {
+  license: { ...EMPTY_UPLOAD_FEEDBACK },
+  idFront: { ...EMPTY_UPLOAD_FEEDBACK },
+  idBack: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
 function getOCRString(payload: Record<string, unknown> | undefined, key: string): string {
@@ -72,6 +98,10 @@ function getErrorText(error: unknown, fallback: string): string {
     if (data?.message) return data.message
   }
   return fallback
+}
+
+function createUploadFeedback(state: UploadFeedbackState, title = '', description = ''): UploadFeedback {
+  return { state, title, description }
 }
 
 function isNoOperatorApplicationError(error: unknown): boolean {
@@ -148,6 +178,7 @@ Page({
     regionOptions: [] as RegionOption[],     // 原始列表
     filteredRegions: [] as RegionOption[],   // 搜索过滤后的列表
     ocrDisplayState: DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
+    uploadFeedback: DEFAULT_OPERATOR_UPLOAD_FEEDBACK,
     consentChecked: false,
     consentPopupVisible: false
   },
@@ -489,7 +520,8 @@ Page({
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
       license: { url: '', assetId: res.business_license_asset_id },
-      ocrDisplayState: this.buildOperatorOcrDisplayState(res)
+      ocrDisplayState: this.buildOperatorOcrDisplayState(res),
+      uploadFeedback: this.buildOperatorUploadFeedback(res)
     }
 
     // 优先使用后端返回的名称，否则尝试从本地 Options 中反查
@@ -526,21 +558,58 @@ Page({
       && (res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
     )
 
-    const businessLicenseDone = Boolean(
-      getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'enterprise_name')
-      || getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'credit_code')
-      || getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'reg_num')
-      || String(res?.business_license_number || '').trim()
-    )
-    const idCardDone = Boolean(
-      getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'name')
-      && getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'id_number')
-      && getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'valid_date')
-    )
+    const businessLicenseStatus = getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'status')
+    const idCardFrontStatus = getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'status')
+    const idCardBackStatus = getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'status')
+    const businessLicenseDone = businessLicenseStatus === 'done'
+    const idCardDone = idCardFrontStatus === 'done' && idCardBackStatus === 'done'
 
     return {
-      businessLicense: businessLicenseDone ? 'done' : businessLicenseUploaded ? 'processing' : 'idle',
-      idCard: idCardDone ? 'done' : idCardUploaded ? 'processing' : 'idle'
+      businessLicense: businessLicenseStatus === 'failed' ? 'failed' : businessLicenseDone ? 'done' : businessLicenseUploaded ? 'processing' : 'idle',
+      idCard: idCardFrontStatus === 'failed' || idCardBackStatus === 'failed'
+        ? 'failed'
+        : idCardDone
+          ? 'done'
+          : idCardUploaded
+            ? 'processing'
+            : 'idle'
+    }
+  },
+
+  buildOperatorUploadFeedback(res?: OperatorApplicationResponse): OperatorUploadFeedback {
+    const licenseStatus = getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'status')
+    const licenseError = getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'error')
+    const idFrontStatus = getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'status')
+    const idFrontError = getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'error')
+    const idBackStatus = getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'status')
+    const idBackError = getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'error')
+
+    const licenseUploaded = Boolean(res?.business_license_asset_id || this.data.license.assetId || this.data.license.url)
+    const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
+    const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+
+    return {
+      license: licenseUploaded
+        ? licenseStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', licenseError || '请重新上传清晰、完整的营业执照')
+          : licenseStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已识别主体名称和营业执照信息')
+            : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      idFront: idFrontUploaded
+        ? idFrontStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', idFrontError || '请重新上传清晰、完整的身份证人像面')
+          : idFrontStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已识别负责人姓名和身份证号')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      idBack: idBackUploaded
+        ? idBackStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', idBackError || '请重新上传清晰、完整的身份证国徽面')
+          : idBackStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已识别证件有效期')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK }
     }
   },
 
@@ -548,8 +617,8 @@ Page({
     this.setData({ [`ocrDisplayState.${type}`]: status })
   },
 
-  isPendingOCRMessage(message: string): boolean {
-    return message.includes('处理中') || message.includes('审核中') || message.includes('识别中')
+  setUploadFeedback(field: keyof OperatorUploadFeedback, feedback: UploadFeedback) {
+    this.setData({ [`uploadFeedback.${field}`]: feedback })
   },
 
   /**
@@ -748,7 +817,11 @@ Page({
       'idFront.url': path,
       'idFront.rawUrl': path
     })
-    this.processOCR(ocrOperatorIdCard(path, 'Front'), 'idCard')
+    this.processOCR(
+      ocrOperatorIdCard(path, 'Front'),
+      'idCard',
+      'idFront'
+    )
   },
 
   async onIdBackUpload(e: UploadEvent) {
@@ -758,7 +831,11 @@ Page({
       'idBack.url': path,
       'idBack.rawUrl': path
     })
-    this.processOCR(ocrOperatorIdCard(path, 'Back'), 'idCard')
+    this.processOCR(
+      ocrOperatorIdCard(path, 'Back'),
+      'idCard',
+      'idBack'
+    )
   },
 
   async onLicenseUpload(e: UploadEvent) {
@@ -768,27 +845,28 @@ Page({
       'license.url': path,
       'license.rawUrl': path
     })
-    this.processOCR(ocrOperatorBusinessLicense(path), 'businessLicense')
+    this.processOCR(
+      ocrOperatorBusinessLicense(path),
+      'businessLicense',
+      'license'
+    )
   },
 
-  async processOCR(ocrPromise: Promise<OperatorApplicationResponse>, type: keyof OperatorOCRDisplayState) {
+  async processOCR(
+    ocrPromise: Promise<OperatorApplicationResponse>,
+    type: keyof OperatorOCRDisplayState,
+    feedbackField: keyof OperatorUploadFeedback
+  ) {
     this.setOCRState(type, 'processing')
-    wx.showLoading({ title: '智能识别中...' })
+    this.setUploadFeedback(feedbackField, createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const res = await ocrPromise
-      const nextState = this.buildOperatorOcrDisplayState(res)
       this.mapResponseToData(res)
-      wx.hideLoading()
-      wx.showToast({
-        title: nextState[type] === 'done' ? '自动识别成功' : '图片已上传，系统继续识别中',
-        icon: 'none'
-      })
     } catch (e) {
-      wx.hideLoading()
       logger.error('OCR failed', e)
-      const message = getErrorText(e, '图片已上传，系统处理中')
-      this.setOCRState(type, this.isPendingOCRMessage(message) ? 'processing' : 'failed')
-      wx.showToast({ title: message, icon: 'none', duration: 3000 })
+      const message = getErrorText(e, '识别失败，请提供更清晰更规整的图片重试')
+      this.setOCRState(type, 'failed')
+      this.setUploadFeedback(feedbackField, createUploadFeedback('error', '识别失败', message))
     }
   },
 

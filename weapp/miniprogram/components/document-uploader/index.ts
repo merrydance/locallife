@@ -21,6 +21,18 @@ Component({
         disabled: {
             type: Boolean,
             value: false
+        },
+        feedbackState: {
+            type: String,
+            value: 'idle'
+        },
+        feedbackTitle: {
+            type: String,
+            value: ''
+        },
+        feedbackDescription: {
+            type: String,
+            value: ''
         }
     },
 

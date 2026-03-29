@@ -6,6 +6,49 @@ import type { AgreementConsentPayload } from './agreement-consent'
 
 type OCRResult = Record<string, unknown>
 
+function getOCRText(payload: OCRResult | undefined, key: string) {
+  const value = payload?.[key]
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function checkOperatorBusinessLicenseWriteback(latest: OperatorApplicationResponse) {
+  const status = getOCRText(latest.business_license_ocr, 'status')
+  const error = getOCRText(latest.business_license_ocr, 'error')
+  return {
+    ready: status === 'done'
+      || !!String(latest.business_license_number || '').trim()
+      || !!getOCRText(latest.business_license_ocr, 'enterprise_name')
+      || !!getOCRText(latest.business_license_ocr, 'credit_code')
+      || !!getOCRText(latest.business_license_ocr, 'reg_num'),
+    failed: status === 'failed',
+    errorMessage: error
+  }
+}
+
+function checkOperatorIDCardWriteback(latest: OperatorApplicationResponse, side: 'Front' | 'Back') {
+  const payload = side === 'Front' ? latest.id_card_front_ocr : latest.id_card_back_ocr
+  const status = getOCRText(payload, 'status')
+  const error = getOCRText(payload, 'error')
+
+  if (side === 'Front') {
+    return {
+      ready: status === 'done'
+        || !!String(latest.legal_person_name || '').trim()
+        || !!String(latest.legal_person_id_number || '').trim()
+        || !!getOCRText(payload, 'name')
+        || !!getOCRText(payload, 'id_number'),
+      failed: status === 'failed',
+      errorMessage: error
+    }
+  }
+
+  return {
+    ready: status === 'done' || !!getOCRText(payload, 'valid_end') || !!getOCRText(payload, 'valid_date'),
+    failed: status === 'failed',
+    errorMessage: error
+  }
+}
+
 export interface AvailableRegion {
   id: number
   name: string
@@ -124,7 +167,12 @@ export async function ocrOperatorBusinessLicense(filePath: string) {
       owner_type: 'operator_application',
       owner_id: draft.id
     },
-    getOperatorApplication
+    getOperatorApplication,
+    {
+      verifyResult: checkOperatorBusinessLicenseWriteback,
+      maxAttempts: 20,
+      intervalMs: 1000
+    }
   )
 }
 
@@ -146,7 +194,12 @@ export async function ocrOperatorIdCard(filePath: string, side: 'Front' | 'Back'
       owner_id: draft.id,
       side: side === 'Front' ? 'front' : 'back'
     },
-    getOperatorApplication
+    getOperatorApplication,
+    {
+      verifyResult: (latest) => checkOperatorIDCardWriteback(latest, side),
+      maxAttempts: 20,
+      intervalMs: 1000
+    }
   )
 }
 

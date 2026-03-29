@@ -245,7 +245,11 @@ type TaskDistributor interface {
 }
 
 type RedisTaskDistributor struct {
-	client *asynq.Client
+	client taskEnqueueClient
+}
+
+type taskEnqueueClient interface {
+	EnqueueContext(ctx context.Context, task *asynq.Task, opts ...asynq.Option) (*asynq.TaskInfo, error)
 }
 
 func requestIDFromContext(ctx context.Context) string {

@@ -2,6 +2,7 @@ package worker
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
@@ -10,9 +11,14 @@ import (
 
 const defaultOCRTaskMaxRetry = 2
 
+// ocrTaskEnqueueDedupWindow suppresses duplicate enqueue attempts for the same OCR job payload,
+// which can happen when upstream moderation callbacks are retried before a worker leases the job.
+const ocrTaskEnqueueDedupWindow = 12 * time.Minute
+
 func withDefaultOCRTaskOptions(opts ...asynq.Option) []asynq.Option {
-	merged := make([]asynq.Option, 0, len(opts)+1)
+	merged := make([]asynq.Option, 0, len(opts)+2)
 	merged = append(merged, asynq.MaxRetry(defaultOCRTaskMaxRetry))
+	merged = append(merged, asynq.Unique(ocrTaskEnqueueDedupWindow))
 	merged = append(merged, opts...)
 	return merged
 }

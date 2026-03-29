@@ -5,7 +5,6 @@ import { DraftStorage } from '../../../../utils/draft-storage'
 import {
   getMerchantApplication,
   updateMerchantBasicInfo,
-  enqueueMerchantApplicationOCRForMedia,
   ocrBusinessLicense,
   ocrFoodPermit,
   ocrIdCard,
@@ -16,7 +15,6 @@ import {
   updateMerchantImages,
   deleteMerchantApplicationDocument,
   deleteMediaAsset,
-  type MerchantApplicationOCRDocumentType,
   type MerchantApplicationOCRSubmissionResult,
   type MerchantApplicationDraftResponse
 } from '../../../../api/onboarding'
@@ -45,12 +43,6 @@ type OCRResult = {
   valid_date?: string
 }
 
-type OCRCheckResult = {
-  label: string
-  status: string
-  error?: string
-}
-
 type MerchantDraftExt = MerchantApplicationDraftResponse & {
   business_address_detail?: string
   legal_person_contact_address?: string
@@ -69,16 +61,22 @@ type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
 
 type OCRFieldKey = 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr'
 
-type OCRPollOptions = {
-  retryQueue?: {
-    mediaId: number
-    documentType: MerchantApplicationOCRDocumentType
-    side?: 'Front' | 'Back'
-  }
-  timeoutMessage?: string
+type OCRDisplayStateValue = 'idle' | 'processing' | 'done' | 'failed'
+
+type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
+
+type UploadFeedback = {
+  state: UploadFeedbackState
+  title: string
+  description: string
 }
 
-type OCRDisplayStateValue = 'idle' | 'processing' | 'done' | 'failed'
+type MerchantUploadFeedback = {
+  license: UploadFeedback
+  foodPermit: UploadFeedback
+  idCardFront: UploadFeedback
+  idCardBack: UploadFeedback
+}
 
 type MerchantOCRDisplayState = {
   businessLicense: OCRDisplayStateValue
@@ -86,12 +84,23 @@ type MerchantOCRDisplayState = {
   idCard: OCRDisplayStateValue
 }
 
-const activeOcrPollers: Partial<Record<OCRFieldKey, number>> = {}
-
 const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
   businessLicense: 'idle',
   foodPermit: 'idle',
   idCard: 'idle'
+}
+
+const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
+  state: 'idle',
+  title: '',
+  description: ''
+}
+
+const DEFAULT_MERCHANT_UPLOAD_FEEDBACK: MerchantUploadFeedback = {
+  license: { ...EMPTY_UPLOAD_FEEDBACK },
+  foodPermit: { ...EMPTY_UPLOAD_FEEDBACK },
+  idCardFront: { ...EMPTY_UPLOAD_FEEDBACK },
+  idCardBack: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
 function buildPrivateAssetKey(assetId?: number | null): string | undefined {
@@ -133,8 +142,8 @@ function toSafeString(value: unknown): string {
   return String(value)
 }
 
-function hasFilledValue(value: unknown): boolean {
-  return toSafeString(value) !== ''
+function createUploadFeedback(state: UploadFeedbackState, title = '', description = ''): UploadFeedback {
+  return { state, title, description }
 }
 
 Page({
@@ -145,6 +154,7 @@ Page({
     applicationInitialized: false, // 标记申请草稿是否已成功创建
     ocrProgressMessage: '',
     ocrDisplayState: DEFAULT_MERCHANT_OCR_DISPLAY_STATE,
+    uploadFeedback: DEFAULT_MERCHANT_UPLOAD_FEEDBACK,
     formData: {
       // 基本信息
       name: '',
@@ -342,6 +352,7 @@ Page({
       this.setData({
         formData,
         ocrDisplayState: this.buildMerchantOcrDisplayState(data),
+        uploadFeedback: this.buildMerchantUploadFeedback(data),
         ocrResults,
         licenseImages,
         foodLicenseImages,
@@ -379,10 +390,6 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  onUnload() {
-    this.clearAllOcrPollers()
-  },
-
   applyLatestOcrDraft(data: MerchantDraftExt) {
     this.setData({
       formData: {
@@ -400,6 +407,7 @@ Page({
         idCardValidity: toSafeString(data.id_card_back_ocr?.valid_date)
       },
       ocrDisplayState: this.buildMerchantOcrDisplayState(data),
+      uploadFeedback: this.buildMerchantUploadFeedback(data),
       ocrResults: {
         license: data.business_license_ocr || null,
         idCard: data.id_card_front_ocr || null
@@ -413,12 +421,10 @@ Page({
   async removeUploadedDocument(field: UploadField) {
     const documentMap: Record<UploadField, {
       documentType: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'
-      fieldKey: OCRFieldKey
       data: Record<string, unknown>
     }> = {
       license: {
         documentType: 'business_license',
-        fieldKey: 'business_license_ocr',
         data: {
           licenseImages: [],
           'formData.licenseName': '',
@@ -431,7 +437,6 @@ Page({
       },
       foodPermit: {
         documentType: 'food_permit',
-        fieldKey: 'food_permit_ocr',
         data: {
           foodLicenseImages: [],
           'formData.foodLicenseValidity': ''
@@ -439,7 +444,6 @@ Page({
       },
       idCardFront: {
         documentType: 'id_card_front',
-        fieldKey: 'id_card_front_ocr',
         data: {
           idCardFrontImages: [],
           'formData.legalPerson': '',
@@ -451,7 +455,6 @@ Page({
       },
       idCardBack: {
         documentType: 'id_card_back',
-        fieldKey: 'id_card_back_ocr',
         data: {
           idCardBackImages: [],
           'formData.idCardValidity': ''
@@ -460,7 +463,6 @@ Page({
     }
 
     const target = documentMap[field]
-    this.stopOcrPolling(target.fieldKey)
 
     wx.showLoading({ title: '删除中...' })
     try {
@@ -523,15 +525,10 @@ Page({
     const idCardFrontStatus = data?.id_card_front_ocr?.status || ''
     const idCardBackStatus = data?.id_card_back_ocr?.status || ''
 
-    const businessLicenseDone = businessLicenseStatus === 'done' || hasFilledValue(data?.business_license_ocr?.enterprise_name)
-      || hasFilledValue(data?.business_license_number)
-      || hasFilledValue(data?.business_license_ocr?.reg_num)
-      || hasFilledValue(data?.business_license_ocr?.credit_code)
-    const foodPermitDone = foodPermitStatus === 'done' || hasFilledValue(data?.food_permit_ocr?.valid_to)
-      || hasFilledValue(data?.food_permit_ocr?.permit_no)
-    const idCardFrontDone = idCardFrontStatus === 'done' || hasFilledValue(data?.id_card_front_ocr?.id_number)
-      || hasFilledValue(data?.id_card_front_ocr?.name)
-    const idCardBackDone = idCardBackStatus === 'done' || hasFilledValue(data?.id_card_back_ocr?.valid_date)
+    const businessLicenseDone = businessLicenseStatus === 'done'
+    const foodPermitDone = foodPermitStatus === 'done'
+    const idCardFrontDone = idCardFrontStatus === 'done'
+    const idCardBackDone = idCardBackStatus === 'done'
 
     return {
       businessLicense: businessLicenseStatus === 'failed'
@@ -558,53 +555,67 @@ Page({
     }
   },
 
+  buildMerchantUploadFeedback(data?: MerchantDraftExt): MerchantUploadFeedback {
+    const businessLicenseUploaded = Boolean(
+      (data?.business_license_media_asset_id && data.business_license_media_asset_id > 0) || this.data.licenseImages.length > 0
+    )
+    const foodPermitUploaded = Boolean(
+      (data?.food_permit_media_asset_id && data.food_permit_media_asset_id > 0) || this.data.foodLicenseImages.length > 0
+    )
+    const idCardFrontUploaded = Boolean(
+      (data?.id_card_front_media_asset_id && data.id_card_front_media_asset_id > 0) || this.data.idCardFrontImages.length > 0
+    )
+    const idCardBackUploaded = Boolean(
+      (data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || this.data.idCardBackImages.length > 0
+    )
+
+    const businessLicenseStatus = data?.business_license_ocr?.status || ''
+    const foodPermitStatus = data?.food_permit_ocr?.status || ''
+    const idCardFrontStatus = data?.id_card_front_ocr?.status || ''
+    const idCardBackStatus = data?.id_card_back_ocr?.status || ''
+
+    return {
+      license: businessLicenseUploaded
+        ? businessLicenseStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', data?.business_license_ocr?.error || '请重新上传清晰、完整的营业执照')
+          : businessLicenseStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已回填主体名称、统一信用代码和经营范围')
+            : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      foodPermit: foodPermitUploaded
+        ? foodPermitStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', data?.food_permit_ocr?.error || '请重新上传清晰、完整的食品经营许可证')
+          : foodPermitStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已回填食品经营许可证有效期')
+            : createUploadFeedback('processing', '证照识别中', '正在识别食品经营许可证信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      idCardFront: idCardFrontUploaded
+        ? idCardFrontStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', data?.id_card_front_ocr?.error || '请重新上传清晰、完整的身份证人像面')
+          : idCardFrontStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已回填法人姓名和身份证号')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      idCardBack: idCardBackUploaded
+        ? idCardBackStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', data?.id_card_back_ocr?.error || '请重新上传清晰、完整的身份证国徽面')
+          : idCardBackStatus === 'done'
+            ? createUploadFeedback('success', '识别成功', '已回填身份证有效期')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK }
+    }
+  },
+
   updateOcrProgressMessage(data?: MerchantDraftExt) {
     this.setData({
       ocrProgressMessage: this.buildOcrProgressMessage(data),
-      ocrDisplayState: this.buildMerchantOcrDisplayState(data)
+      ocrDisplayState: this.buildMerchantOcrDisplayState(data),
+      uploadFeedback: this.buildMerchantUploadFeedback(data)
     })
   },
 
-  getUploadStepOcrChecks(data: MerchantDraftExt): OCRCheckResult[] {
-    return [
-      {
-        label: '营业执照',
-        status: data.business_license_ocr?.status || '',
-        error: data.business_license_ocr?.error
-      },
-      {
-        label: '食品经营许可证',
-        status: data.food_permit_ocr?.status || '',
-        error: data.food_permit_ocr?.error
-      },
-      {
-        label: '身份证正面',
-        status: data.id_card_front_ocr?.status || '',
-        error: data.id_card_front_ocr?.error
-      },
-      {
-        label: '身份证反面',
-        status: data.id_card_back_ocr?.status || '',
-        error: data.id_card_back_ocr?.error
-      }
-    ]
-  },
-
-  clearAllOcrPollers() {
-    (Object.keys(activeOcrPollers) as OCRFieldKey[]).forEach((fieldKey) => {
-      const intervalId = activeOcrPollers[fieldKey]
-      if (intervalId) {
-        clearInterval(intervalId)
-        delete activeOcrPollers[fieldKey]
-      }
-    })
-  },
-
-  stopOcrPolling(fieldKey: OCRFieldKey) {
-    const intervalId = activeOcrPollers[fieldKey]
-    if (!intervalId) return
-    clearInterval(intervalId)
-    delete activeOcrPollers[fieldKey]
+  setUploadFeedback(field: keyof MerchantUploadFeedback, feedback: UploadFeedback) {
+    this.setData({ [`uploadFeedback.${field}`]: feedback })
   },
 
   setUploadedImage(field: UploadField, path: string, assetId?: number) {
@@ -626,94 +637,16 @@ Page({
   },
 
   handleDocumentOCRSubmission(
-    label: string,
     fieldKey: OCRFieldKey,
     result: MerchantApplicationOCRSubmissionResult,
-    onRecognized: (ocr: OCRResult) => void,
-    options?: {
-      documentType: MerchantApplicationOCRDocumentType
-      side?: 'Front' | 'Back'
-    }
+    onRecognized: (ocr: OCRResult) => void
   ) {
-    if (result.state === 'queued') {
-      wx.hideLoading()
-      wx.showToast({ title: '上传成功，识别中...', icon: 'none' })
-      this.updateOcrProgressMessage(result.draft as MerchantDraftExt)
-      this.pollOcrStatus(fieldKey, onRecognized)
-      return
+    const latestDraft = result.draft as MerchantDraftExt
+    const latestOCR = latestDraft[fieldKey]
+    this.updateOcrProgressMessage(latestDraft)
+    if (latestOCR?.status === 'done') {
+      onRecognized(latestOCR as OCRResult)
     }
-
-    wx.hideLoading()
-    wx.showToast({
-      title: `${label}已上传，系统处理中`,
-      icon: 'none',
-      duration: 2500
-    })
-    this.updateOcrProgressMessage(result.draft as MerchantDraftExt)
-    this.pollOcrStatus(fieldKey, onRecognized, {
-      retryQueue: {
-        mediaId: result.mediaId,
-        documentType: options?.documentType || 'business_license',
-        side: options?.side
-      }
-    })
-  },
-
-  async ensureUploadStepOCRQueued(data: MerchantDraftExt) {
-    const retryTargets: Array<{
-      fieldKey: OCRFieldKey
-      assetId?: number
-      documentType: MerchantApplicationOCRDocumentType
-      side?: 'Front' | 'Back'
-    }> = [
-      {
-        fieldKey: 'business_license_ocr',
-        assetId: data.business_license_media_asset_id ?? this.data.licenseImages[0]?.assetId,
-        documentType: 'business_license'
-      },
-      {
-        fieldKey: 'food_permit_ocr',
-        assetId: data.food_permit_media_asset_id ?? this.data.foodLicenseImages[0]?.assetId,
-        documentType: 'food_permit'
-      },
-      {
-        fieldKey: 'id_card_front_ocr',
-        assetId: data.id_card_front_media_asset_id ?? this.data.idCardFrontImages[0]?.assetId,
-        documentType: 'id_card',
-        side: 'Front'
-      },
-      {
-        fieldKey: 'id_card_back_ocr',
-        assetId: data.id_card_back_media_asset_id ?? this.data.idCardBackImages[0]?.assetId,
-        documentType: 'id_card',
-        side: 'Back'
-      }
-    ]
-
-    let latestDraft = data
-    for (const target of retryTargets) {
-      if (!target.assetId || latestDraft[target.fieldKey]?.status) {
-        continue
-      }
-
-      try {
-        const retryResult = await enqueueMerchantApplicationOCRForMedia(
-          target.assetId,
-          target.documentType,
-          target.side,
-          { maxAttempts: 1, retryDelayMs: 0 }
-        )
-        latestDraft = retryResult.draft as MerchantDraftExt
-      } catch (error) {
-        logger.warn('[MerchantRegister] 补建 OCR 任务失败', {
-          fieldKey: target.fieldKey,
-          assetId: target.assetId,
-          error
-        }, 'ensureUploadStepOCRQueued')
-      }
-    }
-
-    return latestDraft
   },
 
   // ==================== 草稿管理 ====================
@@ -961,34 +894,19 @@ Page({
         wx.showToast({ title: '请上传所有必需的证照', icon: 'none' })
         return
       }
-
-      wx.showLoading({ title: '校验识别结果...' })
       try {
-        let latestDraft = await getMerchantApplication() as MerchantDraftExt
-        latestDraft = await this.ensureUploadStepOCRQueued(latestDraft)
+        const latestDraft = await getMerchantApplication() as MerchantDraftExt
         this.applyLatestOcrDraft(latestDraft)
-
-        const failedCheck = this.getUploadStepOcrChecks(latestDraft).find((item) => item.status === 'failed')
-        if (failedCheck) {
-          wx.showToast({
-            title: failedCheck.error || `${failedCheck.label}识别失败，请重新上传`,
-            icon: 'none',
-            duration: 3000
-          })
-          return
-        }
 
         this.setData({ currentStep: 2 })
         return
       } catch (error) {
         wx.showToast({
-          title: getErrorMessage(error, '识别结果校验失败，请重试'),
+          title: getErrorMessage(error, '申请数据加载失败，请重试'),
           icon: 'none',
           duration: 3000
         })
         return
-      } finally {
-        wx.hideLoading()
       }
     }
 
@@ -1030,7 +948,7 @@ Page({
 
       if (missingOCRFields.length > 0) {
         wx.showToast({
-          title: '证照信息处理中',
+          title: `请补全: ${missingOCRFields.join('、')}`,
           icon: 'none',
           duration: 3000
         })
@@ -1085,13 +1003,13 @@ Page({
     this.setUploadedImage('license', path)
     this.saveDraft()
 
-    wx.showLoading({ title: '上传中...' })
+    this.setUploadFeedback('license', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const result = await ocrBusinessLicense(path)
       this.setUploadedImage('license', path, result.mediaId)
       this.saveDraft()
       logger.info('[MerchantRegister] 营业执照上传成功', result, 'onLicenseUpload')
-      this.handleDocumentOCRSubmission('营业执照', 'business_license_ocr', result, (ocr) => {
+      this.handleDocumentOCRSubmission('business_license_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.licenseName': ocr.enterprise_name || '',
@@ -1103,17 +1021,13 @@ Page({
             'ocrResults.license': ocr
           })
           this.saveDraft()
-          wx.showToast({ title: '识别成功', icon: 'success' })
         }
-      }, {
-        documentType: 'business_license'
       })
     } catch (error: unknown) {
-      wx.hideLoading()
       logger.error('[MerchantRegister] 营业执照上传失败', error, 'onLicenseUpload')
       // 显示更具体的错误信息
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
+      this.setUploadFeedback('license', createUploadFeedback('error', '识别失败', errMsg))
     }
   },
   onLicenseRemove() {
@@ -1133,28 +1047,24 @@ Page({
     this.setUploadedImage('foodPermit', path)
     this.saveDraft()
 
-    wx.showLoading({ title: '上传中...' })
+    this.setUploadFeedback('foodPermit', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const result = await ocrFoodPermit(path)
       this.setUploadedImage('foodPermit', path, result.mediaId)
       this.saveDraft()
       logger.info('[MerchantRegister] 食品许可证上传成功', result, 'onFoodLicenseUpload')
-      this.handleDocumentOCRSubmission('食品经营许可证', 'food_permit_ocr', result, (ocr) => {
+      this.handleDocumentOCRSubmission('food_permit_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.foodLicenseValidity': ocr.valid_to || ''
           })
           this.saveDraft()
-          wx.showToast({ title: '识别成功', icon: 'success' })
         }
-      }, {
-        documentType: 'food_permit'
       })
     } catch (error: unknown) {
-      wx.hideLoading()
       logger.error('[MerchantRegister] 食品许可证上传失败', error, 'onFoodLicenseUpload')
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
+      this.setUploadFeedback('foodPermit', createUploadFeedback('error', '识别失败', errMsg))
     }
   },
   onFoodLicenseRemove() {
@@ -1174,13 +1084,13 @@ Page({
     this.setUploadedImage('idCardFront', path)
     this.saveDraft()
 
-    wx.showLoading({ title: '上传中...' })
+    this.setUploadFeedback('idCardFront', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const result = await ocrIdCard(path, 'Front')
       this.setUploadedImage('idCardFront', path, result.mediaId)
       this.saveDraft()
       logger.info('[MerchantRegister] 身份证正面上传成功', result, 'onIdCardFrontUpload')
-      this.handleDocumentOCRSubmission('身份证正面', 'id_card_front_ocr', result, (ocr) => {
+      this.handleDocumentOCRSubmission('id_card_front_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.legalPerson': ocr.name || '',
@@ -1190,17 +1100,12 @@ Page({
             'ocrResults.idCard': ocr
           })
           this.saveDraft()
-          wx.showToast({ title: '识别成功', icon: 'success' })
         }
-      }, {
-        documentType: 'id_card',
-        side: 'Front'
       })
     } catch (error: unknown) {
-      wx.hideLoading()
       logger.error('[MerchantRegister] 身份证正面上传失败', error, 'onIdCardFrontUpload')
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
+      this.setUploadFeedback('idCardFront', createUploadFeedback('error', '识别失败', errMsg))
     }
   },
   onIdCardFrontRemove() {
@@ -1220,29 +1125,24 @@ Page({
     this.setUploadedImage('idCardBack', path)
     this.saveDraft()
 
-    wx.showLoading({ title: '上传中...' })
+    this.setUploadFeedback('idCardBack', createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const result = await ocrIdCard(path, 'Back')
       this.setUploadedImage('idCardBack', path, result.mediaId)
       this.saveDraft()
       logger.info('[MerchantRegister] 身份证反面上传成功', result, 'onIdCardBackUpload')
-      this.handleDocumentOCRSubmission('身份证反面', 'id_card_back_ocr', result, (ocr) => {
+      this.handleDocumentOCRSubmission('id_card_back_ocr', result, (ocr) => {
         if (ocr) {
           this.setData({
             'formData.idCardValidity': ocr.valid_date || ''
           })
           this.saveDraft()
-          wx.showToast({ title: '识别成功', icon: 'success' })
         }
-      }, {
-        documentType: 'id_card',
-        side: 'Back'
       })
     } catch (error: unknown) {
-      wx.hideLoading()
       logger.error('[MerchantRegister] 身份证反面上传失败', error, 'onIdCardBackUpload')
       const errMsg = getErrorMessage(error, '上传失败，请重试')
-      wx.showToast({ title: errMsg, icon: 'none', duration: 3000 })
+      this.setUploadFeedback('idCardBack', createUploadFeedback('error', '识别失败', errMsg))
     }
   },
   onIdCardBackRemove() {
@@ -1502,64 +1402,6 @@ Page({
   // ==================== 提交申请 ====================
 
   // ==================== 校验逻辑 ====================
-
-  // ==================== OCR 轮询 ====================
-
-  pollOcrStatus(fieldKey: OCRFieldKey, callback: (ocr: OCRResult) => void, options?: OCRPollOptions) {
-    this.stopOcrPolling(fieldKey)
-
-    let attempts = 0
-    const maxAttempts = 150 // 最长约 5 分钟，避免后台处理中时过早停止自动回填
-    let retryingQueue = false
-
-    const intervalId = setInterval(async () => {
-      attempts++
-      try {
-        const res = await getMerchantApplication() as MerchantDraftExt
-        this.updateOcrProgressMessage(res)
-        const ocrData = res[fieldKey]
-        if (ocrData?.status === 'done') {
-          this.stopOcrPolling(fieldKey)
-          this.updateOcrProgressMessage(res)
-          callback(ocrData as OCRResult)
-          return
-        } else if (ocrData?.status === 'failed') {
-          this.stopOcrPolling(fieldKey)
-          this.updateOcrProgressMessage(res)
-          wx.showToast({ title: `识别失败: ${ocrData.error || '未知错误'}`, icon: 'none' })
-          return
-        }
-
-        if (options?.retryQueue && !ocrData?.status && !retryingQueue) {
-          retryingQueue = true
-          try {
-            await enqueueMerchantApplicationOCRForMedia(
-              options.retryQueue.mediaId,
-              options.retryQueue.documentType,
-              options.retryQueue.side,
-              { maxAttempts: 1, retryDelayMs: 0 }
-            )
-          } catch (error) {
-            logger.warn('[MerchantRegister] OCR 建单重试失败', {
-              fieldKey,
-              mediaId: options.retryQueue.mediaId,
-              error
-            }, 'pollOcrStatus')
-          } finally {
-            retryingQueue = false
-          }
-        }
-      } catch (e) {
-        console.error('[pollOcrStatus] Error:', e)
-      }
-
-      if (attempts >= maxAttempts) {
-        this.stopOcrPolling(fieldKey)
-      }
-    }, 2000)
-
-    activeOcrPollers[fieldKey] = intervalId as unknown as number
-  },
 
   // ==================== 提交申请 ====================
 

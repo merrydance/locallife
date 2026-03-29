@@ -28,9 +28,35 @@ type RiderOCRDisplayState = {
   health: OCRDisplayStateValue
 }
 
+type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
+
+type UploadFeedback = {
+  state: UploadFeedbackState
+  title: string
+  description: string
+}
+
+type RiderUploadFeedback = {
+  idFront: UploadFeedback
+  idBack: UploadFeedback
+  healthCert: UploadFeedback
+}
+
 const DEFAULT_RIDER_OCR_DISPLAY_STATE: RiderOCRDisplayState = {
   identity: 'idle',
   health: 'idle'
+}
+
+const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
+  state: 'idle',
+  title: '',
+  description: ''
+}
+
+const DEFAULT_RIDER_UPLOAD_FEEDBACK: RiderUploadFeedback = {
+  idFront: { ...EMPTY_UPLOAD_FEEDBACK },
+  idBack: { ...EMPTY_UPLOAD_FEEDBACK },
+  healthCert: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -42,6 +68,10 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return fallback
 }
 
+function createUploadFeedback(state: UploadFeedbackState, title = '', description = ''): UploadFeedback {
+  return { state, title, description }
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -51,6 +81,7 @@ Page({
     idBack: { url: '', assetId: undefined } as UploadFieldValue,
     healthCert: { url: '', assetId: undefined } as UploadFieldValue,
     ocrDisplayState: DEFAULT_RIDER_OCR_DISPLAY_STATE,
+    uploadFeedback: DEFAULT_RIDER_UPLOAD_FEEDBACK,
     formData: {
       realName: '',
       phone: '',
@@ -116,10 +147,50 @@ Page({
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
       healthCert: { url: '', assetId: res.health_cert_asset_id },
-      ocrDisplayState: this.buildRiderOcrDisplayState(res)
+      ocrDisplayState: this.buildRiderOcrDisplayState(res),
+      uploadFeedback: this.buildRiderUploadFeedback(res)
     }, () => {
       void this.refreshUploadPreviewURLs()
     })
+  },
+
+  buildRiderUploadFeedback(res?: RiderApplicationResponse): RiderUploadFeedback {
+    const idStatus = res?.id_card_ocr?.status || ''
+    const idError = res?.id_card_ocr?.error || ''
+    const healthStatus = res?.health_cert_ocr?.status || ''
+    const healthError = res?.health_cert_ocr?.error || ''
+
+    const idFrontUploaded = Boolean(res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
+    const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+    const healthUploaded = Boolean(res?.health_cert_asset_id || this.data.healthCert.assetId || this.data.healthCert.url)
+
+    const idFrontReady = Boolean(res?.id_card_ocr?.name || res?.id_card_ocr?.id_number || idStatus === 'done')
+    const idBackReady = Boolean(res?.id_card_ocr?.valid_end || idStatus === 'done')
+    const healthReady = Boolean(res?.health_cert_ocr?.cert_number || res?.health_cert_ocr?.valid_end || healthStatus === 'done')
+
+    return {
+      idFront: idFrontUploaded
+        ? idStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', idError || '请重新上传清晰、完整的身份证人像面')
+          : idFrontReady
+            ? createUploadFeedback('success', '识别成功', '已识别姓名和身份证号')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      idBack: idBackUploaded
+        ? idStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', idError || '请重新上传清晰、完整的身份证国徽面')
+          : idBackReady
+            ? createUploadFeedback('success', '识别成功', '已识别证件有效期')
+            : createUploadFeedback('processing', '证照识别中', '正在识别身份证国徽面信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK },
+      healthCert: healthUploaded
+        ? healthStatus === 'failed'
+          ? createUploadFeedback('error', '识别失败', healthError || '请重新上传清晰、无遮挡的健康证照片')
+          : healthReady
+            ? createUploadFeedback('success', '识别成功', '已识别健康证号和有效期')
+            : createUploadFeedback('processing', '证照识别中', '正在识别健康证信息')
+        : { ...EMPTY_UPLOAD_FEEDBACK }
+    }
   },
 
   buildRiderOcrDisplayState(res?: RiderApplicationResponse): RiderOCRDisplayState {
@@ -142,8 +213,8 @@ Page({
     this.setData({ [`ocrDisplayState.${type}`]: status })
   },
 
-  isPendingOCRMessage(message: string): boolean {
-    return message.includes('处理中') || message.includes('审核中') || message.includes('识别中')
+  setUploadFeedback(field: keyof RiderUploadFeedback, feedback: UploadFeedback) {
+    this.setData({ [`uploadFeedback.${field}`]: feedback })
   },
 
   async resolveUploadPreviewURL(assetId?: number): Promise<string> {
@@ -180,21 +251,33 @@ Page({
     const { path } = e.detail
     if (!path) return
     this.setData({ 'idFront.url': path, 'idFront.rawUrl': path })
-    this.processOCR(ocrRiderIdCard(path, 'Front'), 'identity')
+    this.processOCR(
+      ocrRiderIdCard(path, 'Front'),
+      'identity',
+      'idFront'
+    )
   },
 
   async onIdBackUpload(e: UploadEvent) {
     const { path } = e.detail
     if (!path) return
     this.setData({ 'idBack.url': path, 'idBack.rawUrl': path })
-    this.processOCR(ocrRiderIdCard(path, 'Back'), 'identity')
+    this.processOCR(
+      ocrRiderIdCard(path, 'Back'),
+      'identity',
+      'idBack'
+    )
   },
 
   async onHealthCertUpload(e: UploadEvent) {
     const { path } = e.detail
     if (!path) return
     this.setData({ 'healthCert.url': path, 'healthCert.rawUrl': path })
-    this.processOCR(ocrRiderHealthCert(path), 'health')
+    this.processOCR(
+      ocrRiderHealthCert(path),
+      'health',
+      'healthCert'
+    )
   },
 
   async onHealthCertRemove() {
@@ -210,24 +293,21 @@ Page({
     }
   },
 
-  async processOCR(ocrPromise: Promise<RiderApplicationResponse>, _type: 'identity' | 'health') {
+  async processOCR(
+    ocrPromise: Promise<RiderApplicationResponse>,
+    _type: 'identity' | 'health',
+    feedbackField: keyof RiderUploadFeedback
+  ) {
     this.setOCRState(_type, 'processing')
-    wx.showLoading({ title: '智能识别中...' })
+    this.setUploadFeedback(feedbackField, createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const res = await ocrPromise
-      const nextState = this.buildRiderOcrDisplayState(res)
       this.mapResponseToData(res)
-      wx.hideLoading()
-      wx.showToast({
-        title: nextState[_type] === 'done' ? '识别成功' : '图片已上传，系统继续识别中',
-        icon: 'none'
-      })
     } catch (e) {
-      wx.hideLoading()
       logger.error('OCR failed', e)
-      const message = getErrorMessage(e, '图片已上传，系统处理中')
-      this.setOCRState(_type, this.isPendingOCRMessage(message) ? 'processing' : 'failed')
-      wx.showToast({ title: message, icon: 'none', duration: 3000 })
+      const message = getErrorMessage(e, '识别失败，请提供更清晰更规整的图片重试')
+      this.setOCRState(_type, 'failed')
+      this.setUploadFeedback(feedbackField, createUploadFeedback('error', '识别失败', message))
     }
   },
 

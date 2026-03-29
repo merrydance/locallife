@@ -45,6 +45,14 @@ var (
 		},
 		[]string{"owner_type", "document_type", "provider", "reason"},
 	)
+
+	ocrEnqueueSuppressedTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "ocr_enqueue_suppressed_total",
+			Help: "Total number of OCR task enqueue attempts suppressed as idempotent duplicates",
+		},
+		[]string{"task_type", "reason"},
+	)
 )
 
 func normalizedOCRLabel(value string) string {
@@ -98,6 +106,13 @@ func recordOCRRetrySuppressed(job db.OcrJob, reason string) {
 		normalizedOCRLabel(job.DocumentType),
 		normalizedOCRLabel(job.Provider),
 		reason,
+	).Inc()
+}
+
+func recordOCREnqueueSuppressed(taskType, reason string) {
+	ocrEnqueueSuppressedTotal.WithLabelValues(
+		normalizedOCRLabel(taskType),
+		normalizedOCRLabel(reason),
 	).Inc()
 }
 

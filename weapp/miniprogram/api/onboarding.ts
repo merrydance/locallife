@@ -1,10 +1,18 @@
 import { request } from '../utils/request'
 import { uploadMedia, type MediaUploadResult } from '../utils/media'
 import type { AgreementConsentPayload } from './agreement-consent'
+import { waitForOCRJobTerminal, waitForOCRWriteback } from './ocr-jobs'
+import { AppError, ErrorType } from '../utils/error-handler'
 
 const OCR_ENQUEUE_RETRY_DELAY_MS = 1500
 const OCR_ENQUEUE_MAX_ATTEMPTS = 3
-const IMAGE_MODERATION_PENDING_MARKERS = ['image moderation is pending', '内容审核中']
+const IMAGE_MODERATION_PENDING_MARKERS = [
+  'image moderation is pending',
+  '内容审核中',
+  '多媒体内容安全审查',
+  '安全审查系统拦截'
+]
+const OCR_BLOCKED_MESSAGE = '图片被微信多媒体内容安全审查系统拦截，请更换图片再试'
 
 // ==================== OCR Status Types ====================
 
@@ -91,7 +99,7 @@ interface OCRJobResponse {
 
 export type MerchantApplicationOCRDocumentType = 'business_license' | 'food_permit' | 'id_card'
 
-export type MerchantApplicationOCRSubmissionState = 'queued' | 'moderation_pending'
+export type MerchantApplicationOCRSubmissionState = 'queued'
 
 export interface MerchantApplicationOCRSubmissionResult {
   draft: MerchantApplicationDraftResponse
@@ -102,6 +110,51 @@ export interface MerchantApplicationOCRSubmissionResult {
 interface MerchantApplicationOCRRequestOptions {
   maxAttempts?: number
   retryDelayMs?: number
+}
+
+function buildMerchantDraftOCRCheck(
+  documentType: MerchantApplicationOCRDocumentType,
+  side?: 'Front' | 'Back'
+) {
+  return (draft: MerchantApplicationDraftResponse) => {
+    if (documentType === 'business_license') {
+      const status = draft.business_license_ocr?.status || ''
+      const error = draft.business_license_ocr?.error || ''
+      return {
+        ready: status === 'done',
+        failed: status === 'failed',
+        errorMessage: error
+      }
+    }
+
+    if (documentType === 'food_permit') {
+      const status = draft.food_permit_ocr?.status || ''
+      const error = draft.food_permit_ocr?.error || ''
+      return {
+        ready: status === 'done',
+        failed: status === 'failed',
+        errorMessage: error
+      }
+    }
+
+    if (side === 'Back') {
+      const status = draft.id_card_back_ocr?.status || ''
+      const error = draft.id_card_back_ocr?.error || ''
+      return {
+        ready: status === 'done',
+        failed: status === 'failed',
+        errorMessage: error
+      }
+    }
+
+    const status = draft.id_card_front_ocr?.status || ''
+    const error = draft.id_card_front_ocr?.error || ''
+    return {
+      ready: status === 'done',
+      failed: status === 'failed',
+      errorMessage: error
+    }
+  }
 }
 
 // 图片上传响应
@@ -174,7 +227,7 @@ async function enqueueMerchantApplicationOCR(
 
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      await request<OCRJobResponse>({
+      const job = await request<OCRJobResponse>({
         url: '/v1/ocr/jobs',
         method: 'POST',
         data: {
@@ -186,8 +239,21 @@ async function enqueueMerchantApplicationOCR(
         }
       })
 
+      await waitForOCRJobTerminal(job.ocr_job_id, {
+        maxAttempts: 20,
+        intervalMs: 1000
+      })
+      const latestDraft = await waitForOCRWriteback(
+        getMerchantApplication,
+        buildMerchantDraftOCRCheck(documentType, side),
+        {
+          maxAttempts: 20,
+          intervalMs: 1000
+        }
+      )
+
       return {
-        draft: await getMerchantApplication(),
+        draft: latestDraft,
         mediaId,
         state: 'queued' as const
       }
@@ -197,22 +263,22 @@ async function enqueueMerchantApplicationOCR(
       }
 
       if (attempt >= maxAttempts - 1) {
-        return {
-          draft,
-          mediaId,
-          state: 'moderation_pending' as const
-        }
+        throw new AppError({
+          type: ErrorType.BUSINESS,
+          message: 'OCR enqueue blocked by media moderation',
+          userMessage: OCR_BLOCKED_MESSAGE
+        }, error)
       }
 
       await sleep(retryDelayMs)
     }
   }
 
-  return {
-    draft,
-    mediaId,
-    state: 'moderation_pending'
-  }
+  throw new AppError({
+    type: ErrorType.BUSINESS,
+    message: 'OCR enqueue blocked by media moderation',
+    userMessage: OCR_BLOCKED_MESSAGE
+  })
 }
 
 function sleep(ms: number) {

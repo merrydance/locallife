@@ -12,6 +12,8 @@ export interface RiderApplicationResponse {
   id_card_front_asset_id?: number
   id_card_back_asset_id?: number
   id_card_ocr?: {
+    status?: 'pending' | 'processing' | 'done' | 'failed'
+    error?: string
     name?: string
     id_number?: string
     gender?: string
@@ -23,6 +25,8 @@ export interface RiderApplicationResponse {
   }
   health_cert_asset_id?: number
   health_cert_ocr?: {
+    status?: 'pending' | 'processing' | 'done' | 'failed'
+    error?: string
     name?: string
     id_number?: string
     cert_number?: string
@@ -35,6 +39,42 @@ export interface RiderApplicationResponse {
   created_at: string
   updated_at?: string
   submitted_at?: string
+}
+
+function hasRiderText(value?: string) {
+  return typeof value === 'string' && value.trim().length > 0
+}
+
+function checkRiderIDCardWriteback(latest: RiderApplicationResponse, side: 'Front' | 'Back') {
+  const status = latest.id_card_ocr?.status || ''
+  const error = latest.id_card_ocr?.error || ''
+
+  if (side === 'Front') {
+    return {
+      ready: status === 'done' || hasRiderText(latest.id_card_ocr?.name) || hasRiderText(latest.id_card_ocr?.id_number),
+      failed: status === 'failed',
+      errorMessage: error
+    }
+  }
+
+  return {
+    ready: status === 'done' || hasRiderText(latest.id_card_ocr?.valid_end),
+    failed: status === 'failed',
+    errorMessage: error
+  }
+}
+
+function checkRiderHealthCertWriteback(latest: RiderApplicationResponse) {
+  const status = latest.health_cert_ocr?.status || ''
+  const error = latest.health_cert_ocr?.error || ''
+  return {
+    ready: status === 'done'
+      || hasRiderText(latest.health_cert_ocr?.cert_number)
+      || hasRiderText(latest.health_cert_ocr?.valid_end)
+      || hasRiderText(latest.health_cert_ocr?.name),
+    failed: status === 'failed',
+    errorMessage: error
+  }
 }
 
 export interface UpdateRiderBasicRequest {
@@ -81,7 +121,12 @@ export async function ocrRiderIdCard(filePath: string, side: 'Front' | 'Back') {
       owner_id: draft.id,
       side: side === 'Front' ? 'front' : 'back'
     },
-    getOrCreateRiderApplication
+    getOrCreateRiderApplication,
+    {
+      verifyResult: (latest) => checkRiderIDCardWriteback(latest, side),
+      maxAttempts: 20,
+      intervalMs: 1000
+    }
   )
 }
 
@@ -101,7 +146,12 @@ export async function ocrRiderHealthCert(filePath: string) {
       owner_type: 'rider_application',
       owner_id: draft.id
     },
-    getOrCreateRiderApplication
+    getOrCreateRiderApplication,
+    {
+      verifyResult: checkRiderHealthCertWriteback,
+      maxAttempts: 20,
+      intervalMs: 1000
+    }
   )
 }
 

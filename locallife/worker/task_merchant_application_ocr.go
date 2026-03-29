@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -88,6 +89,11 @@ func (distributor *RedisTaskDistributor) enqueue(ctx context.Context, taskType s
 	task := asynq.NewTask(taskType, payload, opts...)
 	info, err := distributor.enqueueTask(ctx, task)
 	if err != nil {
+		if errors.Is(err, asynq.ErrDuplicateTask) {
+			recordOCREnqueueSuppressed(task.Type(), "duplicate_task")
+			log.Info().Str("type", task.Type()).Str("request_id", requestIDFromContext(ctx)).Msg("duplicate ocr task enqueue suppressed")
+			return nil
+		}
 		return fmt.Errorf("enqueue task: %w", err)
 	}
 	log.Info().Str("type", task.Type()).Str("queue", info.Queue).Msg("enqueued task")

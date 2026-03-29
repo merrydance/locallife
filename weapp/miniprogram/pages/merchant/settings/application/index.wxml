@@ -75,7 +75,6 @@
 
       <view wx:if="{{ocrNoticeMessage}}" class="hint-card hint-card-warning ocr-notice-card">
         <text class="ocr-notice-text">{{ocrNoticeMessage}}</text>
-        <t-button theme="primary" variant="outline" size="small" shape="round" loading="{{ocrRefreshing}}" disabled="{{loading || ocrRefreshing || licenseUploading || foodPermitUploading || idCardFrontUploading || idCardBackUploading || submitting || resetting}}" bindtap="onRefreshOcrStatus">刷新识别结果</t-button>
       </view>
 
       <view class="upload-card">

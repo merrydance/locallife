@@ -538,6 +538,7 @@ type Querier interface {
 	// 返回包间信息 + 商户信息 + 主图 + 近30天预订量
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
 	FailOCRJob(ctx context.Context, arg FailOCRJobParams) (OcrJob, error)
+	FailPendingOCRJob(ctx context.Context, arg FailPendingOCRJobParams) (OcrJob, error)
 	// 冻结用户余额（提现申请时）
 	FreezeUserBalance(ctx context.Context, arg FreezeUserBalanceParams) (UserBalance, error)
 	// Phase3: abnormal stats aggregation queries
@@ -1301,6 +1302,7 @@ type Querier interface {
 	// 获取超时未接单的配送单
 	ListPendingDeliveriesBefore(ctx context.Context, arg ListPendingDeliveriesBeforeParams) ([]Delivery, error)
 	ListPendingEcommerceApplyments(ctx context.Context, arg ListPendingEcommerceApplymentsParams) ([]EcommerceApplyment, error)
+	ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]OcrJob, error)
 	// 列出申请（平台管理员用，包含 submitted/approved/rejected）
 	ListPendingOperatorApplications(ctx context.Context, arg ListPendingOperatorApplicationsParams) ([]ListPendingOperatorApplicationsRow, error)
 	// ==================== 订单超时清理 ====================
