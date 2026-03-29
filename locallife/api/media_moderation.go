@@ -6,6 +6,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strings"
 	"time"
@@ -29,6 +30,8 @@ type miniProgramMediaCheckXML struct {
 	AppID   string   `xml:"AppID"`
 	AppIDV2 string   `xml:"appid"`
 	TraceID string   `xml:"trace_id"`
+	ErrCode string   `xml:"errcode"`
+	ErrMsg  string   `xml:"errmsg"`
 	Result  struct {
 		Suggest string `xml:"suggest"`
 		Label   string `xml:"label"`
@@ -63,13 +66,13 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 	if asset == nil {
 		return nil
 	}
-	if asset.Visibility == string(media.VisibilityPrivate) && isOwnerOnlyPrivateMedia(asset.MediaCategory) {
+	if asset.Visibility == string(media.VisibilityPrivate) && isPrivateDocumentMediaModerationExempt(asset.MediaCategory) {
 		updated, err := server.store.SetMediaAssetModerationStatus(ctx, db.SetMediaAssetModerationStatusParams{
 			ID:               asset.ID,
 			ModerationStatus: "approved",
 		})
 		if err != nil {
-			return fmt.Errorf("auto approve owner-only private media moderation: %w", err)
+			return fmt.Errorf("auto approve moderation-exempt private document media: %w", err)
 		}
 		*asset = updated
 		log.Info().
@@ -77,7 +80,7 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 			Str("object_key", asset.ObjectKey).
 			Str("media_category", asset.MediaCategory).
 			Str("visibility", asset.Visibility).
-			Msg("media moderation skipped for owner-only private media")
+			Msg("media moderation skipped for moderation-exempt private document media")
 		return nil
 	}
 	if asset.ModerationStatus != "pending" || asset.ModerationTraceID.Valid {
@@ -149,6 +152,7 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 	if err != nil {
 		return err
 	}
+	sourceURLHost, sourceURLPath := mediaModerationSourceLogFields(mediaURL)
 
 	log.Info().
 		Int64("media_id", asset.ID).
@@ -157,6 +161,8 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 		Str("mime_type", asset.MimeType).
 		Str("visibility", asset.Visibility).
 		Str("source_client", asset.SourceClient).
+		Str("source_url_host", sourceURLHost).
+		Str("source_url_path", sourceURLPath).
 		Msg("requesting async media moderation")
 
 	result, err := server.wechatClient.MediaCheckAsync(ctx, wechat.MediaCheckAsyncRequest{
@@ -172,6 +178,8 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 			Int64("media_id", asset.ID).
 			Int64("uploader_id", uploaderID).
 			Str("object_key", asset.ObjectKey).
+			Str("source_url_host", sourceURLHost).
+			Str("source_url_path", sourceURLPath).
 			Msg("async media moderation request failed")
 		return fmt.Errorf("request wechat media moderation: %w", err)
 	}
@@ -180,6 +188,8 @@ func (server *Server) triggerMediaModeration(ctx *gin.Context, asset *db.MediaAs
 		Int64("media_id", asset.ID).
 		Int64("uploader_id", uploaderID).
 		Str("object_key", asset.ObjectKey).
+		Str("source_url_host", sourceURLHost).
+		Str("source_url_path", sourceURLPath).
 		Str("trace_id", result.TraceID).
 		Msg("async media moderation request accepted")
 
@@ -276,6 +286,9 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		Str("appid", payloadAppID).
 		Str("event", payload.Event).
 		Str("msg_type", payload.MsgType).
+		Str("callback_errcode", payload.callbackErrCode()).
+		Str("callback_errmsg", payload.callbackErrMsg()).
+		Str("callback_reason", payload.callbackReason()).
 		Str("suggest", suggest).
 		Str("label", label).
 		Str("is_risky", payload.riskyFlag()).
@@ -293,6 +306,9 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		log.Error().
 			Err(err).
 			Str("trace_id", payload.TraceID).
+			Str("callback_errcode", payload.callbackErrCode()).
+			Str("callback_errmsg", payload.callbackErrMsg()).
+			Str("callback_reason", payload.callbackReason()).
 			Str("suggest", suggest).
 			Str("label", label).
 			Str("mapped_status", moderationStatus).
@@ -305,6 +321,9 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		Int64("media_id", asset.ID).
 		Str("trace_id", payload.TraceID).
 		Str("object_key", asset.ObjectKey).
+		Str("callback_errcode", payload.callbackErrCode()).
+		Str("callback_errmsg", payload.callbackErrMsg()).
+		Str("callback_reason", payload.callbackReason()).
 		Str("moderation_status", moderationStatus).
 		Str("label", label).
 		Msg("media moderation callback processed")
@@ -313,6 +332,9 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 			Err(err).
 			Int64("media_id", asset.ID).
 			Str("trace_id", payload.TraceID).
+			Str("callback_errcode", payload.callbackErrCode()).
+			Str("callback_errmsg", payload.callbackErrMsg()).
+			Str("callback_reason", payload.callbackReason()).
 			Str("moderation_status", moderationStatus).
 			Msg("process pending ocr jobs for media moderation failed")
 		ctx.String(http.StatusInternalServerError, "ocr moderation linkage failed")
@@ -351,6 +373,37 @@ func (payload miniProgramMediaCheckXML) riskyFlag() string {
 		return strings.TrimSpace(payload.IsRisky)
 	}
 	return strings.TrimSpace(payload.IsRiskyV2)
+}
+
+func (payload miniProgramMediaCheckXML) callbackErrCode() string {
+	return strings.TrimSpace(payload.ErrCode)
+}
+
+func (payload miniProgramMediaCheckXML) callbackErrMsg() string {
+	return strings.TrimSpace(payload.ErrMsg)
+}
+
+func (payload miniProgramMediaCheckXML) callbackReason() string {
+	if code := payload.callbackErrCode(); code != "" && code != "0" {
+		switch code {
+		case "-1008":
+			return "download_failed"
+		default:
+			return "upstream_callback_error"
+		}
+	}
+
+	suggest, _ := payload.moderationDecision()
+	switch suggest {
+	case "pass":
+		return "passed"
+	case "review":
+		return "manual_review"
+	case "risky":
+		return "risky_content"
+	default:
+		return "unknown"
+	}
 }
 
 func (payload miniProgramMediaCheckXML) moderationDecision() (string, string) {
@@ -433,6 +486,14 @@ func truncateMediaModerationCallbackBody(body []byte) string {
 		return string(body)
 	}
 	return string(body[:mediaModerationCallbackLogLimit]) + "...(truncated)"
+}
+
+func mediaModerationSourceLogFields(rawURL string) (string, string) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", ""
+	}
+	return parsed.Host, parsed.EscapedPath()
 }
 
 func (server *Server) verifyMiniProgramMessageSignature(signature, timestamp, nonce string) bool {

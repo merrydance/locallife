@@ -246,6 +246,18 @@ func isOwnerOnlyPrivateMedia(category string) bool {
 	}
 }
 
+func isPrivateDocumentMediaModerationExempt(category string) bool {
+	switch category {
+	case string(media.CategoryIDCardFront),
+		string(media.CategoryIDCardBack),
+		string(media.CategoryHealthCert),
+		string(media.CategoryGroupLicense):
+		return true
+	default:
+		return false
+	}
+}
+
 // deleteMediaAsset godoc
 // @Summary 软删除媒体资产
 // @Tags media

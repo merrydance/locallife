@@ -347,6 +347,49 @@ func TestCreateOCRJob_AllowsOwnerOnlyPrivateIDCardDespiteModerationStatus(t *tes
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
+func TestCreateOCRJob_AllowsPrivateHealthCertDespiteModerationStatus(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomRiderApplication(user.ID)
+	job := db.OcrJob{ID: 334, Status: "pending", DocumentType: string(ocr.DocumentTypeHealthCert), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 804, OwnerType: string(ocr.OwnerTypeRiderApplication), OwnerID: app.ID, CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(804)).Return(db.MediaAsset{ID: 804, Visibility: "private", MediaCategory: "health_cert", ModerationStatus: "quarantined"}, nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
+			require.Equal(t, string(ocr.DocumentTypeHealthCert), arg.DocumentType)
+			require.Equal(t, int64(804), arg.MediaAssetID)
+			return job, nil
+		}),
+		store.EXPECT().GetRiderApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateRiderApplicationHealthCert(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpdateRiderApplicationHealthCertParams) (db.RiderApplication, error) {
+			require.Equal(t, app.ID, arg.ID)
+			require.True(t, arg.HealthCertMediaAssetID.Valid)
+			require.Equal(t, int64(804), arg.HealthCertMediaAssetID.Int64)
+			return app, nil
+		}),
+	)
+	distributor.EXPECT().DistributeTaskRiderApplicationHealthCertOCR(gomock.Any(), app.ID, int64(804), int64(334)).Return(nil)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "health_cert", MediaAssetID: 804, OwnerType: "rider_application", OwnerID: app.ID})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestCreateOCRJob_DelaysDispatchWhileMediaModerationPending(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)

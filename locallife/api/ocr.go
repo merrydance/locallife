@@ -609,7 +609,7 @@ func (server *Server) getOCRMediaModerationStatus(ctx *gin.Context, mediaAssetID
 	if err != nil {
 		return "", err
 	}
-	if asset.Visibility == string(media.VisibilityPrivate) && isOwnerOnlyPrivateMedia(asset.MediaCategory) {
+	if asset.Visibility == string(media.VisibilityPrivate) && isPrivateDocumentMediaModerationExempt(asset.MediaCategory) {
 		return "approved", nil
 	}
 	return strings.ToLower(strings.TrimSpace(asset.ModerationStatus)), nil

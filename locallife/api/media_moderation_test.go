@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
@@ -133,6 +134,61 @@ func TestCompleteMediaUploadSkipsModerationForOwnerOnlyPrivateMedia(t *testing.T
 	var resp completeUploadResponse
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.EqualValues(t, 11, resp.MediaID)
+	require.Equal(t, "approved", resp.Status)
+	require.Len(t, resp.Variants, 0)
+}
+
+func TestCompleteMediaUploadSkipsModerationForPrivateHealthCert(t *testing.T) {
+	user, _ := randomUser(t)
+	objectKey := "rider/health_cert/1/20260329/private-health-cert.jpg"
+	uploadID := "up_test_private_health_cert"
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	wxClient := mockwechat.NewMockWechatClient(ctrl)
+
+	session := randomUploadSession(user.ID, "health_cert", "private", objectKey, false)
+	session.ID = uploadID
+	asset := randomMediaAsset(16, user.ID, "private", objectKey)
+	asset.MediaCategory = string(media.CategoryHealthCert)
+	asset.ModerationStatus = "pending"
+	approvedAsset := asset
+	approvedAsset.ModerationStatus = "approved"
+
+	store.EXPECT().GetUploadSession(gomock.Any(), uploadID).Times(1).Return(session, nil)
+	store.EXPECT().CreateMediaAsset(gomock.Any(), gomock.Any()).Times(1).Return(asset, nil)
+	store.EXPECT().CompleteUploadSession(gomock.Any(), gomock.Any()).Times(1).Return(session, nil)
+	store.EXPECT().SetMediaAssetModerationStatus(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
+		func(_ context.Context, arg db.SetMediaAssetModerationStatusParams) (db.MediaAsset, error) {
+			require.Equal(t, asset.ID, arg.ID)
+			require.Equal(t, "approved", arg.ModerationStatus)
+			return approvedAsset, nil
+		},
+	)
+
+	server, tempDir := newTestServerForMedia(t, store)
+	server.config.WechatMiniAppID = "wx-test-app"
+	server.config.WechatMiniAppSecret = "secret"
+	server.wechatClient = wxClient
+	writeLocalFile(t, tempDir, objectKey)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/v1/media/complete", marshalBody(t, completeUploadRequest{
+		UploadID:  uploadID,
+		ObjectKey: objectKey,
+	}))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var resp completeUploadResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.EqualValues(t, 16, resp.MediaID)
 	require.Equal(t, "approved", resp.Status)
 	require.Len(t, resp.Variants, 0)
 }
@@ -367,6 +423,111 @@ func TestMiniProgramMediaCheckNotify_QuarantinedFailsPendingOCRJobs(t *testing.T
 
 	require.Equal(t, http.StatusOK, recorder.Code)
 	require.Equal(t, "success", recorder.Body.String())
+}
+
+func TestMiniProgramMediaCheckNotify_TopLevelErrcodeStillQuarantines(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	asset := randomMediaAsset(17, 1, "private", "rider/health_cert/1/20260329/moderation-download-failed.jpg")
+	asset.ModerationStatus = "quarantined"
+	asset.ModerationTraceID = pgtype.Text{String: "trace-download-error", Valid: true}
+	store.EXPECT().SetMediaAssetModerationStatusByTraceID(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(
+		func(_ context.Context, arg db.SetMediaAssetModerationStatusByTraceIDParams) (db.MediaAsset, error) {
+			require.Equal(t, "trace-download-error", arg.ModerationTraceID.String)
+			require.Equal(t, "quarantined", arg.ModerationStatus)
+			return asset, nil
+		},
+	)
+	store.EXPECT().ListPendingOCRJobsByMediaAsset(gomock.Any(), asset.ID).Return(nil, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	server.config.WechatMiniAppID = "wx-test-app"
+	server.config.WechatMiniAppMessageToken = "mini-token"
+
+	timestamp := "1710000004"
+	nonce := "nonce-top-level-errcode"
+	signature := signMiniProgramCallback(server.config.WechatMiniAppMessageToken, timestamp, nonce)
+	body := `<xml>
+<appid><![CDATA[wx-test-app]]></appid>
+<MsgType><![CDATA[event]]></MsgType>
+<Event><![CDATA[wxa_media_check]]></Event>
+<trace_id><![CDATA[trace-download-error]]></trace_id>
+<version>2</version>
+<errcode>-1008</errcode>
+<errmsg><![CDATA[下载错误，请检查媒体链接是否有效]]></errmsg>
+</xml>`
+
+	recorder := httptest.NewRecorder()
+	url := fmt.Sprintf("/v1/webhooks/wechat-miniprogram/media-check?signature=%s&timestamp=%s&nonce=%s", signature, timestamp, nonce)
+	req, err := http.NewRequest(http.MethodPost, url, bytes.NewBufferString(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/xml")
+
+	server.router.ServeHTTP(recorder, req)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "success", recorder.Body.String())
+}
+
+func TestMiniProgramMediaCheckCallbackReason(t *testing.T) {
+	testCases := []struct {
+		name    string
+		payload miniProgramMediaCheckXML
+		want    string
+	}{
+		{
+			name:    "top level download failed",
+			payload: miniProgramMediaCheckXML{ErrCode: "-1008", ErrMsg: "下载错误"},
+			want:    "download_failed",
+		},
+		{
+			name:    "top level upstream error fallback",
+			payload: miniProgramMediaCheckXML{ErrCode: "-1", ErrMsg: "system error"},
+			want:    "upstream_callback_error",
+		},
+		{
+			name: "review result",
+			payload: miniProgramMediaCheckXML{Result: struct {
+				Suggest string `xml:"suggest"`
+				Label   string `xml:"label"`
+			}{Suggest: "review", Label: "20001"}},
+			want: "manual_review",
+		},
+		{
+			name: "risky result",
+			payload: miniProgramMediaCheckXML{Result: struct {
+				Suggest string `xml:"suggest"`
+				Label   string `xml:"label"`
+			}{Suggest: "risky", Label: "20001"}},
+			want: "risky_content",
+		},
+		{
+			name: "pass result",
+			payload: miniProgramMediaCheckXML{Result: struct {
+				Suggest string `xml:"suggest"`
+				Label   string `xml:"label"`
+			}{Suggest: "pass", Label: "10001"}},
+			want: "passed",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.want, tc.payload.callbackReason())
+		})
+	}
+}
+
+func TestMediaModerationSourceLogFields(t *testing.T) {
+	host, path := mediaModerationSourceLogFields("https://oss-cn-beijing.aliyuncs.com/private/object.jpg?X-Amz-Signature=secret&X-Amz-Expires=900")
+	require.Equal(t, "oss-cn-beijing.aliyuncs.com", host)
+	require.Equal(t, "/private/object.jpg", path)
+
+	host, path = mediaModerationSourceLogFields("://bad-url")
+	require.Equal(t, "", host)
+	require.Equal(t, "", path)
 }
 
 func signMiniProgramCallback(token, timestamp, nonce string) string {
