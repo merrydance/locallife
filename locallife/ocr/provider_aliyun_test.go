@@ -139,6 +139,46 @@ func TestAliyunOpenAPIClientRecognizeFoodPermitUsesCorrectAction(t *testing.T) {
 	}
 }
 
+func TestAliyunOpenAPIClientRecognizeHealthCertUsesRecognizeAdvanced(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer r.Body.Close()
+		if got := r.Header.Get("x-acs-action"); got != "RecognizeAdvanced" {
+			t.Fatalf("x-acs-action = %s", got)
+		}
+		if got := r.URL.RawQuery; got != "" {
+			t.Fatalf("raw query = %q", got)
+		}
+		_, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"Data":"{\"content\":\"姓名：张三\\n健康证号：JK20260001\\n有效期至：2030年12月31日\\n110101199001011234\"}"}`))
+	}))
+	defer server.Close()
+
+	client := &AliyunOpenAPIClient{
+		endpoint:        server.URL,
+		region:          "cn-hangzhou",
+		accessKeyID:     "test-ak",
+		accessKeySecret: "test-sk",
+		httpClient:      server.Client(),
+		clock: func() time.Time {
+			return time.Date(2026, time.March, 29, 1, 2, 3, 0, time.UTC)
+		},
+		nonce: func() string {
+			return "nonce-health-123"
+		},
+	}
+	client.signer = client.defaultSigner
+
+	_, err := client.Recognize(context.Background(), CapabilityAliyunHealthCert, RecognizeRequest{
+		DocumentType: DocumentTypeHealthCert,
+		ContentType:  "image/jpeg",
+		Data:         []byte("health-cert-bytes"),
+	})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+}
+
 func TestAliyunProviderRecognizeNormalizesBusinessLicense(t *testing.T) {
 	raw := json.RawMessage(`{
 		"Data": {
@@ -285,6 +325,46 @@ func TestAliyunProviderRecognizeNormalizesStringifiedHealthCertData(t *testing.T
 		t.Fatalf("valid period = %s", resp.Normalized.HealthCert.ValidPeriod)
 	}
 	if !strings.Contains(resp.Normalized.HealthCert.RawText, "110101199001011234") {
+		t.Fatalf("raw text = %s", resp.Normalized.HealthCert.RawText)
+	}
+}
+
+func TestAliyunProviderRecognizeNormalizesAdvancedHealthCertText(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"content\":\"姓名：张三\\n健康证号：JK20260001\\n有效期至：2030年12月31日\\n110101199001011234\"}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunHealthCert, RecognizeRequest{DocumentType: DocumentTypeHealthCert})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.HealthCert == nil {
+		t.Fatal("expected normalized health cert result")
+	}
+	if resp.Normalized.HealthCert.RawText == "" {
+		t.Fatal("expected raw text from recognize advanced result")
+	}
+	if !strings.Contains(resp.Normalized.HealthCert.RawText, "健康证号：JK20260001") {
+		t.Fatalf("raw text = %s", resp.Normalized.HealthCert.RawText)
+	}
+}
+
+func TestAliyunProviderRecognizeNormalizesAdvancedHealthCertWordFragments(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": "{\"prism_wordsInfo\":[{\"word\":\"姓名：\"},{\"word\":\"张三\"},{\"word\":\"健康证号：\"},{\"word\":\"JK20260001\"},{\"word\":\"有效期至：\"},{\"word\":\"2030年12月31日\"}]}"
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunHealthCert, RecognizeRequest{DocumentType: DocumentTypeHealthCert})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.HealthCert == nil {
+		t.Fatal("expected normalized health cert result")
+	}
+	if !strings.Contains(resp.Normalized.HealthCert.RawText, "姓名：") {
+		t.Fatalf("raw text = %s", resp.Normalized.HealthCert.RawText)
+	}
+	if !strings.Contains(resp.Normalized.HealthCert.RawText, "2030年12月31日") {
 		t.Fatalf("raw text = %s", resp.Normalized.HealthCert.RawText)
 	}
 }

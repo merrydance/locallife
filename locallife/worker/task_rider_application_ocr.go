@@ -290,6 +290,17 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationHealthCertOCR(ct
 	} else if normalized.FoodPermit != nil && normalized.FoodPermit.RawText != "" {
 		parseRiderHealthCertOCRText(&ocrData, normalized.FoodPermit.RawText)
 	}
+	log.Info().
+		Int64("application_id", payload.ApplicationID).
+		Int64("ocr_job_id", job.ID).
+		Str("provider", job.Provider).
+		Bool("has_health_cert_result", normalized.HealthCert != nil).
+		Bool("used_food_permit_fallback", normalized.HealthCert == nil && normalized.FoodPermit != nil && normalized.FoodPermit.RawText != "").
+		Bool("has_raw_text", normalized.HealthCert != nil && normalized.HealthCert.RawText != "").
+		Bool("has_name", ocrData.Name != "").
+		Bool("has_cert_number", ocrData.CertNumber != "").
+		Bool("has_valid_end", ocrData.ValidEnd != "").
+		Msg("rider health cert OCR normalized")
 	ocrJSON, _ := json.Marshal(ocrData)
 	_, err = processor.store.UpdateRiderApplicationHealthCert(ctx, db.UpdateRiderApplicationHealthCertParams{ID: payload.ApplicationID, HealthCertOcr: ocrJSON})
 	if err != nil {

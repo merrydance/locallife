@@ -39,7 +39,7 @@ var aliyunCapabilityMap = map[Capability]aliyunOperation{
 	CapabilityAliyunBusinessLicense: {Action: "RecognizeBusinessLicense", Version: "2021-07-07"},
 	CapabilityAliyunIDCard:          {Action: "RecognizeIdcard", Version: "2021-07-07"},
 	CapabilityAliyunFoodPermit:      {Action: "RecognizeFoodManageLicense", Version: "2021-07-07"},
-	CapabilityAliyunHealthCert:      {Action: "RecognizeHealthCert", Version: "2021-07-07"},
+	CapabilityAliyunHealthCert:      {Action: "RecognizeAdvanced", Version: "2021-07-07"},
 }
 
 // AliyunAPIError is the normalized error model returned by Aliyun OCR RPC APIs.
@@ -226,6 +226,9 @@ func normalizeAliyunHealthCertResult(raw json.RawMessage) *HealthCertResult {
 	rawText := firstAliyunField(fields,
 		"raw_text", "rawtext", "ocr_text", "ocrtext", "alltext", "fulltext", "content", "text")
 	if rawText == "" {
+		rawText = strings.Join(collectAliyunTextFragments(raw, "content", "text", "word"), "\n")
+	}
+	if rawText == "" {
 		rawText = buildAliyunHealthCertRawText(name, certificate, validPeriod)
 	}
 	if name == "" && certificate == "" && validPeriod == "" && rawText == "" {
@@ -288,6 +291,66 @@ func collectAliyunStringFields(raw json.RawMessage) map[string]string {
 	fields := make(map[string]string)
 	collectAliyunFieldValues("", payload, fields)
 	return fields
+}
+
+func collectAliyunTextFragments(raw json.RawMessage, keys ...string) []string {
+	if len(raw) == 0 || len(keys) == 0 {
+		return nil
+	}
+	var payload any
+	if err := json.Unmarshal(raw, &payload); err != nil {
+		return nil
+	}
+	allowed := make(map[string]struct{}, len(keys))
+	for _, key := range keys {
+		normalized := normalizeAliyunFieldKey(key)
+		if normalized != "" {
+			allowed[normalized] = struct{}{}
+		}
+	}
+	fragments := make([]string, 0, 8)
+	seen := make(map[string]struct{})
+	collectAliyunTextFragmentValues("", payload, allowed, seen, &fragments)
+	return fragments
+}
+
+func collectAliyunTextFragmentValues(prefix string, value any, allowed map[string]struct{}, seen map[string]struct{}, fragments *[]string) {
+	switch v := value.(type) {
+	case map[string]any:
+		for key, nested := range v {
+			next := key
+			if prefix != "" {
+				next = prefix + "." + key
+			}
+			collectAliyunTextFragmentValues(next, nested, allowed, seen, fragments)
+		}
+	case []any:
+		for _, item := range v {
+			collectAliyunTextFragmentValues(prefix, item, allowed, seen, fragments)
+		}
+	case string:
+		if nested, ok := decodeAliyunEmbeddedJSON(v); ok {
+			collectAliyunTextFragmentValues(prefix, nested, allowed, seen, fragments)
+		}
+		leafKey := normalizeAliyunFieldKey(prefix)
+		if leafKey == "" {
+			return
+		}
+		segments := strings.Split(leafKey, ".")
+		leafKey = segments[len(segments)-1]
+		if _, ok := allowed[leafKey]; !ok {
+			return
+		}
+		trimmed := strings.TrimSpace(v)
+		if trimmed == "" {
+			return
+		}
+		if _, ok := seen[trimmed]; ok {
+			return
+		}
+		seen[trimmed] = struct{}{}
+		*fragments = append(*fragments, trimmed)
+	}
 }
 
 func collectAliyunFieldValues(prefix string, value any, fields map[string]string) {
