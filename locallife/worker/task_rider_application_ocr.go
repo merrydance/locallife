@@ -248,7 +248,17 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 		app, getErr := processor.store.GetRiderApplication(ctx, payload.ApplicationID)
 		if getErr == nil {
 			if !riderIDCardAssetStillBound(app, payload.Side, payload.MediaAssetID) {
-				log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", payload.OCRJobID).Int64("media_asset_id", payload.MediaAssetID).Str("side", payload.Side).Msg("skip stale rider id card OCR failure writeback")
+				log.Info().
+					Int64("application_id", payload.ApplicationID).
+					Int64("ocr_job_id", payload.OCRJobID).
+					Int64("media_asset_id", payload.MediaAssetID).
+					Str("side", payload.Side).
+					Bool("front_asset_bound", app.IDCardFrontMediaAssetID.Valid).
+					Bool("back_asset_bound", app.IDCardBackMediaAssetID.Valid).
+					Int64("front_asset_id", app.IDCardFrontMediaAssetID.Int64).
+					Int64("back_asset_id", app.IDCardBackMediaAssetID.Int64).
+					Str("status", app.Status).
+					Msg("skip stale rider id card OCR failure writeback")
 				return nil
 			}
 			ocrData := readRiderIDCardOCR(app.IDCardOcr)
@@ -280,7 +290,17 @@ func (processor *RedisTaskProcessor) ProcessTaskRiderApplicationIDCardOCR(ctx co
 		return fmt.Errorf("get rider application: %w", err)
 	}
 	if !riderIDCardAssetStillBound(app, payload.Side, payload.MediaAssetID) {
-		log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Int64("media_asset_id", payload.MediaAssetID).Str("side", payload.Side).Msg("skip stale rider id card OCR success writeback")
+		log.Info().
+			Int64("application_id", payload.ApplicationID).
+			Int64("ocr_job_id", job.ID).
+			Int64("media_asset_id", payload.MediaAssetID).
+			Str("side", payload.Side).
+			Bool("front_asset_bound", app.IDCardFrontMediaAssetID.Valid).
+			Bool("back_asset_bound", app.IDCardBackMediaAssetID.Valid).
+			Int64("front_asset_id", app.IDCardFrontMediaAssetID.Int64).
+			Int64("back_asset_id", app.IDCardBackMediaAssetID.Int64).
+			Str("status", app.Status).
+			Msg("skip stale rider id card OCR success writeback")
 		return nil
 	}
 

@@ -350,6 +350,18 @@ func (server *Server) deleteRiderApplicationDocumentByType(ctx *gin.Context, doc
 	}
 
 	if app.Status != "draft" {
+		log.Warn().
+			Int64("application_id", app.ID).
+			Int64("user_id", authPayload.UserID).
+			Str("status", app.Status).
+			Str("document_type", string(documentType)).
+			Bool("front_asset_bound", app.IDCardFrontMediaAssetID.Valid).
+			Bool("back_asset_bound", app.IDCardBackMediaAssetID.Valid).
+			Bool("health_asset_bound", app.HealthCertMediaAssetID.Valid).
+			Int64("front_asset_id", app.IDCardFrontMediaAssetID.Int64).
+			Int64("back_asset_id", app.IDCardBackMediaAssetID.Int64).
+			Int64("health_asset_id", app.HealthCertMediaAssetID.Int64).
+			Msg("reject deleting rider application document because application is not draft")
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
 		return
 	}
@@ -380,6 +392,19 @@ func (server *Server) deleteRiderApplicationDocumentByType(ctx *gin.Context, doc
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("clear rider application document: %w", err)))
 		return
 	}
+
+	log.Info().
+		Int64("application_id", updated.ID).
+		Int64("user_id", authPayload.UserID).
+		Str("document_type", string(documentType)).
+		Int64("deleted_asset_id", assetID).
+		Bool("front_asset_bound", updated.IDCardFrontMediaAssetID.Valid).
+		Bool("back_asset_bound", updated.IDCardBackMediaAssetID.Valid).
+		Bool("health_asset_bound", updated.HealthCertMediaAssetID.Valid).
+		Int64("front_asset_id", updated.IDCardFrontMediaAssetID.Int64).
+		Int64("back_asset_id", updated.IDCardBackMediaAssetID.Int64).
+		Int64("health_asset_id", updated.HealthCertMediaAssetID.Int64).
+		Msg("rider application document cleared")
 
 	if assetID > 0 {
 		if err := server.mediaRegistry.SoftDelete(ctx, assetID, authPayload.UserID); err != nil {

@@ -454,6 +454,17 @@ func (server *Server) markRiderApplicationOCRPending(ctx *gin.Context, job db.Oc
 		return err
 	}
 	if app.Status != "draft" {
+		log.Warn().
+			Int64("application_id", app.ID).
+			Int64("ocr_job_id", job.ID).
+			Int64("media_asset_id", job.MediaAssetID).
+			Str("side", job.Side).
+			Str("status", app.Status).
+			Bool("front_asset_bound", app.IDCardFrontMediaAssetID.Valid).
+			Bool("back_asset_bound", app.IDCardBackMediaAssetID.Valid).
+			Int64("front_asset_id", app.IDCardFrontMediaAssetID.Int64).
+			Int64("back_asset_id", app.IDCardBackMediaAssetID.Int64).
+			Msg("skip marking rider OCR pending because application is not draft")
 		return nil
 	}
 
@@ -462,6 +473,16 @@ func (server *Server) markRiderApplicationOCRPending(ctx *gin.Context, job db.Oc
 
 	switch ocr.DocumentType(job.DocumentType) {
 	case ocr.DocumentTypeIDCard:
+		log.Info().
+			Int64("application_id", app.ID).
+			Int64("ocr_job_id", job.ID).
+			Int64("media_asset_id", job.MediaAssetID).
+			Str("side", job.Side).
+			Bool("front_asset_bound", app.IDCardFrontMediaAssetID.Valid).
+			Bool("back_asset_bound", app.IDCardBackMediaAssetID.Valid).
+			Int64("front_asset_id", app.IDCardFrontMediaAssetID.Int64).
+			Int64("back_asset_id", app.IDCardBackMediaAssetID.Int64).
+			Msg("mark rider id card OCR pending before binding media asset")
 		payload := readRiderIDCardOCRData(app.IDCardOcr)
 		payload.Status = "pending"
 		payload.Error = ""
@@ -484,7 +505,19 @@ func (server *Server) markRiderApplicationOCRPending(ctx *gin.Context, job db.Oc
 		} else {
 			arg.IDCardFrontMediaAssetID = pgtype.Int8{Int64: job.MediaAssetID, Valid: true}
 		}
-		_, err = server.store.UpdateRiderApplicationIDCard(ctx, arg)
+		updated, err := server.store.UpdateRiderApplicationIDCard(ctx, arg)
+		if err == nil {
+			log.Info().
+				Int64("application_id", updated.ID).
+				Int64("ocr_job_id", job.ID).
+				Int64("media_asset_id", job.MediaAssetID).
+				Str("side", job.Side).
+				Bool("front_asset_bound", updated.IDCardFrontMediaAssetID.Valid).
+				Bool("back_asset_bound", updated.IDCardBackMediaAssetID.Valid).
+				Int64("front_asset_id", updated.IDCardFrontMediaAssetID.Int64).
+				Int64("back_asset_id", updated.IDCardBackMediaAssetID.Int64).
+				Msg("mark rider id card OCR pending after binding media asset")
+		}
 		return err
 	case ocr.DocumentTypeHealthCert:
 		payload := readRiderHealthCertOCRData(app.HealthCertOcr)
