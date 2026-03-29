@@ -107,14 +107,14 @@ func TestUpdateRiderApplicationBasicInfo_OnlyDraft(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
+		ID:                      app.ID,
 		IDCardFrontMediaAssetID: pgtype.Int8{},
 		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	require.NoError(t, err)
 
 	_, err = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
+		ID:                     app.ID,
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	require.NoError(t, err)
@@ -147,16 +147,51 @@ func TestUpdateRiderApplicationIDCard(t *testing.T) {
 	ocrJSON, _ := json.Marshal(ocrData)
 
 	updated, err := testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
+		ID:                      app.ID,
 		IDCardFrontMediaAssetID: pgtype.Int8{},
 		IDCardBackMediaAssetID:  pgtype.Int8{},
-		IDCardOcr:      ocrJSON,
-		RealName:       pgtype.Text{String: "张三", Valid: true},
+		IDCardOcr:               ocrJSON,
+		RealName:                pgtype.Text{String: "张三", Valid: true},
 	})
 	require.NoError(t, err)
 	require.False(t, updated.IDCardFrontMediaAssetID.Valid)
 	require.False(t, updated.IDCardBackMediaAssetID.Valid)
 	require.NotEmpty(t, updated.IDCardOcr)
+	require.Equal(t, "张三", updated.RealName.String)
+}
+
+func TestUpdateRiderApplicationIDCard_MergesOCRPayload(t *testing.T) {
+	app := createRandomRiderApplication(t)
+
+	frontOCR, err := json.Marshal(map[string]string{
+		"name":      "张三",
+		"id_number": "110101199001011234",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:        app.ID,
+		IDCardOcr: frontOCR,
+		RealName:  pgtype.Text{String: "张三", Valid: true},
+	})
+	require.NoError(t, err)
+
+	backOCR, err := json.Marshal(map[string]string{
+		"valid_end": "2035.01.01",
+	})
+	require.NoError(t, err)
+
+	updated, err := testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
+		ID:        app.ID,
+		IDCardOcr: backOCR,
+	})
+	require.NoError(t, err)
+
+	var payload map[string]string
+	require.NoError(t, json.Unmarshal(updated.IDCardOcr, &payload))
+	require.Equal(t, "张三", payload["name"])
+	require.Equal(t, "110101199001011234", payload["id_number"])
+	require.Equal(t, "2035.01.01", payload["valid_end"])
 	require.Equal(t, "张三", updated.RealName.String)
 }
 
@@ -166,7 +201,7 @@ func TestUpdateRiderApplicationHealthCert(t *testing.T) {
 	app := createRandomRiderApplication(t)
 
 	updated, err := testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
+		ID:                     app.ID,
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	require.NoError(t, err)
@@ -185,12 +220,12 @@ func TestSubmitRiderApplication(t *testing.T) {
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
+		ID:                      app.ID,
 		IDCardFrontMediaAssetID: pgtype.Int8{},
 		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
+		ID:                     app.ID,
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 
@@ -213,12 +248,12 @@ func TestApproveRiderApplication(t *testing.T) {
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
+		ID:                      app.ID,
 		IDCardFrontMediaAssetID: pgtype.Int8{},
 		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
+		ID:                     app.ID,
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
@@ -244,12 +279,12 @@ func TestRejectRiderApplication(t *testing.T) {
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
+		ID:                      app.ID,
 		IDCardFrontMediaAssetID: pgtype.Int8{},
 		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
+		ID:                     app.ID,
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
@@ -277,12 +312,12 @@ func TestResetRiderApplicationToDraft(t *testing.T) {
 		Phone:    pgtype.Text{String: "13812345678", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
+		ID:                      app.ID,
 		IDCardFrontMediaAssetID: pgtype.Int8{},
 		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
+		ID:                     app.ID,
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
@@ -324,12 +359,12 @@ func TestListRiderApplicationsByStatus(t *testing.T) {
 		Phone:    pgtype.Text{String: "13900000000", Valid: true},
 	})
 	_, _ = testStore.UpdateRiderApplicationIDCard(context.Background(), UpdateRiderApplicationIDCardParams{
-		ID:             app.ID,
+		ID:                      app.ID,
 		IDCardFrontMediaAssetID: pgtype.Int8{},
 		IDCardBackMediaAssetID:  pgtype.Int8{},
 	})
 	_, _ = testStore.UpdateRiderApplicationHealthCert(context.Background(), UpdateRiderApplicationHealthCertParams{
-		ID:            app.ID,
+		ID:                     app.ID,
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)

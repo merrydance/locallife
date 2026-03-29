@@ -34,7 +34,11 @@ UPDATE rider_applications
 SET 
     id_card_front_media_asset_id = COALESCE(sqlc.narg(id_card_front_media_asset_id), id_card_front_media_asset_id),
     id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
-    id_card_ocr = COALESCE(sqlc.narg(id_card_ocr), id_card_ocr),
+    id_card_ocr = CASE
+        WHEN sqlc.narg(id_card_ocr)::jsonb IS NULL THEN id_card_ocr
+        WHEN id_card_ocr IS NULL THEN sqlc.narg(id_card_ocr)::jsonb
+        ELSE id_card_ocr || sqlc.narg(id_card_ocr)::jsonb
+    END,
     -- OCR识别出姓名时自动更新real_name
     real_name = COALESCE(sqlc.narg(real_name), real_name),
     updated_at = now()

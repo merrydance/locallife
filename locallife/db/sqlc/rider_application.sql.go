@@ -558,7 +558,11 @@ UPDATE rider_applications
 SET 
     id_card_front_media_asset_id = COALESCE($2, id_card_front_media_asset_id),
     id_card_back_media_asset_id = COALESCE($3, id_card_back_media_asset_id),
-    id_card_ocr = COALESCE($4, id_card_ocr),
+    id_card_ocr = CASE
+        WHEN $4::jsonb IS NULL THEN id_card_ocr
+        WHEN id_card_ocr IS NULL THEN $4::jsonb
+        ELSE id_card_ocr || $4::jsonb
+    END,
     -- OCR识别出姓名时自动更新real_name
     real_name = COALESCE($5, real_name),
     updated_at = now()
