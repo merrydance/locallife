@@ -26,14 +26,23 @@ const (
 type miniProgramMediaCheckXML struct {
 	XMLName xml.Name `xml:"xml"`
 	AppID   string   `xml:"AppID"`
+	AppIDV2 string   `xml:"appid"`
 	TraceID string   `xml:"trace_id"`
 	Result  struct {
 		Suggest string `xml:"suggest"`
 		Label   string `xml:"label"`
 	} `xml:"result"`
-	IsRisky string `xml:"isrisky"`
-	MsgType string `xml:"MsgType"`
-	Event   string `xml:"Event"`
+	Details []struct {
+		Strategy string `xml:"strategy"`
+		ErrCode  string `xml:"errcode"`
+		Suggest  string `xml:"suggest"`
+		Label    string `xml:"label"`
+		Prob     string `xml:"prob"`
+	} `xml:"detail"`
+	IsRisky   string `xml:"isrisky"`
+	IsRiskyV2 string `xml:"is_risky"`
+	MsgType   string `xml:"MsgType"`
+	Event     string `xml:"Event"`
 }
 
 func (server *Server) publicVariantsForAsset(asset db.MediaAsset) map[string]string {
@@ -215,7 +224,8 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		ctx.String(http.StatusBadRequest, "invalid xml")
 		return
 	}
-	if payload.AppID != "" && server.config.WechatMiniAppID != "" && payload.AppID != server.config.WechatMiniAppID {
+	payloadAppID := payload.appID()
+	if payloadAppID != "" && server.config.WechatMiniAppID != "" && payloadAppID != server.config.WechatMiniAppID {
 		ctx.String(http.StatusBadRequest, "appid mismatch")
 		return
 	}
@@ -224,15 +234,18 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		return
 	}
 
+	suggest, label := payload.moderationDecision()
 	moderationStatus := mapMediaModerationStatus(payload)
 	log.Info().
 		Str("trace_id", payload.TraceID).
-		Str("appid", payload.AppID).
+		Str("appid", payloadAppID).
 		Str("event", payload.Event).
 		Str("msg_type", payload.MsgType).
-		Str("suggest", payload.Result.Suggest).
-		Str("label", payload.Result.Label).
-		Str("is_risky", payload.IsRisky).
+		Str("suggest", suggest).
+		Str("label", label).
+		Str("is_risky", payload.riskyFlag()).
+		Int("detail_count", len(payload.Details)).
+		Str("detail_summary", payload.detailSummary()).
 		Str("mapped_status", moderationStatus).
 		Msg("media moderation callback received")
 	asset, err := server.store.SetMediaAssetModerationStatusByTraceID(ctx, db.SetMediaAssetModerationStatusByTraceIDParams{
@@ -243,8 +256,8 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		log.Error().
 			Err(err).
 			Str("trace_id", payload.TraceID).
-			Str("suggest", payload.Result.Suggest).
-			Str("label", payload.Result.Label).
+			Str("suggest", suggest).
+			Str("label", label).
 			Str("mapped_status", moderationStatus).
 			Msg("update media moderation status by trace id failed")
 		ctx.String(http.StatusNotFound, "media asset not found")
@@ -256,7 +269,7 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		Str("trace_id", payload.TraceID).
 		Str("object_key", asset.ObjectKey).
 		Str("moderation_status", moderationStatus).
-		Str("label", payload.Result.Label).
+		Str("label", label).
 		Msg("media moderation callback processed")
 	if err := server.processPendingOCRJobsForMediaModeration(ctx, asset); err != nil {
 		log.Error().
@@ -272,14 +285,9 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 }
 
 func mapMediaModerationStatus(payload miniProgramMediaCheckXML) string {
-	suggest := strings.ToLower(strings.TrimSpace(payload.Result.Suggest))
+	suggest, _ := payload.moderationDecision()
 	if suggest == "" {
-		switch strings.TrimSpace(payload.IsRisky) {
-		case "0", "false":
-			suggest = "pass"
-		case "1", "true":
-			suggest = "risky"
-		}
+		return "quarantined"
 	}
 
 	switch suggest {
@@ -292,6 +300,95 @@ func mapMediaModerationStatus(payload miniProgramMediaCheckXML) string {
 	default:
 		return "quarantined"
 	}
+}
+
+func (payload miniProgramMediaCheckXML) appID() string {
+	if strings.TrimSpace(payload.AppID) != "" {
+		return strings.TrimSpace(payload.AppID)
+	}
+	return strings.TrimSpace(payload.AppIDV2)
+}
+
+func (payload miniProgramMediaCheckXML) riskyFlag() string {
+	if strings.TrimSpace(payload.IsRisky) != "" {
+		return strings.TrimSpace(payload.IsRisky)
+	}
+	return strings.TrimSpace(payload.IsRiskyV2)
+}
+
+func (payload miniProgramMediaCheckXML) moderationDecision() (string, string) {
+	suggest := strings.ToLower(strings.TrimSpace(payload.Result.Suggest))
+	label := strings.TrimSpace(payload.Result.Label)
+	if suggest != "" {
+		return suggest, label
+	}
+
+	bestSuggest := ""
+	bestLabel := ""
+	for _, detail := range payload.Details {
+		detailSuggest := strings.ToLower(strings.TrimSpace(detail.Suggest))
+		detailLabel := strings.TrimSpace(detail.Label)
+		switch detailSuggest {
+		case "risky":
+			return detailSuggest, detailLabel
+		case "review":
+			if bestSuggest != "review" {
+				bestSuggest = detailSuggest
+				bestLabel = detailLabel
+			}
+		case "pass":
+			if bestSuggest == "" {
+				bestSuggest = detailSuggest
+				bestLabel = detailLabel
+			}
+		default:
+			if detailSuggest == "" && strings.TrimSpace(detail.ErrCode) != "" && strings.TrimSpace(detail.ErrCode) != "0" && bestSuggest == "" {
+				bestSuggest = "review"
+				bestLabel = detailLabel
+			}
+		}
+	}
+	if bestSuggest != "" {
+		return bestSuggest, bestLabel
+	}
+
+	switch strings.ToLower(payload.riskyFlag()) {
+	case "0", "false":
+		return "pass", ""
+	case "1", "true":
+		return "risky", ""
+	default:
+		return "", ""
+	}
+}
+
+func (payload miniProgramMediaCheckXML) detailSummary() string {
+	if len(payload.Details) == 0 {
+		return ""
+	}
+
+	parts := make([]string, 0, len(payload.Details))
+	for _, detail := range payload.Details {
+		strategy := strings.TrimSpace(detail.Strategy)
+		if strategy == "" {
+			strategy = "unknown"
+		}
+		suggest := strings.ToLower(strings.TrimSpace(detail.Suggest))
+		if suggest == "" {
+			suggest = "empty"
+		}
+		label := strings.TrimSpace(detail.Label)
+		if label == "" {
+			label = "-"
+		}
+		errCode := strings.TrimSpace(detail.ErrCode)
+		if errCode == "" {
+			errCode = "-"
+		}
+		parts = append(parts, fmt.Sprintf("%s:%s:%s:%s", strategy, suggest, label, errCode))
+	}
+
+	return strings.Join(parts, ",")
 }
 
 func (server *Server) verifyMiniProgramMessageSignature(signature, timestamp, nonce string) bool {
