@@ -82,6 +82,20 @@ func stringValueFromMap(data map[string]any, key string) string {
 	return text
 }
 
+func logMerchantOCRDebugPayload(job db.OcrJob, applicationID int64, side string, message string) {
+	event := log.Warn().
+		Int64("application_id", applicationID).
+		Int64("ocr_job_id", job.ID).
+		Str("document_type", job.DocumentType).
+		Str("provider", job.Provider).
+		Str("raw_result", string(job.RawResult)).
+		Str("normalized_result", string(job.NormalizedResult))
+	if side != "" {
+		event = event.Str("side", side)
+	}
+	event.Msg(message)
+}
+
 func (distributor *RedisTaskDistributor) DistributeTaskMerchantApplicationBusinessLicenseOCR(
 	ctx context.Context,
 	applicationID int64,
@@ -216,6 +230,8 @@ func (processor *RedisTaskProcessor) processMerchantApplicationBusinessLicenseOC
 		if normalized.BusinessLicense.BusinessScope != "" {
 			arg.BusinessScope = pgtype.Text{String: normalized.BusinessLicense.BusinessScope, Valid: true}
 		}
+	} else {
+		logMerchantOCRDebugPayload(job, payload.ApplicationID, "", "merchant application business license ocr normalized payload empty")
 	}
 	log.Info().
 		Int64("application_id", payload.ApplicationID).
@@ -288,6 +304,8 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 	if normalized.FoodPermit != nil {
 		ocrData.RawText = normalized.FoodPermit.RawText
 		parseFoodPermitOCRText(&ocrData, normalized.FoodPermit.RawText)
+	} else {
+		logMerchantOCRDebugPayload(job, payload.ApplicationID, "", "merchant application food permit ocr normalized payload empty")
 	}
 	log.Info().
 		Int64("application_id", payload.ApplicationID).
@@ -370,6 +388,8 @@ func (processor *RedisTaskProcessor) processMerchantApplicationIDCardOCRJob(ctx 
 		ocrData.Nation = normalized.IDCard.Ethnicity
 		ocrData.Address = normalized.IDCard.Address
 		ocrData.ValidDate = normalized.IDCard.ValidPeriod
+	} else {
+		logMerchantOCRDebugPayload(job, payload.ApplicationID, payload.Side, "merchant application id card ocr normalized payload empty")
 	}
 	log.Info().
 		Int64("application_id", payload.ApplicationID).
