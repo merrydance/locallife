@@ -7,6 +7,16 @@ export interface CurrentRegionResponse {
     parent_name?: string
 }
 
+export interface RegionSearchResult {
+    id: number
+    code: string
+    name: string
+    level: number
+    parent_id?: number
+    longitude?: string
+    latitude?: string
+}
+
 function assertValidCoordinate(latitude: number, longitude: number): void {
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
         throw new Error('invalid coordinates')
@@ -23,6 +33,14 @@ export function getCurrentRegion(params: { latitude: number, longitude: number }
             latitude: Number(params.latitude),
             longitude: Number(params.longitude)
         }
+    })
+}
+
+export function searchRegions(query: string): Promise<RegionSearchResult[]> {
+    return request<RegionSearchResult[]>({
+        url: '/v1/regions/search',
+        method: 'GET',
+        data: { q: query.trim() }
     })
 }
 

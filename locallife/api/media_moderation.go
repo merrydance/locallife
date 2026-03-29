@@ -19,8 +19,9 @@ import (
 )
 
 const (
-	miniProgramMediaCheckScene   = 2
-	mediaModerationPrivateURLTTL = 15 * time.Minute
+	miniProgramMediaCheckScene      = 2
+	mediaModerationPrivateURLTTL    = 15 * time.Minute
+	mediaModerationCallbackLogLimit = 4096
 )
 
 type miniProgramMediaCheckXML struct {
@@ -238,15 +239,32 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 
 	var payload miniProgramMediaCheckXML
 	if err := xml.Unmarshal(body, &payload); err != nil {
+		log.Error().
+			Err(err).
+			Int("raw_xml_bytes", len(body)).
+			Str("raw_xml_excerpt", truncateMediaModerationCallbackBody(body)).
+			Msg("invalid media moderation callback xml")
 		ctx.String(http.StatusBadRequest, "invalid xml")
 		return
 	}
 	payloadAppID := payload.appID()
 	if payloadAppID != "" && server.config.WechatMiniAppID != "" && payloadAppID != server.config.WechatMiniAppID {
+		log.Warn().
+			Str("trace_id", payload.TraceID).
+			Str("callback_appid", payloadAppID).
+			Str("expected_appid", server.config.WechatMiniAppID).
+			Int("raw_xml_bytes", len(body)).
+			Str("raw_xml_excerpt", truncateMediaModerationCallbackBody(body)).
+			Msg("media moderation callback appid mismatch")
 		ctx.String(http.StatusBadRequest, "appid mismatch")
 		return
 	}
 	if payload.TraceID == "" {
+		log.Warn().
+			Str("appid", payloadAppID).
+			Int("raw_xml_bytes", len(body)).
+			Str("raw_xml_excerpt", truncateMediaModerationCallbackBody(body)).
+			Msg("media moderation callback missing trace id")
 		ctx.String(http.StatusBadRequest, "missing trace_id")
 		return
 	}
@@ -263,6 +281,8 @@ func (server *Server) handleMiniProgramMediaCheckNotify(ctx *gin.Context) {
 		Str("is_risky", payload.riskyFlag()).
 		Int("detail_count", len(payload.Details)).
 		Str("detail_summary", payload.detailSummary()).
+		Int("raw_xml_bytes", len(body)).
+		Str("raw_xml_excerpt", truncateMediaModerationCallbackBody(body)).
 		Str("mapped_status", moderationStatus).
 		Msg("media moderation callback received")
 	asset, err := server.store.SetMediaAssetModerationStatusByTraceID(ctx, db.SetMediaAssetModerationStatusByTraceIDParams{
@@ -406,6 +426,13 @@ func (payload miniProgramMediaCheckXML) detailSummary() string {
 	}
 
 	return strings.Join(parts, ",")
+}
+
+func truncateMediaModerationCallbackBody(body []byte) string {
+	if len(body) <= mediaModerationCallbackLogLimit {
+		return string(body)
+	}
+	return string(body[:mediaModerationCallbackLogLimit]) + "...(truncated)"
 }
 
 func (server *Server) verifyMiniProgramMessageSignature(signature, timestamp, nonce string) bool {

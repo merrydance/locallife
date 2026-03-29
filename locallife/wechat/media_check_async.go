@@ -7,9 +7,13 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+
+	"github.com/rs/zerolog/log"
 )
 
 const mediaCheckAsyncURL = "https://api.weixin.qq.com/wxa/media_check_async?access_token=%s"
+
+const mediaCheckAsyncResponseLogLimit = 2048
 
 type mediaCheckAsyncPayload struct {
 	MediaURL  string `json:"media_url"`
@@ -71,14 +75,48 @@ func (c *Client) MediaCheckAsync(ctx context.Context, req MediaCheckAsyncRequest
 
 	var result mediaCheckAsyncAPIResponse
 	if err := json.Unmarshal(body, &result); err != nil {
+		log.Error().
+			Err(err).
+			Int("http_status", resp.StatusCode).
+			Int("media_type", req.MediaType).
+			Int("version", req.Version).
+			Int("scene", req.Scene).
+			Str("response_body_excerpt", truncateMediaCheckAsyncLogValue(body, mediaCheckAsyncResponseLogLimit)).
+			Msg("wechat media_check_async returned invalid json")
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
+
+	log.Info().
+		Int("http_status", resp.StatusCode).
+		Int("errcode", result.ErrCode).
+		Str("errmsg", result.ErrMsg).
+		Str("trace_id", result.TraceID).
+		Int("media_type", req.MediaType).
+		Int("version", req.Version).
+		Int("scene", req.Scene).
+		Str("response_body_excerpt", truncateMediaCheckAsyncLogValue(body, mediaCheckAsyncResponseLogLimit)).
+		Msg("wechat media_check_async response received")
+
 	if result.ErrCode != 0 {
 		return nil, &APIError{Code: result.ErrCode, Msg: result.ErrMsg}
 	}
 	if result.TraceID == "" {
+		log.Error().
+			Int("http_status", resp.StatusCode).
+			Int("media_type", req.MediaType).
+			Int("version", req.Version).
+			Int("scene", req.Scene).
+			Str("response_body_excerpt", truncateMediaCheckAsyncLogValue(body, mediaCheckAsyncResponseLogLimit)).
+			Msg("wechat media_check_async response missing trace id")
 		return nil, fmt.Errorf("missing trace id in media_check_async response")
 	}
 
 	return &MediaCheckAsyncResponse{TraceID: result.TraceID}, nil
+}
+
+func truncateMediaCheckAsyncLogValue(body []byte, limit int) string {
+	if limit <= 0 || len(body) <= limit {
+		return string(body)
+	}
+	return string(body[:limit]) + "...(truncated)"
 }

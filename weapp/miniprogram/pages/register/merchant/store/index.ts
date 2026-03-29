@@ -22,7 +22,7 @@ import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { getMediaDisplayUrl } from '../../../../utils/media'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
-import { getCurrentRegion } from '../../../../api/location'
+import { getCurrentRegion, searchRegions, type RegionSearchResult } from '../../../../api/location'
 
 const DRAFT_KEY = 'merchant_register_draft'
 
@@ -66,6 +66,90 @@ function toPersistedImageUrls(images: ImageFieldItem[]): string[] {
 function toSafeNumber(value: unknown): number {
   const num = Number(value)
   return Number.isFinite(num) ? num : 0
+}
+
+type ParsedRegionAddress = {
+  province: string
+  city: string
+  district: string
+}
+
+function normalizeRegionText(value: string): string {
+  return value.replace(/\s+/g, '').trim()
+}
+
+function stripRegionSuffix(value: string): string {
+  return normalizeRegionText(value).replace(/(特别行政区|自治区|自治州|地区|省|市|区|县|旗)$/u, '')
+}
+
+function parseRegionAddress(address: string): ParsedRegionAddress {
+  const normalized = normalizeRegionText(address)
+  const provinceMatch = normalized.match(/^(北京|天津|上海|重庆|河北|山西|辽宁|吉林|黑龙江|江苏|浙江|安徽|福建|江西|山东|河南|湖北|湖南|广东|海南|四川|贵州|云南|陕西|甘肃|青海|台湾|内蒙古|广西|西藏|宁夏|新疆|香港|澳门)(省|市|自治区|特别行政区)?/u)
+  const province = provinceMatch?.[0] || ''
+  const afterProvince = province ? normalized.slice(province.length) : normalized
+  const cityMatch = afterProvince.match(/^(.+?)(市|地区|自治州|盟)/u)
+  const city = cityMatch?.[0] || ''
+  const afterCity = city ? afterProvince.slice(city.length) : afterProvince
+  const districtMatch = afterCity.match(/^(.+?)(区|县|旗)/u)
+  const district = districtMatch?.[0] || ''
+
+  return { province, city, district }
+}
+
+function buildRegionSearchKeywords(address: string): string[] {
+  const parsed = parseRegionAddress(address)
+  const candidates = [
+    parsed.district,
+    stripRegionSuffix(parsed.district),
+    parsed.city,
+    stripRegionSuffix(parsed.city)
+  ]
+
+  const seen = new Set<string>()
+  return candidates.filter((value) => {
+    const normalized = normalizeRegionText(value)
+    if (!normalized || seen.has(normalized)) {
+      return false
+    }
+    seen.add(normalized)
+    return true
+  })
+}
+
+function pickBestRegionSearchResult(regions: RegionSearchResult[], address: string): RegionSearchResult | null {
+  const parsed = parseRegionAddress(address)
+  const district = normalizeRegionText(parsed.district)
+  const districtBase = stripRegionSuffix(parsed.district)
+  const city = normalizeRegionText(parsed.city)
+  const cityBase = stripRegionSuffix(parsed.city)
+
+  const candidates = regions.filter((region) => region.level === 3 || region.level === 4)
+  if (!candidates.length) {
+    return null
+  }
+
+  const exactDistrict = candidates.find((region) => normalizeRegionText(region.name) === district)
+  if (exactDistrict) {
+    return exactDistrict
+  }
+
+  const suffixDistrict = candidates.find((region) => {
+    const regionName = normalizeRegionText(region.name)
+    return Boolean(districtBase) && (regionName === districtBase || stripRegionSuffix(regionName) === districtBase)
+  })
+  if (suffixDistrict) {
+    return suffixDistrict
+  }
+
+  const cityScoped = candidates.find((region) => {
+    const regionName = normalizeRegionText(region.name)
+    return Boolean(cityBase) && Boolean(districtBase) && city.includes(cityBase) && (regionName.includes(districtBase) || district.includes(regionName))
+  })
+  if (cityScoped) {
+    return cityScoped
+  }
+
+  return null
 }
 
 type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
@@ -763,14 +847,43 @@ Page({
     }
   },
 
-  async resolveAndSyncRegionId(latitude?: number, longitude?: number): Promise<number> {
+  async resolveRegionIdByAddressText(address?: string): Promise<number> {
+    const rawAddress = (address || '').trim()
+    if (!rawAddress) {
+      return 0
+    }
+
+    const keywords = buildRegionSearchKeywords(rawAddress)
+    for (const keyword of keywords) {
+      try {
+        const regions = await searchRegions(keyword)
+        const matchedRegion = pickBestRegionSearchResult(regions || [], rawAddress)
+        if (!matchedRegion?.id) {
+          continue
+        }
+
+        const resolvedRegionId = Number(matchedRegion.id)
+        if (resolvedRegionId && resolvedRegionId !== toSafeNumber(this.data.formData.regionId)) {
+          this.setData({ 'formData.regionId': resolvedRegionId })
+        }
+        return resolvedRegionId
+      } catch (error) {
+        logger.warn('[MerchantRegister] 地址文本解析所属区域失败', { keyword, error })
+      }
+    }
+
+    return 0
+  },
+
+  async resolveAndSyncRegionId(latitude?: number, longitude?: number, address?: string): Promise<number> {
     const resolvedRegionId = await this.resolveRegionIdByLocation(latitude, longitude)
-    if (!resolvedRegionId) {
+    const fallbackRegionId = resolvedRegionId || await this.resolveRegionIdByAddressText(address)
+    if (!fallbackRegionId) {
       return 0
     }
 
     const syncedDraft = await this.syncToBackend()
-    return Number(syncedDraft?.region_id || resolvedRegionId)
+    return Number(syncedDraft?.region_id || fallbackRegionId)
   },
 
   loadDraft() {
@@ -892,7 +1005,7 @@ Page({
         }, () => {
           this.saveDraft()
           void (async () => {
-            const resolvedRegionId = await this.resolveAndSyncRegionId(res.latitude, res.longitude)
+            const resolvedRegionId = await this.resolveAndSyncRegionId(res.latitude, res.longitude, fullAddress)
             if (!resolvedRegionId) {
               await this.syncToBackend()
             }
@@ -1035,7 +1148,7 @@ Page({
         return
       }
 
-      let resolvedRegionId = await this.resolveAndSyncRegionId(latitude, longitude)
+      let resolvedRegionId = await this.resolveAndSyncRegionId(latitude, longitude, address)
 
       if (!resolvedRegionId) {
         const syncedDraft = await this.syncToBackend()
@@ -1595,7 +1708,7 @@ Page({
     try {
       // 1. Sync latest data to backend (prevent "empty merchant name" error)
       if (!toSafeNumber(this.data.formData.regionId)) {
-        const resolvedRegionId = await this.resolveAndSyncRegionId(formData.latitude, formData.longitude)
+        const resolvedRegionId = await this.resolveAndSyncRegionId(formData.latitude, formData.longitude, formData.address)
         if (resolvedRegionId && resolvedRegionId !== toSafeNumber(this.data.formData.regionId)) {
           this.setData({ 'formData.regionId': resolvedRegionId })
         }
