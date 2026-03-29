@@ -478,7 +478,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 	testCases := []struct {
 		name          string
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(store *mockdb.MockStore)
+		buildStubs    func(t *testing.T, store *mockdb.MockStore)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -486,7 +486,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
@@ -544,7 +544,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				licenseOCR, _ := json.Marshal(BusinessLicenseOCRData{
 					EnterpriseName: "测试科技有限公司",
@@ -590,7 +590,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				app.FoodPermitMediaAssetID = pgtype.Int8{}
 				store.EXPECT().
@@ -607,7 +607,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				app.RegionID = pgtype.Int8{Valid: false}
 				store.EXPECT().
@@ -620,11 +620,96 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "Approved_WithoutContactPhone",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				app.MerchantName = ""
+				app.ContactPhone = ""
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					GetUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(db.User{ID: user.ID}, nil)
+
+				derivedApp := app
+				derivedApp.MerchantName = "测试餐饮有限公司"
+				store.EXPECT().
+					UpdateMerchantApplicationBasicInfo(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateMerchantApplicationBasicInfoParams) (db.MerchantApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						require.True(t, arg.MerchantName.Valid)
+						require.Equal(t, "测试餐饮有限公司", arg.MerchantName.String)
+						require.False(t, arg.ContactPhone.Valid)
+						return derivedApp, nil
+					})
+
+				submittedApp := derivedApp
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.ApproveMerchantApplicationTxParams) (db.ApproveMerchantApplicationTxResult, error) {
+						require.Equal(t, "测试餐饮有限公司", arg.MerchantName)
+						require.Equal(t, "", arg.Phone)
+						return db.ApproveMerchantApplicationTxResult{
+							Application: approvedApp,
+							Merchant:    db.Merchant{ID: 1},
+						}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+				require.Equal(t, "测试餐饮有限公司", resp.MerchantName)
+				require.Equal(t, "", resp.ContactPhone)
+			},
+		},
+		{
 			name: "SubmittedStatus_Retry",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				app.Status = "submitted"
 
@@ -670,7 +755,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
-			buildStubs: func(store *mockdb.MockStore) {
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
 				store.EXPECT().
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
@@ -725,7 +810,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 			store := mockdb.NewMockStore(ctrl)
 			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
-			tc.buildStubs(store)
+			tc.buildStubs(t, store)
 
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()

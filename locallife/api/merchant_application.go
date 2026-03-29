@@ -745,6 +745,51 @@ func (server *Server) deleteMerchantApplicationDocument(ctx *gin.Context) {
 // ==================== 上传身份证并OCR识别 ====================
 // ==================== 提交申请 ====================
 
+func (server *Server) backfillMerchantSubmissionDefaults(ctx context.Context, app db.MerchantApplication) (db.MerchantApplication, error) {
+	updateArg := db.UpdateMerchantApplicationBasicInfoParams{ID: app.ID}
+	shouldPersist := false
+
+	if strings.TrimSpace(app.MerchantName) == "" && len(app.BusinessLicenseOcr) > 0 {
+		var licenseOCR BusinessLicenseOCRData
+		if err := json.Unmarshal(app.BusinessLicenseOcr, &licenseOCR); err != nil {
+			log.Warn().Err(err).Int64("application_id", app.ID).Msg("submit merchant application: decode business license OCR failed")
+		} else if merchantName := strings.TrimSpace(licenseOCR.EnterpriseName); merchantName != "" {
+			app.MerchantName = merchantName
+			if app.Status == "draft" {
+				updateArg.MerchantName = pgtype.Text{String: merchantName, Valid: true}
+				shouldPersist = true
+			}
+		}
+	}
+
+	if strings.TrimSpace(app.ContactPhone) == "" {
+		user, err := server.store.GetUser(ctx, app.UserID)
+		if err != nil {
+			log.Warn().Err(err).Int64("application_id", app.ID).Int64("user_id", app.UserID).Msg("submit merchant application: load user phone fallback failed")
+		} else if user.Phone.Valid {
+			contactPhone := strings.TrimSpace(user.Phone.String)
+			if contactPhone != "" {
+				app.ContactPhone = contactPhone
+				if app.Status == "draft" {
+					updateArg.ContactPhone = pgtype.Text{String: contactPhone, Valid: true}
+					shouldPersist = true
+				}
+			}
+		}
+	}
+
+	if !shouldPersist || app.Status != "draft" {
+		return app, nil
+	}
+
+	updatedApp, err := server.store.UpdateMerchantApplicationBasicInfo(ctx, updateArg)
+	if err != nil {
+		return app, err
+	}
+
+	return updatedApp, nil
+}
+
 // submitMerchantApplication godoc
 // @Summary 提交商户入驻申请
 // @Description 提交商户入驻申请，系统自动审核。提交前必须确保所有必填项（包括 region_id）已填充。支持从 draft/rejected/approved 状态提交。
@@ -786,6 +831,12 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 	if app.Status != "draft" && app.Status != "rejected" && app.Status != "approved" && app.Status != "submitted" {
 		log.Warn().Str("request_id", requestID).Str("current_status", app.Status).Msg("submit failed: invalid status")
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationInvalidState))
+		return
+	}
+
+	app, err = server.backfillMerchantSubmissionDefaults(ctx, app)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -860,6 +911,13 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 			return
 		}
 
+		if strings.TrimSpace(txResult.Application.MerchantName) == "" {
+			txResult.Application.MerchantName = submittedApp.MerchantName
+		}
+		if strings.TrimSpace(txResult.Application.ContactPhone) == "" {
+			txResult.Application.ContactPhone = submittedApp.ContactPhone
+		}
+
 		log.Info().
 			Int64("application_id", txResult.Application.ID).
 			Int64("merchant_id", txResult.Merchant.ID).
@@ -880,6 +938,13 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
+	if strings.TrimSpace(rejectedApp.MerchantName) == "" {
+		rejectedApp.MerchantName = submittedApp.MerchantName
+	}
+	if strings.TrimSpace(rejectedApp.ContactPhone) == "" {
+		rejectedApp.ContactPhone = submittedApp.ContactPhone
+	}
+
 	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), rejectedApp))
 }
 
@@ -887,9 +952,6 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 func validateMerchantApplicationRequired(app db.MerchantApplication) error {
 	if app.MerchantName == "" {
 		return ErrMerchantNameRequired
-	}
-	if app.ContactPhone == "" {
-		return ErrPhoneRequired
 	}
 	if app.BusinessAddress == "" {
 		return ErrMerchantAddressRequired

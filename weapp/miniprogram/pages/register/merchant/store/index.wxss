@@ -149,6 +149,18 @@
   color: #333;
 }
 
+.ocr-section-card .t-cell__title,
+.ocr-section-card .scope-label {
+  color: var(--td-text-color-secondary);
+  font-weight: 400;
+}
+
+.ocr-section-card .t-cell__note,
+.ocr-section-card .scope-content {
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
+
 .ocr-status-panel {
   margin: 0 24rpx 24rpx;
   padding: 24rpx;
@@ -222,12 +234,10 @@
 }
 .scope-label {
   font-size: 28rpx;
-  color: #333;
   margin-bottom: 12rpx;
 }
 .scope-content {
   font-size: 28rpx;
-  color: #666;
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-all;

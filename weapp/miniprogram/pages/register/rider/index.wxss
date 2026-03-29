@@ -137,6 +137,14 @@
   font-weight: 600;
   color: var(--td-text-color-primary);
 }
+.ocr-section-card .t-cell__title {
+  color: var(--td-text-color-secondary);
+  font-weight: 400;
+}
+.ocr-section-card .t-cell__note {
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
 
 .ocr-status-card {
   margin: 0 24rpx 24rpx;

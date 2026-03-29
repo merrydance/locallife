@@ -111,12 +111,6 @@
                 <view class="ocr-status-desc">请重新上传身份证正反面，确保文字完整清晰。</view>
             </view>
         </view>
-        
-        <view class="section-header">基本信息 (可编辑)</view>
-        <view class="form-group">
-            <t-input label="店铺名称" layout="vertical" placeholder="请输入店铺展示名" value="{{formData.name}}" bindchange="onNameInput" bindblur="onFieldBlur" data-field="name" />
-            <t-input label="联系电话" type="number" layout="vertical" placeholder="请输入联系电话" value="{{formData.phone}}" bindchange="onPhoneInput" bindblur="onFieldBlur" data-field="phone" />
-        </view>
     </view>
 
     <!-- Step 3: 位置与图片 -->
@@ -148,8 +142,7 @@
     <view class="step-content" wx:if="{{currentStep === 4}}">
          <view class="review-title">请确认以下信息</view>
          <view class="form-group">
-             <t-cell title="店铺名称" note="{{formData.name}}" />
-             <t-cell title="联系电话" note="{{formData.phone}}" />
+             <t-cell title="营业执照名" note="{{formData.licenseName || '--'}}" />
              <t-cell title="店铺地址" note="{{formData.address}}" />
              <t-cell title="法人姓名" note="{{formData.legalPerson}}" />
          </view>

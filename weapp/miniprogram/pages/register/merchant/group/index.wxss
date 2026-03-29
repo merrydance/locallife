@@ -160,6 +160,14 @@
   margin-bottom: 12rpx;
   margin-left: 8rpx;
 }
+.ocr-preview .t-cell__title {
+  color: var(--td-text-color-secondary);
+  font-weight: 400;
+}
+.ocr-preview .t-cell__note {
+  color: var(--td-text-color-primary);
+  font-weight: 500;
+}
 
 .ocr-preview.note-only {
   margin-top: var(--spacer-md);

@@ -669,21 +669,33 @@ Page({
   async syncToBackend() {
     if (!this.data.applicationInitialized) return
     const { formData } = this.data
-    // Only sync if minimum required fields are present
-    if (!formData.name) {
-      logger.debug('[MerchantRegister] syncToBackend skipped: no name', { name: formData.name })
+    const merchantName = formData.name?.trim() || formData.licenseName?.trim()
+    const contactPhone = formData.phone?.trim()
+    const businessAddress = formData.addressDetail || formData.address
+
+    const hasSyncableFields = Boolean(
+      merchantName
+      || contactPhone
+      || businessAddress
+      || formData.longitude
+      || formData.latitude
+      || formData.regionId
+    )
+
+    if (!hasSyncableFields) {
+      logger.debug('[MerchantRegister] syncToBackend skipped: no syncable fields')
       return
     }
 
     try {
       // 构造基础信息 payload（仅包含 PUT /basic 支持的字段）
       const payload = {
-        merchant_name: formData.name,
-        contact_phone: formData.phone,
-        business_address: formData.addressDetail || formData.address,
+        merchant_name: merchantName || undefined,
+        contact_phone: contactPhone || undefined,
+        business_address: businessAddress || undefined,
         longitude: formData.longitude ? String(formData.longitude) : undefined,
         latitude: formData.latitude ? String(formData.latitude) : undefined,
-        region_id: formData.regionId
+        region_id: formData.regionId || undefined
       }
 
       console.log('[MerchantRegister] syncToBackend payload:', JSON.stringify(payload, null, 2))
@@ -928,23 +940,11 @@ Page({
       const mergedIdCard = currentFormData.idCard
         || toSafeString(latestDraft?.id_card_front_ocr?.id_number || latestDraft?.legal_person_id_number)
 
-      const { name, phone } = currentFormData
-      const missingBasicFields: string[] = []
       const missingOCRFields: string[] = []
 
-      if (!name?.trim()) missingBasicFields.push('店铺名称')
-      if (!phone?.trim()) missingBasicFields.push('联系电话')
       if (!mergedCreditCode?.trim()) missingOCRFields.push('统一信用代码')
       if (!mergedLegalPerson?.trim()) missingOCRFields.push('法人姓名')
       if (!mergedIdCard?.trim()) missingOCRFields.push('身份证号')
-
-      if (missingBasicFields.length > 0) {
-        const message = missingBasicFields.length <= 3
-          ? `请填写: ${missingBasicFields.join('、')}`
-          : `还有 ${missingBasicFields.length} 项必填信息未完善`
-        wx.showToast({ title: message, icon: 'none', duration: 3000 })
-        return
-      }
 
       if (missingOCRFields.length > 0) {
         wx.showToast({
@@ -1429,9 +1429,6 @@ Page({
     // ========== 前端校验 ==========
     const missingFields: string[] = []
 
-    // 基本信息
-    if (!formData.name?.trim()) missingFields.push('店铺名称')
-    if (!formData.phone?.trim()) missingFields.push('联系电话')
     if (!formData.address?.trim()) missingFields.push('店铺地址')
 
     // 证照图片
