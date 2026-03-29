@@ -78,7 +78,21 @@ type OCRPollOptions = {
   timeoutMessage?: string
 }
 
+type OCRDisplayStateValue = 'idle' | 'processing' | 'done' | 'failed'
+
+type MerchantOCRDisplayState = {
+  businessLicense: OCRDisplayStateValue
+  foodPermit: OCRDisplayStateValue
+  idCard: OCRDisplayStateValue
+}
+
 const activeOcrPollers: Partial<Record<OCRFieldKey, number>> = {}
+
+const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
+  businessLicense: 'idle',
+  foodPermit: 'idle',
+  idCard: 'idle'
+}
 
 function buildPrivateAssetKey(assetId?: number | null): string | undefined {
   return assetId && assetId > 0 ? `asset:${assetId}` : undefined
@@ -119,6 +133,10 @@ function toSafeString(value: unknown): string {
   return String(value)
 }
 
+function hasFilledValue(value: unknown): boolean {
+  return toSafeString(value) !== ''
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -126,7 +144,7 @@ Page({
     isSubmitting: false, // 防止重复提交
     applicationInitialized: false, // 标记申请草稿是否已成功创建
     ocrProgressMessage: '',
-    ocrFieldPlaceholder: '系统识别中，完成后自动回填',
+    ocrDisplayState: DEFAULT_MERCHANT_OCR_DISPLAY_STATE,
     formData: {
       // 基本信息
       name: '',
@@ -323,6 +341,7 @@ Page({
       // 关键：一次性设置所有数据
       this.setData({
         formData,
+        ocrDisplayState: this.buildMerchantOcrDisplayState(data),
         ocrResults,
         licenseImages,
         foodLicenseImages,
@@ -380,6 +399,7 @@ Page({
         hometown: toSafeString(data.id_card_front_ocr?.address),
         idCardValidity: toSafeString(data.id_card_back_ocr?.valid_date)
       },
+      ocrDisplayState: this.buildMerchantOcrDisplayState(data),
       ocrResults: {
         license: data.business_license_ocr || null,
         idCard: data.id_card_front_ocr || null
@@ -484,9 +504,64 @@ Page({
     return '证照已上传，系统正在自动识别，完成后会自动回填。你可以先继续填写后续信息。'
   },
 
+  buildMerchantOcrDisplayState(data?: MerchantDraftExt): MerchantOCRDisplayState {
+    const businessLicenseUploaded = Boolean(
+      (data?.business_license_media_asset_id && data.business_license_media_asset_id > 0) || this.data.licenseImages.length > 0
+    )
+    const foodPermitUploaded = Boolean(
+      (data?.food_permit_media_asset_id && data.food_permit_media_asset_id > 0) || this.data.foodLicenseImages.length > 0
+    )
+    const idCardFrontUploaded = Boolean(
+      (data?.id_card_front_media_asset_id && data.id_card_front_media_asset_id > 0) || this.data.idCardFrontImages.length > 0
+    )
+    const idCardBackUploaded = Boolean(
+      (data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || this.data.idCardBackImages.length > 0
+    )
+
+    const businessLicenseStatus = data?.business_license_ocr?.status || ''
+    const foodPermitStatus = data?.food_permit_ocr?.status || ''
+    const idCardFrontStatus = data?.id_card_front_ocr?.status || ''
+    const idCardBackStatus = data?.id_card_back_ocr?.status || ''
+
+    const businessLicenseDone = businessLicenseStatus === 'done' || hasFilledValue(data?.business_license_ocr?.enterprise_name)
+      || hasFilledValue(data?.business_license_number)
+      || hasFilledValue(data?.business_license_ocr?.reg_num)
+      || hasFilledValue(data?.business_license_ocr?.credit_code)
+    const foodPermitDone = foodPermitStatus === 'done' || hasFilledValue(data?.food_permit_ocr?.valid_to)
+      || hasFilledValue(data?.food_permit_ocr?.permit_no)
+    const idCardFrontDone = idCardFrontStatus === 'done' || hasFilledValue(data?.id_card_front_ocr?.id_number)
+      || hasFilledValue(data?.id_card_front_ocr?.name)
+    const idCardBackDone = idCardBackStatus === 'done' || hasFilledValue(data?.id_card_back_ocr?.valid_date)
+
+    return {
+      businessLicense: businessLicenseStatus === 'failed'
+        ? 'failed'
+        : businessLicenseDone
+          ? 'done'
+          : businessLicenseUploaded
+            ? 'processing'
+            : 'idle',
+      foodPermit: foodPermitStatus === 'failed'
+        ? 'failed'
+        : foodPermitDone
+          ? 'done'
+          : foodPermitUploaded
+            ? 'processing'
+            : 'idle',
+      idCard: idCardFrontStatus === 'failed' || idCardBackStatus === 'failed'
+        ? 'failed'
+        : idCardFrontDone && idCardBackDone
+          ? 'done'
+          : idCardFrontUploaded || idCardBackUploaded
+            ? 'processing'
+            : 'idle'
+    }
+  },
+
   updateOcrProgressMessage(data?: MerchantDraftExt) {
     this.setData({
-      ocrProgressMessage: this.buildOcrProgressMessage(data)
+      ocrProgressMessage: this.buildOcrProgressMessage(data),
+      ocrDisplayState: this.buildMerchantOcrDisplayState(data)
     })
   },
 

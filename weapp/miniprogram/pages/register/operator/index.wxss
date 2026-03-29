@@ -166,6 +166,23 @@
   box-shadow: var(--shadow-sm);
 }
 
+.ocr-status-banner {
+  margin-bottom: var(--spacer-md);
+  padding: 20rpx 24rpx;
+  border-radius: var(--radius-md);
+  background: #FFF7E8;
+  border: 1rpx solid #F3D19C;
+  color: #8A5A00;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.ocr-status-banner.error {
+  background: #FFF1F0;
+  border-color: #F5B5B0;
+  color: #C62828;
+}
+
 .upload-box {
   background: #FFFFFF;
   border-radius: var(--radius-md);

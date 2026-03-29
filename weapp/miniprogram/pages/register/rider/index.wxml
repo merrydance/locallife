@@ -92,7 +92,7 @@
       <view class="card-group">
         <t-input 
           label="真实姓名" 
-          placeholder="OCR识别回填" 
+          placeholder="请填写真实姓名" 
           value="{{formData.realName}}" 
           bindchange="onInput" 
           data-field="realName" 
@@ -113,13 +113,38 @@
       </view>
 
       <view class="section-title">资质信息回填</view>
-      <view class="card-group gray-bg">
-        <t-cell title="身份证号" note="{{formData.idNumber || '待识别'}}" />
-        <t-cell title="身份证有效期" note="{{formData.idValidity || '待识别'}}" />
-        <t-cell title="健康证号" note="{{formData.healthCertNo || '待识别'}}" />
-        <t-cell title="健康证过期日" note="{{formData.healthCertDate || '待识别'}}" />
+      <view class="card-group gray-bg ocr-section-card">
+        <view class="ocr-section-title">身份证信息</view>
+        <block wx:if="{{ocrDisplayState.identity === 'done'}}">
+          <t-cell title="身份证号" note="{{formData.idNumber || '--'}}" />
+          <t-cell title="身份证有效期" note="{{formData.idValidity || '--'}}" />
+        </block>
+        <view class="ocr-status-card" wx:elif="{{ocrDisplayState.identity === 'processing'}}">
+          <view class="ocr-status-title">身份证识别中</view>
+          <view class="ocr-status-desc">身份证正反面都识别完成后，再统一展示实名信息。</view>
+        </view>
+        <view class="ocr-status-card error" wx:elif="{{ocrDisplayState.identity === 'failed'}}">
+          <view class="ocr-status-title">身份证识别失败</view>
+          <view class="ocr-status-desc">请重新上传清晰、完整的身份证正反面。</view>
+        </view>
       </view>
-      <view class="info-tip">若信息有误，请重新上传对应证照图片自动更新</view>
+
+      <view class="card-group gray-bg ocr-section-card">
+        <view class="ocr-section-title">健康证信息</view>
+        <block wx:if="{{ocrDisplayState.health === 'done'}}">
+          <t-cell title="健康证号" note="{{formData.healthCertNo || '--'}}" />
+          <t-cell title="健康证过期日" note="{{formData.healthCertDate || '--'}}" />
+        </block>
+        <view class="ocr-status-card" wx:elif="{{ocrDisplayState.health === 'processing'}}">
+          <view class="ocr-status-title">健康证识别中</view>
+          <view class="ocr-status-desc">健康证识别完成后，再统一回填证号和有效期。</view>
+        </view>
+        <view class="ocr-status-card error" wx:elif="{{ocrDisplayState.health === 'failed'}}">
+          <view class="ocr-status-title">健康证识别失败</view>
+          <view class="ocr-status-desc">请重新上传清晰、无遮挡的健康证照片。</view>
+        </view>
+      </view>
+      <view class="info-tip">若识别还在进行中，可以先继续填写手机号和常驻地区。</view>
     </view>
 
     <!-- Step 3: 预览与提交 -->

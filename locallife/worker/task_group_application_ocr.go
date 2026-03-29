@@ -13,12 +13,33 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-const TaskGroupApplicationBusinessLicenseOCR = "group_application:ocr_business_license"
+const (
+	TaskGroupApplicationBusinessLicenseOCR = "group_application:ocr_business_license"
+	TaskGroupApplicationIDCardOCR          = "group_application:ocr_id_card"
+)
 
 type groupApplicationOCRPayload struct {
-	ApplicationID int64 `json:"application_id"`
-	MediaAssetID  int64 `json:"media_asset_id,omitempty"`
-	OCRJobID      int64 `json:"ocr_job_id,omitempty"`
+	ApplicationID int64  `json:"application_id"`
+	MediaAssetID  int64  `json:"media_asset_id,omitempty"`
+	OCRJobID      int64  `json:"ocr_job_id,omitempty"`
+	Side          string `json:"side,omitempty"`
+}
+
+type groupIDCardOCRData struct {
+	Status         string `json:"status,omitempty"`
+	Error          string `json:"error,omitempty"`
+	ErrorCode      string `json:"error_code,omitempty"`
+	AlertEmittedAt string `json:"alert_emitted_at,omitempty"`
+	QueuedAt       string `json:"queued_at,omitempty"`
+	StartedAt      string `json:"started_at,omitempty"`
+	OCRJobID       *int64 `json:"ocr_job_id,omitempty"`
+	Name           string `json:"name,omitempty"`
+	IDNumber       string `json:"id_number,omitempty"`
+	Gender         string `json:"gender,omitempty"`
+	Nation         string `json:"nation,omitempty"`
+	Address        string `json:"address,omitempty"`
+	ValidDate      string `json:"valid_date,omitempty"`
+	OCRAt          string `json:"ocr_at,omitempty"`
 }
 
 func mergeGroupApplicationData(data []byte) map[string]any {
@@ -35,6 +56,14 @@ func (distributor *RedisTaskDistributor) DistributeTaskGroupApplicationBusinessL
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 	return distributor.enqueue(ctx, TaskGroupApplicationBusinessLicenseOCR, payloadBytes, withDefaultOCRTaskOptions(opts...)...)
+}
+
+func (distributor *RedisTaskDistributor) DistributeTaskGroupApplicationIDCardOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, side string, opts ...asynq.Option) error {
+	payloadBytes, err := json.Marshal(groupApplicationOCRPayload{ApplicationID: applicationID, MediaAssetID: mediaAssetID, OCRJobID: ocrJobID, Side: side})
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	return distributor.enqueue(ctx, TaskGroupApplicationIDCardOCR, payloadBytes, withDefaultOCRTaskOptions(opts...)...)
 }
 
 func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseOCR(ctx context.Context, task *asynq.Task) error {
@@ -102,5 +131,94 @@ func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationBusinessLicenseO
 	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
 
 	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Msg("✅ group business license OCR updated from ocr job")
+	return nil
+}
+
+func (processor *RedisTaskProcessor) ProcessTaskGroupApplicationIDCardOCR(ctx context.Context, task *asynq.Task) error {
+	var payload groupApplicationOCRPayload
+	if err := json.Unmarshal(task.Payload(), &payload); err != nil {
+		return fmt.Errorf("unmarshal payload: %w", asynq.SkipRetry)
+	}
+	if payload.ApplicationID <= 0 || payload.OCRJobID <= 0 || (payload.Side != "Front" && payload.Side != "Back") {
+		return fmt.Errorf("invalid group id card payload: %w", asynq.SkipRetry)
+	}
+	if processor.ocrService == nil {
+		return fmt.Errorf("ocr service not configured for group id card: %w", asynq.SkipRetry)
+	}
+
+	job, err := processor.ocrService.ExecuteJob(ctx, ocr.ExecuteJobParams{JobID: payload.OCRJobID, LeaseOwner: "worker:group_id_card"})
+	if err != nil {
+		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
+		app, getErr := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
+		if getErr == nil {
+			data := mergeGroupApplicationData(app.ApplicationData)
+			failed := groupIDCardOCRData{
+				Status:         string(ocr.JobStatusFailed),
+				QueuedAt:       job.CreatedAt.Format(time.RFC3339),
+				StartedAt:      formatPgTimestamp(job.StartedAt),
+				OCRJobID:       int64Ptr(payload.OCRJobID),
+				Error:          err.Error(),
+				ErrorCode:      ocr.ErrorCode(err),
+				AlertEmittedAt: formatOCRAlertEmittedAt(alertEmittedAt),
+			}
+			if payload.Side == "Back" {
+				data["id_card_back_ocr"] = failed
+			} else {
+				data["id_card_front_ocr"] = failed
+			}
+			merged, _ := json.Marshal(data)
+			_, _ = processor.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID, ApplicationData: merged})
+		}
+		processor.writeOCRJobAudit(ctx, job, "ocr_job_failed", ocrFailureAuditMetadata(err))
+		return asynqOCRTaskError(job, err)
+	}
+	observeOCRJob(job)
+
+	normalized, decodeErr := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
+	if decodeErr != nil {
+		return fmt.Errorf("decode normalized group id card result: %w", decodeErr)
+	}
+	app, err := processor.store.GetGroupApplication(ctx, payload.ApplicationID)
+	if err != nil {
+		return fmt.Errorf("get group application: %w", err)
+	}
+
+	data := mergeGroupApplicationData(app.ApplicationData)
+	ocrData := groupIDCardOCRData{
+		Status:    "done",
+		QueuedAt:  job.CreatedAt.Format(time.RFC3339),
+		StartedAt: formatPgTimestamp(job.StartedAt),
+		OCRJobID:  int64Ptr(job.ID),
+		OCRAt:     normalized.RecognizedAt.Format(time.RFC3339),
+	}
+	if normalized.IDCard != nil {
+		if payload.Side == "Back" {
+			ocrData.ValidDate = normalized.IDCard.ValidPeriod
+		} else {
+			ocrData.Name = normalized.IDCard.Name
+			ocrData.IDNumber = normalized.IDCard.IDNumber
+			ocrData.Gender = normalized.IDCard.Gender
+			ocrData.Nation = normalized.IDCard.Ethnicity
+			ocrData.Address = normalized.IDCard.Address
+			if normalized.IDCard.Name != "" {
+				data["legal_person_name"] = normalized.IDCard.Name
+			}
+			if normalized.IDCard.IDNumber != "" {
+				data["legal_person_id_number"] = normalized.IDCard.IDNumber
+			}
+		}
+	}
+	if payload.Side == "Back" {
+		data["id_card_back_ocr"] = ocrData
+	} else {
+		data["id_card_front_ocr"] = ocrData
+	}
+	merged, _ := json.Marshal(data)
+	_, err = processor.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{ID: payload.ApplicationID, ApplicationData: merged})
+	if err != nil {
+		return fmt.Errorf("update group application id card: %w", err)
+	}
+	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
+	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Str("side", payload.Side).Msg("✅ group id card OCR updated from ocr job")
 	return nil
 }

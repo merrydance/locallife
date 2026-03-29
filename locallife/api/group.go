@@ -18,20 +18,37 @@ import (
 // ==================== Group Application ====================
 
 type groupApplicationResponse struct {
-	ID                  int64      `json:"id"`
-	ApplicantUserID     int64      `json:"applicant_user_id"`
-	GroupName           string     `json:"group_name"`
-	ContactPhone        string     `json:"contact_phone"`
-	LicenseNumber       *string    `json:"license_number,omitempty"`
-	LicenseImageAssetID *int64     `json:"license_image_asset_id,omitempty"`
-	Address             *string    `json:"address,omitempty"`
-	RegionID            *int64     `json:"region_id,omitempty"`
-	Status              string     `json:"status"`
-	RejectReason        *string    `json:"reject_reason,omitempty"`
-	ReviewedBy          *int64     `json:"reviewed_by,omitempty"`
-	ReviewedAt          *time.Time `json:"reviewed_at,omitempty"`
-	CreatedAt           time.Time  `json:"created_at"`
-	UpdatedAt           time.Time  `json:"updated_at"`
+	ID                  int64                   `json:"id"`
+	ApplicantUserID     int64                   `json:"applicant_user_id"`
+	GroupName           string                  `json:"group_name"`
+	ContactPhone        string                  `json:"contact_phone"`
+	LicenseNumber       *string                 `json:"license_number,omitempty"`
+	LicenseImageAssetID *int64                  `json:"license_image_asset_id,omitempty"`
+	BusinessLicenseOCR  *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
+	LegalPersonName     string                  `json:"legal_person_name,omitempty"`
+	LegalPersonIDNumber string                  `json:"legal_person_id_number,omitempty"`
+	IDCardFrontAssetID  *int64                  `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID   *int64                  `json:"id_card_back_asset_id,omitempty"`
+	IDCardFrontOCR      *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
+	IDCardBackOCR       *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
+	Address             *string                 `json:"address,omitempty"`
+	RegionID            *int64                  `json:"region_id,omitempty"`
+	Status              string                  `json:"status"`
+	RejectReason        *string                 `json:"reject_reason,omitempty"`
+	ReviewedBy          *int64                  `json:"reviewed_by,omitempty"`
+	ReviewedAt          *time.Time              `json:"reviewed_at,omitempty"`
+	CreatedAt           time.Time               `json:"created_at"`
+	UpdatedAt           time.Time               `json:"updated_at"`
+}
+
+type groupApplicationDataPayload struct {
+	BusinessLicenseOCR  *BusinessLicenseOCRData `json:"business_license_ocr,omitempty"`
+	LegalPersonName     string                  `json:"legal_person_name,omitempty"`
+	LegalPersonIDNumber string                  `json:"legal_person_id_number,omitempty"`
+	IDCardFrontAssetID  *int64                  `json:"id_card_front_asset_id,omitempty"`
+	IDCardBackAssetID   *int64                  `json:"id_card_back_asset_id,omitempty"`
+	IDCardFrontOCR      *MerchantIDCardOCRData  `json:"id_card_front_ocr,omitempty"`
+	IDCardBackOCR       *MerchantIDCardOCRData  `json:"id_card_back_ocr,omitempty"`
 }
 
 type groupResponse struct {
@@ -130,6 +147,24 @@ func newGroupApplicationResponse(app db.MerchantGroupApplication) groupApplicati
 	resp.RejectReason = pgTextToPtr(app.RejectReason)
 	resp.ReviewedBy = pgInt8ToPtr(app.ReviewedBy)
 	resp.ReviewedAt = pgTimeToPtr(app.ReviewedAt)
+
+	var payload groupApplicationDataPayload
+	if len(app.ApplicationData) > 0 {
+		_ = json.Unmarshal(app.ApplicationData, &payload)
+	}
+	resp.BusinessLicenseOCR = payload.BusinessLicenseOCR
+	resp.LegalPersonName = payload.LegalPersonName
+	if resp.LegalPersonName == "" && payload.IDCardFrontOCR != nil {
+		resp.LegalPersonName = payload.IDCardFrontOCR.Name
+	}
+	resp.LegalPersonIDNumber = payload.LegalPersonIDNumber
+	if resp.LegalPersonIDNumber == "" && payload.IDCardFrontOCR != nil {
+		resp.LegalPersonIDNumber = payload.IDCardFrontOCR.IDNumber
+	}
+	resp.IDCardFrontAssetID = payload.IDCardFrontAssetID
+	resp.IDCardBackAssetID = payload.IDCardBackAssetID
+	resp.IDCardFrontOCR = payload.IDCardFrontOCR
+	resp.IDCardBackOCR = payload.IDCardBackOCR
 	return resp
 }
 

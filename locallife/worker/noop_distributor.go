@@ -120,6 +120,10 @@ func (NoopTaskDistributor) DistributeTaskGroupApplicationBusinessLicenseOCR(ctx 
 	return nil
 }
 
+func (NoopTaskDistributor) DistributeTaskGroupApplicationIDCardOCR(ctx context.Context, applicationID int64, mediaAssetID int64, ocrJobID int64, side string, opts ...asynq.Option) error {
+	return nil
+}
+
 func (NoopTaskDistributor) DistributeTaskUploadShippingInfo(ctx context.Context, payload *UploadShippingInfoPayload, opts ...asynq.Option) error {
 	return nil
 }

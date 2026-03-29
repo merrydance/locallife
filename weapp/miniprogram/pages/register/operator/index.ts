@@ -41,7 +41,25 @@ type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
 type UploadFieldValue = {
   url: string
+  rawUrl?: string
   assetId?: number
+}
+
+type OCRDisplayStateValue = 'idle' | 'processing' | 'done' | 'failed'
+
+type OperatorOCRDisplayState = {
+  businessLicense: OCRDisplayStateValue
+  idCard: OCRDisplayStateValue
+}
+
+const DEFAULT_OPERATOR_OCR_DISPLAY_STATE: OperatorOCRDisplayState = {
+  businessLicense: 'idle',
+  idCard: 'idle'
+}
+
+function getOCRString(payload: Record<string, unknown> | undefined, key: string): string {
+  const value = payload?.[key]
+  return typeof value === 'string' ? value.trim() : ''
 }
 
 function getErrorText(error: unknown, fallback: string): string {
@@ -103,9 +121,9 @@ Page({
     navBarHeight: 88,
     currentStep: 0,
     isSubmitting: false,
-    idFront: { url: '', rawUrl: '' },
-    idBack: { url: '', rawUrl: '' },
-    license: { url: '', rawUrl: '' },
+    idFront: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
+    idBack: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
+    license: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     
     // 核心表单数据
     formData: {
@@ -129,6 +147,7 @@ Page({
     lastRegionSearchCityId: 0,
     regionOptions: [] as RegionOption[],     // 原始列表
     filteredRegions: [] as RegionOption[],   // 搜索过滤后的列表
+    ocrDisplayState: DEFAULT_OPERATOR_OCR_DISPLAY_STATE,
     consentChecked: false,
     consentPopupVisible: false
   },
@@ -469,7 +488,8 @@ Page({
       'formData.years': Number(res.requested_contract_years || 3),
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
-      license: { url: '', assetId: res.business_license_asset_id }
+      license: { url: '', assetId: res.business_license_asset_id },
+      ocrDisplayState: this.buildOperatorOcrDisplayState(res)
     }
 
     // 优先使用后端返回的名称，否则尝试从本地 Options 中反查
@@ -497,6 +517,39 @@ Page({
     this.setData(newData, () => {
       void this.refreshUploadPreviewURLs()
     })
+  },
+
+  buildOperatorOcrDisplayState(res?: OperatorApplicationResponse): OperatorOCRDisplayState {
+    const businessLicenseUploaded = Boolean(res?.business_license_asset_id || this.data.license.assetId || this.data.license.url)
+    const idCardUploaded = Boolean(
+      (res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
+      && (res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+    )
+
+    const businessLicenseDone = Boolean(
+      getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'enterprise_name')
+      || getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'credit_code')
+      || getOCRString(res?.business_license_ocr as Record<string, unknown> | undefined, 'reg_num')
+      || String(res?.business_license_number || '').trim()
+    )
+    const idCardDone = Boolean(
+      getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'name')
+      && getOCRString(res?.id_card_front_ocr as Record<string, unknown> | undefined, 'id_number')
+      && getOCRString(res?.id_card_back_ocr as Record<string, unknown> | undefined, 'valid_date')
+    )
+
+    return {
+      businessLicense: businessLicenseDone ? 'done' : businessLicenseUploaded ? 'processing' : 'idle',
+      idCard: idCardDone ? 'done' : idCardUploaded ? 'processing' : 'idle'
+    }
+  },
+
+  setOCRState(type: keyof OperatorOCRDisplayState, status: OCRDisplayStateValue) {
+    this.setData({ [`ocrDisplayState.${type}`]: status })
+  },
+
+  isPendingOCRMessage(message: string): boolean {
+    return message.includes('处理中') || message.includes('审核中') || message.includes('识别中')
   },
 
   /**
@@ -695,7 +748,7 @@ Page({
       'idFront.url': path,
       'idFront.rawUrl': path
     })
-    this.processOCR(ocrOperatorIdCard(path, 'Front'))
+    this.processOCR(ocrOperatorIdCard(path, 'Front'), 'idCard')
   },
 
   async onIdBackUpload(e: UploadEvent) {
@@ -705,7 +758,7 @@ Page({
       'idBack.url': path,
       'idBack.rawUrl': path
     })
-    this.processOCR(ocrOperatorIdCard(path, 'Back'))
+    this.processOCR(ocrOperatorIdCard(path, 'Back'), 'idCard')
   },
 
   async onLicenseUpload(e: UploadEvent) {
@@ -715,20 +768,27 @@ Page({
       'license.url': path,
       'license.rawUrl': path
     })
-    this.processOCR(ocrOperatorBusinessLicense(path))
+    this.processOCR(ocrOperatorBusinessLicense(path), 'businessLicense')
   },
 
-  async processOCR(ocrPromise: Promise<OperatorApplicationResponse>) {
+  async processOCR(ocrPromise: Promise<OperatorApplicationResponse>, type: keyof OperatorOCRDisplayState) {
+    this.setOCRState(type, 'processing')
     wx.showLoading({ title: '智能识别中...' })
     try {
       const res = await ocrPromise
+      const nextState = this.buildOperatorOcrDisplayState(res)
       this.mapResponseToData(res)
       wx.hideLoading()
-      wx.showToast({ title: '自动识别成功', icon: 'none' })
+      wx.showToast({
+        title: nextState[type] === 'done' ? '自动识别成功' : '图片已上传，系统继续识别中',
+        icon: 'none'
+      })
     } catch (e) {
       wx.hideLoading()
       logger.error('OCR failed', e)
-      wx.showToast({ title: getErrorText(e, '图片已上传，系统处理中'), icon: 'none', duration: 3000 })
+      const message = getErrorText(e, '图片已上传，系统处理中')
+      this.setOCRState(type, this.isPendingOCRMessage(message) ? 'processing' : 'failed')
+      wx.showToast({ title: message, icon: 'none', duration: 3000 })
     }
   },
 

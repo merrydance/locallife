@@ -245,6 +245,65 @@ func TestCreateOCRJob_MarksGroupBusinessLicensePending(t *testing.T) {
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
+func TestCreateOCRJob_MarksGroupIDCardPending(t *testing.T) {
+	user, _ := randomUser(t)
+	app := randomGroupApplication(user.ID)
+	app.ApplicationData = []byte(`{"existing":{"ok":true}}`)
+	job := db.OcrJob{ID: 332, Status: "pending", DocumentType: string(ocr.DocumentTypeIDCard), Provider: string(ocr.ProviderNameAliyun), MediaAssetID: 802, OwnerType: string(ocr.OwnerTypeGroupApplication), OwnerID: app.ID, Side: string(ocr.DocumentSideFront), CreatedAt: time.Now()}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+	store := mockdb.NewMockStore(ctrl)
+	distributor := mockworker.NewMockTaskDistributor(ctrl)
+
+	gomock.InOrder(
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().GetMediaAssetByID(gomock.Any(), int64(802)).Return(db.MediaAsset{ID: 802, ModerationStatus: "approved"}, nil),
+		store.EXPECT().UpsertOCRJob(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpsertOCRJobParams) (db.OcrJob, error) {
+			require.Equal(t, string(ocr.DocumentTypeIDCard), arg.DocumentType)
+			require.Equal(t, string(ocr.OwnerTypeGroupApplication), arg.OwnerType)
+			require.Equal(t, string(ocr.DocumentSideFront), arg.Side)
+			return job, nil
+		}),
+		store.EXPECT().GetGroupApplication(gomock.Any(), app.ID).Return(app, nil),
+		store.EXPECT().UpdateGroupApplicationLicense(gomock.Any(), gomock.Any()).DoAndReturn(func(_ any, arg db.UpdateGroupApplicationLicenseParams) (db.MerchantGroupApplication, error) {
+			require.Equal(t, app.ID, arg.ID)
+
+			var merged map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(arg.ApplicationData, &merged))
+			require.Contains(t, merged, "existing")
+			require.Contains(t, merged, "id_card_front_asset_id")
+			require.Contains(t, merged, "id_card_front_ocr")
+
+			var assetID int64
+			require.NoError(t, json.Unmarshal(merged["id_card_front_asset_id"], &assetID))
+			require.Equal(t, int64(802), assetID)
+
+			var payload MerchantIDCardOCRData
+			require.NoError(t, json.Unmarshal(merged["id_card_front_ocr"], &payload))
+			require.Equal(t, "pending", payload.Status)
+			require.NotNil(t, payload.OCRJobID)
+			require.Equal(t, int64(332), *payload.OCRJobID)
+			return app, nil
+		}),
+	)
+	distributor.EXPECT().DistributeTaskGroupApplicationIDCardOCR(gomock.Any(), app.ID, int64(802), int64(332), "Front").Return(nil)
+
+	server := newTestServer(t, store)
+	server.SetTaskDistributorForTest(distributor)
+
+	body, err := json.Marshal(createOCRJobRequest{DocumentType: "id_card", MediaAssetID: 802, OwnerType: "group_application", OwnerID: app.ID, Side: "front"})
+	require.NoError(t, err)
+	request, err := http.NewRequest(http.MethodPost, "/v1/ocr/jobs", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+}
+
 func TestCreateOCRJob_RejectsPendingModerationMedia(t *testing.T) {
 	user, _ := randomUser(t)
 	app := randomMerchantAppDraft(user.ID)

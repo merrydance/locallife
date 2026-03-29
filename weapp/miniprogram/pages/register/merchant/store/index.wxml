@@ -58,23 +58,58 @@
     <view class="step-content" wx:if="{{currentStep === 2}}">
         <view class="section-header">证照信息 (OCR识别)</view>
         <view class="ocr-progress-notice" wx:if="{{ocrProgressMessage}}">{{ocrProgressMessage}}</view>
-        <view class="form-group readonly-group">
-            <t-cell title="营业执照名" note="{{formData.licenseName || ocrFieldPlaceholder}}" />
-            <t-cell title="统一信用代码" note="{{formData.creditCode || ocrFieldPlaceholder}}" />
-            <t-cell title="注册地址" note="{{formData.registerAddress || ocrFieldPlaceholder}}" />
-            <t-cell title="营业期限" note="{{formData.licenseValidity || ocrFieldPlaceholder}}" />
-            <view class="scope-cell">
-                <view class="scope-label">经营范围</view>
-                <view class="scope-content">{{formData.businessScope || ocrFieldPlaceholder}}</view>
+        <view class="form-group readonly-group ocr-section-card">
+            <view class="ocr-section-title">营业执照</view>
+            <block wx:if="{{ocrDisplayState.businessLicense === 'done'}}">
+                <t-cell title="营业执照名" note="{{formData.licenseName || '--'}}" />
+                <t-cell title="统一信用代码" note="{{formData.creditCode || '--'}}" />
+                <t-cell title="注册地址" note="{{formData.registerAddress || '--'}}" />
+                <t-cell title="营业期限" note="{{formData.licenseValidity || '--'}}" />
+                <view class="scope-cell">
+                    <view class="scope-label">经营范围</view>
+                    <view class="scope-content">{{formData.businessScope || '--'}}</view>
+                </view>
+            </block>
+            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.businessLicense === 'processing'}}">
+                <view class="ocr-status-title">营业执照识别中</view>
+                <view class="ocr-status-desc">营业执照整张识别完成后再统一回填，不再按单个字段穿插占位。</view>
             </view>
-            <t-cell title="许可证有效期" note="{{formData.foodLicenseValidity || ocrFieldPlaceholder}}" />
+            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.businessLicense === 'failed'}}">
+                <view class="ocr-status-title">营业执照识别失败</view>
+                <view class="ocr-status-desc">请重新上传清晰、完整的营业执照照片。</view>
+            </view>
+        </view>
+
+        <view class="form-group readonly-group ocr-section-card">
+            <view class="ocr-section-title">食品经营许可证</view>
+            <block wx:if="{{ocrDisplayState.foodPermit === 'done'}}">
+                <t-cell title="许可证有效期" note="{{formData.foodLicenseValidity || '--'}}" />
+            </block>
+            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.foodPermit === 'processing'}}">
+                <view class="ocr-status-title">许可证识别中</view>
+                <view class="ocr-status-desc">许可证识别完成后会统一回填有效期等信息。</view>
+            </view>
+            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.foodPermit === 'failed'}}">
+                <view class="ocr-status-title">许可证识别失败</view>
+                <view class="ocr-status-desc">请重新上传清晰、无遮挡的许可证照片。</view>
+            </view>
         </view>
 
         <view class="section-header">法人信息 (OCR识别)</view>
-        <view class="form-group readonly-group">
-            <t-cell title="法人姓名" note="{{formData.legalPerson || ocrFieldPlaceholder}}" />
-            <t-cell title="身份证号" note="{{formData.idCard || ocrFieldPlaceholder}}" />
-            <t-cell title="身份证有效期" note="{{formData.idCardValidity || ocrFieldPlaceholder}}" />
+        <view class="form-group readonly-group ocr-section-card">
+            <block wx:if="{{ocrDisplayState.idCard === 'done'}}">
+                <t-cell title="法人姓名" note="{{formData.legalPerson || '--'}}" />
+                <t-cell title="身份证号" note="{{formData.idCard || '--'}}" />
+                <t-cell title="身份证有效期" note="{{formData.idCardValidity || '--'}}" />
+            </block>
+            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.idCard === 'processing'}}">
+                <view class="ocr-status-title">法人身份证识别中</view>
+                <view class="ocr-status-desc">身份证人像面和国徽面都处理完成后，再统一展示法人信息。</view>
+            </view>
+            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.idCard === 'failed'}}">
+                <view class="ocr-status-title">法人身份证识别失败</view>
+                <view class="ocr-status-desc">请重新上传身份证正反面，确保文字完整清晰。</view>
+            </view>
         </view>
         
         <view class="section-header">基本信息 (可编辑)</view>

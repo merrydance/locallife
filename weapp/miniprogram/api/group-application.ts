@@ -4,13 +4,47 @@ import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 import { ApplicationStatus } from './onboarding'
 import type { AgreementConsentPayload } from './agreement-consent'
 
+export interface GroupBusinessLicenseOCR {
+  status?: 'pending' | 'processing' | 'done' | 'failed'
+  error?: string
+  queued_at?: string
+  started_at?: string
+  ocr_at?: string
+  ocr_job_id?: number
+  credit_code?: string
+  reg_num?: string
+  enterprise_name?: string
+}
+
+export interface GroupIDCardOCR {
+  status?: 'pending' | 'processing' | 'done' | 'failed'
+  error?: string
+  queued_at?: string
+  started_at?: string
+  ocr_at?: string
+  ocr_job_id?: number
+  name?: string
+  id_number?: string
+  gender?: string
+  nation?: string
+  address?: string
+  valid_date?: string
+}
+
 export interface GroupApplicationResponse {
   id: number
   applicant_user_id: number
   group_name: string
   contact_phone: string
   license_number?: string
-  license_image_url?: string
+  license_image_asset_id?: number
+  business_license_ocr?: GroupBusinessLicenseOCR
+  legal_person_name?: string
+  legal_person_id_number?: string
+  id_card_front_asset_id?: number
+  id_card_back_asset_id?: number
+  id_card_front_ocr?: GroupIDCardOCR
+  id_card_back_ocr?: GroupIDCardOCR
   address?: string
   region_id?: number
   status: ApplicationStatus
@@ -25,7 +59,7 @@ export interface UpdateGroupApplicationBasicRequest {
   group_name?: string
   contact_phone?: string
   license_number?: string
-  license_image_url?: string
+  license_image_asset_id?: number
   address?: string
   region_id?: number
 }
@@ -82,6 +116,28 @@ export async function ocrGroupBusinessLicense(filePath: string) {
       media_asset_id: mediaId,
       owner_type: 'group_application',
       owner_id: draft.id
+    },
+    getOrCreateGroupApplication
+  )
+}
+
+/**
+ * 上传集团负责人身份证并通过统一 OCR job 识别
+ */
+export async function ocrGroupIdCard(filePath: string, side: 'Front' | 'Back') {
+  const mediaCategory = side === 'Front' ? 'id_card_front' : 'id_card_back'
+  const { mediaId } = await uploadMedia(filePath, {
+    businessType: 'group',
+    mediaCategory
+  })
+  const draft = await getOrCreateGroupApplication()
+  return enqueueOCRJobAndRefresh(
+    {
+      document_type: 'id_card',
+      media_asset_id: mediaId,
+      owner_type: 'group_application',
+      owner_id: draft.id,
+      side: side === 'Front' ? 'front' : 'back'
     },
     getOrCreateGroupApplication
   )

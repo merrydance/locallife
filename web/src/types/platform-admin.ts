@@ -69,7 +69,14 @@ export type AdminGroupApplication = {
   group_name: string;
   contact_phone: string;
   license_number?: string;
-  license_image_url?: string;
+  license_image_asset_id?: number;
+  business_license_ocr?: AdminGroupBusinessLicenseOCR;
+  legal_person_name?: string;
+  legal_person_id_number?: string;
+  id_card_front_asset_id?: number;
+  id_card_back_asset_id?: number;
+  id_card_front_ocr?: AdminGroupIDCardOCR;
+  id_card_back_ocr?: AdminGroupIDCardOCR;
   address?: string;
   region_id?: number;
   status: "draft" | "submitted" | "approved" | "rejected" | string;
@@ -86,6 +93,41 @@ export type AdminGroupApplicationsResponse = {
   page: number;
   limit: number;
   has_more: boolean;
+};
+
+export type AdminGroupBusinessLicenseOCR = {
+  status?: string;
+  error?: string;
+  error_code?: string;
+  alert_emitted_at?: string;
+  queued_at?: string;
+  started_at?: string;
+  ocr_job_id?: number;
+  credit_code?: string;
+  reg_num?: string;
+  enterprise_name?: string;
+  legal_representative?: string;
+  address?: string;
+  business_scope?: string;
+  valid_period?: string;
+  ocr_at?: string;
+};
+
+export type AdminGroupIDCardOCR = {
+  status?: string;
+  error?: string;
+  error_code?: string;
+  alert_emitted_at?: string;
+  queued_at?: string;
+  started_at?: string;
+  ocr_job_id?: number;
+  name?: string;
+  id_number?: string;
+  gender?: string;
+  nation?: string;
+  address?: string;
+  valid_date?: string;
+  ocr_at?: string;
 };
 
 export type AdminRegionExpansionApplication = {

@@ -113,6 +113,12 @@
     <!-- Step 2: 企业与法人资质 -->
     <view class="step-view animate-fade-in" wx:if="{{currentStep === 2}}">
       <view class="section-title">资质上传（身份证必填，营业执照可选）</view>
+      <view class="ocr-status-banner" wx:if="{{ocrDisplayState.idCard === 'processing' || ocrDisplayState.businessLicense === 'processing'}}">
+        资质图片已上传，系统仍在自动识别。你可以继续下一步，提交时会按最新识别结果核验。
+      </view>
+      <view class="ocr-status-banner error" wx:if="{{ocrDisplayState.idCard === 'failed' || ocrDisplayState.businessLicense === 'failed'}}">
+        部分资质识别未完成，建议重新上传清晰图片后再提交。
+      </view>
       
       <view class="upload-section">
         <view class="label-row">
@@ -153,6 +159,9 @@
 
     <!-- Step 3: 确认提交 -->
     <view class="step-view animate-fade-in" wx:if="{{currentStep === 3}}">
+      <view class="ocr-status-banner" wx:if="{{ocrDisplayState.idCard === 'processing' || ocrDisplayState.businessLicense === 'processing'}}">
+        系统仍在核验资质图片，本页不再展示字段级占位，避免把不同证照的进度混在一起。
+      </view>
       <view class="final-check">
         <t-icon name="check-circle-filled" size="120rpx" color="var(--td-brand-color)" />
         <view class="check-title">确认以上信息真实有效</view>

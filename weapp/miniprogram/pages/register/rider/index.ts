@@ -17,7 +17,20 @@ type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
 type UploadFieldValue = {
   url: string
+  rawUrl?: string
   assetId?: number
+}
+
+type OCRDisplayStateValue = 'idle' | 'processing' | 'done' | 'failed'
+
+type RiderOCRDisplayState = {
+  identity: OCRDisplayStateValue
+  health: OCRDisplayStateValue
+}
+
+const DEFAULT_RIDER_OCR_DISPLAY_STATE: RiderOCRDisplayState = {
+  identity: 'idle',
+  health: 'idle'
 }
 
 function getErrorMessage(error: unknown, fallback: string): string {
@@ -37,6 +50,7 @@ Page({
     idFront: { url: '', assetId: undefined } as UploadFieldValue,
     idBack: { url: '', assetId: undefined } as UploadFieldValue,
     healthCert: { url: '', assetId: undefined } as UploadFieldValue,
+    ocrDisplayState: DEFAULT_RIDER_OCR_DISPLAY_STATE,
     formData: {
       realName: '',
       phone: '',
@@ -101,10 +115,35 @@ Page({
       'formData.healthCertDate': res.health_cert_ocr?.valid_end || '',
       idFront: { url: '', assetId: res.id_card_front_asset_id },
       idBack: { url: '', assetId: res.id_card_back_asset_id },
-      healthCert: { url: '', assetId: res.health_cert_asset_id }
+      healthCert: { url: '', assetId: res.health_cert_asset_id },
+      ocrDisplayState: this.buildRiderOcrDisplayState(res)
     }, () => {
       void this.refreshUploadPreviewURLs()
     })
+  },
+
+  buildRiderOcrDisplayState(res?: RiderApplicationResponse): RiderOCRDisplayState {
+    const identityUploaded = Boolean(
+      (res?.id_card_front_asset_id || this.data.idFront.assetId || this.data.idFront.url)
+      && (res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
+    )
+    const healthUploaded = Boolean(res?.health_cert_asset_id || this.data.healthCert.assetId || this.data.healthCert.url)
+
+    const identityDone = Boolean(res?.id_card_ocr?.name && res.id_card_ocr?.id_number && res.id_card_ocr?.valid_end)
+    const healthDone = Boolean(res?.health_cert_ocr?.cert_number && res.health_cert_ocr?.valid_end)
+
+    return {
+      identity: identityDone ? 'done' : identityUploaded ? 'processing' : 'idle',
+      health: healthDone ? 'done' : healthUploaded ? 'processing' : 'idle'
+    }
+  },
+
+  setOCRState(type: 'identity' | 'health', status: OCRDisplayStateValue) {
+    this.setData({ [`ocrDisplayState.${type}`]: status })
+  },
+
+  isPendingOCRMessage(message: string): boolean {
+    return message.includes('处理中') || message.includes('审核中') || message.includes('识别中')
   },
 
   async resolveUploadPreviewURL(assetId?: number): Promise<string> {
@@ -140,21 +179,21 @@ Page({
   async onIdFrontUpload(e: UploadEvent) {
     const { path } = e.detail
     if (!path) return
-    this.setData({ 'idFront.url': path })
+    this.setData({ 'idFront.url': path, 'idFront.rawUrl': path })
     this.processOCR(ocrRiderIdCard(path, 'Front'), 'identity')
   },
 
   async onIdBackUpload(e: UploadEvent) {
     const { path } = e.detail
     if (!path) return
-    this.setData({ 'idBack.url': path })
+    this.setData({ 'idBack.url': path, 'idBack.rawUrl': path })
     this.processOCR(ocrRiderIdCard(path, 'Back'), 'identity')
   },
 
   async onHealthCertUpload(e: UploadEvent) {
     const { path } = e.detail
     if (!path) return
-    this.setData({ 'healthCert.url': path })
+    this.setData({ 'healthCert.url': path, 'healthCert.rawUrl': path })
     this.processOCR(ocrRiderHealthCert(path), 'health')
   },
 
@@ -172,16 +211,23 @@ Page({
   },
 
   async processOCR(ocrPromise: Promise<RiderApplicationResponse>, _type: 'identity' | 'health') {
+    this.setOCRState(_type, 'processing')
     wx.showLoading({ title: '智能识别中...' })
     try {
       const res = await ocrPromise
+      const nextState = this.buildRiderOcrDisplayState(res)
       this.mapResponseToData(res)
       wx.hideLoading()
-      wx.showToast({ title: '识别成功', icon: 'none' })
+      wx.showToast({
+        title: nextState[_type] === 'done' ? '识别成功' : '图片已上传，系统继续识别中',
+        icon: 'none'
+      })
     } catch (e) {
       wx.hideLoading()
       logger.error('OCR failed', e)
-      wx.showToast({ title: getErrorMessage(e, '图片已上传，系统处理中'), icon: 'none', duration: 3000 })
+      const message = getErrorMessage(e, '图片已上传，系统处理中')
+      this.setOCRState(_type, this.isPendingOCRMessage(message) ? 'processing' : 'failed')
+      wx.showToast({ title: message, icon: 'none', duration: 3000 })
     }
   },
 

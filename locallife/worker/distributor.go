@@ -212,6 +212,16 @@ type TaskDistributor interface {
 		opts ...asynq.Option,
 	) error
 
+	// DistributeTaskGroupApplicationIDCardOCR 分发集团身份证 OCR 任务
+	DistributeTaskGroupApplicationIDCardOCR(
+		ctx context.Context,
+		applicationID int64,
+		mediaAssetID int64,
+		ocrJobID int64,
+		side string,
+		opts ...asynq.Option,
+	) error
+
 	// DistributeTaskUploadShippingInfo 分发微信发货信息上报任务（合规，支持自动重试）
 	DistributeTaskUploadShippingInfo(
 		ctx context.Context,

@@ -59,6 +59,23 @@
   line-height: 1.5;
 }
 
+.ocr-banner {
+  margin-bottom: var(--spacer-md);
+  padding: 20rpx 24rpx;
+  border-radius: var(--radius-md);
+  background: #FFF7E8;
+  border: 1rpx solid #F3D19C;
+  color: #8A5A00;
+  font-size: 24rpx;
+  line-height: 1.6;
+}
+
+.ocr-banner.error {
+  background: #FFF1F0;
+  border-color: #F5B5B0;
+  color: #C62828;
+}
+
 .section-title {
   font-size: 30rpx;
   font-weight: bold;
@@ -142,6 +159,24 @@
   color: var(--td-text-color-placeholder);
   margin-bottom: 12rpx;
   margin-left: 8rpx;
+}
+
+.ocr-preview.note-only {
+  margin-top: var(--spacer-md);
+  padding: 24rpx;
+  border-radius: var(--radius-md);
+  background: #FFF7E8;
+  border: 1rpx solid #F3D19C;
+}
+
+.ocr-note {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: #8A5A00;
+}
+
+.ocr-note.error {
+  color: #C62828;
 }
 
 .review-header {

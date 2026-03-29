@@ -194,7 +194,10 @@ func isSupportedOCRJob(ownerType ocr.OwnerType, documentType ocr.DocumentType, s
 		}
 		return documentType == ocr.DocumentTypeIDCard && (side == ocr.DocumentSideFront || side == ocr.DocumentSideBack)
 	case ocr.OwnerTypeGroupApplication:
-		return documentType == ocr.DocumentTypeBusinessLicense && side == ocr.DocumentSideUnknown
+		if documentType == ocr.DocumentTypeBusinessLicense {
+			return side == ocr.DocumentSideUnknown
+		}
+		return documentType == ocr.DocumentTypeIDCard && (side == ocr.DocumentSideFront || side == ocr.DocumentSideBack)
 	default:
 		return false
 	}
@@ -287,8 +290,11 @@ func (server *Server) enqueueOCRJob(ctx *gin.Context, job db.OcrJob) error {
 			return server.taskDistributor.DistributeTaskRiderApplicationHealthCertOCR(ctx, job.OwnerID, job.MediaAssetID, job.ID)
 		}
 	case ocr.OwnerTypeGroupApplication:
-		if documentType == ocr.DocumentTypeBusinessLicense {
+		switch documentType {
+		case ocr.DocumentTypeBusinessLicense:
 			return server.taskDistributor.DistributeTaskGroupApplicationBusinessLicenseOCR(ctx, job.OwnerID, job.MediaAssetID, job.ID)
+		case ocr.DocumentTypeIDCard:
+			return server.taskDistributor.DistributeTaskGroupApplicationIDCardOCR(ctx, job.OwnerID, job.MediaAssetID, job.ID, strings.Title(side))
 		}
 	}
 	return fmt.Errorf("unsupported ocr job dispatch: owner_type=%s document_type=%s side=%s", job.OwnerType, job.DocumentType, job.Side)
@@ -510,32 +516,64 @@ func (server *Server) markGroupApplicationOCRPending(ctx *gin.Context, job db.Oc
 	if app.Status != "draft" {
 		return nil
 	}
-	if ocr.DocumentType(job.DocumentType) != ocr.DocumentTypeBusinessLicense {
-		return nil
-	}
 
 	queuedAt := job.CreatedAt.Format(time.RFC3339)
 	ocrJobID := job.ID
-	payload, marshalErr := json.Marshal(BusinessLicenseOCRData{
-		Status:   "pending",
-		QueuedAt: queuedAt,
-		OCRJobID: &ocrJobID,
-	})
-	if marshalErr != nil {
-		return marshalErr
-	}
 	applicationData := mergeGroupApplicationData(app.ApplicationData)
-	applicationData["business_license_ocr"] = payload
-	merged, marshalErr := json.Marshal(applicationData)
-	if marshalErr != nil {
-		return marshalErr
+
+	switch ocr.DocumentType(job.DocumentType) {
+	case ocr.DocumentTypeBusinessLicense:
+		payload, marshalErr := json.Marshal(BusinessLicenseOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		applicationData["business_license_ocr"] = payload
+		merged, marshalErr := json.Marshal(applicationData)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, err = server.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{
+			ID:                  app.ID,
+			LicenseMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
+			ApplicationData:     merged,
+		})
+		return err
+	case ocr.DocumentTypeIDCard:
+		payload, marshalErr := json.Marshal(MerchantIDCardOCRData{
+			Status:   "pending",
+			QueuedAt: queuedAt,
+			OCRJobID: &ocrJobID,
+		})
+		if marshalErr != nil {
+			return marshalErr
+		}
+		assetPayload, marshalErr := json.Marshal(job.MediaAssetID)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
+			applicationData["id_card_back_asset_id"] = assetPayload
+			applicationData["id_card_back_ocr"] = payload
+		} else {
+			applicationData["id_card_front_asset_id"] = assetPayload
+			applicationData["id_card_front_ocr"] = payload
+		}
+		merged, marshalErr := json.Marshal(applicationData)
+		if marshalErr != nil {
+			return marshalErr
+		}
+		_, err = server.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{
+			ID:              app.ID,
+			ApplicationData: merged,
+		})
+		return err
+	default:
+		return nil
 	}
-	_, err = server.store.UpdateGroupApplicationLicense(ctx, db.UpdateGroupApplicationLicenseParams{
-		ID:                  app.ID,
-		LicenseMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
-		ApplicationData:     merged,
-	})
-	return err
 }
 
 func (server *Server) markOCRPending(ctx *gin.Context, job db.OcrJob) error {

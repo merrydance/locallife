@@ -221,6 +221,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskRiderApplicationIDCardOCR, processor.ProcessTaskRiderApplicationIDCardOCR)
 	mux.HandleFunc(TaskRiderApplicationHealthCertOCR, processor.ProcessTaskRiderApplicationHealthCertOCR)
 	mux.HandleFunc(TaskGroupApplicationBusinessLicenseOCR, processor.ProcessTaskGroupApplicationBusinessLicenseOCR)
+	mux.HandleFunc(TaskGroupApplicationIDCardOCR, processor.ProcessTaskGroupApplicationIDCardOCR)
 
 	// 微信发货信息上报任务（合规）
 	mux.HandleFunc(TaskUploadShippingInfo, processor.ProcessTaskUploadShippingInfo)
