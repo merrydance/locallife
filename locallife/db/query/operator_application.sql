@@ -91,6 +91,39 @@ SET
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
+-- name: ClearOperatorApplicationBusinessLicense :one
+-- 清空营业执照媒体与 OCR 结果
+UPDATE operator_applications
+SET
+  business_license_media_asset_id = NULL,
+  business_license_number = NULL,
+  business_license_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearOperatorApplicationIDCardFront :one
+-- 清空身份证正面媒体与对应 OCR 字段
+UPDATE operator_applications
+SET
+  id_card_front_media_asset_id = NULL,
+  legal_person_name = NULL,
+  legal_person_id_number = NULL,
+  id_card_front_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearOperatorApplicationIDCardBack :one
+-- 清空身份证背面媒体与 OCR 结果
+UPDATE operator_applications
+SET
+  id_card_back_media_asset_id = NULL,
+  id_card_back_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
 -- name: SubmitOperatorApplication :one
 -- 提交运营商申请（从草稿变为已提交待审核）
 UPDATE operator_applications

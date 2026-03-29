@@ -11,6 +11,107 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const clearGroupApplicationBusinessLicense = `-- name: ClearGroupApplicationBusinessLicense :one
+UPDATE merchant_group_applications
+SET license_media_asset_id = NULL,
+    license_number = NULL,
+    application_data = COALESCE(application_data, '{}'::jsonb) - 'business_license_ocr',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
+`
+
+func (q *Queries) ClearGroupApplicationBusinessLicense(ctx context.Context, id int64) (MerchantGroupApplication, error) {
+	row := q.db.QueryRow(ctx, clearGroupApplicationBusinessLicense, id)
+	var i MerchantGroupApplication
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantUserID,
+		&i.GroupName,
+		&i.ContactPhone,
+		&i.LicenseNumber,
+		&i.Address,
+		&i.RegionID,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
+	)
+	return i, err
+}
+
+const clearGroupApplicationIDCardBack = `-- name: ClearGroupApplicationIDCardBack :one
+UPDATE merchant_group_applications
+SET application_data = COALESCE(application_data, '{}'::jsonb)
+      - 'id_card_back_asset_id'
+      - 'id_card_back_ocr',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
+`
+
+func (q *Queries) ClearGroupApplicationIDCardBack(ctx context.Context, id int64) (MerchantGroupApplication, error) {
+	row := q.db.QueryRow(ctx, clearGroupApplicationIDCardBack, id)
+	var i MerchantGroupApplication
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantUserID,
+		&i.GroupName,
+		&i.ContactPhone,
+		&i.LicenseNumber,
+		&i.Address,
+		&i.RegionID,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
+	)
+	return i, err
+}
+
+const clearGroupApplicationIDCardFront = `-- name: ClearGroupApplicationIDCardFront :one
+UPDATE merchant_group_applications
+SET application_data = COALESCE(application_data, '{}'::jsonb)
+      - 'id_card_front_asset_id'
+      - 'id_card_front_ocr'
+      - 'legal_person_name'
+      - 'legal_person_id_number',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, applicant_user_id, group_name, contact_phone, license_number, address, region_id, status, reject_reason, reviewed_by, reviewed_at, application_data, created_at, updated_at, license_media_asset_id
+`
+
+func (q *Queries) ClearGroupApplicationIDCardFront(ctx context.Context, id int64) (MerchantGroupApplication, error) {
+	row := q.db.QueryRow(ctx, clearGroupApplicationIDCardFront, id)
+	var i MerchantGroupApplication
+	err := row.Scan(
+		&i.ID,
+		&i.ApplicantUserID,
+		&i.GroupName,
+		&i.ContactPhone,
+		&i.LicenseNumber,
+		&i.Address,
+		&i.RegionID,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LicenseMediaAssetID,
+	)
+	return i, err
+}
+
 const createBrandMenuTemplate = `-- name: CreateBrandMenuTemplate :one
 INSERT INTO brand_menu_templates (brand_id, payload, version, status)
 VALUES ($1, $2, $3, $4)

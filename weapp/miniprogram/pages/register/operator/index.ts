@@ -2,6 +2,7 @@ import {
   getOrCreateOperatorApplication, 
   getOperatorApplication,
   updateOperatorBasic, 
+  deleteOperatorApplicationDocument,
   ocrOperatorBusinessLicense, 
   ocrOperatorIdCard, 
   submitOperatorApplication,
@@ -65,6 +66,8 @@ type OperatorUploadFeedback = {
   idFront: UploadFeedback
   idBack: UploadFeedback
 }
+
+type OperatorUploadField = 'license' | 'idFront' | 'idBack'
 
 const DEFAULT_OPERATOR_OCR_DISPLAY_STATE: OperatorOCRDisplayState = {
   businessLicense: 'idle',
@@ -893,6 +896,62 @@ Page({
       'businessLicense',
       'license'
     )
+  },
+
+  async removeUploadedDocument(field: OperatorUploadField) {
+    const documentMap: Record<OperatorUploadField, {
+      documentType: 'business_license' | 'id_card_front' | 'id_card_back'
+      data: Record<string, unknown>
+    }> = {
+      license: {
+        documentType: 'business_license',
+        data: {
+          license: { url: '', rawUrl: '', assetId: undefined },
+          'uploadFeedback.license': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      },
+      idFront: {
+        documentType: 'id_card_front',
+        data: {
+          idFront: { url: '', rawUrl: '', assetId: undefined },
+          'uploadFeedback.idFront': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      },
+      idBack: {
+        documentType: 'id_card_back',
+        data: {
+          idBack: { url: '', rawUrl: '', assetId: undefined },
+          'uploadFeedback.idBack': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      }
+    }
+
+    const target = documentMap[field]
+
+    wx.showLoading({ title: '删除中...' })
+    try {
+      const res = await deleteOperatorApplicationDocument(target.documentType)
+      this.setData(target.data, () => {
+        this.mapResponseToData(res)
+      })
+    } catch (e) {
+      logger.error('Delete operator application document failed', { field, error: e })
+      wx.showToast({ title: getErrorText(e, '删除失败，请重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
+  },
+
+  onLicenseRemove() {
+    this.removeUploadedDocument('license')
+  },
+
+  onIdFrontRemove() {
+    this.removeUploadedDocument('idFront')
+  },
+
+  onIdBackRemove() {
+    this.removeUploadedDocument('idBack')
   },
 
   async processOCR(

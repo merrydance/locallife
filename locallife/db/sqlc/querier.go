@@ -89,6 +89,9 @@ type Querier interface {
 	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
+	ClearGroupApplicationBusinessLicense(ctx context.Context, id int64) (MerchantGroupApplication, error)
+	ClearGroupApplicationIDCardBack(ctx context.Context, id int64) (MerchantGroupApplication, error)
+	ClearGroupApplicationIDCardFront(ctx context.Context, id int64) (MerchantGroupApplication, error)
 	// 清空营业执照关联和 OCR 结果
 	ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (MerchantApplication, error)
 	// 清空食品经营许可证关联和 OCR 结果
@@ -100,6 +103,18 @@ type Querier interface {
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error
+	// 清空营业执照媒体与 OCR 结果
+	ClearOperatorApplicationBusinessLicense(ctx context.Context, id int64) (OperatorApplication, error)
+	// 清空身份证背面媒体与 OCR 结果
+	ClearOperatorApplicationIDCardBack(ctx context.Context, id int64) (OperatorApplication, error)
+	// 清空身份证正面媒体与对应 OCR 字段
+	ClearOperatorApplicationIDCardFront(ctx context.Context, id int64) (OperatorApplication, error)
+	// 清空健康证媒体与 OCR 结果
+	ClearRiderApplicationHealthCert(ctx context.Context, id int64) (RiderApplication, error)
+	// 清空身份证背面媒体与对应 OCR 字段，保留正面实名信息
+	ClearRiderApplicationIDCardBack(ctx context.Context, id int64) (RiderApplication, error)
+	// 清空身份证正面媒体与对应 OCR 字段，保留背面有效期信息
+	ClearRiderApplicationIDCardFront(ctx context.Context, id int64) (RiderApplication, error)
 	ClearSearchHistory(ctx context.Context, userID int64) error
 	CloseDiningSession(ctx context.Context, id int64) (DiningSession, error)
 	// 批量关闭过期的 pending 支付订单

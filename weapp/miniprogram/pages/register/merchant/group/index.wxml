@@ -57,7 +57,8 @@
             feedbackState="{{uploadFeedback.idFront.state}}"
             feedbackTitle="{{uploadFeedback.idFront.title}}"
             feedbackDescription="{{uploadFeedback.idFront.description}}"
-            bind:change="onIdFrontUpload" 
+            bind:change="onIdFrontUpload"
+            bind:remove="onIdFrontRemove" 
           />
           <document-uploader 
             type="id-back" 
@@ -67,7 +68,8 @@
             feedbackState="{{uploadFeedback.idBack.state}}"
             feedbackTitle="{{uploadFeedback.idBack.title}}"
             feedbackDescription="{{uploadFeedback.idBack.description}}"
-            bind:change="onIdBackUpload" 
+            bind:change="onIdBackUpload"
+            bind:remove="onIdBackRemove" 
           />
         </view>
       </view>
@@ -85,7 +87,8 @@
           feedbackState="{{uploadFeedback.license.state}}"
           feedbackTitle="{{uploadFeedback.license.title}}"
           feedbackDescription="{{uploadFeedback.license.description}}"
-          bind:change="onLicenseUpload" 
+          bind:change="onLicenseUpload"
+          bind:remove="onLicenseRemove" 
         />
       </view>
     </view>

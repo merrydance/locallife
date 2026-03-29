@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== 运营商入驻申请 API ====================
@@ -79,6 +81,14 @@ type OperatorIDCardBackOCR struct {
 	ValidEnd       string `json:"valid_end,omitempty"`
 	OCRAt          string `json:"ocr_at,omitempty"`
 }
+
+type operatorApplicationDocumentType string
+
+const (
+	operatorApplicationDocumentBusinessLicense operatorApplicationDocumentType = "business_license"
+	operatorApplicationDocumentIDCardFront     operatorApplicationDocumentType = "id_card_front"
+	operatorApplicationDocumentIDCardBack      operatorApplicationDocumentType = "id_card_back"
+)
 
 func newOperatorApplicationResponse(app db.OperatorApplication, regionName string) operatorApplicationResponse {
 	resp := operatorApplicationResponse{
@@ -469,6 +479,89 @@ func (server *Server) updateOperatorApplicationBasicInfo(ctx *gin.Context) {
 
 	regionName := server.getRegionName(ctx, updatedApp.RegionID)
 	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
+}
+
+func (server *Server) deleteOperatorApplicationDocumentByType(ctx *gin.Context, documentType operatorApplicationDocumentType) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	switch documentType {
+	case operatorApplicationDocumentBusinessLicense, operatorApplicationDocumentIDCardFront, operatorApplicationDocumentIDCardBack:
+	default:
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid document type")))
+		return
+	}
+
+	app, err := server.store.GetOperatorApplicationDraft(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if app.Status == "rejected" {
+		app, err = server.store.ResetOperatorApplicationToDraft(ctx, app.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+
+	var (
+		updatedApp db.OperatorApplication
+		assetID    int64
+	)
+
+	switch documentType {
+	case operatorApplicationDocumentBusinessLicense:
+		if app.BusinessLicenseMediaAssetID.Valid {
+			assetID = app.BusinessLicenseMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearOperatorApplicationBusinessLicense(ctx, app.ID)
+	case operatorApplicationDocumentIDCardFront:
+		if app.IDCardFrontMediaAssetID.Valid {
+			assetID = app.IDCardFrontMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearOperatorApplicationIDCardFront(ctx, app.ID)
+	default:
+		if app.IDCardBackMediaAssetID.Valid {
+			assetID = app.IDCardBackMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearOperatorApplicationIDCardBack(ctx, app.ID)
+	}
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if assetID > 0 {
+		if err := server.mediaRegistry.SoftDelete(ctx, assetID, authPayload.UserID); err != nil {
+			log.Warn().Err(err).Int64("asset_id", assetID).Str("document_type", string(documentType)).Msg("delete operator application document: soft delete media failed")
+		}
+	}
+
+	regionName := server.getRegionName(ctx, updatedApp.RegionID)
+	ctx.JSON(http.StatusOK, newOperatorApplicationResponse(updatedApp, regionName))
+}
+
+// deleteOperatorApplicationDocument godoc
+// @Summary 删除运营商申请证照
+// @Description 删除运营商草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back。
+// @Tags 运营商申请
+// @Produce json
+// @Param document_type path string true "证照类型: business_license|id_card_front|id_card_back"
+// @Success 200 {object} operatorApplicationResponse "删除成功"
+// @Failure 400 {object} ErrorResponse "参数错误或状态不允许修改"
+// @Failure 401 {object} ErrorResponse "未登录"
+// @Failure 404 {object} ErrorResponse "申请不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/operator/application/documents/{document_type} [delete]
+// @Security BearerAuth
+func (server *Server) deleteOperatorApplicationDocument(ctx *gin.Context) {
+	documentType := operatorApplicationDocumentType(strings.TrimSpace(ctx.Param("document_type")))
+	server.deleteOperatorApplicationDocumentByType(ctx, documentType)
 }
 
 // ==================== 提交申请 ====================

@@ -182,3 +182,12 @@ export function deleteRiderApplicationHealthCert() {
     method: 'DELETE'
   })
 }
+
+export function deleteRiderApplicationDocument(
+  documentType: 'id_card_front' | 'id_card_back' | 'health_cert'
+) {
+  return request<RiderApplicationResponse>({
+    url: `/v1/rider/application/documents/${documentType}`,
+    method: 'DELETE'
+  })
+}

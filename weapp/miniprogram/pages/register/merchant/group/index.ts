@@ -1,6 +1,7 @@
 import { 
   getOrCreateGroupApplication, 
   updateGroupApplicationBasic, 
+  deleteGroupApplicationDocument,
   ocrGroupIdCard,
   ocrGroupBusinessLicense, 
   submitGroupApplication,
@@ -49,6 +50,8 @@ type GroupUploadFeedback = {
   idFront: UploadFeedback
   idBack: UploadFeedback
 }
+
+type GroupUploadField = 'license' | 'idFront' | 'idBack'
 
 const DEFAULT_GROUP_OCR_DISPLAY_STATE: GroupOCRDisplayState = {
   license: 'idle',
@@ -333,6 +336,64 @@ Page({
       this.setOCRState('license', 'failed')
       this.setUploadFeedback('license', createUploadFeedback('error', '识别失败', message))
     }
+  },
+
+  async removeUploadedDocument(field: GroupUploadField) {
+    const documentMap: Record<GroupUploadField, {
+      documentType: 'business_license' | 'id_card_front' | 'id_card_back'
+      data: Record<string, unknown>
+    }> = {
+      license: {
+        documentType: 'business_license',
+        data: {
+          license: { url: '', rawUrl: '', assetId: undefined },
+          'formData.licenseNumber': '',
+          'uploadFeedback.license': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      },
+      idFront: {
+        documentType: 'id_card_front',
+        data: {
+          idFront: { url: '', rawUrl: '', assetId: undefined },
+          'formData.legalPerson': '',
+          'uploadFeedback.idFront': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      },
+      idBack: {
+        documentType: 'id_card_back',
+        data: {
+          idBack: { url: '', rawUrl: '', assetId: undefined },
+          'uploadFeedback.idBack': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      }
+    }
+
+    const target = documentMap[field]
+
+    wx.showLoading({ title: '删除中...' })
+    try {
+      const res = await deleteGroupApplicationDocument(target.documentType)
+      this.setData(target.data, () => {
+        this.mapResponseToData(res)
+      })
+    } catch (e) {
+      logger.error('Delete group application document failed', { field, error: e })
+      wx.showToast({ title: getErrorMessage(e, '删除失败，请重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
+  },
+
+  onLicenseRemove() {
+    this.removeUploadedDocument('license')
+  },
+
+  onIdFrontRemove() {
+    this.removeUploadedDocument('idFront')
+  },
+
+  onIdBackRemove() {
+    this.removeUploadedDocument('idBack')
   },
 
   onInput(e: InputEvent) {

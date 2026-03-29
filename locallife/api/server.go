@@ -578,8 +578,9 @@ func (server *Server) setupRouter() {
 	authGroup.GET("/operator/application", server.getOperatorApplication)                   // 获取申请状态
 	authGroup.PUT("/operator/application/region", server.updateOperatorApplicationRegion)   // 更新申请区域
 	authGroup.PUT("/operator/application/basic", server.updateOperatorApplicationBasicInfo) // 更新基础信息
-	authGroup.POST("/operator/application/submit", server.submitOperatorApplication)        // 提交申请
-	authGroup.POST("/operator/application/reset", server.resetOperatorApplicationToDraft)   // 重置为草稿
+	authGroup.DELETE("/operator/application/documents/:document_type", server.deleteOperatorApplicationDocument)
+	authGroup.POST("/operator/application/submit", server.submitOperatorApplication)      // 提交申请
+	authGroup.POST("/operator/application/reset", server.resetOperatorApplicationToDraft) // 重置为草稿
 
 	// M5.2: 运营商开户（微信支付二级商户进件）
 	operatorApplymentGroup := authGroup.Group("/operator/applyment")
@@ -700,6 +701,7 @@ func (server *Server) setupRouter() {
 		groupAppGroup.POST("", server.createGroupApplicationDraft)
 		groupAppGroup.GET("/me", server.getOrCreateGroupApplicationDraft)
 		groupAppGroup.PUT("/basic", server.updateGroupApplicationBasic)
+		groupAppGroup.DELETE("/documents/:document_type", server.deleteGroupApplicationDocument)
 		groupAppGroup.POST("/submit", server.submitGroupApplication)
 		groupAppGroup.POST("/:id/review", server.CasbinRoleMiddleware(RoleAdmin), server.reviewGroupApplication)
 	}
@@ -990,6 +992,7 @@ func (server *Server) setupRouter() {
 		// 骑手申请流程（新版）
 		riderGroup.GET("/application", server.createOrGetRiderApplicationDraft)  // 创建/获取草稿
 		riderGroup.PUT("/application/basic", server.updateRiderApplicationBasic) // 更新基础信息
+		riderGroup.DELETE("/application/documents/:document_type", server.deleteRiderApplicationDocument)
 		riderGroup.DELETE("/application/health-cert", server.deleteRiderApplicationHealthCert)
 		riderGroup.POST("/application/submit", server.submitRiderApplication) // 提交申请
 		riderGroup.POST("/application/reset", server.resetRiderApplication)   // 重置申请（被拒后）

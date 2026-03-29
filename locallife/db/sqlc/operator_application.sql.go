@@ -60,6 +60,135 @@ func (q *Queries) ApproveOperatorApplication(ctx context.Context, arg ApproveOpe
 	return i, err
 }
 
+const clearOperatorApplicationBusinessLicense = `-- name: ClearOperatorApplicationBusinessLicense :one
+UPDATE operator_applications
+SET
+  business_license_media_asset_id = NULL,
+  business_license_number = NULL,
+  business_license_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空营业执照媒体与 OCR 结果
+func (q *Queries) ClearOperatorApplicationBusinessLicense(ctx context.Context, id int64) (OperatorApplication, error) {
+	row := q.db.QueryRow(ctx, clearOperatorApplicationBusinessLicense, id)
+	var i OperatorApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RegionID,
+		&i.Name,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseOcr,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.RequestedContractYears,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearOperatorApplicationIDCardBack = `-- name: ClearOperatorApplicationIDCardBack :one
+UPDATE operator_applications
+SET
+  id_card_back_media_asset_id = NULL,
+  id_card_back_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空身份证背面媒体与 OCR 结果
+func (q *Queries) ClearOperatorApplicationIDCardBack(ctx context.Context, id int64) (OperatorApplication, error) {
+	row := q.db.QueryRow(ctx, clearOperatorApplicationIDCardBack, id)
+	var i OperatorApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RegionID,
+		&i.Name,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseOcr,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.RequestedContractYears,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearOperatorApplicationIDCardFront = `-- name: ClearOperatorApplicationIDCardFront :one
+UPDATE operator_applications
+SET
+  id_card_front_media_asset_id = NULL,
+  legal_person_name = NULL,
+  legal_person_id_number = NULL,
+  id_card_front_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, region_id, name, contact_name, contact_phone, business_license_number, business_license_ocr, legal_person_name, legal_person_id_number, id_card_front_ocr, id_card_back_ocr, requested_contract_years, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, business_license_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空身份证正面媒体与对应 OCR 字段
+func (q *Queries) ClearOperatorApplicationIDCardFront(ctx context.Context, id int64) (OperatorApplication, error) {
+	row := q.db.QueryRow(ctx, clearOperatorApplicationIDCardFront, id)
+	var i OperatorApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RegionID,
+		&i.Name,
+		&i.ContactName,
+		&i.ContactPhone,
+		&i.BusinessLicenseNumber,
+		&i.BusinessLicenseOcr,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.RequestedContractYears,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.BusinessLicenseMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
 const countPendingOperatorApplications = `-- name: CountPendingOperatorApplications :one
 SELECT COUNT(*) FROM operator_applications
 WHERE status IN ('submitted', 'approved', 'rejected')

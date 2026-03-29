@@ -13,6 +13,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
+	"github.com/rs/zerolog/log"
 )
 
 // ==================== Group Application ====================
@@ -120,6 +121,14 @@ type groupTemplateResponse struct {
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
+
+type groupApplicationDocumentType string
+
+const (
+	groupApplicationDocumentBusinessLicense groupApplicationDocumentType = "business_license"
+	groupApplicationDocumentIDCardFront     groupApplicationDocumentType = "id_card_front"
+	groupApplicationDocumentIDCardBack      groupApplicationDocumentType = "id_card_back"
+)
 
 type brandTemplateResponse struct {
 	ID        int64     `json:"id"`
@@ -411,6 +420,94 @@ func (server *Server) updateGroupApplicationBasic(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, newGroupApplicationResponse(updated))
+}
+
+func (server *Server) deleteGroupApplicationDocumentByType(ctx *gin.Context, documentType groupApplicationDocumentType) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	switch documentType {
+	case groupApplicationDocumentBusinessLicense, groupApplicationDocumentIDCardFront, groupApplicationDocumentIDCardBack:
+	default:
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid document type")))
+		return
+	}
+
+	app, err := server.store.GetLatestGroupApplicationByApplicant(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("application not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if app.Status == "submitted" || app.Status == "approved" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("application is not editable")))
+		return
+	}
+
+	if app.Status == "rejected" {
+		app, err = server.store.ResetGroupApplicationToDraft(ctx, app.ID)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+
+	resp := newGroupApplicationResponse(app)
+	var (
+		updated db.MerchantGroupApplication
+		assetID int64
+	)
+
+	switch documentType {
+	case groupApplicationDocumentBusinessLicense:
+		if resp.LicenseImageAssetID != nil {
+			assetID = *resp.LicenseImageAssetID
+		}
+		updated, err = server.store.ClearGroupApplicationBusinessLicense(ctx, app.ID)
+	case groupApplicationDocumentIDCardFront:
+		if resp.IDCardFrontAssetID != nil {
+			assetID = *resp.IDCardFrontAssetID
+		}
+		updated, err = server.store.ClearGroupApplicationIDCardFront(ctx, app.ID)
+	default:
+		if resp.IDCardBackAssetID != nil {
+			assetID = *resp.IDCardBackAssetID
+		}
+		updated, err = server.store.ClearGroupApplicationIDCardBack(ctx, app.ID)
+	}
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if assetID > 0 {
+		if err := server.mediaRegistry.SoftDelete(ctx, assetID, authPayload.UserID); err != nil {
+			log.Warn().Err(err).Int64("asset_id", assetID).Str("document_type", string(documentType)).Msg("delete group application document: soft delete media failed")
+		}
+	}
+
+	ctx.JSON(http.StatusOK, newGroupApplicationResponse(updated))
+}
+
+// deleteGroupApplicationDocument godoc
+// @Summary 删除集团申请证照
+// @Description 删除集团草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back。
+// @Tags 集团申请
+// @Produce json
+// @Param document_type path string true "证照类型: business_license|id_card_front|id_card_back"
+// @Success 200 {object} groupApplicationResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Router /v1/groups/applications/documents/{document_type} [delete]
+// @Security BearerAuth
+func (server *Server) deleteGroupApplicationDocument(ctx *gin.Context) {
+	documentType := groupApplicationDocumentType(ctx.Param("document_type"))
+	server.deleteGroupApplicationDocumentByType(ctx, documentType)
 }
 
 // submitGroupApplication godoc

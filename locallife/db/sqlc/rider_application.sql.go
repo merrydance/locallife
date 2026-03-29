@@ -52,6 +52,146 @@ func (q *Queries) ApproveRiderApplication(ctx context.Context, arg ApproveRiderA
 	return i, err
 }
 
+const clearRiderApplicationHealthCert = `-- name: ClearRiderApplicationHealthCert :one
+UPDATE rider_applications
+SET
+    health_cert_media_asset_id = NULL,
+    health_cert_ocr = NULL,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+`
+
+// 清空健康证媒体与 OCR 结果
+func (q *Queries) ClearRiderApplicationHealthCert(ctx context.Context, id int64) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, clearRiderApplicationHealthCert, id)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+	)
+	return i, err
+}
+
+const clearRiderApplicationIDCardBack = `-- name: ClearRiderApplicationIDCardBack :one
+UPDATE rider_applications
+SET
+    id_card_back_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'valid_start'
+                - 'valid_end',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+`
+
+// 清空身份证背面媒体与对应 OCR 字段，保留正面实名信息
+func (q *Queries) ClearRiderApplicationIDCardBack(ctx context.Context, id int64) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, clearRiderApplicationIDCardBack, id)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+	)
+	return i, err
+}
+
+const clearRiderApplicationIDCardFront = `-- name: ClearRiderApplicationIDCardFront :one
+UPDATE rider_applications
+SET
+    id_card_front_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'name'
+                - 'id_number'
+                - 'gender'
+                - 'nation'
+                - 'address',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
+`
+
+// 清空身份证正面媒体与对应 OCR 字段，保留背面有效期信息
+func (q *Queries) ClearRiderApplicationIDCardFront(ctx context.Context, id int64) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, clearRiderApplicationIDCardFront, id)
+	var i RiderApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.RealName,
+		&i.Phone,
+		&i.IDCardOcr,
+		&i.HealthCertOcr,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.SubmittedAt,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+		&i.HealthCertMediaAssetID,
+	)
+	return i, err
+}
+
 const countRiderApplicationsByStatus = `-- name: CountRiderApplicationsByStatus :one
 SELECT COUNT(*) FROM rider_applications
 WHERE status = $1

@@ -6088,6 +6088,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/groups/applications/documents/{document_type}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除集团草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "集团申请"
+                ],
+                "summary": "删除集团申请证照",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "证照类型: business_license|id_card_front|id_card_back",
+                        "name": "document_type",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.groupApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/groups/applications/me": {
             "get": {
                 "security": [
@@ -15057,6 +15115,64 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/operator/application/documents/{document_type}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除运营商草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：business_license、id_card_front、id_card_back。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商申请"
+                ],
+                "summary": "删除运营商申请证照",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "证照类型: business_license|id_card_front|id_card_back",
+                        "name": "document_type",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或状态不允许修改",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/application/region": {
             "put": {
                 "security": [
@@ -23549,6 +23665,64 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "更新后的申请信息",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或状态不允许修改",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/application/documents/{document_type}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除骑手草稿中的单个证照绑定，并清空对应 OCR 结果。支持证照类型：id_card_front、id_card_back、health_cert。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手申请"
+                ],
+                "summary": "删除骑手申请证照",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "证照类型: id_card_front|id_card_back|health_cert",
+                        "name": "document_type",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
                         "schema": {
                             "$ref": "#/definitions/api.riderApplicationResponse"
                         }

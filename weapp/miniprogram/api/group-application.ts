@@ -143,6 +143,15 @@ export function updateGroupApplicationBasic(data: UpdateGroupApplicationBasicReq
   })
 }
 
+export function deleteGroupApplicationDocument(
+  documentType: 'business_license' | 'id_card_front' | 'id_card_back'
+) {
+  return request<GroupApplicationResponse>({
+    url: `/v1/groups/applications/documents/${documentType}`,
+    method: 'DELETE'
+  })
+}
+
 /**
  * 上传集团营业执照并通过统一 OCR job 识别
  */

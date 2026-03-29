@@ -5,7 +5,7 @@ import {
   ocrRiderHealthCert, 
   submitRiderApplication,
   resetRiderApplication,
-  deleteRiderApplicationHealthCert,
+  deleteRiderApplicationDocument,
   type RiderApplicationResponse
 } from '../../../api/rider-application'
 import { getPrivateMediaUrl } from '../../../utils/image-security'
@@ -41,6 +41,8 @@ type RiderUploadFeedback = {
   idBack: UploadFeedback
   healthCert: UploadFeedback
 }
+
+type UploadField = 'idFront' | 'idBack' | 'healthCert'
 
 const DEFAULT_RIDER_OCR_DISPLAY_STATE: RiderOCRDisplayState = {
   identity: 'idle',
@@ -305,17 +307,65 @@ Page({
     )
   },
 
-  async onHealthCertRemove() {
+  async removeUploadedDocument(field: UploadField) {
+    const documentMap: Record<UploadField, {
+      documentType: 'id_card_front' | 'id_card_back' | 'health_cert'
+      data: Record<string, unknown>
+    }> = {
+      idFront: {
+        documentType: 'id_card_front',
+        data: {
+          idFront: { url: '', rawUrl: '', assetId: undefined },
+          'formData.realName': '',
+          'formData.idNumber': '',
+          'uploadFeedback.idFront': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      },
+      idBack: {
+        documentType: 'id_card_back',
+        data: {
+          idBack: { url: '', rawUrl: '', assetId: undefined },
+          'formData.idValidity': '',
+          'uploadFeedback.idBack': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      },
+      healthCert: {
+        documentType: 'health_cert',
+        data: {
+          healthCert: { url: '', rawUrl: '', assetId: undefined },
+          'formData.healthCertNo': '',
+          'formData.healthCertDate': '',
+          'uploadFeedback.healthCert': { ...EMPTY_UPLOAD_FEEDBACK }
+        }
+      }
+    }
+
+    const target = documentMap[field]
+
     wx.showLoading({ title: '删除中...' })
     try {
-      const res = await deleteRiderApplicationHealthCert()
-      this.mapResponseToData(res)
+      const res = await deleteRiderApplicationDocument(target.documentType)
+      this.setData(target.data, () => {
+        this.mapResponseToData(res)
+      })
     } catch (e) {
-      logger.error('Delete rider health cert failed', e)
+      logger.error('Delete rider application document failed', { field, error: e })
       wx.showToast({ title: getErrorMessage(e, '删除失败，请重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }
+  },
+
+  onIdFrontRemove() {
+    this.removeUploadedDocument('idFront')
+  },
+
+  onIdBackRemove() {
+    this.removeUploadedDocument('idBack')
+  },
+
+  onHealthCertRemove() {
+    this.removeUploadedDocument('healthCert')
   },
 
   async processOCR(

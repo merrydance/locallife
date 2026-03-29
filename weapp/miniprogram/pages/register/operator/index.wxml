@@ -128,7 +128,8 @@
           feedbackState="{{uploadFeedback.license.state}}"
           feedbackTitle="{{uploadFeedback.license.title}}"
           feedbackDescription="{{uploadFeedback.license.description}}"
-          bind:change="onLicenseUpload" 
+          bind:change="onLicenseUpload"
+          bind:remove="onLicenseRemove" 
         />
       </view>
 
@@ -145,7 +146,8 @@
             feedbackState="{{uploadFeedback.idFront.state}}"
             feedbackTitle="{{uploadFeedback.idFront.title}}"
             feedbackDescription="{{uploadFeedback.idFront.description}}"
-            bind:change="onIdFrontUpload" 
+            bind:change="onIdFrontUpload"
+            bind:remove="onIdFrontRemove" 
           />
           <view class="upload-spacer"></view>
           <document-uploader 
@@ -156,7 +158,8 @@
             feedbackState="{{uploadFeedback.idBack.state}}"
             feedbackTitle="{{uploadFeedback.idBack.title}}"
             feedbackDescription="{{uploadFeedback.idBack.description}}"
-            bind:change="onIdBackUpload" 
+            bind:change="onIdBackUpload"
+            bind:remove="onIdBackRemove" 
           />
         </view>
       </view>

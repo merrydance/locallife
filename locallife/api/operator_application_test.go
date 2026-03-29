@@ -1043,3 +1043,187 @@ func TestGetOperatorApplicationAPI_ReturnsAsyncOCRFields(t *testing.T) {
 	require.NotNil(t, resp.IDCardBackOCR.OCRJobID)
 	require.Equal(t, ocrJobID, *resp.IDCardBackOCR.OCRJobID)
 }
+
+func TestDeleteOperatorApplicationDocumentAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	region := randomRegion()
+	region.ID = 1
+
+	testCases := []struct {
+		name          string
+		documentType  string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:         "OKBusinessLicense",
+			documentType: "business_license",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomOperatorApplicationDraft(user.ID, region.ID)
+				app.BusinessLicenseMediaAssetID = pgtype.Int8{Int64: 10, Valid: true}
+				app.BusinessLicenseNumber = pgtype.Text{String: "91310000123456789A", Valid: true}
+				app.BusinessLicenseOcr = []byte(`{"status":"done"}`)
+				updated := app
+				updated.BusinessLicenseMediaAssetID = pgtype.Int8{}
+				updated.BusinessLicenseNumber = pgtype.Text{}
+				updated.BusinessLicenseOcr = nil
+
+				store.EXPECT().
+					GetOperatorApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					ClearOperatorApplicationBusinessLicense(gomock.Any(), app.ID).
+					Times(1).
+					Return(updated, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(10)).
+					Times(1).
+					Return(db.MediaAsset{ID: 10, UploadedBy: user.ID}, nil)
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(10)).
+					Times(1).
+					Return(db.MediaAsset{ID: 10, UploadedBy: user.ID}, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), region.ID).
+					Times(1).
+					Return(region, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp operatorApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Nil(t, resp.BusinessLicenseAssetID)
+				require.Empty(t, resp.BusinessLicenseNumber)
+				require.Nil(t, resp.BusinessLicenseOCR)
+			},
+		},
+		{
+			name:         "OKIDCardFront",
+			documentType: "id_card_front",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomOperatorApplicationDraft(user.ID, region.ID)
+				app.IDCardFrontMediaAssetID = pgtype.Int8{Int64: 11, Valid: true}
+				app.LegalPersonName = pgtype.Text{String: "张三", Valid: true}
+				app.LegalPersonIDNumber = pgtype.Text{String: "110101199001011234", Valid: true}
+				app.IDCardFrontOcr = []byte(`{"status":"done","name":"张三"}`)
+				updated := app
+				updated.IDCardFrontMediaAssetID = pgtype.Int8{}
+				updated.LegalPersonName = pgtype.Text{}
+				updated.LegalPersonIDNumber = pgtype.Text{}
+				updated.IDCardFrontOcr = nil
+
+				store.EXPECT().
+					GetOperatorApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					ClearOperatorApplicationIDCardFront(gomock.Any(), app.ID).
+					Times(1).
+					Return(updated, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(11)).
+					Times(1).
+					Return(db.MediaAsset{ID: 11, UploadedBy: user.ID}, nil)
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(11)).
+					Times(1).
+					Return(db.MediaAsset{ID: 11, UploadedBy: user.ID}, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), region.ID).
+					Times(1).
+					Return(region, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp operatorApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Nil(t, resp.IDCardFrontAssetID)
+				require.Empty(t, resp.LegalPersonName)
+				require.Empty(t, resp.LegalPersonIDNumber)
+				require.Nil(t, resp.IDCardFrontOCR)
+			},
+		},
+		{
+			name:         "OKIDCardBack",
+			documentType: "id_card_back",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomOperatorApplicationDraft(user.ID, region.ID)
+				app.IDCardBackMediaAssetID = pgtype.Int8{Int64: 12, Valid: true}
+				app.IDCardBackOcr = []byte(`{"status":"done","valid_end":"2035-01-01"}`)
+				updated := app
+				updated.IDCardBackMediaAssetID = pgtype.Int8{}
+				updated.IDCardBackOcr = nil
+
+				store.EXPECT().
+					GetOperatorApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+				store.EXPECT().
+					ClearOperatorApplicationIDCardBack(gomock.Any(), app.ID).
+					Times(1).
+					Return(updated, nil)
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(12)).
+					Times(1).
+					Return(db.MediaAsset{ID: 12, UploadedBy: user.ID}, nil)
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(12)).
+					Times(1).
+					Return(db.MediaAsset{ID: 12, UploadedBy: user.ID}, nil)
+				store.EXPECT().
+					GetRegion(gomock.Any(), region.ID).
+					Times(1).
+					Return(region, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp operatorApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Nil(t, resp.IDCardBackAssetID)
+				require.Nil(t, resp.IDCardBackOCR)
+			},
+		},
+		{
+			name:         "InvalidDocumentType",
+			documentType: "invalid",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodDelete, "/v1/operator/application/documents/"+tc.documentType, nil)
+			require.NoError(t, err)
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}

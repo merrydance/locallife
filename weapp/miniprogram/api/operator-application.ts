@@ -151,6 +151,15 @@ export function updateOperatorBasic(data: UpdateOperatorBasicRequest) {
   })
 }
 
+export function deleteOperatorApplicationDocument(
+  documentType: 'business_license' | 'id_card_front' | 'id_card_back'
+) {
+  return request<OperatorApplicationResponse>({
+    url: `/v1/operator/application/documents/${documentType}`,
+    method: 'DELETE'
+  })
+}
+
 /**
  * 上传营业执照并通过统一 OCR job 识别
  */

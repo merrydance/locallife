@@ -51,6 +51,71 @@ SET
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
+-- name: ClearRiderApplicationIDCardFront :one
+-- 清空身份证正面媒体与对应 OCR 字段，保留背面有效期信息
+UPDATE rider_applications
+SET
+    id_card_front_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'name'
+                - 'id_number'
+                - 'gender'
+                - 'nation'
+                - 'address',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearRiderApplicationIDCardBack :one
+-- 清空身份证背面媒体与对应 OCR 字段，保留正面实名信息
+UPDATE rider_applications
+SET
+    id_card_back_media_asset_id = NULL,
+    id_card_ocr = CASE
+        WHEN id_card_ocr IS NULL THEN NULL
+        ELSE NULLIF(
+            id_card_ocr
+                - 'status'
+                - 'error'
+                - 'error_code'
+                - 'alert_emitted_at'
+                - 'queued_at'
+                - 'started_at'
+                - 'ocr_job_id'
+                - 'ocr_at'
+                - 'valid_start'
+                - 'valid_end',
+            '{}'::jsonb
+        )
+    END,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearRiderApplicationHealthCert :one
+-- 清空健康证媒体与 OCR 结果
+UPDATE rider_applications
+SET
+    health_cert_media_asset_id = NULL,
+    health_cert_ocr = NULL,
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
 -- name: SubmitRiderApplication :one
 -- 提交骑手申请
 UPDATE rider_applications

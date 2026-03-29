@@ -286,12 +286,10 @@ func TestDeleteRiderApplicationHealthCert(t *testing.T) {
 					Return(app, nil)
 
 				store.EXPECT().
-					UpdateRiderApplicationHealthCert(gomock.Any(), gomock.Any()).
+					ClearRiderApplicationHealthCert(gomock.Any(), app.ID).
 					Times(1).
-					DoAndReturn(func(_ any, arg db.UpdateRiderApplicationHealthCertParams) (db.RiderApplication, error) {
-						require.Equal(t, app.ID, arg.ID)
-						require.False(t, arg.HealthCertMediaAssetID.Valid)
-						require.Nil(t, arg.HealthCertOcr)
+					DoAndReturn(func(_ any, id int64) (db.RiderApplication, error) {
+						require.Equal(t, app.ID, id)
 						return updatedApp, nil
 					})
 
@@ -346,6 +344,141 @@ func TestDeleteRiderApplicationHealthCert(t *testing.T) {
 			recorder := httptest.NewRecorder()
 
 			request, err := http.NewRequest(http.MethodDelete, "/v1/rider/application/health-cert", nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestDeleteRiderApplicationDocument(t *testing.T) {
+	user, _ := randomUser(t)
+
+	testCases := []struct {
+		name          string
+		documentType  string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:         "OKIDCardFront",
+			documentType: "id_card_front",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				updatedApp := app
+				updatedApp.IDCardFrontMediaAssetID = pgtype.Int8{}
+				updatedApp.IDCardOcr = []byte(`{"valid_end":"20350101"}`)
+
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ClearRiderApplicationIDCardFront(gomock.Any(), app.ID).
+					Times(1).
+					Return(updatedApp, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(1)).
+					Times(1).
+					Return(db.MediaAsset{ID: 1, UploadedBy: user.ID}, nil)
+
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(1)).
+					Times(1).
+					Return(db.MediaAsset{ID: 1, UploadedBy: user.ID}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp riderApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Nil(t, resp.IDCardFrontAssetID)
+				require.NotNil(t, resp.IDCardBackAssetID)
+				require.NotNil(t, resp.IDCardOCR)
+				require.Empty(t, resp.IDCardOCR.Name)
+				require.Empty(t, resp.IDCardOCR.IDNumber)
+				require.Equal(t, "20350101", resp.IDCardOCR.ValidEnd)
+			},
+		},
+		{
+			name:         "OKIDCardBack",
+			documentType: "id_card_back",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				updatedApp := app
+				updatedApp.IDCardBackMediaAssetID = pgtype.Int8{}
+				updatedApp.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234"}`)
+
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ClearRiderApplicationIDCardBack(gomock.Any(), app.ID).
+					Times(1).
+					Return(updatedApp, nil)
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(2)).
+					Times(1).
+					Return(db.MediaAsset{ID: 2, UploadedBy: user.ID}, nil)
+
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(2)).
+					Times(1).
+					Return(db.MediaAsset{ID: 2, UploadedBy: user.ID}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp riderApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.NotNil(t, resp.IDCardFrontAssetID)
+				require.Nil(t, resp.IDCardBackAssetID)
+				require.NotNil(t, resp.IDCardOCR)
+				require.Equal(t, "张三", resp.IDCardOCR.Name)
+				require.Equal(t, "110101199001011234", resp.IDCardOCR.IDNumber)
+				require.Empty(t, resp.IDCardOCR.ValidEnd)
+			},
+		},
+		{
+			name:         "InvalidDocumentType",
+			documentType: "invalid",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodDelete, "/v1/rider/application/documents/"+tc.documentType, nil)
 			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)

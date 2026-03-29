@@ -37,6 +37,35 @@ SET license_media_asset_id = COALESCE($2, license_media_asset_id),
 WHERE id = $1
 RETURNING *;
 
+-- name: ClearGroupApplicationBusinessLicense :one
+UPDATE merchant_group_applications
+SET license_media_asset_id = NULL,
+    license_number = NULL,
+    application_data = COALESCE(application_data, '{}'::jsonb) - 'business_license_ocr',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearGroupApplicationIDCardFront :one
+UPDATE merchant_group_applications
+SET application_data = COALESCE(application_data, '{}'::jsonb)
+      - 'id_card_front_asset_id'
+      - 'id_card_front_ocr'
+      - 'legal_person_name'
+      - 'legal_person_id_number',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearGroupApplicationIDCardBack :one
+UPDATE merchant_group_applications
+SET application_data = COALESCE(application_data, '{}'::jsonb)
+      - 'id_card_back_asset_id'
+      - 'id_card_back_ocr',
+    updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
 -- name: ResetGroupApplicationToDraft :one
 UPDATE merchant_group_applications
 SET status = 'draft',
