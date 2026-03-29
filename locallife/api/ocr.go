@@ -462,17 +462,22 @@ func (server *Server) markRiderApplicationOCRPending(ctx *gin.Context, job db.Oc
 
 	switch ocr.DocumentType(job.DocumentType) {
 	case ocr.DocumentTypeIDCard:
-		payload, marshalErr := json.Marshal(IDCardOCRData{
-			Status:   "pending",
-			QueuedAt: queuedAt,
-			OCRJobID: &ocrJobID,
-		})
+		payload := readRiderIDCardOCRData(app.IDCardOcr)
+		payload.Status = "pending"
+		payload.Error = ""
+		payload.ErrorCode = ""
+		payload.AlertEmittedAt = ""
+		payload.QueuedAt = queuedAt
+		payload.StartedAt = ""
+		payload.OCRJobID = &ocrJobID
+		payload.OCRAt = ""
+		encoded, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			return marshalErr
 		}
 		arg := db.UpdateRiderApplicationIDCardParams{
 			ID:        app.ID,
-			IDCardOcr: payload,
+			IDCardOcr: encoded,
 		}
 		if strings.EqualFold(job.Side, string(ocr.DocumentSideBack)) {
 			arg.IDCardBackMediaAssetID = pgtype.Int8{Int64: job.MediaAssetID, Valid: true}
@@ -482,18 +487,23 @@ func (server *Server) markRiderApplicationOCRPending(ctx *gin.Context, job db.Oc
 		_, err = server.store.UpdateRiderApplicationIDCard(ctx, arg)
 		return err
 	case ocr.DocumentTypeHealthCert:
-		payload, marshalErr := json.Marshal(HealthCertOCRData{
-			Status:   "pending",
-			QueuedAt: queuedAt,
-			OCRJobID: &ocrJobID,
-		})
+		payload := readRiderHealthCertOCRData(app.HealthCertOcr)
+		payload.Status = "pending"
+		payload.Error = ""
+		payload.ErrorCode = ""
+		payload.AlertEmittedAt = ""
+		payload.QueuedAt = queuedAt
+		payload.StartedAt = ""
+		payload.OCRJobID = &ocrJobID
+		payload.OCRAt = ""
+		encoded, marshalErr := json.Marshal(payload)
 		if marshalErr != nil {
 			return marshalErr
 		}
 		_, err = server.store.UpdateRiderApplicationHealthCert(ctx, db.UpdateRiderApplicationHealthCertParams{
 			ID:                     app.ID,
 			HealthCertMediaAssetID: pgtype.Int8{Int64: job.MediaAssetID, Valid: true},
-			HealthCertOcr:          payload,
+			HealthCertOcr:          encoded,
 		})
 		return err
 	default:

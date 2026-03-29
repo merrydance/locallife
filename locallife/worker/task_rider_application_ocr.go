@@ -61,12 +61,30 @@ type riderHealthCertOCRData struct {
 	OCRAt          string `json:"ocr_at,omitempty"`
 }
 
+func decodeWorkerOCRPayload(data []byte, target any) error {
+	if len(data) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(data, target); err == nil {
+		return nil
+	}
+
+	var embedded string
+	if err := json.Unmarshal(data, &embedded); err != nil {
+		return err
+	}
+	if strings.TrimSpace(embedded) == "" {
+		return nil
+	}
+	return json.Unmarshal([]byte(embedded), target)
+}
+
 func readRiderIDCardOCR(data []byte) riderIDCardOCRData {
 	var result riderIDCardOCRData
 	if len(data) == 0 {
 		return result
 	}
-	_ = json.Unmarshal(data, &result)
+	_ = decodeWorkerOCRPayload(data, &result)
 	return result
 }
 
@@ -75,7 +93,7 @@ func readRiderHealthCertOCR(data []byte) riderHealthCertOCRData {
 	if len(data) == 0 {
 		return result
 	}
-	_ = json.Unmarshal(data, &result)
+	_ = decodeWorkerOCRPayload(data, &result)
 	return result
 }
 

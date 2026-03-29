@@ -224,3 +224,10 @@ func TestParseRiderHealthCertOCRText_ExtractsFlexibleValidEnd(t *testing.T) {
 		})
 	}
 }
+
+func TestReadRiderIDCardOCR_DecodesStringifiedPayload(t *testing.T) {
+	data := []byte(`"{\"name\":\"张三\",\"id_number\":\"110101199001011234\"}"`)
+	payload := readRiderIDCardOCR(data)
+	require.Equal(t, "张三", payload.Name)
+	require.Equal(t, "110101199001011234", payload.IDNumber)
+}
