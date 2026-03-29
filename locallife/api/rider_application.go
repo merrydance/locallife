@@ -303,7 +303,7 @@ func (server *Server) deleteRiderApplicationHealthCert(ctx *gin.Context) {
 
 // submitRiderApplication godoc
 // @Summary 提交骑手申请
-// @Description 提交申请进行自动审核。条件：身份证在有效期内且健康证已上传则通过，否则直接拒绝
+// @Description 提交申请进行自动审核。条件：身份证在有效期内，且健康证姓名与身份证一致并且有效期超过当前日期7天则通过，否则直接拒绝
 // @Tags 骑手申请
 // @Accept json
 // @Produce json
@@ -463,26 +463,24 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 		return false, "身份证有效期未识别，请上传身份证背面照片"
 	}
 
-	// "长期"有效
-	if ocrData.ValidEnd == "长期" {
-		return true, ""
-	}
+	// "长期"有效，但不能绕过后续健康证校验
+	if ocrData.ValidEnd != "长期" {
+		// 解析有效期
+		validEnd := ocrData.ValidEnd
+		if len(validEnd) > 8 {
+			// 取最后8位作为结束日期
+			validEnd = validEnd[len(validEnd)-8:]
+		}
 
-	// 解析有效期
-	validEnd := ocrData.ValidEnd
-	if len(validEnd) > 8 {
-		// 取最后8位作为结束日期
-		validEnd = validEnd[len(validEnd)-8:]
-	}
+		endDate, err := time.Parse("20060102", validEnd)
+		if err != nil {
+			log.Error().Err(err).Str("valid_end", ocrData.ValidEnd).Msg("解析身份证有效期失败")
+			return false, "身份证有效期格式无法识别，请联系客服"
+		}
 
-	endDate, err := time.Parse("20060102", validEnd)
-	if err != nil {
-		log.Error().Err(err).Str("valid_end", ocrData.ValidEnd).Msg("解析身份证有效期失败")
-		return false, "身份证有效期格式无法识别，请联系客服"
-	}
-
-	if time.Now().After(endDate) {
-		return false, "身份证已过期，请更换有效身份证后重新申请"
+		if time.Now().After(endDate) {
+			return false, "身份证已过期，请更换有效身份证后重新申请"
+		}
 	}
 
 	// 4. 健康证OCR数据必须存在（通用印刷体OCR解析）
@@ -495,7 +493,7 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 		return false, "健康证信息解析失败，请重新上传"
 	}
 
-	// 5. 健康证必须与身份证一致（姓名+身份证号）
+	// 5. 健康证姓名必须与身份证一致
 	idName := normalizePersonName(ocrData.Name)
 	healthName := normalizePersonName(healthOCR.Name)
 	if idName == "" {
@@ -506,18 +504,6 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 	}
 	if idName != healthName {
 		return false, "健康证姓名与身份证姓名不一致"
-	}
-
-	idNumber := strings.ToUpper(strings.TrimSpace(ocrData.IDNumber))
-	healthID := strings.ToUpper(strings.TrimSpace(healthOCR.IDNumber))
-	if idNumber == "" {
-		return false, "身份证号码未识别，请重新上传清晰的身份证正面照片"
-	}
-	if healthID == "" {
-		return false, "健康证身份证号码未识别，请重新上传清晰的健康证照片"
-	}
-	if idNumber != healthID {
-		return false, "健康证身份证号码与身份证不一致"
 	}
 
 	// 6. 健康证有效期需超过当日7天

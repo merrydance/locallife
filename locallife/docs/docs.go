@@ -23688,7 +23688,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "提交申请进行自动审核。条件：身份证在有效期内且健康证已上传则通过，否则直接拒绝",
+                "description": "提交申请进行自动审核。条件：身份证在有效期内，且健康证姓名与身份证一致并且有效期超过当前日期7天则通过，否则直接拒绝",
                 "consumes": [
                     "application/json"
                 ],
@@ -31301,6 +31301,9 @@ const docTemplate = `{
                 "applicant_user_id": {
                     "type": "integer"
                 },
+                "business_license_ocr": {
+                    "$ref": "#/definitions/api.BusinessLicenseOCRData"
+                },
                 "contact_phone": {
                     "type": "string"
                 },
@@ -31312,6 +31315,24 @@ const docTemplate = `{
                 },
                 "id": {
                     "type": "integer"
+                },
+                "id_card_back_asset_id": {
+                    "type": "integer"
+                },
+                "id_card_back_ocr": {
+                    "$ref": "#/definitions/api.MerchantIDCardOCRData"
+                },
+                "id_card_front_asset_id": {
+                    "type": "integer"
+                },
+                "id_card_front_ocr": {
+                    "$ref": "#/definitions/api.MerchantIDCardOCRData"
+                },
+                "legal_person_id_number": {
+                    "type": "string"
+                },
+                "legal_person_name": {
+                    "type": "string"
                 },
                 "license_image_asset_id": {
                     "type": "integer"

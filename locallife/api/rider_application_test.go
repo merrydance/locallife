@@ -41,6 +41,29 @@ func randomRiderApplicationWithData(userID int64) db.RiderApplication {
 	}
 }
 
+func TestCheckRiderApplicationApproval_PermanentIDCardStillRequiresHealthCertValidation(t *testing.T) {
+	server := &Server{}
+	app := randomRiderApplicationWithData(1)
+	app.IDCardOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"长期"}`)
+	app.HealthCertOcr = []byte(`{"name":"李四","valid_end":"2030年12月31日"}`)
+
+	approved, rejectReason := server.checkRiderApplicationApproval(app)
+
+	require.False(t, approved)
+	require.Equal(t, "健康证姓名与身份证姓名不一致", rejectReason)
+}
+
+func TestCheckRiderApplicationApproval_IgnoresHealthCertIDNumber(t *testing.T) {
+	server := &Server{}
+	app := randomRiderApplicationWithData(1)
+	app.HealthCertOcr = []byte(`{"name":"张三","id_number":"320101199001011234","valid_end":"2030年12月31日"}`)
+
+	approved, rejectReason := server.checkRiderApplicationApproval(app)
+
+	require.True(t, approved)
+	require.Empty(t, rejectReason)
+}
+
 // ==================== 创建/获取草稿测试 ====================
 
 func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
