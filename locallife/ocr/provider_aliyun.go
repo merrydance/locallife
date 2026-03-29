@@ -289,7 +289,7 @@ func collectAliyunStringFields(raw json.RawMessage) map[string]string {
 		return nil
 	}
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := decodeAliyunPayload(raw, &payload); err != nil {
 		return nil
 	}
 	fields := make(map[string]string)
@@ -302,7 +302,7 @@ func collectAliyunTextFragments(raw json.RawMessage, keys ...string) []string {
 		return nil
 	}
 	var payload any
-	if err := json.Unmarshal(raw, &payload); err != nil {
+	if err := decodeAliyunPayload(raw, &payload); err != nil {
 		return nil
 	}
 	allowed := make(map[string]struct{}, len(keys))
@@ -316,6 +316,12 @@ func collectAliyunTextFragments(raw json.RawMessage, keys ...string) []string {
 	seen := make(map[string]struct{})
 	collectAliyunTextFragmentValues("", payload, allowed, seen, &fragments)
 	return fragments
+}
+
+func decodeAliyunPayload(raw []byte, target *any) error {
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	return decoder.Decode(target)
 }
 
 func mergeAliyunTextFragments(base string, fragments []string) string {
@@ -410,6 +416,8 @@ func collectAliyunFieldValues(prefix string, value any, fields map[string]string
 		storeAliyunFieldValue(prefix, v, fields)
 	case float64:
 		storeAliyunFieldValue(prefix, fmt.Sprintf("%v", v), fields)
+	case json.Number:
+		storeAliyunFieldValue(prefix, v.String(), fields)
 	case bool:
 		storeAliyunFieldValue(prefix, fmt.Sprintf("%t", v), fields)
 	}
@@ -424,7 +432,7 @@ func decodeAliyunEmbeddedJSON(value string) (any, bool) {
 		return nil, false
 	}
 	var nested any
-	if err := json.Unmarshal([]byte(trimmed), &nested); err != nil {
+	if err := decodeAliyunPayload([]byte(trimmed), &nested); err != nil {
 		return nil, false
 	}
 	return nested, true

@@ -108,6 +108,11 @@ Page({
   },
 
   previewRefreshVersion: 0,
+  documentRequestVersion: {
+    idFront: 0,
+    idBack: 0,
+    healthCert: 0
+  } as Record<UploadField, number>,
 
   async onLoad() {
     await this.initApplication()
@@ -173,6 +178,58 @@ Page({
     })
   },
 
+  beginDocumentRequest(field: UploadField): number {
+    const nextVersion = (this.documentRequestVersion[field] || 0) + 1
+    this.documentRequestVersion[field] = nextVersion
+    return nextVersion
+  },
+
+  isLatestDocumentRequest(field: UploadField, version: number): boolean {
+    return this.documentRequestVersion[field] === version
+  },
+
+  applyDocumentResponse(field: UploadField, version: number, res: RiderApplicationResponse) {
+    if (!this.isLatestDocumentRequest(field, version)) {
+      return
+    }
+
+    const currentForm = this.data.formData
+    const idCardOCR = res.id_card_ocr as Record<string, unknown> | undefined
+    const healthCertOCR = res.health_cert_ocr as Record<string, unknown> | undefined
+    const mergedRes: RiderApplicationResponse = {
+      ...res,
+      id_card_front_asset_id: field === 'idFront' ? res.id_card_front_asset_id : this.data.idFront.assetId,
+      id_card_back_asset_id: field === 'idBack' ? res.id_card_back_asset_id : this.data.idBack.assetId,
+      health_cert_asset_id: field === 'healthCert' ? res.health_cert_asset_id : this.data.healthCert.assetId
+    }
+
+    const nextData: Record<string, unknown> = {
+      ocrDisplayState: this.buildRiderOcrDisplayState(mergedRes),
+      uploadFeedback: this.buildRiderUploadFeedback(mergedRes)
+    }
+
+    if (field === 'idFront') {
+      nextData['formData.realName'] = res.real_name || pickOCRText(idCardOCR, 'name') || currentForm.realName || ''
+      nextData['formData.idNumber'] = pickOCRText(idCardOCR, 'id_number', 'id_num') || currentForm.idNumber || ''
+      nextData.idFront = { url: '', assetId: res.id_card_front_asset_id }
+    }
+
+    if (field === 'idBack') {
+      nextData['formData.idValidity'] = pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.idValidity || ''
+      nextData.idBack = { url: '', assetId: res.id_card_back_asset_id }
+    }
+
+    if (field === 'healthCert') {
+      nextData['formData.healthCertNo'] = pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate') || currentForm.healthCertNo || ''
+      nextData['formData.healthCertDate'] = pickOCRText(healthCertOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.healthCertDate || ''
+      nextData.healthCert = { url: '', assetId: res.health_cert_asset_id }
+    }
+
+    this.setData(nextData, () => {
+      void this.refreshUploadPreviewURLs()
+    })
+  },
+
   buildRiderUploadFeedback(res?: RiderApplicationResponse): RiderUploadFeedback {
     const idCardOCR = res?.id_card_ocr as Record<string, unknown> | undefined
     const healthCertOCR = res?.health_cert_ocr as Record<string, unknown> | undefined
@@ -185,8 +242,11 @@ Page({
     const idBackUploaded = Boolean(res?.id_card_back_asset_id || this.data.idBack.assetId || this.data.idBack.url)
     const healthUploaded = Boolean(res?.health_cert_asset_id || this.data.healthCert.assetId || this.data.healthCert.url)
 
-    const idFrontReady = Boolean(pickOCRText(idCardOCR, 'name', 'id_number', 'id_num') || idStatus === 'done')
-    const idBackReady = Boolean(pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period') || idStatus === 'done')
+    const idFrontReady = Boolean(
+      pickOCRText(idCardOCR, 'name')
+      && pickOCRText(idCardOCR, 'id_number', 'id_num')
+    )
+    const idBackReady = Boolean(pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period'))
     const healthReady = Boolean(pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate', 'valid_end', 'valid_date', 'valid_period', 'name') || healthStatus === 'done')
 
     return {
@@ -224,8 +284,9 @@ Page({
     const healthCertOCR = res?.health_cert_ocr as Record<string, unknown> | undefined
 
     const identityDone = Boolean(
-      pickOCRText(idCardOCR, 'status') === 'done'
-      || (pickOCRText(idCardOCR, 'name') && pickOCRText(idCardOCR, 'id_number', 'id_num') && pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period'))
+      pickOCRText(idCardOCR, 'name')
+      && pickOCRText(idCardOCR, 'id_number', 'id_num')
+      && pickOCRText(idCardOCR, 'valid_end', 'valid_date', 'valid_period')
     )
     const healthDone = Boolean(
       pickOCRText(healthCertOCR, 'status') === 'done'
@@ -289,6 +350,7 @@ Page({
     this.setData({ 'idFront.url': path, 'idFront.rawUrl': path })
     this.processOCR(
       ocrRiderIdCard(path, 'Front'),
+      'idFront',
       'identity',
       'idFront'
     )
@@ -300,6 +362,7 @@ Page({
     this.setData({ 'idBack.url': path, 'idBack.rawUrl': path })
     this.processOCR(
       ocrRiderIdCard(path, 'Back'),
+      'idBack',
       'identity',
       'idBack'
     )
@@ -311,6 +374,7 @@ Page({
     this.setData({ 'healthCert.url': path, 'healthCert.rawUrl': path })
     this.processOCR(
       ocrRiderHealthCert(path),
+      'healthCert',
       'health',
       'healthCert'
     )
@@ -350,12 +414,16 @@ Page({
     }
 
     const target = documentMap[field]
+    const requestVersion = this.beginDocumentRequest(field)
 
     wx.showLoading({ title: '删除中...' })
     try {
       const res = await deleteRiderApplicationDocument(target.documentType)
+      if (!this.isLatestDocumentRequest(field, requestVersion)) {
+        return
+      }
       this.setData(target.data, () => {
-        this.mapResponseToData(res)
+        this.applyDocumentResponse(field, requestVersion, res)
       })
     } catch (e) {
       logger.error('Delete rider application document failed', { field, error: e })
@@ -379,14 +447,16 @@ Page({
 
   async processOCR(
     ocrPromise: Promise<RiderApplicationResponse>,
+    field: UploadField,
     _type: 'identity' | 'health',
     feedbackField: keyof RiderUploadFeedback
   ) {
+    const requestVersion = this.beginDocumentRequest(field)
     this.setOCRState(_type, 'processing')
     this.setUploadFeedback(feedbackField, createUploadFeedback('processing', '证照识别中', '请稍候，识别结果会显示在当前卡片中'))
     try {
       const res = await ocrPromise
-      this.mapResponseToData(res)
+      this.applyDocumentResponse(field, requestVersion, res)
     } catch (e) {
       logger.error('OCR failed', e)
       const message = getErrorMessage(e, '识别失败，请提供更清晰更规整的图片重试')

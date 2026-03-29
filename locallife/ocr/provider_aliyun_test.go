@@ -474,6 +474,50 @@ func TestAliyunProviderRecognizeNormalizesStringifiedIDCardFrontData(t *testing.
 	}
 }
 
+func TestAliyunProviderRecognizeNormalizesNumericIDCardFrontData(t *testing.T) {
+	raw := json.RawMessage(`{
+		"Data": {
+			"data": {
+				"face": {
+					"data": {
+						"name": "王铭宇",
+						"sex": "男",
+						"ethnicity": "汉",
+						"address": "四川省攀枝花市榕树街277号",
+						"idNumber": 510124198809071200
+					},
+					"prism_keyValueInfo": [
+						{"key": "idNumber", "value": 510124198809071200}
+					]
+				}
+			}
+		}
+	}`)
+	provider := NewAliyunProvider(stubAliyunClient{raw: raw})
+	resp, err := provider.Recognize(context.Background(), CapabilityAliyunIDCard, RecognizeRequest{DocumentType: DocumentTypeIDCard, Side: DocumentSideFront})
+	if err != nil {
+		t.Fatalf("Recognize error = %v", err)
+	}
+	if resp.Normalized.IDCard == nil {
+		t.Fatal("expected normalized id card result")
+	}
+	if resp.Normalized.IDCard.Name != "王铭宇" {
+		t.Fatalf("name = %s", resp.Normalized.IDCard.Name)
+	}
+	if resp.Normalized.IDCard.IDNumber != "510124198809071200" {
+		t.Fatalf("id number = %s", resp.Normalized.IDCard.IDNumber)
+	}
+	if resp.Normalized.IDCard.Gender != "男" {
+		t.Fatalf("gender = %s", resp.Normalized.IDCard.Gender)
+	}
+	if resp.Normalized.IDCard.Ethnicity != "汉" {
+		t.Fatalf("ethnicity = %s", resp.Normalized.IDCard.Ethnicity)
+	}
+	if resp.Normalized.IDCard.Address != "四川省攀枝花市榕树街277号" {
+		t.Fatalf("address = %s", resp.Normalized.IDCard.Address)
+	}
+}
+
 func TestAliyunProviderRecognizeNormalizesStringifiedIDCardBackData(t *testing.T) {
 	raw := json.RawMessage(`{
 		"Data": "{\"data\":{\"back\":{\"data\":{\"issueAuthority\":\"宁晋县公安局\",\"validPeriod\":\"2008.05.07-2028.05.07\"}}}}"

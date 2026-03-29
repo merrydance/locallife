@@ -51,14 +51,14 @@ function checkRiderIDCardWriteback(latest: RiderApplicationResponse, side: 'Fron
 
   if (side === 'Front') {
     return {
-      ready: status === 'done' || hasRiderText(latest.id_card_ocr?.name) || hasRiderText(latest.id_card_ocr?.id_number),
+      ready: hasRiderText(latest.id_card_ocr?.id_number),
       failed: status === 'failed',
       errorMessage: error
     }
   }
 
   return {
-    ready: status === 'done' || hasRiderText(latest.id_card_ocr?.valid_end),
+    ready: hasRiderText(latest.id_card_ocr?.valid_end),
     failed: status === 'failed',
     errorMessage: error
   }
