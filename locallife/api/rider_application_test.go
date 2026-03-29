@@ -237,6 +237,101 @@ func TestUpdateRiderApplicationBasic(t *testing.T) {
 	}
 }
 
+func TestDeleteRiderApplicationHealthCert(t *testing.T) {
+	user, _ := randomUser(t)
+
+	testCases := []struct {
+		name          string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OK",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				updatedApp := app
+				updatedApp.HealthCertMediaAssetID = pgtype.Int8{}
+				updatedApp.HealthCertOcr = nil
+
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					UpdateRiderApplicationHealthCert(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, arg db.UpdateRiderApplicationHealthCertParams) (db.RiderApplication, error) {
+						require.Equal(t, app.ID, arg.ID)
+						require.False(t, arg.HealthCertMediaAssetID.Valid)
+						require.Nil(t, arg.HealthCertOcr)
+						return updatedApp, nil
+					})
+
+				store.EXPECT().
+					GetMediaAssetByID(gomock.Any(), int64(3)).
+					Times(1).
+					Return(db.MediaAsset{ID: 3, UploadedBy: user.ID}, nil)
+
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(3)).
+					Times(1).
+					Return(db.MediaAsset{ID: 3, UploadedBy: user.ID}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp riderApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Nil(t, resp.HealthCertAssetID)
+				require.Nil(t, resp.HealthCertOCR)
+			},
+		},
+		{
+			name: "NotDraft",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomRiderApplicationWithData(user.ID)
+				app.Status = "submitted"
+				store.EXPECT().
+					GetRiderApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodDelete, "/v1/rider/application/health-cert", nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 // ==================== 提交申请测试（自动审核） ====================
 
 func TestSubmitRiderApplication(t *testing.T) {

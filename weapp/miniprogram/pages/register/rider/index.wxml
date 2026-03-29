@@ -80,7 +80,8 @@
           title="点击上传本人健康证" 
           value="{{healthCert.url}}" 
           rawUrl="{{healthCert.rawUrl}}"
-          bind:change="onHealthCertUpload" 
+          bind:change="onHealthCertUpload"
+          bind:remove="onHealthCertRemove" 
         />
       </view>
     </view>

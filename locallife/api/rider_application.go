@@ -245,6 +245,60 @@ func (server *Server) updateRiderApplicationBasic(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
 }
 
+// deleteRiderApplicationHealthCert godoc
+// @Summary 删除骑手申请健康证
+// @Description 删除骑手草稿中的健康证绑定，并清空对应 OCR 结果。
+// @Tags 骑手申请
+// @Produce json
+// @Success 200 {object} riderApplicationResponse "删除成功"
+// @Failure 400 {object} ErrorResponse "状态不允许修改"
+// @Failure 401 {object} ErrorResponse "未登录"
+// @Failure 404 {object} ErrorResponse "申请不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/rider/application/health-cert [delete]
+// @Security BearerAuth
+func (server *Server) deleteRiderApplicationHealthCert(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider application by user: %w", err)))
+		return
+	}
+
+	if app.Status != "draft" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
+		return
+	}
+
+	assetID := int64(0)
+	if app.HealthCertMediaAssetID.Valid {
+		assetID = app.HealthCertMediaAssetID.Int64
+	}
+
+	updated, err := server.store.UpdateRiderApplicationHealthCert(ctx, db.UpdateRiderApplicationHealthCertParams{
+		ID:                     app.ID,
+		HealthCertMediaAssetID: pgtype.Int8{},
+		HealthCertOcr:          nil,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("update rider application health cert: %w", err)))
+		return
+	}
+
+	if assetID > 0 {
+		if err := server.mediaRegistry.SoftDelete(ctx, assetID, authPayload.UserID); err != nil {
+			log.Warn().Err(err).Int64("asset_id", assetID).Msg("delete rider application health cert: soft delete media failed")
+		}
+	}
+
+	ctx.JSON(http.StatusOK, newRiderApplicationResponse(updated))
+}
+
 // ==================== 提交申请 ====================
 
 // submitRiderApplication godoc

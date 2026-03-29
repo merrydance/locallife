@@ -652,8 +652,9 @@ func (server *Server) setupRouter() {
 		merchantAppGroup.GET("", server.getOrCreateMerchantApplicationDraft)      // 创建/获取草稿
 		merchantAppGroup.PUT("/basic", server.updateMerchantApplicationBasicInfo) // 更新基础信息
 		merchantAppGroup.PUT("/images", server.updateMerchantApplicationImages)   // 更新门头照/环境照
-		merchantAppGroup.POST("/submit", server.submitMerchantApplication)        // 提交申请（自动审核）
-		merchantAppGroup.POST("/reset", server.resetMerchantApplication)          // 重置申请（被拒后）
+		merchantAppGroup.DELETE("/documents/:document_type", server.deleteMerchantApplicationDocument)
+		merchantAppGroup.POST("/submit", server.submitMerchantApplication) // 提交申请（自动审核）
+		merchantAppGroup.POST("/reset", server.resetMerchantApplication)   // 重置申请（被拒后）
 	}
 
 	// M3.2: 商户开户（微信支付二级商户进件）
@@ -989,8 +990,9 @@ func (server *Server) setupRouter() {
 		// 骑手申请流程（新版）
 		riderGroup.GET("/application", server.createOrGetRiderApplicationDraft)  // 创建/获取草稿
 		riderGroup.PUT("/application/basic", server.updateRiderApplicationBasic) // 更新基础信息
-		riderGroup.POST("/application/submit", server.submitRiderApplication)    // 提交申请
-		riderGroup.POST("/application/reset", server.resetRiderApplication)      // 重置申请（被拒后）
+		riderGroup.DELETE("/application/health-cert", server.deleteRiderApplicationHealthCert)
+		riderGroup.POST("/application/submit", server.submitRiderApplication) // 提交申请
+		riderGroup.POST("/application/reset", server.resetRiderApplication)   // 重置申请（被拒后）
 		riderGroup.GET("/me", server.getRiderMe)
 
 		// 押金管理

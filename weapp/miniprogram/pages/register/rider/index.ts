@@ -5,6 +5,7 @@ import {
   ocrRiderHealthCert, 
   submitRiderApplication,
   resetRiderApplication,
+  deleteRiderApplicationHealthCert,
   type RiderApplicationResponse
 } from '../../../api/rider-application'
 import { getPrivateMediaUrl } from '../../../utils/image-security'
@@ -155,6 +156,19 @@ Page({
     if (!path) return
     this.setData({ 'healthCert.url': path })
     this.processOCR(ocrRiderHealthCert(path), 'health')
+  },
+
+  async onHealthCertRemove() {
+    wx.showLoading({ title: '删除中...' })
+    try {
+      const res = await deleteRiderApplicationHealthCert()
+      this.mapResponseToData(res)
+    } catch (e) {
+      logger.error('Delete rider health cert failed', e)
+      wx.showToast({ title: getErrorMessage(e, '删除失败，请重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
   },
 
   async processOCR(ocrPromise: Promise<RiderApplicationResponse>, _type: 'identity' | 'health') {

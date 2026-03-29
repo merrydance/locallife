@@ -53,12 +53,32 @@ SET
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
+-- name: ClearMerchantApplicationBusinessLicense :one
+-- 清空营业执照关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  business_license_media_asset_id = NULL,
+  business_license_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
 -- name: UpdateMerchantApplicationFoodPermit :one
 -- 更新食品经营许可证信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
   food_permit_media_asset_id = COALESCE(sqlc.narg(food_permit_media_asset_id), food_permit_media_asset_id),
   food_permit_ocr = COALESCE(sqlc.narg(food_permit_ocr), food_permit_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearMerchantApplicationFoodPermit :one
+-- 清空食品经营许可证关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  food_permit_media_asset_id = NULL,
+  food_permit_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
@@ -75,12 +95,32 @@ SET
 WHERE id = $1 AND status = 'draft'
 RETURNING *;
 
+-- name: ClearMerchantApplicationIDCardFront :one
+-- 清空身份证正面关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  id_card_front_media_asset_id = NULL,
+  id_card_front_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
 -- name: UpdateMerchantApplicationIDCardBack :one
 -- 更新身份证背面信息（图片URL和OCR结果）
 UPDATE merchant_applications
 SET
   id_card_back_media_asset_id = COALESCE(sqlc.narg(id_card_back_media_asset_id), id_card_back_media_asset_id),
   id_card_back_ocr = COALESCE(sqlc.narg(id_card_back_ocr), id_card_back_ocr),
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING *;
+
+-- name: ClearMerchantApplicationIDCardBack :one
+-- 清空身份证背面关联和 OCR 结果
+UPDATE merchant_applications
+SET
+  id_card_back_media_asset_id = NULL,
+  id_card_back_ocr = NULL,
   updated_at = now()
 WHERE id = $1 AND status = 'draft'
 RETURNING *;

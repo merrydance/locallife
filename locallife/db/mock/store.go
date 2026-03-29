@@ -862,6 +862,66 @@ func (mr *MockStoreMockRecorder) ClearCart(ctx, cartID any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearCart", reflect.TypeOf((*MockStore)(nil).ClearCart), ctx, cartID)
 }
 
+// ClearMerchantApplicationBusinessLicense mocks base method.
+func (m *MockStore) ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearMerchantApplicationBusinessLicense", ctx, id)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearMerchantApplicationBusinessLicense indicates an expected call of ClearMerchantApplicationBusinessLicense.
+func (mr *MockStoreMockRecorder) ClearMerchantApplicationBusinessLicense(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantApplicationBusinessLicense", reflect.TypeOf((*MockStore)(nil).ClearMerchantApplicationBusinessLicense), ctx, id)
+}
+
+// ClearMerchantApplicationFoodPermit mocks base method.
+func (m *MockStore) ClearMerchantApplicationFoodPermit(ctx context.Context, id int64) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearMerchantApplicationFoodPermit", ctx, id)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearMerchantApplicationFoodPermit indicates an expected call of ClearMerchantApplicationFoodPermit.
+func (mr *MockStoreMockRecorder) ClearMerchantApplicationFoodPermit(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantApplicationFoodPermit", reflect.TypeOf((*MockStore)(nil).ClearMerchantApplicationFoodPermit), ctx, id)
+}
+
+// ClearMerchantApplicationIDCardBack mocks base method.
+func (m *MockStore) ClearMerchantApplicationIDCardBack(ctx context.Context, id int64) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearMerchantApplicationIDCardBack", ctx, id)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearMerchantApplicationIDCardBack indicates an expected call of ClearMerchantApplicationIDCardBack.
+func (mr *MockStoreMockRecorder) ClearMerchantApplicationIDCardBack(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantApplicationIDCardBack", reflect.TypeOf((*MockStore)(nil).ClearMerchantApplicationIDCardBack), ctx, id)
+}
+
+// ClearMerchantApplicationIDCardFront mocks base method.
+func (m *MockStore) ClearMerchantApplicationIDCardFront(ctx context.Context, id int64) (db.MerchantApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearMerchantApplicationIDCardFront", ctx, id)
+	ret0, _ := ret[0].(db.MerchantApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearMerchantApplicationIDCardFront indicates an expected call of ClearMerchantApplicationIDCardFront.
+func (mr *MockStoreMockRecorder) ClearMerchantApplicationIDCardFront(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantApplicationIDCardFront", reflect.TypeOf((*MockStore)(nil).ClearMerchantApplicationIDCardFront), ctx, id)
+}
+
 // ClearMerchantTags mocks base method.
 func (m *MockStore) ClearMerchantTags(ctx context.Context, merchantID int64) error {
 	m.ctrl.T.Helper()

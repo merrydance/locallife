@@ -10,7 +10,8 @@ import {
   submitMerchantApplication,
   type MerchantApplicationOCRDocumentType,
   type MerchantApplicationOCRSubmissionResult,
-  updateMerchantBasicInfo
+  updateMerchantBasicInfo,
+  deleteMerchantApplicationDocument
 } from '../../../../api/onboarding'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 import { AppError, ErrorType } from '../../../../utils/error-handler'
@@ -541,7 +542,7 @@ Page({
   },
 
   onLicenseRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.handleDocumentRemove('license')
   },
 
   async onFoodPermitUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) {
@@ -549,7 +550,7 @@ Page({
   },
 
   onFoodPermitRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.handleDocumentRemove('foodPermit')
   },
 
   async onIdCardFrontUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) {
@@ -557,7 +558,7 @@ Page({
   },
 
   onIdCardFrontRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.handleDocumentRemove('idCardFront')
   },
 
   async onIdCardBackUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) {
@@ -565,7 +566,32 @@ Page({
   },
 
   onIdCardBackRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.handleDocumentRemove('idCardBack')
+  },
+
+  async handleDocumentRemove(field: UploadField) {
+    if (!canEdit(this.data.status)) {
+      wx.showToast({ title: '当前状态不可编辑申请资料', icon: 'none' })
+      return
+    }
+
+    const documentMap: Record<UploadField, 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'> = {
+      license: 'business_license',
+      foodPermit: 'food_permit',
+      idCardFront: 'id_card_front',
+      idCardBack: 'id_card_back'
+    }
+
+    wx.showLoading({ title: '删除中...' })
+    try {
+      const updated = await deleteMerchantApplicationDocument(documentMap[field])
+      await this.applyDraftToPage(updated, false)
+    } catch (error) {
+      logger.error('Delete merchant application document failed', { field, error }, 'merchant-application-page')
+      wx.showToast({ title: extractErrorMessage(error, '删除失败，请稍后重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
   },
 
   async handleDocumentUpload(field: UploadField, path: string) {
@@ -771,15 +797,6 @@ Page({
       ocrNoticeMessage: buildOcrNoticeMessage(ocrStatuses, ocrRefreshRecommended)
     })
 
-    this.checkLegalPersonConsistency(nextForm, draft)
-  },
-
-  checkLegalPersonConsistency(form: ApplicationForm, draft: MerchantApplicationDraftResponse) {
-    const licenseLegalPerson = draft.business_license_ocr?.legal_representative
-    const idCardName = draft.id_card_front_ocr?.name || form.legalPersonName
-    if (!licenseLegalPerson || !idCardName || licenseLegalPerson === idCardName) return
-
-    wx.showToast({ title: '请上传法人身份证', icon: 'none', duration: 3000 })
   },
 
   sleep(ms: number) {

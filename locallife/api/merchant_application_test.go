@@ -225,7 +225,6 @@ func TestGetOrCreateMerchantApplicationDraft(t *testing.T) {
 
 func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 	user, _ := randomUser(t)
-
 	testCases := []struct {
 		name          string
 		body          updateMerchantBasicInfoRequest
@@ -374,6 +373,95 @@ func TestUpdateMerchantApplicationBasicInfo(t *testing.T) {
 			request, err := http.NewRequest(http.MethodPut, "/v1/merchant/application/basic", bytes.NewReader(body))
 			require.NoError(t, err)
 			request.Header.Set("Content-Type", "application/json")
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestDeleteMerchantApplicationDocument(t *testing.T) {
+	user, _ := randomUser(t)
+
+	testCases := []struct {
+		name          string
+		documentType  string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:         "OKBusinessLicense",
+			documentType: "business_license",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				updatedApp := app
+				updatedApp.BusinessLicenseMediaAssetID = pgtype.Int8{}
+				updatedApp.BusinessLicenseOcr = nil
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ClearMerchantApplicationBusinessLicense(gomock.Any(), app.ID).
+					Times(1).
+					Return(updatedApp, nil)
+
+				store.EXPECT().
+					SoftDeleteMediaAsset(gomock.Any(), int64(2)).
+					Times(1).
+					Return(db.MediaAsset{ID: 2, UploadedBy: user.ID}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response merchantApplicationDraftResponse
+				err := json.Unmarshal(recorder.Body.Bytes(), &response)
+				require.NoError(t, err)
+				require.Nil(t, response.BusinessLicenseMediaAssetID)
+				require.Nil(t, response.BusinessLicenseOCR)
+			},
+		},
+		{
+			name:         "InvalidDocumentType",
+			documentType: "invalid",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			expectMerchantApplicationPublicDocumentLookups(store, user.ID)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodDelete, "/v1/merchant/application/documents/"+tc.documentType, nil)
+			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)

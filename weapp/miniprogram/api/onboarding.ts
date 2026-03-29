@@ -370,6 +370,15 @@ export function deleteMediaAsset(mediaId: number) {
   })
 }
 
+export function deleteMerchantApplicationDocument(
+  documentType: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'
+) {
+  return request<MerchantApplicationDraftResponse>({
+    url: `/v1/merchant/application/documents/${documentType}`,
+    method: 'DELETE'
+  })
+}
+
 // 更新商户店铺图片请求（已入驻商户使用）
 export interface UpdateShopImagesRequest {
   storefront_images?: string[]

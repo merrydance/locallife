@@ -79,6 +79,194 @@ func (q *Queries) CheckMerchantAddressExists(ctx context.Context, arg CheckMerch
 	return exists, err
 }
 
+const clearMerchantApplicationBusinessLicense = `-- name: ClearMerchantApplicationBusinessLicense :one
+UPDATE merchant_applications
+SET
+  business_license_media_asset_id = NULL,
+  business_license_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空营业执照关联和 OCR 结果
+func (q *Queries) ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, clearMerchantApplicationBusinessLicense, id)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearMerchantApplicationFoodPermit = `-- name: ClearMerchantApplicationFoodPermit :one
+UPDATE merchant_applications
+SET
+  food_permit_media_asset_id = NULL,
+  food_permit_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空食品经营许可证关联和 OCR 结果
+func (q *Queries) ClearMerchantApplicationFoodPermit(ctx context.Context, id int64) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, clearMerchantApplicationFoodPermit, id)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearMerchantApplicationIDCardBack = `-- name: ClearMerchantApplicationIDCardBack :one
+UPDATE merchant_applications
+SET
+  id_card_back_media_asset_id = NULL,
+  id_card_back_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空身份证背面关联和 OCR 结果
+func (q *Queries) ClearMerchantApplicationIDCardBack(ctx context.Context, id int64) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, clearMerchantApplicationIDCardBack, id)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
+const clearMerchantApplicationIDCardFront = `-- name: ClearMerchantApplicationIDCardFront :one
+UPDATE merchant_applications
+SET
+  id_card_front_media_asset_id = NULL,
+  id_card_front_ocr = NULL,
+  updated_at = now()
+WHERE id = $1 AND status = 'draft'
+RETURNING id, user_id, merchant_name, business_license_number, legal_person_name, legal_person_id_number, contact_phone, business_address, business_scope, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, longitude, latitude, region_id, food_permit_ocr, business_license_ocr, id_card_front_ocr, id_card_back_ocr, storefront_images, environment_images, business_license_media_asset_id, food_permit_media_asset_id, id_card_front_media_asset_id, id_card_back_media_asset_id
+`
+
+// 清空身份证正面关联和 OCR 结果
+func (q *Queries) ClearMerchantApplicationIDCardFront(ctx context.Context, id int64) (MerchantApplication, error) {
+	row := q.db.QueryRow(ctx, clearMerchantApplicationIDCardFront, id)
+	var i MerchantApplication
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.MerchantName,
+		&i.BusinessLicenseNumber,
+		&i.LegalPersonName,
+		&i.LegalPersonIDNumber,
+		&i.ContactPhone,
+		&i.BusinessAddress,
+		&i.BusinessScope,
+		&i.Status,
+		&i.RejectReason,
+		&i.ReviewedBy,
+		&i.ReviewedAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Longitude,
+		&i.Latitude,
+		&i.RegionID,
+		&i.FoodPermitOcr,
+		&i.BusinessLicenseOcr,
+		&i.IDCardFrontOcr,
+		&i.IDCardBackOcr,
+		&i.StorefrontImages,
+		&i.EnvironmentImages,
+		&i.BusinessLicenseMediaAssetID,
+		&i.FoodPermitMediaAssetID,
+		&i.IDCardFrontMediaAssetID,
+		&i.IDCardBackMediaAssetID,
+	)
+	return i, err
+}
+
 const countMerchantApplicationsByStatus = `-- name: CountMerchantApplicationsByStatus :one
 SELECT COUNT(*) FROM merchant_applications
 WHERE status = $1

@@ -89,6 +89,14 @@ type Querier interface {
 	CleanupOldCarts(ctx context.Context, updatedAt time.Time) error
 	ClearBrowseHistory(ctx context.Context, userID int64) error
 	ClearCart(ctx context.Context, cartID int64) error
+	// 清空营业执照关联和 OCR 结果
+	ClearMerchantApplicationBusinessLicense(ctx context.Context, id int64) (MerchantApplication, error)
+	// 清空食品经营许可证关联和 OCR 结果
+	ClearMerchantApplicationFoodPermit(ctx context.Context, id int64) (MerchantApplication, error)
+	// 清空身份证背面关联和 OCR 结果
+	ClearMerchantApplicationIDCardBack(ctx context.Context, id int64) (MerchantApplication, error)
+	// 清空身份证正面关联和 OCR 结果
+	ClearMerchantApplicationIDCardFront(ctx context.Context, id int64) (MerchantApplication, error)
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error

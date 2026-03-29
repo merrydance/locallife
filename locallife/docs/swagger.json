@@ -8821,6 +8821,64 @@
                 }
             }
         },
+        "/v1/merchant/application/documents/{document_type}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除草稿中的单个证照绑定，并清空对应 OCR 结果。支持在 approved 或 rejected 状态下自动重置为 draft 后删除。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户申请"
+                ],
+                "summary": "删除商户申请证照",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "证照类型: business_license|food_permit|id_card_front|id_card_back",
+                        "name": "document_type",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantApplicationDraftResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误或非可编辑状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/application/images": {
             "put": {
                 "security": [
@@ -23491,6 +23549,55 @@
                     },
                     "400": {
                         "description": "参数错误或状态不允许修改",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未登录",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/rider/application/health-cert": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "删除骑手草稿中的健康证绑定，并清空对应 OCR 结果。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手申请"
+                ],
+                "summary": "删除骑手申请健康证",
+                "responses": {
+                    "200": {
+                        "description": "删除成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.riderApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "状态不允许修改",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }

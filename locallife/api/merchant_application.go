@@ -516,6 +516,15 @@ type updateMerchantImagesRequest struct {
 	EnvironmentImages []string `json:"environment_images"` // 环境照URL数组，最多5张
 }
 
+type merchantApplicationDocumentType string
+
+const (
+	merchantApplicationDocumentBusinessLicense merchantApplicationDocumentType = "business_license"
+	merchantApplicationDocumentFoodPermit      merchantApplicationDocumentType = "food_permit"
+	merchantApplicationDocumentIDCardFront     merchantApplicationDocumentType = "id_card_front"
+	merchantApplicationDocumentIDCardBack      merchantApplicationDocumentType = "id_card_back"
+)
+
 // updateMerchantApplicationImages godoc
 // @Summary 更新门头照和环境照
 // @Description 保存商户门头照和店内环境照URL数组到草稿
@@ -638,6 +647,92 @@ func (server *Server) updateMerchantApplicationImages(ctx *gin.Context) {
 			if !found {
 				server.deleteStoredImageAsync(old)
 			}
+		}
+	}
+
+	ctx.JSON(http.StatusOK, server.newMerchantApplicationDraftResponse(ctx.Request.Context(), updatedApp))
+}
+
+// deleteMerchantApplicationDocument godoc
+// @Summary 删除商户申请证照
+// @Description 删除草稿中的单个证照绑定，并清空对应 OCR 结果。支持在 approved 或 rejected 状态下自动重置为 draft 后删除。
+// @Tags 商户申请
+// @Produce json
+// @Param document_type path string true "证照类型: business_license|food_permit|id_card_front|id_card_back"
+// @Success 200 {object} merchantApplicationDraftResponse "删除成功"
+// @Failure 400 {object} ErrorResponse "参数错误或非可编辑状态"
+// @Failure 401 {object} ErrorResponse "未登录"
+// @Failure 404 {object} ErrorResponse "申请不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchant/application/documents/{document_type} [delete]
+// @Security BearerAuth
+func (server *Server) deleteMerchantApplicationDocument(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	documentType := merchantApplicationDocumentType(strings.TrimSpace(ctx.Param("document_type")))
+
+	app, err := server.store.GetMerchantApplicationDraft(ctx, authPayload.UserID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrApplicationNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	editable, needReset, errMsg := checkApplicationEditable(app.Status)
+	if !editable {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(errMsg)))
+		return
+	}
+	if needReset {
+		resetResult, err := server.store.ResetMerchantApplicationTx(ctx, db.ResetMerchantApplicationTxParams{
+			ApplicationID: app.ID,
+			UserID:        authPayload.UserID,
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		app = resetResult.Application
+	}
+
+	var updatedApp db.MerchantApplication
+	var assetID int64
+
+	switch documentType {
+	case merchantApplicationDocumentBusinessLicense:
+		if app.BusinessLicenseMediaAssetID.Valid {
+			assetID = app.BusinessLicenseMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearMerchantApplicationBusinessLicense(ctx, app.ID)
+	case merchantApplicationDocumentFoodPermit:
+		if app.FoodPermitMediaAssetID.Valid {
+			assetID = app.FoodPermitMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearMerchantApplicationFoodPermit(ctx, app.ID)
+	case merchantApplicationDocumentIDCardFront:
+		if app.IDCardFrontMediaAssetID.Valid {
+			assetID = app.IDCardFrontMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearMerchantApplicationIDCardFront(ctx, app.ID)
+	case merchantApplicationDocumentIDCardBack:
+		if app.IDCardBackMediaAssetID.Valid {
+			assetID = app.IDCardBackMediaAssetID.Int64
+		}
+		updatedApp, err = server.store.ClearMerchantApplicationIDCardBack(ctx, app.ID)
+	default:
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid document type")))
+		return
+	}
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	if assetID > 0 {
+		if err := server.mediaRegistry.SoftDelete(ctx, assetID, authPayload.UserID); err != nil {
+			log.Warn().Err(err).Int64("asset_id", assetID).Str("document_type", string(documentType)).Msg("delete merchant application document: soft delete media failed")
 		}
 	}
 

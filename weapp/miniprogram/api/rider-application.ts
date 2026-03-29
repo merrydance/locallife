@@ -125,3 +125,10 @@ export function resetRiderApplication() {
     method: 'POST'
   })
 }
+
+export function deleteRiderApplicationHealthCert() {
+  return request<RiderApplicationResponse>({
+    url: '/v1/rider/application/health-cert',
+    method: 'DELETE'
+  })
+}

@@ -14,6 +14,7 @@ import {
   resetMerchantApplication,
   uploadMerchantImage,
   updateMerchantImages,
+  deleteMerchantApplicationDocument,
   deleteMediaAsset,
   type MerchantApplicationOCRDocumentType,
   type MerchantApplicationOCRSubmissionResult,
@@ -330,9 +331,6 @@ Page({
         accountPermitImages,
         storefrontImages,
         environmentImages
-      }, () => {
-        // 数据加载后立即进行法人一致性校验
-        this.checkLegalPersonConsistency()
       })
 
       logger.debug('[MerchantRegister] initApplication 完成', formData, 'initApplication')
@@ -389,8 +387,73 @@ Page({
     }, () => {
       this.updateOcrProgressMessage(data)
       this.saveDraft()
-      this.checkLegalPersonConsistency()
     })
+  },
+
+  async removeUploadedDocument(field: UploadField) {
+    const documentMap: Record<UploadField, {
+      documentType: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back'
+      fieldKey: OCRFieldKey
+      data: Record<string, unknown>
+    }> = {
+      license: {
+        documentType: 'business_license',
+        fieldKey: 'business_license_ocr',
+        data: {
+          licenseImages: [],
+          'formData.licenseName': '',
+          'formData.creditCode': '',
+          'formData.registerAddress': '',
+          'formData.licenseValidity': '',
+          'formData.businessScope': '',
+          'ocrResults.license': null
+        }
+      },
+      foodPermit: {
+        documentType: 'food_permit',
+        fieldKey: 'food_permit_ocr',
+        data: {
+          foodLicenseImages: [],
+          'formData.foodLicenseValidity': ''
+        }
+      },
+      idCardFront: {
+        documentType: 'id_card_front',
+        fieldKey: 'id_card_front_ocr',
+        data: {
+          idCardFrontImages: [],
+          'formData.legalPerson': '',
+          'formData.idCard': '',
+          'formData.gender': '',
+          'formData.hometown': '',
+          'ocrResults.idCard': null
+        }
+      },
+      idCardBack: {
+        documentType: 'id_card_back',
+        fieldKey: 'id_card_back_ocr',
+        data: {
+          idCardBackImages: [],
+          'formData.idCardValidity': ''
+        }
+      }
+    }
+
+    const target = documentMap[field]
+    this.stopOcrPolling(target.fieldKey)
+
+    wx.showLoading({ title: '删除中...' })
+    try {
+      const latestDraft = await deleteMerchantApplicationDocument(target.documentType) as MerchantDraftExt
+      this.setData(target.data, () => {
+        this.applyLatestOcrDraft(latestDraft)
+      })
+    } catch (error) {
+      logger.error('[MerchantRegister] 删除证照失败', { field, error }, 'removeUploadedDocument')
+      wx.showToast({ title: getErrorMessage(error, '删除失败，请重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
   },
 
   buildOcrProgressMessage(data?: MerchantDraftExt) {
@@ -965,7 +1028,6 @@ Page({
             'ocrResults.license': ocr
           })
           this.saveDraft()
-          this.checkLegalPersonConsistency()
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
       }, {
@@ -980,7 +1042,7 @@ Page({
     }
   },
   onLicenseRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.removeUploadedDocument('license')
   },
 
   // 食品经营许可证
@@ -1021,7 +1083,7 @@ Page({
     }
   },
   onFoodLicenseRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.removeUploadedDocument('foodPermit')
   },
 
   // 身份证正面
@@ -1053,7 +1115,6 @@ Page({
             'ocrResults.idCard': ocr
           })
           this.saveDraft()
-          this.checkLegalPersonConsistency()
           wx.showToast({ title: '识别成功', icon: 'success' })
         }
       }, {
@@ -1068,7 +1129,7 @@ Page({
     }
   },
   onIdCardFrontRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.removeUploadedDocument('idCardFront')
   },
 
   // 身份证反面
@@ -1110,7 +1171,7 @@ Page({
     }
   },
   onIdCardBackRemove() {
-    wx.showToast({ title: '暂不支持删除已上传证照，可重新上传替换', icon: 'none' })
+    this.removeUploadedDocument('idCardBack')
   },
 
   // 开户许可证
@@ -1366,24 +1427,6 @@ Page({
   // ==================== 提交申请 ====================
 
   // ==================== 校验逻辑 ====================
-
-  checkLegalPersonConsistency() {
-    const { ocrResults, formData } = this.data
-    const licenseName = ocrResults.license?.legal_representative || ocrResults.license?.person
-    const idName = ocrResults.idCard?.name || formData.legalPerson
-
-    console.log('[DEBUG] Consistency Check:', {
-      licenseName,
-      idName,
-      licenseSource: ocrResults.license,
-      idSource: ocrResults.idCard,
-      formDataLegel: formData.legalPerson
-    })
-
-    if (licenseName && idName && licenseName !== idName) {
-      wx.showToast({ title: '请上传法人身份证', icon: 'none', duration: 3000 })
-    }
-  },
 
   // ==================== OCR 轮询 ====================
 
