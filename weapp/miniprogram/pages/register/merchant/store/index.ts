@@ -40,6 +40,12 @@ type OCRResult = {
   valid_date?: string
 }
 
+type OCRCheckResult = {
+  label: string
+  status: string
+  error?: string
+}
+
 type MerchantDraftExt = MerchantApplicationDraftResponse & {
   business_address_detail?: string
   legal_person_contact_address?: string
@@ -84,6 +90,13 @@ function getErrorMessage(error: unknown, fallback: string): string {
     return maybeError.userMessage || maybeError.message || maybeError.data?.message || fallback
   }
   return fallback
+}
+
+function toSafeString(value: unknown): string {
+  if (value === null || value === undefined || value === true || value === 'true') {
+    return ''
+  }
+  return String(value)
 }
 
 Page({
@@ -328,6 +341,57 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
+  applyLatestOcrDraft(data: MerchantDraftExt) {
+    this.setData({
+      formData: {
+        ...this.data.formData,
+        licenseName: toSafeString(data.business_license_ocr?.enterprise_name),
+        creditCode: toSafeString(data.business_license_number || data.business_license_ocr?.reg_num || data.business_license_ocr?.credit_code),
+        registerAddress: toSafeString(data.business_license_ocr?.address),
+        licenseValidity: toSafeString(data.business_license_ocr?.valid_period),
+        businessScope: toSafeString(data.business_scope || data.business_license_ocr?.business_scope),
+        foodLicenseValidity: toSafeString(data.food_permit_ocr?.valid_to),
+        legalPerson: toSafeString(data.id_card_front_ocr?.name || data.legal_person_name || data.business_license_ocr?.legal_representative),
+        idCard: toSafeString(data.id_card_front_ocr?.id_number || data.legal_person_id_number),
+        gender: toSafeString(data.id_card_front_ocr?.gender),
+        hometown: toSafeString(data.id_card_front_ocr?.address),
+        idCardValidity: toSafeString(data.id_card_back_ocr?.valid_date)
+      },
+      ocrResults: {
+        license: data.business_license_ocr || null,
+        idCard: data.id_card_front_ocr || null
+      }
+    }, () => {
+      this.saveDraft()
+      this.checkLegalPersonConsistency()
+    })
+  },
+
+  getUploadStepOcrChecks(data: MerchantDraftExt): OCRCheckResult[] {
+    return [
+      {
+        label: '营业执照',
+        status: data.business_license_ocr?.status || '',
+        error: data.business_license_ocr?.error
+      },
+      {
+        label: '食品经营许可证',
+        status: data.food_permit_ocr?.status || '',
+        error: data.food_permit_ocr?.error
+      },
+      {
+        label: '身份证正面',
+        status: data.id_card_front_ocr?.status || '',
+        error: data.id_card_front_ocr?.error
+      },
+      {
+        label: '身份证反面',
+        status: data.id_card_back_ocr?.status || '',
+        error: data.id_card_back_ocr?.error
+      }
+    ]
+  },
+
   // ==================== 草稿管理 ====================
 
   saveDraft() {
@@ -556,7 +620,7 @@ Page({
     return false
   },
 
-  nextStep() {
+  async nextStep() {
     const { currentStep, licenseImages, foodLicenseImages, idCardFrontImages, idCardBackImages } = this.data
 
     // Step 1 check (Intro) - No validation
@@ -573,11 +637,44 @@ Page({
         wx.showToast({ title: '请上传所有必需的证照', icon: 'none' })
         return
       }
-      // Transition to Step 3: Populate data from OCR results if needed
-      // The OCR results are already in `formData` courtesy of `onUpload` handlers.
-      // We just move to next step.
-      this.setData({ currentStep: 2 })
-      return
+
+      wx.showLoading({ title: '校验识别结果...' })
+      try {
+        const latestDraft = await getMerchantApplication() as MerchantDraftExt
+        this.applyLatestOcrDraft(latestDraft)
+
+        const failedCheck = this.getUploadStepOcrChecks(latestDraft).find((item) => item.status === 'failed')
+        if (failedCheck) {
+          wx.showToast({
+            title: failedCheck.error || `${failedCheck.label}识别失败，请重新上传`,
+            icon: 'none',
+            duration: 3000
+          })
+          return
+        }
+
+        const pendingCheck = this.getUploadStepOcrChecks(latestDraft).find((item) => item.status !== 'done')
+        if (pendingCheck) {
+          wx.showToast({
+            title: `${pendingCheck.label}仍在识别中，请稍后再试`,
+            icon: 'none',
+            duration: 3000
+          })
+          return
+        }
+
+        this.setData({ currentStep: 2 })
+        return
+      } catch (error) {
+        wx.showToast({
+          title: getErrorMessage(error, '识别结果校验失败，请重试'),
+          icon: 'none',
+          duration: 3000
+        })
+        return
+      } finally {
+        wx.hideLoading()
+      }
     }
 
     // Step 3 check (Info) - 必填字段校验
