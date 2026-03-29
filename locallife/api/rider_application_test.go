@@ -75,6 +75,19 @@ func TestCheckRiderApplicationApproval_AcceptsIDCardDateRangeWithDots(t *testing
 	require.Empty(t, rejectReason)
 }
 
+func TestCheckRiderApplicationApproval_AcceptsStringifiedHealthCertOCR(t *testing.T) {
+	server := &Server{}
+	app := randomRiderApplicationWithData(1)
+	wrapped, err := json.Marshal(`{"name":"张三","id_number":"110101199001011234","valid_end":"2030年12月31日"}`)
+	require.NoError(t, err)
+	app.HealthCertOcr = wrapped
+
+	approved, rejectReason := server.checkRiderApplicationApproval(app)
+
+	require.True(t, approved)
+	require.Empty(t, rejectReason)
+}
+
 // ==================== 创建/获取草稿测试 ====================
 
 func TestCreateOrGetRiderApplicationDraft(t *testing.T) {

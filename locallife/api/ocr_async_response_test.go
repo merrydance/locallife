@@ -208,3 +208,31 @@ func TestNewRiderApplicationResponse_PreservesAsyncOCRFields(t *testing.T) {
 	require.NotNil(t, resp.HealthCertOCR.OCRJobID)
 	require.Equal(t, jobID, *resp.HealthCertOCR.OCRJobID)
 }
+
+func TestNewRiderApplicationResponse_DecodesStringifiedHealthCertOCR(t *testing.T) {
+	jobID := int64(404)
+	inner, err := json.Marshal(HealthCertOCRData{
+		Status:   "done",
+		OCRJobID: &jobID,
+		Name:     "张三",
+	})
+	require.NoError(t, err)
+	wrapped, err := json.Marshal(string(inner))
+	require.NoError(t, err)
+
+	app := db.RiderApplication{
+		ID:            8,
+		UserID:        9,
+		HealthCertOcr: wrapped,
+		Status:        "draft",
+		CreatedAt:     time.Now(),
+	}
+
+	resp := newRiderApplicationResponse(app)
+
+	require.NotNil(t, resp.HealthCertOCR)
+	require.Equal(t, "done", resp.HealthCertOCR.Status)
+	require.Equal(t, "张三", resp.HealthCertOCR.Name)
+	require.NotNil(t, resp.HealthCertOCR.OCRJobID)
+	require.Equal(t, jobID, *resp.HealthCertOCR.OCRJobID)
+}

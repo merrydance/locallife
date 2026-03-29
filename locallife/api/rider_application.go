@@ -55,6 +55,46 @@ type HealthCertOCRData struct {
 	OCRAt          string `json:"ocr_at,omitempty"`      // OCR识别时间
 }
 
+func decodeOCRPayload(data []byte, target any) error {
+	if len(data) == 0 {
+		return nil
+	}
+	if err := json.Unmarshal(data, target); err == nil {
+		return nil
+	}
+
+	var embedded string
+	if err := json.Unmarshal(data, &embedded); err != nil {
+		return err
+	}
+	if strings.TrimSpace(embedded) == "" {
+		return nil
+	}
+	return json.Unmarshal([]byte(embedded), target)
+}
+
+func decodeIDCardOCRData(data []byte) (*IDCardOCRData, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var payload IDCardOCRData
+	if err := decodeOCRPayload(data, &payload); err != nil {
+		return nil, err
+	}
+	return &payload, nil
+}
+
+func decodeHealthCertOCRData(data []byte) (*HealthCertOCRData, error) {
+	if len(data) == 0 {
+		return nil, nil
+	}
+	var payload HealthCertOCRData
+	if err := decodeOCRPayload(data, &payload); err != nil {
+		return nil, err
+	}
+	return &payload, nil
+}
+
 func normalizePersonName(name string) string {
 	name = strings.TrimSpace(name)
 	name = strings.ReplaceAll(name, " ", "")
@@ -170,17 +210,17 @@ func newRiderApplicationResponse(app db.RiderApplication) riderApplicationRespon
 
 	// 解析身份证OCR数据
 	if len(app.IDCardOcr) > 0 {
-		var ocrData IDCardOCRData
-		if err := json.Unmarshal(app.IDCardOcr, &ocrData); err == nil {
-			resp.IDCardOCR = &ocrData
+		ocrData, err := decodeIDCardOCRData(app.IDCardOcr)
+		if err == nil {
+			resp.IDCardOCR = ocrData
 		}
 	}
 
 	// 解析健康证OCR数据
 	if len(app.HealthCertOcr) > 0 {
-		var ocrData HealthCertOCRData
-		if err := json.Unmarshal(app.HealthCertOcr, &ocrData); err == nil {
-			resp.HealthCertOCR = &ocrData
+		ocrData, err := decodeHealthCertOCRData(app.HealthCertOcr)
+		if err == nil {
+			resp.HealthCertOCR = ocrData
 		}
 	}
 
@@ -538,10 +578,11 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 		return false, "身份证信息未识别，请重新上传清晰的身份证照片"
 	}
 
-	var ocrData IDCardOCRData
-	if err := json.Unmarshal(app.IDCardOcr, &ocrData); err != nil {
+	decodedIDCardOCR, err := decodeIDCardOCRData(app.IDCardOcr)
+	if err != nil || decodedIDCardOCR == nil {
 		return false, "身份证信息解析失败，请重新上传"
 	}
+	ocrData := *decodedIDCardOCR
 
 	// 3. 身份证必须在有效期内
 	if ocrData.ValidEnd == "" {
@@ -566,10 +607,11 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 		return false, "健康证信息未识别，请重新上传清晰的健康证照片"
 	}
 
-	var healthOCR HealthCertOCRData
-	if err := json.Unmarshal(app.HealthCertOcr, &healthOCR); err != nil {
+	decodedHealthOCR, err := decodeHealthCertOCRData(app.HealthCertOcr)
+	if err != nil || decodedHealthOCR == nil {
 		return false, "健康证信息解析失败，请重新上传"
 	}
+	healthOCR := *decodedHealthOCR
 
 	// 5. 健康证姓名必须与身份证一致
 	idName := normalizePersonName(ocrData.Name)

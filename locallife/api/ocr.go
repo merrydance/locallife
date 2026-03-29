@@ -594,13 +594,13 @@ func (server *Server) markOCRPending(ctx *gin.Context, job db.OcrJob) error {
 
 func readRiderIDCardOCRData(data []byte) IDCardOCRData {
 	var payload IDCardOCRData
-	_ = json.Unmarshal(data, &payload)
+	_ = decodeOCRPayload(data, &payload)
 	return payload
 }
 
 func readRiderHealthCertOCRData(data []byte) HealthCertOCRData {
 	var payload HealthCertOCRData
-	_ = json.Unmarshal(data, &payload)
+	_ = decodeOCRPayload(data, &payload)
 	return payload
 }
 
