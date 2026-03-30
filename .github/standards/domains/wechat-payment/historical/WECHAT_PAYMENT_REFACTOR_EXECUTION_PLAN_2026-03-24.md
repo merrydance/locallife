@@ -291,7 +291,7 @@
 - 已完成阶段 I1：统一退款、分账、商户提现失败告警的关键标识字段，当前告警 extra 会稳定携带 payment_order / refund_order / profit_sharing_order / withdrawal_record 级别的排障上下文；商户提现失败与查询重试耗尽也已补发平台告警。
 - 已新增 worker 层测试，覆盖统一告警字段 helper 与商户提现失败告警发布。
 - 已完成阶段 I2：支付回调主链路已补齐关键任务入队失败的指标与平台告警，覆盖合单子单金额不一致退款入队失败、合单支付成功任务入队失败、结算触发分账任务入队失败三类高风险场景；对应恢复仍依赖 payment/refund/profit-sharing/merchant-withdraw recovery scheduler 或人工介入。
-- 已补充支付运行手册 `docs/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`，明确自动恢复链路、对账入口、核心告警类型与人工排障步骤，作为阶段 I3 交付物。
+- 已补充支付运行手册 `../WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`，明确自动恢复链路、对账入口、核心告警类型与人工排障步骤，作为阶段 I3 交付物。
 - 已完成阶段 I4：为支付回调补充关键回归测试，覆盖合单异常到账自动异常退款、合单金额不一致自动退款、合单支付成功任务入队失败仍返回 SUCCESS、结算触发分账任务入队失败仍返回 SUCCESS 四类高风险分支；`go test ./api -run 'TestHandleCombinePaymentNotify_(ClosedOrderEnqueuesAnomalyRefund|AmountMismatchEnqueuesRefund|PaymentSuccessEnqueueFailureStillReturnsSuccess)|TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSuccess'` 已通过。
 - 已完成阶段 H：订单支付 API 的 `payment_type` 已降为兼容保留字段，请求可省略；Swagger 已改为说明“按业务类型自动选择真实支付链路”；后端会对显式传入旧 `payment_type` 的请求记录兼容日志，小程序支付调用也已去掉该冗余字段。
 - 已进一步收紧取消订单后的退款任务处理：当退款任务调度失败或未配置调度器时，`OrderService.CancelOrder` 会额外写入审计记录，明确标记依赖 refund recovery scheduler 继续补偿；新增 `go test ./logic -run 'TestOrderServiceCancelOrder_(RefundScheduleFailureWritesAudit|MissingSchedulerWritesAudit)'` 已通过。
@@ -300,5 +300,5 @@
 - 已完成阶段 J3：新增骑手押金退款回调落账集成测试，覆盖“押金支付成功 -> 提现冻结 -> 退款结果任务成功结算 -> 支付单/refund order/credit/rider balance/rider deposit logs 全量落账”闭环；在补测过程中进一步暴露并修复两处真实 schema 约束缺口：`rider_deposits.related_order_id` 不能承载 `refund_order.id`，现已改为退款流水统一关联 `payment_order_id`；`rider_deposits.payment_order_id` 唯一索引已收窄为仅约束 `type='deposit'`，并同步将 `GetRiderDepositByPaymentOrderID` 查询限定为充值流水；`make sqlc` 已重新生成代码，`go test ./integration -run 'TestRiderDepositRefundCallbackAccountingIntegration$' -count=1 -p 1` 已通过。
 - 已完成阶段 J4：现有 `DataCleanupScheduler` 已具备骑手押金到期提醒测试覆盖，包含“异步通知任务分发”“无 distributor 时直接通知 fallback 并发布平台告警”“到期凭证批量标记 expired 并发布告警”三类关键场景；`go test ./scheduler -run 'TestDataCleanupScheduler_(RemindExpiringRiderDepositCredits_DistributesNotificationTask|RemindExpiringRiderDepositCredits_FallbackDirectNotificationAndPublishAlert|MarkExpiredRiderDepositCredits)$'` 已通过。
 - 已完成阶段 J5：新增 `util.LoadConfig` 配置接线测试，覆盖默认值、Redis 密码引号清洗、数据库连接池默认参数以及微信支付/收付通新增配置字段读取，确保 `WECHAT_PAY_*`、`WECHAT_ECOMMERCE_*`、`REDIS_REQUIRED` 等关键变量能稳定进入运行时配置对象；`go test ./util -run 'TestLoadConfig_(DefaultsAndTrimQuotes|ReadsWechatPaymentAndEcommerceConfig)$'` 已通过。
-- 已完成阶段 J7/J8：已在 `docs/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md` 中补充测试环境闭环执行清单、生产发布顺序、回滚优先级、数据库回滚原则与回滚触发条件，后续上线按 runbook 执行即可。
+- 已完成阶段 J7/J8：已在 `../WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md` 中补充测试环境闭环执行清单、生产发布顺序、回滚优先级、数据库回滚原则与回滚触发条件，后续上线按 runbook 执行即可。
 - 阶段 J6 仍需在真实测试环境执行一次闭环联调；阶段 G 因无历史数据暂不执行。

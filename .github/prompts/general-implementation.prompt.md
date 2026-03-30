@@ -1,3 +1,7 @@
+---
+name: "通用实现请求模板"
+description: "Use only when drafting an implementation request that spans multiple product areas or the target area is not yet clear. Trigger phrases: cross-area implementation, one request touches backend and web, coordinate backend and Mini Program, multi-surface feature change. 适用于整理跨区域或尚未明确归属的实现型请求。"
+---
 # General Implementation Template
 
 Use this template when asking for a concrete code change in this workspace.

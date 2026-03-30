@@ -6,8 +6,8 @@
 
 本文不替代运维 Runbook，也不替代切换清单：
 
-- 切换前准入条件看 `docs/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`
-- 失败排障与告警处理看 `docs/OCR_OPERATIONS_RUNBOOK_2026-03-25.md`
+- 切换前准入条件看 `./OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`
+- 失败排障与告警处理看 `../OCR_OPERATIONS_RUNBOOK_2026-03-25.md`
 
 ## 2. 联调目标
 
@@ -122,6 +122,6 @@
 
 ## 8. 关联文档
 
-- `.github/standards/domains/ocr/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
-- `.github/standards/domains/ocr/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`
+- `.github/standards/domains/ocr/historical/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
+- `.github/standards/domains/ocr/historical/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`
 - `.github/standards/domains/ocr/OCR_OPERATIONS_RUNBOOK_2026-03-25.md`

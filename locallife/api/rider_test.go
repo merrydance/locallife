@@ -142,6 +142,33 @@ func TestGoOnlineAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "OK_ApprovedLegacyRider",
+			body: map[string]interface{}{
+				"longitude": 116.404,
+				"latitude":  39.915,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
+				approvedRider := rider
+				approvedRider.Status = "approved"
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(approvedRider, nil)
+
+				approvedRider.IsOnline = true
+				store.EXPECT().
+					UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(approvedRider, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
 			name: "InsufficientDeposit",
 			body: map[string]interface{}{
 				"longitude": 116.404,
@@ -999,6 +1026,34 @@ func TestGetRiderStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.False(t, resp.CanGoOnline)
 				require.Contains(t, resp.OnlineBlockReason, "押金不足")
+			},
+		},
+		{
+			name: "OK_ApprovedLegacyRiderCanGoOnline",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				approvedRider := rider
+				approvedRider.Status = "approved"
+				approvedRider.IsOnline = false
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(approvedRider, nil)
+
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.Delivery{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp riderStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+				require.True(t, resp.CanGoOnline)
+				require.Empty(t, resp.OnlineBlockReason)
 			},
 		},
 		{

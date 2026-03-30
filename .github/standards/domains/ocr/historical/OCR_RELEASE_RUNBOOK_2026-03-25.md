@@ -15,8 +15,8 @@
 
 执行本 Runbook 前，必须满足：
 
-1. `docs/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md` 中的切换前硬性前置条件已满足。
-2. `docs/OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md` 已在测试环境完成至少一轮闭环联调。
+1. `./OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md` 中的切换前硬性前置条件已满足。
+2. `./OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md` 已在测试环境完成至少一轮闭环联调。
 3. 当前待发布版本已包含统一 OCR API、worker、观测、告警和最新文档。
 4. 发布窗口内不再混入新的 OCR handler 或 worker 结构性改动。
 
@@ -150,7 +150,7 @@ worker 发布后立刻确认：
 
 ## 9. 关联文档
 
-- `.github/standards/domains/ocr/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
-- `.github/standards/domains/ocr/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`
-- `.github/standards/domains/ocr/OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md`
+- `.github/standards/domains/ocr/historical/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
+- `.github/standards/domains/ocr/historical/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`
+- `.github/standards/domains/ocr/historical/OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md`
 - `.github/standards/domains/ocr/OCR_OPERATIONS_RUNBOOK_2026-03-25.md`

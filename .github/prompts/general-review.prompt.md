@@ -1,3 +1,7 @@
+---
+name: "通用审查请求模板"
+description: "Use only when drafting a review request that spans multiple product areas or the target area is not yet clear. Trigger phrases: cross-area review, backend plus web review, system-wide regression review, findings first across multiple surfaces. 适用于整理跨区域或尚未明确归属的通用审查请求。"
+---
 # General Review Template
 
 Use this template when asking for a code review in this workspace.
@@ -11,6 +15,7 @@ Request:
 - Check authentication, authorization, sensitive data exposure, unsafe defaults, and obvious injection or callback-handling risks when relevant
 - Check whether the change forms a complete end-to-end path instead of stopping at one layer
 - Call out missing tests, missing regeneration steps, and residual risk
+- If a high-risk path changed but was not actually validated, say exactly which path remains unverified
 - If there are no findings, say so explicitly
 
 Optional context:

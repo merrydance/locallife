@@ -1,3 +1,7 @@
+---
+name: "后端实现请求模板"
+description: "Use when drafting a normal backend implementation or bug-fix request for locallife/, outside payment-specialized or task-card-specialized flows. Trigger phrases: implement backend endpoint, fix handler logic wiring, update sqlc flow, add business rule, backend contract change. 适用于发起常规 Go 后端功能开发与缺陷修复任务。"
+---
 # Backend Implementation Template
 
 Use this template when asking for a concrete backend change in `locallife/`.
@@ -12,6 +16,7 @@ Request:
 - Use constants from `db/sqlc/constants.go` instead of new magic strings
 - Tell me whether the change requires `make sqlc`, `make mock`, or `make swagger`
 - Run the smallest relevant validation command and report what was executed
+- Report which layers changed, which relevant validations were not run, and what residual risk remains if the path is not fully verified
 
 Required context:
 
@@ -30,3 +35,4 @@ Acceptance checklist:
 - Persistence changes are wired through sqlc/store and actually used by logic
 - Required generation steps were identified and run if source files changed
 - Tests cover the new branch, failure path, or contract edge case
+- The hand-off states what was verified, what was not verified, and where the execution path would still need confirmation

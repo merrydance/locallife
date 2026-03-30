@@ -4,7 +4,7 @@
  * 支持商户、骑手、运营商三种角色
  */
 
-import { postFormData, uploadMedia } from '../utils/media'
+import { uploadMedia } from '../utils/media'
 import { request } from '../utils/request'
 import { enqueueOCRJobAndRefresh } from './ocr-jobs'
 
@@ -92,34 +92,6 @@ const API_ENDPOINTS = {
 interface OCRJobResponse {
   ocr_job_id: number
   status: string
-}
-
-// ==================== 证照上传功能 ====================
-
-/**
- * 通用 OCR 上传：先走媒体三步上传，再提交 media_asset_id 到业务 OCR 接口
- * @param url API路径
- * @param filePath 本地文件路径
- * @param businessType 媒体归属业务
- * @param mediaCategory 媒体分类
- * @param formData 附加表单数据（如 side 参数）
- */
-async function uploadOCR(
-  url: string,
-  filePath: string,
-  businessType: 'merchant' | 'rider' | 'operator',
-  mediaCategory: 'business_license' | 'food_permit' | 'id_card_front' | 'id_card_back' | 'health_cert',
-  formData: Record<string, string | number> = {}
-): Promise<OCRPayload> {
-  const { mediaId } = await uploadMedia(filePath, {
-    businessType,
-    mediaCategory
-  })
-
-  return postFormData<OCRPayload>(url, {
-    media_asset_id: mediaId,
-    ...formData
-  })
 }
 
 async function uploadMerchantApplicationOCR(

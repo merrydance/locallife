@@ -1,9 +1,13 @@
 ---
 name: "微信小程序页面重构蓝图"
-description: "Generate a structured Mini Program page refactor request with diagnosis, scoring, and a production-ready blueprint. 适用于发起微信小程序页面重构任务，先诊断，再给出高分方案与实施要求。"
-agent: "微信小程序交互与工程专家"
+description: "Use when drafting a Mini Program page refactor request that must start with diagnosis, scoring, and a production-ready blueprint before coding. Trigger phrases: refactor Mini Program page, page diagnosis, setData optimization plan, weak-network UX blueprint, page architecture cleanup. 适用于发起微信小程序页面重构任务，先诊断，再给出高分方案与实施要求。"
 ---
 为指定的小程序页面或组件生成一份可直接执行的重构任务说明。先审视现状，再输出高分方案，不要跳过诊断阶段。
+
+适用边界：
+- 这是 prompt，不是专属 agent 模式
+- 用于生成高质量任务说明或直接发起实现请求
+- 若只需要只读诊断，请改用微信小程序只读审计官
 
 输出目标：
 - 先给出现状诊断书，再给重构蓝图，最后给实施要求

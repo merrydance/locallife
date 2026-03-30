@@ -24626,7 +24626,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "设置骑手状态为在线，开始接受订单。需要骑手状态为active且押金充足",
+                "description": "设置骑手状态为在线，开始接受订单。需要骑手状态为approved或active且押金充足",
                 "consumes": [
                     "application/json"
                 ],

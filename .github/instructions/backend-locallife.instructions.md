@@ -28,6 +28,15 @@ More specific backend instruction files under `.github/instructions/` take prece
 - Use structured logging. Do not add `fmt.Println` or other unstructured logging in request paths.
 - Keep handler, logic, and worker files within the existing file-size guardrail enforced by `make lint-filesize`.
 - Inspect nearby files in the same domain package before adding new abstractions.
+- Do not report a change as complete if the affected execution path, regeneration step, or validation command has not been checked yet.
+
+## High-Risk Change Gates
+
+- For payment, refund, callback, webhook, upload, media, OCR, or other externally triggered flows, verify the server-side trust boundary explicitly instead of relying on client-provided identity, status, or ownership fields.
+- For money movement, status transitions, and async recovery paths, make the persistence boundary explicit. Important state changes must be backed by persisted records, idempotency guards, and auditable transitions instead of in-memory assumptions.
+- For worker, scheduler, outbox, retry, or callback-triggered work, define duplicate-delivery behavior and failure recovery behavior deliberately. Do not leave repeated execution semantics implicit.
+- For private media, OCR, document, or download access, preserve ownership checks, visibility rules, and secret handling. Do not weaken access assumptions just to make a path easier to wire.
+- If a high-risk path cannot be validated locally, call that out as residual risk instead of implying the path is production-safe.
 
 ## Regeneration Triggers
 
@@ -40,6 +49,21 @@ More specific backend instruction files under `.github/instructions/` take prece
 - Prefer `make test-unit` for focused validation.
 - Run `make test-integration` only when the change touches integration flows or database-backed behavior.
 - Common local commands: `make server`, `make test`, `make migrateup`, `make new_migration name=<name>`.
+
+## Completion Contract
+
+- Before hand-off, identify which layers changed or were checked: handler, logic, SQL/sqlc, worker, scheduler, route, Swagger, prompt or docs as applicable.
+- State which regeneration steps were required, which were run, and which were confirmed unnecessary.
+- State which validation commands were run, and which relevant validations were not run.
+- If any affected path remains unverified, describe the exact residual risk instead of using a generic caveat.
+- If a requested change stops short of a full end-to-end path, explain where it stops and why.
+
+## Document Hygiene
+
+- When a task touches standards, runbooks, execution plans, cutover checklists, or migration playbooks, decide whether each referenced document is still active guidance or historical rollout material.
+- If a document appears to have completed its purpose, recommend `keep`, `archive`, or `delete` in the hand-off summary.
+- Do not automatically archive or delete documentation unless the user asked for documentation cleanup or the current task explicitly includes that scope.
+- Keep `Read First` sections pointed at the most stable long-lived guidance. Treat execution plans and cutover materials as conditional references unless they are still the active operating baseline.
 
 ## Link Instead Of Duplicating
 

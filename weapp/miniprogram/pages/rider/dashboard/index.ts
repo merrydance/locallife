@@ -50,6 +50,7 @@ Page({
     navBarHeight: 88,
     activeTab: 'hall', // hall: 抢单大厅, my: 我的配送
     loading: false,
+    onlineSwitchLoading: false,
     initError: '',
     loadError: '',
     isRefresherTriggered: false,
@@ -321,10 +322,6 @@ Page({
     wx.navigateTo({ url: '/pages/rider/tasks/index' })
   },
 
-  onGoToPremiumScore() {
-    wx.navigateTo({ url: '/pages/rider/credit/index' })
-  },
-
   onGoToClaims() {
     wx.navigateTo({ url: '/pages/rider/claims/index' })
   },
@@ -351,10 +348,32 @@ Page({
    * 切换上下线
    */
   async onToggleOnline(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
-    const targetOnline = e.detail.value
+    await this.toggleOnlineStatus(e.detail.value)
+  },
+
+  async toggleOnlineStatus(targetOnline: boolean) {
+    if (this.data.onlineSwitchLoading) return
+
+    this.setData({ onlineSwitchLoading: true })
     wx.showLoading({ title: targetOnline ? '正在上线...' : '正在下线...' })
     
     try {
+      const latestStatus = await RiderService.getStatus()
+      const canToggle = targetOnline ? latestStatus.can_go_online : latestStatus.can_go_offline
+
+      if (!canToggle) {
+        const message = targetOnline
+          ? (latestStatus.online_block_reason || '当前无法上线')
+          : (latestStatus.active_deliveries > 0 ? '有配送中的订单，无法下线' : '当前无法下线')
+
+        this.setData({
+          riderStatus: latestStatus,
+          isOnline: latestStatus.is_online
+        })
+        wx.showToast({ title: message, icon: 'none' })
+        return
+      }
+
       let info: RiderInfo
       if (targetOnline) {
         info = await RiderService.goOnline()
@@ -363,21 +382,36 @@ Page({
         info = await RiderService.goOffline()
         wx.showToast({ title: '已下线', icon: 'none' })
       }
+
+      const fallbackStatus: RiderStatus = {
+        ...latestStatus,
+        is_online: targetOnline,
+        online_status: targetOnline
+          ? (latestStatus.active_deliveries > 0 ? 'delivering' : 'online')
+          : 'offline',
+        can_go_online: !targetOnline,
+        can_go_offline: targetOnline,
+        online_block_reason: targetOnline ? undefined : latestStatus.online_block_reason
+      }
+
+      const nextStatus = await RiderService.getStatus().catch(() => fallbackStatus)
       
       this.setData({ 
-        isOnline: targetOnline,
+        isOnline: nextStatus.is_online,
         riderInfo: info,
+        riderStatus: nextStatus,
         initError: ''
       })
       
       if (targetOnline) {
         this.enterOnlineRuntime().catch((err) => logger.error('Toggle online refresh error', err))
       } else {
-        this.setData({ recommendOrders: [] })
+        this.setData({ recommendOrders: [], activeDeliveries: [], newOrdersCount: 0, loadError: '' })
         this.cleanupWebSocket()
       }
     } catch (err: unknown) {
-      this.setData({ isOnline: !targetOnline })
+      const fallbackStatus = this.data.riderStatus
+      this.setData({ isOnline: fallbackStatus ? fallbackStatus.is_online : !targetOnline })
       const userMessage = (err as UserMessageError).userMessage
       const message = typeof userMessage === 'string' && userMessage ? userMessage : '操作失败'
       wx.showToast({ 
@@ -386,6 +420,7 @@ Page({
       })
     } finally {
       wx.hideLoading()
+      this.setData({ onlineSwitchLoading: false })
     }
   },
 

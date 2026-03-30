@@ -29,6 +29,13 @@ Apply these rules when the user asks for a review.
 - Check upload, download, media, OCR, payment, and webhook flows for missing ownership checks, signature checks, content-type checks, or replay protections.
 - Flag hardcoded credentials, test keys, debug bypasses, insecure defaults, or new configuration that would be unsafe in production.
 
+## Unverified High-Risk Paths
+
+- If the change touches callbacks, async jobs, retries, payment, refunds, OCR, uploads, downloads, authorization-sensitive logic, or other externally triggered paths that were not actually validated, call that out explicitly.
+- Do not treat "not enough evidence" as neutral. If a high-risk path was changed but not verified, report it as residual risk or a finding depending on the severity and likelihood of regression.
+- Prefer concrete statements such as "callback idempotency was not exercised" or "worker retry classification remains unverified" over generic phrases like "needs more testing".
+- If you cannot determine whether a high-risk path is safe because the diff lacks surrounding validation or evidence, say that directly.
+
 ## Structural Completeness Checks
 
 - Check whether the change forms a complete path instead of stopping at one layer.
@@ -57,6 +64,7 @@ Apply these rules when the user asks for a review.
 - Reference concrete files and lines where possible.
 - Keep summaries brief and secondary.
 - If no findings are discovered, state that explicitly and mention any residual risk or untested area.
+- If no code-level bug is proven but a changed high-risk path remains unverified, say so explicitly instead of presenting the review as fully closed.
 
 ## Area-Specific Review Reminders
 
@@ -64,9 +72,12 @@ Apply these rules when the user asks for a review.
 - Backend: check that business logic stays out of handlers and that status constants still come from `locallife/db/sqlc/constants.go`.
 - Backend: check that source changes in `locallife/db/query/`, interfaces, or Swagger annotations were followed by the required regeneration steps.
 - Backend: review authn/authz, secret handling, callback verification, upload/download access control, and whether sensitive data is over-logged or over-returned.
+- Backend: when callbacks, workers, schedulers, or retries are involved, check idempotency, repeated delivery semantics, and failure recovery expectations even if the diff only shows one layer.
 - Web: check that new UI work still follows `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`.
 - Web: check that new data or status fields are fully threaded through page state, API calls, rendering states, and user-visible copy.
 - Web: flag client-only permission checks, sensitive data exposure in page state or rendered fields, unsafe rendering of user content, and dangerous actions without proper confirmation or disabled states.
+- Web: if dangerous actions, payout states, private materials, or moderation-sensitive fields changed but no user-visible confirmation or failure-state evidence is shown, call out the gap.
 - Mini Program: check that new patterns align with `.github/standards/weapp/DESIGN_SYSTEM.md` and do not leak business styles into shared global styles.
 - Mini Program: check that new fields or actions are wired through page state, service calls, event handlers, and user-facing states.
 - Mini Program: flag client-only permission assumptions, exposed private materials or internal fields, unsafe weak-network fallbacks, and dangerous operations without clear confirmation or failure handling.
+- Mini Program: when payment, login recovery, realtime state, or weak-network flows are touched, call out any unverified cold-start, retry, duplicate-tap, or re-entry behavior explicitly.

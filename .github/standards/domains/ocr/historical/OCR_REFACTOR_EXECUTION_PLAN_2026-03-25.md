@@ -624,11 +624,11 @@ type BinaryReader interface {
 - [x] Aliyun provider 已为 food permit 补齐基础归一化：可从原始 JSON 提取许可证号、主体名称、经营者姓名、有效期等字段，并构造兼容现有解析器的 `raw_text`。
 - [x] 已完成 T38、T39：`ocr.IsRetryableError`、最大尝试次数和重试抑制逻辑已落地，worker 会在不可重试或达到 `ocr_jobs.max_attempts` 时停止继续重试。
 - [x] 已完成 T43、T44：OCR Prometheus 指标与 `OCR_JOB_FAILED`、`OCR_RETRY_EXHAUSTED` 平台告警已接入，并已写入运维 Runbook。
-- [x] 已完成 T48：新增 `docs/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`，覆盖统一 OCR 接口族的一次性切换前置条件、执行顺序和冒烟清单。
-- [x] 已完成 T49：新增 `docs/OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md`，覆盖统一 OCR API、成功样本、可重试失败、不可重试失败与重试耗尽的测试环境闭环联调步骤。
-- [x] 已完成 T50：新增 `docs/OCR_RELEASE_RUNBOOK_2026-03-25.md`，固定生产配置预检查、migration、API/worker 发布、Swagger/权限切换和首轮生产冒烟顺序。
-- [x] 已完成 T51：新增 `docs/OCR_ROLLBACK_GUIDELINES_2026-03-25.md`，明确 OCR 发布后的回滚优先级、触发条件与不建议直接回滚的数据边界。
-- [x] 已完成 T52：新增 `docs/OCR_ACCEPTANCE_CHECKLIST_2026-03-25.md`，固定统一 OCR 主链路在首小时、首日、首周的上线后验收动作与通过标准。
+- [x] 已完成 T48：新增 `./OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`，覆盖统一 OCR 接口族的一次性切换前置条件、执行顺序和冒烟清单。
+- [x] 已完成 T49：新增 `./OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md`，覆盖统一 OCR API、成功样本、可重试失败、不可重试失败与重试耗尽的测试环境闭环联调步骤。
+- [x] 已完成 T50：新增 `./OCR_RELEASE_RUNBOOK_2026-03-25.md`，固定生产配置预检查、migration、API/worker 发布、Swagger/权限切换和首轮生产冒烟顺序。
+- [x] 已完成 T51：新增 `./OCR_ROLLBACK_GUIDELINES_2026-03-25.md`，明确 OCR 发布后的回滚优先级、触发条件与不建议直接回滚的数据边界。
+- [x] 已完成 T52：新增 `./OCR_ACCEPTANCE_CHECKLIST_2026-03-25.md`，固定统一 OCR 主链路在首小时、首日、首周的上线后验收动作与通过标准。
 - [x] 已完成 T11，已盘点商户 food permit 旧链路的 handler、worker、请求/响应结构与 provider 依赖。
 - [x] 商户 food permit OCR 已开始迁移到 `media_asset_id` 优先模式：任务 payload 新增 `media_asset_id`，worker 优先通过 `media.Registry` 读取媒体字节，旧 `image_path` 仅作为回退。
 - [x] 商户 food permit 的 asset-backed 路径已开始创建 `ocr_job`，并将 `ocr_job_id` 写回现有 `food_permit_ocr` JSON 响应结构。
@@ -652,4 +652,4 @@ type BinaryReader interface {
 - [x] T40 已完成：新增 admin-only `GET /v1/ocr/jobs/dead-letter`，可按 `owner_type` / `document_type` 查询失败且不再自动重试、需要人工介入的 OCR 任务，并直接返回 `attempt_count`、`max_attempts` 与 `manual_reason`。
 - [x] T45 已完成：新增数据库级并发测试，验证两个 worker 同时对同一 `ocr_job` 调用 `MarkOCRJobProcessing` 时，只有一个能成功拿到 lease，另一个会收到 `pgx.ErrNoRows`，从而防止重复消费。
 - [x] T46 已完成：新增失败注入回归测试，覆盖 `ocr.Service.ExecuteJob` 在限流错误下回写 `pending + next_retry_at` 的重试路径，以及 worker 在“重试未耗尽不告警 / 永久失败立即告警”两类边界上的行为。
-- [x] T47 / T47A 已完成：新增 `docs/OCR_BASELINE_EVALUATION_2026-03-25.md`、`cmd/ocr_baseline_eval`、repo-safe 样本清单示例与运行结果示例，固定 success_rate、field_accuracy、P50/P95/P99、error_code_distribution、backlog_count、retry_volume 的计算口径，并提供 `make ocr-baseline` 入口。
+- [x] T47 / T47A 已完成：新增 `../OCR_BASELINE_EVALUATION_2026-03-25.md`、`cmd/ocr_baseline_eval`、repo-safe 样本清单示例与运行结果示例，固定 success_rate、field_accuracy、P50/P95/P99、error_code_distribution、backlog_count、retry_volume 的计算口径，并提供 `make ocr-baseline` 入口。

@@ -56,29 +56,70 @@ func (store *SQLStore) ApproveRiderApplicationTx(ctx context.Context, arg Approv
 			} else {
 				result.Rider = existingRider
 			}
+		} else if !errors.Is(err, ErrRecordNotFound) {
+			return fmt.Errorf("get rider by user: %w", err)
+		} else {
+			result.Rider, err = q.CreateRider(ctx, CreateRiderParams{
+				UserID:   result.Application.UserID,
+				RealName: arg.RiderRealName,
+				IDCardNo: arg.RiderIDCardNo,
+				Phone:    arg.RiderPhone,
+				RegionID: arg.RegionID,
+			})
+			if err != nil {
+				return fmt.Errorf("create rider: %w", err)
+			}
+
+			result.Rider, err = q.UpdateRiderStatus(ctx, UpdateRiderStatusParams{
+				ID:     result.Rider.ID,
+				Status: "active",
+			})
+			if err != nil {
+				return fmt.Errorf("update rider status to active: %w", err)
+			}
+		}
+
+		existingRole, err := q.GetUserRoleByType(ctx, GetUserRoleByTypeParams{
+			UserID: result.Application.UserID,
+			Role:   "rider",
+		})
+		if err != nil {
+			if !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("get rider user role: %w", err)
+			}
+
+			_, err = q.CreateUserRole(ctx, CreateUserRoleParams{
+				UserID:          result.Application.UserID,
+				Role:            "rider",
+				Status:          "active",
+				RelatedEntityID: pgtype.Int8{Int64: result.Rider.ID, Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("create rider user role: %w", err)
+			}
+
 			return nil
 		}
-		if !errors.Is(err, ErrRecordNotFound) {
-			return fmt.Errorf("get rider by user: %w", err)
+
+		if existingRole.Status == "active" && existingRole.RelatedEntityID.Valid && existingRole.RelatedEntityID.Int64 == result.Rider.ID {
+			return nil
 		}
 
-		result.Rider, err = q.CreateRider(ctx, CreateRiderParams{
-			UserID:   result.Application.UserID,
-			RealName: arg.RiderRealName,
-			IDCardNo: arg.RiderIDCardNo,
-			Phone:    arg.RiderPhone,
-			RegionID: arg.RegionID,
-		})
-		if err != nil {
-			return fmt.Errorf("create rider: %w", err)
+		if err := q.DeleteUserRoleByUserAndRole(ctx, DeleteUserRoleByUserAndRoleParams{
+			UserID: result.Application.UserID,
+			Role:   "rider",
+		}); err != nil {
+			return fmt.Errorf("delete stale rider user role: %w", err)
 		}
 
-		result.Rider, err = q.UpdateRiderStatus(ctx, UpdateRiderStatusParams{
-			ID:     result.Rider.ID,
-			Status: "active",
+		_, err = q.CreateUserRole(ctx, CreateUserRoleParams{
+			UserID:          result.Application.UserID,
+			Role:            "rider",
+			Status:          "active",
+			RelatedEntityID: pgtype.Int8{Int64: result.Rider.ID, Valid: true},
 		})
 		if err != nil {
-			return fmt.Errorf("update rider status to active: %w", err)
+			return fmt.Errorf("recreate rider user role: %w", err)
 		}
 
 		return nil

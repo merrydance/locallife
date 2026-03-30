@@ -1,3 +1,7 @@
+---
+name: "Web 审查请求模板"
+description: "Use when drafting a web review request with findings-first output. Trigger phrases: review web change, inspect UI regression, check state propagation, audit operator page wiring, findings first web review. 适用于发起 Web 界面与状态传播审查。"
+---
 # Web Review Template
 
 Use this template when asking for a web review in `web/`.
@@ -10,6 +14,7 @@ Request:
 - Check it against `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`
 - Prioritize broken field propagation, inconsistent states, contract drift, and UI pattern regressions
 - Flag missing loading, empty, error, disabled, and validation states
+- Call out dangerous or high-impact user paths that changed but still appear unverified in real interaction flow
 - If there are no findings, say so explicitly and mention residual risks
 
 Required context:

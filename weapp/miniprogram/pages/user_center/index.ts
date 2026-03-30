@@ -25,6 +25,35 @@ interface ScanCodeRawPayload {
   query?: Record<string, unknown>
 }
 
+const ROLE_LABEL_MAP: Record<string, string> = {
+  merchant: '商家',
+  merchant_boss: '店长',
+  merchant_staff: '店员',
+  rider: '骑手',
+  customer: '顾客',
+  operator: '运营',
+  admin: '管理员'
+}
+
+function normalizeRoles(roles: string[] | string) {
+  const rawRoles = Array.isArray(roles) ? roles : [roles]
+  return Array.from(
+    new Set(
+      rawRoles
+        .map((role) => String(role || '').trim().toLowerCase())
+        .filter(Boolean)
+    )
+  )
+}
+
+function pickPrimaryRole(roles: string[]) {
+  if (roles.includes('merchant')) return 'merchant'
+  if (roles.includes('rider')) return 'rider'
+  if (roles.includes('operator') || roles.includes('admin')) return 'operator'
+  if (roles.includes('customer')) return 'customer'
+  return 'guest'
+}
+
 function toFriendlyMessage(error: unknown, fallback: string) {
   const err = error as MessageError
   const raw = err?.userMessage || err?.message || ''
@@ -120,31 +149,14 @@ Page({
     },
     roles: string[] | string
   ) {
-    const roleList = Array.isArray(roles) ? roles : [roles]
-    const roleMap: Record<string, string> = {
-      'merchant': '商家',
-      'merchant_boss': '店长',
-      'merchant_staff': '店员',
-      'rider': '骑手',
-      'customer': '顾客',
-      'operator': '运营',
-      'admin': '管理员',
-      'MERCHANT': '商家',
-      'MERCHANT_BOSS': '店长',
-      'MERCHANT_STAFF': '店员',
-      'RIDER': '骑手',
-      'CUSTOMER': '顾客',
-      'OPERATOR': '运营',
-      'ADMIN': '管理员'
-    }
+    const roleList = normalizeRoles(roles)
 
     const nonCustomerRoleList = roleList.filter((r) => {
-      const normalized = String(r || '').toLowerCase()
       // 过滤掉纯消费者角色和默认游客占位值，不应显示为标签
-      return normalized !== 'customer' && normalized !== 'guest'
+      return r !== 'customer' && r !== 'guest'
     })
 
-    const userRoles = nonCustomerRoleList.map((r) => ({ key: r, label: roleMap[r] || r }))
+    const userRoles = nonCustomerRoleList.map((r) => ({ key: r, label: ROLE_LABEL_MAP[r] || r }))
 
     this.setData({
       userInfo: {
@@ -159,8 +171,9 @@ Page({
 
   async initUserInfo() {
     if (app.globalData.userInfo) {
-      // Use cached role as fallback
-      this.updateUser(app.globalData.userInfo, app.globalData.userRole)
+      const cachedRoles = app.globalData.userRoles
+      const roles = cachedRoles && cachedRoles.length > 0 ? cachedRoles : app.globalData.userRole
+      this.updateUser(app.globalData.userInfo, roles)
     }
     await this.refreshUserInfo()
   },
@@ -197,7 +210,8 @@ Page({
             avatarUrl: finalAvatar
           } as WechatMiniprogram.UserInfo
           // 缓存完整角色列表，供 onShow 快速恢复工作台
-          app.globalData.userRoles = (user.roles || []).map((r) => String(r).toLowerCase())
+          app.globalData.userRoles = normalizeRoles(user.roles || [])
+          app.globalData.userRole = pickPrimaryRole(app.globalData.userRoles)
 
           // Update Local Data
           this.updateUser(app.globalData.userInfo, user.roles || [])
@@ -313,10 +327,11 @@ Page({
   },
 
   loadWorkbenches(roles: string[]) {
+    const normalizedRoles = normalizeRoles(roles)
     const workbenches = []
 
     // 商家入口：仅商户相关角色
-    if (roles.some((r) => ['merchant', 'merchant_boss', 'merchant_staff'].includes(r))) {
+    if (normalizedRoles.some((r) => ['merchant', 'merchant_boss', 'merchant_staff'].includes(r))) {
       workbenches.push({
         id: 'merchant',
         name: '商户中心',
@@ -325,8 +340,8 @@ Page({
       })
     }
 
-    // 骑手入口：支持骑手，或者运营人员
-    if (roles.includes('rider') || roles.includes('operator')) {
+    // 骑手入口：仅骑手角色展示
+    if (normalizedRoles.includes('rider')) {
       workbenches.push({
         id: 'rider',
         name: '骑手配送',
@@ -336,7 +351,7 @@ Page({
     }
 
     // 运营入口：独立显示
-    if (roles.includes('operator')) {
+    if (normalizedRoles.includes('operator')) {
       workbenches.push({
         id: 'operator',
         name: '运营管理中心',
@@ -346,7 +361,7 @@ Page({
     }
 
     // Admin Entrance
-    if (roles.includes('admin')) {
+    if (normalizedRoles.includes('admin')) {
       workbenches.push({
         id: 'admin',
         name: '平台管理中心',

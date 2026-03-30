@@ -18,6 +18,15 @@ import (
 
 const riderWithdrawProcessingStatus = "processing"
 
+func isRiderOnlineEligibleStatus(status string) bool {
+	switch status {
+	case "approved", "active":
+		return true
+	default:
+		return false
+	}
+}
+
 type riderWithdrawRefundItemResponse struct {
 	RefundOrderID  int64  `json:"refund_order_id"`
 	PaymentOrderID int64  `json:"payment_order_id"`
@@ -681,7 +690,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 
 	// 判断是否可以上线/下线
 	availableDeposit := rider.DepositAmount - rider.FrozenDeposit
-	if rider.Status != "active" {
+	if !isRiderOnlineEligibleStatus(rider.Status) {
 		resp.CanGoOnline = false
 		resp.OnlineBlockReason = "账号未激活"
 	} else if availableDeposit < MinOnlineDeposit {
@@ -699,7 +708,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 
 // goOnline godoc
 // @Summary 骑手上线
-// @Description 设置骑手状态为在线，开始接受订单。需要骑手状态为active且押金充足
+// @Description 设置骑手状态为在线，开始接受订单。需要骑手状态为approved或active且押金充足
 // @Tags 骑手
 // @Accept json
 // @Produce json
@@ -723,7 +732,7 @@ func (server *Server) goOnline(ctx *gin.Context) {
 		return
 	}
 
-	if rider.Status != "active" {
+	if !isRiderOnlineEligibleStatus(rider.Status) {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotActivated))
 		return
 	}

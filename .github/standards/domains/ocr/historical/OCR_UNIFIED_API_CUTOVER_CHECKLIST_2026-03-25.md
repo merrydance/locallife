@@ -98,8 +98,8 @@
 
 ## 8. 关联文档
 
-- `.github/standards/domains/ocr/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
-- `docs/OCR_OPERATIONS_RUNBOOK_2026-03-25.md`
+- `.github/standards/domains/ocr/historical/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`
+- `../OCR_OPERATIONS_RUNBOOK_2026-03-25.md`
 
 本清单只回答“能不能切、切之前检查什么”。
 

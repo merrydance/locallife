@@ -1,3 +1,7 @@
+---
+name: "Web 实现请求模板"
+description: "Use when drafting a web implementation or UI change request for web/. Trigger phrases: update route, change component, add field to page, fix operator UI state, web UX adjustment. 适用于发起 Next.js Web 页面与组件实现任务。"
+---
 # Web Implementation Template
 
 Use this template when asking for a concrete web change in `web/`.

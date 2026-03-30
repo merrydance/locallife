@@ -1,3 +1,7 @@
+---
+name: "小程序实现请求模板"
+description: "Use when drafting a generic Mini Program page or component implementation request for weapp/, outside payment-specialized flows. Trigger phrases: update Mini Program page, fix component behavior, wire page state, improve weak-network UX, implement service-to-view change. 适用于发起常规微信小程序页面与组件实现任务。"
+---
 # Mini Program Implementation Template
 
 Use this template when asking for a concrete Mini Program change in `weapp/`.

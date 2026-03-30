@@ -13,15 +13,11 @@
       <view class="rider-profile">
         <t-icon name="user-circle" size="48rpx" color="rgba(255,255,255,0.8)" />
         <view class="rider-name">{{riderInfo.real_name || '骑手用户'}}</view>
-        <t-tag size="small" variant="dark" theme="default" shape="round" class="credit-tag" bindtap="onGoToPremiumScore">信用分: {{riderInfo.credit_score || 100}}</t-tag>
+        <t-tag size="small" variant="dark" theme="default" shape="round" class="credit-tag">信用分: {{riderInfo.credit_score || 100}}</t-tag>
       </view>
       <view class="header-actions">
         <view class="quick-entry" bindtap="onGoToWallet">
           <text>押金与账单</text>
-          <t-icon name="chevron-right" size="32rpx" />
-        </view>
-        <view class="quick-entry" bindtap="onGoToPremiumScore">
-          <text>高值单资格</text>
           <t-icon name="chevron-right" size="32rpx" />
         </view>
         <view class="quick-entry" bindtap="onGoToHistory">
@@ -55,8 +51,10 @@
           <view class="status-dot"></view>
           <text class="status-text">{{isOnline ? '正在接单中' : '休息中 - 点击上线'}}</text>
         </view>
-        <t-switch 
-          value="{{isOnline}}" 
+        <t-switch
+          value="{{isOnline}}"
+          loading="{{onlineSwitchLoading}}"
+          disabled="{{onlineSwitchLoading}}"
           bind:change="onToggleOnline"
           colors="{{['#00897B', 'var(--td-bg-color-component)']}}"
         />

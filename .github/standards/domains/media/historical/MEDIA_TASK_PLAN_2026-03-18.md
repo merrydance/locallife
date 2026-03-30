@@ -3,10 +3,10 @@
 本文档为 [MEDIA_OSS_CDN_FINAL_IMPLEMENTATION_PLAN_2026-03-18.md](./MEDIA_OSS_CDN_FINAL_IMPLEMENTATION_PLAN_2026-03-18.md) 的施工落地任务拆分，按阶段顺序排列，完成一项勾选一项。
 
 **前置文档：**
-- 实施方案：`MEDIA_OSS_CDN_FINAL_IMPLEMENTATION_PLAN_2026-03-18.md`
+- 实施方案：`./MEDIA_OSS_CDN_FINAL_IMPLEMENTATION_PLAN_2026-03-18.md`
 - 测试清单：`MEDIA_TEST_AND_ACCEPTANCE_CHECKLIST_2026-03-18.md`
-- 上线 Runbook：`MEDIA_RELEASE_RUNBOOK_2026-03-18.md`
-- 小程序迁移手册：`MEDIA_WEAPP_MIGRATION_PLAYBOOK_2026-03-18.md`
+- 上线 Runbook：`./MEDIA_RELEASE_RUNBOOK_2026-03-18.md`
+- 小程序迁移手册：`./MEDIA_WEAPP_MIGRATION_PLAYBOOK_2026-03-18.md`
 
 ---
 
@@ -333,7 +333,7 @@
 
 ## Phase 7：小程序端改造
 
-> 详见 `MEDIA_WEAPP_MIGRATION_PLAYBOOK_2026-03-18.md`
+> 详见 `./MEDIA_WEAPP_MIGRATION_PLAYBOOK_2026-03-18.md`
 
 ### 7.1 媒体上传 SDK
 
@@ -439,7 +439,7 @@
 
 ## Phase 10：上线执行
 
-> 严格按照 `MEDIA_RELEASE_RUNBOOK_2026-03-18.md` 执行，以下为关键节点
+> 严格按照 `./MEDIA_RELEASE_RUNBOOK_2026-03-18.md` 执行，以下为关键节点
 
 - [ ] Runbook §4 上线前检查清单全部勾选
 - [ ] `make migrateup` 执行成功，migration 后检查通过（Runbook §7.3）

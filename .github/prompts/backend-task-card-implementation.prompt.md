@@ -1,6 +1,10 @@
+---
+name: "后端任务卡实现模板"
+description: "Use when drafting a backend implementation request from one task card. Trigger phrases: implement this task card, fix one backend card, complete scoped card only, update card checkboxes after validation. 适用于按单张任务卡推进后端开发。"
+---
 # Backend Task Card Implementation Template
 
-Use this template when asking for a concrete backend fix from one task card under [business_flow_task_cards_20260327](../../business_flow_task_cards_20260327).
+Use this template when asking for a concrete backend fix from one task card in the business_flow_task_cards_20260327 task-card set.
 
 ## Backend Task Card Fix
 
