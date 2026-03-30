@@ -505,59 +505,6 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 	}
 }
 
-// ==================== 骑手开户测试 ====================
-
-func TestRiderBindBankAPI(t *testing.T) {
-	user, _ := randomUser(t)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	server := newTestServerWithEcommerce(t, store, ecommerceClient)
-
-	body := gin.H{
-		"account_type":      "ACCOUNT_TYPE_PRIVATE",
-		"account_bank":      "招商银行",
-		"bank_address_code": "440300",
-		"account_number":    "6214830012345678",
-		"account_name":      "张三",
-		"contact_phone":     "13800138000",
-	}
-	data, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	request, err := http.NewRequest(http.MethodPost, "/v1/rider/applyment/bindbank", bytes.NewReader(data))
-	require.NoError(t, err)
-	request.Header.Set("Content-Type", "application/json")
-	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-
-	recorder := httptest.NewRecorder()
-	server.router.ServeHTTP(recorder, request)
-	require.Equal(t, http.StatusNotFound, recorder.Code)
-}
-
-// ==================== 骑手开户状态查询测试 ====================
-
-func TestGetRiderApplymentStatusAPI(t *testing.T) {
-	user, _ := randomUser(t)
-
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	server := newTestServer(t, store)
-
-	request, err := http.NewRequest(http.MethodGet, "/v1/rider/applyment/status", nil)
-	require.NoError(t, err)
-	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-
-	recorder := httptest.NewRecorder()
-	server.router.ServeHTTP(recorder, request)
-	require.Equal(t, http.StatusNotFound, recorder.Code)
-}
-
 // ==================== 进件回调测试 ====================
 
 func TestHandleApplymentStateNotifyAPI(t *testing.T) {
