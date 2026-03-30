@@ -45,6 +45,8 @@ Practical defaults for this workspace:
 - Prefer specialized prompts such as payment, integration-test, task-card, or Mermaid only when the request explicitly matches that workflow.
 - Do not create a new agent just to express expertise. Expertise belongs in prompt wording or instructions unless a tool boundary is required.
 - Keep agent count minimal. At the moment, read-only Mini Program audit is the only agent-mode that justifies a separate boundary.
+- Do not use `prompts/` as a task archive. One-off planning notes and temporary implementation breakdowns should stay in session state or an existing design document unless the user explicitly asks to persist them.
+- When a prompt is worth keeping, prefer updating an existing reusable prompt over adding another near-duplicate file.
 
 ## Authoritative Source Strategy
 

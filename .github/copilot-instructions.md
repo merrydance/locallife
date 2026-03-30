@@ -22,6 +22,16 @@ Area-specific instructions live in `.github/instructions/` and should be treated
 
 Reusable prompt templates live in `.github/prompts/`.
 
+## Prompt Artifact Hygiene
+
+- Do not create a new prompt file for one-off analysis, planning notes, scratch implementation steps, or temporary task decomposition.
+- Treat `.github/prompts/` as a library of reusable templates, not as a task-by-task archive.
+- Default to not creating prompt files unless the user explicitly asks to save one or the prompt is expected to be reused across multiple future tasks.
+- Prefer session memory, an existing design doc, or the active conversation for temporary working notes.
+- If a reusable prompt already exists for the same workflow, update or replace it instead of creating a near-duplicate file.
+- For a single topic, keep at most one `plan` prompt and one `implement` prompt unless the user explicitly requests a separate variant.
+- After a task is completed, do not preserve temporary prompt drafts in the workspace unless the user asked to keep them or they clearly became a reusable team asset.
+
 ## Backend: `locallife/`
 
 Read these first when changing backend behavior:
