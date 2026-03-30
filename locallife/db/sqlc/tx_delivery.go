@@ -376,6 +376,12 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 		}
 		result.PremiumScoreLog = &scoreLog
 
+		if rider.Status != RiderStatusActive && rider.IsOnline {
+			if _, err := maybeSetRiderOfflineWhenNotEligible(ctx, q, rider); err != nil {
+				return err
+			}
+		}
+
 		return nil
 	})
 

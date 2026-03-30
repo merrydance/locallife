@@ -42,7 +42,7 @@ type depositConfigValue struct {
 func (server *Server) getGlobalDepositFen(ctx *gin.Context, configKey string) (int64, bool, error) {
 	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
 		ConfigKey: configKey,
-		ScopeType: "global",
+		ScopeType: db.PlatformConfigScopeGlobal,
 		ScopeID:   pgtype.Int8{Valid: false},
 	})
 	if err != nil {
@@ -73,7 +73,7 @@ func (server *Server) upsertGlobalDepositFen(ctx *gin.Context, configKey string,
 	_, err = server.store.UpsertPlatformConfig(ctx, db.UpsertPlatformConfigParams{
 		ConfigKey:   configKey,
 		ConfigValue: payload,
-		ScopeType:   "global",
+		ScopeType:   db.PlatformConfigScopeGlobal,
 		ScopeID:     pgtype.Int8{Valid: false},
 	})
 	return err
@@ -83,7 +83,7 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 	platformRate := int32(2)
 	operatorRate := int32(3)
 	merchantDeposit := int64(500000)
-	riderDeposit := int64(20000)
+	riderDeposit := int64(db.DefaultRiderDepositThresholdFen)
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	if config, err := server.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
@@ -101,7 +101,6 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 	baseline, err := server.store.GetPlatformOperatorRuleBaselineFromRegion(ctx)
 	if err == nil {
 		merchantDeposit = baseline.MerchantDeposit
-		riderDeposit = baseline.RiderDeposit
 	} else if !isNotFoundError(err) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -109,7 +108,6 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 		fallback, fallbackErr := server.store.GetPlatformOperatorRuleBaselineFromOperator(ctx)
 		if fallbackErr == nil {
 			merchantDeposit = fallback.MerchantDeposit
-			riderDeposit = fallback.RiderDeposit
 		} else if !isNotFoundError(fallbackErr) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fallbackErr))
 			return
@@ -167,7 +165,7 @@ func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
 			Key:      "RIDER_DEPOSIT",
 			Value:    fenToYuanString(riderDeposit, 2),
 			Unit:     "元",
-			Desc:     "骑手接单前需缴纳的押金（全局生效）",
+			Desc:     "平台默认值；仅在运营商未单独配置时生效",
 			Category: "platform",
 			Editable: true,
 		},
@@ -345,11 +343,7 @@ func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
-		if err := server.store.UpdateAllRegionRuleConfigRiderDeposit(ctx, amountFen); err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-		if err := server.store.UpdateAllOperatorsRiderDeposit(ctx, amountFen); err != nil {
+		if err := server.syncAllRiderOperationalStatuses(ctx); err != nil {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}

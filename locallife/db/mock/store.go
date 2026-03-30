@@ -8174,21 +8174,6 @@ func (mr *MockStoreMockRecorder) GetOperatorApplicationDraft(ctx, userID any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorApplicationDraft", reflect.TypeOf((*MockStore)(nil).GetOperatorApplicationDraft), ctx, userID)
 }
 
-// GetOperatorByRegion mocks base method.
-func (m *MockStore) GetOperatorByRegion(ctx context.Context, regionID int64) (db.Operator, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOperatorByRegion", ctx, regionID)
-	ret0, _ := ret[0].(db.Operator)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetOperatorByRegion indicates an expected call of GetOperatorByRegion.
-func (mr *MockStoreMockRecorder) GetOperatorByRegion(ctx, regionID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOperatorByRegion", reflect.TypeOf((*MockStore)(nil).GetOperatorByRegion), ctx, regionID)
-}
-
 // GetOperatorByUser mocks base method.
 func (m *MockStore) GetOperatorByUser(ctx context.Context, userID int64) (db.Operator, error) {
 	m.ctrl.T.Helper()
@@ -9417,21 +9402,6 @@ func (m *MockStore) GetRiderApplicationByUserID(ctx context.Context, userID int6
 func (mr *MockStoreMockRecorder) GetRiderApplicationByUserID(ctx, userID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderApplicationByUserID", reflect.TypeOf((*MockStore)(nil).GetRiderApplicationByUserID), ctx, userID)
-}
-
-// GetRiderBySubMchID mocks base method.
-func (m *MockStore) GetRiderBySubMchID(ctx context.Context, subMchID pgtype.Text) (db.Rider, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRiderBySubMchID", ctx, subMchID)
-	ret0, _ := ret[0].(db.Rider)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetRiderBySubMchID indicates an expected call of GetRiderBySubMchID.
-func (mr *MockStoreMockRecorder) GetRiderBySubMchID(ctx, subMchID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderBySubMchID", reflect.TypeOf((*MockStore)(nil).GetRiderBySubMchID), ctx, subMchID)
 }
 
 // GetRiderByUserID mocks base method.
@@ -11859,21 +11829,6 @@ func (mr *MockStoreMockRecorder) ListDeliveryPoolNearby(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDeliveryPoolNearby", reflect.TypeOf((*MockStore)(nil).ListDeliveryPoolNearby), ctx, arg)
 }
 
-// ListDeliveryPoolNearbyByRegion mocks base method.
-func (m *MockStore) ListDeliveryPoolNearbyByRegion(ctx context.Context, arg db.ListDeliveryPoolNearbyByRegionParams) ([]db.ListDeliveryPoolNearbyByRegionRow, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListDeliveryPoolNearbyByRegion", ctx, arg)
-	ret0, _ := ret[0].([]db.ListDeliveryPoolNearbyByRegionRow)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListDeliveryPoolNearbyByRegion indicates an expected call of ListDeliveryPoolNearbyByRegion.
-func (mr *MockStoreMockRecorder) ListDeliveryPoolNearbyByRegion(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListDeliveryPoolNearbyByRegion", reflect.TypeOf((*MockStore)(nil).ListDeliveryPoolNearbyByRegion), ctx, arg)
-}
-
 // ListDeliveryPromotionsByMerchant mocks base method.
 func (m *MockStore) ListDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) ([]db.MerchantDeliveryPromotion, error) {
 	m.ctrl.T.Helper()
@@ -12997,21 +12952,6 @@ func (m *MockStore) ListOnlineRiders(ctx context.Context) ([]db.Rider, error) {
 func (mr *MockStoreMockRecorder) ListOnlineRiders(ctx any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOnlineRiders", reflect.TypeOf((*MockStore)(nil).ListOnlineRiders), ctx)
-}
-
-// ListOnlineRidersByRegion mocks base method.
-func (m *MockStore) ListOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) ([]db.Rider, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListOnlineRidersByRegion", ctx, regionID)
-	ret0, _ := ret[0].([]db.Rider)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListOnlineRidersByRegion indicates an expected call of ListOnlineRidersByRegion.
-func (mr *MockStoreMockRecorder) ListOnlineRidersByRegion(ctx, regionID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOnlineRidersByRegion", reflect.TypeOf((*MockStore)(nil).ListOnlineRidersByRegion), ctx, regionID)
 }
 
 // ListOpenDiningSessionsBefore mocks base method.
@@ -15304,21 +15244,6 @@ func (mr *MockStoreMockRecorder) RejectOperatorRegionApplication(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectOperatorRegionApplication", reflect.TypeOf((*MockStore)(nil).RejectOperatorRegionApplication), ctx, arg)
 }
 
-// RejectRiderApplication mocks base method.
-func (m *MockStore) RejectRiderApplication(ctx context.Context, arg db.RejectRiderApplicationParams) (db.RiderApplication, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RejectRiderApplication", ctx, arg)
-	ret0, _ := ret[0].(db.RiderApplication)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RejectRiderApplication indicates an expected call of RejectRiderApplication.
-func (mr *MockStoreMockRecorder) RejectRiderApplication(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RejectRiderApplication", reflect.TypeOf((*MockStore)(nil).RejectRiderApplication), ctx, arg)
-}
-
 // ReleaseReservationInventoryTx mocks base method.
 func (m *MockStore) ReleaseReservationInventoryTx(ctx context.Context, arg db.ReleaseReservationInventoryTxParams) error {
 	m.ctrl.T.Helper()
@@ -15807,6 +15732,21 @@ func (m *MockStore) ResumeClaimRecoveryAfterAppeal(ctx context.Context, id int64
 func (mr *MockStoreMockRecorder) ResumeClaimRecoveryAfterAppeal(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResumeClaimRecoveryAfterAppeal", reflect.TypeOf((*MockStore)(nil).ResumeClaimRecoveryAfterAppeal), ctx, id)
+}
+
+// ReturnRiderApplicationToDraft mocks base method.
+func (m *MockStore) ReturnRiderApplicationToDraft(ctx context.Context, arg db.ReturnRiderApplicationToDraftParams) (db.RiderApplication, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReturnRiderApplicationToDraft", ctx, arg)
+	ret0, _ := ret[0].(db.RiderApplication)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReturnRiderApplicationToDraft indicates an expected call of ReturnRiderApplicationToDraft.
+func (mr *MockStoreMockRecorder) ReturnRiderApplicationToDraft(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReturnRiderApplicationToDraft", reflect.TypeOf((*MockStore)(nil).ReturnRiderApplicationToDraft), ctx, arg)
 }
 
 // RevertBehaviorDecisionEffectsByDecision mocks base method.
@@ -18977,21 +18917,6 @@ func (m *MockStore) UpdateRiderStatus(ctx context.Context, arg db.UpdateRiderSta
 func (mr *MockStoreMockRecorder) UpdateRiderStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderStatus", reflect.TypeOf((*MockStore)(nil).UpdateRiderStatus), ctx, arg)
-}
-
-// UpdateRiderSubMchID mocks base method.
-func (m *MockStore) UpdateRiderSubMchID(ctx context.Context, arg db.UpdateRiderSubMchIDParams) (db.Rider, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateRiderSubMchID", ctx, arg)
-	ret0, _ := ret[0].(db.Rider)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateRiderSubMchID indicates an expected call of UpdateRiderSubMchID.
-func (mr *MockStoreMockRecorder) UpdateRiderSubMchID(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderSubMchID", reflect.TypeOf((*MockStore)(nil).UpdateRiderSubMchID), ctx, arg)
 }
 
 // UpdateRuleCurrentVersion mocks base method.

@@ -518,6 +518,49 @@ func TestCancelOrderTx_UnfreezesAssignedDeliveryDeposit(t *testing.T) {
 	require.True(t, found, "should create unfreeze rider deposit log when cancelling assigned order")
 }
 
+func TestCancelOrderTx_AutoOfflineNonActiveRiderAfterAssignedOrderCancelled(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	rider := createOnlineRider(t)
+	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, "paid")
+	delivery := createRandomDeliveryWithOrder(t, order.ID)
+
+	_, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusApproved,
+	})
+	require.NoError(t, err)
+
+	delivery, err = testStore.AssignDelivery(context.Background(), AssignDeliveryParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "assigned", delivery.Status)
+
+	freezeAmount := orderFreezeAmount(order)
+	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: freezeAmount + 10000,
+		FrozenDeposit: freezeAmount,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.CancelOrderTx(context.Background(), CancelOrderTxParams{
+		OrderID:      order.ID,
+		OldStatus:    "paid",
+		CancelReason: "用户取消已接单订单",
+		OperatorID:   user.ID,
+		OperatorType: "user",
+	})
+	require.NoError(t, err)
+
+	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, RiderStatusApproved, updatedRider.Status)
+	require.False(t, updatedRider.IsOnline)
+}
+
 func TestCancelOrderTx_BlocksPickedDeliveryCancellation(t *testing.T) {
 	user := createRandomUser(t)
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)

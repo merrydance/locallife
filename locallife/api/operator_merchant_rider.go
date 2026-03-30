@@ -402,7 +402,7 @@ func (server *Server) getOperatorMerchantStats(ctx *gin.Context) {
 // ==================== 骑手列表查询 ====================
 
 type listOperatorRidersRequest struct {
-	Status   string `form:"status" binding:"omitempty,oneof=pending active suspended deactivated"`
+	Status   string `form:"status" binding:"omitempty,oneof=approved active suspended"`
 	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
 	Page     int32  `form:"page" binding:"omitempty,min=1"`
 	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
@@ -437,7 +437,7 @@ type listOperatorRidersResponse struct {
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
-// @Param status query string false "骑手状态" Enums(pending, active, suspended, deactivated)
+// @Param status query string false "骑手状态" Enums(approved, active, suspended)
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20) maximum(100)
 // @Success 200 {object} listOperatorRidersResponse

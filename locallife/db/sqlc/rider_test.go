@@ -33,7 +33,7 @@ func createRandomRiderWithUser(t *testing.T, userID int64) Rider {
 	require.Equal(t, arg.RealName, rider.RealName)
 	require.Equal(t, arg.IDCardNo, rider.IDCardNo)
 	require.Equal(t, arg.Phone, rider.Phone)
-	require.Equal(t, "pending", rider.Status)
+	require.Equal(t, RiderStatusApproved, rider.Status)
 	require.Equal(t, int64(0), rider.DepositAmount)
 	require.Equal(t, false, rider.IsOnline)
 	require.NotZero(t, rider.ID)
@@ -163,23 +163,23 @@ func TestGetRiderByUserID(t *testing.T) {
 
 func TestUpdateRiderStatus(t *testing.T) {
 	rider := createRandomRider(t)
-	require.Equal(t, "pending", rider.Status)
+	require.Equal(t, RiderStatusApproved, rider.Status)
 
 	// 审核通过
 	updated, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
 		ID:     rider.ID,
-		Status: "active",
+		Status: RiderStatusActive,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "active", updated.Status)
+	require.Equal(t, RiderStatusActive, updated.Status)
 
 	// 禁用
 	updated, err = testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
 		ID:     rider.ID,
-		Status: "suspended",
+		Status: RiderStatusSuspended,
 	})
 	require.NoError(t, err)
-	require.Equal(t, "suspended", updated.Status)
+	require.Equal(t, RiderStatusSuspended, updated.Status)
 }
 
 func TestUpdateRiderDeposit(t *testing.T) {
@@ -322,14 +322,14 @@ func TestUpdateRiderStats(t *testing.T) {
 }
 
 func TestCountRidersByStatus(t *testing.T) {
-	createRandomRider(t) // pending
+	createRandomRider(t) // approved
 	createActiveRider(t) // active
 
-	pendingCount, err := testStore.CountRidersByStatus(context.Background(), "pending")
+	approvedCount, err := testStore.CountRidersByStatus(context.Background(), RiderStatusApproved)
 	require.NoError(t, err)
-	require.GreaterOrEqual(t, pendingCount, int64(1))
+	require.GreaterOrEqual(t, approvedCount, int64(1))
 
-	activeCount, err := testStore.CountRidersByStatus(context.Background(), "active")
+	activeCount, err := testStore.CountRidersByStatus(context.Background(), RiderStatusActive)
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, activeCount, int64(1))
 }
@@ -931,31 +931,4 @@ func TestCountRidersByRegionWithStatus(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.GreaterOrEqual(t, suspendedCount, int64(1))
-}
-
-func TestListOnlineRidersByRegion(t *testing.T) {
-	region := createRandomRegion(t)
-	regionID := pgtype.Int8{Int64: region.ID, Valid: true}
-
-	// 创建一个在线骑手
-	rider := createRiderInRegion(t, region.ID, "active")
-	_, err := testStore.UpdateRiderOnlineStatus(context.Background(), UpdateRiderOnlineStatusParams{
-		ID:       rider.ID,
-		IsOnline: true,
-	})
-	require.NoError(t, err)
-
-	// 创建一个离线骑手
-	createRiderInRegion(t, region.ID, "active")
-
-	// 查询在线骑手
-	onlineRiders, err := testStore.ListOnlineRidersByRegion(context.Background(), regionID)
-	require.NoError(t, err)
-	require.GreaterOrEqual(t, len(onlineRiders), 1)
-
-	// 验证只有在线骑手
-	for _, r := range onlineRiders {
-		require.True(t, r.IsOnline)
-		require.Equal(t, "active", r.Status)
-	}
 }

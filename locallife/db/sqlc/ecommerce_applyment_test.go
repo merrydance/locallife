@@ -18,12 +18,6 @@ func createRandomEcommerceApplymentForMerchant(t *testing.T) EcommerceApplyment 
 	return createRandomEcommerceApplymentWithSubject(t, "merchant", merchant.ID)
 }
 
-// createRandomEcommerceApplymentForRider 为骑手创建测试进件记录
-func createRandomEcommerceApplymentForRider(t *testing.T) EcommerceApplyment {
-	rider := createRandomRider(t)
-	return createRandomEcommerceApplymentWithSubject(t, "rider", rider.ID)
-}
-
 // createRandomEcommerceApplymentWithSubject 创建指定主体的进件记录
 func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string, subjectID int64) EcommerceApplyment {
 	outRequestNo := util.RandomString(20)
@@ -407,45 +401,6 @@ func TestConcurrentCreateEcommerceApplyment(t *testing.T) {
 		err := <-errs
 		require.NoError(t, err)
 	}
-}
-
-// ==================== 骑手进件测试 ====================
-
-func TestCreateEcommerceApplymentForRider(t *testing.T) {
-	applyment := createRandomEcommerceApplymentForRider(t)
-	require.NotEmpty(t, applyment)
-	require.Equal(t, "rider", applyment.SubjectType)
-	require.Equal(t, "pending", applyment.Status)
-}
-
-func TestRiderApplymentStatusFlow(t *testing.T) {
-	applyment := createRandomEcommerceApplymentForRider(t)
-
-	// 1. pending -> submitted
-	updated, err := testStore.UpdateEcommerceApplymentToSubmitted(context.Background(), UpdateEcommerceApplymentToSubmittedParams{
-		ID:          applyment.ID,
-		ApplymentID: pgtype.Int8{Int64: 123456789, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, "submitted", updated.Status)
-
-	// 2. submitted -> auditing
-	updated, err = testStore.UpdateEcommerceApplymentStatus(context.Background(), UpdateEcommerceApplymentStatusParams{
-		ID:     applyment.ID,
-		Status: "auditing",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "auditing", updated.Status)
-
-	// 3. auditing -> finish (with sub_mch_id)
-	subMchID := "rider_sub_mch_123"
-	updated, err = testStore.UpdateEcommerceApplymentSubMchID(context.Background(), UpdateEcommerceApplymentSubMchIDParams{
-		ID:       applyment.ID,
-		SubMchID: pgtype.Text{String: subMchID, Valid: true},
-	})
-	require.NoError(t, err)
-	require.Equal(t, "finish", updated.Status)
-	require.Equal(t, subMchID, updated.SubMchID.String)
 }
 
 // ==================== 被拒后重新提交测试 ====================

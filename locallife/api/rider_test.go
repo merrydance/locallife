@@ -30,10 +30,18 @@ func randomRider(userID int64) db.Rider {
 		DepositAmount: 30000, // 300元
 		FrozenDeposit: 0,
 		IsOnline:      false,
+		RegionID:      pgtype.Int8{Int64: 1, Valid: true},
 		TotalOrders:   0,
 		TotalEarnings: 0,
 		CreatedAt:     time.Now(),
 	}
+}
+
+func expectRiderThresholdFromOperator(store *mockdb.MockStore, rider db.Rider, threshold int64) {
+	store.EXPECT().
+		GetActiveOperatorByRegion(gomock.Any(), rider.RegionID.Int64).
+		Times(1).
+		Return(db.Operator{ID: 1, RiderDeposit: threshold}, nil)
 }
 
 func TestGetRiderMeAPI(t *testing.T) {
@@ -129,6 +137,7 @@ func TestGoOnlineAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
 
 				updatedRider := rider
 				updatedRider.IsOnline = true
@@ -142,7 +151,7 @@ func TestGoOnlineAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "OK_ApprovedLegacyRider",
+			name: "BadRequest_ApprovedRider",
 			body: map[string]interface{}{
 				"longitude": 116.404,
 				"latitude":  39.915,
@@ -152,20 +161,14 @@ func TestGoOnlineAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore, paymentClient *wechatmock.MockPaymentClientInterface) {
 				approvedRider := rider
-				approvedRider.Status = "approved"
+				approvedRider.Status = db.RiderStatusApproved
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(approvedRider, nil)
-
-				approvedRider.IsOnline = true
-				store.EXPECT().
-					UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(approvedRider, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -184,6 +187,7 @@ func TestGoOnlineAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(insufficientRider, nil)
+				expectRiderThresholdFromOperator(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -239,6 +243,49 @@ func TestGoOnlineAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGoOnlineAPI_UsesConfiguredDepositThreshold(t *testing.T) {
+	user, _ := randomUser(t)
+	rider := randomRider(user.ID)
+	rider.Status = db.RiderStatusActive
+	rider.DepositAmount = 25000
+	rider.RegionID = pgtype.Int8{Int64: 66, Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	thresholdConfig, err := json.Marshal(depositConfigValue{AmountFen: 26000})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetActiveOperatorByRegion(gomock.Any(), int64(66)).
+		Times(1).
+		Return(db.Operator{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.PlatformConfig{ConfigValue: thresholdConfig}, nil)
+	store.EXPECT().
+		UpdateRiderOnlineStatus(gomock.Any(), gomock.Any()).
+		Times(0)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/rider/online", bytes.NewReader([]byte(`{}`)))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
 }
 
 func TestGoOfflineAPI(t *testing.T) {
@@ -937,6 +984,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -965,6 +1013,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{{ID: 1}}, nil)
+				expectRiderThresholdFromOperator(store, rider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -992,6 +1041,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, offlineRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1019,6 +1069,7 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, insufficientRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1029,13 +1080,13 @@ func TestGetRiderStatusAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "OK_ApprovedLegacyRiderCanGoOnline",
+			name: "OK_ApprovedRiderCannotGoOnline",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				approvedRider := rider
-				approvedRider.Status = "approved"
+				approvedRider.Status = db.RiderStatusApproved
 				approvedRider.IsOnline = false
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
@@ -1046,14 +1097,15 @@ func TestGetRiderStatusAPI(t *testing.T) {
 					ListRiderActiveDeliveries(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.Delivery{}, nil)
+				expectRiderThresholdFromOperator(store, approvedRider, db.DefaultRiderDepositThresholdFen)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp riderStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "approved", resp.Status)
-				require.True(t, resp.CanGoOnline)
-				require.Empty(t, resp.OnlineBlockReason)
+				require.False(t, resp.CanGoOnline)
+				require.Contains(t, resp.OnlineBlockReason, "押金不足")
 			},
 		},
 		{

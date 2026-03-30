@@ -54,7 +54,7 @@ func TestApproveRiderApplicationTx_AssignsRiderRole(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Equal(t, "approved", result.Application.Status)
-	require.Equal(t, "active", result.Rider.Status)
+	require.Equal(t, RiderStatusApproved, result.Rider.Status)
 
 	role, err := testStore.GetUserRoleByType(context.Background(), GetUserRoleByTypeParams{
 		UserID: user.ID,
@@ -66,7 +66,7 @@ func TestApproveRiderApplicationTx_AssignsRiderRole(t *testing.T) {
 	require.Equal(t, result.Rider.ID, role.RelatedEntityID.Int64)
 }
 
-func TestApproveRiderApplicationTx_RepairsStaleRiderRole(t *testing.T) {
+func TestApproveRiderApplicationTx_FailsWhenRiderRoleAlreadyExists(t *testing.T) {
 	user := createRandomUser(t)
 	app := prepareSubmittedRiderApplication(t, user.ID)
 	idCardNo := util.RandomString(18)
@@ -78,20 +78,11 @@ func TestApproveRiderApplicationTx_RepairsStaleRiderRole(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	result, err := testStore.ApproveRiderApplicationTx(context.Background(), ApproveRiderApplicationTxParams{
+	_, err = testStore.ApproveRiderApplicationTx(context.Background(), ApproveRiderApplicationTxParams{
 		ApplicationID: app.ID,
 		RiderRealName: "张三",
 		RiderIDCardNo: idCardNo,
 		RiderPhone:    "13812345678",
 	})
-	require.NoError(t, err)
-
-	role, err := testStore.GetUserRoleByType(context.Background(), GetUserRoleByTypeParams{
-		UserID: user.ID,
-		Role:   "rider",
-	})
-	require.NoError(t, err)
-	require.Equal(t, "active", role.Status)
-	require.True(t, role.RelatedEntityID.Valid)
-	require.Equal(t, result.Rider.ID, role.RelatedEntityID.Int64)
+	require.Error(t, err)
 }

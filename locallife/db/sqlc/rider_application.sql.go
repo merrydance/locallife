@@ -355,27 +355,22 @@ func (q *Queries) ListRiderApplications(ctx context.Context, arg ListRiderApplic
 	return items, nil
 }
 
-const rejectRiderApplication = `-- name: RejectRiderApplication :one
+const resetRiderApplicationToDraft = `-- name: ResetRiderApplicationToDraft :one
 UPDATE rider_applications
 SET 
-    status = 'rejected',
-    reject_reason = $2,
-    reviewed_by = $3,
-    reviewed_at = now(),
+    status = 'draft',
+    reject_reason = NULL,
+    reviewed_by = NULL,
+    reviewed_at = NULL,
+    submitted_at = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
-type RejectRiderApplicationParams struct {
-	ID           int64       `json:"id"`
-	RejectReason pgtype.Text `json:"reject_reason"`
-	ReviewedBy   pgtype.Int8 `json:"reviewed_by"`
-}
-
-// 拒绝骑手申请
-func (q *Queries) RejectRiderApplication(ctx context.Context, arg RejectRiderApplicationParams) (RiderApplication, error) {
-	row := q.db.QueryRow(ctx, rejectRiderApplication, arg.ID, arg.RejectReason, arg.ReviewedBy)
+// 手动重置申请为草稿状态，并清空审核痕迹
+func (q *Queries) ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, resetRiderApplicationToDraft, id)
 	var i RiderApplication
 	err := row.Scan(
 		&i.ID,
@@ -398,22 +393,28 @@ func (q *Queries) RejectRiderApplication(ctx context.Context, arg RejectRiderApp
 	return i, err
 }
 
-const resetRiderApplicationToDraft = `-- name: ResetRiderApplicationToDraft :one
+const returnRiderApplicationToDraft = `-- name: ReturnRiderApplicationToDraft :one
 UPDATE rider_applications
 SET 
     status = 'draft',
-    reject_reason = NULL,
-    reviewed_by = NULL,
-    reviewed_at = NULL,
+    reject_reason = $2,
+    reviewed_by = $3,
+    reviewed_at = now(),
     submitted_at = NULL,
     updated_at = now()
-WHERE id = $1 AND status IN ('submitted', 'rejected')
+WHERE id = $1 AND status = 'submitted'
 RETURNING id, user_id, real_name, phone, id_card_ocr, health_cert_ocr, status, reject_reason, reviewed_by, reviewed_at, created_at, updated_at, submitted_at, id_card_front_media_asset_id, id_card_back_media_asset_id, health_cert_media_asset_id
 `
 
-// 重置申请为草稿状态（支持待审核或被拒绝后重新编辑）
-func (q *Queries) ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error) {
-	row := q.db.QueryRow(ctx, resetRiderApplicationToDraft, id)
+type ReturnRiderApplicationToDraftParams struct {
+	ID           int64       `json:"id"`
+	RejectReason pgtype.Text `json:"reject_reason"`
+	ReviewedBy   pgtype.Int8 `json:"reviewed_by"`
+}
+
+// 审核未通过后退回草稿，保留失败原因
+func (q *Queries) ReturnRiderApplicationToDraft(ctx context.Context, arg ReturnRiderApplicationToDraftParams) (RiderApplication, error) {
+	row := q.db.QueryRow(ctx, returnRiderApplicationToDraft, arg.ID, arg.RejectReason, arg.ReviewedBy)
 	var i RiderApplication
 	err := row.Scan(
 		&i.ID,

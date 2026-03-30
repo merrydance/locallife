@@ -1689,8 +1689,6 @@ type Rider struct {
 	RegionID pgtype.Int8 `json:"region_id"`
 	// 关联的入驻申请ID，审核通过后填充
 	ApplicationID pgtype.Int8 `json:"application_id"`
-	// 微信平台收付通二级商户号
-	SubMchID pgtype.Text `json:"sub_mch_id"`
 }
 
 // 骑手入驻申请表，支持草稿保存和自动审核

@@ -995,7 +995,7 @@ func (server *Server) setupRouter() {
 		riderGroup.DELETE("/application/documents/:document_type", server.deleteRiderApplicationDocument)
 		riderGroup.DELETE("/application/health-cert", server.deleteRiderApplicationHealthCert)
 		riderGroup.POST("/application/submit", server.submitRiderApplication) // 提交申请
-		riderGroup.POST("/application/reset", server.resetRiderApplication)   // 重置申请（被拒后）
+		riderGroup.POST("/application/reset", server.resetRiderApplication)   // 重置待处理申请
 		riderGroup.GET("/me", server.getRiderMe)
 
 		// 押金管理
@@ -1062,8 +1062,6 @@ func (server *Server) setupRouter() {
 	adminRiderGroup.Use(server.CasbinMiddleware())
 	{
 		adminRiderGroup.GET("", server.listRiders)
-		adminRiderGroup.POST("/:rider_id/approve", server.approveRider)
-		adminRiderGroup.POST("/:rider_id/reject", server.rejectRider)
 	}
 
 	// 平台管理员审核运营商申请

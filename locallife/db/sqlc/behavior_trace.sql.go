@@ -656,6 +656,7 @@ func (q *Queries) GetBehaviorEffectSummary(ctx context.Context, arg GetBehaviorE
 const getPlatformConfig = `-- name: GetPlatformConfig :one
 SELECT id, config_key, config_value, scope_type, scope_id, created_at, updated_at FROM platform_configs
 WHERE config_key = $1 AND scope_type = $2 AND scope_id IS NOT DISTINCT FROM $3
+ORDER BY updated_at DESC, id DESC
 LIMIT 1
 `
 

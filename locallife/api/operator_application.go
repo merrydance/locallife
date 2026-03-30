@@ -240,7 +240,7 @@ func (server *Server) getOrCreateOperatorApplicationDraft(ctx *gin.Context) {
 	}
 
 	// 检查区域是否已被其他运营商占用
-	_, err = server.store.GetOperatorByRegion(ctx, req.RegionID)
+	_, err = server.getRegionActiveOperator(ctx, req.RegionID)
 	if err == nil {
 		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
@@ -372,7 +372,7 @@ func (server *Server) updateOperatorApplicationRegion(ctx *gin.Context) {
 	}
 
 	// 检查新区域是否已被占用
-	_, err = server.store.GetOperatorByRegion(ctx, req.RegionID)
+	_, err = server.getRegionActiveOperator(ctx, req.RegionID)
 	if err == nil {
 		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
@@ -629,7 +629,7 @@ func (server *Server) submitOperatorApplication(ctx *gin.Context) {
 	}
 
 	// 再次检查区域是否已被占用（防止竞态条件）
-	_, err = server.store.GetOperatorByRegion(ctx, app.RegionID)
+	_, err = server.getRegionActiveOperator(ctx, app.RegionID)
 	if err == nil {
 		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return

@@ -30,6 +30,7 @@ RETURNING *;
 -- name: GetPlatformConfig :one
 SELECT * FROM platform_configs
 WHERE config_key = $1 AND scope_type = $2 AND scope_id IS NOT DISTINCT FROM $3
+ORDER BY updated_at DESC, id DESC
 LIMIT 1;
 
 -- name: ListPlatformConfigsByKey :many

@@ -267,9 +267,9 @@ func TestApproveRiderApplication(t *testing.T) {
 	require.True(t, approved.ReviewedAt.Valid)
 }
 
-// ==================== Reject Tests ====================
+// ==================== Return-To-Draft Tests ====================
 
-func TestRejectRiderApplication(t *testing.T) {
+func TestReturnRiderApplicationToDraft(t *testing.T) {
 	app := createRandomRiderApplication(t)
 
 	// 填充并提交
@@ -289,15 +289,17 @@ func TestRejectRiderApplication(t *testing.T) {
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
 
-	// 拒绝
+	// 审核未通过后退回草稿
 	rejectReason := "身份证照片不清晰"
-	rejected, err := testStore.RejectRiderApplication(context.Background(), RejectRiderApplicationParams{
+	returned, err := testStore.ReturnRiderApplicationToDraft(context.Background(), ReturnRiderApplicationToDraftParams{
 		ID:           app.ID,
 		RejectReason: pgtype.Text{String: rejectReason, Valid: true},
 	})
 	require.NoError(t, err)
-	require.Equal(t, "rejected", rejected.Status)
-	require.Equal(t, rejectReason, rejected.RejectReason.String)
+	require.Equal(t, "draft", returned.Status)
+	require.Equal(t, rejectReason, returned.RejectReason.String)
+	require.True(t, returned.ReviewedAt.Valid)
+	require.False(t, returned.SubmittedAt.Valid)
 }
 
 // ==================== Reset Tests ====================
@@ -305,7 +307,7 @@ func TestRejectRiderApplication(t *testing.T) {
 func TestResetRiderApplicationToDraft(t *testing.T) {
 	app := createRandomRiderApplication(t)
 
-	// 填充、提交、拒绝
+	// 填充并提交
 	_, _ = testStore.UpdateRiderApplicationBasicInfo(context.Background(), UpdateRiderApplicationBasicInfoParams{
 		ID:       app.ID,
 		RealName: pgtype.Text{String: "张三", Valid: true},
@@ -321,10 +323,6 @@ func TestResetRiderApplicationToDraft(t *testing.T) {
 		HealthCertMediaAssetID: pgtype.Int8{},
 	})
 	_, _ = testStore.SubmitRiderApplication(context.Background(), app.ID)
-	_, _ = testStore.RejectRiderApplication(context.Background(), RejectRiderApplicationParams{
-		ID:           app.ID,
-		RejectReason: pgtype.Text{String: "照片不清晰", Valid: true},
-	})
 
 	// 重置为草稿
 	reset, err := testStore.ResetRiderApplicationToDraft(context.Background(), app.ID)

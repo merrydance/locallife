@@ -21,6 +21,8 @@ func createRefundableRiderDepositCredit(t *testing.T, rider Rider, amount int64)
 }
 
 func TestPrepareRiderDepositRefundTx_ReservesCreditAndFreezesBalance(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
 
@@ -64,6 +66,8 @@ func TestPrepareRiderDepositRefundTx_ReservesCreditAndFreezesBalance(t *testing.
 }
 
 func TestPrepareRiderDepositRefundTx_SplitsAcrossCredits(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
 	rider := createRandomRider(t)
 	firstPaymentOrder := createRefundableRiderDepositCredit(t, rider, 10000)
 	secondPaymentOrder := createRefundableRiderDepositCredit(t, rider, 20000)
@@ -99,6 +103,8 @@ func TestPrepareRiderDepositRefundTx_SplitsAcrossCredits(t *testing.T) {
 }
 
 func TestResolveRiderDepositRefundTx_SuccessSettlesFrozenBalance(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
 
@@ -123,6 +129,7 @@ func TestResolveRiderDepositRefundTx_SuccessSettlesFrozenBalance(t *testing.T) {
 	require.Equal(t, int64(18000), result.DepositLog.BalanceAfter)
 	require.Equal(t, int64(18000), result.Rider.DepositAmount)
 	require.Equal(t, int64(0), result.Rider.FrozenDeposit)
+	require.Equal(t, RiderStatusApproved, result.Rider.Status)
 	require.Equal(t, riderDepositCreditStatusPartial, result.Credit.Status)
 	require.Equal(t, int64(18000), result.Credit.RefundableAmount)
 	require.Equal(t, int64(12000), result.Credit.RefundedAmount)
@@ -141,6 +148,8 @@ func TestResolveRiderDepositRefundTx_SuccessSettlesFrozenBalance(t *testing.T) {
 }
 
 func TestResolveRiderDepositRefundTx_ClosedRestoresCreditAndUnfreezesBalance(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
 	rider := createRandomRider(t)
 	paymentOrder := createRefundableRiderDepositCredit(t, rider, 30000)
 

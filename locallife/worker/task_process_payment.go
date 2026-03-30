@@ -256,8 +256,8 @@ type ApplymentResultPayload struct {
 	OutRequestNo   string `json:"out_request_no"`  // 业务申请编号
 	ApplymentState string `json:"applyment_state"` // 进件状态
 	SubMchID       string `json:"sub_mch_id"`      // 二级商户号（开户成功时返回）
-	SubjectType    string `json:"subject_type"`    // 主体类型：merchant/rider
-	SubjectID      int64  `json:"subject_id"`      // 主体ID（商户ID或骑手ID）
+	SubjectType    string `json:"subject_type"`    // 主体类型：merchant/operator
+	SubjectID      int64  `json:"subject_id"`      // 主体ID
 }
 
 // ProfitSharingResultPayload 分账结果处理任务载荷
@@ -769,68 +769,55 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 	deliveryLng, _ := poolItem.DeliveryLongitude.Float64Value()
 	deliveryLat, _ := poolItem.DeliveryLatitude.Float64Value()
 
-	// 推送策略：100m起步，每次+100m，超过1000m改为全区县推送
-	const (
-		startDistance   = 100.0  // 起始距离100米
-		stepDistance    = 100.0  // 每次扩大100米
-		regionThreshold = 1000.0 // 超过1000米改为全区县推送
-		minRiderCount   = 3      // 最少通知骑手数
-	)
-
-	var ridersToNotify []int64
-	var usedDistance float64
-	var isRegionBroadcast bool
-
-	// 阶段1：按距离递增查找附近骑手（100m -> 200m -> ... -> 1000m）
-	for distance := startDistance; distance <= regionThreshold; distance += stepDistance {
-		riders, err := processor.store.ListNearbyRiders(ctx, db.ListNearbyRidersParams{
-			CenterLat:   pickupLat.Float64,
-			CenterLng:   pickupLng.Float64,
-			MaxDistance: distance,
-			LimitCount:  1000, // 不限制数量
-		})
-		if err != nil {
-			log.Error().Err(err).Float64("distance", distance).Msg("list nearby riders failed")
-			continue
-		}
-
-		usedDistance = distance
-		for _, r := range riders {
-			ridersToNotify = append(ridersToNotify, r.ID)
-		}
-
-		// 如果找到足够骑手，停止扩大范围
-		if len(riders) >= minRiderCount {
-			break
-		}
-	}
-
-	// 阶段2：如果1000米内骑手不足，改为全区县推送
-	if len(ridersToNotify) < minRiderCount {
-		regionRiders, err := processor.store.ListOnlineRidersByRegion(ctx, pgtype.Int8{Int64: merchant.RegionID, Valid: true})
-		if err != nil {
-			log.Error().Err(err).Int64("region_id", merchant.RegionID).Msg("list region riders failed")
-		} else {
-			ridersToNotify = nil // 清空，使用区域骑手
-			for _, r := range regionRiders {
-				ridersToNotify = append(ridersToNotify, r.ID)
-			}
-			isRegionBroadcast = true
-		}
-	}
-
-	if len(ridersToNotify) == 0 {
-		log.Warn().
-			Int64("order_id", order.ID).
-			Int64("region_id", merchant.RegionID).
-			Msg("no online riders in region, order waiting in pool")
-		return
-	}
-
-	// 构建完整的新订单池消息数据（使用标准类型常量）
 	if processor.deliveryBroadcast != nil {
-		_ = processor.deliveryBroadcast.BroadcastNewOrderNotification(ctx, merchant.RegionID, *poolItem, merchant.Name)
+		_ = processor.deliveryBroadcast.BroadcastNewOrderNotification(ctx, *poolItem, merchant.Name)
 	} else {
+		const (
+			startDistance = 100.0
+			stepDistance  = 100.0
+			maxDistance   = 5000.0
+			minRiderCount = 3
+		)
+
+		var ridersToNotify []int64
+		seenRiders := make(map[int64]struct{}, minRiderCount)
+		var usedDistance float64
+
+		for distance := startDistance; distance <= maxDistance; distance += stepDistance {
+			riders, err := processor.store.ListNearbyRiders(ctx, db.ListNearbyRidersParams{
+				CenterLat:   pickupLat.Float64,
+				CenterLng:   pickupLng.Float64,
+				MaxDistance: distance,
+				LimitCount:  1000,
+			})
+			if err != nil {
+				log.Error().Err(err).Float64("distance", distance).Msg("list nearby riders failed")
+				continue
+			}
+
+			usedDistance = distance
+			for _, rider := range riders {
+				if _, ok := seenRiders[rider.ID]; ok {
+					continue
+				}
+				seenRiders[rider.ID] = struct{}{}
+				ridersToNotify = append(ridersToNotify, rider.ID)
+			}
+
+			if len(ridersToNotify) >= minRiderCount {
+				break
+			}
+		}
+
+		if len(ridersToNotify) == 0 {
+			log.Warn().
+				Int64("order_id", order.ID).
+				Float64("pickup_lat", pickupLat.Float64).
+				Float64("pickup_lng", pickupLng.Float64).
+				Msg("no nearby online riders, order waiting in pool")
+			return
+		}
+
 		// 回退方案（保持兼容）
 		newOrderData := map[string]any{
 			"type":                 "new_delivery_order",
@@ -868,17 +855,15 @@ func (processor *RedisTaskProcessor) notifyRidersNewDelivery(ctx context.Context
 			channel := fmt.Sprintf("notification:rider:%d", riderID)
 			processor.publishWSMessage(ctx, channel, wsMessageJSON)
 		}
-	}
 
-	log.Info().
-		Int64("order_id", order.ID).
-		Int64("delivery_id", delivery.ID).
-		Float64("search_radius_m", usedDistance).
-		Bool("region_broadcast", isRegionBroadcast).
-		Int64("region_id", merchant.RegionID).
-		Int64("delivery_fee", order.DeliveryFee).
-		Bool("is_high_value", order.DeliveryFee >= 1000).
-		Msg("✅ new delivery order pushed to riders")
+		log.Info().
+			Int64("order_id", order.ID).
+			Int64("delivery_id", delivery.ID).
+			Float64("search_radius_m", usedDistance).
+			Int64("delivery_fee", order.DeliveryFee).
+			Bool("is_high_value", order.DeliveryFee >= 1000).
+			Msg("✅ new delivery order pushed to nearby riders via worker fallback")
+	}
 }
 
 // ProcessTaskRefundResult 处理退款结果任务
@@ -1048,7 +1033,6 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	var totalAmount int64
 	var deliveryFee int64
 	var orderSource string
-	var addressID int64 // 0 if none
 	var outOrderNoSuffix string
 
 	if payload.OrderID > 0 {
@@ -1064,9 +1048,6 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		totalAmount = order.TotalAmount
 		deliveryFee = order.DeliveryFee
 		orderSource = order.OrderType
-		if order.AddressID.Valid {
-			addressID = order.AddressID.Int64
-		}
 		outOrderNoSuffix = fmt.Sprintf("%d", payload.OrderID)
 	} else if payload.ReservationID > 0 {
 		// 获取预订信息
@@ -1103,21 +1084,13 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		return fmt.Errorf("get merchant payment config: %w", err)
 	}
 
-	// 获取运营商信息（根据配送地址所在区域）
+	// 获取运营商信息（根据商户所属区域）
 	var operator db.Operator
 	var hasOperator bool
 	regionID := merchant.RegionID
 	var operatorCommission int64
 	var platformCommission int64
 	merchantAmount := totalAmount
-
-	// 获取配送地址的区域ID（优先使用配送地址，否则回退商户区域）
-	if addressID > 0 {
-		address, err := processor.store.GetUserAddress(ctx, addressID)
-		if err == nil && address.RegionID > 0 {
-			regionID = address.RegionID
-		}
-	}
 
 	config, err := processor.store.GetActiveProfitSharingConfig(ctx, db.GetActiveProfitSharingConfigParams{
 		OrderSource: orderSource,
@@ -1180,7 +1153,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 查找运营商
 	if regionID > 0 {
-		op, err := processor.store.GetOperatorByRegion(ctx, regionID)
+		op, err := processor.store.GetActiveOperatorByRegion(ctx, regionID)
 		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 			return fmt.Errorf("get operator: %w", err)
 		}
@@ -2327,6 +2300,14 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 		Str("sub_mch_id", payload.SubMchID).
 		Msg("processing applyment result")
 
+	if payload.SubjectType != "merchant" && payload.SubjectType != "operator" {
+		log.Warn().
+			Int64("applyment_id", payload.ApplymentID).
+			Str("subject_type", payload.SubjectType).
+			Msg("skip unsupported applyment subject type")
+		return nil
+	}
+
 	// 根据进件状态处理
 	switch payload.ApplymentState {
 	case "APPLYMENT_STATE_FINISHED":
@@ -2353,8 +2334,8 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 
 // handleApplymentSuccess 处理进件成功
 func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context, payload *ApplymentResultPayload) error {
-	// 1. 添加为分账接收方（关键步骤！）
-	if processor.ecommerceClient != nil && payload.SubMchID != "" {
+	// 1. 商户进件成功后，添加为分账接收方。
+	if processor.ecommerceClient != nil && payload.SubMchID != "" && payload.SubjectType == "merchant" {
 		_, err := processor.ecommerceClient.AddProfitSharingReceiver(ctx, &wechat.AddReceiverRequest{
 			AppID:        processor.ecommerceClient.GetSpAppID(),
 			Type:         wechat.ReceiverTypeMerchant,
@@ -2388,15 +2369,6 @@ func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context,
 		}
 		userID = merchant.OwnerUserID
 		notifyContent = fmt.Sprintf("您的商户「%s」已完成微信支付开户，可以开始接单收款了！", merchant.Name)
-
-	case "rider":
-		rider, err := processor.store.GetRider(ctx, payload.SubjectID)
-		if err != nil {
-			log.Error().Err(err).Int64("rider_id", payload.SubjectID).Msg("get rider for notification")
-			return nil
-		}
-		userID = rider.UserID
-		notifyContent = "您的骑手账户已完成微信支付开户，可以开始接单了！"
 	}
 
 	if userID > 0 && processor.distributor != nil {
@@ -2440,15 +2412,6 @@ func (processor *RedisTaskProcessor) handleApplymentRejected(ctx context.Context
 		}
 		userID = merchant.OwnerUserID
 		notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户申请被驳回，原因：%s", merchant.Name, rejectReason)
-
-	case "rider":
-		rider, err := processor.store.GetRider(ctx, payload.SubjectID)
-		if err != nil {
-			log.Error().Err(err).Int64("rider_id", payload.SubjectID).Msg("get rider")
-			return nil
-		}
-		userID = rider.UserID
-		notifyContent = fmt.Sprintf("您的骑手微信支付开户申请被驳回，原因：%s", rejectReason)
 	}
 
 	if userID > 0 && processor.distributor != nil {
@@ -2483,18 +2446,6 @@ func (processor *RedisTaskProcessor) handleApplymentPending(ctx context.Context,
 			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", merchant.Name)
 		} else {
 			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", merchant.Name)
-		}
-
-	case "rider":
-		rider, err := processor.store.GetRider(ctx, payload.SubjectID)
-		if err != nil {
-			return nil
-		}
-		userID = rider.UserID
-		if payload.ApplymentState == "APPLYMENT_STATE_TO_BE_CONFIRMED" {
-			notifyContent = "您的骑手微信支付开户需要确认，请登录微信支付商户平台完成确认"
-		} else {
-			notifyContent = "您的骑手微信支付开户需要签约，请登录微信支付商户平台完成签约"
 		}
 	}
 

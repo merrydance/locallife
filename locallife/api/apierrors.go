@@ -111,7 +111,7 @@ var (
 	// 400 类：申请状态约束
 	ErrApplicationNotDraft     = apierr(40003, "application can only be modified in draft state")
 	ErrApplicationSubmitDraft  = apierr(40004, "application can only be submitted in draft state")
-	ErrApplicationCannotReset  = apierr(40005, "application can only be reset when rejected")
+	ErrApplicationCannotReset  = apierr(40005, "application can only be reset while pending review")
 	ErrApplicationInvalidState = apierr(40006, "application cannot be submitted in its current state")
 	ErrApplicationNotPending   = apierr(40027, "application can only be reviewed when in pending state")
 	// 409 类：申请冲突

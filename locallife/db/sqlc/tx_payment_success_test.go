@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -9,6 +10,21 @@ import (
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
+
+func setRiderDepositThresholdForTest(t *testing.T, amountFen int64) {
+	t.Helper()
+
+	payload, err := json.Marshal(map[string]int64{"amount_fen": amountFen})
+	require.NoError(t, err)
+
+	_, err = testStore.UpsertPlatformConfig(context.Background(), UpsertPlatformConfigParams{
+		ConfigKey:   PlatformConfigKeyRiderDepositFen,
+		ConfigValue: payload,
+		ScopeType:   PlatformConfigScopeGlobal,
+		ScopeID:     pgtype.Int8{Valid: false},
+	})
+	require.NoError(t, err)
+}
 
 func createPaidRiderDepositPaymentOrder(t *testing.T, rider Rider, amount int64) PaymentOrder {
 	if amount <= 0 {
@@ -35,6 +51,8 @@ func createPaidRiderDepositPaymentOrder(t *testing.T, rider Rider, amount int64)
 }
 
 func TestProcessPaymentSuccessTx_RiderDepositCreatesCredit(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
 	rider := createRandomRider(t)
 	paymentOrder := createPaidRiderDepositPaymentOrder(t, rider, 30000)
 
@@ -48,6 +66,7 @@ func TestProcessPaymentSuccessTx_RiderDepositCreatesCredit(t *testing.T) {
 	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
 	require.NoError(t, err)
 	require.Equal(t, paymentOrder.Amount, updatedRider.DepositAmount)
+	require.Equal(t, RiderStatusActive, updatedRider.Status)
 
 	depositLog, err := testStore.GetRiderDepositByPaymentOrderID(context.Background(), pgtype.Int8{Int64: paymentOrder.ID, Valid: true})
 	require.NoError(t, err)
@@ -69,6 +88,8 @@ func TestProcessPaymentSuccessTx_RiderDepositCreatesCredit(t *testing.T) {
 }
 
 func TestProcessPaymentSuccessTx_RiderDepositIsIdempotent(t *testing.T) {
+	setRiderDepositThresholdForTest(t, DefaultRiderDepositThresholdFen)
+
 	rider := createRandomRider(t)
 	paymentOrder := createPaidRiderDepositPaymentOrder(t, rider, 28000)
 
@@ -87,6 +108,7 @@ func TestProcessPaymentSuccessTx_RiderDepositIsIdempotent(t *testing.T) {
 	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
 	require.NoError(t, err)
 	require.Equal(t, paymentOrder.Amount, updatedRider.DepositAmount)
+	require.Equal(t, RiderStatusActive, updatedRider.Status)
 
 	deposits, err := testStore.ListRiderDeposits(context.Background(), ListRiderDepositsParams{
 		RiderID: rider.ID,

@@ -94,7 +94,7 @@ func (p apiOrderEventPublisher) PublishTakeoutOrderPooled(ctx context.Context, o
 		return
 	}
 
-	_ = p.server.deliveryBroadcast.BroadcastNewOrderNotification(ctx, merchant.RegionID, poolItem, merchant.Name)
+	_ = p.server.deliveryBroadcast.BroadcastNewOrderNotification(ctx, poolItem, merchant.Name)
 }
 
 type apiTaskScheduler struct {

@@ -19,12 +19,11 @@ import (
 const riderWithdrawProcessingStatus = "processing"
 
 func isRiderOnlineEligibleStatus(status string) bool {
-	switch status {
-	case "approved", "active":
-		return true
-	default:
-		return false
-	}
+	return status == db.RiderStatusActive
+}
+
+func (server *Server) getRiderDepositThreshold(ctx context.Context, rider db.Rider) (int64, error) {
+	return db.GetEffectiveRiderDepositThreshold(ctx, server.store, rider.RegionID)
 }
 
 type riderWithdrawRefundItemResponse struct {
@@ -123,111 +122,6 @@ func (server *Server) getRiderMe(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, newRiderResponse(rider))
 }
 
-// ==================== 骑手审核（管理员） ====================
-
-type approveRiderRequest struct {
-	ID int64 `uri:"rider_id" binding:"required,min=1"`
-}
-
-// approveRider godoc
-// @Summary 审核通过骑手申请（管理员）
-// @Description 管理员审核通过骑手入驻申请，骑手状态变为active，可直接接单
-// @Tags 骑手管理
-// @Accept json
-// @Produce json
-// @Param rider_id path int true "骑手ID"
-// @Success 200 {object} riderResponse "审核成功"
-// @Failure 400 {object} ErrorResponse "状态不允许审核"
-// @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 403 {object} ErrorResponse "无权限"
-// @Failure 404 {object} ErrorResponse "骑手不存在"
-// @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/admin/riders/{rider_id}/approve [post]
-// @Security BearerAuth
-func (server *Server) approveRider(ctx *gin.Context) {
-	var req approveRiderRequest
-	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	rider, err := server.store.GetRider(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if rider.Status != "pending" && rider.Status != "pending_bindbank" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderCannotApprove))
-		return
-	}
-
-	// 审核通过后直接激活，无需骑手开户流程
-	updated, err := server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     req.ID,
-		Status: "active",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newRiderResponse(updated))
-}
-
-// rejectRider godoc
-// @Summary 拒绝骑手申请（管理员）
-// @Description 管理员拒绝骑手入驻申请，骑手状态从pending变为rejected
-// @Tags 骑手管理
-// @Accept json
-// @Produce json
-// @Param rider_id path int true "骑手ID"
-// @Success 200 {object} riderResponse "拒绝成功"
-// @Failure 400 {object} ErrorResponse "状态不允许审核"
-// @Failure 401 {object} ErrorResponse "未登录"
-// @Failure 403 {object} ErrorResponse "无权限"
-// @Failure 404 {object} ErrorResponse "骑手不存在"
-// @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/admin/riders/{rider_id}/reject [post]
-// @Security BearerAuth
-func (server *Server) rejectRider(ctx *gin.Context) {
-	var req approveRiderRequest
-	if err := ctx.ShouldBindUri(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, errorResponse(err))
-		return
-	}
-
-	rider, err := server.store.GetRider(ctx, req.ID)
-	if err != nil {
-		if isNotFoundError(err) {
-			ctx.JSON(http.StatusNotFound, errorResponse(ErrRiderNotFound))
-			return
-		}
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if rider.Status != "pending" {
-		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderNotPending))
-		return
-	}
-
-	updated, err := server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
-		ID:     req.ID,
-		Status: "rejected",
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	ctx.JSON(http.StatusOK, newRiderResponse(updated))
-}
-
 // ==================== 押金管理 ====================
 
 // 押金常量定义
@@ -240,8 +134,6 @@ const (
 	MinWithdrawAmount = 1 * fenPerYuan
 	// MaxWithdrawAmount 单次最大提现金额：5000000分 = 50000元
 	MaxWithdrawAmount = 50000 * fenPerYuan
-	// MinOnlineDeposit 上线所需最低押金：10000分 = 100元
-	MinOnlineDeposit = 100 * fenPerYuan
 )
 
 type depositRequest struct {
@@ -616,7 +508,7 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 
 // riderStatusResponse 骑手状态响应
 type riderStatusResponse struct {
-	Status            string     `json:"status"`            // 账号状态：pending/approved/active/suspended/rejected
+	Status            string     `json:"status"`            // 账号状态：approved/active/suspended
 	IsOnline          bool       `json:"is_online"`         // 是否在线
 	OnlineStatus      string     `json:"online_status"`     // 在线状态描述：offline/online/delivering
 	ActiveDeliveries  int        `json:"active_deliveries"` // 当前配送中订单数量
@@ -688,14 +580,23 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 		resp.LocationUpdatedAt = &rider.LocationUpdatedAt.Time
 	}
 
+	threshold, err := server.getRiderDepositThreshold(ctx, rider)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider deposit threshold: %w", err)))
+		return
+	}
+
 	// 判断是否可以上线/下线
 	availableDeposit := rider.DepositAmount - rider.FrozenDeposit
-	if !isRiderOnlineEligibleStatus(rider.Status) {
+	if rider.Status == db.RiderStatusSuspended {
 		resp.CanGoOnline = false
-		resp.OnlineBlockReason = "账号未激活"
-	} else if availableDeposit < MinOnlineDeposit {
+		resp.OnlineBlockReason = "账号已停用"
+	} else if !isRiderOnlineEligibleStatus(rider.Status) {
 		resp.CanGoOnline = false
-		resp.OnlineBlockReason = fmt.Sprintf("押金不足，需要至少%s元", fenToYuanString(MinOnlineDeposit, 0))
+		resp.OnlineBlockReason = fmt.Sprintf("押金不足，需要至少%s元", fenToYuanString(threshold, 0))
+	} else if availableDeposit < threshold {
+		resp.CanGoOnline = false
+		resp.OnlineBlockReason = fmt.Sprintf("可用押金不足，需要至少%s元", fenToYuanString(threshold, 0))
 	} else {
 		resp.CanGoOnline = true
 	}
@@ -708,7 +609,7 @@ func (server *Server) getRiderStatus(ctx *gin.Context) {
 
 // goOnline godoc
 // @Summary 骑手上线
-// @Description 设置骑手状态为在线，开始接受订单。需要骑手状态为approved或active且押金充足
+// @Description 设置骑手状态为在线，开始接受订单。需要骑手处于 active 且可用押金达到平台阈值
 // @Tags 骑手
 // @Accept json
 // @Produce json
@@ -737,8 +638,14 @@ func (server *Server) goOnline(ctx *gin.Context) {
 		return
 	}
 
+	threshold, err := server.getRiderDepositThreshold(ctx, rider)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("get rider deposit threshold: %w", err)))
+		return
+	}
+
 	// 检查押金余额
-	if rider.DepositAmount-rider.FrozenDeposit < MinOnlineDeposit {
+	if rider.DepositAmount-rider.FrozenDeposit < threshold {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrRiderDepositInsufficient))
 		return
 	}
@@ -993,7 +900,7 @@ type listRidersResponse struct {
 // @Tags 骑手管理
 // @Accept json
 // @Produce json
-// @Param status query string false "筛选状态" Enums(pending, approved, active, suspended, rejected)
+// @Param status query string false "筛选状态" Enums(approved, active, suspended)
 // @Param page query int false "页码" minimum(1) default(1)
 // @Param limit query int false "每页数量" minimum(1) maximum(100) default(20)
 // @Success 200 {object} listRidersResponse "骑手列表"
@@ -1018,7 +925,7 @@ func (server *Server) listRiders(ctx *gin.Context) {
 	}
 
 	if req.Status == "" {
-		req.Status = "pending"
+		req.Status = db.RiderStatusActive
 	}
 
 	riders, err := server.store.ListRidersByStatus(ctx, db.ListRidersByStatusParams{
@@ -1371,8 +1278,8 @@ func (server *Server) notifyPlatformSupport(ctx context.Context, orderID int64, 
 		return
 	}
 
-	// 3. 获取该区域的运营商
-	operator, err := server.store.GetOperatorByRegion(ctx, merchant.RegionID)
+	// 3. 获取该区域当前活跃运营商
+	operator, err := server.getRegionActiveOperator(ctx, merchant.RegionID)
 	if err != nil {
 		// 该区域没有运营商，记录日志但不阻塞
 		log.Warn().

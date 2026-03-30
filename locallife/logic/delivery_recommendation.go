@@ -11,10 +11,9 @@ import (
 
 // RecommendDeliveryInput defines rider and location data for recommendations.
 type RecommendDeliveryInput struct {
-	RiderID       int64
-	RiderRegionID int64
-	RiderLat      float64
-	RiderLng      float64
+	RiderID  int64
+	RiderLat float64
+	RiderLng float64
 }
 
 // RecommendDeliveryResult contains scored orders and enriched routes.
@@ -48,8 +47,7 @@ func RecommendDeliveryOrders(
 		config.MaxResults = int(dbConfig.MaxResults)
 	}
 
-	poolItems, err := store.ListDeliveryPoolNearbyByRegion(ctx, db.ListDeliveryPoolNearbyByRegionParams{
-		RegionID:    input.RiderRegionID,
+	poolItems, err := store.ListDeliveryPoolNearby(ctx, db.ListDeliveryPoolNearbyParams{
 		RiderLat:    input.RiderLat,
 		RiderLng:    input.RiderLng,
 		MaxDistance: float64(config.MaxDistance),

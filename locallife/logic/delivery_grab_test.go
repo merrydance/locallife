@@ -36,12 +36,14 @@ func TestGrabDeliveryOrder_NotRider(t *testing.T) {
 	require.Equal(t, 404, reqErr.Status)
 }
 
-func TestGrabDeliveryOrder_RegionMismatch(t *testing.T) {
+func TestGrabDeliveryOrder_NoRegionStillChecksDistance(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000,
+		CurrentLongitude: numericFromFloatGrab(120.0), CurrentLatitude: numericFromFloatGrab(30.0)}
+	merchant := db.Merchant{ID: 20, RegionID: 3, Longitude: numericFromFloatGrab(121.0), Latitude: numericFromFloatGrab(31.0)}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -62,12 +64,11 @@ func TestGrabDeliveryOrder_RegionMismatch(t *testing.T) {
 	store.EXPECT().
 		GetMerchant(gomock.Any(), int64(20)).
 		Times(1).
-		Return(db.Merchant{ID: 20, RegionID: 3}, nil)
+		Return(merchant, nil)
 
-	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2, MaxDistanceMeters: 5000})
-	var regionErr *RegionAccessError
-	require.ErrorAs(t, err, &regionErr)
-	require.Equal(t, int64(3), regionErr.MerchantRegionID)
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2, MaxDistanceMeters: 100})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
 }
 
 func TestGrabDeliveryOrder_DistanceTooFar(t *testing.T) {
@@ -75,7 +76,7 @@ func TestGrabDeliveryOrder_DistanceTooFar(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true},
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true,
 		CurrentLongitude: numericFromFloatGrab(120.0), CurrentLatitude: numericFromFloatGrab(30.0)}
 	merchant := db.Merchant{ID: 20, RegionID: 9, Longitude: numericFromFloatGrab(121.0), Latitude: numericFromFloatGrab(31.0)}
 
@@ -110,7 +111,7 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
 	order := db.Order{ID: 2, Status: db.OrderStatusReady, TotalAmount: 500}
@@ -166,7 +167,7 @@ func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
 	order := db.Order{ID: 2, Status: db.OrderStatusPreparing, TotalAmount: 500}
@@ -211,7 +212,7 @@ func TestGrabDeliveryOrder_PaidOrderRejected(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
 	order := db.Order{ID: 2, Status: db.OrderStatusPaid, TotalAmount: 500}
@@ -256,7 +257,7 @@ func TestGrabDeliveryOrder_Suspended(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -277,12 +278,30 @@ func TestGrabDeliveryOrder_Suspended(t *testing.T) {
 	require.Equal(t, "骑手接单已暂停", reqErr.Err.Error())
 }
 
+func TestGrabDeliveryOrder_NonActiveOnlineRiderRejected(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusApproved, IsOnline: true, DepositAmount: 1000}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+
+	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 400, reqErr.Status)
+	require.Equal(t, "押金不足或账号未激活，暂不可接单", reqErr.Err.Error())
+}
+
 func TestGrabDeliveryOrder_HighValueScoreDenied(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -311,7 +330,7 @@ func TestGrabDeliveryOrder_Expired(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
 
 	store.EXPECT().
 		GetRiderByUserID(gomock.Any(), int64(1)).
@@ -336,7 +355,7 @@ func TestGrabDeliveryOrder_GrabTxError(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}, DepositAmount: 1000}
+	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
 	merchant := db.Merchant{ID: 20, RegionID: 9}
 	delivery := db.Delivery{ID: 30, OrderID: 2}
 	order := db.Order{ID: 2, Status: db.OrderStatusReady, TotalAmount: 500}

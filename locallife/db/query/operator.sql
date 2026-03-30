@@ -23,10 +23,6 @@ WHERE id = $1 LIMIT 1;
 SELECT * FROM operators
 WHERE user_id = $1 LIMIT 1;
 
--- name: GetOperatorByRegion :one
-SELECT * FROM operators
-WHERE region_id = $1 LIMIT 1;
-
 -- name: ListOperators :many
 SELECT 
     o.*,

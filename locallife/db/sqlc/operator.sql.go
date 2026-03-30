@@ -173,42 +173,6 @@ func (q *Queries) GetOperator(ctx context.Context, id int64) (Operator, error) {
 	return i, err
 }
 
-const getOperatorByRegion = `-- name: GetOperatorByRegion :one
-SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
-WHERE region_id = $1 LIMIT 1
-`
-
-func (q *Queries) GetOperatorByRegion(ctx context.Context, regionID int64) (Operator, error) {
-	row := q.db.QueryRow(ctx, getOperatorByRegion, regionID)
-	var i Operator
-	err := row.Scan(
-		&i.ID,
-		&i.UserID,
-		&i.RegionID,
-		&i.Name,
-		&i.ContactName,
-		&i.ContactPhone,
-		&i.WechatMchID,
-		&i.CommissionRate,
-		&i.Status,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-		&i.ContractStartDate,
-		&i.ContractEndDate,
-		&i.ContractYears,
-		&i.SubMchID,
-		&i.Balance,
-		&i.WalletAccount,
-		&i.MerchantDeposit,
-		&i.RiderDeposit,
-		&i.WeatherCoeffExtreme,
-		&i.WeatherCoeffHeavy,
-		&i.WeatherCoeffModerate,
-		&i.WeatherCoeffLight,
-	)
-	return i, err
-}
-
 const getOperatorByUser = `-- name: GetOperatorByUser :one
 SELECT id, user_id, region_id, name, contact_name, contact_phone, wechat_mch_id, commission_rate, status, created_at, updated_at, contract_start_date, contract_end_date, contract_years, sub_mch_id, balance, wallet_account, merchant_deposit, rider_deposit, weather_coeff_extreme, weather_coeff_heavy, weather_coeff_moderate, weather_coeff_light FROM operators
 WHERE user_id = $1 LIMIT 1

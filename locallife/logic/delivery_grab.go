@@ -12,28 +12,6 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 )
 
-// RegionAccessError captures region mismatch details for auditing.
-type RegionAccessError struct {
-	RequestErr       *RequestError
-	MerchantRegionID int64
-	RiderRegionID    int64
-	OrderID          int64
-}
-
-func (e *RegionAccessError) Error() string {
-	if e == nil || e.RequestErr == nil {
-		return "region access denied"
-	}
-	return e.RequestErr.Error()
-}
-
-func (e *RegionAccessError) Unwrap() error {
-	if e == nil {
-		return nil
-	}
-	return e.RequestErr
-}
-
 // GrabOrderInput defines the grab order input.
 type GrabOrderInput struct {
 	UserID            int64
@@ -83,15 +61,15 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	if !rider.IsOnline {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请先上线"))
 	}
+	if rider.Status != db.RiderStatusActive {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("押金不足或账号未激活，暂不可接单"))
+	}
 	suspension, err := GetRiderSuspension(ctx, store, rider.ID)
 	if err != nil {
 		return result, err
 	}
 	if suspension != nil {
 		return result, NewRequestError(http.StatusForbidden, errors.New("骑手接单已暂停"))
-	}
-	if !rider.RegionID.Valid {
-		return result, NewRequestError(http.StatusBadRequest, ErrRiderRegionUnassigned)
 	}
 
 	availableDeposit := rider.DepositAmount - rider.FrozenDeposit
@@ -123,14 +101,6 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	merchant, err := store.GetMerchant(ctx, poolItem.MerchantID)
 	if err != nil {
 		return result, err
-	}
-	if merchant.RegionID != rider.RegionID.Int64 {
-		return result, &RegionAccessError{
-			RequestErr:       &RequestError{Status: http.StatusForbidden, Err: errors.New("该订单不在您的服务区域内")},
-			MerchantRegionID: merchant.RegionID,
-			RiderRegionID:    rider.RegionID.Int64,
-			OrderID:          input.OrderID,
-		}
 	}
 
 	riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)

@@ -51,6 +51,18 @@ const (
 	BehaviorSnapshotScopeNet     = "net_effective"
 	BehaviorSnapshotVersionV2    = "v2"
 
+	RiderStatusApproved  = "approved"
+	RiderStatusActive    = "active"
+	RiderStatusSuspended = "suspended"
+
+	RiderApplicationStatusDraft     = "draft"
+	RiderApplicationStatusSubmitted = "submitted"
+	RiderApplicationStatusApproved  = "approved"
+
+	PlatformConfigScopeGlobal        = "global"
+	PlatformConfigKeyRiderDepositFen = "platform_rule.rider_deposit_fen"
+	DefaultRiderDepositThresholdFen  = 20000
+
 	FulfillmentStatusScheduled      = "scheduled"
 	FulfillmentStatusPendingKitchen = "pending_kitchen"
 	FulfillmentStatusPreparing      = "preparing"

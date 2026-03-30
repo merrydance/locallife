@@ -30,9 +30,9 @@ func TestRecommendDeliveryOrders_Basic(t *testing.T) {
 		Times(1).
 		Return(db.RecommendConfig{}, db.ErrRecordNotFound)
 	store.EXPECT().
-		ListDeliveryPoolNearbyByRegion(gomock.Any(), gomock.Any()).
+		ListDeliveryPoolNearby(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return([]db.ListDeliveryPoolNearbyByRegionRow{
+		Return([]db.ListDeliveryPoolNearbyRow{
 			{
 				OrderID:            10,
 				MerchantID:         20,
@@ -55,10 +55,9 @@ func TestRecommendDeliveryOrders_Basic(t *testing.T) {
 		Return([]db.Delivery{}, nil)
 
 	result, err := RecommendDeliveryOrders(context.Background(), store, nil, RecommendDeliveryInput{
-		RiderID:       1,
-		RiderRegionID: 2,
-		RiderLat:      30.0,
-		RiderLng:      120.0,
+		RiderID:  1,
+		RiderLat: 30.0,
+		RiderLng: 120.0,
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Scored, 1)

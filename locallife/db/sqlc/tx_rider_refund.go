@@ -246,6 +246,11 @@ func (store *SQLStore) ResolveRiderDepositRefundTx(ctx context.Context, arg Reso
 				return fmt.Errorf("settle rider deposit refund success: %w", err)
 			}
 
+			updatedRider, err = ReconcileRiderOperationalStatus(ctx, q, updatedRider)
+			if err != nil {
+				return fmt.Errorf("reconcile rider status after refund: %w", err)
+			}
+
 			depositLog, err := q.CreateRiderDeposit(ctx, CreateRiderDepositParams{
 				RiderID:        lockedRider.ID,
 				Amount:         refundOrder.RefundAmount,

@@ -141,20 +141,21 @@ SET
 WHERE id = $1 AND status = 'submitted'
 RETURNING *;
 
--- name: RejectRiderApplication :one
--- 拒绝骑手申请
+-- name: ReturnRiderApplicationToDraft :one
+-- 审核未通过后退回草稿，保留失败原因
 UPDATE rider_applications
 SET 
-    status = 'rejected',
+    status = 'draft',
     reject_reason = $2,
     reviewed_by = sqlc.narg(reviewed_by),
     reviewed_at = now(),
+    submitted_at = NULL,
     updated_at = now()
 WHERE id = $1 AND status = 'submitted'
 RETURNING *;
 
 -- name: ResetRiderApplicationToDraft :one
--- 重置申请为草稿状态（支持待审核或被拒绝后重新编辑）
+-- 手动重置申请为草稿状态，并清空审核痕迹
 UPDATE rider_applications
 SET 
     status = 'draft',
@@ -163,7 +164,7 @@ SET
     reviewed_at = NULL,
     submitted_at = NULL,
     updated_at = now()
-WHERE id = $1 AND status IN ('submitted', 'rejected')
+WHERE id = $1 AND status = 'submitted'
 RETURNING *;
 
 -- name: ListRiderApplications :many

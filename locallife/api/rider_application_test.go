@@ -172,31 +172,25 @@ func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
 			},
 		},
 		{
-			name: "GetExisting_AutoResetSubmittedToDraft",
+			name: "GetExisting_SubmittedPreserved",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomRiderApplicationWithData(user.ID)
 				app.Status = "submitted"
-				reset := app
-				reset.Status = "draft"
 
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
-				store.EXPECT().
-					ResetRiderApplicationToDraft(gomock.Any(), app.ID).
-					Times(1).
-					Return(reset, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 
 				var resp riderApplicationResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Equal(t, "draft", resp.Status)
+				require.Equal(t, "submitted", resp.Status)
 			},
 		},
 		{
@@ -274,7 +268,7 @@ func TestUpdateRiderApplicationBasic(t *testing.T) {
 			},
 		},
 		{
-			name: "Submitted_AutoResetToDraft",
+			name: "Submitted_Rejected",
 			body: map[string]interface{}{
 				"real_name": "李四",
 			},
@@ -284,25 +278,13 @@ func TestUpdateRiderApplicationBasic(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomRiderApplication(user.ID)
 				app.Status = "submitted"
-				resetApp := app
-				resetApp.Status = "draft"
-				updatedApp := resetApp
-				updatedApp.RealName = pgtype.Text{String: "李四", Valid: true}
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
-				store.EXPECT().
-					ResetRiderApplicationToDraft(gomock.Any(), app.ID).
-					Times(1).
-					Return(resetApp, nil)
-				store.EXPECT().
-					UpdateRiderApplicationBasicInfo(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(updatedApp, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -400,51 +382,20 @@ func TestDeleteRiderApplicationHealthCert(t *testing.T) {
 			},
 		},
 		{
-			name: "Submitted_AutoResetToDraft",
+			name: "Submitted_Rejected",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomRiderApplicationWithData(user.ID)
 				app.Status = "submitted"
-				resetApp := app
-				resetApp.Status = "draft"
-				updatedApp := resetApp
-				updatedApp.HealthCertMediaAssetID = pgtype.Int8{}
-				updatedApp.HealthCertOcr = nil
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
-				store.EXPECT().
-					ResetRiderApplicationToDraft(gomock.Any(), app.ID).
-					Times(1).
-					Return(resetApp, nil)
-				store.EXPECT().
-					ClearRiderApplicationHealthCert(gomock.Any(), app.ID).
-					Times(1).
-					DoAndReturn(func(_ any, id int64) (db.RiderApplication, error) {
-						require.Equal(t, app.ID, id)
-						return updatedApp, nil
-					})
-
-				store.EXPECT().
-					GetMediaAssetByID(gomock.Any(), int64(3)).
-					Times(1).
-					Return(db.MediaAsset{ID: 3, UploadedBy: user.ID}, nil)
-
-				store.EXPECT().
-					SoftDeleteMediaAsset(gomock.Any(), int64(3)).
-					Times(1).
-					Return(db.MediaAsset{ID: 3, UploadedBy: user.ID}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var resp riderApplicationResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
-				require.Nil(t, resp.HealthCertAssetID)
-				require.Nil(t, resp.HealthCertOCR)
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 	}
@@ -659,7 +610,7 @@ func TestSubmitRiderApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "BadRequest_ExpiredIDCardKeepsDraft",
+			name: "Rejected_ExpiredIDCardReturnsDraft",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
@@ -671,10 +622,30 @@ func TestSubmitRiderApplication(t *testing.T) {
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitRiderApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				returnedApp := submittedApp
+				returnedApp.Status = "draft"
+				returnedApp.RejectReason = pgtype.Text{String: "身份证已过期，请更换有效身份证后重新申请", Valid: true}
+				store.EXPECT().
+					ReturnRiderApplicationToDraft(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(returnedApp, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-				require.Contains(t, recorder.Body.String(), "身份证已过期")
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp riderApplicationResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "draft", resp.Status)
+				require.NotNil(t, resp.RejectReason)
+				require.Contains(t, *resp.RejectReason, "身份证已过期")
 			},
 		},
 		{
@@ -870,7 +841,7 @@ func TestResetRiderApplication(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomRiderApplicationWithData(user.ID)
-				app.Status = "rejected"
+				app.Status = "submitted"
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).
@@ -892,13 +863,13 @@ func TestResetRiderApplication(t *testing.T) {
 			},
 		},
 		{
-			name: "NotRejected",
+			name: "NotSubmitted",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				app := randomRiderApplicationWithData(user.ID)
-				app.Status = "draft" // 不是rejected状态
+				app.Status = "draft" // 不是submitted状态
 				store.EXPECT().
 					GetRiderApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).

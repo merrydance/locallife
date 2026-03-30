@@ -550,63 +550,6 @@ func TestListDeliveryPool_EffectivePriority(t *testing.T) {
 	require.True(t, found, "应该能找到刚创建的配送池项")
 }
 
-// TestListDeliveryPoolNearbyByRegion 测试按区域过滤的配送池查询
-func TestListDeliveryPoolNearbyByRegion(t *testing.T) {
-	// 创建一个配送池项
-	poolItem := createRandomDeliveryPoolItem(t)
-
-	// 获取商户所属区域
-	merchant, err := testStore.GetMerchant(context.Background(), poolItem.MerchantID)
-	require.NoError(t, err)
-
-	// 按区域查询（使用商户所在区域）
-	pools, err := testStore.ListDeliveryPoolNearbyByRegion(context.Background(), ListDeliveryPoolNearbyByRegionParams{
-		RegionID:    merchant.RegionID,
-		RiderLat:    39.915,
-		RiderLng:    116.404,
-		MaxDistance: 10000, // 10公里范围
-		ResultLimit: 100,
-	})
-	require.NoError(t, err)
-
-	// 应该能找到我们创建的订单
-	var found bool
-	for _, p := range pools {
-		if p.ID == poolItem.ID {
-			found = true
-			// 验证返回了距离和有效优先级
-			require.GreaterOrEqual(t, p.DistanceToRider, int32(0))
-			require.GreaterOrEqual(t, p.EffectivePriority, int32(0))
-			break
-		}
-	}
-	require.True(t, found, "应该能通过区域过滤找到订单")
-}
-
-// TestListDeliveryPoolNearbyByRegion_WrongRegion 测试错误区域无法看到订单
-func TestListDeliveryPoolNearbyByRegion_WrongRegion(t *testing.T) {
-	// 创建一个配送池项
-	poolItem := createRandomDeliveryPoolItem(t)
-
-	// 创建另一个区域
-	otherRegion := createRandomRegion(t)
-
-	// 用不同的区域查询
-	pools, err := testStore.ListDeliveryPoolNearbyByRegion(context.Background(), ListDeliveryPoolNearbyByRegionParams{
-		RegionID:    otherRegion.ID,
-		RiderLat:    39.915,
-		RiderLng:    116.404,
-		MaxDistance: 10000,
-		ResultLimit: 100,
-	})
-	require.NoError(t, err)
-
-	// 不应该找到在其他区域的订单
-	for _, p := range pools {
-		require.NotEqual(t, poolItem.ID, p.ID, "不应该在错误区域看到订单")
-	}
-}
-
 // TestRemoveFromDeliveryPool_NotFound 测试删除不存在的配送池项
 func TestRemoveFromDeliveryPool_NotFound(t *testing.T) {
 	// 删除不存在的订单应该不报错（DELETE不报no rows）
@@ -905,6 +848,60 @@ func TestCompleteDeliveryTx(t *testing.T) {
 
 	// 验证骑手统计已更新
 	require.Equal(t, int32(1), updatedRider.TotalOrders)
+}
+
+func TestCompleteDeliveryTx_AutoOfflineNonActiveRiderAfterLastDelivery(t *testing.T) {
+	rider := createOnlineRider(t)
+
+	_, err := testStore.UpdateRiderStatus(context.Background(), UpdateRiderStatusParams{
+		ID:     rider.ID,
+		Status: RiderStatusApproved,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateRiderDeposit(context.Background(), UpdateRiderDepositParams{
+		ID:            rider.ID,
+		DepositAmount: 10000,
+		FrozenDeposit: 500,
+	})
+	require.NoError(t, err)
+
+	delivery := createAssignedDelivery(t, rider.ID)
+
+	_, err = testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateDeliveryToPicked(context.Background(), UpdateDeliveryToPickedParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateDeliveryToDelivering(context.Background(), UpdateDeliveryToDeliveringParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	deliveryData, err := testStore.GetDelivery(context.Background(), delivery.ID)
+	require.NoError(t, err)
+
+	_, err = testStore.CompleteDeliveryTx(context.Background(), CompleteDeliveryTxParams{
+		DeliveryID:     delivery.ID,
+		RiderID:        rider.ID,
+		OrderID:        deliveryData.OrderID,
+		UnfreezeAmount: 500,
+		DeliveryFee:    800,
+	})
+	require.NoError(t, err)
+
+	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
+	require.NoError(t, err)
+	require.Equal(t, RiderStatusApproved, updatedRider.Status)
+	require.False(t, updatedRider.IsOnline)
 }
 
 // TestCompleteDeliveryTx_WrongStatus 测试在错误状态下完成配送

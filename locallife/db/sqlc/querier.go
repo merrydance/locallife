@@ -818,7 +818,6 @@ type Querier interface {
 	GetOperatorApplicationByUserID(ctx context.Context, userID int64) (OperatorApplication, error)
 	// 获取用户的草稿或可编辑申请（排除已通过的）
 	GetOperatorApplicationDraft(ctx context.Context, userID int64) (OperatorApplication, error)
-	GetOperatorByRegion(ctx context.Context, regionID int64) (Operator, error)
 	GetOperatorByUser(ctx context.Context, userID int64) (Operator, error)
 	GetOperatorForUpdate(ctx context.Context, id int64) (Operator, error)
 	// 运营商区域内商户排行（基于实际分账数据）
@@ -945,8 +944,6 @@ type Querier interface {
 	GetRiderApplication(ctx context.Context, id int64) (RiderApplication, error)
 	// 根据用户ID获取骑手申请
 	GetRiderApplicationByUserID(ctx context.Context, userID int64) (RiderApplication, error)
-	// 通过二级商户号查找骑手
-	GetRiderBySubMchID(ctx context.Context, subMchID pgtype.Text) (Rider, error)
 	GetRiderByUserID(ctx context.Context, userID int64) (Rider, error)
 	// 骑手查看索赔详情
 	GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderClaimDetailForRiderParams) (GetRiderClaimDetailForRiderRow, error)
@@ -1168,10 +1165,6 @@ type Querier interface {
 	// 按骑手位置获取附近的可接订单
 	// 动态优先级：等待越久优先级越高
 	ListDeliveryPoolNearby(ctx context.Context, arg ListDeliveryPoolNearbyParams) ([]ListDeliveryPoolNearbyRow, error)
-	// 按区域过滤的骑手可接订单列表，实现多租户隔离
-	// 骑手只能看到其所属区域内商户的订单
-	// 距离越近排名越靠前，同时返回动态优先级供前端展示
-	ListDeliveryPoolNearbyByRegion(ctx context.Context, arg ListDeliveryPoolNearbyByRegionParams) ([]ListDeliveryPoolNearbyByRegionRow, error)
 	ListDeliveryPromotionsByMerchant(ctx context.Context, merchantID int64) ([]MerchantDeliveryPromotion, error)
 	ListDiningSessionsByUser(ctx context.Context, arg ListDiningSessionsByUserParams) ([]DiningSession, error)
 	ListDishCategories(ctx context.Context, merchantID int64) ([]ListDishCategoriesRow, error)
@@ -1278,8 +1271,6 @@ type Querier interface {
 	// 获取商户上架套餐（用于扫码点餐菜单展示）
 	ListOnlineCombosByMerchant(ctx context.Context, merchantID int64) ([]ListOnlineCombosByMerchantRow, error)
 	ListOnlineRiders(ctx context.Context) ([]Rider, error)
-	// 列出区域内在线骑手
-	ListOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) ([]Rider, error)
 	ListOpenDiningSessionsBefore(ctx context.Context, arg ListOpenDiningSessionsBeforeParams) ([]DiningSession, error)
 	// 获取营业中的商户列表
 	ListOpenMerchants(ctx context.Context, arg ListOpenMerchantsParams) ([]Merchant, error)
@@ -1463,8 +1454,6 @@ type Querier interface {
 	RejectOperatorApplication(ctx context.Context, arg RejectOperatorApplicationParams) (OperatorApplication, error)
 	// 审批拒绝区域扩展申请
 	RejectOperatorRegionApplication(ctx context.Context, arg RejectOperatorRegionApplicationParams) (OperatorRegionApplication, error)
-	// 拒绝骑手申请
-	RejectRiderApplication(ctx context.Context, arg RejectRiderApplicationParams) (RiderApplication, error)
 	ReleaseReservedInventory(ctx context.Context, arg ReleaseReservedInventoryParams) (DailyInventory, error)
 	RemoveAllComboDishes(ctx context.Context, comboID int64) error
 	RemoveAllComboTags(ctx context.Context, comboID int64) error
@@ -1493,11 +1482,13 @@ type Querier interface {
 	ResetMerchantApplicationToDraft(ctx context.Context, id int64) (MerchantApplication, error)
 	// 重置被拒绝的申请为草稿（允许重新编辑提交）
 	ResetOperatorApplicationToDraft(ctx context.Context, id int64) (OperatorApplication, error)
-	// 重置申请为草稿状态（支持待审核或被拒绝后重新编辑）
+	// 手动重置申请为草稿状态，并清空审核痕迹
 	ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error)
 	ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error
 	RestoreRiderDepositCreditByPaymentOrderID(ctx context.Context, arg RestoreRiderDepositCreditByPaymentOrderIDParams) (RiderDepositCredit, error)
 	ResumeClaimRecoveryAfterAppeal(ctx context.Context, id int64) (ClaimRecovery, error)
+	// 审核未通过后退回草稿，保留失败原因
+	ReturnRiderApplicationToDraft(ctx context.Context, arg ReturnRiderApplicationToDraftParams) (RiderApplication, error)
 	RevertBehaviorDecisionEffectsByDecision(ctx context.Context, arg RevertBehaviorDecisionEffectsByDecisionParams) error
 	// 审核申诉
 	ReviewAppeal(ctx context.Context, arg ReviewAppealParams) (Appeal, error)
@@ -1755,8 +1746,6 @@ type Querier interface {
 	UpdateRiderRegion(ctx context.Context, arg UpdateRiderRegionParams) (Rider, error)
 	UpdateRiderStats(ctx context.Context, arg UpdateRiderStatsParams) (Rider, error)
 	UpdateRiderStatus(ctx context.Context, arg UpdateRiderStatusParams) (Rider, error)
-	// 更新骑手的微信二级商户号
-	UpdateRiderSubMchID(ctx context.Context, arg UpdateRiderSubMchIDParams) (Rider, error)
 	UpdateRuleCurrentVersion(ctx context.Context, arg UpdateRuleCurrentVersionParams) (Rule, error)
 	UpdateRuleStatus(ctx context.Context, arg UpdateRuleStatusParams) (Rule, error)
 	UpdateSafetyReportStatus(ctx context.Context, arg UpdateSafetyReportStatusParams) (SafetyReport, error)

@@ -46,7 +46,7 @@ type operatorDepositConfigValue struct {
 func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey string) (int64, bool, error) {
 	config, err := server.store.GetPlatformConfig(ctx, db.GetPlatformConfigParams{
 		ConfigKey: configKey,
-		ScopeType: "global",
+		ScopeType: db.PlatformConfigScopeGlobal,
 		ScopeID:   pgtype.Int8{Valid: false},
 	})
 	if err != nil {
@@ -66,6 +66,22 @@ func (server *Server) getOperatorGlobalDepositFen(ctx *gin.Context, configKey st
 	}
 
 	return payload.AmountFen, true, nil
+}
+
+func (server *Server) getOperatorRiderDepositThreshold(ctx *gin.Context, operator db.Operator) (int64, error) {
+	if operator.RiderDeposit > 0 {
+		return operator.RiderDeposit, nil
+	}
+
+	configured, ok, err := server.getOperatorGlobalDepositFen(ctx, operatorRiderDepositConfigKey)
+	if err != nil {
+		return 0, err
+	}
+	if ok && configured > 0 {
+		return configured, nil
+	}
+
+	return db.DefaultRiderDepositThresholdFen, nil
 }
 
 func weatherRuleKeyToPlatformConfigKey(key string) (string, error) {
@@ -140,7 +156,11 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	rules := []RuleItem{}
 
 	merchantDepositValue := operator.MerchantDeposit
-	riderDepositValue := operator.RiderDeposit
+	riderDepositValue, err := server.getOperatorRiderDepositThreshold(ctx, operator)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 	weatherCoeffExtreme := operator.WeatherCoeffExtreme
 	weatherCoeffHeavy := operator.WeatherCoeffHeavy
 	weatherCoeffModerate := operator.WeatherCoeffModerate
@@ -153,7 +173,6 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 	}
 	if configErr == nil {
 		merchantDepositValue = regionRuleConfig.MerchantDeposit
-		riderDepositValue = regionRuleConfig.RiderDeposit
 		weatherCoeffExtreme = regionRuleConfig.WeatherCoeffExtreme
 		weatherCoeffHeavy = regionRuleConfig.WeatherCoeffHeavy
 		weatherCoeffModerate = regionRuleConfig.WeatherCoeffModerate
@@ -181,13 +200,6 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		merchantDepositValue = configuredMerchantDeposit
 	}
 
-	if configuredRiderDeposit, ok, cfgErr := server.getOperatorGlobalDepositFen(ctx, operatorRiderDepositConfigKey); cfgErr != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, cfgErr))
-		return
-	} else if ok {
-		riderDepositValue = configuredRiderDeposit
-	}
-
 	// 1. 商户入驻保证金 (只读展示，平台维护)
 	merchantDeposit := fenToYuanString(merchantDepositValue, 2)
 	rules = append(rules, RuleItem{
@@ -201,17 +213,21 @@ func (server *Server) listOperatorRules(ctx *gin.Context) {
 		Editable: false,
 	})
 
-	// 2. 骑手入驻押金 (只读展示，平台维护)
+	// 2. 骑手入驻押金（运营商优先，平台默认值兜底）
 	riderDeposit := fenToYuanString(riderDepositValue, 2)
+	riderDepositDesc := "当前运营商配置，直接决定本运营商骑手押金门槛"
+	if operator.RiderDeposit <= 0 {
+		riderDepositDesc = "当前使用平台默认值，运营商可单独修改覆盖"
+	}
 	rules = append(rules, RuleItem{
 		ID:       "rule_2",
 		Name:     "骑手入驻押金",
 		Key:      "RIDER_DEPOSIT",
 		Value:    riderDeposit,
 		Unit:     "元",
-		Desc:     "平台统一维护，运营商仅可查看",
+		Desc:     riderDepositDesc,
 		Category: "delivery",
-		Editable: false,
+		Editable: true,
 	})
 
 	// 3. 平台抽成比例 (只读展示，平台维护)
@@ -487,11 +503,11 @@ type updateRuleRequest struct {
 
 // updateOperatorRule 更新运营商规则配置
 // @Summary 更新规则配置
-// @Description 更新运营商规则配置，支持运费参数与天气系数；抽成/保证金/货值费率为平台维护只读项
+// @Description 更新运营商规则配置，支持运费参数、天气系数与骑手押金；抽成、商户保证金与货值费率为平台维护只读项
 // @Tags 运营商-规则管理
 // @Accept json
 // @Produce json
-// @Param key path string true "规则Key (BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO, WEATHER_COEFF_EXTREME, WEATHER_COEFF_HEAVY, WEATHER_COEFF_MODERATE, WEATHER_COEFF_LIGHT)"
+// @Param key path string true "规则Key (RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO, WEATHER_COEFF_EXTREME, WEATHER_COEFF_HEAVY, WEATHER_COEFF_MODERATE, WEATHER_COEFF_LIGHT)"
 // @Param request body updateRuleRequest true "新值"
 // @Success 200 {object} MessageResponse "更新成功"
 // @Failure 400 {object} ErrorResponse "参数错误"
@@ -535,6 +551,7 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 	}
 
 	editableKeys := map[string]struct{}{
+		"RIDER_DEPOSIT":          {},
 		"BASE_DELIVERY_FEE":      {},
 		"BASE_DISTANCE":          {},
 		"EXTRA_FEE_PER_KM":       {},
@@ -559,6 +576,34 @@ func (server *Server) updateOperatorRule(ctx *gin.Context) {
 	}
 
 	switch key {
+	case "RIDER_DEPOSIT":
+		val, err := strconv.ParseFloat(req.Value, 64)
+		if err != nil {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrInvalidNumberFormat))
+			return
+		}
+		if val < 0 {
+			ctx.JSON(http.StatusBadRequest, errorResponse(ErrAmountNegative))
+			return
+		}
+
+		amountFen := yuanToFen(val)
+		_, err = server.store.UpdateOperatorRules(ctx, db.UpdateOperatorRulesParams{
+			ID:           operator.ID,
+			RiderDeposit: pgtype.Int8{Int64: amountFen, Valid: true},
+		})
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		if err := server.syncRiderOperationalStatusesByRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		auditMetadata["operator_id"] = operator.ID
+		auditMetadata["value_fen"] = amountFen
+
 	case "BASE_DELIVERY_FEE", "BASE_DISTANCE", "EXTRA_FEE_PER_KM", "MIN_DELIVERY_FEE", "MAX_DELIVERY_FEE", "DELIVERY_VALUE_RATIO":
 		// 1. 获取现有配置或初始化
 		feeConfig, err := server.store.GetActiveDeliveryFeeConfigByRegion(ctx, targetRegionID)

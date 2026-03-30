@@ -227,12 +227,9 @@ func newRiderApplicationResponse(app db.RiderApplication) riderApplicationRespon
 	return resp
 }
 
-func (server *Server) ensureEditableRiderApplication(ctx *gin.Context, app db.RiderApplication) (db.RiderApplication, error) {
+func (server *Server) ensureEditableRiderApplication(app db.RiderApplication) (db.RiderApplication, error) {
 	if app.Status == "draft" {
 		return app, nil
-	}
-	if app.Status == "submitted" || app.Status == "rejected" {
-		return server.store.ResetRiderApplicationToDraft(ctx, app.ID)
 	}
 
 	return app, ErrApplicationNotDraft
@@ -258,14 +255,6 @@ func (server *Server) createOrGetRiderApplicationDraft(ctx *gin.Context) {
 	// 检查是否已有申请
 	app, err := server.store.GetRiderApplicationByUserID(ctx, authPayload.UserID)
 	if err == nil {
-		if app.Status == "submitted" || app.Status == "rejected" {
-			reset, resetErr := server.store.ResetRiderApplicationToDraft(ctx, app.ID)
-			if resetErr != nil {
-				ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reset stale rider application to draft: %w", resetErr)))
-				return
-			}
-			app = reset
-		}
 		ctx.JSON(http.StatusOK, newRiderApplicationResponse(app))
 		return
 	}
@@ -324,7 +313,7 @@ func (server *Server) updateRiderApplicationBasic(ctx *gin.Context) {
 		return
 	}
 
-	app, err = server.ensureEditableRiderApplication(ctx, app)
+	app, err = server.ensureEditableRiderApplication(app)
 	if err != nil {
 		if errors.Is(err, ErrApplicationNotDraft) {
 			ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationNotDraft))
@@ -378,7 +367,7 @@ func (server *Server) deleteRiderApplicationDocumentByType(ctx *gin.Context, doc
 		return
 	}
 
-	app, err = server.ensureEditableRiderApplication(ctx, app)
+	app, err = server.ensureEditableRiderApplication(app)
 	if err != nil {
 		if errors.Is(err, ErrApplicationNotDraft) {
 			log.Warn().
@@ -504,11 +493,11 @@ func (server *Server) deleteRiderApplicationHealthCert(ctx *gin.Context) {
 
 // submitRiderApplication godoc
 // @Summary 提交骑手申请
-// @Description 提交申请进行自动审核。条件：身份证在有效期内，且健康证姓名与身份证一致并且有效期超过当前日期7天则通过，否则直接拒绝
+// @Description 提交申请进行自动审核。条件：身份证在有效期内，且健康证姓名与身份证一致并且有效期超过当前日期7天则通过，否则退回草稿并保留失败原因
 // @Tags 骑手申请
 // @Accept json
 // @Produce json
-// @Success 200 {object} riderApplicationResponse "审核结果（approved或rejected）"
+// @Success 200 {object} riderApplicationResponse "审核结果（approved或draft）"
 // @Failure 400 {object} ErrorResponse "信息不完整"
 // @Failure 401 {object} ErrorResponse "未登录"
 // @Failure 404 {object} ErrorResponse "申请不存在"
@@ -591,14 +580,13 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		}
 	}
 
-	if approved {
-		// 先提交再通过
-		submitted, err := server.store.SubmitRiderApplication(ctx, app.ID)
-		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("submit rider application: %w", err)))
-			return
-		}
+	submitted, err := server.store.SubmitRiderApplication(ctx, app.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("submit rider application: %w", err)))
+		return
+	}
 
+	if approved {
 		approvedResult, err := server.store.ApproveRiderApplicationTx(ctx, db.ApproveRiderApplicationTxParams{
 			ApplicationID: submitted.ID,
 			ReviewedBy:    pgtype.Int8{},
@@ -617,7 +605,17 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(rejectReason)))
+	returned, err := server.store.ReturnRiderApplicationToDraft(ctx, db.ReturnRiderApplicationToDraftParams{
+		ID:           submitted.ID,
+		RejectReason: pgtype.Text{String: rejectReason, Valid: rejectReason != ""},
+		ReviewedBy:   pgtype.Int8{},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("return rider application to draft: %w", err)))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, newRiderApplicationResponse(returned))
 }
 
 func validateRiderApplicationSubmissionReadiness(app db.RiderApplication) (*IDCardOCRData, error) {
@@ -748,11 +746,11 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 	return true, ""
 }
 
-// ==================== 重置申请（被拒绝后） ====================
+// ==================== 重置申请（处理中） ====================
 
 // resetRiderApplication godoc
 // @Summary 重置骑手申请
-// @Description 申请被拒绝后，重置为草稿状态以便重新编辑
+// @Description 将待处理申请重置为草稿状态并清空审核痕迹
 // @Tags 骑手申请
 // @Accept json
 // @Produce json
@@ -776,7 +774,7 @@ func (server *Server) resetRiderApplication(ctx *gin.Context) {
 		return
 	}
 
-	if app.Status != "rejected" {
+	if app.Status != db.RiderApplicationStatusSubmitted {
 		ctx.JSON(http.StatusBadRequest, errorResponse(ErrApplicationCannotReset))
 		return
 	}

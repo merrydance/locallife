@@ -79,7 +79,7 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 					Return(region, nil)
 				// 区域没有运营商
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), region.ID).
+					GetActiveOperatorByRegion(gomock.Any(), region.ID).
 					Return(db.Operator{}, db.ErrRecordNotFound)
 				// 区域没有待审核申请
 				store.EXPECT().
@@ -176,7 +176,7 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 					Return(region, nil)
 				// 区域已有运营商
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), region.ID).
+					GetActiveOperatorByRegion(gomock.Any(), region.ID).
 					Return(db.Operator{ID: 999}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -202,7 +202,7 @@ func TestGetOrCreateOperatorApplicationDraftAPI(t *testing.T) {
 					GetRegion(gomock.Any(), region.ID).
 					Return(region, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), region.ID).
+					GetActiveOperatorByRegion(gomock.Any(), region.ID).
 					Return(db.Operator{}, db.ErrRecordNotFound)
 				// 区域有其他人的待审核申请
 				otherApp := randomOperatorApplicationSubmitted(user.ID+1, region.ID)
@@ -501,7 +501,7 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 					Return(completeApp, nil)
 				// 区域没有运营商
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), region.ID).
+					GetActiveOperatorByRegion(gomock.Any(), region.ID).
 					Return(db.Operator{}, db.ErrRecordNotFound)
 				// 没有其他待审核申请
 				store.EXPECT().
@@ -561,7 +561,7 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 					Return(appWithName, nil)
 
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), region.ID).
+					GetActiveOperatorByRegion(gomock.Any(), region.ID).
 					Return(db.Operator{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetPendingOperatorApplicationByRegion(gomock.Any(), region.ID).
@@ -598,7 +598,7 @@ func TestSubmitOperatorApplicationAPI(t *testing.T) {
 					Return(completeApp, nil)
 				// 区域已被占用
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), region.ID).
+					GetActiveOperatorByRegion(gomock.Any(), region.ID).
 					Return(db.Operator{ID: 999}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
@@ -769,7 +769,7 @@ func TestUpdateOperatorApplicationRegionAPI(t *testing.T) {
 					GetRegion(gomock.Any(), newRegion.ID).
 					Return(newRegion, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), newRegion.ID).
+					GetActiveOperatorByRegion(gomock.Any(), newRegion.ID).
 					Return(db.Operator{}, db.ErrRecordNotFound)
 				store.EXPECT().
 					GetPendingOperatorApplicationByRegion(gomock.Any(), newRegion.ID).
@@ -798,7 +798,7 @@ func TestUpdateOperatorApplicationRegionAPI(t *testing.T) {
 					GetRegion(gomock.Any(), newRegion.ID).
 					Return(newRegion, nil)
 				store.EXPECT().
-					GetOperatorByRegion(gomock.Any(), newRegion.ID).
+					GetActiveOperatorByRegion(gomock.Any(), newRegion.ID).
 					Return(db.Operator{ID: 999}, nil)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {

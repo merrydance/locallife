@@ -75,7 +75,7 @@ func (s *RiderDepositRefundService) SubmitWithdrawal(ctx context.Context, input 
 		return result, err
 	}
 
-	if rider.Status != "active" {
+	if rider.Status != db.RiderStatusApproved && rider.Status != db.RiderStatusActive {
 		return result, NewRequestError(http.StatusBadRequest, ErrRiderAccountNotActivated)
 	}
 	if rider.FrozenDeposit > 0 {

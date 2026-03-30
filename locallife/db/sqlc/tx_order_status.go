@@ -239,6 +239,18 @@ func (store *SQLStore) CancelOrderTx(ctx context.Context, arg CancelOrderTxParam
 					return fmt.Errorf("create rider unfreeze log on order cancel: %w", riderErr)
 				}
 			}
+
+			if lockedDelivery.RiderID.Valid {
+				rider, riderErr := q.GetRiderForUpdate(ctx, lockedDelivery.RiderID.Int64)
+				if riderErr != nil {
+					return fmt.Errorf("get rider for cancel offline check: %w", riderErr)
+				}
+				if rider.Status != RiderStatusActive && rider.IsOnline {
+					if _, riderErr = maybeSetRiderOfflineWhenNotEligible(ctx, q, rider); riderErr != nil {
+						return riderErr
+					}
+				}
+			}
 		}
 
 		// 2.1 取消订单时回滚优惠券使用状态（幂等）

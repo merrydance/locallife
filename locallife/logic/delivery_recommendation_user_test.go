@@ -60,22 +60,18 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 			},
 		},
 		{
-			name:  "NoRegion",
+			name:  "NotActive",
 			input: RecommendDeliveryForUserInput{UserID: userID, RiderLat: 30, RiderLng: 120},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), userID).
 					Times(1).
-					Return(db.Rider{ID: 1, UserID: userID, IsOnline: true}, nil)
-				store.EXPECT().
-					GetRiderProfile(gomock.Any(), int64(1)).
-					Times(1).
-					Return(db.RiderProfile{RiderID: 1, IsSuspended: false}, nil)
+					Return(db.Rider{ID: 1, UserID: userID, IsOnline: true, Status: db.RiderStatusApproved}, nil)
 			},
 			check: func(t *testing.T, _ RecommendDeliveryForUserResult, err error) {
 				reqErr := assertRequestError(t, err)
 				require.Equal(t, 400, reqErr.Status)
-				require.Equal(t, "您尚未分配服务区域，请联系管理员", reqErr.Err.Error())
+				require.Equal(t, "押金不足或账号未激活，暂不可接单", reqErr.Err.Error())
 			},
 		},
 		{
@@ -85,7 +81,7 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), userID).
 					Times(1).
-					Return(db.Rider{ID: 1, UserID: userID, IsOnline: true}, nil)
+					Return(db.Rider{ID: 1, UserID: userID, IsOnline: true, Status: db.RiderStatusActive}, nil)
 				store.EXPECT().
 					GetRiderProfile(gomock.Any(), int64(1)).
 					Times(1).
@@ -105,7 +101,7 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 			name:  "Success",
 			input: RecommendDeliveryForUserInput{UserID: userID, RiderLat: 30, RiderLng: 120},
 			buildStubs: func(store *mockdb.MockStore) {
-				rider := db.Rider{ID: 2, UserID: userID, IsOnline: true, RegionID: pgtype.Int8{Int64: 9, Valid: true}}
+				rider := db.Rider{ID: 2, UserID: userID, IsOnline: true, Status: db.RiderStatusActive}
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), userID).
 					Times(1).
@@ -119,9 +115,9 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 					Times(1).
 					Return(db.RecommendConfig{}, db.ErrRecordNotFound)
 				store.EXPECT().
-					ListDeliveryPoolNearbyByRegion(gomock.Any(), gomock.Any()).
+					ListDeliveryPoolNearby(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.ListDeliveryPoolNearbyByRegionRow{
+					Return([]db.ListDeliveryPoolNearbyRow{
 						{
 							OrderID:            10,
 							MerchantID:         20,
@@ -147,6 +143,38 @@ func TestRecommendDeliveryOrdersForUser(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, int64(2), result.Rider.ID)
 				require.Len(t, result.Recommendations.Scored, 1)
+			},
+		},
+		{
+			name:  "SuccessWithoutRegion",
+			input: RecommendDeliveryForUserInput{UserID: userID, RiderLat: 30, RiderLng: 120},
+			buildStubs: func(store *mockdb.MockStore) {
+				rider := db.Rider{ID: 3, UserID: userID, IsOnline: true, Status: db.RiderStatusActive}
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), userID).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetRiderProfile(gomock.Any(), rider.ID).
+					Times(1).
+					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
+				store.EXPECT().
+					GetActiveRecommendConfig(gomock.Any()).
+					Times(1).
+					Return(db.RecommendConfig{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					ListDeliveryPoolNearby(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListDeliveryPoolNearbyRow{}, nil)
+				store.EXPECT().
+					ListRiderActiveDeliveries(gomock.Any(), pgtype.Int8{Int64: rider.ID, Valid: true}).
+					Times(1).
+					Return([]db.Delivery{}, nil)
+			},
+			check: func(t *testing.T, result RecommendDeliveryForUserResult, err error) {
+				require.NoError(t, err)
+				require.Equal(t, int64(3), result.Rider.ID)
+				require.Len(t, result.Recommendations.Scored, 0)
 			},
 		},
 	}

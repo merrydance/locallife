@@ -272,7 +272,7 @@ func (server *Server) approveOperatorApplicationAdmin(ctx *gin.Context) {
 		return
 	}
 
-	if _, err := server.store.GetOperatorByRegion(ctx, app.RegionID); err == nil {
+	if _, err := server.getRegionActiveOperator(ctx, app.RegionID); err == nil {
 		ctx.JSON(http.StatusConflict, errorResponse(ErrRegionHasOperator))
 		return
 	} else if !isNotFoundError(err) {

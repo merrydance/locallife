@@ -128,21 +128,6 @@ func (server *Server) getRecommendedOrders(ctx *gin.Context) {
 		RiderLng: req.Longitude,
 	})
 	if err != nil {
-		var reqErr *logic.RequestError
-		if errors.As(err, &reqErr) && errors.Is(reqErr.Err, logic.ErrRiderRegionUnassigned) {
-			server.writeAuditLog(ctx, AuditLogInput{
-				ActorUserID: authPayload.UserID,
-				ActorRole:   "rider",
-				Action:      "region_access_denied",
-				TargetType:  "region",
-				RegionID:    nil,
-				Metadata: map[string]any{
-					"reason": "rider_region_unassigned",
-					"path":   ctx.Request.URL.Path,
-					"method": ctx.Request.Method,
-				},
-			})
-		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -353,42 +338,6 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		MaxDistanceMeters: MaxGrabOrderDistanceMeters,
 	})
 	if err != nil {
-		var regionErr *logic.RegionAccessError
-		if errors.As(err, &regionErr) {
-			regionID := regionErr.MerchantRegionID
-			riderRegionID := regionErr.RiderRegionID
-			server.writeAuditLog(ctx, AuditLogInput{
-				ActorUserID: authPayload.UserID,
-				ActorRole:   "rider",
-				Action:      "region_access_denied",
-				TargetType:  "region",
-				TargetID:    &regionID,
-				RegionID:    &regionID,
-				Metadata: map[string]any{
-					"reason":             "rider_region_mismatch",
-					"rider_region_id":    riderRegionID,
-					"merchant_region_id": regionID,
-					"order_id":           req.OrderID,
-					"path":               ctx.Request.URL.Path,
-					"method":             ctx.Request.Method,
-				},
-			})
-		}
-		var reqErr *logic.RequestError
-		if errors.As(err, &reqErr) && errors.Is(reqErr.Err, logic.ErrRiderRegionUnassigned) {
-			server.writeAuditLog(ctx, AuditLogInput{
-				ActorUserID: authPayload.UserID,
-				ActorRole:   "rider",
-				Action:      "region_access_denied",
-				TargetType:  "region",
-				RegionID:    nil,
-				Metadata: map[string]any{
-					"reason": "rider_region_unassigned",
-					"path":   ctx.Request.URL.Path,
-					"method": ctx.Request.Method,
-				},
-			})
-		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -441,9 +390,13 @@ func (server *Server) grabOrder(ctx *gin.Context) {
 		fmt.Sprintf("订单%s已有骑手接单，正在前往取餐", order.OrderNo),
 	)
 
-	// 📢 M8: 实时广播通知全区域骑手：订单已被抢，请从大厅移除
+	// 📢 M8: 实时广播通知取餐点附近骑手：订单已被抢，请从大厅移除
 	if server.deliveryBroadcast != nil {
-		_ = server.deliveryBroadcast.BroadcastOrderGone(ctx, merchant.RegionID, order.ID)
+		pickupLng, lngErr := delivery.PickupLongitude.Float64Value()
+		pickupLat, latErr := delivery.PickupLatitude.Float64Value()
+		if lngErr == nil && latErr == nil {
+			_ = server.deliveryBroadcast.BroadcastOrderGone(ctx, order.ID, pickupLat.Float64, pickupLng.Float64)
+		}
 	}
 
 	// 重新获取更新后的配送单

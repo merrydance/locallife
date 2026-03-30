@@ -1041,12 +1041,16 @@ func (server *Server) SuspendRider(ctx *gin.Context) {
 	}
 
 	// 更新骑手状态为暂停
-	_, err = server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
+	updatedRider, err := server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
 		ID:     riderID,
 		Status: "suspended",
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("suspend rider %d: %w", riderID, err)))
+		return
+	}
+	if _, err = db.ReconcileRiderOperationalStatus(ctx, server.store, updatedRider); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reconcile suspended rider %d: %w", riderID, err)))
 		return
 	}
 
@@ -1094,13 +1098,17 @@ func (server *Server) ResumeRider(ctx *gin.Context) {
 		return
 	}
 
-	// 更新骑手状态为正常
-	_, err = server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
+	// 恢复后先回到 approved，再按押金阈值统一收敛为 approved/active。
+	restoredRider, err := server.store.UpdateRiderStatus(ctx, db.UpdateRiderStatusParams{
 		ID:     riderID,
-		Status: "active",
+		Status: db.RiderStatusApproved,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("resume rider %d: %w", riderID, err)))
+		return
+	}
+	if _, err = db.ReconcileRiderOperationalStatus(ctx, server.store, restoredRider); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("reconcile resumed rider %d: %w", riderID, err)))
 		return
 	}
 

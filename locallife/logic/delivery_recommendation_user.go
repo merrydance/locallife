@@ -40,6 +40,9 @@ func RecommendDeliveryOrdersForUser(
 	if !rider.IsOnline {
 		return result, NewRequestError(http.StatusBadRequest, errors.New("请先上线"))
 	}
+	if rider.Status != db.RiderStatusActive {
+		return result, NewRequestError(http.StatusBadRequest, errors.New("押金不足或账号未激活，暂不可接单"))
+	}
 	suspension, err := GetRiderSuspension(ctx, store, rider.ID)
 	if err != nil {
 		return result, err
@@ -47,15 +50,11 @@ func RecommendDeliveryOrdersForUser(
 	if suspension != nil {
 		return result, NewRequestError(http.StatusForbidden, errors.New("骑手接单已暂停"))
 	}
-	if !rider.RegionID.Valid {
-		return result, NewRequestError(http.StatusBadRequest, ErrRiderRegionUnassigned)
-	}
 
 	recommendations, err := RecommendDeliveryOrders(ctx, store, routeService, RecommendDeliveryInput{
-		RiderID:       rider.ID,
-		RiderRegionID: rider.RegionID.Int64,
-		RiderLat:      input.RiderLat,
-		RiderLng:      input.RiderLng,
+		RiderID:  rider.ID,
+		RiderLat: input.RiderLat,
+		RiderLng: input.RiderLng,
 	})
 	if err != nil {
 		return result, err

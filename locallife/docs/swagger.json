@@ -542,11 +542,9 @@
                 "parameters": [
                     {
                         "enum": [
-                            "pending",
                             "approved",
                             "active",
-                            "suspended",
-                            "rejected"
+                            "suspended"
                         ],
                         "type": "string",
                         "description": "筛选状态",
@@ -592,140 +590,6 @@
                     },
                     "403": {
                         "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/admin/riders/{rider_id}/approve": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "管理员审核通过骑手入驻申请，骑手状态变为active，可直接接单",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手管理"
-                ],
-                "summary": "审核通过骑手申请（管理员）",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "骑手ID",
-                        "name": "rider_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "审核成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.riderResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "状态不允许审核",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "骑手不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/admin/riders/{rider_id}/reject": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "管理员拒绝骑手入驻申请，骑手状态从pending变为rejected",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手管理"
-                ],
-                "summary": "拒绝骑手申请（管理员）",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "骑手ID",
-                        "name": "rider_id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "拒绝成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.riderResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "状态不允许审核",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未登录",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "无权限",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "骑手不存在",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -16573,10 +16437,9 @@
                 "parameters": [
                     {
                         "enum": [
-                            "pending",
+                            "approved",
                             "active",
-                            "suspended",
-                            "deactivated"
+                            "suspended"
                         ],
                         "type": "string",
                         "description": "骑手状态",
@@ -23804,7 +23667,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "申请被拒绝后，重置为草稿状态以便重新编辑",
+                "description": "将待处理申请重置为草稿状态并清空审核痕迹",
                 "consumes": [
                     "application/json"
                 ],
@@ -23856,7 +23719,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "提交申请进行自动审核。条件：身份证在有效期内，且健康证姓名与身份证一致并且有效期超过当前日期7天则通过，否则直接拒绝",
+                "description": "提交申请进行自动审核。条件：身份证在有效期内，且健康证姓名与身份证一致并且有效期超过当前日期7天则通过，否则退回草稿并保留失败原因",
                 "consumes": [
                     "application/json"
                 ],
@@ -23869,7 +23732,7 @@
                 "summary": "提交骑手申请",
                 "responses": {
                     "200": {
-                        "description": "审核结果（approved或rejected）",
+                        "description": "审核结果（approved或draft）",
                         "schema": {
                             "$ref": "#/definitions/api.riderApplicationResponse"
                         }
@@ -24626,7 +24489,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "设置骑手状态为在线，开始接受订单。需要骑手状态为approved或active且押金充足",
+                "description": "设置骑手状态为在线，开始接受订单。需要骑手处于 active 且可用押金达到平台阈值",
                 "consumes": [
                     "application/json"
                 ],
@@ -36579,7 +36442,7 @@
                     "type": "string"
                 },
                 "status": {
-                    "description": "账号状态：pending/approved/active/suspended/rejected",
+                    "description": "账号状态：approved/active/suspended",
                     "type": "string"
                 }
             }

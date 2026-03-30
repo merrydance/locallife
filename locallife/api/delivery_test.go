@@ -63,7 +63,6 @@ func TestGetRecommendedOrdersAPI(t *testing.T) {
 	rider.CurrentLatitude = numericFromFloat(39.920)
 	rider.LocationUpdatedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
 	rider.Status = "active"
-	rider.RegionID = pgtype.Int8{Int64: 1, Valid: true} // 设置骑手区域
 
 	testCases := []struct {
 		name          string
@@ -95,11 +94,11 @@ func TestGetRecommendedOrdersAPI(t *testing.T) {
 					Times(1).
 					Return(db.RecommendConfig{}, db.ErrRecordNotFound)
 
-				// ListDeliveryPoolNearbyByRegion - 按区域过滤
+				// ListDeliveryPoolNearby - 仅按位置过滤
 				store.EXPECT().
-					ListDeliveryPoolNearbyByRegion(gomock.Any(), gomock.Any()).
+					ListDeliveryPoolNearby(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return([]db.ListDeliveryPoolNearbyByRegionRow{}, nil)
+					Return([]db.ListDeliveryPoolNearbyRow{}, nil)
 
 				// ListRiderActiveDeliveries
 				store.EXPECT().
@@ -175,7 +174,6 @@ func TestGrabOrderAPI(t *testing.T) {
 	rider := randomRider(user.ID)
 	rider.IsOnline = true
 	rider.Status = "active"
-	rider.RegionID = pgtype.Int8{Int64: 1, Valid: true} // 设置骑手区域
 
 	orderID := util.RandomInt(1, 1000)
 	merchantID := util.RandomInt(1, 1000)
@@ -221,11 +219,10 @@ func TestGrabOrderAPI(t *testing.T) {
 					Times(1).
 					Return(int16(0), nil)
 
-				// 区域检查：获取商家确认区域匹配
 				merchant := db.Merchant{
 					ID:          merchantID,
 					OwnerUserID: util.RandomInt(1, 1000),
-					RegionID:    rider.RegionID.Int64, // 匹配骑手区域
+					RegionID:    util.RandomInt(1, 1000),
 					Name:        util.RandomString(10),
 				}
 				store.EXPECT().
@@ -357,7 +354,7 @@ func TestGrabOrderAPI(t *testing.T) {
 				merchant := db.Merchant{
 					ID:          merchantID,
 					OwnerUserID: util.RandomInt(1, 1000),
-					RegionID:    rider.RegionID.Int64,
+					RegionID:    util.RandomInt(1, 1000),
 					Name:        util.RandomString(10),
 				}
 				store.EXPECT().
@@ -1539,7 +1536,6 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 	rider := randomRider(user.ID)
 	rider.IsOnline = true
 	rider.Status = "active"
-	rider.RegionID = pgtype.Int8{Int64: 1, Valid: true}
 	rider.DepositAmount = 100 * fenPerYuan
 	rider.FrozenDeposit = 0
 
@@ -1591,7 +1587,7 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 				merchant := db.Merchant{
 					ID:          merchantID,
 					OwnerUserID: util.RandomInt(1, 1000),
-					RegionID:    rider.RegionID.Int64,
+					RegionID:    util.RandomInt(1, 1000),
 				}
 				store.EXPECT().
 					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
@@ -1617,80 +1613,6 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 					GetOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(order, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusBadRequest, recorder.Code)
-			},
-		},
-		{
-			name:    "RegionMismatch",
-			orderID: orderID,
-			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					AnyTimes().
-					Return(rider, nil)
-
-				store.EXPECT().
-					GetRiderProfile(gomock.Any(), gomock.Eq(rider.ID)).
-					Times(1).
-					Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
-
-				store.EXPECT().
-					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
-					Return(pool, nil)
-
-				// 高值单资格积分检查
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(0), nil)
-
-				// 商户在不同区域
-				merchant := db.Merchant{
-					ID:          merchantID,
-					OwnerUserID: util.RandomInt(1, 1000),
-					RegionID:    rider.RegionID.Int64 + 1, // 不同区域
-				}
-				store.EXPECT().
-					GetMerchant(gomock.Any(), gomock.Eq(merchantID)).
-					Times(1).
-					Return(merchant, nil)
-			},
-			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusForbidden, recorder.Code)
-			},
-		},
-		{
-			name:    "NoRegionAssigned",
-			orderID: orderID,
-			body: map[string]interface{}{
-				"longitude": 116.404,
-				"latitude":  39.915,
-			},
-			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
-				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
-			},
-			buildStubs: func(store *mockdb.MockStore) {
-				noRegionRider := rider
-				noRegionRider.RegionID = pgtype.Int8{Valid: false}
-				store.EXPECT().
-					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(noRegionRider, nil)
-
-				store.EXPECT().
-					GetRiderProfile(gomock.Any(), gomock.Eq(noRegionRider.ID)).
-					Times(1).
-					Return(db.RiderProfile{RiderID: noRegionRider.ID, IsSuspended: false}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

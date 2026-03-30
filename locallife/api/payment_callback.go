@@ -498,7 +498,6 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		})
 		return
 	}
-
 	// 检查是否已处理（幂等）
 	if paymentOrder.Status == PaymentStatusPaid {
 		log.Info().Int64("id", paymentOrder.ID).Msg("payment order already paid")
@@ -2008,6 +2007,15 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		})
 		return
 	}
+	if applyment.SubjectType != "merchant" && applyment.SubjectType != "operator" {
+		log.Warn().
+			Int64("applyment_id", applyment.ID).
+			Str("subject_type", applyment.SubjectType).
+			Msg("ignore unsupported applyment subject type")
+		server.markNotificationProcessed(ctx, notification.ID, "", "")
+		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		return
+	}
 
 	// 映射状态
 	newStatus := mapApplymentStateToDBStatus(resource.ApplymentState)
@@ -2035,12 +2043,6 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		}
 		// 非商户主体的额外更新（不在激活事务内，但各自幂等安全）
 		switch applyment.SubjectType {
-		case "rider":
-			log.Warn().
-				Int64("applyment_id", applyment.ID).
-				Int64("rider_id", applyment.SubjectID).
-				Str("sub_mch_id", resource.SubMchID).
-				Msg("rider applyment callback received but rider onboarding is disabled in current mode")
 		case "operator":
 			if _, err = server.store.UpdateOperatorSubMchID(ctx, db.UpdateOperatorSubMchIDParams{
 				ID:       applyment.SubjectID,
