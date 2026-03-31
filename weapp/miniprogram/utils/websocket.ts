@@ -37,6 +37,19 @@ class WebSocketManager {
     }
   }
 
+  private sendAck(messageId: string, sequence: number) {
+    if (!messageId && sequence <= 0) {
+      return
+    }
+
+    this.send({
+      type: 'ack',
+      message_id: messageId,
+      sequence,
+      ts: new Date().toISOString()
+    })
+  }
+
   /**
    * 建立连接
    * @param url WebSocket 地址，若不传则从配置获取
@@ -131,6 +144,12 @@ class WebSocketManager {
         // 追踪序号，断线重连时传给服务端触发消息回放
         if (typeof msg.sequence === 'number' && msg.sequence > this.lastSequence) {
           this.lastSequence = msg.sequence
+        }
+
+        const messageId = typeof msg.id === 'string' ? msg.id : ''
+        const messageSequence = typeof msg.sequence === 'number' ? msg.sequence : 0
+        if (msg.type !== WSMessageType.PONG && messageId) {
+          this.sendAck(messageId, messageSequence)
         }
 
         // 分发业务消息
