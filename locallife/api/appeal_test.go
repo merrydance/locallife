@@ -1816,6 +1816,40 @@ func TestListRiderClaimsAPI(t *testing.T) {
 			},
 		},
 		{
+			name:  "WithBucket",
+			query: "?page_id=2&page_size=5&bucket=pending_action",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(rider, nil)
+
+				store.EXPECT().
+					ListRiderClaimsForRider(gomock.Any(), gomock.Eq(db.ListRiderClaimsForRiderParams{
+						RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+						Limit:   5,
+						Offset:  5,
+						Bucket:  pgtype.Text{String: "pending_action", Valid: true},
+					})).
+					Times(1).
+					Return([]db.ListRiderClaimsForRiderRow{claim}, nil)
+
+				store.EXPECT().
+					CountRiderClaimsForRider(gomock.Any(), gomock.Eq(db.CountRiderClaimsForRiderParams{
+						RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+						Bucket:  pgtype.Text{String: "pending_action", Valid: true},
+					})).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
 			name:  "NotRider",
 			query: "?page_id=1&page_size=10",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {

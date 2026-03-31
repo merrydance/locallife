@@ -30,6 +30,13 @@ class WebSocketManager {
   private lastSequence = 0 // 记录最后收到的消息序号，断线重连时带给服务端以触发消息回放
   private readonly eventBus = new EventBus()
 
+  private clearReconnectTimer() {
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer)
+      this.reconnectTimer = null
+    }
+  }
+
   /**
    * 建立连接
    * @param url WebSocket 地址，若不传则从配置获取
@@ -77,6 +84,7 @@ class WebSocketManager {
    */
   disconnect() {
     this.forcedClose = true
+    this.isConnecting = false
     if (this.socket) {
       this.socket.close({
         reason: 'Client logout'
@@ -84,9 +92,7 @@ class WebSocketManager {
       this.socket = null
     }
     this.isConnected = false
-    if (this.reconnectTimer) {
-      clearTimeout(this.reconnectTimer)
-    }
+    this.clearReconnectTimer()
   }
 
   /**
@@ -106,6 +112,7 @@ class WebSocketManager {
       this.isConnected = true
       this.isConnecting = false
       this.reconnectAttempts = 0
+      this.clearReconnectTimer()
     })
 
     this.socket.onMessage((res) => {
@@ -136,6 +143,7 @@ class WebSocketManager {
     this.socket.onClose((res) => {
       logger.warn('WebSocket: Connection closed', res, 'WS')
       this.isConnected = false
+      this.isConnecting = false
       this.socket = null
       if (!this.forcedClose) {
         this.scheduleReconnect()
@@ -147,16 +155,24 @@ class WebSocketManager {
       this.isConnected = false
       this.isConnecting = false
       this.socket = null
+      if (!this.forcedClose) {
+        this.scheduleReconnect()
+      }
     })
   }
 
   private scheduleReconnect() {
+    if (this.forcedClose || this.reconnectTimer || this.isConnected || this.isConnecting) {
+      return
+    }
+
     const delay = Math.min(1000 * Math.pow(2, this.reconnectAttempts), 30000)
     this.reconnectAttempts++
 
     logger.info(`WebSocket: Reconnecting in ${delay}ms (Attempt ${this.reconnectAttempts})...`, undefined, 'WS')
 
     this.reconnectTimer = setTimeout(() => {
+      this.reconnectTimer = null
       this.connect()
     }, delay)
   }

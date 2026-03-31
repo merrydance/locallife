@@ -128,69 +128,16 @@
         </t-cell-group>
       </view>
 
-      <view class="support-actions">
-        <view class="support-entry" bindtap="onOpenDelayReport">
-          <t-icon name="time" size="32rpx" />
-          <text>预计会延时？先报备</text>
-        </view>
-        <view class="support-entry" bindtap="onReportException">
-          <t-icon name="error-circle" size="32rpx" />
-          <text>配送遇到问题？去报备</text>
+      <view class="detail-card contact-tip-card">
+        <view class="contact-tip-title">如预计晚点，请直接联系顾客说明情况</view>
+        <view class="contact-tip-desc">骑手端不再向平台提交延时或异常报备。起步阶段按即时履约处理，优先和顾客同步到达时间。</view>
+        <view class="contact-tip-actions" wx:if="{{delivery.delivery_phone}}">
+          <t-button theme="primary" variant="outline" shape="round" bindtap="onCallPhone" data-phone="{{delivery.delivery_phone}}">联系顾客</t-button>
         </view>
       </view>
     </block>
   </view>
 </scroll-view>
-
-<t-popup visible="{{showDelayReport}}" placement="bottom">
-  <view class="delay-sheet">
-    <view class="delay-sheet-title">配送延时报备</view>
-    <text class="delay-sheet-desc">提前报备后，平台可以同步顾客和商户，减少后续争议。</text>
-
-    <view class="delay-group">
-      <text class="delay-label">常用原因</text>
-      <view class="delay-chip-row">
-        <view
-          wx:for="{{delayReasonTemplates}}"
-          wx:key="label"
-          class="delay-chip"
-          data-reason="{{item.reason}}"
-          data-minutes="{{item.expectedMinutes}}"
-          bindtap="onSelectDelayTemplate"
-        >{{item.label}}</view>
-      </view>
-    </view>
-
-    <view class="delay-group">
-      <text class="delay-label">预计延时</text>
-      <view class="delay-chip-row">
-        <view
-          wx:for="{{delayMinuteOptions}}"
-          wx:key="*this"
-          class="delay-chip {{delayForm.expectedMinutes === item ? 'is-active' : ''}}"
-          data-minutes="{{item}}"
-          bindtap="onSelectDelayMinutes"
-        >{{item}} 分钟</view>
-      </view>
-    </view>
-
-    <view class="delay-group">
-      <text class="delay-label">延时说明</text>
-      <t-textarea
-        value="{{delayForm.reason}}"
-        placeholder="请说明延时原因，平台会据此同步各方。"
-        maxlength="300"
-        indicator
-        bindchange="onDelayReasonChange"
-      />
-    </view>
-
-    <view class="delay-sheet-actions">
-      <t-button theme="default" variant="outline" shape="round" bindtap="onCloseDelayReport" disabled="{{delaySubmitting}}">取消</t-button>
-      <t-button theme="primary" shape="round" loading="{{delaySubmitting}}" bindtap="onSubmitDelayReport">提交报备</t-button>
-    </view>
-  </view>
-</t-popup>
 
 <!-- 底部固定操作按钮 -->
 <view class="bottom-action" wx:if="{{delivery && delivery.can_update_status}}">

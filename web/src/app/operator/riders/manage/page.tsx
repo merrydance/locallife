@@ -156,7 +156,6 @@ export default function OperatorRidersManagePage() {
               <div>电话：{detail.phone}</div>
               <div>状态：{formatRiderStatus(detail.status)}</div>
               <div>信用分：{detail.credit_score}</div>
-              <div>高价值单资格：{detail.high_value_qualified ? "是" : "否"}</div>
               <div>总单量：{detail.total_orders}</div>
             </CardContent>
           </Card>

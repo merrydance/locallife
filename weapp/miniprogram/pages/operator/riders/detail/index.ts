@@ -32,7 +32,6 @@ type RiderDetailView = {
   current_longitude?: number
   location_updated_at?: string
   credit_score: number
-  high_value_qualified: boolean
   created_at: string
   updated_at: string
   deposit_amount_display: string
@@ -82,7 +81,6 @@ function adaptRiderDetail(detail: OperatorRiderDetailResponse & Record<string, u
     current_longitude: currentLongitude || undefined,
     location_updated_at: locationUpdatedAt,
     credit_score: Number(detail.score || detail.credit_score || 0),
-    high_value_qualified: Number(detail.score || 0) >= 0 || Boolean(detail.high_value_qualified),
     created_at: String(detail.created_at || ''),
     updated_at: String(detail.updated_at || ''),
     deposit_amount_display: (depositAmount / 100).toFixed(2),

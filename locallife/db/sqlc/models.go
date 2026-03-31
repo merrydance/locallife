@@ -1767,20 +1767,6 @@ type RiderLocation struct {
 	RecordedAt time.Time      `json:"recorded_at"`
 }
 
-// 高值单资格积分变更日志表
-type RiderPremiumScoreLog struct {
-	ID                int64       `json:"id"`
-	RiderID           int64       `json:"rider_id"`
-	ChangeAmount      int16       `json:"change_amount"`
-	OldScore          int16       `json:"old_score"`
-	NewScore          int16       `json:"new_score"`
-	ChangeType        string      `json:"change_type"`
-	RelatedOrderID    pgtype.Int8 `json:"related_order_id"`
-	RelatedDeliveryID pgtype.Int8 `json:"related_delivery_id"`
-	Remark            pgtype.Text `json:"remark"`
-	CreatedAt         time.Time   `json:"created_at"`
-}
-
 // 骑手信任画像表 - 餐损索赔由押金扣除
 type RiderProfile struct {
 	ID                  int64 `json:"id"`
@@ -1808,8 +1794,6 @@ type RiderProfile struct {
 	SuspendedAt   pgtype.Timestamptz `json:"suspended_at"`
 	SuspendUntil  pgtype.Timestamptz `json:"suspend_until"`
 	UpdatedAt     time.Time          `json:"updated_at"`
-	// 高值单资格积分：普通单+1，高值单-3，超时-5，餐损-10，≥0可接高值单
-	PremiumScore int16 `json:"premium_score"`
 }
 
 // 规则主体表（Phase1 草案）

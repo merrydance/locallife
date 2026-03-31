@@ -569,25 +569,24 @@ type getOperatorRiderRequest struct {
 }
 
 type riderDetailResponse struct {
-	ID                 int64   `json:"id"`
-	UserID             int64   `json:"user_id"`
-	RealName           string  `json:"real_name"`
-	Phone              string  `json:"phone"`
-	IDCardNo           string  `json:"id_card_no"`
-	Status             string  `json:"status"`
-	IsOnline           bool    `json:"is_online"`
-	RegionID           int64   `json:"region_id"`
-	DepositAmount      int64   `json:"deposit_amount"`
-	FrozenDeposit      int64   `json:"frozen_deposit"`
-	TotalOrders        int32   `json:"total_orders"`
-	TotalEarnings      int64   `json:"total_earnings"`
-	CurrentLatitude    float64 `json:"current_latitude"`
-	CurrentLongitude   float64 `json:"current_longitude"`
-	LocationUpdatedAt  string  `json:"location_updated_at,omitempty"`
-	CreditScore        int16   `json:"credit_score"`
-	HighValueQualified bool    `json:"high_value_qualified"`
-	CreatedAt          string  `json:"created_at"`
-	UpdatedAt          string  `json:"updated_at"`
+	ID                int64   `json:"id"`
+	UserID            int64   `json:"user_id"`
+	RealName          string  `json:"real_name"`
+	Phone             string  `json:"phone"`
+	IDCardNo          string  `json:"id_card_no"`
+	Status            string  `json:"status"`
+	IsOnline          bool    `json:"is_online"`
+	RegionID          int64   `json:"region_id"`
+	DepositAmount     int64   `json:"deposit_amount"`
+	FrozenDeposit     int64   `json:"frozen_deposit"`
+	TotalOrders       int32   `json:"total_orders"`
+	TotalEarnings     int64   `json:"total_earnings"`
+	CurrentLatitude   float64 `json:"current_latitude"`
+	CurrentLongitude  float64 `json:"current_longitude"`
+	LocationUpdatedAt string  `json:"location_updated_at,omitempty"`
+	CreditScore       int16   `json:"credit_score"`
+	CreatedAt         string  `json:"created_at"`
+	UpdatedAt         string  `json:"updated_at"`
 }
 
 // getOperatorRider 获取骑手详情
@@ -635,34 +634,29 @@ func (server *Server) getOperatorRider(ctx *gin.Context) {
 		return
 	}
 
-	// 获取高值单资格积分
-	premiumScore, _ := server.store.GetRiderPremiumScore(ctx, rider.ID)
-	highValueQualified := premiumScore >= 0
-
 	updatedAt := ""
 	if rider.UpdatedAt.Valid {
 		updatedAt = rider.UpdatedAt.Time.Format("2006-01-02 15:04:05")
 	}
 
 	resp := riderDetailResponse{
-		ID:                 rider.ID,
-		UserID:             rider.UserID,
-		RealName:           rider.RealName,
-		Phone:              rider.Phone,
-		IDCardNo:           maskIDCard(rider.IDCardNo),
-		Status:             rider.Status,
-		IsOnline:           rider.IsOnline,
-		RegionID:           rider.RegionID.Int64,
-		DepositAmount:      rider.DepositAmount,
-		FrozenDeposit:      rider.FrozenDeposit,
-		TotalOrders:        rider.TotalOrders,
-		TotalEarnings:      rider.TotalEarnings,
-		CurrentLatitude:    pgNumericToFloat64(rider.CurrentLatitude),
-		CurrentLongitude:   pgNumericToFloat64(rider.CurrentLongitude),
-		CreditScore:        rider.CreditScore,
-		HighValueQualified: highValueQualified,
-		CreatedAt:          rider.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:          updatedAt,
+		ID:               rider.ID,
+		UserID:           rider.UserID,
+		RealName:         rider.RealName,
+		Phone:            rider.Phone,
+		IDCardNo:         maskIDCard(rider.IDCardNo),
+		Status:           rider.Status,
+		IsOnline:         rider.IsOnline,
+		RegionID:         rider.RegionID.Int64,
+		DepositAmount:    rider.DepositAmount,
+		FrozenDeposit:    rider.FrozenDeposit,
+		TotalOrders:      rider.TotalOrders,
+		TotalEarnings:    rider.TotalEarnings,
+		CurrentLatitude:  pgNumericToFloat64(rider.CurrentLatitude),
+		CurrentLongitude: pgNumericToFloat64(rider.CurrentLongitude),
+		CreditScore:      rider.CreditScore,
+		CreatedAt:        rider.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:        updatedAt,
 	}
 
 	if rider.LocationUpdatedAt.Valid {

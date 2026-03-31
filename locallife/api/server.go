@@ -1012,14 +1012,6 @@ func (server *Server) setupRouter() {
 		// 位置上报
 		riderGroup.POST("/location", server.updateRiderLocation)
 
-		// 骑手订单操作
-		riderGroup.POST("/orders/:id/delay", server.reportDelay)         // 延时申报
-		riderGroup.POST("/orders/:id/exception", server.reportException) // 异常上报
-
-		// 高值单资格积分
-		riderGroup.GET("/score", server.getRiderPremiumScore)                 // 获取高值单资格积分
-		riderGroup.GET("/score/history", server.listRiderPremiumScoreHistory) // 获取积分变更历史
-
 		// 骑手索赔与申诉
 		riderGroup.GET("/claims", server.listRiderClaims)
 		riderGroup.GET("/claims/:id", server.getRiderClaimDetail)

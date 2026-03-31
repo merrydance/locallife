@@ -14,11 +14,10 @@
       "pages": [
         "dashboard/index",
         "claims/index",
-        "credit/index",
+        "claims/detail/index",
         "deposit/index",
         "task-detail/index",
-        "tasks/index",
-        "exception/index"
+        "tasks/index"
       ],
       "independent": false
     },

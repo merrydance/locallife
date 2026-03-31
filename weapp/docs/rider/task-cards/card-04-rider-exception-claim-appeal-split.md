@@ -1,4 +1,4 @@
-# CARD-04 骑手异常、索赔、申诉域拆分
+# CARD-04 骑手索赔、申诉、追偿域收口
 
 状态：已实现，待人工回归
 
@@ -8,40 +8,37 @@
 
 ## 问题目标
 
-把 exception、claim、appeal、recovery 从当前混杂状态拆开，形成符合后端真实语义的页面职责。
+把 claims、appeal、recovery 从旧混杂状态收口成“列表页加详情页”两层职责，形成符合后端真实语义的骑手处理面。
 
 ## 影响范围
 
-- weapp/miniprogram/pages/rider/exception/index.ts
-- weapp/miniprogram/pages/rider/exception/index.wxml
 - weapp/miniprogram/pages/rider/claims/index.ts
 - weapp/miniprogram/pages/rider/claims/index.wxml
-- weapp/miniprogram/api/rider.ts
-- weapp/miniprogram/api/rider-exception-handling.ts
+- weapp/miniprogram/pages/rider/claims/detail/index.ts
+- weapp/miniprogram/pages/rider/claims/detail/index.wxml
 - weapp/miniprogram/api/appeals-customer-service.ts
-- locallife/api/rider.go
 - locallife/api/appeal.go
 - locallife/api/claim_recovery.go
 
 ## 任务内容
 
-- [x] 将 exception/index 明确为异常上报页，只消费 /v1/rider/orders/:id/exception 与真实异常历史策略。
-- [x] 决定异常历史如果后端暂无独立接口，是补接口还是改为只展示最近上报结果，不得继续拿 appeals 顶替。
-- [x] claims/index 明确改造为“索赔与申诉页”或拆成 claim detail / appeal list，不再使用“异常上报”文案。
+- [x] 下线 exception/index 与 rider-exception-handling.ts，移除已判定为伪需求的异常报备与延时报备前端承接。
+- [x] claims/index 收口为真实索赔列表页，使用 bucket 过滤，不再混入申诉表单或追偿动作。
+- [x] 新增 claims/detail/index，承接 claim detail、decision、recovery、appeal 全链动作与结果回看。
 - [x] 修复 createRiderAppeal 的入参来源，claim_id 必须来自真实 claim，而不是 taskId 或 orderId。
 - [x] 收口追偿支付流程，如果接口返回 pay_params，则必须接 wx.requestPayment，而不是只 await 成功。
-- [x] 决定图片上传能力是否保留；若保留则补真实上传链路，若不保留则移除 UI。
+- [x] 删除无真实后端链路的异常图片上传、异常历史和延时报备 UI。
 
 ## 完成定义
 
-- [x] 异常、索赔、申诉、追偿四类动作各自有明确页面职责。
-- [x] 用户不会在“异常上报”页面里误触 claim / appeal 语义。
+- [x] 索赔、申诉、追偿三类动作各自有明确页面职责。
+- [x] 用户不会再从 rider 域进入伪异常报备页面误触 claim / appeal 语义。
 - [x] 追偿支付形成真实闭环。
 
 ## 验证要求
 
-- [ ] 人工验证异常上报成功与失败场景。
 - [ ] 人工验证 claim、appeal、recovery 支付链路。
+- [ ] 人工验证 claims 列表、详情、支付回流与申诉回流。
 - [x] 执行最小相关质量检查。
 
 ## 完成记录
@@ -52,7 +49,8 @@
 
 ## 本次实现说明
 
-- exception/index 已收口为纯异常上报页，移除了用 appeals 顶替异常历史的错误行为，改为展示最近一次提交结果。
-- claims/index 已改为真实“索赔与申诉”页，区分索赔记录与我的申诉，并修复 claim_id 来源。
-- 追偿支付已接入微信支付调用，异常上报页的图片上传 UI 已移除，避免继续保留无后端链路的假能力。
+- exception/index 与相关旧 service 已整体下线，不再作为 rider 域保留页面。
+- claims/index 已改为真实索赔列表页，区分 bucket 与我的申诉，不再承担详情内动作。
+- claims/detail/index 已承接责任判定、行为摘要、追偿支付、申诉提交与处理结果回看。
+- 追偿支付已接入微信支付调用，并补上支付后的状态回读。
 - 已完成 `npm run quality:check`，真机与弱网人工回归仍待执行。

@@ -535,7 +535,7 @@ INSERT INTO rider_profiles (
   rider_id
 ) VALUES (
   $1
-) RETURNING id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at, premium_score
+) RETURNING id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at
 `
 
 // ==========================================
@@ -568,7 +568,6 @@ func (q *Queries) CreateRiderProfile(ctx context.Context, riderID int64) (RiderP
 		&i.SuspendedAt,
 		&i.SuspendUntil,
 		&i.UpdatedAt,
-		&i.PremiumScore,
 	)
 	return i, err
 }
@@ -1526,7 +1525,7 @@ func (q *Queries) GetRiderDeliveryStats(ctx context.Context, arg GetRiderDeliver
 }
 
 const getRiderProfile = `-- name: GetRiderProfile :one
-SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at, premium_score FROM rider_profiles
+SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM rider_profiles
 WHERE rider_id = $1
 LIMIT 1
 `
@@ -1558,13 +1557,12 @@ func (q *Queries) GetRiderProfile(ctx context.Context, riderID int64) (RiderProf
 		&i.SuspendedAt,
 		&i.SuspendUntil,
 		&i.UpdatedAt,
-		&i.PremiumScore,
 	)
 	return i, err
 }
 
 const getRiderProfileForUpdate = `-- name: GetRiderProfileForUpdate :one
-SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at, premium_score FROM rider_profiles
+SELECT id, rider_id, total_deliveries, completed_deliveries, on_time_deliveries, delayed_deliveries, cancelled_deliveries, total_damage_incidents, customer_complaints, timeout_incidents, recent_7d_damages, recent_7d_delays, recent_30d_damages, recent_30d_delays, recent_30d_complaints, recent_90d_damages, recent_90d_delays, total_online_hours, is_suspended, suspend_reason, suspended_at, suspend_until, updated_at FROM rider_profiles
 WHERE rider_id = $1
 LIMIT 1
 FOR UPDATE
@@ -1597,7 +1595,6 @@ func (q *Queries) GetRiderProfileForUpdate(ctx context.Context, riderID int64) (
 		&i.SuspendedAt,
 		&i.SuspendUntil,
 		&i.UpdatedAt,
-		&i.PremiumScore,
 	)
 	return i, err
 }

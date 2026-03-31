@@ -58,10 +58,6 @@ func TestGrabDeliveryOrder_NoRegionStillChecksDistance(t *testing.T) {
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: 20, ExpiresAt: time.Now().Add(time.Hour)}, nil)
 	store.EXPECT().
-		GetRiderPremiumScore(gomock.Any(), rider.ID).
-		Times(1).
-		Return(int16(0), db.ErrRecordNotFound)
-	store.EXPECT().
 		GetMerchant(gomock.Any(), int64(20)).
 		Times(1).
 		Return(merchant, nil)
@@ -92,10 +88,6 @@ func TestGrabDeliveryOrder_DistanceTooFar(t *testing.T) {
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour)}, nil)
-	store.EXPECT().
-		GetRiderPremiumScore(gomock.Any(), rider.ID).
-		Times(1).
-		Return(int16(0), db.ErrRecordNotFound)
 	store.EXPECT().
 		GetMerchant(gomock.Any(), merchant.ID).
 		Times(1).
@@ -128,10 +120,6 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
-	store.EXPECT().
-		GetRiderPremiumScore(gomock.Any(), rider.ID).
-		Times(1).
-		Return(int16(0), db.ErrRecordNotFound)
 	store.EXPECT().
 		GetMerchant(gomock.Any(), merchant.ID).
 		Times(1).
@@ -185,10 +173,6 @@ func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
 	store.EXPECT().
-		GetRiderPremiumScore(gomock.Any(), rider.ID).
-		Times(1).
-		Return(int16(0), db.ErrRecordNotFound)
-	store.EXPECT().
 		GetMerchant(gomock.Any(), merchant.ID).
 		Times(1).
 		Return(merchant, nil)
@@ -229,10 +213,6 @@ func TestGrabDeliveryOrder_PaidOrderRejected(t *testing.T) {
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
-	store.EXPECT().
-		GetRiderPremiumScore(gomock.Any(), rider.ID).
-		Times(1).
-		Return(int16(0), db.ErrRecordNotFound)
 	store.EXPECT().
 		GetMerchant(gomock.Any(), merchant.ID).
 		Times(1).
@@ -296,35 +276,6 @@ func TestGrabDeliveryOrder_NonActiveOnlineRiderRejected(t *testing.T) {
 	require.Equal(t, "押金不足或账号未激活，暂不可接单", reqErr.Err.Error())
 }
 
-func TestGrabDeliveryOrder_HighValueScoreDenied(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	defer ctrl.Finish()
-
-	store := mockdb.NewMockStore(ctrl)
-	rider := db.Rider{ID: 10, UserID: 1, Status: db.RiderStatusActive, IsOnline: true, DepositAmount: 1000}
-
-	store.EXPECT().
-		GetRiderByUserID(gomock.Any(), int64(1)).
-		Times(1).
-		Return(rider, nil)
-	store.EXPECT().
-		GetRiderProfile(gomock.Any(), rider.ID).
-		Times(1).
-		Return(db.RiderProfile{RiderID: rider.ID, IsSuspended: false}, nil)
-	store.EXPECT().
-		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
-		Times(1).
-		Return(db.DeliveryPool{OrderID: 2, MerchantID: 20, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 2000}, nil)
-	store.EXPECT().
-		GetRiderPremiumScore(gomock.Any(), rider.ID).
-		Times(1).
-		Return(int16(-1), nil)
-
-	_, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2})
-	reqErr := assertRequestError(t, err)
-	require.Equal(t, 403, reqErr.Status)
-}
-
 func TestGrabDeliveryOrder_Expired(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -372,10 +323,6 @@ func TestGrabDeliveryOrder_GrabTxError(t *testing.T) {
 		GetDeliveryPoolByOrderID(gomock.Any(), int64(2)).
 		Times(1).
 		Return(db.DeliveryPool{OrderID: 2, MerchantID: merchant.ID, ExpiresAt: time.Now().Add(time.Hour), DeliveryFee: 500}, nil)
-	store.EXPECT().
-		GetRiderPremiumScore(gomock.Any(), rider.ID).
-		Times(1).
-		Return(int16(0), db.ErrRecordNotFound)
 	store.EXPECT().
 		GetMerchant(gomock.Any(), merchant.ID).
 		Times(1).

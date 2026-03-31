@@ -1,5 +1,4 @@
 import DeliveryService, { Delivery } from '../../../api/delivery'
-import { riderExceptionHandlingService } from '../../../api/rider-exception-handling'
 import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
@@ -13,18 +12,25 @@ interface UserMessageError {
     userMessage?: string
 }
 
-type DelayReasonTemplate = {
-    label: string
-    reason: string
-    expectedMinutes: number
-}
-
 type DeliveryAction = (deliveryId: number) => Promise<Delivery>
 
 type DeliveryView = Delivery & {
     deadline_desc: string
     can_update_status: boolean
     action_label: string
+}
+
+function getUserMessage(err: unknown, fallback: string) {
+    const userMessage = (err as UserMessageError).userMessage
+    return typeof userMessage === 'string' && userMessage ? userMessage : fallback
+}
+
+function isExpectedStatusReached(status: Delivery['status'], expectedStatus: Delivery['status']) {
+    if (expectedStatus === 'delivered') {
+        return status === 'delivered' || status === 'completed'
+    }
+
+    return status === expectedStatus
 }
 
 function getDeliveryActionLabel(status: Delivery['status']): string {
@@ -46,19 +52,7 @@ Page({
         loading: false,
         errorMessage: '',
         navBarHeight: 88,
-        showDelayReport: false,
-        delaySubmitting: false,
-        delayReasonTemplates: [
-            { label: '商户出餐慢', reason: '商户出餐较慢，预计会影响送达时效。', expectedMinutes: 20 },
-            { label: '道路拥堵', reason: '配送路线出现拥堵，预计会延迟送达。', expectedMinutes: 25 },
-            { label: '天气影响', reason: '受天气影响，预计配送时效会延后。', expectedMinutes: 30 }
-        ] as DelayReasonTemplate[],
-        delayMinuteOptions: [10, 15, 20, 30, 45, 60],
-        delayForm: {
-            reason: '',
-            expectedMinutes: 15
-        },
-        
+
         // 状态映射
         statusSteps: [
             { title: '已接单', status: 'assigned' },
@@ -94,10 +88,30 @@ Page({
             })
         } catch (err: unknown) {
             logger.error('Fetch task detail failed', err)
-            const message = err instanceof Error && err.message ? err.message : '任务详情加载失败，请稍后重试'
+            const message = getUserMessage(err, '任务详情加载失败，请稍后重试')
             this.setData({ delivery: null, errorMessage: message })
         } finally {
             this.setData({ loading: false })
+        }
+    },
+
+    async reconcileDeliveryState(expectedStatus: Delivery['status']) {
+        try {
+            const latest = await DeliveryService.getDeliveryByOrder(this.data.orderId)
+            if (!isExpectedStatusReached(latest.status, expectedStatus)) {
+                return false
+            }
+
+            const deliveryView = this.decorateDelivery(latest)
+            this.setData({
+                delivery: deliveryView,
+                currentStep: this.mapStatusToStep(latest.status),
+                errorMessage: ''
+            })
+            return true
+        } catch (err: unknown) {
+            logger.warn('Reconcile task detail state failed', { expectedStatus, err }, 'RiderTaskDetail')
+            return false
         }
     },
 
@@ -153,23 +167,29 @@ Page({
         
         let nextAction = ''
         let actionMethod: DeliveryAction | null = null
+        let expectedStatus: Delivery['status'] | null = null
 
         if (status === 'assigned') {
             nextAction = '到达商家'
             actionMethod = DeliveryService.startPickup
+            expectedStatus = 'picking'
         } else if (status === 'picking') {
             nextAction = '确认取餐'
             actionMethod = DeliveryService.confirmPickup
+            expectedStatus = 'picked'
         } else if (status === 'picked') {
             nextAction = '开始配送'
             actionMethod = DeliveryService.startDelivery
+            expectedStatus = 'delivering'
         } else if (status === 'delivering') {
             nextAction = '确认送达'
             actionMethod = DeliveryService.confirmDelivery
+            expectedStatus = 'delivered'
         }
 
-        if (!actionMethod) return
+        if (!actionMethod || !expectedStatus) return
         const method = actionMethod
+        const nextExpectedStatus = expectedStatus
         const locationSourceMap: Record<NonNullable<Delivery['status']>, string> = {
             pending: 'rider_task_detail_pending',
             assigned: 'rider_task_detail_start_pickup',
@@ -202,8 +222,17 @@ Page({
                             setTimeout(() => wx.navigateBack(), 1500)
                         }
                     } catch (err: unknown) {
-                        const userMessage = (err as UserMessageError).userMessage
-                        const message = typeof userMessage === 'string' && userMessage ? userMessage : '操作失败'
+                        const reconciled = await this.reconcileDeliveryState(nextExpectedStatus)
+                        if (reconciled) {
+                            wx.showToast({ title: '状态已同步，请查看最新进度', icon: 'success' })
+                            const latestStatus = this.data.delivery?.status
+                            if (latestStatus === 'completed' || latestStatus === 'delivered') {
+                                setTimeout(() => wx.navigateBack(), 1500)
+                            }
+                            return
+                        }
+
+                        const message = getUserMessage(err, '操作失败')
                         wx.showToast({ title: message, icon: 'none' })
                     } finally {
                         wx.hideLoading()
@@ -248,90 +277,6 @@ Page({
             await syncRiderDeliveryLocation(deliveryId, source)
         } catch (err: unknown) {
             throw normalizeLocationError(err)
-        }
-    },
-
-    onReportException() {
-      wx.navigateTo({
-        url: `/pages/rider/exception/index?orderId=${this.data.orderId}`
-      })
-    },
-
-    onOpenDelayReport() {
-        if (!this.data.delivery) return
-
-        const defaultReason = this.data.delayForm.reason || '配送过程出现情况，预计会影响送达时效。'
-        this.setData({
-            showDelayReport: true,
-            'delayForm.reason': defaultReason,
-            'delayForm.expectedMinutes': this.data.delayForm.expectedMinutes || 15
-        })
-    },
-
-    onCloseDelayReport() {
-        if (this.data.delaySubmitting) return
-        this.setData({ showDelayReport: false })
-    },
-
-    onSelectDelayTemplate(e: WechatMiniprogram.TouchEvent) {
-        const { reason, minutes } = e.currentTarget.dataset as { reason?: string, minutes?: number }
-        if (!reason || !minutes) return
-        this.setData({
-            'delayForm.reason': reason,
-            'delayForm.expectedMinutes': Number(minutes)
-        })
-    },
-
-    onSelectDelayMinutes(e: WechatMiniprogram.TouchEvent) {
-        const { minutes } = e.currentTarget.dataset as { minutes?: number }
-        if (!minutes) return
-        this.setData({ 'delayForm.expectedMinutes': Number(minutes) })
-    },
-
-    onDelayReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-        this.setData({ 'delayForm.reason': e.detail.value || '' })
-    },
-
-    async onSubmitDelayReport() {
-        if (!this.data.delivery || this.data.delaySubmitting) return
-
-        const reason = this.data.delayForm.reason.trim()
-        const expectedMinutes = Number(this.data.delayForm.expectedMinutes)
-
-        if (reason.length < 5) {
-            wx.showToast({ title: '请填写至少5个字的延时原因', icon: 'none' })
-            return
-        }
-
-        if (!expectedMinutes || expectedMinutes < 5 || expectedMinutes > 120) {
-            wx.showToast({ title: '预计延时需在5到120分钟之间', icon: 'none' })
-            return
-        }
-
-        this.setData({ delaySubmitting: true })
-        wx.showLoading({ title: '提交中...' })
-        try {
-            await riderExceptionHandlingService.reportDelay(this.data.orderId, {
-                reason,
-                expected_minutes: expectedMinutes
-            })
-
-            wx.showToast({ title: '延时已报备', icon: 'success' })
-            this.setData({
-                showDelayReport: false,
-                delaySubmitting: false,
-                delayForm: {
-                    reason: '',
-                    expectedMinutes: 15
-                }
-            })
-        } catch (error: unknown) {
-            const userMessage = (error as UserMessageError).userMessage
-            const message = typeof userMessage === 'string' && userMessage ? userMessage : '延时报备失败'
-            wx.showToast({ title: message, icon: 'none' })
-            this.setData({ delaySubmitting: false })
-        } finally {
-            wx.hideLoading()
         }
     },
 

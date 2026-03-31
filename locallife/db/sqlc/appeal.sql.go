@@ -138,13 +138,44 @@ SELECT COUNT(*)
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
+LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE d.rider_id = $1
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    $2::text IS NULL
+    OR (
+      $2::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      $2::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      $2::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 `
 
+type CountRiderClaimsForRiderParams struct {
+	RiderID pgtype.Int8 `json:"rider_id"`
+	Bucket  pgtype.Text `json:"bucket"`
+}
+
 // 骑手收到的索赔计数
-func (q *Queries) CountRiderClaimsForRider(ctx context.Context, riderID pgtype.Int8) (int64, error) {
-	row := q.db.QueryRow(ctx, countRiderClaimsForRider, riderID)
+func (q *Queries) CountRiderClaimsForRider(ctx context.Context, arg CountRiderClaimsForRiderParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countRiderClaimsForRider, arg.RiderID, arg.Bucket)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -1389,6 +1420,24 @@ LEFT JOIN LATERAL (
 ) cr ON TRUE
 WHERE d.rider_id = $1
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    $4::text IS NULL
+    OR (
+      $4::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      $4::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      $4::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 ORDER BY c.created_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -1397,6 +1446,7 @@ type ListRiderClaimsForRiderParams struct {
 	RiderID pgtype.Int8 `json:"rider_id"`
 	Limit   int32       `json:"limit"`
 	Offset  int32       `json:"offset"`
+	Bucket  pgtype.Text `json:"bucket"`
 }
 
 type ListRiderClaimsForRiderRow struct {
@@ -1431,7 +1481,12 @@ type ListRiderClaimsForRiderRow struct {
 
 // 骑手查看收到的索赔列表（通过配送单关联）
 func (q *Queries) ListRiderClaimsForRider(ctx context.Context, arg ListRiderClaimsForRiderParams) ([]ListRiderClaimsForRiderRow, error) {
-	rows, err := q.db.Query(ctx, listRiderClaimsForRider, arg.RiderID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listRiderClaimsForRider,
+		arg.RiderID,
+		arg.Limit,
+		arg.Offset,
+		arg.Bucket,
+	)
 	if err != nil {
 		return nil, err
 	}

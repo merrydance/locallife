@@ -101,7 +101,6 @@ export interface OperatorRiderDetail {
   current_longitude: number;
   location_updated_at?: string;
   credit_score: number;
-  high_value_qualified: boolean;
   created_at: string;
   updated_at: string;
 }

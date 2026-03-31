@@ -120,7 +120,6 @@
                 </view>
                 <view class="tags-group">
                   <t-tag theme="warning" variant="dark" size="extra-small" wx:if="{{item.item_count}}">{{item.item_count}}件商品</t-tag>
-                  <t-tag theme="primary" variant="dark" size="extra-small" wx:if="{{item.delivery_fee >= 1000}}">高值单</t-tag>
                 </view>
               </view>
               
@@ -187,8 +186,8 @@
             </view>
           </block>
 
-          <view wx:elif="{{loadError && !loading}}" class="inline-state-card">
-            <t-empty icon="error-circle" description="{{loadError}}" />
+          <view wx:elif="{{hallLoadError && !loading}}" class="inline-state-card">
+            <t-empty icon="error-circle" description="{{hallLoadError}}" />
             <t-button theme="primary" shape="round" bindtap="onRetryLoad" size="medium">重新加载</t-button>
           </view>
           
@@ -306,8 +305,8 @@
             </view>
           </block>
 
-          <view wx:elif="{{loadError && !loading}}" class="inline-state-card">
-            <t-empty icon="error-circle" description="{{loadError}}" />
+          <view wx:elif="{{myLoadError && !loading}}" class="inline-state-card">
+            <t-empty icon="error-circle" description="{{myLoadError}}" />
             <t-button theme="primary" shape="round" bindtap="onRetryLoad" size="medium">重新加载</t-button>
           </view>
 

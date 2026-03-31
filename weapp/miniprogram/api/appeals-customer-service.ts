@@ -591,6 +591,20 @@ export class ClaimManagementService {
     }
 
     /**
+     * 获取骑手索赔行为回溯摘要
+     * @param orderId 订单ID
+     */
+    async getRiderClaimBehaviorSummary(orderId: number): Promise<MerchantClaimBehaviorSummaryResponse> {
+        return request({
+            url: '/v1/rider/claims/behavior-summary',
+            method: 'GET',
+            data: {
+                order_id: orderId
+            }
+        })
+    }
+
+    /**
      * 获取骑手索赔列表
      * @param params 查询参数
      */

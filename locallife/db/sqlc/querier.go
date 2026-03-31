@@ -215,7 +215,7 @@ type Querier interface {
 	// 统计各状态的申请数量
 	CountRiderApplicationsByStatus(ctx context.Context, status string) (int64, error)
 	// 骑手收到的索赔计数
-	CountRiderClaimsForRider(ctx context.Context, riderID pgtype.Int8) (int64, error)
+	CountRiderClaimsForRider(ctx context.Context, arg CountRiderClaimsForRiderParams) (int64, error)
 	CountRiderCompletedDeliveries(ctx context.Context, riderID pgtype.Int8) (int64, error)
 	// ==========================================
 	// 骑手统计查询（保留用于统计展示）
@@ -225,8 +225,6 @@ type Querier interface {
 	CountRiderDeliveries(ctx context.Context, riderID pgtype.Int8) (int64, error)
 	CountRiderDeposits(ctx context.Context, riderID int64) (int64, error)
 	CountRiderLocations(ctx context.Context, riderID int64) (int64, error)
-	// 统计骑手高值单资格积分变更历史数量
-	CountRiderPremiumScoreLogs(ctx context.Context, riderID int64) (int64, error)
 	// 统计区域内骑手数量
 	CountRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error)
 	// 按区域和状态统计骑手数量
@@ -436,8 +434,6 @@ type Querier interface {
 	CreateRiderDeposit(ctx context.Context, arg CreateRiderDepositParams) (RiderDeposit, error)
 	CreateRiderDepositCredit(ctx context.Context, arg CreateRiderDepositCreditParams) (RiderDepositCredit, error)
 	CreateRiderLocation(ctx context.Context, arg CreateRiderLocationParams) (RiderLocation, error)
-	// 创建高值单资格积分变更日志
-	CreateRiderPremiumScoreLog(ctx context.Context, arg CreateRiderPremiumScoreLogParams) (RiderPremiumScoreLog, error)
 	// ==========================================
 	// rider_profiles（骑手信任画像）
 	// ==========================================
@@ -967,13 +963,6 @@ type Querier interface {
 	GetRiderLatestLocation(ctx context.Context, riderID int64) (RiderLocation, error)
 	// 骑手绩效排行(全平台)
 	GetRiderPerformanceRanking(ctx context.Context, arg GetRiderPerformanceRankingParams) ([]GetRiderPerformanceRankingRow, error)
-	// =============================================
-	// 高值单资格积分查询
-	// =============================================
-	// 获取骑手高值单资格积分
-	GetRiderPremiumScore(ctx context.Context, riderID int64) (int16, error)
-	// 获取骑手高值单资格积分及基本信息（用于API返回）
-	GetRiderPremiumScoreWithProfile(ctx context.Context, id int64) (GetRiderPremiumScoreWithProfileRow, error)
 	GetRiderProfile(ctx context.Context, riderID int64) (RiderProfile, error)
 	GetRiderProfileForUpdate(ctx context.Context, riderID int64) (RiderProfile, error)
 	// ==================== 骑手分账查询 ====================
@@ -1375,8 +1364,6 @@ type Querier interface {
 	ListRiderDeposits(ctx context.Context, arg ListRiderDepositsParams) ([]RiderDeposit, error)
 	ListRiderDepositsByType(ctx context.Context, arg ListRiderDepositsByTypeParams) ([]RiderDeposit, error)
 	ListRiderLocations(ctx context.Context, arg ListRiderLocationsParams) ([]RiderLocation, error)
-	// 查询骑手高值单资格积分变更历史
-	ListRiderPremiumScoreLogs(ctx context.Context, arg ListRiderPremiumScoreLogsParams) ([]RiderPremiumScoreLog, error)
 	// 骑手配送费明细
 	ListRiderProfitSharingOrders(ctx context.Context, arg ListRiderProfitSharingOrdersParams) ([]ListRiderProfitSharingOrdersRow, error)
 	// 按区域列出骑手（供运营商管理使用）
@@ -1741,8 +1728,6 @@ type Querier interface {
 	UpdateRiderLocation(ctx context.Context, arg UpdateRiderLocationParams) (Rider, error)
 	UpdateRiderOnlineDuration(ctx context.Context, arg UpdateRiderOnlineDurationParams) (Rider, error)
 	UpdateRiderOnlineStatus(ctx context.Context, arg UpdateRiderOnlineStatusParams) (Rider, error)
-	// 更新骑手高值单资格积分（原子操作）
-	UpdateRiderPremiumScore(ctx context.Context, arg UpdateRiderPremiumScoreParams) (int16, error)
 	UpdateRiderProfile(ctx context.Context, arg UpdateRiderProfileParams) error
 	// 更新骑手所属区域
 	UpdateRiderRegion(ctx context.Context, arg UpdateRiderRegionParams) (Rider, error)

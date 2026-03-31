@@ -3675,7 +3675,7 @@
                         }
                     },
                     "403": {
-                        "description": "高值单资格不足或订单不在服务区域",
+                        "description": "订单不在服务区域",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -24534,277 +24534,6 @@
                 }
             }
         },
-        "/v1/rider/orders/{id}/delay": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "骑手申报订单配送将延迟，通知顾客和商户",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "riders"
-                ],
-                "summary": "骑手延时申报",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "订单ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "延时申报信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.delayReportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.delayReportResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "非该订单骑手",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "订单不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/orders/{id}/exception": {
-            "post": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "骑手上报配送过程中遇到的异常情况",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "riders"
-                ],
-                "summary": "骑手异常上报",
-                "parameters": [
-                    {
-                        "type": "integer",
-                        "description": "订单ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "异常上报信息",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.exceptionReportRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.exceptionReportResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "非该订单骑手",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "订单不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/score": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取当前骑手的高值单资格积分及接单资格状态。积分规则：完成普通单+1，完成高值单-3，超时-5，餐损-10。初始积分为0，积分≥0时可以接高值单。",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手-高值单"
-                ],
-                "summary": "获取高值单资格积分",
-                "responses": {
-                    "200": {
-                        "description": "成功返回积分信息",
-                        "schema": {
-                            "$ref": "#/definitions/api.riderPremiumScoreResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "非骑手用户或骑手档案不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/rider/score/history": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "分页查询骑手的高值单资格积分变更历史记录",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "骑手-高值单"
-                ],
-                "summary": "获取高值单资格积分历史",
-                "parameters": [
-                    {
-                        "minimum": 1,
-                        "type": "integer",
-                        "default": 1,
-                        "description": "页码",
-                        "name": "page_id",
-                        "in": "query",
-                        "required": true
-                    },
-                    {
-                        "maximum": 50,
-                        "minimum": 5,
-                        "type": "integer",
-                        "default": 20,
-                        "description": "每页数量",
-                        "name": "page_size",
-                        "in": "query",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "成功返回积分历史",
-                        "schema": {
-                            "$ref": "#/definitions/api.listRiderPremiumScoreHistoryResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未授权",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "非骑手用户",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器内部错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/rider/status": {
             "get": {
                 "security": [
@@ -30588,48 +30317,6 @@
                 }
             }
         },
-        "api.delayReportRequest": {
-            "type": "object",
-            "required": [
-                "expected_minutes",
-                "reason"
-            ],
-            "properties": {
-                "expected_minutes": {
-                    "description": "预计延迟分钟数",
-                    "type": "integer",
-                    "maximum": 120,
-                    "minimum": 5
-                },
-                "reason": {
-                    "description": "延时原因",
-                    "type": "string",
-                    "maxLength": 500,
-                    "minLength": 5
-                }
-            }
-        },
-        "api.delayReportResponse": {
-            "type": "object",
-            "properties": {
-                "expected_minutes": {
-                    "type": "integer"
-                },
-                "order_id": {
-                    "type": "integer"
-                },
-                "reason": {
-                    "type": "string"
-                },
-                "reported_at": {
-                    "type": "string"
-                },
-                "status": {
-                    "description": "pending, acknowledged",
-                    "type": "string"
-                }
-            }
-        },
         "api.deliveryFeeConfigResponse": {
             "type": "object",
             "properties": {
@@ -31141,56 +30828,6 @@
                     "description": "Error 为人类可读的错误描述，降级展示或日志使用。",
                     "type": "string",
                     "example": "error message"
-                }
-            }
-        },
-        "api.exceptionReportRequest": {
-            "type": "object",
-            "required": [
-                "description",
-                "exception_type"
-            ],
-            "properties": {
-                "description": {
-                    "description": "异常描述",
-                    "type": "string",
-                    "maxLength": 500,
-                    "minLength": 5
-                },
-                "exception_type": {
-                    "description": "异常类型",
-                    "type": "string",
-                    "enum": [
-                        "customer_unreachable",
-                        "merchant_not_ready",
-                        "weather_issue",
-                        "road_blocked",
-                        "other"
-                    ]
-                }
-            }
-        },
-        "api.exceptionReportResponse": {
-            "type": "object",
-            "properties": {
-                "description": {
-                    "type": "string"
-                },
-                "exception_type": {
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "order_id": {
-                    "type": "integer"
-                },
-                "reported_at": {
-                    "type": "string"
-                },
-                "status": {
-                    "description": "pending, resolved, dismissed",
-                    "type": "string"
                 }
             }
         },
@@ -32226,32 +31863,6 @@
                     "type": "integer"
                 },
                 "total": {
-                    "type": "integer"
-                }
-            }
-        },
-        "api.listRiderPremiumScoreHistoryResponse": {
-            "type": "object",
-            "properties": {
-                "current_score": {
-                    "description": "当前积分",
-                    "type": "integer"
-                },
-                "logs": {
-                    "description": "历史记录",
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api.premiumScoreLogItem"
-                    }
-                },
-                "page_id": {
-                    "type": "integer"
-                },
-                "page_size": {
-                    "type": "integer"
-                },
-                "total": {
-                    "description": "总记录数",
                     "type": "integer"
                 }
             }
@@ -34679,50 +34290,6 @@
                 }
             }
         },
-        "api.premiumScoreLogItem": {
-            "type": "object",
-            "properties": {
-                "change_amount": {
-                    "description": "变更量（正数为增加，负数为减少）",
-                    "type": "integer"
-                },
-                "change_type": {
-                    "description": "变更类型：normal_order/premium_order/adjustment",
-                    "type": "string"
-                },
-                "change_type_name": {
-                    "description": "变更类型中文名",
-                    "type": "string"
-                },
-                "created_at": {
-                    "description": "变更时间",
-                    "type": "string"
-                },
-                "id": {
-                    "type": "integer"
-                },
-                "new_score": {
-                    "description": "变更后积分",
-                    "type": "integer"
-                },
-                "old_score": {
-                    "description": "变更前积分",
-                    "type": "integer"
-                },
-                "related_delivery_id": {
-                    "description": "关联配送单ID",
-                    "type": "integer"
-                },
-                "related_order_id": {
-                    "description": "关联订单ID",
-                    "type": "integer"
-                },
-                "remark": {
-                    "description": "备注",
-                    "type": "string"
-                }
-            }
-        },
         "api.printerResponse": {
             "type": "object",
             "properties": {
@@ -36211,9 +35778,6 @@
                 "frozen_deposit": {
                     "type": "integer"
                 },
-                "high_value_qualified": {
-                    "type": "boolean"
-                },
                 "id": {
                     "type": "integer"
                 },
@@ -36286,27 +35850,6 @@
                     "type": "integer"
                 },
                 "user_id": {
-                    "type": "integer"
-                }
-            }
-        },
-        "api.riderPremiumScoreResponse": {
-            "type": "object",
-            "properties": {
-                "can_accept_premium_order": {
-                    "description": "是否可以接高值单（积分≥0）",
-                    "type": "boolean"
-                },
-                "premium_score": {
-                    "description": "高值单资格积分（可为负）",
-                    "type": "integer"
-                },
-                "real_name": {
-                    "description": "真实姓名",
-                    "type": "string"
-                },
-                "rider_id": {
-                    "description": "骑手ID",
                     "type": "integer"
                 }
             }

@@ -2269,18 +2269,18 @@ func (mr *MockStoreMockRecorder) CountRiderApplicationsByStatus(ctx, status any)
 }
 
 // CountRiderClaimsForRider mocks base method.
-func (m *MockStore) CountRiderClaimsForRider(ctx context.Context, riderID pgtype.Int8) (int64, error) {
+func (m *MockStore) CountRiderClaimsForRider(ctx context.Context, arg db.CountRiderClaimsForRiderParams) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CountRiderClaimsForRider", ctx, riderID)
+	ret := m.ctrl.Call(m, "CountRiderClaimsForRider", ctx, arg)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CountRiderClaimsForRider indicates an expected call of CountRiderClaimsForRider.
-func (mr *MockStoreMockRecorder) CountRiderClaimsForRider(ctx, riderID any) *gomock.Call {
+func (mr *MockStoreMockRecorder) CountRiderClaimsForRider(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderClaimsForRider", reflect.TypeOf((*MockStore)(nil).CountRiderClaimsForRider), ctx, riderID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderClaimsForRider", reflect.TypeOf((*MockStore)(nil).CountRiderClaimsForRider), ctx, arg)
 }
 
 // CountRiderCompletedDeliveries mocks base method.
@@ -2356,21 +2356,6 @@ func (m *MockStore) CountRiderLocations(ctx context.Context, riderID int64) (int
 func (mr *MockStoreMockRecorder) CountRiderLocations(ctx, riderID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderLocations", reflect.TypeOf((*MockStore)(nil).CountRiderLocations), ctx, riderID)
-}
-
-// CountRiderPremiumScoreLogs mocks base method.
-func (m *MockStore) CountRiderPremiumScoreLogs(ctx context.Context, riderID int64) (int64, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CountRiderPremiumScoreLogs", ctx, riderID)
-	ret0, _ := ret[0].(int64)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CountRiderPremiumScoreLogs indicates an expected call of CountRiderPremiumScoreLogs.
-func (mr *MockStoreMockRecorder) CountRiderPremiumScoreLogs(ctx, riderID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderPremiumScoreLogs", reflect.TypeOf((*MockStore)(nil).CountRiderPremiumScoreLogs), ctx, riderID)
 }
 
 // CountRidersByRegion mocks base method.
@@ -4156,21 +4141,6 @@ func (m *MockStore) CreateRiderLocation(ctx context.Context, arg db.CreateRiderL
 func (mr *MockStoreMockRecorder) CreateRiderLocation(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderLocation", reflect.TypeOf((*MockStore)(nil).CreateRiderLocation), ctx, arg)
-}
-
-// CreateRiderPremiumScoreLog mocks base method.
-func (m *MockStore) CreateRiderPremiumScoreLog(ctx context.Context, arg db.CreateRiderPremiumScoreLogParams) (db.RiderPremiumScoreLog, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateRiderPremiumScoreLog", ctx, arg)
-	ret0, _ := ret[0].(db.RiderPremiumScoreLog)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CreateRiderPremiumScoreLog indicates an expected call of CreateRiderPremiumScoreLog.
-func (mr *MockStoreMockRecorder) CreateRiderPremiumScoreLog(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateRiderPremiumScoreLog", reflect.TypeOf((*MockStore)(nil).CreateRiderPremiumScoreLog), ctx, arg)
 }
 
 // CreateRiderProfile mocks base method.
@@ -9674,36 +9644,6 @@ func (mr *MockStoreMockRecorder) GetRiderPerformanceRanking(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderPerformanceRanking", reflect.TypeOf((*MockStore)(nil).GetRiderPerformanceRanking), ctx, arg)
 }
 
-// GetRiderPremiumScore mocks base method.
-func (m *MockStore) GetRiderPremiumScore(ctx context.Context, riderID int64) (int16, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRiderPremiumScore", ctx, riderID)
-	ret0, _ := ret[0].(int16)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetRiderPremiumScore indicates an expected call of GetRiderPremiumScore.
-func (mr *MockStoreMockRecorder) GetRiderPremiumScore(ctx, riderID any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderPremiumScore", reflect.TypeOf((*MockStore)(nil).GetRiderPremiumScore), ctx, riderID)
-}
-
-// GetRiderPremiumScoreWithProfile mocks base method.
-func (m *MockStore) GetRiderPremiumScoreWithProfile(ctx context.Context, id int64) (db.GetRiderPremiumScoreWithProfileRow, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRiderPremiumScoreWithProfile", ctx, id)
-	ret0, _ := ret[0].(db.GetRiderPremiumScoreWithProfileRow)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetRiderPremiumScoreWithProfile indicates an expected call of GetRiderPremiumScoreWithProfile.
-func (mr *MockStoreMockRecorder) GetRiderPremiumScoreWithProfile(ctx, id any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRiderPremiumScoreWithProfile", reflect.TypeOf((*MockStore)(nil).GetRiderPremiumScoreWithProfile), ctx, id)
-}
-
 // GetRiderProfile mocks base method.
 func (m *MockStore) GetRiderProfile(ctx context.Context, riderID int64) (db.RiderProfile, error) {
 	m.ctrl.T.Helper()
@@ -14167,21 +14107,6 @@ func (m *MockStore) ListRiderLocations(ctx context.Context, arg db.ListRiderLoca
 func (mr *MockStoreMockRecorder) ListRiderLocations(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRiderLocations", reflect.TypeOf((*MockStore)(nil).ListRiderLocations), ctx, arg)
-}
-
-// ListRiderPremiumScoreLogs mocks base method.
-func (m *MockStore) ListRiderPremiumScoreLogs(ctx context.Context, arg db.ListRiderPremiumScoreLogsParams) ([]db.RiderPremiumScoreLog, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListRiderPremiumScoreLogs", ctx, arg)
-	ret0, _ := ret[0].([]db.RiderPremiumScoreLog)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListRiderPremiumScoreLogs indicates an expected call of ListRiderPremiumScoreLogs.
-func (mr *MockStoreMockRecorder) ListRiderPremiumScoreLogs(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListRiderPremiumScoreLogs", reflect.TypeOf((*MockStore)(nil).ListRiderPremiumScoreLogs), ctx, arg)
 }
 
 // ListRiderProfitSharingOrders mocks base method.
@@ -18873,21 +18798,6 @@ func (m *MockStore) UpdateRiderOnlineStatus(ctx context.Context, arg db.UpdateRi
 func (mr *MockStoreMockRecorder) UpdateRiderOnlineStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderOnlineStatus", reflect.TypeOf((*MockStore)(nil).UpdateRiderOnlineStatus), ctx, arg)
-}
-
-// UpdateRiderPremiumScore mocks base method.
-func (m *MockStore) UpdateRiderPremiumScore(ctx context.Context, arg db.UpdateRiderPremiumScoreParams) (int16, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateRiderPremiumScore", ctx, arg)
-	ret0, _ := ret[0].(int16)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateRiderPremiumScore indicates an expected call of UpdateRiderPremiumScore.
-func (mr *MockStoreMockRecorder) UpdateRiderPremiumScore(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateRiderPremiumScore", reflect.TypeOf((*MockStore)(nil).UpdateRiderPremiumScore), ctx, arg)
 }
 
 // UpdateRiderProfile mocks base method.

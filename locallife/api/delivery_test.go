@@ -213,12 +213,6 @@ func TestGrabOrderAPI(t *testing.T) {
 					Times(1).
 					Return(pool, nil)
 
-				// 高值单资格积分检查
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(0), nil)
-
 				merchant := db.Merchant{
 					ID:          merchantID,
 					OwnerUserID: util.RandomInt(1, 1000),
@@ -345,11 +339,6 @@ func TestGrabOrderAPI(t *testing.T) {
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(pool, nil)
-
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(0), nil)
 
 				merchant := db.Merchant{
 					ID:          merchantID,
@@ -1578,11 +1567,6 @@ func TestGrabOrderAPI_EdgeCases(t *testing.T) {
 					GetDeliveryPoolByOrderID(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return(pool, nil)
-
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Times(1).
-					Return(int16(0), nil)
 
 				merchant := db.Merchant{
 					ID:          merchantID,

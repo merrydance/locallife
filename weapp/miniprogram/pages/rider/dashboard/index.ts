@@ -27,6 +27,11 @@ interface DeliveryActionConfig {
   source: string
 }
 
+function getUserMessage(err: unknown, fallback: string) {
+  const userMessage = (err as UserMessageError).userMessage
+  return typeof userMessage === 'string' && userMessage ? userMessage : fallback
+}
+
 /**
  * 计算两个经纬度之间的距离（单位：米）
  */
@@ -53,7 +58,8 @@ Page({
     loading: false,
     onlineSwitchLoading: false,
     initError: '',
-    loadError: '',
+    hallLoadError: '',
+    myLoadError: '',
     isRefresherTriggered: false,
     statusText: '休息中 - 点击上线',
     showDepositReminder: false,
@@ -101,7 +107,13 @@ Page({
         }
 
         this.cleanupWebSocket()
-        this.setData({ recommendOrders: [], activeDeliveries: [], newOrdersCount: 0, loadError: '' })
+        this.setData({
+          recommendOrders: [],
+          activeDeliveries: [],
+          newOrdersCount: 0,
+          hallLoadError: '',
+          myLoadError: ''
+        })
         return undefined
       })
       .catch((err) => logger.error('Show refresh error', err))
@@ -123,7 +135,10 @@ Page({
     runtimeNetworkUnsubscribe = networkMonitor.subscribe((state) => {
       if (!state.isConnected) {
         if (this.data.isOnline && this.data.recommendOrders.length === 0 && this.data.activeDeliveries.length === 0) {
-          this.setData({ loadError: '网络已断开，请恢复后重试' })
+          this.setData({
+            hallLoadError: '网络已断开，请恢复后重试',
+            myLoadError: '网络已断开，请恢复后重试'
+          })
         }
         return
       }
@@ -163,7 +178,8 @@ Page({
       const statusViewData = this.buildStatusViewData(null, null)
       this.setData({
         initError: message,
-        loadError: '',
+        hallLoadError: '',
+        myLoadError: '',
         riderInfo: null,
         recommendOrders: [],
         activeDeliveries: [],
@@ -236,26 +252,56 @@ Page({
     if (!this.data.isOnline) return
 
     try {
-      // 获取位置
-      const location = await this.getLocation()
-      
-      const [hallOrdersRes, myDeliveriesRes] = await Promise.all([
-        DeliveryService.getRecommendedOrders(location.longitude, location.latitude),
-        request({ url: '/v1/delivery/active', method: 'GET' }) as Promise<Delivery[]>
-      ])
-      
-      const hallOrders = (hallOrdersRes || []).map((o) => ({
-        ...o,
-        expires_at_format: this.formatExpiry(o.expires_at),
-        distance_km: (o.distance / 1000).toFixed(1),
-        pickup_distance_km: (o.distance_to_pickup / 1000).toFixed(1),
-        route_distance_km: (((o.real_distance || o.distance_to_pickup || o.distance) || 0) / 1000).toFixed(1)
-      }))
+      const activeDeliveriesRequest = request({ url: '/v1/delivery/active', method: 'GET' }) as Promise<Delivery[]>
 
-      const myDeliveries = (myDeliveriesRes || []).map((d) => {
+      let hallLoadError = ''
+      const location = await this.getLocation().catch(() => null)
+      const hallOrdersRequest = location
+        ? DeliveryService.getRecommendedOrders(location.longitude, location.latitude)
+        : Promise.resolve([] as RecommendedOrder[])
+
+      if (!location) {
+        hallLoadError = '暂时无法获取当前位置，抢单大厅稍后再试'
+      }
+
+      const [hallOrdersResult, myDeliveriesResult] = await Promise.all([
+        hallOrdersRequest.then(
+          (value) => ({ ok: true as const, value }),
+          (reason) => ({ ok: false as const, reason })
+        ),
+        activeDeliveriesRequest.then(
+          (value) => ({ ok: true as const, value }),
+          (reason) => ({ ok: false as const, reason })
+        )
+      ])
+
+      const hallOrders = hallOrdersResult.ok
+        ? (hallOrdersResult.value || []).map((o: RecommendedOrder) => ({
+            ...o,
+            expires_at_format: this.formatExpiry(o.expires_at),
+            distance_km: (o.distance / 1000).toFixed(1),
+            pickup_distance_km: (o.distance_to_pickup / 1000).toFixed(1),
+            route_distance_km: (((o.real_distance || o.distance_to_pickup || o.distance) || 0) / 1000).toFixed(1)
+          }))
+        : []
+
+      if (!hallOrdersResult.ok && !hallLoadError) {
+        hallLoadError = getUserMessage(hallOrdersResult.reason, '抢单大厅加载失败，请重试')
+      }
+
+      let myLoadError = ''
+      const myDeliveriesSource = myDeliveriesResult.ok
+        ? (myDeliveriesResult.value || [])
+        : this.data.activeDeliveries
+
+      if (!myDeliveriesResult.ok) {
+        myLoadError = getUserMessage(myDeliveriesResult.reason, '我的任务加载失败，请重试')
+      }
+
+      const myDeliveries = myDeliveriesSource.map((d: Delivery) => {
         const isOverdue = d.estimated_delivery_at ? new Date(d.estimated_delivery_at).getTime() < Date.now() : false
         const deadline = d.status === 'assigned' || d.status === 'picking' ? d.estimated_pickup_at : d.estimated_delivery_at
-        
+
         return {
           ...d,
           status_desc: this.getStatusDesc(d.status),
@@ -270,15 +316,16 @@ Page({
         activeDeliveries: myDeliveries,
         isRefresherTriggered: false,
         initError: '',
-        loadError: ''
+        hallLoadError,
+        myLoadError
       })
     } catch (err: unknown) {
       logger.error('Refresh data error', err)
-      const userMessage = (err as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '任务数据加载失败，请重试'
+      const message = getUserMessage(err, '任务数据加载失败，请重试')
       this.setData({ 
         isRefresherTriggered: false,
-        loadError: message
+        hallLoadError: message,
+        myLoadError: message
       })
     }
   },
@@ -372,8 +419,13 @@ Page({
       wx.showToast({ title: '操作成功', icon: 'success' })
       this.refreshData()
     } catch (err: unknown) {
-      const userMessage = (err as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '操作失败'
+      const reconciled = await this.reconcileDeliveryAction(id, action)
+      if (reconciled) {
+        wx.showToast({ title: '状态已同步，请查看最新进度', icon: 'success' })
+        return
+      }
+
+      const message = getUserMessage(err, '操作失败')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()
@@ -403,6 +455,50 @@ Page({
       await syncRiderDeliveryLocation(deliveryId, source)
     } catch (err: unknown) {
       throw normalizeLocationError(err)
+    }
+  },
+
+  isActionReconciled(action: DeliveryActionType, status: Delivery['status']) {
+    if (action === 'confirmDelivery') {
+      return status === 'delivered' || status === 'completed'
+    }
+
+    const expectedStatusMap: Record<Exclude<DeliveryActionType, 'confirmDelivery'>, Delivery['status']> = {
+      startPickup: 'picking',
+      confirmPickup: 'picked',
+      startDelivery: 'delivering'
+    }
+
+    return expectedStatusMap[action as Exclude<DeliveryActionType, 'confirmDelivery'>] === status
+  },
+
+  async reconcileDeliveryAction(deliveryId: number, action: DeliveryActionType) {
+    const currentDelivery = this.data.activeDeliveries.find((delivery) => delivery.id === deliveryId)
+    if (!currentDelivery) return false
+
+    try {
+      const latest = await DeliveryService.getDeliveryByOrder(currentDelivery.order_id)
+      if (!this.isActionReconciled(action, latest.status)) {
+        return false
+      }
+
+      await this.refreshData()
+      return true
+    } catch (err: unknown) {
+      logger.warn('Reconcile delivery action failed', { deliveryId, action, err }, 'RiderDashboard')
+      return false
+    }
+  },
+
+  async reconcileGrabOrder(orderId: number) {
+    try {
+      await DeliveryService.getDeliveryByOrder(orderId)
+      this.setData({ activeTab: 'my' })
+      await this.refreshData()
+      return true
+    } catch (err: unknown) {
+      logger.warn('Reconcile grab order failed', { orderId, err }, 'RiderDashboard')
+      return false
     }
   },
 
@@ -474,14 +570,19 @@ Page({
       if (targetOnline) {
         this.enterOnlineRuntime().catch((err) => logger.error('Toggle online refresh error', err))
       } else {
-        this.setData({ recommendOrders: [], activeDeliveries: [], newOrdersCount: 0, loadError: '' })
+        this.setData({
+          recommendOrders: [],
+          activeDeliveries: [],
+          newOrdersCount: 0,
+          hallLoadError: '',
+          myLoadError: ''
+        })
         this.cleanupWebSocket()
       }
     } catch (err: unknown) {
       const fallbackStatus = this.data.riderStatus
       this.setData(this.buildStatusViewData(fallbackStatus))
-      const userMessage = (err as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '操作失败'
+      const message = getUserMessage(err, '操作失败')
       wx.showToast({ 
         title: message,
         icon: 'none' 
@@ -547,8 +648,13 @@ Page({
       this.setData({ activeTab: 'my' })
       this.refreshData()
     } catch (err: unknown) {
-      const userMessage = (err as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '抢单失败'
+      const reconciled = await this.reconcileGrabOrder(orderId)
+      if (reconciled) {
+        wx.showToast({ title: '订单已同步到我的任务', icon: 'success' })
+        return
+      }
+
+      const message = getUserMessage(err, '抢单失败')
       wx.showToast({ 
         title: message,
         icon: 'none' 

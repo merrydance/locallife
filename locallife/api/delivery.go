@@ -319,7 +319,7 @@ func (server *Server) newDeliveryResponse(ctx context.Context, d db.Delivery) de
 // @Success 200 {object} deliveryResponse "抢单成功，返回配送单详情"
 // @Failure 400 {object} ErrorResponse "参数校验失败或骑手未上线/押金不足/订单已过期"
 // @Failure 401 {object} ErrorResponse "未授权"
-// @Failure 403 {object} ErrorResponse "高值单资格不足或订单不在服务区域"
+// @Failure 403 {object} ErrorResponse "订单不在服务区域"
 // @Failure 404 {object} ErrorResponse "非骑手用户或订单不存在/已被接走"
 // @Failure 500 {object} ErrorResponse "服务器内部错误"
 // @Router /v1/delivery/grab/:order_id [post]

@@ -267,6 +267,24 @@ LEFT JOIN LATERAL (
 ) cr ON TRUE
 WHERE d.rider_id = $1
   AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  )
 ORDER BY c.created_at DESC
 LIMIT $2 OFFSET $3;
 
@@ -276,8 +294,34 @@ SELECT COUNT(*)
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
+LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE d.rider_id = $1
-  AND c.status IN ('approved', 'auto-approved');
+  AND c.status IN ('approved', 'auto-approved')
+  AND (
+    sqlc.narg('bucket')::text IS NULL
+    OR (
+      sqlc.narg('bucket')::text = 'pending_action'
+      AND (
+        cr.status IN ('pending', 'overdue')
+        OR (a.status = 'rejected' AND COALESCE(cr.status, '') NOT IN ('paid', 'waived'))
+      )
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'appealed'
+      AND (a.status = 'pending' OR cr.status = 'appealed')
+    )
+    OR (
+      sqlc.narg('bucket')::text = 'closed'
+      AND (cr.status IN ('paid', 'waived') OR a.status IN ('approved', 'compensated'))
+    )
+  );
 
 -- name: GetRiderClaimDetailForRider :one
 -- 骑手查看索赔详情

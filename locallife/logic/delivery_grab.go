@@ -85,19 +85,6 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 		return result, NewRequestError(http.StatusBadRequest, errors.New("订单已过期"))
 	}
 
-	highValueThreshold := int64(1000)
-	isHighValueOrder := poolItem.DeliveryFee >= highValueThreshold
-	premiumScore, err := store.GetRiderPremiumScore(ctx, rider.ID)
-	if err != nil {
-		if !errors.Is(err, db.ErrRecordNotFound) {
-			return result, err
-		}
-		premiumScore = 0
-	}
-	if isHighValueOrder && premiumScore < 0 {
-		return result, NewRequestError(http.StatusForbidden, errors.New("高值单资格积分不足，无法接取高值单（运费≥10元），请先完成普通订单积累积分"))
-	}
-
 	merchant, err := store.GetMerchant(ctx, poolItem.MerchantID)
 	if err != nil {
 		return result, err

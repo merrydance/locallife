@@ -1,366 +1,430 @@
-import { riderExceptionHandlingService } from '../../../api/rider-exception-handling'
 import {
   appealManagementService,
   claimManagementService,
-  ClaimResponse,
-  CreateAppealRequest,
-  MerchantClaimDecisionResponse
+  AppealResponse,
+  ClaimResponse
 } from '../../../api/appeals-customer-service'
-import { invokeWechatPay } from '../../../api/payment'
+import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 
-interface RiderClaimsOptions {
-  taskId?: string
-}
+type ClaimTagTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
+type ClaimBucketTab = 'all' | 'pending_action' | 'appealed' | 'closed'
+type ClaimsSectionTab = 'claims' | 'appeals'
 
-interface ClaimDisplay {
+const PAGE_SIZE = 20
+
+interface RiderClaimView {
   id: number
-  orderId?: number
   orderNo: string
-  typeLabel: string
-  description: string
-  status: string
+  claimTypeLabel: string
+  claimTypeTheme: ClaimTagTheme
+  claimAmountText: string
+  approvedAmountText: string
   statusLabel: string
-  createdAt: string
-  appealId?: number
-  appealStatus?: string
-  appealStatusLabel?: string
-  recoveryStatus?: string
-  recoveryStatusLabel?: string
+  statusTheme: ClaimTagTheme
+  description: string
+  appealStatusLabel: string
+  appealStatusTheme: ClaimTagTheme
+  recoveryStatusLabel: string
+  recoveryStatusTheme: ClaimTagTheme
+  createdAtLabel: string
+  actionHint: string
 }
 
-interface AppealDisplay {
+interface RiderAppealView {
   id: number
   claimId: number
-  status: string
+  orderNo: string
+  claimTypeLabel: string
   statusLabel: string
+  statusTheme: ClaimTagTheme
   reason: string
-  createdAt: string
+  createdAtLabel: string
   reviewNotes?: string
+}
+
+interface ClaimSummary {
+  total: number
+  pendingAction: number
+  appealed: number
+  closed: number
 }
 
 interface UserMessageError {
   userMessage?: string
 }
 
-function formatResponsibleParty(party?: string) {
-  const map: Record<string, string> = {
-    rider: '骑手承担',
-    merchant: '商户承担',
-    platform: '平台承担',
-    user: '用户承担',
-    shared: '多方分摊'
-  }
-  return party ? (map[party] || party) : '暂无'
+function formatMoney(cents?: number): string {
+  const value = typeof cents === 'number' ? cents : 0
+  return `¥${(value / 100).toFixed(2)}`
 }
 
-function formatCompensationSource(source?: string) {
+function formatClaimType(claimType: string): string {
   const map: Record<string, string> = {
-    rider: '骑手追偿',
-    merchant: '商户追偿',
-    platform: '平台承担',
-    shared: '分摊承担'
+    refund: '退款',
+    compensation: '补偿',
+    quality_issue: '质量问题',
+    delivery_issue: '配送问题',
+    'foreign-object': '异物',
+    damage: '餐损',
+    timeout: '超时',
+    'food-safety': '食安'
   }
-  return source ? (map[source] || source) : '暂无'
+  return map[claimType] || claimType
 }
 
-function formatDecisionStatus(status?: string) {
+function getClaimTypeTheme(claimType: string): ClaimTagTheme {
+  if (claimType === 'food-safety' || claimType === 'foreign-object') return 'danger'
+  if (claimType === 'damage' || claimType === 'quality_issue') return 'warning'
+  return 'primary'
+}
+
+function formatClaimStatus(status: string): string {
   const map: Record<string, string> = {
-    decided: '已判定',
-    pending: '待判定',
-    waived: '已豁免'
+    pending: '待审核',
+    approved: '已通过',
+    rejected: '已驳回',
+    compensated: '已赔付',
+    'auto-approved': '已通过'
   }
-  return status ? (map[status] || status) : '暂无'
+  return map[status] || status
+}
+
+function getClaimStatusTheme(status: string): ClaimTagTheme {
+  if (status === 'approved' || status === 'auto-approved') return 'warning'
+  if (status === 'compensated') return 'success'
+  if (status === 'rejected') return 'default'
+  return 'primary'
+}
+
+function formatAppealStatus(status?: string): string {
+  const map: Record<string, string> = {
+    pending: '申诉处理中',
+    approved: '申诉通过',
+    rejected: '申诉驳回',
+    compensated: '申诉已赔付'
+  }
+  if (!status) return '未提交申诉'
+  return map[status] || status
+}
+
+function getAppealStatusTheme(status?: string): ClaimTagTheme {
+  if (!status) return 'default'
+  if (status === 'pending') return 'warning'
+  if (status === 'approved' || status === 'compensated') return 'success'
+  if (status === 'rejected') return 'danger'
+  return 'default'
+}
+
+function formatRecoveryStatus(status?: string): string {
+  const map: Record<string, string> = {
+    pending: '待支付追偿',
+    overdue: '追偿已逾期',
+    paid: '追偿已支付',
+    waived: '追偿已豁免',
+    appealed: '追偿申诉中'
+  }
+  if (!status) return '暂无追偿'
+  return map[status] || status
+}
+
+function getRecoveryStatusTheme(status?: string): ClaimTagTheme {
+  if (!status) return 'default'
+  if (status === 'pending' || status === 'overdue') return 'warning'
+  if (status === 'paid' || status === 'waived') return 'success'
+  if (status === 'appealed') return 'danger'
+  return 'default'
+}
+
+function formatTime(value?: string): string {
+  if (!value) return '暂无'
+  return value.replace('T', ' ').slice(0, 16)
+}
+
+function getActionHint(claim: ClaimResponse): string {
+  const appealStatus = claim.appeal_status
+  const recoveryStatus = claim.recovery_status
+
+  if (recoveryStatus === 'appealed' || appealStatus === 'pending') {
+    return '平台正在复核申诉，进入详情可查看最新处理进度。'
+  }
+
+  if (recoveryStatus === 'pending' || recoveryStatus === 'overdue') {
+    return '当前有待处理追偿，进入详情可支付追偿款或提交申诉。'
+  }
+
+  if (appealStatus === 'rejected') {
+    return '申诉已驳回，请进入详情核对复核说明和追偿状态。'
+  }
+
+  if (appealStatus === 'approved' || appealStatus === 'compensated' || recoveryStatus === 'paid' || recoveryStatus === 'waived') {
+    return '这笔索赔已进入结案阶段，进入详情可查看最终结果。'
+  }
+
+  return '进入详情查看责任判定，并决定是否申诉或支付追偿。'
+}
+
+function getErrorMessage(err: unknown, fallback: string) {
+  const userMessage = (err as UserMessageError).userMessage
+  return typeof userMessage === 'string' && userMessage.trim() ? userMessage : fallback
+}
+
+function buildClaimView(claim: ClaimResponse): RiderClaimView {
+  return {
+    id: claim.id,
+    orderNo: claim.order_no || `#${claim.order_id}`,
+    claimTypeLabel: formatClaimType(claim.claim_type),
+    claimTypeTheme: getClaimTypeTheme(claim.claim_type),
+    claimAmountText: formatMoney(claim.claim_amount),
+    approvedAmountText: formatMoney(claim.approved_amount || claim.claim_amount),
+    statusLabel: formatClaimStatus(String(claim.status)),
+    statusTheme: getClaimStatusTheme(String(claim.status)),
+    description: claim.description,
+    appealStatusLabel: formatAppealStatus(claim.appeal_status),
+    appealStatusTheme: getAppealStatusTheme(claim.appeal_status),
+    recoveryStatusLabel: formatRecoveryStatus(claim.recovery_status),
+    recoveryStatusTheme: getRecoveryStatusTheme(claim.recovery_status),
+    createdAtLabel: formatTime(claim.created_at),
+    actionHint: getActionHint(claim)
+  }
+}
+
+function buildAppealView(appeal: AppealResponse): RiderAppealView {
+  return {
+    id: appeal.id,
+    claimId: appeal.claim_id,
+    orderNo: appeal.order_no || `#${appeal.claim_id}`,
+    claimTypeLabel: formatClaimType(appeal.claim_type || 'compensation'),
+    statusLabel: formatAppealStatus(appeal.status),
+    statusTheme: getAppealStatusTheme(appeal.status),
+    reason: appeal.reason,
+    createdAtLabel: formatTime(appeal.created_at),
+    reviewNotes: appeal.review_notes
+  }
+}
+
+function toBucket(tab: ClaimBucketTab): 'pending_action' | 'appealed' | 'closed' | undefined {
+  return tab === 'all' ? undefined : tab
+}
+
+async function fetchClaimSummary(): Promise<ClaimSummary> {
+  const [allResult, pendingResult, appealedResult, closedResult] = await Promise.all([
+    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1 }),
+    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1, bucket: 'pending_action' }),
+    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1, bucket: 'appealed' }),
+    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1, bucket: 'closed' })
+  ])
+
+  return {
+    total: allResult.total || 0,
+    pendingAction: pendingResult.total || 0,
+    appealed: appealedResult.total || 0,
+    closed: closedResult.total || 0
+  }
+}
+
+async function fetchClaimPage(bucket: ClaimBucketTab, pageId: number) {
+  const result = await claimManagementService.getRiderClaims({
+    page_id: pageId,
+    page_size: PAGE_SIZE,
+    bucket: toBucket(bucket)
+  })
+
+  return {
+    claims: (result.claims || []).map(buildClaimView),
+    pageId: result.page_id || pageId,
+    pageSize: result.page_size || PAGE_SIZE,
+    total: result.total || 0,
+    hasMore: typeof result.has_more === 'boolean'
+      ? result.has_more
+      : (result.page_id || pageId) * (result.page_size || PAGE_SIZE) < (result.total || 0)
+  }
 }
 
 Page({
   data: {
-    taskId: '',
-    activeTab: 'claims',
-    claims: [] as ClaimDisplay[],
-    appeals: [] as AppealDisplay[],
-    form: {
-      claimId: 0,
-      claimLabel: '',
-      description: ''
-    },
     navBarHeight: 88,
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
     loading: false,
-    submitting: false,
-    errorMessage: '',
-    recoveryPaying: {} as Record<number, boolean>,
-    decisionLoading: {} as Record<number, boolean>
+    loadingMore: false,
+    sectionTab: 'claims' as ClaimsSectionTab,
+    bucketTab: 'all' as ClaimBucketTab,
+    claims: [] as RiderClaimView[],
+    appeals: [] as RiderAppealView[],
+    pageId: 1,
+    pageSize: PAGE_SIZE,
+    hasMore: false,
+    summary: {
+      total: 0,
+      pendingAction: 0,
+      appealed: 0,
+      closed: 0
+    }
   },
 
-  onLoad(options: RiderClaimsOptions) {
+  onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    if (options.taskId) {
-      this.setData({ taskId: options.taskId })
-    }
-    this.loadClaims()
+    this.reloadPageData(false)
   },
 
   onShow() {
-    this.loadClaims()
-  },
-
-  onNavHeight(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
-  },
-
-  switchTab(e: WechatMiniprogram.CustomEvent<{ value: 'claims' | 'appeals' }>) {
-    this.setData({ activeTab: e.detail.value })
-  },
-
-  getClaimTypeLabel(type: string) {
-    const map: Record<string, string> = {
-      refund: '退款索赔',
-      compensation: '补偿索赔',
-      quality_issue: '商品问题',
-      delivery_issue: '配送问题'
-    }
-    return map[type] || type
-  },
-
-  getClaimStatusLabel(status: string) {
-    const map: Record<string, string> = {
-      pending: '待处理',
-      approved: '已通过',
-      rejected: '已驳回',
-      compensated: '已赔付'
-    }
-    return map[status] || status
-  },
-
-  getAppealStatusLabel(status: string) {
-    const map: Record<string, string> = {
-      pending: '申诉处理中',
-      approved: '申诉通过',
-      rejected: '申诉驳回',
-      compensated: '已补偿'
-    }
-    return map[status] || status
-  },
-
-  getRecoveryStatusLabel(status: string) {
-    const map: Record<string, string> = {
-      pending: '待支付',
-      paid: '已支付',
-      overdue: '已逾期',
-      waived: '已豁免',
-      appealed: '申诉中'
-    }
-    return map[status] || status
-  },
-
-  async loadClaims() {
-    this.setData({ loading: true })
-    try {
-      const [claimsResponse, appealsResponse] = await Promise.all([
-        riderExceptionHandlingService.getRiderClaims({
-          page_id: 1,
-          page_size: 20
-        }),
-        appealManagementService.getRiderAppeals({
-          page_id: 1,
-          page_size: 20
-        })
-      ])
-
-      const claims: ClaimDisplay[] = (claimsResponse.claims || []).map((claim: ClaimResponse) => ({
-        id: claim.id,
-        orderId: claim.order_id,
-        orderNo: claim.order_no || `#${claim.order_id}`,
-        typeLabel: this.getClaimTypeLabel(claim.claim_type),
-        description: claim.description,
-        status: claim.status,
-        statusLabel: this.getClaimStatusLabel(claim.status),
-        createdAt: claim.created_at,
-        appealId: claim.appeal_id,
-        appealStatus: claim.appeal_status,
-        appealStatusLabel: claim.appeal_status ? this.getAppealStatusLabel(claim.appeal_status) : '',
-        recoveryStatus: claim.recovery_status,
-        recoveryStatusLabel: claim.recovery_status ? this.getRecoveryStatusLabel(claim.recovery_status) : ''
-      }))
-
-      const appeals: AppealDisplay[] = (appealsResponse.appeals || []).map((appeal) => ({
-        id: appeal.id,
-        claimId: appeal.claim_id,
-        status: appeal.status,
-        statusLabel: this.getAppealStatusLabel(appeal.status),
-        reason: appeal.reason,
-        createdAt: appeal.created_at,
-        reviewNotes: appeal.review_notes
-      }))
-
-      const preselectedClaim = this.data.taskId
-        ? claims.find((claim) => String(claim.orderId || '') === this.data.taskId)
-        : undefined
-
-      this.setData({
-        claims,
-        appeals,
-        errorMessage: '',
-        'form.claimId': this.data.form.claimId || preselectedClaim?.id || 0,
-        'form.claimLabel': this.data.form.claimLabel || (preselectedClaim ? `${preselectedClaim.typeLabel} · ${preselectedClaim.orderNo}` : '')
-      })
-    } catch (error: unknown) {
-      console.error('加载索赔与申诉失败:', error)
-      const userMessage = (error as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '索赔与申诉加载失败，请稍后重试'
-      this.setData({
-        claims: [],
-        appeals: [],
-        errorMessage: message
-      })
-    } finally {
-      this.setData({ loading: false })
+    if (!this.data.initialLoading && !this.data.loading && !this.data.loadingMore) {
+      this.reloadPageData(true)
     }
   },
 
-  onPickClaim() {
-    if (this.data.claims.length === 0) {
-      wx.showToast({ title: '当前没有可关联的索赔单', icon: 'none' })
-      return
-    }
-
-    wx.showActionSheet({
-      itemList: this.data.claims.map((claim) => `${claim.typeLabel} · ${claim.orderNo}`),
-      success: ({ tapIndex }) => {
-        const selected = this.data.claims[tapIndex]
-        if (!selected) return
-        this.setData({
-          'form.claimId': selected.id,
-          'form.claimLabel': `${selected.typeLabel} · ${selected.orderNo}`
-        })
-      }
-    })
+  onPullDownRefresh() {
+    this.reloadPageData(false)
   },
 
-  onPrepareAppeal(e: WechatMiniprogram.TouchEvent) {
-    const { claimId } = e.currentTarget.dataset as { claimId?: number }
-    const selected = this.data.claims.find((claim) => claim.id === claimId)
-    if (!selected) return
+  onReachBottom() {
+    if (this.data.sectionTab === 'claims') {
+      this.loadMoreClaims()
+    }
+  },
+
+  onSectionTabChange(e: WechatMiniprogram.CustomEvent<{ value: ClaimsSectionTab }>) {
+    this.setData({ sectionTab: e.detail.value })
+  },
+
+  onBucketTabChange(e: WechatMiniprogram.CustomEvent<{ value: ClaimBucketTab }>) {
+    const bucketTab = e.detail.value
+    if (bucketTab === this.data.bucketTab) return
 
     this.setData({
-      activeTab: 'claims',
-      'form.claimId': selected.id,
-      'form.claimLabel': `${selected.typeLabel} · ${selected.orderNo}`
+      bucketTab,
+      claims: [],
+      pageId: 1,
+      hasMore: false,
+      loading: true,
+      initialError: false,
+      initialErrorMessage: ''
     })
-    wx.pageScrollTo({ scrollTop: 0, duration: 200 })
+    this.loadClaimList(bucketTab)
   },
 
-  onDescChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ 'form.description': e.detail.value })
-  },
-
-  async onViewDecision(e: WechatMiniprogram.TouchEvent) {
-    const claimId = Number(e.currentTarget.dataset.claimId)
-    if (!claimId || this.data.decisionLoading[claimId]) {
-      return
+  async reloadPageData(silent = false) {
+    if (!silent) {
+      this.setData({ loading: true, initialError: false, initialErrorMessage: '' })
     }
 
-    this.setData({ decisionLoading: { ...this.data.decisionLoading, [claimId]: true } })
-    wx.showLoading({ title: '加载中...' })
     try {
-      const result = await claimManagementService.getRiderClaimDecision(claimId)
-      const decision: MerchantClaimDecisionResponse['decision'] = result.decision
+      const [summary, claimsPage, appealsResult] = await Promise.all([
+        fetchClaimSummary(),
+        fetchClaimPage(this.data.bucketTab as ClaimBucketTab, 1),
+        appealManagementService.getRiderAppeals({ page_id: 1, page_size: 20 })
+      ])
 
-      if (!decision) {
-        wx.showModal({
-          title: '判定依据',
-          content: '当前索赔单还没有可展示的责任判定信息。',
-          showCancel: false
-        })
-        return
-      }
-
-      const content = [
-        `判定状态：${formatDecisionStatus(decision.decision_status)}`,
-        `责任归属：${formatResponsibleParty(decision.responsible_party)}`,
-        `赔付来源：${formatCompensationSource(decision.compensation_source)}`,
-        `原因码：${decision.reason_codes?.length ? decision.reason_codes.join('、') : '无'}`,
-        decision.trace_summary ? `判定摘要：${decision.trace_summary}` : ''
-      ].filter(Boolean).join('\n')
-
-      wx.showModal({
-        title: '判定依据',
-        content,
-        showCancel: false
-      })
-    } catch (error: unknown) {
-      const userMessage = (error as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '判定依据加载失败'
-      wx.showToast({ title: message, icon: 'none' })
-    } finally {
-      wx.hideLoading()
-      this.setData({ decisionLoading: { ...this.data.decisionLoading, [claimId]: false } })
-    }
-  },
-
-  async onPayRecovery(e: WechatMiniprogram.CustomEvent) {
-    const claimId = Number(e.currentTarget.dataset.claimId)
-    if (!claimId) {
-      return
-    }
-
-    const payingMap = { ...this.data.recoveryPaying, [claimId]: true }
-    this.setData({ recoveryPaying: payingMap })
-    try {
-      const payment = await claimManagementService.payRiderClaimRecovery(claimId)
-      if (payment.pay_params) {
-        await invokeWechatPay(payment.pay_params)
-      }
-      wx.showToast({ title: '追偿支付已提交', icon: 'success' })
-      this.loadClaims()
-    } catch (error: unknown) {
-      console.error('支付追偿失败:', error)
-      const errMsg = error && typeof error === 'object' && 'errMsg' in error ? (error as { errMsg?: string }).errMsg : ''
-      if (typeof errMsg === 'string' && errMsg.includes('cancel')) {
-        wx.showToast({ title: '已取消支付', icon: 'none' })
-      } else {
-        wx.showToast({ title: '支付失败', icon: 'none' })
-      }
-    } finally {
-      const nextMap = { ...this.data.recoveryPaying, [claimId]: false }
-      this.setData({ recoveryPaying: nextMap })
-    }
-  },
-
-  async onSubmit() {
-    const { form } = this.data
-    if (!form.claimId || !form.description.trim()) {
-      wx.showToast({ title: '请填写完整信息', icon: 'none' })
-      return
-    }
-
-    this.setData({ submitting: true })
-    try {
-      const appealData: CreateAppealRequest = {
-        claim_id: form.claimId,
-        reason: form.description.trim()
-      }
-
-      await appealManagementService.createRiderAppeal(appealData)
-
-      wx.showToast({ title: '申诉已提交', icon: 'success' })
       this.setData({
-        activeTab: 'appeals',
-        form: { claimId: 0, claimLabel: '', description: '' }
+        summary,
+        claims: claimsPage.claims,
+        appeals: (appealsResult.appeals || []).map(buildAppealView),
+        pageId: claimsPage.pageId,
+        pageSize: claimsPage.pageSize,
+        hasMore: claimsPage.hasMore,
+        loading: false,
+        loadingMore: false,
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: ''
       })
-      this.loadClaims()
-    } catch (error: unknown) {
-      console.error('提交申诉失败:', error)
-      const userMessage = (error as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '提交失败'
-      wx.showToast({ title: message, icon: 'none' })
+    } catch (error) {
+      logger.error('Load rider claims failed', error)
+      const message = getErrorMessage(error, '索赔与申诉加载失败，请稍后重试')
+      if (this.data.initialLoading || !silent) {
+        this.setData({
+          loading: false,
+          loadingMore: false,
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message,
+          claims: [],
+          appeals: [],
+          hasMore: false,
+          summary: {
+            total: 0,
+            pendingAction: 0,
+            appealed: 0,
+            closed: 0
+          }
+        })
+      } else {
+        wx.showToast({ title: message, icon: 'none' })
+        this.setData({ loading: false, loadingMore: false })
+      }
     } finally {
-      this.setData({ submitting: false })
+      wx.stopPullDownRefresh()
     }
+  },
+
+  async loadClaimList(bucketTab: ClaimBucketTab) {
+    try {
+      const page = await fetchClaimPage(bucketTab, 1)
+      this.setData({
+        claims: page.claims,
+        pageId: page.pageId,
+        pageSize: page.pageSize,
+        hasMore: page.hasMore,
+        loading: false,
+        loadingMore: false,
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: ''
+      })
+    } catch (error) {
+      logger.error('Switch rider claims bucket failed', error)
+      const message = getErrorMessage(error, '索赔列表加载失败，请稍后重试')
+      this.setData({
+        loading: false,
+        loadingMore: false,
+        initialLoading: false,
+        initialError: true,
+        initialErrorMessage: message,
+        claims: [],
+        hasMore: false
+      })
+    }
+  },
+
+  async loadMoreClaims() {
+    if (this.data.loading || this.data.loadingMore || !this.data.hasMore) {
+      return
+    }
+
+    this.setData({ loadingMore: true })
+    try {
+      const nextPage = this.data.pageId + 1
+      const page = await fetchClaimPage(this.data.bucketTab as ClaimBucketTab, nextPage)
+      this.setData({
+        claims: this.data.claims.concat(page.claims),
+        pageId: page.pageId,
+        pageSize: page.pageSize,
+        hasMore: page.hasMore,
+        loadingMore: false
+      })
+    } catch (error) {
+      logger.error('Load more rider claims failed', error)
+      wx.showToast({ title: getErrorMessage(error, '加载更多索赔失败，请稍后重试'), icon: 'none' })
+      this.setData({ loadingMore: false })
+    }
+  },
+
+  onViewClaimDetail(e: WechatMiniprogram.TouchEvent) {
+    const { claimId } = e.currentTarget.dataset as { claimId?: number }
+    if (!claimId) return
+    wx.navigateTo({ url: `/pages/rider/claims/detail/index?id=${claimId}` })
+  },
+
+  onViewAppealClaim(e: WechatMiniprogram.TouchEvent) {
+    const { claimId } = e.currentTarget.dataset as { claimId?: number }
+    if (!claimId) return
+    wx.navigateTo({ url: `/pages/rider/claims/detail/index?id=${claimId}` })
   },
 
   onRetry() {
-    this.loadClaims()
+    this.reloadPageData(false)
   }
 })

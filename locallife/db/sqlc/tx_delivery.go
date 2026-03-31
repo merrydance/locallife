@@ -238,26 +238,15 @@ type CompleteDeliveryTxParams struct {
 	RiderID        int64
 	OrderID        int64
 	UnfreezeAmount int64 // 需要解冻的押金金额
-	DeliveryFee    int64 // 配送费（分）：用于判断高值单和更新收益
+	DeliveryFee    int64 // 配送费（分）：用于更新收益
 }
 
 // CompleteDeliveryTxResult contains the result of the complete delivery transaction
 type CompleteDeliveryTxResult struct {
-	Delivery        Delivery
-	DepositLog      RiderDeposit
-	PremiumScoreLog *RiderPremiumScoreLog // 高值单资格积分变更记录
-	NewPremiumScore int16                 // 更新后的高值单资格积分
-	Order           Order
+	Delivery   Delivery
+	DepositLog RiderDeposit
+	Order      Order
 }
-
-// 高值单阈值：运费 >= 10 元（1000分）
-const HighValueOrderThreshold = int64(1000)
-
-// 积分变更规则
-const (
-	PremiumScoreNormalOrder  = int16(1)  // 完成普通单 +1
-	PremiumScorePremiumOrder = int16(-3) // 完成高值单 -3
-)
 
 // CompleteDeliveryTx executes all operations for completing a delivery in a single transaction:
 // 1. Lock rider row with FOR UPDATE
@@ -265,7 +254,6 @@ const (
 // 3. Unfreeze rider's deposit
 // 4. Create deposit log
 // 5. Update rider stats
-// 6. Update premium score and create log
 func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliveryTxParams) (CompleteDeliveryTxResult, error) {
 	var result CompleteDeliveryTxResult
 
@@ -327,54 +315,6 @@ func (store *SQLStore) CompleteDeliveryTx(ctx context.Context, arg CompleteDeliv
 		if err != nil {
 			return fmt.Errorf("update rider stats: %w", err)
 		}
-
-		// 6. 更新高值单资格积分
-		// 获取当前积分
-		oldScore, err := q.GetRiderPremiumScore(ctx, arg.RiderID)
-		if err != nil {
-			// 如果rider_profiles不存在，默认为0
-			oldScore = 0
-		}
-
-		// 判断是高值单还是普通单，计算积分变更
-		var changeAmount int16
-		var changeType string
-		var remark string
-		if arg.DeliveryFee >= HighValueOrderThreshold {
-			changeAmount = PremiumScorePremiumOrder
-			changeType = "premium_order"
-			remark = "完成高值单（运费≥10元）"
-		} else {
-			changeAmount = PremiumScoreNormalOrder
-			changeType = "normal_order"
-			remark = "完成普通单"
-		}
-
-		// 更新积分
-		newScore, err := q.UpdateRiderPremiumScore(ctx, UpdateRiderPremiumScoreParams{
-			RiderID:      arg.RiderID,
-			PremiumScore: changeAmount,
-		})
-		if err != nil {
-			return fmt.Errorf("update premium score: %w", err)
-		}
-		result.NewPremiumScore = newScore
-
-		// 创建积分变更日志
-		scoreLog, err := q.CreateRiderPremiumScoreLog(ctx, CreateRiderPremiumScoreLogParams{
-			RiderID:           arg.RiderID,
-			ChangeAmount:      changeAmount,
-			OldScore:          oldScore,
-			NewScore:          newScore,
-			ChangeType:        changeType,
-			RelatedOrderID:    pgtype.Int8{Int64: arg.OrderID, Valid: true},
-			RelatedDeliveryID: pgtype.Int8{Int64: arg.DeliveryID, Valid: true},
-			Remark:            pgtype.Text{String: remark, Valid: true},
-		})
-		if err != nil {
-			return fmt.Errorf("create premium score log: %w", err)
-		}
-		result.PremiumScoreLog = &scoreLog
 
 		if rider.Status != RiderStatusActive && rider.IsOnline {
 			if _, err := maybeSetRiderOfflineWhenNotEligible(ctx, q, rider); err != nil {

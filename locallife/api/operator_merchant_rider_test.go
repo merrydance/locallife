@@ -546,10 +546,6 @@ func TestGetOperatorRiderAPI(t *testing.T) {
 					}).
 					Return(true, nil)
 
-				store.EXPECT().
-					GetRiderPremiumScore(gomock.Any(), rider.ID).
-					Return(int16(80), nil)
-
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

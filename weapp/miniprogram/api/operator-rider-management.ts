@@ -204,7 +204,6 @@ export interface RiderDetailResponse {
     credit_score: number                         // 信用分
     deposit_amount: number                       // 押金金额（分）
     frozen_deposit: number                       // 冻结押金（分）
-    high_value_qualified: boolean                // 是否有高值单资格
     total_orders: number                         // 总订单数
     total_earnings: number                       // 总收入（分）
     current_latitude?: number                    // 当前纬度
@@ -227,35 +226,6 @@ export interface RiderListItem {
     total_orders: number                         // 总订单数
     total_earnings: number                       // 总收入（分）
     created_at: string                           // 创建时间
-}
-
-/** 骑手高值单积分响应 - 对齐 api.riderPremiumScoreResponse */
-export interface RiderPremiumScoreResponse {
-    rider_id: number                             // 骑手ID
-    real_name: string                            // 真实姓名
-    premium_score: number                        // 高值单资格积分（可为负）
-    can_accept_premium_order: boolean            // 是否可以接高值单（积分≥0）
-}
-
-/** 高值单积分日志项 - 对齐 api.premiumScoreLogItem */
-export interface PremiumScoreLogItem {
-    id: number                                   // 日志ID
-    change_type: string                          // 变更类型：normal_order/premium_order/adjustment
-    change_type_name: string                     // 变更类型中文名
-    change_amount: number                        // 变更量（正数为增加，负数为减少）
-    old_score: number                            // 变更前积分
-    new_score: number                            // 变更后积分
-    related_order_id?: number                    // 关联订单ID
-    related_delivery_id?: number                 // 关联配送单ID
-    remark?: string                              // 备注
-    created_at: string                           // 变更时间
-}
-
-/** 骑手高值单积分历史响应 - 对齐 api.listRiderPremiumScoreHistoryResponse */
-export interface ListRiderPremiumScoreHistoryResponse {
-    current_score: number                        // 当前积分
-    logs: PremiumScoreLogItem[]                  // 历史记录
-    total: number                                // 总记录数
 }
 
 // ==================== 运营商骑手管理服务类 ====================

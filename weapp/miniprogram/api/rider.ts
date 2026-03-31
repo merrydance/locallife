@@ -1,7 +1,5 @@
 import { request } from '../utils/request'
 
-export type RiderExceptionType = 'customer_unreachable' | 'merchant_not_ready' | 'weather_issue' | 'road_blocked' | 'other'
-
 export interface RiderInfo {
     id: number
     user_id: number
@@ -146,20 +144,6 @@ export class RiderService {
         data?: unknown
     ): Promise<T> {
         return await request<T>({ url, method, data })
-    }
-
-    /**
-     * 上报异常
-     */
-    static async reportException(orderId: number, data: {
-        exception_type: RiderExceptionType
-        description: string
-    }): Promise<unknown> {
-        return await request({
-            url: `/v1/rider/orders/${orderId}/exception`,
-            method: 'POST',
-            data
-        })
     }
 }
 

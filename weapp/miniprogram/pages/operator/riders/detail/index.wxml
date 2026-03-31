@@ -27,7 +27,6 @@
           <view class="tag-row">
             <t-tag theme="{{detail.status === 'active' ? 'success' : (detail.status === 'suspended' ? 'danger' : 'warning')}}" variant="dark" size="small">{{detail.status_label}}</t-tag>
             <t-tag theme="{{detail.is_online ? 'success' : 'default'}}" variant="light" size="small">{{detail.is_online ? '在线' : '离线'}}</t-tag>
-            <t-tag wx:if="{{detail.high_value_qualified}}" theme="warning" variant="light" size="small">高值单</t-tag>
           </view>
         </view>
       </view>

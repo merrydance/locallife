@@ -830,15 +830,25 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 
 	claims, err := server.store.ListRiderClaimsForRider(ctx, db.ListRiderClaimsForRiderParams{
 		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
-		Limit:   req.PageSize,
-		Offset:  offset,
+		Bucket: pgtype.Text{
+			String: req.Bucket,
+			Valid:  req.Bucket != "",
+		},
+		Limit:  req.PageSize,
+		Offset: offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	total, err := server.store.CountRiderClaimsForRider(ctx, pgtype.Int8{Int64: rider.ID, Valid: true})
+	total, err := server.store.CountRiderClaimsForRider(ctx, db.CountRiderClaimsForRiderParams{
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+		Bucket: pgtype.Text{
+			String: req.Bucket,
+			Valid:  req.Bucket != "",
+		},
+	})
 	if err != nil {
 		total = int64(len(claims))
 	}

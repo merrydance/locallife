@@ -2452,36 +2452,6 @@ definitions:
       total_sales:
         type: integer
     type: object
-  api.delayReportRequest:
-    properties:
-      expected_minutes:
-        description: 预计延迟分钟数
-        maximum: 120
-        minimum: 5
-        type: integer
-      reason:
-        description: 延时原因
-        maxLength: 500
-        minLength: 5
-        type: string
-    required:
-    - expected_minutes
-    - reason
-    type: object
-  api.delayReportResponse:
-    properties:
-      expected_minutes:
-        type: integer
-      order_id:
-        type: integer
-      reason:
-        type: string
-      reported_at:
-        type: string
-      status:
-        description: pending, acknowledged
-        type: string
-    type: object
   api.deliveryFeeConfigResponse:
     properties:
       base_distance:
@@ -2822,42 +2792,6 @@ definitions:
       error:
         description: Error 为人类可读的错误描述，降级展示或日志使用。
         example: error message
-        type: string
-    type: object
-  api.exceptionReportRequest:
-    properties:
-      description:
-        description: 异常描述
-        maxLength: 500
-        minLength: 5
-        type: string
-      exception_type:
-        description: 异常类型
-        enum:
-        - customer_unreachable
-        - merchant_not_ready
-        - weather_issue
-        - road_blocked
-        - other
-        type: string
-    required:
-    - description
-    - exception_type
-    type: object
-  api.exceptionReportResponse:
-    properties:
-      description:
-        type: string
-      exception_type:
-        type: string
-      id:
-        type: integer
-      order_id:
-        type: integer
-      reported_at:
-        type: string
-      status:
-        description: pending, resolved, dismissed
         type: string
     type: object
   api.favoriteDishRow:
@@ -3548,24 +3482,6 @@ definitions:
       page_size:
         type: integer
       total:
-        type: integer
-    type: object
-  api.listRiderPremiumScoreHistoryResponse:
-    properties:
-      current_score:
-        description: 当前积分
-        type: integer
-      logs:
-        description: 历史记录
-        items:
-          $ref: '#/definitions/api.premiumScoreLogItem'
-        type: array
-      page_id:
-        type: integer
-      page_size:
-        type: integer
-      total:
-        description: 总记录数
         type: integer
     type: object
   api.listRidersResponse:
@@ -5243,38 +5159,6 @@ definitions:
       total_orders:
         type: integer
     type: object
-  api.premiumScoreLogItem:
-    properties:
-      change_amount:
-        description: 变更量（正数为增加，负数为减少）
-        type: integer
-      change_type:
-        description: 变更类型：normal_order/premium_order/adjustment
-        type: string
-      change_type_name:
-        description: 变更类型中文名
-        type: string
-      created_at:
-        description: 变更时间
-        type: string
-      id:
-        type: integer
-      new_score:
-        description: 变更后积分
-        type: integer
-      old_score:
-        description: 变更前积分
-        type: integer
-      related_delivery_id:
-        description: 关联配送单ID
-        type: integer
-      related_order_id:
-        description: 关联订单ID
-        type: integer
-      remark:
-        description: 备注
-        type: string
-    type: object
   api.printerResponse:
     properties:
       created_at:
@@ -6277,8 +6161,6 @@ definitions:
         type: integer
       frozen_deposit:
         type: integer
-      high_value_qualified:
-        type: boolean
       id:
         type: integer
       id_card_no:
@@ -6327,21 +6209,6 @@ definitions:
       total_orders:
         type: integer
       user_id:
-        type: integer
-    type: object
-  api.riderPremiumScoreResponse:
-    properties:
-      can_accept_premium_order:
-        description: 是否可以接高值单（积分≥0）
-        type: boolean
-      premium_score:
-        description: 高值单资格积分（可为负）
-        type: integer
-      real_name:
-        description: 真实姓名
-        type: string
-      rider_id:
-        description: 骑手ID
         type: integer
     type: object
   api.riderRankingRow:
@@ -10730,7 +10597,7 @@ paths:
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "403":
-          description: 高值单资格不足或订单不在服务区域
+          description: 订单不在服务区域
           schema:
             $ref: '#/definitions/api.ErrorResponse'
         "404":
@@ -24370,182 +24237,6 @@ paths:
       summary: 骑手上线
       tags:
       - 骑手
-  /v1/rider/orders/{id}/delay:
-    post:
-      consumes:
-      - application/json
-      description: 骑手申报订单配送将延迟，通知顾客和商户
-      parameters:
-      - description: 订单ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 延时申报信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.delayReportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.delayReportResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 非该订单骑手
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 订单不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 骑手延时申报
-      tags:
-      - riders
-  /v1/rider/orders/{id}/exception:
-    post:
-      consumes:
-      - application/json
-      description: 骑手上报配送过程中遇到的异常情况
-      parameters:
-      - description: 订单ID
-        in: path
-        name: id
-        required: true
-        type: integer
-      - description: 异常上报信息
-        in: body
-        name: request
-        required: true
-        schema:
-          $ref: '#/definitions/api.exceptionReportRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.exceptionReportResponse'
-        "400":
-          description: Bad Request
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 非该订单骑手
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 订单不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 骑手异常上报
-      tags:
-      - riders
-  /v1/rider/score:
-    get:
-      consumes:
-      - application/json
-      description: 获取当前骑手的高值单资格积分及接单资格状态。积分规则：完成普通单+1，完成高值单-3，超时-5，餐损-10。初始积分为0，积分≥0时可以接高值单。
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回积分信息
-          schema:
-            $ref: '#/definitions/api.riderPremiumScoreResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 非骑手用户或骑手档案不存在
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取高值单资格积分
-      tags:
-      - 骑手-高值单
-  /v1/rider/score/history:
-    get:
-      consumes:
-      - application/json
-      description: 分页查询骑手的高值单资格积分变更历史记录
-      parameters:
-      - default: 1
-        description: 页码
-        in: query
-        minimum: 1
-        name: page_id
-        required: true
-        type: integer
-      - default: 20
-        description: 每页数量
-        in: query
-        maximum: 50
-        minimum: 5
-        name: page_size
-        required: true
-        type: integer
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 成功返回积分历史
-          schema:
-            $ref: '#/definitions/api.listRiderPremiumScoreHistoryResponse'
-        "400":
-          description: 参数错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "401":
-          description: 未授权
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: 非骑手用户
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 获取高值单资格积分历史
-      tags:
-      - 骑手-高值单
   /v1/rider/status:
     get:
       consumes:

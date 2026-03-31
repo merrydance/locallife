@@ -1,7 +1,7 @@
 /**
  * 骑手基础管理接口重构 (Task 3.1)
  * 基于swagger.json完全重构，移除所有没有后端支持的旧功能
- * 包含：骑手信息、上下线管理、位置上报、积分管理
+ * 包含：骑手信息、上下线管理、位置上报
  */
 
 import { request } from '../utils/request'
@@ -75,38 +75,6 @@ export interface LocationUpdateResponse {
     message: string
 }
 
-// ==================== 积分管理相关类型 ====================
-
-/** 高值单资格积分响应 */
-export interface RiderScoreResponse {
-    rider_id: number
-    real_name: string
-    premium_score: number
-    can_accept_premium_order: boolean
-}
-
-/** 高值单资格积分历史记录 */
-export interface ScoreHistoryItem {
-    id: number
-    change_amount: number
-    old_score: number
-    new_score: number
-    change_type: string
-    change_type_name: string
-    related_order_id?: number
-    related_delivery_id?: number
-    remark?: string
-    created_at: string
-}
-
-/** 积分历史查询参数 */
-export interface ScoreHistoryParams extends Record<string, unknown> {
-    page_id: number
-    page_size: number
-    start_date?: string
-    end_date?: string
-}
-
 // ==================== 骑手基础管理服务类 ====================
 
 /**
@@ -166,33 +134,6 @@ export class RiderBasicManagementService {
         })
     }
 
-    /**
-     * 获取骑手积分信息
-     */
-    async getRiderScore(): Promise<RiderScoreResponse> {
-        return request({
-            url: '/v1/rider/score',
-            method: 'GET'
-        })
-    }
-
-    /**
-     * 获取积分历史记录
-     * @param params 查询参数
-     */
-    async getScoreHistory(params: ScoreHistoryParams): Promise<{
-        current_score: number
-        total: number
-        page_id: number
-        page_size: number
-        logs: ScoreHistoryItem[]
-    }> {
-        return request({
-            url: '/v1/rider/score/history',
-            method: 'GET',
-            data: params
-        })
-    }
 }
 
 // ==================== 位置管理服务类 ====================
@@ -337,34 +278,6 @@ export class RiderBasicManagementAdapter {
         }
     }
 
-    /**
-     * 适配积分历史记录
-     */
-    static adaptScoreHistoryItem(data: ScoreHistoryItem): {
-        id: number
-        changeAmount: number
-        oldScore: number
-        newScore: number
-        changeType: string
-        changeTypeName: string
-        relatedOrderId?: number
-        relatedDeliveryId?: number
-        remark?: string
-        createdAt: string
-    } {
-        return {
-            id: data.id,
-            changeAmount: data.change_amount,
-            oldScore: data.old_score,
-            newScore: data.new_score,
-            changeType: data.change_type,
-            changeTypeName: data.change_type_name,
-            relatedOrderId: data.related_order_id,
-            relatedDeliveryId: data.related_delivery_id,
-            remark: data.remark,
-            createdAt: data.created_at
-        }
-    }
 }
 
 // ==================== 导出服务实例 ====================
@@ -380,17 +293,15 @@ export const locationManagementService = new LocationManagementService()
 export async function getRiderDashboard(): Promise<{
     riderInfo: RiderResponse
     riderStatus: RiderStatusResponse
-    scoreInfo: RiderScoreResponse
     todayStats: {
         onlineDuration: number
         completedOrders: number
         earnings: number
     }
 }> {
-    const [riderInfo, riderStatus, scoreInfo] = await Promise.all([
+    const [riderInfo, riderStatus] = await Promise.all([
         riderBasicManagementService.getRiderInfo(),
-        riderBasicManagementService.getRiderStatus(),
-        riderBasicManagementService.getRiderScore()
+        riderBasicManagementService.getRiderStatus()
     ])
 
     // 今日统计数据需要根据实际接口调整
@@ -403,7 +314,6 @@ export async function getRiderDashboard(): Promise<{
     return {
         riderInfo,
         riderStatus,
-        scoreInfo,
         todayStats
     }
 }
@@ -542,100 +452,6 @@ export class LocationReportManager {
      */
     getLastLocation(): LocationPoint | null {
         return this.lastLocation
-    }
-}
-
-/**
- * 积分管理工具
- */
-export class ScoreManagementUtils {
-    /**
-     * 计算积分等级
-     * @param score 当前积分
-     */
-    static calculateScoreLevel(score: number): {
-        level: string
-        levelName: string
-        canTakeHighValueOrders: boolean
-        nextLevelThreshold?: number
-    } {
-        if (score >= 100) {
-            return {
-                level: 'excellent',
-                levelName: '优秀骑手',
-                canTakeHighValueOrders: true
-            }
-        } else if (score >= 50) {
-            return {
-                level: 'good',
-                levelName: '良好骑手',
-                canTakeHighValueOrders: true,
-                nextLevelThreshold: 100
-            }
-        } else if (score >= 0) {
-            return {
-                level: 'normal',
-                levelName: '普通骑手',
-                canTakeHighValueOrders: true,
-                nextLevelThreshold: 50
-            }
-        } else {
-            return {
-                level: 'restricted',
-                levelName: '受限骑手',
-                canTakeHighValueOrders: false,
-                nextLevelThreshold: 0
-            }
-        }
-    }
-
-    /**
-     * 格式化积分变化原因
-     * @param reason 原因代码
-     */
-    static formatScoreChangeReason(reason: string): string {
-        const reasonMap: Record<string, string> = {
-            'complete_normal_order': '完成普通订单',
-            'complete_high_value_order': '完成高值订单',
-            'timeout': '订单超时',
-            'damage': '餐损',
-            'complaint': '投诉',
-            'praise': '表扬',
-            'manual_adjustment': '人工调整'
-        }
-        return reasonMap[reason] || reason
-    }
-
-    /**
-     * 预测积分变化影响
-     * @param currentScore 当前积分
-     * @param scoreChange 积分变化
-     */
-    static predictScoreImpact(currentScore: number, scoreChange: number): {
-        newScore: number
-        levelChange: boolean
-        newLevel: string
-        canTakeHighValueOrders: boolean
-        warning?: string
-    } {
-        const newScore = currentScore + scoreChange
-        const currentLevel = this.calculateScoreLevel(currentScore)
-        const newLevel = this.calculateScoreLevel(newScore)
-
-        let warning: string | undefined
-        if (newScore < 0 && currentScore >= 0) {
-            warning = '积分将变为负数，将无法接高值单'
-        } else if (newScore < -50) {
-            warning = '积分过低，可能面临账号限制'
-        }
-
-        return {
-            newScore,
-            levelChange: currentLevel.level !== newLevel.level,
-            newLevel: newLevel.levelName,
-            canTakeHighValueOrders: newLevel.canTakeHighValueOrders,
-            warning
-        }
     }
 }
 
