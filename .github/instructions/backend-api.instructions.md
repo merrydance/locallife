@@ -19,6 +19,7 @@ Apply these rules for files under `locallife/api/`.
 - Use validation tags and existing binding patterns for request input.
 - Keep outward-facing routes under the existing `/v1/` API contract.
 - Prefer strong typed response structs over ad hoc maps when shaping JSON responses.
+- Map internal, database, driver, and upstream provider failures into stable business-facing API errors. Do not leak raw SQL text, Go driver errors, or untranslated upstream payloads into user-facing responses.
 
 ## Boundary Checks
 
@@ -26,6 +27,7 @@ Apply these rules for files under `locallife/api/`.
 - New response fields should come from actual logic or persistence outputs instead of placeholder values.
 - If an endpoint changes contract semantics, check `.github/standards/backend/API_CONTRACT_STANDARDS.md` and update tests or docs as needed.
 - Treat “not yet enabled / not yet applied / not yet configured” states as business states that usually need `200` plus status fields rather than an automatic `404`.
+- Keep pagination semantics explicit and stable. If a response includes `total`, it must mean the full matched result count rather than the current page length; otherwise expose `has_more`, cursor, or equivalent pagination truth explicitly and keep tests/docs aligned.
 
 ## Validation Defaults
 
