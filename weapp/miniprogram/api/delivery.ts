@@ -48,11 +48,21 @@ export interface Delivery {
     completed_at?: string
     created_at?: string
     assigned_at?: string
+    location_updated_at?: string
     notes?: string
     items?: Array<{
         name: string
         quantity: number
     }>
+}
+
+export interface DeliveryLocationPoint {
+    latitude: number
+    longitude: number
+    accuracy?: number
+    speed?: number
+    heading?: number
+    recorded_at: string
 }
 
 export class DeliveryService {
@@ -130,10 +140,21 @@ export class DeliveryService {
     /**
      * 获取骑手位置
      */
-    static async getRiderLocation(deliveryId: number): Promise<{ latitude: number, longitude: number }> {
+    static async getRiderLocation(deliveryId: number): Promise<DeliveryLocationPoint> {
         return await request({
             url: `/v1/delivery/${deliveryId}/rider-location`,
             method: 'GET'
+        })
+    }
+
+    /**
+     * 获取配送轨迹
+     */
+    static async getDeliveryTrack(deliveryId: number, since?: string): Promise<DeliveryLocationPoint[]> {
+        return await request({
+            url: `/v1/delivery/${deliveryId}/track`,
+            method: 'GET',
+            data: since ? { since } : undefined
         })
     }
 }

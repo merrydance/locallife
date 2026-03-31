@@ -3,6 +3,7 @@ import DeliveryService, { RecommendedOrder, Delivery } from '../../../api/delive
 import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
+import { riderLiveLocationSession, RiderLiveLocationState } from '../../../utils/rider-live-location'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 import { networkMonitor } from '../../../utils/network-monitor'
@@ -12,10 +13,19 @@ const MAX_GRAB_DISTANCE = 5000 // 最大抢单距离 5km
 const DEPOSIT_BLOCK_REASON_PATTERN = /押金不足/
 
 let runtimeNetworkUnsubscribe: null | (() => void) = null
+let dashboardLocationUnsubscribe: null | (() => void) = null
 
 type WsUnsubscribe = () => void
 type DeliveryActionType = 'startPickup' | 'confirmPickup' | 'startDelivery' | 'confirmDelivery'
 type DeliveryActionMethod = (deliveryId: number) => Promise<Delivery>
+type TagTheme = 'primary' | 'success' | 'warning' | 'danger' | 'default'
+
+type DashboardDeliveryView = Delivery & {
+  status_desc: string
+  deadline_desc: string
+  is_overdue: boolean
+  is_very_urgent: boolean
+}
 
 interface UserMessageError {
   userMessage?: string
@@ -30,6 +40,28 @@ interface DeliveryActionConfig {
 function getUserMessage(err: unknown, fallback: string) {
   const userMessage = (err as UserMessageError).userMessage
   return typeof userMessage === 'string' && userMessage ? userMessage : fallback
+}
+
+function formatRelativeTime(timeStr: string): string {
+  if (!timeStr) return '刚刚'
+
+  const diff = Date.now() - new Date(timeStr).getTime()
+  if (!Number.isFinite(diff) || diff < 0) {
+    return '刚刚'
+  }
+
+  const minutes = Math.floor(diff / 60000)
+  if (minutes < 1) return '刚刚'
+  if (minutes < 60) return `${minutes} 分钟前`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} 小时前`
+
+  return `${Math.floor(hours / 24)} 天前`
+}
+
+function isTrackableDelivery(status: Delivery['status']): boolean {
+  return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
 
 /**
@@ -72,12 +104,22 @@ Page({
 
     // 数据列表
     recommendOrders: [] as RecommendedOrder[], // 待抢订单
-    activeDeliveries: [] as Delivery[],       // 当前配送中
+    activeDeliveries: [] as DashboardDeliveryView[],
+    currentDelivery: null as DashboardDeliveryView | null,
+    hallTabLabel: '抢单大厅 0',
+    myTabLabel: '我的任务 0',
     stats: {
       todayCount: 0,
       todayEarnings: 0,
       creditScore: 0
     },
+
+    locationDeliveryId: 0,
+    locationStatusText: '',
+    locationStatusTheme: 'default' as TagTheme,
+    locationPendingText: '',
+    locationUpdatedText: '',
+    locationNeedsPermission: false,
     
     // 实时数据补充
     newOrdersCount: 0, 
@@ -88,6 +130,7 @@ Page({
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     this.bindNetworkMonitor()
+    this.bindLocationSession()
     this.initData().catch((err) => logger.error('Load init error', err))
   },
 
@@ -107,9 +150,13 @@ Page({
         }
 
         this.cleanupWebSocket()
+        void this.syncLocationSession([])
         this.setData({
           recommendOrders: [],
           activeDeliveries: [],
+          currentDelivery: null,
+          hallTabLabel: '抢单大厅 0',
+          myTabLabel: '我的任务 0',
           newOrdersCount: 0,
           hallLoadError: '',
           myLoadError: ''
@@ -127,6 +174,10 @@ Page({
   onUnload() {
     this.cleanupWebSocket()
     this.unbindNetworkMonitor()
+    if (dashboardLocationUnsubscribe) {
+      dashboardLocationUnsubscribe()
+      dashboardLocationUnsubscribe = null
+    }
   },
 
   bindNetworkMonitor() {
@@ -170,6 +221,8 @@ Page({
 
       if (overview.isOnline) {
         await this.enterOnlineRuntime()
+      } else {
+        await this.syncLocationSession([])
       }
     } catch (err: unknown) {
       logger.error('Failed to init rider data', err)
@@ -183,11 +236,30 @@ Page({
         riderInfo: null,
         recommendOrders: [],
         activeDeliveries: [],
+        currentDelivery: null,
+        hallTabLabel: '抢单大厅 0',
+        myTabLabel: '我的任务 0',
+        locationDeliveryId: 0,
+        locationStatusText: '',
+        locationPendingText: '',
+        locationUpdatedText: '',
+        locationNeedsPermission: false,
         ...statusViewData
       })
+      await this.syncLocationSession([])
     } finally {
       this.setData({ loading: false })
     }
+  },
+
+  bindLocationSession() {
+    if (dashboardLocationUnsubscribe) {
+      dashboardLocationUnsubscribe()
+    }
+
+    dashboardLocationUnsubscribe = riderLiveLocationSession.subscribe((state) => {
+      this.applyLocationSessionState(state)
+    })
   },
 
   getDepositReminderText(status: RiderStatus | null, riderInfo?: RiderInfo | null) {
@@ -216,6 +288,13 @@ Page({
       statusText: isOnline ? '正在接单中' : (depositReminderText ? '暂不能上线' : '休息中 - 点击上线'),
       showDepositReminder: !!depositReminderText,
       depositReminderText
+    }
+  },
+
+  buildTabLabels(hallCount: number, myCount: number) {
+    return {
+      hallTabLabel: `抢单大厅 ${hallCount}`,
+      myTabLabel: `我的任务 ${myCount}`
     }
   },
 
@@ -309,16 +388,23 @@ Page({
           is_overdue: isOverdue,
           is_very_urgent: !isOverdue && deadline ? (new Date(deadline).getTime() - Date.now() < 15 * 60 * 1000) : false
         }
-      })
+      }) as DashboardDeliveryView[]
+
+      const currentDelivery = myDeliveries.find((delivery) => isTrackableDelivery(delivery.status)) || myDeliveries[0] || null
+      const tabLabels = this.buildTabLabels(hallOrders.length, myDeliveries.length)
 
       this.setData({
         recommendOrders: hallOrders,
         activeDeliveries: myDeliveries,
+        currentDelivery,
         isRefresherTriggered: false,
         initError: '',
         hallLoadError,
-        myLoadError
+        myLoadError,
+        ...tabLabels
       })
+
+      await this.syncLocationSession(myDeliveries)
     } catch (err: unknown) {
       logger.error('Refresh data error', err)
       const message = getUserMessage(err, '任务数据加载失败，请重试')
@@ -328,6 +414,85 @@ Page({
         myLoadError: message
       })
     }
+  },
+
+  applyLocationSessionState(state: RiderLiveLocationState) {
+    const trackedDelivery = this.data.activeDeliveries.find((delivery) => delivery.id === state.activeDeliveryId)
+
+    if (!trackedDelivery) {
+      this.setData({
+        locationDeliveryId: 0,
+        locationStatusText: '',
+        locationStatusTheme: 'default',
+        locationPendingText: '',
+        locationUpdatedText: '',
+        locationNeedsPermission: false
+      })
+      return
+    }
+
+    const fallbackUpdatedAt = trackedDelivery.location_updated_at || ''
+    const locationUpdatedText = state.lastUploadedAt
+      ? `最近上传 ${formatRelativeTime(state.lastUploadedAt)}`
+      : (fallbackUpdatedAt ? `最近上传 ${formatRelativeTime(fallbackUpdatedAt)}` : '暂未上传定位')
+
+    const locationPendingText = state.pendingCount > 0
+      ? `待补发 ${state.pendingCount} 个定位点`
+      : ''
+
+    let locationStatusText = '等待连续定位启动'
+    let locationStatusTheme: TagTheme = 'default'
+    let locationNeedsPermission = false
+
+    switch (state.uploadState) {
+      case 'tracking':
+        locationStatusText = '定位正常'
+        locationStatusTheme = 'success'
+        break
+      case 'uploading':
+        locationStatusText = '正在上传位置'
+        locationStatusTheme = 'primary'
+        break
+      case 'retrying':
+        locationStatusText = '网络恢复后会自动补发'
+        locationStatusTheme = 'warning'
+        break
+      case 'permission_required':
+        locationStatusText = '需要开启定位权限'
+        locationStatusTheme = 'danger'
+        locationNeedsPermission = true
+        break
+      case 'starting':
+        locationStatusText = '正在开启连续定位'
+        locationStatusTheme = 'warning'
+        break
+      default:
+        break
+    }
+
+    this.setData({
+      locationDeliveryId: trackedDelivery.id,
+      locationStatusText,
+      locationStatusTheme,
+      locationPendingText,
+      locationUpdatedText,
+      locationNeedsPermission
+    })
+  },
+
+  async syncLocationSession(deliveries: Delivery[]) {
+    if (!this.data.isOnline) {
+      await riderLiveLocationSession.setActiveDelivery(null)
+      return
+    }
+
+    const trackedDelivery = deliveries.find((delivery) => isTrackableDelivery(delivery.status))
+    if (!trackedDelivery) {
+      await riderLiveLocationSession.setActiveDelivery(null)
+      return
+    }
+
+    await riderLiveLocationSession.setActiveDelivery(trackedDelivery.id, 'rider_dashboard_runtime')
   },
 
   getStatusDesc(status: string) {
@@ -570,9 +735,13 @@ Page({
       if (targetOnline) {
         this.enterOnlineRuntime().catch((err) => logger.error('Toggle online refresh error', err))
       } else {
+        await this.syncLocationSession([])
         this.setData({
           recommendOrders: [],
           activeDeliveries: [],
+          currentDelivery: null,
+          hallTabLabel: '抢单大厅 0',
+          myTabLabel: '我的任务 0',
           newOrdersCount: 0,
           hallLoadError: '',
           myLoadError: ''
@@ -675,6 +844,19 @@ Page({
     })
   },
 
+  onGoToNavigation(e: WechatMiniprogram.TouchEvent) {
+    const { orderId } = e.currentTarget.dataset as { orderId?: number }
+    if (!orderId) return
+
+    wx.navigateTo({
+      url: `/pages/rider/navigation/index?id=${orderId}`
+    })
+  },
+
+  onSwitchToHall() {
+    this.setData({ activeTab: 'hall' })
+  },
+
   /**
    * 钱包
    */
@@ -772,5 +954,43 @@ Page({
       return
     }
     this.refreshData().catch((err) => logger.error('Retry refresh error', err))
+  },
+
+  async onRetryLocationSync() {
+    wx.showLoading({ title: '刷新定位中...' })
+    try {
+      if (this.data.locationNeedsPermission) {
+        const granted = await riderLiveLocationSession.requestPermissionAndRestart()
+        if (!granted) {
+          wx.showToast({ title: '请先开启定位权限', icon: 'none' })
+          return
+        }
+      } else {
+        await riderLiveLocationSession.refreshNow('rider_dashboard_manual_retry')
+        await riderLiveLocationSession.flushNow()
+      }
+
+      wx.showToast({ title: '定位已刷新', icon: 'success' })
+    } catch (err: unknown) {
+      const message = getUserMessage(err, '定位刷新失败，请稍后重试')
+      wx.showToast({ title: message, icon: 'none' })
+    } finally {
+      wx.hideLoading()
+    }
+  },
+
+  async onResolveLocationPermission() {
+    wx.showLoading({ title: '开启定位中...' })
+    try {
+      const granted = await riderLiveLocationSession.requestPermissionAndRestart()
+      if (!granted) {
+        wx.showToast({ title: '请先开启定位权限', icon: 'none' })
+        return
+      }
+
+      wx.showToast({ title: '定位已开启', icon: 'success' })
+    } finally {
+      wx.hideLoading()
+    }
   }
 })

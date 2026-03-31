@@ -131,6 +131,9 @@ export class RiderService {
         recorded_at: string
         delivery_id?: number
         source?: string
+        accuracy?: number
+        speed?: number
+        heading?: number
     }>): Promise<unknown> {
         return await request({
             url: '/v1/rider/location',

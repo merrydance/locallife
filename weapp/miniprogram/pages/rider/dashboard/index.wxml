@@ -15,19 +15,9 @@
         <view class="rider-name">{{riderInfo.real_name || '骑手用户'}}</view>
         <t-tag size="small" variant="dark" theme="default" shape="round" class="credit-tag">信用分: {{riderInfo.credit_score || 100}}</t-tag>
       </view>
-      <view class="header-actions">
-        <view class="quick-entry" bindtap="onGoToWallet">
-          <text>押金与账单</text>
-          <t-icon name="chevron-right" size="32rpx" />
-        </view>
-        <view class="quick-entry" bindtap="onGoToHistory">
-          <text>历史任务</text>
-          <t-icon name="chevron-right" size="32rpx" />
-        </view>
-        <view class="quick-entry" bindtap="onGoToClaims">
-          <text>索赔与申诉</text>
-          <t-icon name="chevron-right" size="32rpx" />
-        </view>
+      <view class="header-side-status">
+        <text class="header-side-label">当前状态</text>
+        <text class="header-side-value">{{isOnline ? '在线接单' : '休息中'}}</text>
       </view>
     </view>
 
@@ -59,6 +49,16 @@
           colors="{{['#00897B', 'var(--td-bg-color-component)']}}"
         />
       </view>
+
+      <view class="runtime-status-strip" wx:if="{{locationDeliveryId > 0}}">
+        <view class="runtime-status-main">
+          <text class="runtime-status-title">定位运行中</text>
+          <text class="runtime-status-desc">{{locationStatusText}} · {{locationUpdatedText}}</text>
+          <text class="runtime-status-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
+        </view>
+        <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" shape="round" bindtap="onResolveLocationPermission">开启定位</t-button>
+        <t-button wx:else theme="primary" variant="text" size="small" shape="round" bindtap="onRetryLocationSync">刷新</t-button>
+      </view>
     </view>
   </t-sticky>
 
@@ -78,6 +78,65 @@
 
   <!-- 3. 任务分类 (Tabs) -->
   <view class="content-section">
+    <view class="current-mission-card" wx:if="{{currentDelivery}}">
+      <view class="current-mission-header">
+        <view>
+          <view class="current-mission-title">当前任务</view>
+          <view class="current-mission-subtitle">优先处理手上订单，再返回抢单大厅</view>
+        </view>
+        <t-tag theme="{{currentDelivery.status === 'assigned' || currentDelivery.status === 'picking' ? 'warning' : 'success'}}" variant="dark" size="small">{{currentDelivery.status_desc}}</t-tag>
+      </view>
+
+      <view class="current-mission-route">
+        <view class="current-mission-point">
+          <view class="marker-dot orange"></view>
+          <view class="current-mission-body">
+            <text class="current-mission-name">{{currentDelivery.merchant_name || currentDelivery.pickup_address}}</text>
+            <text class="current-mission-address">{{currentDelivery.pickup_address}}</text>
+          </view>
+        </view>
+        <view class="current-mission-divider"></view>
+        <view class="current-mission-point">
+          <view class="marker-dot green"></view>
+          <view class="current-mission-body">
+            <text class="current-mission-name">{{currentDelivery.delivery_contact || '顾客'}}</text>
+            <text class="current-mission-address">{{currentDelivery.delivery_address}}</text>
+          </view>
+        </view>
+      </view>
+
+      <view class="current-mission-meta">
+        <view class="current-mission-meta-item">
+          <text class="meta-label">时限</text>
+          <text class="meta-value">{{currentDelivery.deadline_desc || '尽快送达'}}</text>
+        </view>
+        <view class="current-mission-meta-item">
+          <text class="meta-label">定位</text>
+          <text class="meta-value">{{locationDeliveryId === currentDelivery.id ? locationStatusText : '待初始化'}}</text>
+        </view>
+      </view>
+
+      <view class="current-mission-actions">
+        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onGoToDetail" data-order-id="{{currentDelivery.order_id}}">查看详情</t-button>
+        <t-button theme="primary" size="medium" shape="round" bindtap="onGoToNavigation" data-order-id="{{currentDelivery.order_id}}">进入导航</t-button>
+      </view>
+    </view>
+
+    <view class="tool-shortcuts">
+      <view class="tool-shortcut" bindtap="onGoToWallet">
+        <t-icon name="wallet" size="34rpx" />
+        <text>押金与账单</text>
+      </view>
+      <view class="tool-shortcut" bindtap="onGoToHistory">
+        <t-icon name="task-checked" size="34rpx" />
+        <text>历史任务</text>
+      </view>
+      <view class="tool-shortcut" bindtap="onGoToClaims">
+        <t-icon name="service" size="34rpx" />
+        <text>索赔与申诉</text>
+      </view>
+    </view>
+
     <!-- 📢 新单实时提醒栏 -->
     <view class="new-orders-bar" wx:if="{{newOrdersCount > 0}}" bindtap="onRefreshHall">
       <view class="bar-inner">
@@ -94,7 +153,7 @@
       stickyProps="{{ {offsetTop: navBarHeight + 44} }}"
       t-class="tabs-container"
     >
-      <t-tab-panel label="抢单大厅" value="hall">
+      <t-tab-panel label="{{hallTabLabel}}" value="hall">
         <view class="tab-content">
           <!-- 1. 骨架占位 -->
           <t-skeleton 
@@ -195,11 +254,13 @@
             wx:elif="{{!loading}}"
             icon="info-circle" 
             description="{{isOnline ? '附近暂无可接订单' : '请先上线后再刷新订单'}}" 
-          />
+          >
+            <t-button wx:if="{{isOnline}}" theme="primary" variant="outline" size="medium" shape="round" bindtap="onRefreshHall">刷新大厅</t-button>
+          </t-empty>
         </view>
       </t-tab-panel>
 
-      <t-tab-panel label="我的任务" value="my">
+      <t-tab-panel label="{{myTabLabel}}" value="my">
         <view class="tab-content">
           <!-- 1. 骨架占位 -->
           <t-skeleton 
@@ -290,6 +351,21 @@
                  <text class="notes-content">{{item.notes}}</text>
                </view>
 
+              <view class="location-runtime-card" wx:if="{{item.id === locationDeliveryId}}">
+                <view class="location-runtime-main">
+                  <view class="location-runtime-header">
+                    <text class="location-runtime-title">实时定位</text>
+                    <t-tag theme="{{locationStatusTheme}}" variant="light" size="small">{{locationStatusText}}</t-tag>
+                  </view>
+                  <text class="location-runtime-meta">{{locationUpdatedText}}</text>
+                  <text class="location-runtime-pending" wx:if="{{locationPendingText}}">{{locationPendingText}}</text>
+                </view>
+                <view class="location-runtime-actions">
+                  <t-button wx:if="{{locationNeedsPermission}}" theme="primary" variant="outline" size="small" shape="round" catchtap="onResolveLocationPermission">开启定位</t-button>
+                  <t-button wx:else theme="primary" variant="text" size="small" shape="round" catchtap="onRetryLocationSync">刷新</t-button>
+                </view>
+              </view>
+
               <view class="order-footer">
                 <view class="earnings-info">
                    <text class="label">预计总收益</text>
@@ -310,7 +386,9 @@
             <t-button theme="primary" shape="round" bindtap="onRetryLoad" size="medium">重新加载</t-button>
           </view>
 
-          <t-empty wx:elif="{{!loading}}" icon="info-circle" description="当前没有进行中的任务" />
+          <t-empty wx:elif="{{!loading}}" icon="info-circle" description="当前没有进行中的任务">
+            <t-button theme="primary" shape="round" size="medium" bindtap="onSwitchToHall">去抢单大厅</t-button>
+          </t-empty>
         </view>
       </t-tab-panel>
     </t-tabs>

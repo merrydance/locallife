@@ -16,6 +16,7 @@
         "claims/index",
         "claims/detail/index",
         "deposit/index",
+        "navigation/index",
         "task-detail/index",
         "tasks/index"
       ],

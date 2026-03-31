@@ -108,6 +108,47 @@
         </view>
       </view>
 
+      <view class="detail-card location-card">
+        <view class="location-header">
+          <view>
+            <view class="location-title">实时定位</view>
+            <view class="location-subtitle">配送中会自动采集当前位置，弱网恢复后会补发轨迹</view>
+          </view>
+          <t-tag theme="{{locationStatusTheme}}" variant="light" size="small">{{locationStatusText}}</t-tag>
+        </view>
+
+        <map
+          class="delivery-map"
+          latitude="{{mapCenter.latitude}}"
+          longitude="{{mapCenter.longitude}}"
+          scale="{{mapScale}}"
+          markers="{{markers}}"
+          polyline="{{polyline}}"
+          include-points="{{includePoints}}"
+          show-location="false"
+        />
+
+        <view class="location-meta-row">
+          <text class="location-meta-primary">{{locationUpdatedText}}</text>
+          <text class="location-meta-secondary">{{routeSummary}}</text>
+        </view>
+
+        <view class="location-pending" wx:if="{{locationPendingText}}">
+          <t-icon name="time" size="28rpx" color="var(--td-warning-color-7)" />
+          <text>{{locationPendingText}}</text>
+        </view>
+
+        <view class="location-actions">
+          <view class="location-actions-main">
+            <t-button theme="primary" size="small" shape="round" bindtap="onGoToNavigation">进入导航页</t-button>
+            <t-button wx:if="{{showLocationAction}}" theme="primary" variant="outline" size="small" shape="round" bindtap="onRetryLocationSync">
+              {{locationActionText}}
+            </t-button>
+          </view>
+          <text class="location-actions-tip">地图会持续更新骑手位置，也可以进入专用导航页直接到商家或顾客。</text>
+        </view>
+      </view>
+
       <!-- 商品清单 -->
       <view class="detail-card items-card" wx:if="{{delivery.items && delivery.items.length > 0}}">
         <view class="card-title">商品清单 (共{{delivery.item_count}}件)</view>
