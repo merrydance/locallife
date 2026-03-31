@@ -17,6 +17,8 @@ export interface RiderInfo {
     online_duration: number
     current_longitude?: number
     current_latitude?: number
+    location_updated_at?: string
+    created_at: string
 }
 
 export interface RiderStatus {
@@ -24,6 +26,9 @@ export interface RiderStatus {
     is_online: boolean
     online_status: 'offline' | 'online' | 'delivering'
     active_deliveries: number
+    current_longitude?: number
+    current_latitude?: number
+    location_updated_at?: string
     can_go_online: boolean
     can_go_offline: boolean
     online_block_reason?: string
@@ -32,6 +37,8 @@ export interface RiderStatus {
 export interface RiderDepositBalance {
     total_deposit: number
     frozen_deposit: number
+    delivery_frozen_deposit?: number
+    withdrawal_processing_amount?: number
     available_deposit: number
 }
 

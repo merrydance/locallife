@@ -3,6 +3,7 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -540,6 +541,10 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(20*fenPerYuan), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -547,7 +552,28 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, int64(500*fenPerYuan), resp.TotalDeposit)
 				require.Equal(t, int64(50*fenPerYuan), resp.FrozenDeposit)
+				require.Equal(t, int64(30*fenPerYuan), resp.DeliveryFrozenDeposit)
+				require.Equal(t, int64(20*fenPerYuan), resp.WithdrawalProcessingAmount)
 				require.Equal(t, int64(450*fenPerYuan), resp.AvailableDeposit)
+			},
+		},
+		{
+			name: "PendingRefundAmountError",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(rider, nil)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(int64(0), errors.New("query failed"))
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 			},
 		},
 		{
@@ -560,6 +586,9 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 					GetRiderByUserID(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(db.Rider{}, db.ErrRecordNotFound)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Any()).
+					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -573,6 +602,9 @@ func TestGetRiderDepositBalanceAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetRiderByUserID(gomock.Any(), gomock.Any()).
+					Times(0)
+				store.EXPECT().
+					GetPendingRiderDepositRefundAmountByUserID(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -870,12 +902,18 @@ func TestListRiderDepositsAPI(t *testing.T) {
 					}).
 					Times(1).
 					Return(deposits, nil)
+
+				store.EXPECT().
+					CountRiderDeposits(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(int64(23), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var resp listRiderDepositsResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Deposits, 2)
+				require.Equal(t, int64(23), resp.Total)
 			},
 		},
 		{
@@ -898,6 +936,11 @@ func TestListRiderDepositsAPI(t *testing.T) {
 					}).
 					Times(1).
 					Return(deposits, nil)
+
+				store.EXPECT().
+					CountRiderDeposits(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(int64(23), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -919,6 +962,11 @@ func TestListRiderDepositsAPI(t *testing.T) {
 					ListRiderDeposits(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return([]db.RiderDeposit{}, nil) // 空列表
+
+				store.EXPECT().
+					CountRiderDeposits(gomock.Any(), gomock.Eq(rider.ID)).
+					Times(1).
+					Return(int64(0), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -926,6 +974,7 @@ func TestListRiderDepositsAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.NotNil(t, resp.Deposits) // 确保返回空数组而非 null
 				require.Len(t, resp.Deposits, 0)
+				require.Equal(t, int64(0), resp.Total)
 			},
 		},
 	}

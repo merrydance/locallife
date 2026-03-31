@@ -76,6 +76,15 @@ SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
 WHERE payment_order_id = $1 AND status = 'success';
 
+-- name: GetPendingRiderDepositRefundAmountByUserID :one
+SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_rider_deposit_refund_amount
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE po.user_id = $1
+    AND po.business_type = 'rider_deposit'
+    AND ro.refund_type = 'rider_deposit'
+    AND ro.status IN ('pending', 'processing');
+
 -- name: ListRefundOrdersForReconciliation :many
 -- 获取指定日期范围内直连支付（miniprogram/deposit等）成功退款订单（用于每日对账）
 -- 通过 JOIN payment_orders 过滤 payment_type，排除收付通退款（已单独对账）

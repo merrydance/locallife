@@ -110,6 +110,10 @@
 }
 
 /* 2. 上线状态条 */
+.status-bar-container {
+  background: var(--td-bg-color-page);
+}
+
 .status-bar {
   display: flex;
   justify-content: space-between;
@@ -153,6 +157,55 @@
   font-size: var(--font-size-base);
   font-weight: 500;
   color: var(--td-text-color-primary);
+}
+
+.online-reminder-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  margin: 0 var(--spacer-md) var(--spacer-md);
+  padding: var(--spacer-md);
+  background: var(--td-warning-color-light);
+  border: 1rpx solid var(--td-warning-color-5);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.online-reminder-main {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacer-sm);
+}
+
+.online-reminder-icon {
+  color: var(--td-warning-color-7);
+  line-height: 1;
+  padding-top: 4rpx;
+}
+
+.online-reminder-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.online-reminder-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.online-reminder-desc {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  line-height: 1.6;
+}
+
+.online-reminder-tip {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  line-height: 1.5;
 }
 
 @keyframes pulse {

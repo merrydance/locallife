@@ -118,5 +118,7 @@
 .card-actions {
   display: flex;
   justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
   margin-top: var(--spacer-sm);
 }

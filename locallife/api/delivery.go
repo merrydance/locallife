@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -871,10 +872,33 @@ func (server *Server) getRiderLatestLocation(ctx *gin.Context) {
 // ==================== 骑手查询自己的配送单 ====================
 
 type listMyDeliveriesResponse struct {
-	Deliveries []deliveryResponse `json:"deliveries"`
-	Total      int64              `json:"total"`
-	PageID     int32              `json:"page_id"`
-	PageSize   int32              `json:"page_size"`
+	Deliveries     []deliveryResponse `json:"deliveries"`
+	Total          int64              `json:"total"`
+	CompletedTotal int64              `json:"completed_total"`
+	TotalEarnings  int64              `json:"total_earnings"`
+	PageID         int32              `json:"page_id"`
+	PageSize       int32              `json:"page_size"`
+}
+
+func normalizeInt64Result(raw interface{}) (int64, error) {
+	switch v := raw.(type) {
+	case nil:
+		return 0, nil
+	case int64:
+		return v, nil
+	case int32:
+		return int64(v), nil
+	case int:
+		return int64(v), nil
+	case float64:
+		return int64(v), nil
+	case string:
+		return strconv.ParseInt(v, 10, 64)
+	case []byte:
+		return strconv.ParseInt(string(v), 10, 64)
+	default:
+		return 0, fmt.Errorf("unsupported int64 result type %T", raw)
+	}
 }
 
 // listMyDeliveries godoc
@@ -923,23 +947,48 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 		return
 	}
 
+	riderID := pgtype.Int8{Int64: rider.ID, Valid: true}
+
 	var deliveries []db.Delivery
+	total := int64(0)
 
 	if req.Status != "" {
 		deliveries, err = server.store.ListDeliveriesByRiderAndStatus(ctx, db.ListDeliveriesByRiderAndStatusParams{
-			RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+			RiderID: riderID,
 			Status:  req.Status,
 			Limit:   req.Limit,
 			Offset:  pageOffset(req.Page, req.Limit),
 		})
+		total = int64(len(deliveries))
 	} else {
 		deliveries, err = server.store.ListDeliveriesByRider(ctx, db.ListDeliveriesByRiderParams{
-			RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+			RiderID: riderID,
 			Limit:   req.Limit,
 			Offset:  pageOffset(req.Page, req.Limit),
 		})
+		if err == nil {
+			total, err = server.store.CountRiderDeliveries(ctx, riderID)
+		}
 	}
 
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	completedTotal, err := server.store.CountRiderCompletedDeliveries(ctx, riderID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	totalEarningsRaw, err := server.store.GetRiderEarnings(ctx, riderID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	totalEarnings, err := normalizeInt64Result(totalEarningsRaw)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -951,10 +1000,12 @@ func (server *Server) listMyDeliveries(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listMyDeliveriesResponse{
-		Deliveries: response,
-		Total:      int64(len(response)),
-		PageID:     req.Page,
-		PageSize:   req.Limit,
+		Deliveries:     response,
+		Total:          total,
+		CompletedTotal: completedTotal,
+		TotalEarnings:  totalEarnings,
+		PageID:         req.Page,
+		PageSize:       req.Limit,
 	})
 }
 

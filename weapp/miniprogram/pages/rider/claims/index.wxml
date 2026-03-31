@@ -69,6 +69,15 @@
 
             <view class="card-actions">
               <t-button
+                theme="default"
+                variant="outline"
+                size="small"
+                shape="round"
+                loading="{{decisionLoading[item.id]}}"
+                data-claim-id="{{item.id}}"
+                bindtap="onViewDecision"
+              >查看判定依据</t-button>
+              <t-button
                 wx:if="{{!item.appealId}}"
                 theme="primary"
                 variant="outline"

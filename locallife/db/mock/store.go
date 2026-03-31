@@ -2328,6 +2328,21 @@ func (mr *MockStoreMockRecorder) CountRiderDeliveries(ctx, riderID any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderDeliveries", reflect.TypeOf((*MockStore)(nil).CountRiderDeliveries), ctx, riderID)
 }
 
+// CountRiderDeposits mocks base method.
+func (m *MockStore) CountRiderDeposits(ctx context.Context, riderID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountRiderDeposits", ctx, riderID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountRiderDeposits indicates an expected call of CountRiderDeposits.
+func (mr *MockStoreMockRecorder) CountRiderDeposits(ctx, riderID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountRiderDeposits", reflect.TypeOf((*MockStore)(nil).CountRiderDeposits), ctx, riderID)
+}
+
 // CountRiderLocations mocks base method.
 func (m *MockStore) CountRiderLocations(ctx context.Context, riderID int64) (int64, error) {
 	m.ctrl.T.Helper()
@@ -8637,6 +8652,21 @@ func (m *MockStore) GetPendingPaymentOrderByUserAndBusinessType(ctx context.Cont
 func (mr *MockStoreMockRecorder) GetPendingPaymentOrderByUserAndBusinessType(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingPaymentOrderByUserAndBusinessType", reflect.TypeOf((*MockStore)(nil).GetPendingPaymentOrderByUserAndBusinessType), ctx, arg)
+}
+
+// GetPendingRiderDepositRefundAmountByUserID mocks base method.
+func (m *MockStore) GetPendingRiderDepositRefundAmountByUserID(ctx context.Context, userID int64) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPendingRiderDepositRefundAmountByUserID", ctx, userID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPendingRiderDepositRefundAmountByUserID indicates an expected call of GetPendingRiderDepositRefundAmountByUserID.
+func (mr *MockStoreMockRecorder) GetPendingRiderDepositRefundAmountByUserID(ctx, userID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPendingRiderDepositRefundAmountByUserID", reflect.TypeOf((*MockStore)(nil).GetPendingRiderDepositRefundAmountByUserID), ctx, userID)
 }
 
 // GetPendingUploadSessionByIdempotencyKey mocks base method.

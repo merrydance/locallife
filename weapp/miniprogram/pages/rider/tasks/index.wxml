@@ -39,8 +39,8 @@
       data-order-id="{{item.order_id}}"
     >
       <view class="card-header">
-        <text class="date">{{item.completed_at || item.created_at}}</text>
-        <t-tag theme="success" variant="dark" size="extra-small">已送达</t-tag>
+        <text class="date">{{item.display_time || '--'}}</text>
+        <t-tag theme="{{item.status_theme}}" variant="dark" size="extra-small">{{item.status_text}}</t-tag>
       </view>
       
       <view class="card-body">

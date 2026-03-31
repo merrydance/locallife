@@ -49,7 +49,7 @@
       <view class="status-bar {{isOnline ? 'is-online' : 'is-offline'}}">
         <view class="status-info">
           <view class="status-dot"></view>
-          <text class="status-text">{{isOnline ? '正在接单中' : '休息中 - 点击上线'}}</text>
+          <text class="status-text">{{statusText}}</text>
         </view>
         <t-switch
           value="{{isOnline}}"
@@ -61,6 +61,20 @@
       </view>
     </view>
   </t-sticky>
+
+  <view wx:if="{{showDepositReminder}}" class="online-reminder-card">
+    <view class="online-reminder-main">
+      <view class="online-reminder-icon">
+        <t-icon name="error-circle-filled" size="40rpx" />
+      </view>
+      <view class="online-reminder-body">
+        <text class="online-reminder-title">当前暂不能上线接单</text>
+        <text class="online-reminder-desc">{{depositReminderText}}</text>
+        <text class="online-reminder-tip">补足押金后回到此页，再打开上线开关即可。</text>
+      </view>
+    </view>
+    <t-button theme="primary" variant="outline" size="small" shape="round" bindtap="onGoToWallet">去充值</t-button>
+  </view>
 
   <!-- 3. 任务分类 (Tabs) -->
   <view class="content-section">

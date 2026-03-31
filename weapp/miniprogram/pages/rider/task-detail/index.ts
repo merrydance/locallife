@@ -1,4 +1,5 @@
 import DeliveryService, { Delivery } from '../../../api/delivery'
+import { riderExceptionHandlingService } from '../../../api/rider-exception-handling'
 import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
 import { normalizeLocationError, syncRiderDeliveryLocation } from '../../../utils/rider-location'
@@ -12,10 +13,30 @@ interface UserMessageError {
     userMessage?: string
 }
 
+type DelayReasonTemplate = {
+    label: string
+    reason: string
+    expectedMinutes: number
+}
+
 type DeliveryAction = (deliveryId: number) => Promise<Delivery>
 
 type DeliveryView = Delivery & {
     deadline_desc: string
+    can_update_status: boolean
+    action_label: string
+}
+
+function getDeliveryActionLabel(status: Delivery['status']): string {
+    if (status === 'assigned') return '我已到达商家'
+    if (status === 'picking') return '确认取餐'
+    if (status === 'picked') return '开始配送'
+    if (status === 'delivering') return '确认已送达'
+    return ''
+}
+
+function canUpdateDeliveryStatus(status: Delivery['status']): boolean {
+    return status === 'assigned' || status === 'picking' || status === 'picked' || status === 'delivering'
 }
 
 Page({
@@ -25,6 +46,18 @@ Page({
         loading: false,
         errorMessage: '',
         navBarHeight: 88,
+        showDelayReport: false,
+        delaySubmitting: false,
+        delayReasonTemplates: [
+            { label: '商户出餐慢', reason: '商户出餐较慢，预计会影响送达时效。', expectedMinutes: 20 },
+            { label: '道路拥堵', reason: '配送路线出现拥堵，预计会延迟送达。', expectedMinutes: 25 },
+            { label: '天气影响', reason: '受天气影响，预计配送时效会延后。', expectedMinutes: 30 }
+        ] as DelayReasonTemplate[],
+        delayMinuteOptions: [10, 15, 20, 30, 45, 60],
+        delayForm: {
+            reason: '',
+            expectedMinutes: 15
+        },
         
         // 状态映射
         statusSteps: [
@@ -75,7 +108,9 @@ Page({
 
         return {
             ...delivery,
-            deadline_desc: this.formatDeadline(deadline)
+            deadline_desc: this.formatDeadline(deadline),
+            can_update_status: canUpdateDeliveryStatus(delivery.status),
+            action_label: getDeliveryActionLabel(delivery.status)
         }
     },
 
@@ -220,6 +255,84 @@ Page({
       wx.navigateTo({
         url: `/pages/rider/exception/index?orderId=${this.data.orderId}`
       })
+    },
+
+    onOpenDelayReport() {
+        if (!this.data.delivery) return
+
+        const defaultReason = this.data.delayForm.reason || '配送过程出现情况，预计会影响送达时效。'
+        this.setData({
+            showDelayReport: true,
+            'delayForm.reason': defaultReason,
+            'delayForm.expectedMinutes': this.data.delayForm.expectedMinutes || 15
+        })
+    },
+
+    onCloseDelayReport() {
+        if (this.data.delaySubmitting) return
+        this.setData({ showDelayReport: false })
+    },
+
+    onSelectDelayTemplate(e: WechatMiniprogram.TouchEvent) {
+        const { reason, minutes } = e.currentTarget.dataset as { reason?: string, minutes?: number }
+        if (!reason || !minutes) return
+        this.setData({
+            'delayForm.reason': reason,
+            'delayForm.expectedMinutes': Number(minutes)
+        })
+    },
+
+    onSelectDelayMinutes(e: WechatMiniprogram.TouchEvent) {
+        const { minutes } = e.currentTarget.dataset as { minutes?: number }
+        if (!minutes) return
+        this.setData({ 'delayForm.expectedMinutes': Number(minutes) })
+    },
+
+    onDelayReasonChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+        this.setData({ 'delayForm.reason': e.detail.value || '' })
+    },
+
+    async onSubmitDelayReport() {
+        if (!this.data.delivery || this.data.delaySubmitting) return
+
+        const reason = this.data.delayForm.reason.trim()
+        const expectedMinutes = Number(this.data.delayForm.expectedMinutes)
+
+        if (reason.length < 5) {
+            wx.showToast({ title: '请填写至少5个字的延时原因', icon: 'none' })
+            return
+        }
+
+        if (!expectedMinutes || expectedMinutes < 5 || expectedMinutes > 120) {
+            wx.showToast({ title: '预计延时需在5到120分钟之间', icon: 'none' })
+            return
+        }
+
+        this.setData({ delaySubmitting: true })
+        wx.showLoading({ title: '提交中...' })
+        try {
+            await riderExceptionHandlingService.reportDelay(this.data.orderId, {
+                reason,
+                expected_minutes: expectedMinutes
+            })
+
+            wx.showToast({ title: '延时已报备', icon: 'success' })
+            this.setData({
+                showDelayReport: false,
+                delaySubmitting: false,
+                delayForm: {
+                    reason: '',
+                    expectedMinutes: 15
+                }
+            })
+        } catch (error: unknown) {
+            const userMessage = (error as UserMessageError).userMessage
+            const message = typeof userMessage === 'string' && userMessage ? userMessage : '延时报备失败'
+            wx.showToast({ title: message, icon: 'none' })
+            this.setData({ delaySubmitting: false })
+        } finally {
+            wx.hideLoading()
+        }
     },
 
     onCopyOrderNo() {

@@ -566,6 +566,17 @@ export class ClaimManagementService {
     }
 
     /**
+     * 获取骑手索赔责任判定依据
+     * @param claimId 索赔ID
+     */
+    async getRiderClaimDecision(claimId: number): Promise<MerchantClaimDecisionResponse> {
+        return request({
+            url: `/v1/rider/claims/${claimId}/decision`,
+            method: 'GET'
+        })
+    }
+
+    /**
      * 获取商户索赔行为回溯摘要
      * @param orderId 订单ID
      */

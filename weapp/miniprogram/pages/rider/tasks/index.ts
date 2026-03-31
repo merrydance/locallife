@@ -5,14 +5,55 @@ import { getStableBarHeights } from '../../../utils/responsive'
 
 const PAGE_SIZE = 20
 
+type DeliveryHistoryView = Delivery & {
+  display_time: string
+  status_text: string
+  status_theme: 'success' | 'warning' | 'danger' | 'primary' | 'default'
+}
+
 interface DeliveryHistoryResponse {
   deliveries?: Delivery[]
   total_earnings?: number
+  completed_total?: number
   total?: number
+  page_id?: number
+  page_size?: number
 }
 
 interface UserMessageError {
   userMessage?: string
+}
+
+function getDeliveryStatusMeta(status?: Delivery['status']) {
+  switch (status) {
+    case 'completed':
+    case 'delivered':
+      return { text: '已送达', theme: 'success' as const }
+    case 'cancelled':
+      return { text: '已取消', theme: 'warning' as const }
+    case 'exception':
+      return { text: '异常结束', theme: 'danger' as const }
+    case 'delivering':
+      return { text: '配送中', theme: 'primary' as const }
+    case 'picked':
+      return { text: '待配送', theme: 'primary' as const }
+    case 'picking':
+      return { text: '取餐中', theme: 'primary' as const }
+    case 'assigned':
+      return { text: '已接单', theme: 'default' as const }
+    default:
+      return { text: status || '历史记录', theme: 'default' as const }
+  }
+}
+
+function decorateHistoryDelivery(delivery: Delivery): DeliveryHistoryView {
+  const statusMeta = getDeliveryStatusMeta(delivery.status)
+  return {
+    ...delivery,
+    display_time: delivery.completed_at || delivery.delivered_at || delivery.created_at || '',
+    status_text: statusMeta.text,
+    status_theme: statusMeta.theme
+  }
 }
 
 Page({
@@ -22,7 +63,7 @@ Page({
     loadingMore: false,
     errorMessage: '',
     loadMoreError: '',
-    deliveries: [] as Delivery[],
+    deliveries: [] as DeliveryHistoryView[],
     pageID: 1,
     hasMore: true,
     
@@ -51,13 +92,14 @@ Page({
             }
         })) as DeliveryHistoryResponse
         
-        const list = resp.deliveries || []
+        const list = (resp.deliveries || []).map(decorateHistoryDelivery)
+        const total = resp.total || 0
         this.setData({
             deliveries: reset ? list : [...this.data.deliveries, ...list],
-            hasMore: list.length === PAGE_SIZE,
+          hasMore: page * PAGE_SIZE < total,
             totalEarnings: resp.total_earnings || 0,
-            totalCount: resp.total || 0,
-            pageID: page,
+          totalCount: resp.completed_total || 0,
+          pageID: resp.page_id || page,
             errorMessage: '',
             loadMoreError: ''
         })

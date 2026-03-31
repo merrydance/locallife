@@ -25,6 +25,11 @@ WHERE rider_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3;
 
+-- name: CountRiderDeposits :one
+SELECT COUNT(*)::bigint
+FROM rider_deposits
+WHERE rider_id = $1;
+
 -- name: ListRiderDepositsByType :many
 SELECT * FROM rider_deposits
 WHERE rider_id = $1 AND type = $2

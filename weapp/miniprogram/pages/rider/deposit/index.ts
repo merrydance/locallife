@@ -12,6 +12,15 @@ interface DepositRecord {
     remark?: string
 }
 
+interface DepositRecordView extends DepositRecord {
+    display_type_text: string
+    display_remark?: string
+    display_time: string
+    icon_name: 'add-circle' | 'remove-circle'
+    status_text: string
+    status_theme: 'primary' | 'success' | 'warning' | 'default'
+}
+
 interface AmountInputDetail {
     value: string
 }
@@ -52,6 +61,136 @@ const transactionAmountSignMap: Record<string, 1 | -1> = {
     withdraw: -1
 }
 
+function getTransactionSign(type: string): 1 | -1 | 0 {
+    return transactionAmountSignMap[type] || 0
+}
+
+function formatFenToYuan(amount: number): string {
+    return `¥${(Math.max(amount, 0) / 100).toFixed(2)}`
+}
+
+function formatFenValue(amount: number): string {
+    return (Math.max(amount, 0) / 100).toFixed(2)
+}
+
+function formatTransactionTime(timeText?: string): string {
+    if (!timeText) {
+        return '--'
+    }
+
+    const date = new Date(timeText)
+    if (Number.isNaN(date.getTime())) {
+        return timeText
+    }
+
+    return `${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')} ${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`
+}
+
+function buildWithdrawHint(availableDeposit: number, deliveryFrozenDeposit: number, withdrawalProcessingAmount: number): {
+    canWithdraw: boolean
+    withdrawHint: string
+} {
+    if (withdrawalProcessingAmount > 0 && deliveryFrozenDeposit > 0) {
+        return {
+            canWithdraw: false,
+            withdrawHint: `当前有 ${formatFenToYuan(deliveryFrozenDeposit)} 配送冻结，另有 ${formatFenToYuan(withdrawalProcessingAmount)} 提现处理中，暂不可再次提现`
+        }
+    }
+
+    if (withdrawalProcessingAmount > 0) {
+        return {
+            canWithdraw: false,
+            withdrawHint: `当前有 ${formatFenToYuan(withdrawalProcessingAmount)} 正在提现处理中，到账前暂不可再次提现`
+        }
+    }
+
+    if (deliveryFrozenDeposit > 0) {
+        return {
+            canWithdraw: false,
+            withdrawHint: `当前有 ${formatFenToYuan(deliveryFrozenDeposit)} 配送冻结，待订单完成或取消后可提现`
+        }
+    }
+
+    if (availableDeposit >= 100) {
+        return {
+            canWithdraw: true,
+            withdrawHint: `当前可提现 ${formatFenToYuan(availableDeposit)}，提现将退回至微信零钱`
+        }
+    }
+
+    return {
+        canWithdraw: false,
+        withdrawHint: `当前可提现 ${formatFenToYuan(availableDeposit)}，至少需满 ¥1.00 才能提现`
+    }
+}
+
+function decorateDepositRecord(record: DepositRecord): DepositRecordView {
+    const remark = record.remark || ''
+    let displayTypeText = transactionTypeTextMap[record.type] || '账单变动'
+    let displayRemark = remark
+    let statusText = '已完成'
+    let statusTheme: DepositRecordView['status_theme'] = 'default'
+
+    if (record.type === 'freeze') {
+        if (remark === '接单冻结押金') {
+            displayTypeText = '配送冻结'
+            displayRemark = '订单配送中，押金暂时冻结。'
+            statusText = '冻结中'
+            statusTheme = 'warning'
+        } else if (remark === '押金提现冻结') {
+            displayTypeText = '提现处理中'
+            displayRemark = '提现申请处理中，到账前金额暂不可用。'
+            statusText = '处理中'
+            statusTheme = 'warning'
+        }
+    }
+
+    if (record.type === 'unfreeze') {
+        if (remark === '配送完成解冻押金') {
+            displayTypeText = '配送解冻'
+            displayRemark = '订单已完成，配送冻结已释放。'
+            statusText = '已释放'
+            statusTheme = 'success'
+        } else if (remark === '订单取消解冻押金') {
+            displayTypeText = '取消退回'
+            displayRemark = '订单取消后，配送冻结已退回可用押金。'
+            statusText = '已退回'
+            statusTheme = 'success'
+        } else if (remark === '押金退款失败解冻') {
+            displayTypeText = '提现退回'
+            displayRemark = '提现未成功，金额已退回可用押金。'
+            statusText = '已退回'
+            statusTheme = 'default'
+        }
+    }
+
+    if (record.type === 'withdraw' && remark === '押金退款提现成功') {
+        displayTypeText = '提现完成'
+        displayRemark = '提现已退回微信零钱。'
+        statusText = '已到账'
+        statusTheme = 'success'
+    }
+
+    if ((record.type === 'deposit' || record.type === 'recharge') && remark === '微信支付充值') {
+        displayRemark = '已通过微信支付完成押金充值。'
+        statusText = '已充值'
+        statusTheme = 'primary'
+    }
+
+    const sign = getTransactionSign(record.type)
+    const iconName = sign === 1 ? 'add-circle' : 'remove-circle'
+
+    return {
+        ...record,
+        display_type_text: displayTypeText,
+        display_remark: displayRemark || undefined,
+        display_time: formatTransactionTime(record.created_at),
+        icon_name: iconName
+        ,status_text: statusText,
+        status_theme: statusTheme
+    }
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -64,12 +203,14 @@ Page({
     // 账户余额数据
     totalDeposit: 0,
     frozenDeposit: 0,
+    deliveryFrozenDeposit: 0,
+    withdrawalProcessingAmount: 0,
     availableDeposit: 0,
         canWithdraw: false,
         withdrawHint: '可提现金额需至少 1.00 元',
     
     // 提现/充值 状态
-    transactions: [] as DepositRecord[],
+    transactions: [] as DepositRecordView[],
     pageID: 1,
     hasMore: true,
     
@@ -104,16 +245,12 @@ Page({
     }
   },
 
-    updateWithdrawState(availableDeposit: number, frozenDeposit: number) {
-        let canWithdraw = false
-        let withdrawHint = '可提现金额需至少 1.00 元'
-
-        if (frozenDeposit > 0) {
-            withdrawHint = '存在冻结押金时暂不可提现'
-        } else if (availableDeposit >= 100) {
-            canWithdraw = true
-            withdrawHint = '提现将退回至微信零钱，如有进行中配送会被拦截'
-        }
+    updateWithdrawState(availableDeposit: number, deliveryFrozenDeposit: number, withdrawalProcessingAmount: number) {
+        const { canWithdraw, withdrawHint } = buildWithdrawHint(
+            availableDeposit,
+            deliveryFrozenDeposit,
+            withdrawalProcessingAmount
+        )
 
         this.setData({ canWithdraw, withdrawHint })
     },
@@ -121,13 +258,19 @@ Page({
     async refreshAccount() {
     try {
             const balance = await RiderService.getDepositBalance()
+            const withdrawalProcessingAmount = balance.withdrawal_processing_amount || 0
+            const deliveryFrozenDeposit = typeof balance.delivery_frozen_deposit === 'number'
+                ? balance.delivery_frozen_deposit
+                : Math.max((balance.frozen_deposit || 0) - withdrawalProcessingAmount, 0)
             this.setData({
                 totalDeposit: balance.total_deposit,
                 frozenDeposit: balance.frozen_deposit,
+                deliveryFrozenDeposit,
+                withdrawalProcessingAmount,
                 availableDeposit: balance.available_deposit,
                 accountError: ''
             })
-            this.updateWithdrawState(balance.available_deposit, balance.frozen_deposit)
+            this.updateWithdrawState(balance.available_deposit, deliveryFrozenDeposit, withdrawalProcessingAmount)
         } catch (err: unknown) {
             logger.error('Fetch deposit balance failed', err)
             const userMessage = (err as UserMessageError).userMessage
@@ -140,10 +283,12 @@ Page({
         this.setData({ loadingMore: !reset && page > 1 })
         try {
             const resp = await RiderService.listDepositRecords({ page, limit: 20 })
-            const list = resp.deposits || []
+            const list = (resp.deposits || []).map((item) => decorateDepositRecord(item))
+            const pageSize = resp.page_size || 20
+            const total = typeof resp.total === 'number' ? resp.total : 0
             this.setData({
                 transactions: reset ? list : [...this.data.transactions, ...list],
-                hasMore: list.length >= (resp.page_size || 20),
+                hasMore: page * pageSize < total,
                 pageID: resp.page_id || page,
                 listError: ''
             })
@@ -312,12 +457,12 @@ Page({
         this.loadTransactions(1, true)
     },
 
-    getTransactionTypeText(type: string): string {
-        return transactionTypeTextMap[type] || '账单变动'
+    formatBalanceAmount(amount: number): string {
+        return formatFenValue(amount)
     },
 
     formatTransactionAmount(amount: number, type: string): string {
-        const sign = transactionAmountSignMap[type]
+        const sign = getTransactionSign(type)
         if (sign === 1) {
             return `+${(Math.abs(amount) / 100).toFixed(2)}`
         }
@@ -330,7 +475,7 @@ Page({
     },
 
     getTransactionAmountClass(amount: number, type: string): string {
-        const sign = transactionAmountSignMap[type]
+        const sign = getTransactionSign(type)
         if (sign === 1) return 'positive'
         if (sign === -1) return 'negative'
         return amount >= 0 ? 'positive' : 'negative'

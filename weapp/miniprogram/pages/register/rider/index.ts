@@ -4,7 +4,6 @@ import {
   ocrRiderIdCard, 
   ocrRiderHealthCert, 
   submitRiderApplication,
-  resetRiderApplication,
   deleteRiderApplicationDocument,
   type RiderApplicationResponse
 } from '../../../api/rider-application'
@@ -96,6 +95,11 @@ function pickOCRText(payload: Record<string, unknown> | undefined, ...keys: stri
   return ''
 }
 
+function isRejectedRiderApplication(res?: RiderApplicationResponse): boolean {
+  if (!res) return false
+  return (res.status === 'draft' || res.status === 'rejected') && Boolean(res.reject_reason)
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -142,26 +146,14 @@ Page({
       if (res) {
         this.mapResponseToData(res)
         
-        // 如果已被拒绝，自动重置或提示
         if (res.status === 'submitted') {
           this.setData({ currentStep: 4, isSubmitting: true })
           wx.showToast({ title: '申请审核中', icon: 'none' })
-        } else if (res.status === 'rejected') {
-          wx.showModal({
-            title: '申请未通过',
-            content: `驳回原因：${res.reject_reason || '资料不全'}. 是否修改重试？`,
-            success: async (modalRes) => {
-              if (modalRes.confirm) {
-                const refreshed = await resetRiderApplication()
-                this.mapResponseToData(refreshed)
-              } else {
-                wx.navigateBack()
-              }
-            }
-          })
         } else if (res.status === 'approved') {
           wx.showToast({ title: '您已入驻成功' })
           setTimeout(() => wx.reLaunch({ url: '/pages/rider/dashboard/index' }), 1000)
+        } else if (isRejectedRiderApplication(res)) {
+          this.showRejectedApplicationModal(res)
         }
       }
     } catch (e) {
@@ -184,6 +176,7 @@ Page({
       'formData.healthCertNo': pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate') || currentForm.healthCertNo || '',
       'formData.healthCertDate': pickOCRText(healthCertOCR, 'valid_end', 'valid_date', 'valid_period') || currentForm.healthCertDate || '',
       phoneError: nextPhone.trim() ? '' : this.data.phoneError,
+      currentStep: res.status === 'submitted' ? 4 : this.data.currentStep,
       applicationStatus: res.status,
       isSubmitting: res.status === 'submitted',
       idFront: { url: '', assetId: res.id_card_front_asset_id },
@@ -193,6 +186,21 @@ Page({
       uploadFeedback: this.buildRiderUploadFeedback(res)
     }, () => {
       void this.refreshUploadPreviewURLs()
+    })
+  },
+
+  showRejectedApplicationModal(res: RiderApplicationResponse) {
+    this.setData({ currentStep: 1, isSubmitting: false, applicationStatus: 'draft' })
+    wx.showModal({
+      title: '申请未通过',
+      content: res.reject_reason || '资料核验未通过，请修改后重新提交。',
+      confirmText: '修改资料',
+      cancelText: '返回',
+      success: (modalRes) => {
+        if (!modalRes.confirm) {
+          wx.navigateBack()
+        }
+      }
     })
   },
 
@@ -310,10 +318,12 @@ Page({
       pickOCRText(healthCertOCR, 'status') === 'done'
       || pickOCRText(healthCertOCR, 'cert_number', 'certificate_number', 'certificate', 'valid_end', 'valid_date', 'valid_period', 'name')
     )
+    const identityFailed = pickOCRText(idCardOCR, 'status') === 'failed'
+    const healthFailed = pickOCRText(healthCertOCR, 'status') === 'failed'
 
     return {
-      identity: identityDone ? 'done' : identityUploaded ? 'processing' : 'idle',
-      health: healthDone ? 'done' : healthUploaded ? 'processing' : 'idle'
+      identity: identityFailed ? 'failed' : identityDone ? 'done' : identityUploaded ? 'processing' : 'idle',
+      health: healthFailed ? 'failed' : healthDone ? 'done' : healthUploaded ? 'processing' : 'idle'
     }
   },
 
@@ -630,21 +640,12 @@ Page({
             showCancel: false,
             success: () => wx.reLaunch({ url: '/pages/rider/dashboard/index' })
           })
-        } else if (res.status === 'rejected') {
-          wx.showModal({
-            title: '审核未通过',
-            content: res.reject_reason || '资料核验不匹配',
-            confirmText: '修改资料',
-            success: async (m) => {
-              if (m.confirm) {
-                const draft = await resetRiderApplication()
-                this.mapResponseToData(draft)
-                this.setData({ currentStep: 1, isSubmitting: false })
-              } else {
-                wx.navigateBack()
-              }
-            }
-          })
+        } else if (isRejectedRiderApplication(res)) {
+          this.mapResponseToData(res)
+          this.showRejectedApplicationModal(res)
+        } else if (res.status === 'submitted') {
+          this.setData({ isSubmitting: true, currentStep: 4 })
+          wx.showToast({ title: '申请审核中', icon: 'none' })
         }
       }, 1500)
     } catch (e: unknown) {

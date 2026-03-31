@@ -870,6 +870,9 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 		if c.AppealStatus.Valid {
 			response[i].AppealStatus = &c.AppealStatus.String
 		}
+		if c.RecoveryStatus != "" {
+			response[i].RecoveryStatus = &c.RecoveryStatus
+		}
 	}
 
 	ctx.JSON(http.StatusOK, merchantClaimsListResponse{Claims: response, Total: total, PageID: req.PageID, PageSize: req.PageSize})
@@ -948,6 +951,9 @@ func (server *Server) getRiderClaimDetail(ctx *gin.Context) {
 			n := claim.AppealReviewNotes.String
 			rsp.AppealReviewNotes = &n
 		}
+	}
+	if claim.RecoveryStatus != "" {
+		rsp.RecoveryStatus = &claim.RecoveryStatus
 	}
 
 	ctx.JSON(http.StatusOK, rsp)

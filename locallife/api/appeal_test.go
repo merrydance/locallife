@@ -1761,18 +1761,19 @@ func TestListRiderClaimsAPI(t *testing.T) {
 	rider := randomAppealRider(user.ID, region.ID)
 
 	claim := db.ListRiderClaimsForRiderRow{
-		ID:          1,
-		OrderID:     100,
-		UserID:      200,
-		ClaimType:   "delay",
-		Description: "配送延迟",
-		ClaimAmount: 300,
-		Status:      "approved",
-		OrderNo:     "20240101120000123456",
-		OrderAmount: 3000,
-		UserPhone:   pgtype.Text{String: "13800138000", Valid: true},
-		UserName:    "张三",
-		CreatedAt:   time.Now(),
+		ID:             1,
+		OrderID:        100,
+		UserID:         200,
+		ClaimType:      "delay",
+		Description:    "配送延迟",
+		ClaimAmount:    300,
+		Status:         "approved",
+		RecoveryStatus: "pending",
+		OrderNo:        "20240101120000123456",
+		OrderAmount:    3000,
+		UserPhone:      pgtype.Text{String: "13800138000", Valid: true},
+		UserName:       "张三",
+		CreatedAt:      time.Now(),
 	}
 
 	testCases := []struct {
@@ -1806,6 +1807,12 @@ func TestListRiderClaimsAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response merchantClaimsListResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Len(t, response.Claims, 1)
+				require.NotNil(t, response.Claims[0].RecoveryStatus)
+				require.Equal(t, claim.RecoveryStatus, *response.Claims[0].RecoveryStatus)
 			},
 		},
 		{

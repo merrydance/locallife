@@ -45,9 +45,14 @@ export interface Delivery {
     estimated_delivery_at?: string
     picked_at?: string
     delivered_at?: string
+    completed_at?: string
     created_at?: string
     assigned_at?: string
     notes?: string
+    items?: Array<{
+        name: string
+        quantity: number
+    }>
 }
 
 export class DeliveryService {

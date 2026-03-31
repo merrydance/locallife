@@ -70,6 +70,23 @@ func (q *Queries) CreateRefundOrder(ctx context.Context, arg CreateRefundOrderPa
 	return i, err
 }
 
+const getPendingRiderDepositRefundAmountByUserID = `-- name: GetPendingRiderDepositRefundAmountByUserID :one
+SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_rider_deposit_refund_amount
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE po.user_id = $1
+    AND po.business_type = 'rider_deposit'
+    AND ro.refund_type = 'rider_deposit'
+    AND ro.status IN ('pending', 'processing')
+`
+
+func (q *Queries) GetPendingRiderDepositRefundAmountByUserID(ctx context.Context, userID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, getPendingRiderDepositRefundAmountByUserID, userID)
+	var pending_rider_deposit_refund_amount int64
+	err := row.Scan(&pending_rider_deposit_refund_amount)
+	return pending_rider_deposit_refund_amount, err
+}
+
 const getRefundOrder = `-- name: GetRefundOrder :one
 SELECT id, payment_order_id, refund_type, refund_amount, refund_reason, out_refund_no, refund_id, platform_refund, operator_refund, merchant_refund, status, refunded_at, created_at FROM refund_orders
 WHERE id = $1 LIMIT 1

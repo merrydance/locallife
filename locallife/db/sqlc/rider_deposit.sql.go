@@ -11,6 +11,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const countRiderDeposits = `-- name: CountRiderDeposits :one
+SELECT COUNT(*)::bigint
+FROM rider_deposits
+WHERE rider_id = $1
+`
+
+func (q *Queries) CountRiderDeposits(ctx context.Context, riderID int64) (int64, error) {
+	row := q.db.QueryRow(ctx, countRiderDeposits, riderID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createRiderDeposit = `-- name: CreateRiderDeposit :one
 INSERT INTO rider_deposits (
     rider_id,

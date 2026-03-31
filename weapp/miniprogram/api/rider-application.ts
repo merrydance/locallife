@@ -15,6 +15,11 @@ export interface RiderApplicationResponse {
   id_card_ocr?: {
     status?: 'pending' | 'processing' | 'done' | 'failed'
     error?: string
+    error_code?: string
+    alert_emitted_at?: string
+    queued_at?: string
+    started_at?: string
+    ocr_job_id?: number
     name?: string
     id_number?: string
     gender?: string
@@ -28,6 +33,11 @@ export interface RiderApplicationResponse {
   health_cert_ocr?: {
     status?: 'pending' | 'processing' | 'done' | 'failed'
     error?: string
+    error_code?: string
+    alert_emitted_at?: string
+    queued_at?: string
+    started_at?: string
+    ocr_job_id?: number
     name?: string
     id_number?: string
     cert_number?: string

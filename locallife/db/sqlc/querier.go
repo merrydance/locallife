@@ -223,6 +223,7 @@ type Querier interface {
 	// 统计骑手在指定时间窗口内的餐损索赔次数
 	CountRiderDamageClaims(ctx context.Context, arg CountRiderDamageClaimsParams) (int64, error)
 	CountRiderDeliveries(ctx context.Context, riderID pgtype.Int8) (int64, error)
+	CountRiderDeposits(ctx context.Context, riderID int64) (int64, error)
 	CountRiderLocations(ctx context.Context, riderID int64) (int64, error)
 	// 统计骑手高值单资格积分变更历史数量
 	CountRiderPremiumScoreLogs(ctx context.Context, riderID int64) (int64, error)
@@ -859,6 +860,7 @@ type Querier interface {
 	// 检查区域是否有待审核或已通过的申请（用于区域独占检查）
 	GetPendingOperatorApplicationByRegion(ctx context.Context, regionID int64) (OperatorApplication, error)
 	GetPendingPaymentOrderByUserAndBusinessType(ctx context.Context, arg GetPendingPaymentOrderByUserAndBusinessTypeParams) (PaymentOrder, error)
+	GetPendingRiderDepositRefundAmountByUserID(ctx context.Context, userID int64) (int64, error)
 	GetPendingUploadSessionByIdempotencyKey(ctx context.Context, arg GetPendingUploadSessionByIdempotencyKeyParams) (MediaUploadSession, error)
 	GetPlatformConfig(ctx context.Context, arg GetPlatformConfigParams) (PlatformConfig, error)
 	// 平台日统计

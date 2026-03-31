@@ -3,7 +3,8 @@ import {
   appealManagementService,
   claimManagementService,
   ClaimResponse,
-  CreateAppealRequest
+  CreateAppealRequest,
+  MerchantClaimDecisionResponse
 } from '../../../api/appeals-customer-service'
 import { invokeWechatPay } from '../../../api/payment'
 import { getStableBarHeights } from '../../../utils/responsive'
@@ -42,6 +43,36 @@ interface UserMessageError {
   userMessage?: string
 }
 
+function formatResponsibleParty(party?: string) {
+  const map: Record<string, string> = {
+    rider: '骑手承担',
+    merchant: '商户承担',
+    platform: '平台承担',
+    user: '用户承担',
+    shared: '多方分摊'
+  }
+  return party ? (map[party] || party) : '暂无'
+}
+
+function formatCompensationSource(source?: string) {
+  const map: Record<string, string> = {
+    rider: '骑手追偿',
+    merchant: '商户追偿',
+    platform: '平台承担',
+    shared: '分摊承担'
+  }
+  return source ? (map[source] || source) : '暂无'
+}
+
+function formatDecisionStatus(status?: string) {
+  const map: Record<string, string> = {
+    decided: '已判定',
+    pending: '待判定',
+    waived: '已豁免'
+  }
+  return status ? (map[status] || status) : '暂无'
+}
+
 Page({
   data: {
     taskId: '',
@@ -57,7 +88,8 @@ Page({
     loading: false,
     submitting: false,
     errorMessage: '',
-    recoveryPaying: {} as Record<number, boolean>
+    recoveryPaying: {} as Record<number, boolean>,
+    decisionLoading: {} as Record<number, boolean>
   },
 
   onLoad(options: RiderClaimsOptions) {
@@ -221,6 +253,50 @@ Page({
 
   onDescChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
     this.setData({ 'form.description': e.detail.value })
+  },
+
+  async onViewDecision(e: WechatMiniprogram.TouchEvent) {
+    const claimId = Number(e.currentTarget.dataset.claimId)
+    if (!claimId || this.data.decisionLoading[claimId]) {
+      return
+    }
+
+    this.setData({ decisionLoading: { ...this.data.decisionLoading, [claimId]: true } })
+    wx.showLoading({ title: '加载中...' })
+    try {
+      const result = await claimManagementService.getRiderClaimDecision(claimId)
+      const decision: MerchantClaimDecisionResponse['decision'] = result.decision
+
+      if (!decision) {
+        wx.showModal({
+          title: '判定依据',
+          content: '当前索赔单还没有可展示的责任判定信息。',
+          showCancel: false
+        })
+        return
+      }
+
+      const content = [
+        `判定状态：${formatDecisionStatus(decision.decision_status)}`,
+        `责任归属：${formatResponsibleParty(decision.responsible_party)}`,
+        `赔付来源：${formatCompensationSource(decision.compensation_source)}`,
+        `原因码：${decision.reason_codes?.length ? decision.reason_codes.join('、') : '无'}`,
+        decision.trace_summary ? `判定摘要：${decision.trace_summary}` : ''
+      ].filter(Boolean).join('\n')
+
+      wx.showModal({
+        title: '判定依据',
+        content,
+        showCancel: false
+      })
+    } catch (error: unknown) {
+      const userMessage = (error as UserMessageError).userMessage
+      const message = typeof userMessage === 'string' && userMessage ? userMessage : '判定依据加载失败'
+      wx.showToast({ title: message, icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ decisionLoading: { ...this.data.decisionLoading, [claimId]: false } })
+    }
   },
 
   async onPayRecovery(e: WechatMiniprogram.CustomEvent) {

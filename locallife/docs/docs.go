@@ -16766,7 +16766,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "更新运营商规则配置，支持运费参数与天气系数；抽成/保证金/货值费率为平台维护只读项",
+                "description": "更新运营商规则配置，支持运费参数、天气系数与骑手押金；抽成、商户保证金与货值费率为平台维护只读项",
                 "consumes": [
                     "application/json"
                 ],
@@ -16780,7 +16780,7 @@ const docTemplate = `{
                 "parameters": [
                     {
                         "type": "string",
-                        "description": "规则Key (BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO, WEATHER_COEFF_EXTREME, WEATHER_COEFF_HEAVY, WEATHER_COEFF_MODERATE, WEATHER_COEFF_LIGHT)",
+                        "description": "规则Key (RIDER_DEPOSIT, BASE_DELIVERY_FEE, BASE_DISTANCE, EXTRA_FEE_PER_KM, MIN_DELIVERY_FEE, MAX_DELIVERY_FEE, DELIVERY_VALUE_RATIO, WEATHER_COEFF_EXTREME, WEATHER_COEFF_HEAVY, WEATHER_COEFF_MODERATE, WEATHER_COEFF_LIGHT)",
                         "name": "key",
                         "in": "path",
                         "required": true
@@ -30825,12 +30825,20 @@ const docTemplate = `{
                     "description": "可用押金",
                     "type": "integer"
                 },
+                "delivery_frozen_deposit": {
+                    "description": "配送冻结",
+                    "type": "integer"
+                },
                 "frozen_deposit": {
-                    "description": "冻结押金",
+                    "description": "冻结押金（兼容字段，等于配送冻结+提现处理中）",
                     "type": "integer"
                 },
                 "total_deposit": {
                     "description": "总押金",
+                    "type": "integer"
+                },
+                "withdrawal_processing_amount": {
+                    "description": "提现处理中",
                     "type": "integer"
                 }
             }
@@ -31977,6 +31985,9 @@ const docTemplate = `{
         "api.listMyDeliveriesResponse": {
             "type": "object",
             "properties": {
+                "completed_total": {
+                    "type": "integer"
+                },
                 "deliveries": {
                     "type": "array",
                     "items": {
@@ -31990,6 +32001,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "total": {
+                    "type": "integer"
+                },
+                "total_earnings": {
                     "type": "integer"
                 }
             }

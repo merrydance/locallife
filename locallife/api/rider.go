@@ -158,9 +158,11 @@ type depositResponse struct {
 
 // depositBalanceResponse 押金余额响应
 type depositBalanceResponse struct {
-	TotalDeposit     int64 `json:"total_deposit"`     // 总押金
-	FrozenDeposit    int64 `json:"frozen_deposit"`    // 冻结押金
-	AvailableDeposit int64 `json:"available_deposit"` // 可用押金
+	TotalDeposit               int64 `json:"total_deposit"`                // 总押金
+	FrozenDeposit              int64 `json:"frozen_deposit"`               // 冻结押金（兼容字段，等于配送冻结+提现处理中）
+	DeliveryFrozenDeposit      int64 `json:"delivery_frozen_deposit"`      // 配送冻结
+	WithdrawalProcessingAmount int64 `json:"withdrawal_processing_amount"` // 提现处理中
+	AvailableDeposit           int64 `json:"available_deposit"`            // 可用押金
 }
 
 type paginationRequest struct {
@@ -422,10 +424,23 @@ func (server *Server) getRiderDepositBalance(ctx *gin.Context) {
 		return
 	}
 
+	withdrawalProcessingAmount, err := server.store.GetPendingRiderDepositRefundAmountByUserID(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	deliveryFrozenDeposit := rider.FrozenDeposit - withdrawalProcessingAmount
+	if deliveryFrozenDeposit < 0 {
+		deliveryFrozenDeposit = 0
+	}
+
 	response := depositBalanceResponse{
-		TotalDeposit:     rider.DepositAmount,
-		FrozenDeposit:    rider.FrozenDeposit,
-		AvailableDeposit: rider.DepositAmount - rider.FrozenDeposit,
+		TotalDeposit:               rider.DepositAmount,
+		FrozenDeposit:              rider.FrozenDeposit,
+		DeliveryFrozenDeposit:      deliveryFrozenDeposit,
+		WithdrawalProcessingAmount: withdrawalProcessingAmount,
+		AvailableDeposit:           rider.DepositAmount - rider.FrozenDeposit,
 	}
 
 	ctx.JSON(http.StatusOK, response)
@@ -490,6 +505,12 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 		return
 	}
 
+	totalCount, err := server.store.CountRiderDeposits(ctx, rider.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	// 确保返回空数组而非 null
 	response := make([]depositResponse, 0, len(deposits))
 	for _, d := range deposits {
@@ -498,7 +519,7 @@ func (server *Server) listRiderDeposits(ctx *gin.Context) {
 
 	ctx.JSON(http.StatusOK, listRiderDepositsResponse{
 		Deposits: response,
-		Total:    int64(len(response)),
+		Total:    totalCount,
 		PageID:   req.Page,
 		PageSize: req.Limit,
 	})

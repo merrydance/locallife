@@ -251,12 +251,20 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     a.id AS appeal_id,
-    a.status AS appeal_status
+  a.status AS appeal_status,
+  cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE d.rider_id = $1
   AND c.status IN ('approved', 'auto-approved')
 ORDER BY c.created_at DESC
@@ -283,12 +291,20 @@ SELECT
     a.id AS appeal_id,
     a.status AS appeal_status,
     a.reason AS appeal_reason,
-    a.review_notes AS appeal_review_notes
+  a.review_notes AS appeal_review_notes,
+  cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE c.id = $1
   AND d.rider_id = $2
 LIMIT 1;

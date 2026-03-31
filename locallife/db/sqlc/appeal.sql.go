@@ -856,12 +856,20 @@ SELECT
     a.id AS appeal_id,
     a.status AS appeal_status,
     a.reason AS appeal_reason,
-    a.review_notes AS appeal_review_notes
+  a.review_notes AS appeal_review_notes,
+  cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE c.id = $1
   AND d.rider_id = $2
 LIMIT 1
@@ -902,6 +910,7 @@ type GetRiderClaimDetailForRiderRow struct {
 	AppealStatus       pgtype.Text        `json:"appeal_status"`
 	AppealReason       pgtype.Text        `json:"appeal_reason"`
 	AppealReviewNotes  pgtype.Text        `json:"appeal_review_notes"`
+	RecoveryStatus     string             `json:"recovery_status"`
 }
 
 // 骑手查看索赔详情
@@ -938,6 +947,7 @@ func (q *Queries) GetRiderClaimDetailForRider(ctx context.Context, arg GetRiderC
 		&i.AppealStatus,
 		&i.AppealReason,
 		&i.AppealReviewNotes,
+		&i.RecoveryStatus,
 	)
 	return i, err
 }
@@ -1363,12 +1373,20 @@ SELECT
     u.phone AS user_phone,
     u.full_name AS user_name,
     a.id AS appeal_id,
-    a.status AS appeal_status
+  a.status AS appeal_status,
+  cr.status AS recovery_status
 FROM claims c
 JOIN orders o ON c.order_id = o.id
 JOIN deliveries d ON d.order_id = o.id
 JOIN users u ON c.user_id = u.id
 LEFT JOIN appeals a ON a.claim_id = c.id AND a.appellant_type = 'rider'
+LEFT JOIN LATERAL (
+  SELECT status
+  FROM claim_recoveries
+  WHERE claim_id = c.id
+  ORDER BY id DESC
+  LIMIT 1
+) cr ON TRUE
 WHERE d.rider_id = $1
   AND c.status IN ('approved', 'auto-approved')
 ORDER BY c.created_at DESC
@@ -1408,6 +1426,7 @@ type ListRiderClaimsForRiderRow struct {
 	UserName           string             `json:"user_name"`
 	AppealID           pgtype.Int8        `json:"appeal_id"`
 	AppealStatus       pgtype.Text        `json:"appeal_status"`
+	RecoveryStatus     string             `json:"recovery_status"`
 }
 
 // 骑手查看收到的索赔列表（通过配送单关联）
@@ -1447,6 +1466,7 @@ func (q *Queries) ListRiderClaimsForRider(ctx context.Context, arg ListRiderClai
 			&i.UserName,
 			&i.AppealID,
 			&i.AppealStatus,
+			&i.RecoveryStatus,
 		); err != nil {
 			return nil, err
 		}

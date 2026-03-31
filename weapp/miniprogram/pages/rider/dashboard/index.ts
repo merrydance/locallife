@@ -9,6 +9,7 @@ import { networkMonitor } from '../../../utils/network-monitor'
 import { request } from '../../../utils/request'
 
 const MAX_GRAB_DISTANCE = 5000 // 最大抢单距离 5km
+const DEPOSIT_BLOCK_REASON_PATTERN = /押金不足/
 
 let runtimeNetworkUnsubscribe: null | (() => void) = null
 
@@ -54,6 +55,9 @@ Page({
     initError: '',
     loadError: '',
     isRefresherTriggered: false,
+    statusText: '休息中 - 点击上线',
+    showDepositReminder: false,
+    depositReminderText: '',
 
     // 骑手基础信息
     riderInfo: null as RiderInfo | null,
@@ -83,7 +87,24 @@ Page({
 
   onShow() {
     this.bindNetworkMonitor()
-    this.enterOnlineRuntime().catch((err) => logger.error('Show refresh error', err))
+    if (this.data.loading) return
+
+    if (!this.data.riderInfo || !this.data.riderStatus) {
+      this.initData().catch((err) => logger.error('Show init error', err))
+      return
+    }
+
+    this.refreshRiderOverview()
+      .then((overview) => {
+        if (overview.isOnline) {
+          return this.enterOnlineRuntime()
+        }
+
+        this.cleanupWebSocket()
+        this.setData({ recommendOrders: [], activeDeliveries: [], newOrdersCount: 0, loadError: '' })
+        return undefined
+      })
+      .catch((err) => logger.error('Show refresh error', err))
   },
 
   onHide() {
@@ -130,40 +151,81 @@ Page({
   async initData() {
     this.setData({ loading: true })
     try {
-      const [info, status] = await Promise.all([
-        RiderService.getMe(),
-        RiderService.getStatus()
-      ])
-      
-      this.setData({
-        riderInfo: info,
-        riderStatus: status,
-        isOnline: status.is_online,
-        initError: '',
-        stats: {
-          todayCount: info.total_orders || 0,
-          todayEarnings: info.total_earnings || 0,
-          creditScore: info.credit_score || 0
-        }
-      })
+      const overview = await this.refreshRiderOverview()
 
-      if (status.is_online) {
+      if (overview.isOnline) {
         await this.enterOnlineRuntime()
       }
     } catch (err: unknown) {
       logger.error('Failed to init rider data', err)
       const userMessage = (err as UserMessageError).userMessage
       const message = typeof userMessage === 'string' && userMessage ? userMessage : '骑手工作台加载失败，请稍后重试'
+      const statusViewData = this.buildStatusViewData(null, null)
       this.setData({
         initError: message,
         loadError: '',
         riderInfo: null,
-        riderStatus: null,
         recommendOrders: [],
-        activeDeliveries: []
+        activeDeliveries: [],
+        ...statusViewData
       })
     } finally {
       this.setData({ loading: false })
+    }
+  },
+
+  getDepositReminderText(status: RiderStatus | null, riderInfo?: RiderInfo | null) {
+    const currentRiderInfo = riderInfo === undefined ? this.data.riderInfo : riderInfo
+
+    if (!status || status.is_online || status.can_go_online) return ''
+
+    const reason = status.online_block_reason || ''
+    if (!DEPOSIT_BLOCK_REASON_PATTERN.test(reason)) return ''
+
+    if (currentRiderInfo?.status === 'pending' || currentRiderInfo?.status === 'rejected' || currentRiderInfo?.status === 'suspended') {
+      return ''
+    }
+
+    return reason || '可用押金不足，请先补足押金后再尝试上线'
+  },
+
+  buildStatusViewData(status: RiderStatus | null, riderInfo?: RiderInfo | null) {
+    const currentRiderInfo = riderInfo === undefined ? this.data.riderInfo : riderInfo
+    const isOnline = !!status?.is_online
+    const depositReminderText = this.getDepositReminderText(status, currentRiderInfo)
+
+    return {
+      riderStatus: status,
+      isOnline,
+      statusText: isOnline ? '正在接单中' : (depositReminderText ? '暂不能上线' : '休息中 - 点击上线'),
+      showDepositReminder: !!depositReminderText,
+      depositReminderText
+    }
+  },
+
+  async refreshRiderOverview() {
+    const [info, status] = await Promise.all([
+      RiderService.getMe(),
+      RiderService.getStatus()
+    ])
+
+    const statusViewData = this.buildStatusViewData(status, info)
+
+    this.setData({
+      riderInfo: info,
+      initError: '',
+      stats: {
+        todayCount: info.total_orders || 0,
+        todayEarnings: info.total_earnings || 0,
+        creditScore: info.credit_score || 0
+      },
+      ...statusViewData
+    })
+
+    return {
+      info,
+      status,
+      ...statusViewData
     }
   },
 
@@ -366,10 +428,15 @@ Page({
           ? (latestStatus.online_block_reason || '当前无法上线')
           : (latestStatus.active_deliveries > 0 ? '有配送中的订单，无法下线' : '当前无法下线')
 
-        this.setData({
-          riderStatus: latestStatus,
-          isOnline: latestStatus.is_online
-        })
+        const statusViewData = this.buildStatusViewData(latestStatus)
+
+        this.setData(statusViewData)
+
+        if (targetOnline && statusViewData.showDepositReminder) {
+          this.showDepositBlockedModal(statusViewData.depositReminderText)
+          return
+        }
+
         wx.showToast({ title: message, icon: 'none' })
         return
       }
@@ -396,11 +463,12 @@ Page({
 
       const nextStatus = await RiderService.getStatus().catch(() => fallbackStatus)
       
-      this.setData({ 
-        isOnline: nextStatus.is_online,
+      const statusViewData = this.buildStatusViewData(nextStatus, info)
+
+      this.setData({
         riderInfo: info,
-        riderStatus: nextStatus,
-        initError: ''
+        initError: '',
+        ...statusViewData
       })
       
       if (targetOnline) {
@@ -411,7 +479,7 @@ Page({
       }
     } catch (err: unknown) {
       const fallbackStatus = this.data.riderStatus
-      this.setData({ isOnline: fallbackStatus ? fallbackStatus.is_online : !targetOnline })
+      this.setData(this.buildStatusViewData(fallbackStatus))
       const userMessage = (err as UserMessageError).userMessage
       const message = typeof userMessage === 'string' && userMessage ? userMessage : '操作失败'
       wx.showToast({ 
@@ -506,6 +574,20 @@ Page({
    */
   onGoToWallet() {
     wx.navigateTo({ url: '/pages/rider/deposit/index' })
+  },
+
+  showDepositBlockedModal(message: string) {
+    wx.showModal({
+      title: '暂时无法上线',
+      content: `${message}。请先前往押金与账单补足后，再尝试上线接单。`,
+      confirmText: '去充值',
+      cancelText: '知道了',
+      success: ({ confirm }) => {
+        if (confirm) {
+          this.onGoToWallet()
+        }
+      }
+    })
   },
 
   async enterOnlineRuntime() {

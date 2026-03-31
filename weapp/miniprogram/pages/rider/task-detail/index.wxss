@@ -164,18 +164,86 @@
   color: var(--td-text-color-secondary);
 }
 
-/* 异常入口 */
-.exception-entry {
+/* 支持动作 */
+.support-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.support-entry {
   display: flex;
   align-items: center;
   justify-content: center;
   padding: var(--spacer-md);
+  background: #FFFFFF;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
   color: var(--td-text-color-placeholder);
   font-size: var(--font-size-sm);
 }
 
-.exception-entry t-icon {
+.support-entry t-icon {
   margin-right: 12rpx;
+}
+
+.delay-sheet {
+  padding: 32rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+  background: #FFFFFF;
+  border-radius: 32rpx 32rpx 0 0;
+}
+
+.delay-sheet-title {
+  display: block;
+  font-size: var(--font-size-heading);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.delay-sheet-desc {
+  display: block;
+  margin-top: 12rpx;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.delay-group {
+  margin-top: 24rpx;
+}
+
+.delay-label {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: var(--font-size-sm);
+  font-weight: 500;
+  color: var(--td-text-color-primary);
+}
+
+.delay-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.delay-chip {
+  padding: 14rpx 24rpx;
+  border-radius: 999rpx;
+  background: #f3f4f6;
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-sm);
+}
+
+.delay-chip.is-active {
+  background: var(--td-brand-color-light);
+  color: var(--td-brand-color);
+}
+
+.delay-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 16rpx;
+  margin-top: 32rpx;
 }
 
 /* 商品清单 */
