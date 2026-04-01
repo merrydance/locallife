@@ -568,7 +568,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 
 	// 验证是否为商户
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(ErrNotMerchant))
 		return

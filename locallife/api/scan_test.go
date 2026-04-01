@@ -706,6 +706,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
 				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+
+				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Eq(int64(9999))).
 					Times(1).
 					Return(db.Table{}, db.ErrRecordNotFound)
@@ -725,11 +730,6 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
-				store.EXPECT().
-					GetTable(gomock.Any(), gomock.Eq(table.ID)).
-					Times(1).
-					Return(table, nil)
-
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
@@ -778,7 +778,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
-				// No calls expected
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				wechatClient.EXPECT().
 					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -794,6 +798,11 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+
 				store.EXPECT().
 					GetTable(gomock.Any(), gomock.Any()).
 					Times(1).

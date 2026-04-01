@@ -378,7 +378,7 @@ func MerchantCreateReservation(ctx context.Context, store db.Store, input Mercha
 
 // ConfirmReservation confirms a paid reservation as merchant.
 func ConfirmReservation(ctx context.Context, store db.Store, userID, reservationID int64) (ReservationStatusUpdateResult, error) {
-	merchant, err := store.GetMerchantByOwner(ctx, userID)
+	merchant, err := resolveMerchantForUser(ctx, store, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return ReservationStatusUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("not a merchant"))
@@ -421,7 +421,7 @@ func ConfirmReservation(ctx context.Context, store db.Store, userID, reservation
 
 // CompleteReservation marks a reservation as completed and releases the table.
 func CompleteReservation(ctx context.Context, store db.Store, userID, reservationID int64) (ReservationStatusUpdateResult, error) {
-	merchant, err := store.GetMerchantByOwner(ctx, userID)
+	merchant, err := resolveMerchantForUser(ctx, store, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return ReservationStatusUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("not a merchant"))
@@ -483,7 +483,7 @@ func CancelReservation(
 	isOwner := reservation.UserID == userID
 	isMerchant := false
 	if !isOwner {
-		merchant, err := store.GetMerchantByOwner(ctx, userID)
+		merchant, err := resolveMerchantForUser(ctx, store, userID)
 		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 			return ReservationStatusUpdateResult{}, err
 		}
@@ -610,7 +610,7 @@ func CancelReservation(
 
 // MarkReservationNoShow marks a reservation as no-show and releases inventory.
 func MarkReservationNoShow(ctx context.Context, store db.Store, userID, reservationID int64) (ReservationStatusUpdateResult, error) {
-	merchant, err := store.GetMerchantByOwner(ctx, userID)
+	merchant, err := resolveMerchantForUser(ctx, store, userID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return ReservationStatusUpdateResult{}, NewRequestError(http.StatusForbidden, errors.New("not a merchant"))
@@ -669,7 +669,7 @@ func CheckInReservation(ctx context.Context, store db.Store, userID, reservation
 	isOwner := reservation.UserID == userID
 	isMerchant := false
 	if !isOwner {
-		merchant, err := store.GetMerchantByOwner(ctx, userID)
+		merchant, err := resolveMerchantForUser(ctx, store, userID)
 		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 			return ReservationStatusUpdateResult{}, err
 		}
@@ -733,7 +733,7 @@ func StartCookingReservation(ctx context.Context, store db.Store, userID, reserv
 	isOwner := reservation.UserID == userID
 	isMerchant := false
 	if !isOwner {
-		merchant, err := store.GetMerchantByOwner(ctx, userID)
+		merchant, err := resolveMerchantForUser(ctx, store, userID)
 		if err != nil && !errors.Is(err, db.ErrRecordNotFound) {
 			return ReservationStatusUpdateResult{}, err
 		}

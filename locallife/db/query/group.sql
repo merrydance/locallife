@@ -173,14 +173,14 @@ SET status = $2,
 WHERE id = $1
 RETURNING *;
 
--- Merchant binding
--- name: UpdateMerchantGroupBinding :exec
+-- Merchant affiliation
+-- name: UpdateMerchantGroupAffiliation :exec
 UPDATE merchants
 SET group_id = $2, brand_id = $3, updated_at = now()
 WHERE id = $1
 ;
 
--- name: GetMerchantGroupBinding :one
+-- name: GetMerchantGroupAffiliation :one
 SELECT group_id, brand_id FROM merchants WHERE id = $1;
 
 -- Group policies

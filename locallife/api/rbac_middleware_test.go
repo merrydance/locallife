@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -582,6 +583,185 @@ func TestMerchantOwnerMiddleware(t *testing.T) {
 			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestMerchantOwnerOnlyMiddleware(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          util.RandomInt(1, 100),
+		OwnerUserID: user.ID,
+		Name:        "Test Merchant",
+		Status:      "pending",
+		RegionID:    1,
+	}
+
+	testCases := []struct {
+		name          string
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OK_Owner",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var body map[string]any
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+				require.EqualValues(t, merchant.ID, body["merchant_id"])
+				require.Equal(t, "owner", body["staff_role"])
+			},
+		},
+		{
+			name: "Forbidden_StaffAssociationIsNotOwner",
+			buildStubs: func(store *mockdb.MockStore) {
+				staffMerchant := merchant
+				staffMerchant.OwnerUserID = util.RandomInt(1000, 2000)
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(staffMerchant, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			server.router.GET("/test-merchant-owner-only",
+				authMiddleware(server.tokenMaker),
+				server.MerchantOwnerOnlyMiddleware(),
+				func(ctx *gin.Context) {
+					loadedMerchant, _ := GetMerchantFromContext(ctx)
+					staffRole, _ := GetMerchantStaffRoleFromContext(ctx)
+					ctx.JSON(http.StatusOK, gin.H{
+						"merchant_id": loadedMerchant.ID,
+						"staff_role":  staffRole,
+					})
+				},
+			)
+
+			recorder := httptest.NewRecorder()
+			request, err := http.NewRequest(http.MethodGet, "/test-merchant-owner-only", nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestMerchantStaffMiddleware(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          util.RandomInt(1, 100),
+		OwnerUserID: util.RandomInt(1000, 2000),
+		Name:        "Test Merchant",
+		Status:      "active",
+		RegionID:    1,
+	}
+
+	testCases := []struct {
+		name          string
+		allowedRoles  []string
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:         "OK_StaffAssociationAllowed",
+			allowedRoles: []string{"manager"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return("manager", nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var body map[string]any
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &body))
+				require.EqualValues(t, merchant.ID, body["merchant_id"])
+				require.Equal(t, "manager", body["staff_role"])
+			},
+		},
+		{
+			name:         "Forbidden_ResolvedMerchantButRoleMismatch",
+			allowedRoles: []string{"cashier"},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return("manager", nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			server.router.GET("/test-merchant-staff",
+				authMiddleware(server.tokenMaker),
+				server.MerchantStaffMiddleware(tc.allowedRoles...),
+				func(ctx *gin.Context) {
+					loadedMerchant, _ := GetMerchantFromContext(ctx)
+					staffRole, _ := GetMerchantStaffRoleFromContext(ctx)
+					ctx.JSON(http.StatusOK, gin.H{
+						"merchant_id": loadedMerchant.ID,
+						"staff_role":  staffRole,
+					})
+				},
+			)
+
+			recorder := httptest.NewRecorder()
+			request, err := http.NewRequest(http.MethodGet, "/test-merchant-staff", nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(t, recorder)
 		})

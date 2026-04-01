@@ -5,13 +5,15 @@ INSERT INTO order_display_configs (
     print_takeout,
     print_dine_in,
     print_reservation,
+    print_dispatch_mode,
+    print_trigger_mode,
     enable_voice,
     voice_takeout,
     voice_dine_in,
     enable_kds,
     kds_url
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 ) RETURNING *;
 
 -- name: GetOrderDisplayConfig :one
@@ -29,6 +31,8 @@ SET
     print_takeout = COALESCE(sqlc.narg(print_takeout), print_takeout),
     print_dine_in = COALESCE(sqlc.narg(print_dine_in), print_dine_in),
     print_reservation = COALESCE(sqlc.narg(print_reservation), print_reservation),
+    print_dispatch_mode = COALESCE(sqlc.narg(print_dispatch_mode), print_dispatch_mode),
+    print_trigger_mode = COALESCE(sqlc.narg(print_trigger_mode), print_trigger_mode),
     enable_voice = COALESCE(sqlc.narg(enable_voice), enable_voice),
     voice_takeout = COALESCE(sqlc.narg(voice_takeout), voice_takeout),
     voice_dine_in = COALESCE(sqlc.narg(voice_dine_in), voice_dine_in),
@@ -45,19 +49,23 @@ INSERT INTO order_display_configs (
     print_takeout,
     print_dine_in,
     print_reservation,
+    print_dispatch_mode,
+    print_trigger_mode,
     enable_voice,
     voice_takeout,
     voice_dine_in,
     enable_kds,
     kds_url
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 ON CONFLICT (merchant_id) DO UPDATE SET
     enable_print = EXCLUDED.enable_print,
     print_takeout = EXCLUDED.print_takeout,
     print_dine_in = EXCLUDED.print_dine_in,
     print_reservation = EXCLUDED.print_reservation,
+    print_dispatch_mode = EXCLUDED.print_dispatch_mode,
+    print_trigger_mode = EXCLUDED.print_trigger_mode,
     enable_voice = EXCLUDED.enable_voice,
     voice_takeout = EXCLUDED.voice_takeout,
     voice_dine_in = EXCLUDED.voice_dine_in,

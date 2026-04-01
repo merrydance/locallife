@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -31,6 +32,7 @@ type CreateOrderTxParams struct {
 	DeliveryDuration   int32 // 配送预计在途时间（秒），由 LBS 真实路径计算得出
 	RiderAverageSpeed  int   // 骑手平均速度（km/h），用于兜底估算
 	DefaultPrepareTime int   // 默认出餐时间（分钟），用于兜底估算
+	PickupTime         time.Time
 }
 
 // CreateOrderTxResult contains the result of the create order transaction
@@ -49,6 +51,23 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		if (arg.CreateOrderParams.OrderType == OrderTypeTakeout || arg.CreateOrderParams.OrderType == "takeaway") && !arg.CreateOrderParams.PickupCode.Valid {
+			pickupTime := arg.PickupTime
+			if pickupTime.IsZero() {
+				pickupTime = time.Now()
+			}
+
+			sequence, err := q.AllocateDailyPickupSequence(ctx, AllocateDailyPickupSequenceParams{
+				MerchantID: arg.CreateOrderParams.MerchantID,
+				PickupDate: pgtype.Date{Time: pickupTime, Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("allocate pickup sequence: %w", err)
+			}
+
+			arg.CreateOrderParams.PickupCode = pgtype.Text{String: strconv.FormatInt(int64(sequence), 10), Valid: true}
+		}
 
 		// 1. 如果使用优惠券，先验证并锁定
 		if arg.UserVoucherID != nil {

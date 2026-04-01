@@ -85,7 +85,7 @@ func (server *Server) getMerchantFinanceOverview(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -223,7 +223,7 @@ func (server *Server) listMerchantFinanceOrders(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -354,7 +354,7 @@ func (server *Server) listMerchantServiceFees(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -477,7 +477,7 @@ func (server *Server) listMerchantPromotionExpenses(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -609,7 +609,7 @@ func (server *Server) listMerchantDailyFinance(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -792,7 +792,7 @@ func (server *Server) listMerchantSettlements(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -944,7 +944,7 @@ func (server *Server) listMerchantSettlementTimeline(ctx *gin.Context) {
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -1135,8 +1135,8 @@ func toMerchantWithdrawItem(record db.WithdrawalRecord) merchantWithdrawItem {
 	}
 }
 
-func (server *Server) getMerchantAndPaymentConfigByOwner(ctx *gin.Context, ownerUserID int64) (db.Merchant, db.MerchantPaymentConfig, error) {
-	merchant, err := server.store.GetMerchantByOwner(ctx, ownerUserID)
+func (server *Server) getOwnerMerchantWithActivePaymentConfig(ctx *gin.Context, userID int64) (db.Merchant, db.MerchantPaymentConfig, error) {
+	merchant, err := server.requireOwnedMerchantForUser(ctx, userID)
 	if err != nil {
 		return db.Merchant{}, db.MerchantPaymentConfig{}, err
 	}
@@ -1163,8 +1163,8 @@ func getMerchantFinanceAccountStatus(paymentConfig *db.MerchantPaymentConfig) (s
 	return "active", "收付通账户已激活"
 }
 
-func (server *Server) getMerchantPaymentConfigState(ctx *gin.Context, ownerUserID int64) (db.Merchant, *db.MerchantPaymentConfig, string, string, error) {
-	merchant, err := server.store.GetMerchantByOwner(ctx, ownerUserID)
+func (server *Server) getFinanceViewerPaymentConfigState(ctx *gin.Context, userID int64) (db.Merchant, *db.MerchantPaymentConfig, string, string, error) {
+	merchant, err := server.resolveMerchantForUser(ctx, userID)
 	if err != nil {
 		return db.Merchant{}, nil, "", "", err
 	}
@@ -1190,7 +1190,7 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	_, paymentConfig, accountStatus, statusDesc, err := server.getMerchantPaymentConfigState(ctx, authPayload.UserID)
+	_, paymentConfig, accountStatus, statusDesc, err := server.getFinanceViewerPaymentConfigState(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -1247,10 +1247,14 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, paymentConfig, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID)
+	merchant, paymentConfig, err := server.getOwnerMerchantWithActivePaymentConfig(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
 			return
 		}
 		if err.Error() == "merchant payment config is not active" {
@@ -1336,7 +1340,7 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	_, _, accountStatus, statusDesc, err := server.getMerchantPaymentConfigState(ctx, authPayload.UserID)
+	_, _, accountStatus, statusDesc, err := server.getFinanceViewerPaymentConfigState(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
@@ -1413,10 +1417,14 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	_, _, err := server.getMerchantAndPaymentConfigByOwner(ctx, authPayload.UserID)
+	_, _, err := server.getOwnerMerchantWithActivePaymentConfig(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant or payment config not found")))
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
 			return
 		}
 		if err.Error() == "merchant payment config is not active" {

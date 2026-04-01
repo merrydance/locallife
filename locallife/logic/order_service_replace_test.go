@@ -20,6 +20,12 @@ type replaceOrderTaskSchedulerStub struct {
 	called             bool
 }
 
+type replaceOrderNormalizerStub struct{}
+
+func (s replaceOrderNormalizerStub) Normalize(ctx context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
+	return nil, 0, nil
+}
+
 func (s *replaceOrderTaskSchedulerStub) ScheduleOrderPaymentTimeout(ctx context.Context, orderID int64, at time.Time) error {
 	return nil
 }
@@ -44,6 +50,10 @@ func (s *replaceOrderTaskSchedulerStub) ScheduleProfitSharing(ctx context.Contex
 }
 
 func (s *replaceOrderTaskSchedulerStub) ScheduleProfitSharingReturnResult(ctx context.Context, input ProfitSharingReturnResultTaskInput) error {
+	return nil
+}
+
+func (s *replaceOrderTaskSchedulerStub) ScheduleOrderPrint(ctx context.Context, input OrderPrintTaskInput) error {
 	return nil
 }
 
@@ -135,7 +145,7 @@ func TestOrderServiceReplaceOrderSchedulesCombinedTimeout(t *testing.T) {
 	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(222)).Times(1).Return(paymentOrder, nil)
 	store.EXPECT().GetCombinedPaymentOrder(gomock.Any(), int64(3333)).Times(1).Return(db.CombinedPaymentOrder{ID: 3333, CombineOutTradeNo: "RC123"}, nil)
 
-	service := NewOrderService(store, nil, nil, nil, taskScheduler, nil, nil, ecommerceClient, nil, nil, nil)
+	service := NewOrderService(store, nil, nil, nil, taskScheduler, replaceOrderNormalizerStub{}, nil, ecommerceClient, nil, nil, nil)
 	result, err := service.ReplaceOrder(context.Background(), ReplaceOrderInput{
 		UserID:  userID,
 		OrderID: orderID,

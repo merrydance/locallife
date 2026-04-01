@@ -24,7 +24,7 @@ import (
 
 // getMerchantFromUserID 根据用户ID获取商户信息
 func (server *Server) getMerchantFromUserID(ctx *gin.Context, userID int64) (db.Merchant, error) {
-	merchant, err := server.store.GetMerchantByOwner(ctx, userID)
+	merchant, err := server.resolveMerchantForUser(ctx, userID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))

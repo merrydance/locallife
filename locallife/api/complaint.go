@@ -261,6 +261,24 @@ func (server *Server) completeComplaint(ctx *gin.Context) {
 		return
 	}
 
+	if ctx.FullPath() == "/v1/merchant/complaints/:id/complete" {
+		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+		merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
+			} else {
+				ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			}
+			return
+		}
+
+		if !complaint.MerchantID.Valid || complaint.MerchantID.Int64 != merchant.ID {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("complaint does not belong to your merchant")))
+			return
+		}
+	}
+
 	// 调用微信 API 完结投诉
 	if err := server.ecommerceClient.CompleteComplaint(ctx, complaintID); err != nil {
 		log.Error().Err(err).Str("complaint_id", complaintID).Msg("complete complaint: wxpay api failed")

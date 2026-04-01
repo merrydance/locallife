@@ -44,11 +44,8 @@ type comboSetResponse struct {
 	DishImageURLs []string `json:"dish_image_urls,omitempty"`
 }
 
-func (server *Server) getMerchantFromContextOrOwner(ctx *gin.Context, userID int64) (db.Merchant, error) {
-	if merchant, ok := GetMerchantFromContext(ctx); ok {
-		return merchant, nil
-	}
-	merchant, err := server.store.GetMerchantByOwner(ctx, userID)
+func (server *Server) getMerchantFromContextOrAssociation(ctx *gin.Context, userID int64) (db.Merchant, error) {
+	merchant, err := server.resolveMerchantForUser(ctx, userID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -85,7 +82,7 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}
@@ -223,7 +220,7 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}
@@ -472,7 +469,7 @@ func (server *Server) listComboSets(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}
@@ -572,7 +569,7 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}
@@ -739,7 +736,7 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}
@@ -802,7 +799,7 @@ func (server *Server) deleteComboSet(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}
@@ -874,7 +871,7 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}
@@ -956,7 +953,7 @@ func (server *Server) removeComboDish(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.getMerchantFromContextOrOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrAssociation(ctx, authPayload.UserID)
 	if err != nil {
 		return
 	}

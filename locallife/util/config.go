@@ -64,6 +64,13 @@ type Config struct {
 	// Web前端配置
 	WebBaseURL string `mapstructure:"WEB_BASE_URL"` // H5页面基础URL，用于分享功能
 
+	// 飞鹅云打印配置（平台统一账号）
+	FeieyunEnabled     bool          `mapstructure:"FEIEYUN_ENABLED"`
+	FeieyunAPIBaseURL  string        `mapstructure:"FEIEYUN_API_BASE_URL"`
+	FeieyunUser        string        `mapstructure:"FEIEYUN_USER"`
+	FeieyunUkey        string        `mapstructure:"FEIEYUN_UKEY"`
+	FeieyunHTTPTimeout time.Duration `mapstructure:"FEIEYUN_HTTP_TIMEOUT"`
+
 	// 对外服务的基础 URL（生产环境必填）。设置后 API 生成的签名 URL 将以此为前缀，
 	// 避免依赖客户端可控的 Origin/Host 头（SSRF/开放重定向防护）。
 	// 示例：https://api.example.com
@@ -194,6 +201,9 @@ func LoadConfig(path string) (config Config, err error) {
 	v.SetDefault("RESERVATION_MERCHANT_REFUND_PERCENT_AFTER_DEADLINE", 100)
 	// Web 登录默认过期时间
 	v.SetDefault("WEB_LOGIN_SESSION_TTL", "5m")
+	v.SetDefault("FEIEYUN_ENABLED", false)
+	v.SetDefault("FEIEYUN_API_BASE_URL", "https://api.feieyun.cn")
+	v.SetDefault("FEIEYUN_HTTP_TIMEOUT", "5s")
 	// 媒体存储默认值
 	v.SetDefault("FILE_STORAGE_PROVIDER", "local")
 	v.SetDefault("PRIVATE_DOWNLOAD_URL_TTL", "5m")

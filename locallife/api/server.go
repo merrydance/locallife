@@ -12,6 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/go-redis/redis/v8"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/docs"
 	"github.com/merrydance/locallife/logic"
@@ -82,6 +83,7 @@ type Server struct {
 	paymentFacade      logic.PaymentFacade
 	refundOrchestrator logic.RefundOrchestrator
 	mediaStorage       media.ObjectStorage
+	printerClient      cloudprint.Client
 	router             *gin.Engine
 }
 
@@ -101,6 +103,11 @@ func (server *Server) SetPaymentClientForTest(client wechat.PaymentClientInterfa
 // SetTaskDistributorForTest injects a task distributor in tests.
 func (server *Server) SetTaskDistributorForTest(distributor worker.TaskDistributor) {
 	server.taskDistributor = distributor
+	newSvc := server.buildOrderCommandService()
+	server.orderCommandSvc = newSvc
+	if qs, ok := newSvc.(logic.OrderQueryService); ok {
+		server.orderQuerySvc = qs
+	}
 }
 
 // SetEcommerceClientForTest injects an ecommerce client in tests.
@@ -115,6 +122,10 @@ func (server *Server) SetEcommerceClientForTest(client wechat.EcommerceClientInt
 	}
 	server.paymentFacade = nil
 	server.refundOrchestrator = nil
+}
+
+func (server *Server) SetPrinterClientForTest(client cloudprint.Client) {
+	server.printerClient = client
 }
 
 // NewServer creates a new HTTP server and set up routing.
@@ -286,6 +297,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		mapClient:       mapClient,
 		weatherCache:    weatherCache,
 		taskDistributor: taskDistributor,
+		printerClient:   cloudprint.NewFeieyunClientFromConfig(config),
 		wsHub:           wsHub,
 		wsPubSub:        wsPubSub,
 		rulesEngine:     engine,
@@ -646,6 +658,8 @@ func (server *Server) setupRouter() {
 	authGroup.PUT("/merchants/me/tags", server.setMerchantTags) // 设置商户经营类目
 	authGroup.GET("/merchants/me/membership-settings", server.getMerchantMembershipSettings)
 	authGroup.PUT("/merchants/me/membership-settings", server.updateMerchantMembershipSettings)
+	authGroup.GET("/merchants/me/packaging-policy", server.getMerchantPackagingPolicy)
+	authGroup.PUT("/merchants/me/packaging-policy", server.updateMerchantPackagingPolicy)
 
 	// M3.1: 商户入驻申请（新版 - 自动审核）
 	merchantAppGroup := authGroup.Group("/merchant/application")
@@ -660,6 +674,7 @@ func (server *Server) setupRouter() {
 
 	// M3.2: 商户开户（微信支付二级商户进件）
 	merchantApplymentGroup := authGroup.Group("/merchant/applyment")
+	merchantApplymentGroup.Use(server.MerchantOwnerOnlyMiddleware())
 	{
 		merchantApplymentGroup.POST("/bindbank", server.merchantBindBank)        // 绑定银行卡开户
 		merchantApplymentGroup.GET("/status", server.getMerchantApplymentStatus) // 获取开户状态
@@ -827,28 +842,38 @@ func (server *Server) setupRouter() {
 	}
 
 	// M5: 桌台与包间管理路由
-	tablesGroup := authGroup.Group("/tables")
+	tablesReadGroup := authGroup.Group("/tables")
+	tablesReadGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "cashier"))
 	{
-		tablesGroup.POST("", server.createTable)
-		tablesGroup.GET("/:id", server.getTable)
-		tablesGroup.GET("", server.listTables)
-		tablesGroup.PATCH("/:id", server.updateTable)
-		tablesGroup.PATCH("/:id/status", server.updateTableStatus)
-		tablesGroup.DELETE("/:id", server.deleteTable)
+		tablesReadGroup.GET("/:id", server.getTable)
+		tablesReadGroup.GET("", server.listTables)
+		tablesReadGroup.PATCH("/:id/status", server.updateTableStatus)
 
 		// 桌台标签
-		tablesGroup.POST("/:id/tags", server.addTableTag)
-		tablesGroup.DELETE("/:id/tags/:tag_id", server.removeTableTag)
-		tablesGroup.GET("/:id/tags", server.listTableTags)
+		tablesReadGroup.GET("/:id/tags", server.listTableTags)
 
 		// 桌台图片
-		tablesGroup.POST("/:id/images", server.addTableImage)
-		tablesGroup.GET("/:id/images", server.listTableImages)
-		tablesGroup.PUT("/:id/images/:image_id/primary", server.setTablePrimaryImage)
-		tablesGroup.DELETE("/:id/images/:image_id", server.deleteTableImage)
+		tablesReadGroup.GET("/:id/images", server.listTableImages)
+	}
+
+	tablesManageGroup := authGroup.Group("/tables")
+	tablesManageGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
+	{
+		tablesManageGroup.POST("", server.createTable)
+		tablesManageGroup.PATCH("/:id", server.updateTable)
+		tablesManageGroup.DELETE("/:id", server.deleteTable)
+
+		// 桌台标签
+		tablesManageGroup.POST("/:id/tags", server.addTableTag)
+		tablesManageGroup.DELETE("/:id/tags/:tag_id", server.removeTableTag)
+
+		// 桌台图片
+		tablesManageGroup.POST("/:id/images", server.addTableImage)
+		tablesManageGroup.PUT("/:id/images/:image_id/primary", server.setTablePrimaryImage)
+		tablesManageGroup.DELETE("/:id/images/:image_id", server.deleteTableImage)
 
 		// 桌台二维码
-		tablesGroup.GET("/:id/qrcode", server.generateTableQRCode)
+		tablesManageGroup.GET("/:id/qrcode", server.generateTableQRCode)
 	}
 
 	// M5: 商户包间查询（C端用户）
@@ -875,17 +900,25 @@ func (server *Server) setupRouter() {
 		reservationsGroup.POST("/:id/modify-dishes", server.modifyReservationDishes) // 改菜（差量）
 		reservationsGroup.POST("/:id/checkin", server.checkInReservation)            // 到店签到
 		reservationsGroup.POST("/:id/start-cooking", server.startCookingReservation) // 起菜通知
+	}
 
-		// 商户管理
-		reservationsGroup.GET("/merchant", server.listMerchantReservations)
-		reservationsGroup.GET("/merchant/dishes", server.listMerchantReservationDishes)
-		reservationsGroup.GET("/merchant/today", server.listTodayReservations) // 今日预订
-		reservationsGroup.GET("/merchant/stats", server.getReservationStats)
-		reservationsGroup.POST("/merchant/create", server.merchantCreateReservation) // 商户代客创建
-		reservationsGroup.PUT("/:id/update", server.merchantUpdateReservation)       // 商户修改预订
-		reservationsGroup.POST("/:id/confirm", server.confirmReservation)
-		reservationsGroup.POST("/:id/complete", server.completeReservation)
-		reservationsGroup.POST("/:id/no-show", server.markNoShow)
+	reservationMerchantOpsGroup := authGroup.Group("/reservations")
+	reservationMerchantOpsGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "cashier"))
+	{
+		reservationMerchantOpsGroup.GET("/merchant", server.listMerchantReservations)
+		reservationMerchantOpsGroup.GET("/merchant/dishes", server.listMerchantReservationDishes)
+		reservationMerchantOpsGroup.GET("/merchant/today", server.listTodayReservations)
+		reservationMerchantOpsGroup.GET("/merchant/stats", server.getReservationStats)
+		reservationMerchantOpsGroup.POST("/merchant/create", server.merchantCreateReservation)
+		reservationMerchantOpsGroup.POST("/:id/confirm", server.confirmReservation)
+		reservationMerchantOpsGroup.POST("/:id/complete", server.completeReservation)
+	}
+
+	reservationMerchantManageGroup := authGroup.Group("/reservations")
+	reservationMerchantManageGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
+	{
+		reservationMerchantManageGroup.PUT("/:id/update", server.merchantUpdateReservation)
+		reservationMerchantManageGroup.POST("/:id/no-show", server.markNoShow)
 	}
 
 	// 用餐会话
@@ -926,11 +959,16 @@ func (server *Server) setupRouter() {
 
 	{
 		merchantOrdersGroup.GET("", server.listMerchantOrders)
+		merchantOrdersGroup.GET("/print-anomalies", server.listMerchantPrintAnomalies)
 		merchantOrdersGroup.GET("/:id", server.getMerchantOrder)
+		merchantOrdersGroup.GET("/:id/print-jobs", server.listMerchantOrderPrintJobs)
+		merchantOrdersGroup.GET("/:id/print-jobs/:print_log_id/status", server.getMerchantOrderPrintJobStatus)
+		merchantOrdersGroup.POST("/:id/print-jobs/:print_log_id/retry", server.retryMerchantOrderPrintJob)
 		merchantOrdersGroup.POST("/:id/accept", server.acceptOrder)
 		merchantOrdersGroup.POST("/:id/reject", server.rejectOrder) // 拒单
 		merchantOrdersGroup.POST("/:id/ready", server.markOrderReady)
 		merchantOrdersGroup.POST("/:id/complete", server.completeOrder)
+		merchantOrdersGroup.POST("/:id/print-jobs", server.printMerchantOrder)
 		merchantOrdersGroup.GET("/stats", server.getOrderStats)
 	}
 
@@ -1137,17 +1175,26 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/settlements", server.listMerchantSettlements)
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
 		merchantFinanceGroup.GET("/account/balance", server.getMerchantAccountBalance)
-		merchantFinanceGroup.POST("/account/withdraw", server.createMerchantAccountWithdraw)
 		merchantFinanceGroup.GET("/account/withdrawals", server.listMerchantAccountWithdrawals)
 		merchantFinanceGroup.GET("/account/withdrawals/:id", server.getMerchantAccountWithdrawal)
 	}
 
+	merchantFinanceOwnerGroup := authGroup.Group("/merchant/finance")
+	merchantFinanceOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
+	{
+		merchantFinanceOwnerGroup.POST("/account/withdraw", server.createMerchantAccountWithdraw)
+	}
+
 	// 商户设备管理路由
 	merchantDevicesGroup := authGroup.Group("/merchant/devices")
+	merchantDevicesGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		merchantDevicesGroup.POST("", server.createPrinter)
 		merchantDevicesGroup.GET("", server.listPrinters)
+		merchantDevicesGroup.GET("/reconciliation-jobs", server.listPrinterReconciliationJobs)
+		merchantDevicesGroup.POST("/reconciliation-jobs/:id/retry", server.retryPrinterReconciliationJob)
 		merchantDevicesGroup.GET("/:id", server.getPrinter)
+		merchantDevicesGroup.GET("/:id/status", server.getPrinterLiveStatus)
 		merchantDevicesGroup.PUT("/:id", server.updatePrinter)
 		merchantDevicesGroup.DELETE("/:id", server.deletePrinter)
 		merchantDevicesGroup.POST("/:id/test", server.testPrinter)
@@ -1155,6 +1202,7 @@ func (server *Server) setupRouter() {
 
 	// 商户订单展示配置路由
 	merchantDisplayGroup := authGroup.Group("/merchant/display-config")
+	merchantDisplayGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		merchantDisplayGroup.GET("", server.getDisplayConfig)
 		merchantDisplayGroup.PUT("", server.updateDisplayConfig)

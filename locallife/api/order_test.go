@@ -11,12 +11,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/worker"
+	mockworker "github.com/merrydance/locallife/worker/mock"
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
@@ -44,6 +47,13 @@ func dishWithCustomizationsFromDish(dish db.Dish) db.GetDishWithCustomizationsRo
 		RepurchaseRate:      dish.RepurchaseRate,
 		CustomizationGroups: []interface{}{},
 	}
+}
+
+func expectNoPackagingPolicy(store *mockdb.MockStore) {
+	store.EXPECT().
+		GetMerchantPackagingPolicy(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		Return(db.MerchantPackagingPolicy{}, db.ErrRecordNotFound)
 }
 
 func orderWithDetailsFromOrder(order db.Order) db.GetOrderWithDetailsRow {
@@ -896,6 +906,7 @@ func TestCreateOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectNoPackagingPolicy(store)
 			store.EXPECT().
 				GetMerchantProfile(gomock.Any(), gomock.Any()).
 				AnyTimes().
@@ -1222,12 +1233,22 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				store.EXPECT().
-					ListOrdersByMerchant(gomock.Any(), gomock.Any()).
+					ListOrdersByMerchantWithFilters(gomock.Any(), gomock.Eq(db.ListOrdersByMerchantWithFiltersParams{
+						MerchantID: merchant.ID,
+						Status:     pgtype.Text{},
+						OrderType:  pgtype.Text{},
+						Limit:      10,
+						Offset:     0,
+					})).
 					Times(1).
 					Return(orders, nil)
 
 				store.EXPECT().
-					CountOrdersByMerchant(gomock.Any(), merchant.ID).
+					CountOrdersByMerchantWithFilters(gomock.Any(), gomock.Eq(db.CountOrdersByMerchantWithFiltersParams{
+						MerchantID: merchant.ID,
+						Status:     pgtype.Text{},
+						OrderType:  pgtype.Text{},
+					})).
 					Times(1).
 					Return(int64(len(orders)), nil)
 			},
@@ -1280,14 +1301,21 @@ func TestListMerchantOrdersAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				store.EXPECT().
-					ListOrdersByMerchantAndStatus(gomock.Any(), gomock.Any()).
+					ListOrdersByMerchantWithFilters(gomock.Any(), gomock.Eq(db.ListOrdersByMerchantWithFiltersParams{
+						MerchantID: merchant.ID,
+						Status:     pgtype.Text{String: "paid", Valid: true},
+						OrderType:  pgtype.Text{},
+						Limit:      10,
+						Offset:     0,
+					})).
 					Times(1).
 					Return(orders, nil)
 
 				store.EXPECT().
-					CountOrdersByMerchantAndStatus(gomock.Any(), db.CountOrdersByMerchantAndStatusParams{
+					CountOrdersByMerchantWithFilters(gomock.Any(), db.CountOrdersByMerchantWithFiltersParams{
 						MerchantID: merchant.ID,
-						Status:     "paid",
+						Status:     pgtype.Text{String: "paid", Valid: true},
+						OrderType:  pgtype.Text{},
 					}).
 					Times(1).
 					Return(int64(len(orders)), nil)
@@ -1390,6 +1418,11 @@ func TestAcceptOrderAPI(t *testing.T) {
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateOrderStatusTxResult{Order: acceptedOrder}, nil)
+
+				store.EXPECT().
+					GetOrderDisplayConfigByMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(db.OrderDisplayConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -1586,6 +1619,7 @@ func TestRejectOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectNoPackagingPolicy(store)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -1722,6 +1756,7 @@ func TestGetOrderStatsAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectNoPackagingPolicy(store)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -1964,6 +1999,7 @@ func TestUrgeOrderAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectNoPackagingPolicy(store)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -2021,10 +2057,6 @@ func TestConfirmOrderAPI(t *testing.T) {
 					GetDeliveryByOrderID(gomock.Any(), order.ID).
 					Times(1).
 					Return(db.Delivery{}, db.ErrRecordNotFound)
-				store.EXPECT().
-					GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.PaymentOrder{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2312,6 +2344,11 @@ func TestMarkOrderReadyAPI(t *testing.T) {
 					UpdateOrderStatusTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateOrderStatusTxResult{Order: readyOrder}, nil)
+
+				store.EXPECT().
+					GetOrderDisplayConfigByMerchant(gomock.Any(), merchant.ID).
+					Times(1).
+					Return(db.OrderDisplayConfig{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -2606,6 +2643,571 @@ func TestCompleteOrderAPI(t *testing.T) {
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)
 			tc.checkResponse(recorder)
+		})
+	}
+}
+
+func TestPrintMerchantOrderAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	otherMerchantOwner, _ := randomUser(t)
+	otherMerchant := randomMerchant(otherMerchantOwner.ID)
+	otherMerchant.ID = merchant.ID + 1
+	customer, _ := randomUser(t)
+
+	order := randomOrder(customer.ID, merchant.ID)
+	order.Status = db.OrderStatusPreparing
+	order.OrderType = db.OrderTypeTakeout
+
+	testCases := []struct {
+		name          string
+		orderID       int64
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor)
+		checkResponse func(recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:    "OK",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), merchant.ID).Times(1).Return(db.OrderDisplayConfig{
+					MerchantID:        merchant.ID,
+					EnablePrint:       true,
+					PrintTakeout:      true,
+					PrintDineIn:       true,
+					PrintReservation:  true,
+					PrintDispatchMode: "single_full",
+					PrintTriggerMode:  "manual",
+				}, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ any, payload *worker.PrintOrderPayload, _ ...asynq.Option) error {
+					require.Equal(t, order.ID, payload.OrderID)
+					require.Equal(t, "manual", payload.Trigger)
+					require.NotEmpty(t, payload.TaskKey)
+					return nil
+				})
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "ManualModeDisabled",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().GetOrderDisplayConfigByMerchant(gomock.Any(), merchant.ID).Times(1).Return(db.OrderDisplayConfig{
+					MerchantID:        merchant.ID,
+					EnablePrint:       true,
+					PrintTakeout:      true,
+					PrintDineIn:       true,
+					PrintReservation:  true,
+					PrintDispatchMode: "single_full",
+					PrintTriggerMode:  "accepted",
+				}, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:    "OrderNotBelongToMerchant",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherMerchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), otherMerchantOwner.ID).Times(1).Return(otherMerchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			distributor := mockworker.NewMockTaskDistributor(ctrl)
+			tc.buildStubs(store, distributor)
+
+			server := newTestServer(t, store)
+			server.SetTaskDistributorForTest(distributor)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/merchant/orders/%d/print-jobs", tc.orderID)
+			request, err := http.NewRequest(http.MethodPost, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(recorder)
+		})
+	}
+}
+
+func TestListMerchantOrderPrintJobsAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	otherMerchantOwner, _ := randomUser(t)
+	otherMerchant := randomMerchant(otherMerchantOwner.ID)
+	otherMerchant.ID = merchant.ID + 1
+	customer, _ := randomUser(t)
+
+	order := randomOrder(customer.ID, merchant.ID)
+	now := time.Now()
+	printedAt := pgtype.Timestamptz{Time: now.Add(-time.Minute), Valid: true}
+	failedMessage := pgtype.Text{String: "printer offline", Valid: true}
+	printLogs := []db.ListPrintLogsByOrderRow{
+		{
+			ID:            1,
+			OrderID:       order.ID,
+			PrinterID:     101,
+			PrinterName:   "前台打印机",
+			Status:        "success",
+			VendorOrderID: pgtype.Text{String: "vendor-1", Valid: true},
+			PrintedAt:     printedAt,
+			CreatedAt:     now.Add(-2 * time.Minute),
+		},
+		{
+			ID:           2,
+			OrderID:      order.ID,
+			PrinterID:    102,
+			PrinterName:  "后厨打印机",
+			Status:       "failed",
+			ErrorMessage: failedMessage,
+			CreatedAt:    now.Add(-time.Minute),
+		},
+	}
+
+	testCases := []struct {
+		name          string
+		orderID       int64
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:    "OK",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().ListPrintLogsByOrder(gomock.Any(), order.ID).Times(1).Return(printLogs, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listMerchantOrderPrintJobsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, order.ID, resp.OrderID)
+				require.Len(t, resp.Items, 2)
+				require.Equal(t, "前台打印机", resp.Items[0].PrinterName)
+				require.NotNil(t, resp.Items[0].VendorOrderID)
+				require.Equal(t, "vendor-1", *resp.Items[0].VendorOrderID)
+				require.Nil(t, resp.Items[0].ErrorMessage)
+				require.NotNil(t, resp.Items[0].PrintedAt)
+				require.Equal(t, "printer offline", *resp.Items[1].ErrorMessage)
+			},
+		},
+		{
+			name:    "OrderNotBelongToMerchant",
+			orderID: order.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherMerchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), otherMerchantOwner.ID).Times(1).Return(otherMerchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListPrintLogsByOrder(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/merchant/orders/%d/print-jobs", tc.orderID)
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestGetMerchantOrderPrintJobStatusAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	customer, _ := randomUser(t)
+	order := randomOrder(customer.ID, merchant.ID)
+	printer := randomCloudPrinter(merchant.ID)
+	printLog := db.PrintLog{
+		ID:            9001,
+		OrderID:       order.ID,
+		PrinterID:     printer.ID,
+		Status:        "success",
+		VendorOrderID: pgtype.Text{String: "vendor-job-1", Valid: true},
+	}
+
+	testCases := []struct {
+		name          string
+		orderID       int64
+		printLogID    int64
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		buildClient   func() *printerClientStub
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub)
+	}{
+		{
+			name:       "OK",
+			orderID:    order.ID,
+			printLogID: printLog.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(printLog, nil)
+				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+			},
+			buildClient: func() *printerClientStub {
+				return &printerClientStub{queryPrinted: true}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantOrderPrintJobStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, printLog.ID, resp.PrintLogID)
+				require.True(t, resp.CloudQueryAvailable)
+				require.NotNil(t, resp.CloudPrinted)
+				require.True(t, *resp.CloudPrinted)
+				require.Equal(t, "vendor-job-1", client.queryOrderID)
+			},
+		},
+		{
+			name:       "NoVendorOrderID",
+			orderID:    order.ID,
+			printLogID: printLog.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				noVendorLog := printLog
+				noVendorLog.VendorOrderID = pgtype.Text{}
+				store.EXPECT().GetPrintLog(gomock.Any(), printLog.ID).Times(1).Return(noVendorLog, nil)
+				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+			},
+			buildClient: func() *printerClientStub { return &printerClientStub{} },
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp merchantOrderPrintJobStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.False(t, resp.CloudQueryAvailable)
+				require.Nil(t, resp.CloudPrinted)
+				require.Empty(t, client.queryOrderID)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			client := tc.buildClient()
+			server.SetPrinterClientForTest(client)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/merchant/orders/%d/print-jobs/%d/status", tc.orderID, tc.printLogID)
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder, client)
+		})
+	}
+}
+
+func TestListMerchantPrintAnomaliesAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	now := time.Now()
+
+	testCases := []struct {
+		name          string
+		query         string
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK",
+			query: "?page_id=1&page_size=20",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().ListMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.ListMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Limit:      20,
+					Offset:     0,
+					Status:     pgtype.Text{},
+				})).Times(1).Return([]db.ListMerchantPrintAnomaliesRow{{
+					ID:           11,
+					OrderID:      101,
+					OrderNo:      "ORD-101",
+					OrderType:    db.OrderTypeTakeout,
+					PrinterID:    201,
+					PrinterName:  "前台打印机",
+					PrinterType:  printerTypeFeieyun,
+					IsActive:     true,
+					Status:       "failed",
+					ErrorMessage: pgtype.Text{String: "printer offline", Valid: true},
+					CreatedAt:    now,
+				}}, nil)
+				store.EXPECT().CountMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.CountMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Status:     pgtype.Text{},
+				})).Times(1).Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listMerchantPrintAnomaliesResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.Equal(t, int64(1), resp.Total)
+				require.True(t, resp.Items[0].CanRetry)
+				require.NotNil(t, resp.Items[0].ErrorMessage)
+				require.Equal(t, "printer offline", *resp.Items[0].ErrorMessage)
+			},
+		},
+		{
+			name:  "StatusFilter",
+			query: "?status=pending&page_size=10",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().ListMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.ListMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Limit:      10,
+					Offset:     0,
+					Status:     pgtype.Text{String: "pending", Valid: true},
+				})).Times(1).Return([]db.ListMerchantPrintAnomaliesRow{{
+					ID:          12,
+					OrderID:     102,
+					OrderNo:     "ORD-102",
+					OrderType:   db.OrderTypeTakeout,
+					PrinterID:   202,
+					PrinterName: "后厨打印机",
+					PrinterType: printerTypeFeieyun,
+					IsActive:    false,
+					Status:      "pending",
+					CreatedAt:   now,
+				}}, nil)
+				store.EXPECT().CountMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.CountMerchantPrintAnomaliesParams{
+					MerchantID: merchant.ID,
+					Status:     pgtype.Text{String: "pending", Valid: true},
+				})).Times(1).Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp listMerchantPrintAnomaliesResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Items, 1)
+				require.False(t, resp.Items[0].CanRetry)
+				require.Equal(t, "printer is inactive", resp.Items[0].RetryHint)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, "/v1/merchant/orders/print-anomalies"+tc.query, nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestRetryMerchantOrderPrintJobAPI(t *testing.T) {
+	merchantOwner, _ := randomUser(t)
+	merchant := randomMerchant(merchantOwner.ID)
+	customer, _ := randomUser(t)
+	order := randomOrder(customer.ID, merchant.ID)
+	printer := randomCloudPrinter(merchant.ID)
+	printLog := db.PrintLog{
+		ID:        9002,
+		OrderID:   order.ID,
+		PrinterID: printer.ID,
+		Status:    "failed",
+	}
+
+	testCases := []struct {
+		name          string
+		printLog      db.PrintLog
+		buildStubs    func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:     "OK",
+			printLog: printLog,
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(printer, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ any, payload *worker.PrintOrderPayload, _ ...asynq.Option) error {
+					require.Equal(t, order.ID, payload.OrderID)
+					require.Equal(t, "retry", payload.Trigger)
+					require.Equal(t, currentPrintLog.ID, payload.RetryPrintLogID)
+					require.NotEmpty(t, payload.TaskKey)
+					return nil
+				})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp retryMerchantOrderPrintJobResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, order.ID, resp.OrderID)
+				require.Equal(t, printLog.ID, resp.PrintLogID)
+				require.Equal(t, "retry", resp.Trigger)
+			},
+		},
+		{
+			name:     "PrinterInactive",
+			printLog: printLog,
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog) {
+				inactivePrinter := printer
+				inactivePrinter.IsActive = false
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetCloudPrinter(gomock.Any(), printer.ID).Times(1).Return(inactivePrinter, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "SuccessfulPrintLogRejected",
+			printLog: func() db.PrintLog {
+				successLog := printLog
+				successLog.Status = "success"
+				return successLog
+			}(),
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:     "OldFailedPrintLogRejected",
+			printLog: printLog,
+			buildStubs: func(store *mockdb.MockStore, distributor *mockworker.MockTaskDistributor, currentPrintLog db.PrintLog) {
+				latestPrintLog := currentPrintLog
+				latestPrintLog.ID = currentPrintLog.ID + 1
+				latestPrintLog.Status = "failed"
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), merchantOwner.ID).Times(1).Return(merchant, nil)
+				store.EXPECT().GetOrder(gomock.Any(), order.ID).Times(1).Return(order, nil)
+				store.EXPECT().ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).Times(1).Return([]db.ListOrderItemsWithDishByOrderRow{}, nil)
+				store.EXPECT().GetPrintLog(gomock.Any(), currentPrintLog.ID).Times(1).Return(currentPrintLog, nil)
+				store.EXPECT().GetLatestPrintLogByOrderAndPrinter(gomock.Any(), db.GetLatestPrintLogByOrderAndPrinterParams{OrderID: order.ID, PrinterID: printer.ID}).Times(1).Return(latestPrintLog, nil)
+				distributor.EXPECT().DistributeTaskPrintOrder(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			distributor := mockworker.NewMockTaskDistributor(ctrl)
+			tc.buildStubs(store, distributor, tc.printLog)
+
+			server := newTestServer(t, store)
+			server.SetTaskDistributorForTest(distributor)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/merchant/orders/%d/print-jobs/%d/retry", order.ID, tc.printLog.ID)
+			request, err := http.NewRequest(http.MethodPost, url, nil)
+			require.NoError(t, err)
+			addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
+
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
 		})
 	}
 }
@@ -3467,6 +4069,7 @@ func TestCreateOrderWithVoucherAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectNoPackagingPolicy(store)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -4053,6 +4656,7 @@ func TestCreateOrderWithBalanceAPI(t *testing.T) {
 			defer ctrl.Finish()
 
 			store := mockdb.NewMockStore(ctrl)
+			expectNoPackagingPolicy(store)
 			tc.buildStubs(store)
 
 			server := newTestServer(t, store)
@@ -4144,6 +4748,7 @@ func TestCreateOrderWithVoucherAndBalanceAPI(t *testing.T) {
 		defer ctrl.Finish()
 
 		store := mockdb.NewMockStore(ctrl)
+		expectNoPackagingPolicy(store)
 
 		store.EXPECT().
 			GetMerchant(gomock.Any(), merchant.ID).

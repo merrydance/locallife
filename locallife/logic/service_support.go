@@ -176,3 +176,12 @@ func (f *DefaultPaymentFacade) SpMchID() string {
 	}
 	return f.ecommerceClient.GetSpMchID()
 }
+
+// resolveMerchantForUser returns the merchant associated with userID.
+// The user may be the merchant owner or an active merchant_staff member.
+// This is a named wrapper around store.GetMerchantByOwner; despite that
+// name the underlying SQL has always supported staff via a LEFT JOIN on
+// merchant_staff. Use this for staff-compatible operations.
+func resolveMerchantForUser(ctx context.Context, store db.Store, userID int64) (db.Merchant, error) {
+	return store.GetMerchantByOwner(ctx, userID)
+}

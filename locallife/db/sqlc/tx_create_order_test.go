@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"math/big"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
@@ -237,6 +238,53 @@ func TestCreateOrderTxTakeoutOrder(t *testing.T) {
 	require.True(t, result.Order.DeliveryDistance.Valid)
 	require.Equal(t, int32(3000), result.Order.DeliveryDistance.Int32)
 	require.Equal(t, int64(5500), result.Order.TotalAmount)
+}
+
+func TestCreateOrderTxAllocatesMerchantDailyPickupCode(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	address := createRandomUserAddress(t, user)
+	pickupTime := time.Date(2026, 4, 1, 10, 0, 0, 0, time.Local)
+
+	newOrderParams := func(orderNo string, at time.Time) CreateOrderTxParams {
+		return CreateOrderTxParams{
+			CreateOrderParams: CreateOrderParams{
+				OrderNo:     orderNo,
+				UserID:      user.ID,
+				MerchantID:  merchant.ID,
+				OrderType:   OrderTypeTakeout,
+				AddressID:   pgtype.Int8{Int64: address.ID, Valid: true},
+				DeliveryFee: 200,
+				Subtotal:    1800,
+				TotalAmount: 2000,
+				Status:      OrderStatusPending,
+				PickupCode:  pgtype.Text{},
+			},
+			Items: []CreateOrderItemParams{{
+				DishID:    pgtype.Int8{Int64: 1, Valid: true},
+				Name:      "测试菜品",
+				UnitPrice: 1800,
+				Quantity:  1,
+				Subtotal:  1800,
+			}},
+			PickupTime: at,
+		}
+	}
+
+	first, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime))
+	require.NoError(t, err)
+	require.True(t, first.Order.PickupCode.Valid)
+	require.Equal(t, "1", first.Order.PickupCode.String)
+
+	second, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime.Add(2*time.Hour)))
+	require.NoError(t, err)
+	require.True(t, second.Order.PickupCode.Valid)
+	require.Equal(t, "2", second.Order.PickupCode.String)
+
+	third, err := testStore.CreateOrderTx(context.Background(), newOrderParams(util.RandomString(20), pickupTime.Add(24*time.Hour)))
+	require.NoError(t, err)
+	require.True(t, third.Order.PickupCode.Valid)
+	require.Equal(t, "1", third.Order.PickupCode.String)
 }
 
 func TestCreateOrderTxEmptyItems(t *testing.T) {
@@ -992,12 +1040,14 @@ func TestProcessOrderPaymentTx_TakeoutWithoutAddress(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// 支付处理应该失败
-	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
+	// 当前实现会先完成支付与库存扣减，配送单在商家后续推进履约时再创建。
+	result, err := testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{
 		OrderID: createResult.Order.ID,
 	})
-	require.Error(t, err)
-	require.Contains(t, err.Error(), "missing delivery address")
+	require.NoError(t, err)
+	require.Equal(t, "paid", result.Order.Status)
+	require.Nil(t, result.Delivery)
+	require.Nil(t, result.PoolItem)
 }
 
 func TestProcessOrderPaymentTx_TakeoutOrder_MediumDeliveryFee(t *testing.T) {

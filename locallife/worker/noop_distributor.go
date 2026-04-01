@@ -135,3 +135,7 @@ func (NoopTaskDistributor) DistributeTaskSyncComplaints(ctx context.Context, pay
 func (NoopTaskDistributor) DistributeTaskProcessAnomalyRefund(ctx context.Context, payload *PayloadProcessAnomalyRefund, opts ...asynq.Option) error {
 	return nil
 }
+
+func (NoopTaskDistributor) DistributeTaskPrintOrder(ctx context.Context, payload *PrintOrderPayload, opts ...asynq.Option) error {
+	return nil
+}

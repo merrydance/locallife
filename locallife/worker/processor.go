@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-redis/redis/v8"
 	"github.com/hibiken/asynq"
+	"github.com/merrydance/locallife/cloudprint"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
@@ -57,6 +58,7 @@ type RedisTaskProcessor struct {
 	deliveryBroadcast *logic.DeliveryBroadcastLogic
 	mediaRegistry     *media.Registry
 	ocrService        *ocr.Service
+	printerClient     cloudprint.Client
 	config            util.Config
 	roleCache         map[int64]cachedUserRoles
 	roleCacheMu       sync.RWMutex
@@ -124,6 +126,7 @@ func NewRedisTaskProcessor(
 		deliveryBroadcast: deliveryBroadcast,
 		mediaRegistry:     mediaRegistry,
 		ocrService:        ocrService,
+		printerClient:     cloudprint.NewFeieyunClientFromConfig(config),
 		config:            config,
 		roleCache:         make(map[int64]cachedUserRoles),
 		roleCacheTTL:      1 * time.Minute,
@@ -132,6 +135,10 @@ func NewRedisTaskProcessor(
 
 func (processor *RedisTaskProcessor) SetPaymentClient(paymentClient wechat.PaymentClientInterface) {
 	processor.paymentClient = paymentClient
+}
+
+func (processor *RedisTaskProcessor) SetPrinterClientForTest(client cloudprint.Client) {
+	processor.printerClient = client
 }
 
 // NewTestTaskProcessor 创建用于测试的处理器实例（不需要Redis连接）
@@ -148,6 +155,7 @@ func NewTestTaskProcessor(
 		wechatClient:    wechatClient,
 		ecommerceClient: ecommerceClient,
 		ocrService:      ocrService,
+		printerClient:   nil,
 		pubSubPublisher: websocket.NoopPublisher{},
 		roleCache:       make(map[int64]cachedUserRoles),
 		roleCacheTTL:    1 * time.Minute,
@@ -198,6 +206,7 @@ func (processor *RedisTaskProcessor) Start() error {
 	mux.HandleFunc(TaskProcessProfitSharingReturnResult, processor.ProcessTaskProfitSharingReturnResult)
 	mux.HandleFunc(TaskProcessMerchantWithdrawResult, processor.ProcessTaskMerchantWithdrawResult)
 	mux.HandleFunc(TaskProcessAnomalyRefund, processor.ProcessTaskAnomalyRefund)
+	mux.HandleFunc(TaskPrintOrder, processor.ProcessTaskPrintOrder)
 
 	// TrustScore系统任务
 	mux.HandleFunc(TypeHandleSuspiciousPattern, processor.HandleSuspiciousPattern)

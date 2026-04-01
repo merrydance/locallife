@@ -49,12 +49,15 @@ func settingsResultFromModel(settings db.MerchantMembershipSetting) MembershipSe
 }
 
 func GetMembershipSettingsForOwner(ctx context.Context, store db.Store, ownerUserID int64) (MembershipSettingsResult, error) {
-	merchant, err := store.GetMerchantByOwner(ctx, ownerUserID)
+	merchant, err := resolveMerchantForUser(ctx, store, ownerUserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return MembershipSettingsResult{}, NewRequestError(http.StatusNotFound, errors.New("merchant not found"))
 		}
 		return MembershipSettingsResult{}, err
+	}
+	if merchant.OwnerUserID != ownerUserID {
+		return MembershipSettingsResult{}, NewRequestError(http.StatusForbidden, errors.New("merchant owner required"))
 	}
 
 	settings, err := store.GetMerchantMembershipSettings(ctx, merchant.ID)
@@ -69,12 +72,15 @@ func GetMembershipSettingsForOwner(ctx context.Context, store db.Store, ownerUse
 }
 
 func UpdateMembershipSettingsForOwner(ctx context.Context, store db.Store, input UpdateMembershipSettingsInput) (MembershipSettingsResult, error) {
-	merchant, err := store.GetMerchantByOwner(ctx, input.OwnerUserID)
+	merchant, err := resolveMerchantForUser(ctx, store, input.OwnerUserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return MembershipSettingsResult{}, NewRequestError(http.StatusNotFound, errors.New("merchant not found"))
 		}
 		return MembershipSettingsResult{}, err
+	}
+	if merchant.OwnerUserID != input.OwnerUserID {
+		return MembershipSettingsResult{}, NewRequestError(http.StatusForbidden, errors.New("merchant owner required"))
 	}
 
 	defaults := defaultMembershipSettings(merchant.ID)

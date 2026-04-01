@@ -168,7 +168,7 @@ export function GroupPageClient() {
                 </div>
                 <CardTitle>创建并入驻集团</CardTitle>
                 <CardDescription>
-                  如果您拥有多个品牌或门店，可以申请创建集团，统一管理各门店的菜单、库存和营销。
+                  如果您拥有多个品牌或门店，可以申请创建集团，统一查看经营数据、管理门店归属并维护协同策略。
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -344,7 +344,7 @@ export function GroupPageClient() {
                   <Separator />
                   <div className="p-4 bg-primary/5 rounded-lg border border-primary/20 text-xs text-primary leading-relaxed flex items-start gap-2">
                     <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
-                    <span> 您当前的身份为 <strong>集团管理员</strong>，所做的修改将同步并影响到所有授权门店的协作逻辑。</span>
+                    <span> 您当前的身份为 <strong>集团管理员</strong>，可维护集团资料、门店归属和协同偏好；门店菜单、库存和营销执行仍以各自业务链路为准。</span>
                   </div>
                 </CardContent>
               </Card>
@@ -539,49 +539,49 @@ export function GroupPageClient() {
           <TabsContent value="policies" className="m-0 space-y-6 animate-in fade-in slide-in-from-bottom-2">
             <Card className="overflow-hidden border-muted/60">
               <CardHeader className="bg-slate-50/50 border-b pb-6">
-                <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">集团协同策略</CardTitle>
-                <CardDescription className="pl-3 mt-1 underline-offset-4">配置集团与各个门店之间的数据同步和权限策略，确保品牌一致性</CardDescription>
+                <CardTitle className="text-sm font-semibold border-l-4 border-primary pl-3">集团协同偏好</CardTitle>
+                <CardDescription className="pl-3 mt-1 underline-offset-4">记录集团与门店之间的管理偏好，当前主要用于组织协同与视图展示，暂不自动接管门店菜单、库存或营销执行</CardDescription>
               </CardHeader>
               <CardContent className="space-y-0 p-0">
                 <div className="divide-y divide-slate-100">
                   <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
                     <div className="space-y-1">
-                      <Label className="text-base font-bold text-slate-900">菜品/菜单管理模式</Label>
+                      <Label className="text-base font-bold text-slate-900">菜单协同偏好</Label>
                       <p className="text-xs text-muted-foreground font-normal max-w-lg">
-                        <strong>统一分发：</strong> 由于集团统一分发菜单，门店仅可调整估清状态；<br/>
-                        <strong>门店控制：</strong> 门店可自行上下架和修改菜品信息。
+                        <strong>集团主导：</strong> 记录集团希望统一维护菜单口径，便于后续人工协同；<br/>
+                        <strong>门店主导：</strong> 记录各门店自行维护菜单信息的当前分工。
                       </p>
                     </div>
                     <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
-                      <Button variant={policies?.menu_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('menu_mode', 'central')}>统一分发</Button>
-                      <Button variant={policies?.menu_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('menu_mode', 'store')}>门店控制</Button>
+                      <Button variant={policies?.menu_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('menu_mode', 'central')}>集团主导</Button>
+                      <Button variant={policies?.menu_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('menu_mode', 'store')}>门店主导</Button>
                     </div>
                   </div>
 
                   <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
                     <div className="space-y-1">
-                      <Label className="text-base font-bold text-slate-900">价格同步模式</Label>
+                      <Label className="text-base font-bold text-slate-900">价格管理偏好</Label>
                       <p className="text-xs text-muted-foreground font-normal max-w-lg">
-                        <strong>强力一致：</strong> 锁定全国统一售价，门店不可修改；<br/>
-                        <strong>允许差异：</strong> 允许门店根据地域差异在设定范围内调整价格。
+                        <strong>集团主导：</strong> 记录集团希望统一价格口径，便于后续对齐和巡检；<br/>
+                        <strong>门店主导：</strong> 记录门店可按本地经营情况独立定价的当前分工。
                       </p>
                     </div>
                     <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
-                      <Button variant={policies?.pricing_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('pricing_mode', 'central')}>强力一致</Button>
-                      <Button variant={policies?.pricing_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('pricing_mode', 'store')}>允许差异</Button>
+                      <Button variant={policies?.pricing_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('pricing_mode', 'central')}>集团主导</Button>
+                      <Button variant={policies?.pricing_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('pricing_mode', 'store')}>门店主导</Button>
                     </div>
                   </div>
 
                   <div className="p-6 flex items-center justify-between hover:bg-slate-50/30 transition-colors">
                     <div className="space-y-1">
-                      <Label className="text-base font-bold text-slate-900">库存共享策略</Label>
+                      <Label className="text-base font-bold text-slate-900">库存协同偏好</Label>
                       <p className="text-xs text-muted-foreground font-normal max-w-lg">
-                        <strong>集团统筹：</strong> 集团干预核心原材料库存阈值提醒或供应链分配；<br/>
-                        <strong>门店自主：</strong> 门店完全根据自身经营情况管理库存。
+                        <strong>集团协调：</strong> 记录集团参与库存预警、采购节奏或供应链协同的偏好；<br/>
+                        <strong>门店自主：</strong> 记录门店独立管理库存的当前分工。
                       </p>
                     </div>
                     <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner">
-                      <Button variant={policies?.inventory_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('inventory_mode', 'central')}>集团统筹</Button>
+                      <Button variant={policies?.inventory_mode === 'central' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('inventory_mode', 'central')}>集团协调</Button>
                       <Button variant={policies?.inventory_mode === 'store' ? 'default' : 'ghost'} size="sm" className="h-8 text-xs px-4 rounded-lg" onClick={() => handleUpdatePolicy('inventory_mode', 'store')}>门店自主</Button>
                     </div>
                   </div>
@@ -590,9 +590,9 @@ export function GroupPageClient() {
                 <div className="p-8 bg-slate-50 border-t flex justify-between items-center">
                   <div className="flex items-center gap-2 text-xs text-slate-400">
                     <AlertCircle className="h-4 w-4" />
-                    修改策略将即时生效并同步至该集团下的所有门店。
+                    保存后会更新集团协同偏好记录，供后续管理、审核与视图展示使用。
                   </div>
-                  <Button size="lg" className="px-12 font-bold shadow-lg shadow-primary/20" onClick={handleSavePolicies}>发布全局策略</Button>
+                  <Button size="lg" className="px-12 font-bold shadow-lg shadow-primary/20" onClick={handleSavePolicies}>保存协同偏好</Button>
                 </div>
               </CardContent>
             </Card>

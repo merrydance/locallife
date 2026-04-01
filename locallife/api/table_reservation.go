@@ -497,7 +497,7 @@ func (server *Server) getReservation(ctx *gin.Context) {
 	isOwner := reservation.UserID == authPayload.UserID
 	isMerchant := false
 	if !isOwner {
-		merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 		if err == nil && merchant.ID == reservation.MerchantID {
 			isMerchant = true
 		}
@@ -739,7 +739,7 @@ func (server *Server) listMerchantReservationDishes(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -894,7 +894,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 
 	// 获取商户ID
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -1326,7 +1326,7 @@ func (server *Server) getReservationStats(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -1610,7 +1610,7 @@ func (server *Server) merchantCreateReservation(ctx *gin.Context) {
 
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
@@ -1872,7 +1872,7 @@ func (server *Server) merchantUpdateReservation(ctx *gin.Context) {
 func (server *Server) listTodayReservations(ctx *gin.Context) {
 	// 验证商户权限
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))

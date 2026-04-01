@@ -69,7 +69,7 @@ func (s *RefundService) maybeMarkPaymentOrderRefunded(ctx context.Context, payme
 }
 
 func (s *RefundService) CreateRefundOrder(ctx context.Context, input CreateRefundOrderInput) (CreateRefundOrderResult, error) {
-	merchant, err := s.store.GetMerchantByOwner(ctx, input.ActorUserID)
+	merchant, err := resolveMerchantForUser(ctx, s.store, input.ActorUserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return CreateRefundOrderResult{}, NewRequestError(http.StatusForbidden, errors.New("you are not a merchant"))
@@ -199,7 +199,7 @@ func (s *RefundService) GetRefundOrder(ctx context.Context, input GetRefundOrder
 	if paymentOrder.OrderID.Valid {
 		order, getOrderErr := s.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
 		if getOrderErr == nil {
-			merchant, getMerchantErr := s.store.GetMerchantByOwner(ctx, input.ActorUserID)
+			merchant, getMerchantErr := resolveMerchantForUser(ctx, s.store, input.ActorUserID)
 			if getMerchantErr == nil && order.MerchantID == merchant.ID {
 				return GetRefundOrderResult{RefundOrder: refundOrder}, nil
 			}
@@ -224,7 +224,7 @@ func (s *RefundService) ListRefundOrdersByPayment(ctx context.Context, input Lis
 			if getOrderErr != nil {
 				return ListRefundOrdersByPaymentResult{}, getOrderErr
 			}
-			merchant, getMerchantErr := s.store.GetMerchantByOwner(ctx, input.ActorUserID)
+			merchant, getMerchantErr := resolveMerchantForUser(ctx, s.store, input.ActorUserID)
 			if getMerchantErr != nil || order.MerchantID != merchant.ID {
 				return ListRefundOrdersByPaymentResult{}, NewRequestError(http.StatusForbidden, errors.New("access denied"))
 			}
@@ -242,7 +242,7 @@ func (s *RefundService) ListRefundOrdersByPayment(ctx context.Context, input Lis
 }
 
 func (s *RefundService) ListProfitSharingReturnsByRefund(ctx context.Context, input ListProfitSharingReturnsByRefundInput) (ListProfitSharingReturnsByRefundResult, error) {
-	merchant, err := s.store.GetMerchantByOwner(ctx, input.ActorUserID)
+	merchant, err := resolveMerchantForUser(ctx, s.store, input.ActorUserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return ListProfitSharingReturnsByRefundResult{}, NewRequestError(http.StatusForbidden, errors.New("you are not a merchant"))

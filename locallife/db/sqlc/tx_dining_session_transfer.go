@@ -114,6 +114,11 @@ func (store *SQLStore) TransferDiningSessionTableTx(ctx context.Context, arg Tra
 		if toTable.Status == "disabled" {
 			return ErrTargetTableDisabled
 		}
+		if toTable.Status == "reserved" {
+			if !session.ReservationID.Valid || !toTable.CurrentReservationID.Valid || toTable.CurrentReservationID.Int64 != session.ReservationID.Int64 {
+				return ErrTargetTableReserved
+			}
+		}
 
 		if existing, err := q.GetActiveDiningSessionByTable(ctx, toTable.ID); err == nil {
 			if existing.ID != session.ID {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -36,7 +37,7 @@ func TestGetMerchantAccountBalanceAPINotConfigured(t *testing.T) {
 
 	store.EXPECT().
 		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-		Times(2).
+		Times(1).
 		Return(merchant, nil)
 
 	store.EXPECT().
@@ -87,7 +88,7 @@ func TestListMerchantAccountWithdrawalsAPIInactiveConfig(t *testing.T) {
 
 	store.EXPECT().
 		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-		Times(2).
+		Times(1).
 		Return(merchant, nil)
 
 	store.EXPECT().
@@ -111,6 +112,134 @@ func TestListMerchantAccountWithdrawalsAPIInactiveConfig(t *testing.T) {
 	require.Equal(t, "inactive", resp.AccountStatus)
 	require.Len(t, resp.Withdrawals, 0)
 	require.Equal(t, int64(0), resp.Total)
+}
+
+func TestCreateMerchantAccountWithdrawAPIManagerForbidden(t *testing.T) {
+	owner, _ := randomUser(t)
+	manager, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: owner.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(manager.ID)).
+		Times(1).
+		Return(merchant, nil)
+
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     manager.ID,
+		})).
+		Times(1).
+		Return("manager", nil)
+
+	server := newTestServer(t, store)
+
+	body := []byte(`{"amount":1000,"remark":"test withdraw"}`)
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodPost, "/v1/merchant/finance/account/withdraw", bytes.NewReader(body))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, manager.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
+}
+
+func TestListMerchantAccountWithdrawalsAPIManagerCanReadOwnRecords(t *testing.T) {
+	owner, _ := randomUser(t)
+	manager, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: owner.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
+	record := db.WithdrawalRecord{
+		ID:        10,
+		UserID:    manager.ID,
+		Amount:    5000,
+		Status:    "success",
+		Channel:   "wechat_ecommerce_fund",
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(manager.ID)).
+		Times(1).
+		Return(merchant, nil)
+
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     manager.ID,
+		})).
+		Times(1).
+		Return("manager", nil)
+
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	store.EXPECT().
+		ListWithdrawalRecords(gomock.Any(), gomock.Eq(db.ListWithdrawalRecordsParams{
+			UserID: manager.ID,
+			Limit:  20,
+			Offset: 0,
+		})).
+		Times(1).
+		Return([]db.WithdrawalRecord{record}, nil)
+
+	store.EXPECT().
+		CountWithdrawalRecords(gomock.Any(), gomock.Eq(manager.ID)).
+		Times(1).
+		Return(int64(1), nil)
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/withdrawals?page=1&limit=20", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, manager.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantWithdrawalsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "active", resp.AccountStatus)
+	require.Len(t, resp.Withdrawals, 1)
+	require.Equal(t, record.ID, resp.Withdrawals[0].ID)
+	require.Equal(t, manager.ID, record.UserID)
 }
 
 func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
@@ -147,7 +276,7 @@ func TestGetMerchantFinanceOverviewAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -348,7 +477,7 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -408,7 +537,7 @@ func TestListMerchantFinanceOrdersAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -531,7 +660,7 @@ func TestListMerchantServiceFeesAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				store.EXPECT().

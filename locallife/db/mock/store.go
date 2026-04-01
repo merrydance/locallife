@@ -297,6 +297,21 @@ func (mr *MockStoreMockRecorder) AdjustMemberBalanceTx(ctx, arg any) *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AdjustMemberBalanceTx", reflect.TypeOf((*MockStore)(nil).AdjustMemberBalanceTx), ctx, arg)
 }
 
+// AllocateDailyPickupSequence mocks base method.
+func (m *MockStore) AllocateDailyPickupSequence(ctx context.Context, arg db.AllocateDailyPickupSequenceParams) (int32, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AllocateDailyPickupSequence", ctx, arg)
+	ret0, _ := ret[0].(int32)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AllocateDailyPickupSequence indicates an expected call of AllocateDailyPickupSequence.
+func (mr *MockStoreMockRecorder) AllocateDailyPickupSequence(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AllocateDailyPickupSequence", reflect.TypeOf((*MockStore)(nil).AllocateDailyPickupSequence), ctx, arg)
+}
+
 // AppealCompensationTx mocks base method.
 func (m *MockStore) AppealCompensationTx(ctx context.Context, arg db.AppealCompensationTxParams) (db.AppealCompensationTxResult, error) {
 	m.ctrl.T.Helper()
@@ -1741,6 +1756,21 @@ func (m *MockStore) CountMerchantOrdersByStatusAfterTime(ctx context.Context, ar
 func (mr *MockStoreMockRecorder) CountMerchantOrdersByStatusAfterTime(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantOrdersByStatusAfterTime", reflect.TypeOf((*MockStore)(nil).CountMerchantOrdersByStatusAfterTime), ctx, arg)
+}
+
+// CountMerchantPrintAnomalies mocks base method.
+func (m *MockStore) CountMerchantPrintAnomalies(ctx context.Context, arg db.CountMerchantPrintAnomaliesParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountMerchantPrintAnomalies", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountMerchantPrintAnomalies indicates an expected call of CountMerchantPrintAnomalies.
+func (mr *MockStoreMockRecorder) CountMerchantPrintAnomalies(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountMerchantPrintAnomalies", reflect.TypeOf((*MockStore)(nil).CountMerchantPrintAnomalies), ctx, arg)
 }
 
 // CountMerchantPromotionOrders mocks base method.
@@ -5429,6 +5459,21 @@ func (mr *MockStoreMockRecorder) ExploreNearbyRooms(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExploreNearbyRooms", reflect.TypeOf((*MockStore)(nil).ExploreNearbyRooms), ctx, arg)
 }
 
+// FailCloudPrinterReconciliationJobRetry mocks base method.
+func (m *MockStore) FailCloudPrinterReconciliationJobRetry(ctx context.Context, arg db.FailCloudPrinterReconciliationJobRetryParams) (db.CloudPrinterReconciliationJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "FailCloudPrinterReconciliationJobRetry", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterReconciliationJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// FailCloudPrinterReconciliationJobRetry indicates an expected call of FailCloudPrinterReconciliationJobRetry.
+func (mr *MockStoreMockRecorder) FailCloudPrinterReconciliationJobRetry(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FailCloudPrinterReconciliationJobRetry", reflect.TypeOf((*MockStore)(nil).FailCloudPrinterReconciliationJobRetry), ctx, arg)
+}
+
 // FailOCRJob mocks base method.
 func (m *MockStore) FailOCRJob(ctx context.Context, arg db.FailOCRJobParams) (db.OcrJob, error) {
 	m.ctrl.T.Helper()
@@ -6147,6 +6192,21 @@ func (m *MockStore) GetCloudPrinterBySN(ctx context.Context, printerSn string) (
 func (mr *MockStoreMockRecorder) GetCloudPrinterBySN(ctx, printerSn any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloudPrinterBySN", reflect.TypeOf((*MockStore)(nil).GetCloudPrinterBySN), ctx, printerSn)
+}
+
+// GetCloudPrinterReconciliationJob mocks base method.
+func (m *MockStore) GetCloudPrinterReconciliationJob(ctx context.Context, id int64) (db.CloudPrinterReconciliationJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCloudPrinterReconciliationJob", ctx, id)
+	ret0, _ := ret[0].(db.CloudPrinterReconciliationJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCloudPrinterReconciliationJob indicates an expected call of GetCloudPrinterReconciliationJob.
+func (mr *MockStoreMockRecorder) GetCloudPrinterReconciliationJob(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCloudPrinterReconciliationJob", reflect.TypeOf((*MockStore)(nil).GetCloudPrinterReconciliationJob), ctx, id)
 }
 
 // GetCombinedPaymentOrder mocks base method.
@@ -7169,6 +7229,21 @@ func (mr *MockStoreMockRecorder) GetLatestPaymentOrderByReservation(ctx, arg any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestPaymentOrderByReservation", reflect.TypeOf((*MockStore)(nil).GetLatestPaymentOrderByReservation), ctx, arg)
 }
 
+// GetLatestPrintLogByOrderAndPrinter mocks base method.
+func (m *MockStore) GetLatestPrintLogByOrderAndPrinter(ctx context.Context, arg db.GetLatestPrintLogByOrderAndPrinterParams) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetLatestPrintLogByOrderAndPrinter", ctx, arg)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetLatestPrintLogByOrderAndPrinter indicates an expected call of GetLatestPrintLogByOrderAndPrinter.
+func (mr *MockStoreMockRecorder) GetLatestPrintLogByOrderAndPrinter(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLatestPrintLogByOrderAndPrinter", reflect.TypeOf((*MockStore)(nil).GetLatestPrintLogByOrderAndPrinter), ctx, arg)
+}
+
 // GetLatestWeatherCoefficient mocks base method.
 func (m *MockStore) GetLatestWeatherCoefficient(ctx context.Context, regionID int64) (db.WeatherCoefficient, error) {
 	m.ctrl.T.Helper()
@@ -7664,19 +7739,19 @@ func (mr *MockStoreMockRecorder) GetMerchantGroup(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantGroup", reflect.TypeOf((*MockStore)(nil).GetMerchantGroup), ctx, id)
 }
 
-// GetMerchantGroupBinding mocks base method.
-func (m *MockStore) GetMerchantGroupBinding(ctx context.Context, id int64) (db.GetMerchantGroupBindingRow, error) {
+// GetMerchantGroupAffiliation mocks base method.
+func (m *MockStore) GetMerchantGroupAffiliation(ctx context.Context, id int64) (db.GetMerchantGroupAffiliationRow, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMerchantGroupBinding", ctx, id)
-	ret0, _ := ret[0].(db.GetMerchantGroupBindingRow)
+	ret := m.ctrl.Call(m, "GetMerchantGroupAffiliation", ctx, id)
+	ret0, _ := ret[0].(db.GetMerchantGroupAffiliationRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetMerchantGroupBinding indicates an expected call of GetMerchantGroupBinding.
-func (mr *MockStoreMockRecorder) GetMerchantGroupBinding(ctx, id any) *gomock.Call {
+// GetMerchantGroupAffiliation indicates an expected call of GetMerchantGroupAffiliation.
+func (mr *MockStoreMockRecorder) GetMerchantGroupAffiliation(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantGroupBinding", reflect.TypeOf((*MockStore)(nil).GetMerchantGroupBinding), ctx, id)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantGroupAffiliation", reflect.TypeOf((*MockStore)(nil).GetMerchantGroupAffiliation), ctx, id)
 }
 
 // GetMerchantGrowthStats mocks base method.
@@ -7797,6 +7872,21 @@ func (m *MockStore) GetMerchantOverview(ctx context.Context, arg db.GetMerchantO
 func (mr *MockStoreMockRecorder) GetMerchantOverview(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantOverview", reflect.TypeOf((*MockStore)(nil).GetMerchantOverview), ctx, arg)
+}
+
+// GetMerchantPackagingPolicy mocks base method.
+func (m *MockStore) GetMerchantPackagingPolicy(ctx context.Context, merchantID int64) (db.MerchantPackagingPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantPackagingPolicy", ctx, merchantID)
+	ret0, _ := ret[0].(db.MerchantPackagingPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantPackagingPolicy indicates an expected call of GetMerchantPackagingPolicy.
+func (mr *MockStoreMockRecorder) GetMerchantPackagingPolicy(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantPackagingPolicy", reflect.TypeOf((*MockStore)(nil).GetMerchantPackagingPolicy), ctx, merchantID)
 }
 
 // GetMerchantPaymentConfig mocks base method.
@@ -8817,6 +8907,21 @@ func (m *MockStore) GetPrintLog(ctx context.Context, id int64) (db.PrintLog, err
 func (mr *MockStoreMockRecorder) GetPrintLog(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLog", reflect.TypeOf((*MockStore)(nil).GetPrintLog), ctx, id)
+}
+
+// GetPrintLogByTaskKeyAndPrinter mocks base method.
+func (m *MockStore) GetPrintLogByTaskKeyAndPrinter(ctx context.Context, arg db.GetPrintLogByTaskKeyAndPrinterParams) (db.PrintLog, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPrintLogByTaskKeyAndPrinter", ctx, arg)
+	ret0, _ := ret[0].(db.PrintLog)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetPrintLogByTaskKeyAndPrinter indicates an expected call of GetPrintLogByTaskKeyAndPrinter.
+func (mr *MockStoreMockRecorder) GetPrintLogByTaskKeyAndPrinter(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPrintLogByTaskKeyAndPrinter", reflect.TypeOf((*MockStore)(nil).GetPrintLogByTaskKeyAndPrinter), ctx, arg)
 }
 
 // GetProfitSharingOrder mocks base method.
@@ -11544,6 +11649,21 @@ func (mr *MockStoreMockRecorder) ListClaimsByTimeWindow(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClaimsByTimeWindow", reflect.TypeOf((*MockStore)(nil).ListClaimsByTimeWindow), ctx, arg)
 }
 
+// ListCloudPrinterReconciliationJobsByMerchant mocks base method.
+func (m *MockStore) ListCloudPrinterReconciliationJobsByMerchant(ctx context.Context, arg db.ListCloudPrinterReconciliationJobsByMerchantParams) ([]db.CloudPrinterReconciliationJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCloudPrinterReconciliationJobsByMerchant", ctx, arg)
+	ret0, _ := ret[0].([]db.CloudPrinterReconciliationJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCloudPrinterReconciliationJobsByMerchant indicates an expected call of ListCloudPrinterReconciliationJobsByMerchant.
+func (mr *MockStoreMockRecorder) ListCloudPrinterReconciliationJobsByMerchant(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCloudPrinterReconciliationJobsByMerchant", reflect.TypeOf((*MockStore)(nil).ListCloudPrinterReconciliationJobsByMerchant), ctx, arg)
+}
+
 // ListCloudPrintersByMerchant mocks base method.
 func (m *MockStore) ListCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]db.CloudPrinter, error) {
 	m.ctrl.T.Helper()
@@ -12547,6 +12667,21 @@ func (m *MockStore) ListMerchantOrdersByStatus(ctx context.Context, arg db.ListM
 func (mr *MockStoreMockRecorder) ListMerchantOrdersByStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantOrdersByStatus", reflect.TypeOf((*MockStore)(nil).ListMerchantOrdersByStatus), ctx, arg)
+}
+
+// ListMerchantPrintAnomalies mocks base method.
+func (m *MockStore) ListMerchantPrintAnomalies(ctx context.Context, arg db.ListMerchantPrintAnomaliesParams) ([]db.ListMerchantPrintAnomaliesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantPrintAnomalies", ctx, arg)
+	ret0, _ := ret[0].([]db.ListMerchantPrintAnomaliesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantPrintAnomalies indicates an expected call of ListMerchantPrintAnomalies.
+func (mr *MockStoreMockRecorder) ListMerchantPrintAnomalies(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantPrintAnomalies", reflect.TypeOf((*MockStore)(nil).ListMerchantPrintAnomalies), ctx, arg)
 }
 
 // ListMerchantPromotionOrders mocks base method.
@@ -14439,6 +14574,21 @@ func (mr *MockStoreMockRecorder) ListTakeoutOrdersDeliveredBefore(ctx, arg any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTakeoutOrdersDeliveredBefore", reflect.TypeOf((*MockStore)(nil).ListTakeoutOrdersDeliveredBefore), ctx, arg)
 }
 
+// ListTimedOutPrintAnomalies mocks base method.
+func (m *MockStore) ListTimedOutPrintAnomalies(ctx context.Context, arg db.ListTimedOutPrintAnomaliesParams) ([]db.ListTimedOutPrintAnomaliesRow, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTimedOutPrintAnomalies", ctx, arg)
+	ret0, _ := ret[0].([]db.ListTimedOutPrintAnomaliesRow)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTimedOutPrintAnomalies indicates an expected call of ListTimedOutPrintAnomalies.
+func (mr *MockStoreMockRecorder) ListTimedOutPrintAnomalies(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTimedOutPrintAnomalies", reflect.TypeOf((*MockStore)(nil).ListTimedOutPrintAnomalies), ctx, arg)
+}
+
 // ListTodayReservationsByMerchant mocks base method.
 func (m *MockStore) ListTodayReservationsByMerchant(ctx context.Context, merchantID int64) ([]db.ListTodayReservationsByMerchantRow, error) {
 	m.ctrl.T.Helper()
@@ -15642,6 +15792,21 @@ func (m *MockStore) ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt t
 func (mr *MockStoreMockRecorder) ResetStaleMerchantOCRStatus(ctx, updatedAt any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResetStaleMerchantOCRStatus", reflect.TypeOf((*MockStore)(nil).ResetStaleMerchantOCRStatus), ctx, updatedAt)
+}
+
+// ResolveCloudPrinterReconciliationJob mocks base method.
+func (m *MockStore) ResolveCloudPrinterReconciliationJob(ctx context.Context, id int64) (db.CloudPrinterReconciliationJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ResolveCloudPrinterReconciliationJob", ctx, id)
+	ret0, _ := ret[0].(db.CloudPrinterReconciliationJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ResolveCloudPrinterReconciliationJob indicates an expected call of ResolveCloudPrinterReconciliationJob.
+func (mr *MockStoreMockRecorder) ResolveCloudPrinterReconciliationJob(ctx, id any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResolveCloudPrinterReconciliationJob", reflect.TypeOf((*MockStore)(nil).ResolveCloudPrinterReconciliationJob), ctx, id)
 }
 
 // ResolveRiderDepositRefundTx mocks base method.
@@ -17618,18 +17783,18 @@ func (mr *MockStoreMockRecorder) UpdateMerchantGroup(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantGroup", reflect.TypeOf((*MockStore)(nil).UpdateMerchantGroup), ctx, arg)
 }
 
-// UpdateMerchantGroupBinding mocks base method.
-func (m *MockStore) UpdateMerchantGroupBinding(ctx context.Context, arg db.UpdateMerchantGroupBindingParams) error {
+// UpdateMerchantGroupAffiliation mocks base method.
+func (m *MockStore) UpdateMerchantGroupAffiliation(ctx context.Context, arg db.UpdateMerchantGroupAffiliationParams) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateMerchantGroupBinding", ctx, arg)
+	ret := m.ctrl.Call(m, "UpdateMerchantGroupAffiliation", ctx, arg)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// UpdateMerchantGroupBinding indicates an expected call of UpdateMerchantGroupBinding.
-func (mr *MockStoreMockRecorder) UpdateMerchantGroupBinding(ctx, arg any) *gomock.Call {
+// UpdateMerchantGroupAffiliation indicates an expected call of UpdateMerchantGroupAffiliation.
+func (mr *MockStoreMockRecorder) UpdateMerchantGroupAffiliation(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantGroupBinding", reflect.TypeOf((*MockStore)(nil).UpdateMerchantGroupBinding), ctx, arg)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantGroupAffiliation", reflect.TypeOf((*MockStore)(nil).UpdateMerchantGroupAffiliation), ctx, arg)
 }
 
 // UpdateMerchantIsOpen mocks base method.
@@ -19204,6 +19369,21 @@ func (mr *MockStoreMockRecorder) UpdateWithdrawalStatus(ctx, arg any) *gomock.Ca
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWithdrawalStatus", reflect.TypeOf((*MockStore)(nil).UpdateWithdrawalStatus), ctx, arg)
 }
 
+// UpsertCloudPrinterReconciliationJob mocks base method.
+func (m *MockStore) UpsertCloudPrinterReconciliationJob(ctx context.Context, arg db.UpsertCloudPrinterReconciliationJobParams) (db.CloudPrinterReconciliationJob, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertCloudPrinterReconciliationJob", ctx, arg)
+	ret0, _ := ret[0].(db.CloudPrinterReconciliationJob)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertCloudPrinterReconciliationJob indicates an expected call of UpsertCloudPrinterReconciliationJob.
+func (mr *MockStoreMockRecorder) UpsertCloudPrinterReconciliationJob(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertCloudPrinterReconciliationJob", reflect.TypeOf((*MockStore)(nil).UpsertCloudPrinterReconciliationJob), ctx, arg)
+}
+
 // UpsertDishTag mocks base method.
 func (m *MockStore) UpsertDishTag(ctx context.Context, arg db.UpsertDishTagParams) error {
 	m.ctrl.T.Helper()
@@ -19246,6 +19426,21 @@ func (m *MockStore) UpsertMerchantMembershipSettings(ctx context.Context, arg db
 func (mr *MockStoreMockRecorder) UpsertMerchantMembershipSettings(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantMembershipSettings", reflect.TypeOf((*MockStore)(nil).UpsertMerchantMembershipSettings), ctx, arg)
+}
+
+// UpsertMerchantPackagingPolicy mocks base method.
+func (m *MockStore) UpsertMerchantPackagingPolicy(ctx context.Context, arg db.UpsertMerchantPackagingPolicyParams) (db.MerchantPackagingPolicy, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantPackagingPolicy", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantPackagingPolicy)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertMerchantPackagingPolicy indicates an expected call of UpsertMerchantPackagingPolicy.
+func (mr *MockStoreMockRecorder) UpsertMerchantPackagingPolicy(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantPackagingPolicy", reflect.TypeOf((*MockStore)(nil).UpsertMerchantPackagingPolicy), ctx, arg)
 }
 
 // UpsertOCRJob mocks base method.

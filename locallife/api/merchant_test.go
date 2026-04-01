@@ -81,11 +81,6 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -193,11 +188,6 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					MinTimes(1).
 					Return(db.Merchant{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -283,9 +273,10 @@ func TestGetCurrentMerchantAPI_WithLogoURL(t *testing.T) {
 
 	const assetID int64 = 42
 	logoAsset := db.MediaAsset{
-		ID:         assetID,
-		ObjectKey:  "merchant/logo/1/logo_card.jpg",
-		Visibility: "public",
+		ID:               assetID,
+		ObjectKey:        "merchant/logo/1/logo_card.jpg",
+		Visibility:       "public",
+		ModerationStatus: "approved",
 	}
 
 	ctrl := gomock.NewController(t)

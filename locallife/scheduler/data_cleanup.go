@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -19,6 +20,9 @@ import (
 const (
 	riderDepositCreditReminderBatchLimit = int32(200)
 	riderDepositCreditExpireBatchLimit   = int32(200)
+	timedOutPrintAnomalyBatchLimit       = int32(200)
+	timedOutPrintAnomalyThreshold        = 15 * time.Minute
+	timedOutPrintAnomalyAlertInterval    = time.Hour
 )
 
 var riderDepositReminderOffsets = []int{30, 7, 1, 0}
@@ -30,6 +34,8 @@ type DataCleanupScheduler struct {
 	store           db.Store
 	taskDistributor worker.TaskDistributor
 	publisher       websocket.PubSubPublisher
+	mu              sync.Mutex
+	alertedPrintLog map[string]time.Time
 }
 
 // NewDataCleanupScheduler 创建数据清理调度器
@@ -45,6 +51,7 @@ func NewDataCleanupScheduler(store db.Store, taskDistributor worker.TaskDistribu
 		store:           store,
 		taskDistributor: taskDistributor,
 		publisher:       publisher,
+		alertedPrintLog: make(map[string]time.Time),
 	}
 }
 
@@ -100,6 +107,12 @@ func (s *DataCleanupScheduler) Start() error {
 
 	// 每小时15分清理超时OCR任务
 	_, err = s.cron.AddFunc("0 15 * * * *", s.cleanupStaleOCRTasks)
+	if err != nil {
+		return err
+	}
+
+	// 每10分钟巡检一次超时未恢复的打印异常并发布平台告警
+	_, err = s.cron.AddFunc("0 */10 * * * *", s.checkTimedOutPrintAnomalies)
 	if err != nil {
 		return err
 	}
@@ -234,9 +247,9 @@ func (s *DataCleanupScheduler) sendRiderDepositReminderNotification(
 	return nil
 }
 
-func (s *DataCleanupScheduler) publishPlatformAlert(ctx context.Context, alert worker.AlertData) {
+func (s *DataCleanupScheduler) publishPlatformAlert(ctx context.Context, alert worker.AlertData) bool {
 	if s.publisher == nil {
-		return
+		return false
 	}
 
 	alert.Timestamp = time.Now()
@@ -249,12 +262,145 @@ func (s *DataCleanupScheduler) publishPlatformAlert(ctx context.Context, alert w
 	payload, err := json.Marshal(alertMsg)
 	if err != nil {
 		log.Error().Err(err).Str("alert_type", string(alert.AlertType)).Msg("failed to marshal rider deposit alert payload")
-		return
+		return false
 	}
 
 	if err := s.publisher.Publish(ctx, worker.AlertChannel, payload); err != nil {
 		log.Error().Err(err).Str("alert_type", string(alert.AlertType)).Msg("failed to publish rider deposit alert")
+		return false
 	}
+
+	return true
+}
+
+func (s *DataCleanupScheduler) filterTimedOutPrintAnomaliesForAlert(items []db.ListTimedOutPrintAnomaliesRow, now time.Time) []db.ListTimedOutPrintAnomaliesRow {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	current := make(map[string]struct{}, len(items))
+	filtered := make([]db.ListTimedOutPrintAnomaliesRow, 0, len(items))
+	for _, item := range items {
+		key := timedOutPrintAnomalyKey(item)
+		current[key] = struct{}{}
+		lastAlertAt, exists := s.alertedPrintLog[key]
+		if exists && now.Sub(lastAlertAt) < timedOutPrintAnomalyAlertInterval {
+			continue
+		}
+		filtered = append(filtered, item)
+	}
+
+	for anomalyKey := range s.alertedPrintLog {
+		if _, ok := current[anomalyKey]; !ok {
+			delete(s.alertedPrintLog, anomalyKey)
+		}
+	}
+
+	return filtered
+}
+
+func (s *DataCleanupScheduler) markTimedOutPrintAnomaliesAlerted(items []db.ListTimedOutPrintAnomaliesRow, now time.Time) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for _, item := range items {
+		s.alertedPrintLog[timedOutPrintAnomalyKey(item)] = now
+	}
+}
+
+func timedOutPrintAnomalyKey(item db.ListTimedOutPrintAnomaliesRow) string {
+	return fmt.Sprintf("%d:%d", item.OrderID, item.PrinterID)
+}
+
+func summarizeTimedOutPrintAnomalyMessage(items []db.ListTimedOutPrintAnomaliesRow, now time.Time) (string, map[string]interface{}) {
+	failedCount := 0
+	pendingCount := 0
+	samples := make([]map[string]interface{}, 0, minInt(len(items), 5))
+	oldestMinutes := 0
+	for index, item := range items {
+		ageMinutes := int(now.Sub(item.AnomalyCreatedAt).Minutes())
+		if index == 0 || ageMinutes > oldestMinutes {
+			oldestMinutes = ageMinutes
+		}
+		switch item.Status {
+		case "failed":
+			failedCount++
+		case "pending":
+			pendingCount++
+		}
+		if len(samples) < 5 {
+			sample := map[string]interface{}{
+				"print_log_id":  item.ID,
+				"merchant_id":   item.MerchantID,
+				"merchant_name": item.MerchantName,
+				"order_id":      item.OrderID,
+				"order_no":      item.OrderNo,
+				"printer_id":    item.PrinterID,
+				"printer_name":  item.PrinterName,
+				"status":        item.Status,
+				"age_minutes":   ageMinutes,
+			}
+			if item.ErrorMessage.Valid {
+				sample["error_message"] = item.ErrorMessage.String
+			}
+			samples = append(samples, sample)
+		}
+	}
+
+	message := fmt.Sprintf("当前有 %d 条打印异常已超过 %d 分钟仍未恢复，其中 failed %d 条、pending %d 条；最早已滞留约 %d 分钟。", len(items), int(timedOutPrintAnomalyThreshold.Minutes()), failedCount, pendingCount, oldestMinutes)
+	extra := map[string]interface{}{
+		"total":                len(items),
+		"failed_count":         failedCount,
+		"pending_count":        pendingCount,
+		"threshold_minutes":    int(timedOutPrintAnomalyThreshold.Minutes()),
+		"oldest_age_minutes":   oldestMinutes,
+		"sample_print_anomaly": samples,
+	}
+	return message, extra
+}
+
+func minInt(a int, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func (s *DataCleanupScheduler) checkTimedOutPrintAnomalies() {
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
+	now := time.Now()
+	items, err := s.store.ListTimedOutPrintAnomalies(ctx, db.ListTimedOutPrintAnomaliesParams{
+		CreatedAt: now.Add(-timedOutPrintAnomalyThreshold),
+		Limit:     timedOutPrintAnomalyBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("failed to list timed out print anomalies")
+		return
+	}
+	if len(items) == 0 {
+		return
+	}
+
+	toAlert := s.filterTimedOutPrintAnomaliesForAlert(items, now)
+	if len(toAlert) == 0 {
+		return
+	}
+
+	message, extra := summarizeTimedOutPrintAnomalyMessage(toAlert, now)
+	if !s.publishPlatformAlert(ctx, worker.AlertData{
+		AlertType:   worker.AlertTypePrintAnomalyTimeout,
+		Level:       worker.AlertLevelWarning,
+		Title:       "商户打印异常超时未恢复",
+		Message:     message,
+		RelatedType: "print",
+		Extra:       extra,
+	}) {
+		return
+	}
+
+	s.markTimedOutPrintAnomaliesAlerted(toAlert, now)
+	log.Warn().Int("count", len(toAlert)).Msg("published timed out print anomaly alert")
 }
 
 func (s *DataCleanupScheduler) remindExpiringRiderDepositCredits() {

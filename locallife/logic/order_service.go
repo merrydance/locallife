@@ -16,6 +16,14 @@ import (
 
 const orderPaymentTimeoutMinutes = 30
 
+const (
+	printTriggerAccepted = "accepted"
+	printTriggerReady    = "ready"
+	printTriggerManual   = "manual"
+
+	printDispatchModeSingleFull = "single_full"
+)
+
 type OrderService struct {
 	store                 db.Store
 	notificationPublisher NotificationPublisher
@@ -132,6 +140,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	normalizeFn := s.buildNormalizerFunc()
 	subtotal, items, err := CalculateOrderItems(ctx, s.store, input.MerchantID, input.Items, normalizeFn)
 	if err != nil {
+		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, err)
+	}
+	if err := s.validatePackagingPolicy(ctx, input.MerchantID, input.OrderType, items); err != nil {
 		return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, err)
 	}
 
@@ -259,13 +270,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		BalancePaid:         totals.BalancePaid,
 	}
 
-	if input.OrderType == "takeout" || input.OrderType == "takeaway" {
-		pickupCode, err := s.idGenerator.PickupCode(s.clock.Now())
-		if err != nil {
-			return CreateOrderCommandResult{}, fmt.Errorf("generate pickup code: %w", err)
-		}
-		createParams.PickupCode = pgtype.Text{String: pickupCode, Valid: true}
-	}
 	if input.AddressID != nil {
 		createParams.AddressID = pgtype.Int8{Int64: *input.AddressID, Valid: true}
 	}
@@ -302,6 +306,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		DeliveryDuration:   deliveryDuration,
 		RiderAverageSpeed:  input.RiderAverageSpeed,
 		DefaultPrepareTime: input.DefaultPrepareTime,
+		PickupTime:         s.clock.Now(),
 	})
 	if err != nil {
 		if err.Error() == "voucher already used" {
@@ -549,6 +554,8 @@ func (s *OrderService) AcceptMerchantOrder(ctx context.Context, input MerchantOr
 		s.eventPublisher.PublishMerchantOrderSnapshot(ctx, input.MerchantID, result.Order, "order_update")
 	}
 
+	s.scheduleOrderPrint(ctx, result.Order, printTriggerAccepted)
+
 	return result, nil
 }
 
@@ -620,6 +627,8 @@ func (s *OrderService) MarkMerchantOrderReady(ctx context.Context, input Merchan
 			s.eventPublisher.PublishTakeoutOrderPooled(ctx, result.Order, *result.PoolItem)
 		}
 	}
+
+	s.scheduleOrderPrint(ctx, result.Order, printTriggerReady)
 	return result, nil
 }
 
@@ -650,6 +659,39 @@ func (s *OrderService) CompleteMerchantOrder(ctx context.Context, input Merchant
 	return result, nil
 }
 
+func (s *OrderService) PrintMerchantOrder(ctx context.Context, input MerchantOrderPrintInput) (MerchantOrderPrintResult, error) {
+	order, err := s.store.GetOrder(ctx, input.OrderID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return MerchantOrderPrintResult{}, NewRequestError(http.StatusNotFound, errors.New("order not found"))
+		}
+		return MerchantOrderPrintResult{}, err
+	}
+	if order.MerchantID != input.MerchantID {
+		return MerchantOrderPrintResult{}, NewRequestError(http.StatusForbidden, errors.New("order does not belong to your merchant"))
+	}
+	if order.Status == db.OrderStatusCancelled {
+		return MerchantOrderPrintResult{}, NewRequestError(http.StatusBadRequest, errors.New("cancelled orders cannot be printed"))
+	}
+	if s.taskScheduler == nil {
+		return MerchantOrderPrintResult{}, NewRequestError(http.StatusInternalServerError, errors.New("print scheduler is not configured"))
+	}
+
+	config := s.loadOrderPrintConfig(ctx, order.MerchantID)
+	if !config.EnablePrint || !displayConfigAllowsOrderType(config, order.OrderType) {
+		return MerchantOrderPrintResult{}, NewRequestError(http.StatusBadRequest, errors.New("printing is not enabled for this order"))
+	}
+	if config.PrintTriggerMode != printTriggerManual {
+		return MerchantOrderPrintResult{}, NewRequestError(http.StatusBadRequest, errors.New("manual printing is not enabled"))
+	}
+
+	if err := s.taskScheduler.ScheduleOrderPrint(ctx, OrderPrintTaskInput{OrderID: order.ID, Trigger: printTriggerManual}); err != nil {
+		return MerchantOrderPrintResult{}, err
+	}
+
+	return MerchantOrderPrintResult{Order: order}, nil
+}
+
 func (s *OrderService) buildNormalizerFunc() NormalizeDishCustomizationsFunc {
 	if s.normalizer == nil {
 		return nil
@@ -657,6 +699,70 @@ func (s *OrderService) buildNormalizerFunc() NormalizeDishCustomizationsFunc {
 
 	return func(ctx context.Context, dishID int64, customizations map[string]interface{}) ([]byte, int64, error) {
 		return s.normalizer.Normalize(ctx, dishID, customizations)
+	}
+}
+
+func (s *OrderService) scheduleOrderPrint(ctx context.Context, order db.Order, trigger string) {
+	if s.taskScheduler == nil {
+		return
+	}
+
+	config := s.loadOrderPrintConfig(ctx, order.MerchantID)
+
+	if !config.EnablePrint || !displayConfigAllowsOrderType(config, order.OrderType) || !displayConfigAllowsTrigger(config, trigger) {
+		return
+	}
+
+	if err := s.taskScheduler.ScheduleOrderPrint(ctx, OrderPrintTaskInput{OrderID: order.ID, Trigger: trigger}); err != nil {
+		log.Warn().Err(err).Int64("order_id", order.ID).Str("trigger", trigger).Msg("schedule order print failed")
+	}
+}
+
+func (s *OrderService) loadOrderPrintConfig(ctx context.Context, merchantID int64) db.OrderDisplayConfig {
+	config, err := s.store.GetOrderDisplayConfigByMerchant(ctx, merchantID)
+	if err == nil {
+		return config
+	}
+	if !errors.Is(err, db.ErrRecordNotFound) {
+		log.Warn().Err(err).Int64("merchant_id", merchantID).Msg("load order display config for printing failed")
+	}
+	return defaultOrderPrintConfig()
+}
+
+func defaultOrderPrintConfig() db.OrderDisplayConfig {
+	return db.OrderDisplayConfig{
+		EnablePrint:       true,
+		PrintTakeout:      true,
+		PrintDineIn:       true,
+		PrintReservation:  true,
+		PrintDispatchMode: printDispatchModeSingleFull,
+		PrintTriggerMode:  printTriggerAccepted,
+	}
+}
+
+func displayConfigAllowsOrderType(config db.OrderDisplayConfig, orderType string) bool {
+	switch orderType {
+	case db.OrderTypeTakeout, "takeaway":
+		return config.PrintTakeout
+	case "dine_in":
+		return config.PrintDineIn
+	case db.OrderTypeReservation:
+		return config.PrintReservation
+	default:
+		return false
+	}
+}
+
+func displayConfigAllowsTrigger(config db.OrderDisplayConfig, trigger string) bool {
+	switch config.PrintTriggerMode {
+	case "", printTriggerAccepted:
+		return trigger == printTriggerAccepted
+	case printTriggerReady:
+		return trigger == printTriggerReady
+	case printTriggerManual:
+		return trigger == printTriggerManual
+	default:
+		return false
 	}
 }
 

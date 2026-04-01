@@ -185,7 +185,7 @@ func TestTransferDiningSessionTableTx_TargetTableReservedWithoutReservation(t *t
 
 	reservedAt := time.Now().Add(30 * time.Minute)
 	reservationTimeMicro := int64(reservedAt.Hour())*3600*1000000 + int64(reservedAt.Minute())*60*1000000
-	_, err := testStore.CreateTableReservation(context.Background(), CreateTableReservationParams{
+	reservation, err := testStore.CreateTableReservation(context.Background(), CreateTableReservationParams{
 		TableID:         toTable.ID,
 		UserID:          user.ID,
 		MerchantID:      merchant.ID,
@@ -202,6 +202,7 @@ func TestTransferDiningSessionTableTx_TargetTableReservedWithoutReservation(t *t
 		Status:          "confirmed",
 	})
 	require.NoError(t, err)
+	setTableStatus(t, toTable.ID, "reserved", pgtype.Int8{Int64: reservation.ID, Valid: true})
 
 	session := createOpenDiningSession(t, merchant.ID, fromTable.ID, user.ID, pgtype.Int8{Valid: false})
 

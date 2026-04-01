@@ -21,6 +21,7 @@ type OrderCommandService interface {
 	RejectMerchantOrder(ctx context.Context, input MerchantOrderUpdateInput) (MerchantOrderUpdateResult, error)
 	MarkMerchantOrderReady(ctx context.Context, input MerchantOrderUpdateInput) (MerchantOrderUpdateResult, error)
 	CompleteMerchantOrder(ctx context.Context, input MerchantOrderUpdateInput) (MerchantOrderUpdateResult, error)
+	PrintMerchantOrder(ctx context.Context, input MerchantOrderPrintInput) (MerchantOrderPrintResult, error)
 }
 
 type OrderQueryService interface {
@@ -73,6 +74,16 @@ type NotificationInput struct {
 	NotificationReason string
 }
 
+type MerchantOrderPrintInput struct {
+	MerchantID int64
+	OrderID    int64
+	OperatorID int64
+}
+
+type MerchantOrderPrintResult struct {
+	Order db.Order
+}
+
 type NotificationPublisher interface {
 	Send(ctx context.Context, input NotificationInput) error
 }
@@ -122,6 +133,11 @@ type ProfitSharingReturnResultTaskInput struct {
 	Delay                 time.Duration
 }
 
+type OrderPrintTaskInput struct {
+	OrderID int64
+	Trigger string
+}
+
 type TaskScheduler interface {
 	ScheduleOrderPaymentTimeout(ctx context.Context, orderID int64, at time.Time) error
 	SchedulePaymentOrderTimeout(ctx context.Context, paymentOrderNo string, at time.Time) error
@@ -129,6 +145,7 @@ type TaskScheduler interface {
 	ScheduleProcessRefund(ctx context.Context, input ProcessRefundTaskInput) error
 	ScheduleProfitSharing(ctx context.Context, paymentOrderID, orderID int64) error
 	ScheduleProfitSharingReturnResult(ctx context.Context, input ProfitSharingReturnResultTaskInput) error
+	ScheduleOrderPrint(ctx context.Context, input OrderPrintTaskInput) error
 }
 
 type DishCustomizationNormalizer interface {

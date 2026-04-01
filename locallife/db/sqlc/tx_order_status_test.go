@@ -308,17 +308,6 @@ func TestCompleteOrderTx_ByUser(t *testing.T) {
 	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
 	order := createRandomOrderWithStatus(t, user.ID, merchant.ID, "delivering")
 
-	// 先将状态改为 delivering（模拟配送中）
-	_, err := testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
-		ID:     order.ID,
-		Status: "delivering",
-	})
-	require.NoError(t, err)
-
-	// 获取更新后的订单
-	order, err = testStore.GetOrder(context.Background(), order.ID)
-	require.NoError(t, err)
-
 	arg := CompleteOrderTxParams{
 		OrderID:      order.ID,
 		OldStatus:    "delivering",
@@ -574,10 +563,16 @@ func TestCancelOrderTx_BlocksPickedDeliveryCancellation(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{ID: delivery.ID})
+	_, err = testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
 	require.NoError(t, err)
 
-	delivery, err = testStore.UpdateDeliveryToPicked(context.Background(), UpdateDeliveryToPickedParams{ID: delivery.ID})
+	delivery, err = testStore.UpdateDeliveryToPicked(context.Background(), UpdateDeliveryToPickedParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
 	require.NoError(t, err)
 	require.Equal(t, "picked", delivery.Status)
 

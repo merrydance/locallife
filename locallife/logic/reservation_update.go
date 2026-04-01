@@ -25,7 +25,7 @@ type MerchantUpdateReservationInput struct {
 
 // MerchantUpdateReservation updates reservation details with conflict checks.
 func MerchantUpdateReservation(ctx context.Context, store db.Store, input MerchantUpdateReservationInput) (db.TableReservation, error) {
-	merchant, err := store.GetMerchantByOwner(ctx, input.OperatorUserID)
+	merchant, err := resolveMerchantForUser(ctx, store, input.OperatorUserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return db.TableReservation{}, NewRequestError(http.StatusForbidden, errors.New("not a merchant"))

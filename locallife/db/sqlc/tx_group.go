@@ -128,7 +128,7 @@ func (store *SQLStore) ApproveGroupJoinRequestTx(ctx context.Context, arg Approv
 			return err
 		}
 
-		if err := q.UpdateMerchantGroupBinding(ctx, UpdateMerchantGroupBindingParams{
+		if err := q.UpdateMerchantGroupAffiliation(ctx, UpdateMerchantGroupAffiliationParams{
 			ID:      req.MerchantID,
 			GroupID: pgtype.Int8{Int64: arg.GroupID, Valid: true},
 			BrandID: arg.BrandID,

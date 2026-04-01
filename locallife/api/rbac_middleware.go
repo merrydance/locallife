@@ -152,6 +152,38 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 	}
 }
 
+// MerchantOwnerOnlyMiddleware validates that the current user is the merchant owner.
+// Unlike MerchantOwnerMiddleware and MerchantStaffMiddleware, it does not enforce
+// merchant active status or region checks so it can be used on onboarding flows.
+func (server *Server) MerchantOwnerOnlyMiddleware() gin.HandlerFunc {
+	return func(ctx *gin.Context) {
+		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+					errors.New("you are not associated with any merchant"),
+				))
+				return
+			}
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if merchant.OwnerUserID != authPayload.UserID {
+			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+				errors.New("insufficient permissions for this operation"),
+			))
+			return
+		}
+
+		ctx.Set(merchantKey, merchant)
+		ctx.Set(merchantStaffRoleKey, "owner")
+		ctx.Next()
+	}
+}
+
 // MerchantStaffMiddleware 创建商户员工验证中间件
 // 验证用户是商户老板或员工，检查细分角色权限，加载商户信息到 context
 // allowedRoles: 允许的细分角色列表（owner, manager, chef, cashier）
@@ -159,22 +191,17 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 1. 优先复用已缓存的商户信息
-		merchant, ok := GetMerchantFromContext(ctx)
-		if !ok {
-			// 通过 GetMerchantByOwner 获取商户（已支持 merchant_staff 表）
-			var err error
-			merchant, err = server.store.GetMerchantByOwner(ctx, authPayload.UserID)
-			if err != nil {
-				if isNotFoundError(err) {
-					ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-						errors.New("you are not associated with any merchant"),
-					))
-					return
-				}
-				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+		// 1. 统一通过商户关联解析入口获取当前商户。
+		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
+					errors.New("you are not associated with any merchant"),
+				))
 				return
 			}
+			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
 		}
 
 		// 检查商户状态

@@ -568,18 +568,18 @@ func (q *Queries) GetMerchantGroup(ctx context.Context, id int64) (MerchantGroup
 	return i, err
 }
 
-const getMerchantGroupBinding = `-- name: GetMerchantGroupBinding :one
+const getMerchantGroupAffiliation = `-- name: GetMerchantGroupAffiliation :one
 SELECT group_id, brand_id FROM merchants WHERE id = $1
 `
 
-type GetMerchantGroupBindingRow struct {
+type GetMerchantGroupAffiliationRow struct {
 	GroupID pgtype.Int8 `json:"group_id"`
 	BrandID pgtype.Int8 `json:"brand_id"`
 }
 
-func (q *Queries) GetMerchantGroupBinding(ctx context.Context, id int64) (GetMerchantGroupBindingRow, error) {
-	row := q.db.QueryRow(ctx, getMerchantGroupBinding, id)
-	var i GetMerchantGroupBindingRow
+func (q *Queries) GetMerchantGroupAffiliation(ctx context.Context, id int64) (GetMerchantGroupAffiliationRow, error) {
+	row := q.db.QueryRow(ctx, getMerchantGroupAffiliation, id)
+	var i GetMerchantGroupAffiliationRow
 	err := row.Scan(&i.GroupID, &i.BrandID)
 	return i, err
 }
@@ -1044,21 +1044,21 @@ func (q *Queries) UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGro
 	return i, err
 }
 
-const updateMerchantGroupBinding = `-- name: UpdateMerchantGroupBinding :exec
+const updateMerchantGroupAffiliation = `-- name: UpdateMerchantGroupAffiliation :exec
 UPDATE merchants
 SET group_id = $2, brand_id = $3, updated_at = now()
 WHERE id = $1
 `
 
-type UpdateMerchantGroupBindingParams struct {
+type UpdateMerchantGroupAffiliationParams struct {
 	ID      int64       `json:"id"`
 	GroupID pgtype.Int8 `json:"group_id"`
 	BrandID pgtype.Int8 `json:"brand_id"`
 }
 
-// Merchant binding
-func (q *Queries) UpdateMerchantGroupBinding(ctx context.Context, arg UpdateMerchantGroupBindingParams) error {
-	_, err := q.db.Exec(ctx, updateMerchantGroupBinding, arg.ID, arg.GroupID, arg.BrandID)
+// Merchant affiliation
+func (q *Queries) UpdateMerchantGroupAffiliation(ctx context.Context, arg UpdateMerchantGroupAffiliationParams) error {
+	_, err := q.db.Exec(ctx, updateMerchantGroupAffiliation, arg.ID, arg.GroupID, arg.BrandID)
 	return err
 }
 

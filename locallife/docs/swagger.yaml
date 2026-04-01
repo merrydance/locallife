@@ -1930,14 +1930,17 @@ definitions:
       printer_name:
         maxLength: 100
         type: string
+      printer_role:
+        enum:
+        - front
+        - kitchen
+        type: string
       printer_sn:
         maxLength: 100
         type: string
       printer_type:
         enum:
         - feieyun
-        - yilianyun
-        - other
         type: string
     required:
     - printer_key
@@ -2877,10 +2880,14 @@ definitions:
         type: integer
       print_dine_in:
         type: boolean
+      print_dispatch_mode:
+        type: string
       print_reservation:
         type: boolean
       print_takeout:
         type: boolean
+      print_trigger_mode:
+        type: string
       updated_at:
         type: string
       voice_dine_in:
@@ -3293,11 +3300,33 @@ definitions:
       total:
         type: integer
     type: object
+  api.listMerchantOrderPrintJobsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.merchantOrderPrintJobResponse'
+        type: array
+      order_id:
+        type: integer
+    type: object
   api.listMerchantOrdersResponse:
     properties:
       orders:
         items:
           $ref: '#/definitions/api.orderResponse'
+        type: array
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
+  api.listMerchantPrintAnomaliesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/api.merchantPrintAnomalyResponse'
         type: array
       page_id:
         type: integer
@@ -4025,6 +4054,48 @@ definitions:
       user_id:
         type: integer
     type: object
+  api.merchantOrderPrintJobResponse:
+    properties:
+      created_at:
+        type: string
+      error_message:
+        type: string
+      id:
+        type: integer
+      order_id:
+        type: integer
+      printed_at:
+        type: string
+      printer_id:
+        type: integer
+      printer_name:
+        type: string
+      status:
+        type: string
+      vendor_order_id:
+        type: string
+    type: object
+  api.merchantOrderPrintJobStatusResponse:
+    properties:
+      checked_at:
+        type: string
+      cloud_printed:
+        type: boolean
+      cloud_query_available:
+        type: boolean
+      local_status:
+        type: string
+      order_id:
+        type: integer
+      print_log_id:
+        type: integer
+      printer_id:
+        type: integer
+      printer_name:
+        type: string
+      vendor_order_id:
+        type: string
+    type: object
   api.merchantOrderSourceStatsRow:
     properties:
       order_count:
@@ -4046,6 +4117,33 @@ definitions:
         type: integer
       total_sales:
         type: integer
+    type: object
+  api.merchantPrintAnomalyResponse:
+    properties:
+      can_retry:
+        type: boolean
+      error_message:
+        type: string
+      last_attempt_at:
+        type: string
+      local_status:
+        type: string
+      order_id:
+        type: integer
+      order_no:
+        type: string
+      order_type:
+        type: string
+      print_log_id:
+        type: integer
+      printer_id:
+        type: integer
+      printer_name:
+        type: string
+      retry_hint:
+        type: string
+      vendor_order_id:
+        type: string
     type: object
   api.merchantPromotionsResponse:
     properties:
@@ -5159,6 +5257,84 @@ definitions:
       total_orders:
         type: integer
     type: object
+  api.printMerchantOrderResponse:
+    properties:
+      message:
+        type: string
+      order_id:
+        type: integer
+      trigger:
+        type: string
+    type: object
+  api.printerLiveStatusResponse:
+    properties:
+      checked_at:
+        type: string
+      info_status:
+        type: string
+      model:
+        type: string
+      online:
+        type: boolean
+      print_logo:
+        type: boolean
+      printer_id:
+        type: integer
+      printer_name:
+        type: string
+      printer_sn:
+        type: string
+      printer_type:
+        type: string
+      provider_status:
+        type: string
+      scan_switch:
+        type: boolean
+      working:
+        type: boolean
+    type: object
+  api.printerReconciliationJobListResponse:
+    properties:
+      jobs:
+        items:
+          $ref: '#/definitions/api.printerReconciliationJobResponse'
+        type: array
+      total:
+        type: integer
+    type: object
+  api.printerReconciliationJobResponse:
+    properties:
+      can_retry:
+        type: boolean
+      created_at:
+        type: string
+      desired_action:
+        type: string
+      failure_reason:
+        type: string
+      id:
+        type: integer
+      last_error:
+        type: string
+      printer_id:
+        type: integer
+      printer_name:
+        type: string
+      printer_sn:
+        type: string
+      printer_type:
+        type: string
+      resolved_at:
+        type: string
+      retry_count:
+        type: integer
+      source_action:
+        type: string
+      status:
+        type: string
+      updated_at:
+        type: string
+    type: object
   api.printerResponse:
     properties:
       created_at:
@@ -5176,6 +5352,8 @@ definitions:
       print_takeout:
         type: boolean
       printer_name:
+        type: string
+      printer_role:
         type: string
       printer_sn:
         type: string
@@ -6016,6 +6194,17 @@ definitions:
     required:
     - resolution_notes
     - status
+    type: object
+  api.retryMerchantOrderPrintJobResponse:
+    properties:
+      message:
+        type: string
+      order_id:
+        type: integer
+      print_log_id:
+        type: integer
+      trigger:
+        type: string
     type: object
   api.reverseGeocodeAPIResponse:
     properties:
@@ -7219,10 +7408,21 @@ definitions:
         type: string
       print_dine_in:
         type: boolean
+      print_dispatch_mode:
+        enum:
+        - single_full
+        - split
+        type: string
       print_reservation:
         type: boolean
       print_takeout:
         type: boolean
+      print_trigger_mode:
+        enum:
+        - accepted
+        - ready
+        - manual
+        type: string
       voice_dine_in:
         type: boolean
       voice_takeout:
@@ -7434,6 +7634,11 @@ definitions:
         type: string
       printer_name:
         maxLength: 100
+        type: string
+      printer_role:
+        enum:
+        - front
+        - kitchen
         type: string
     type: object
   api.updateProfitSharingConfigRequest:
@@ -14026,36 +14231,7 @@ paths:
       summary: 提交商户入驻申请
       tags:
       - 商户申请
-  /v1/merchant/applyment/status:
-    get:
-      consumes:
-      - application/json
-      description: 查询商户微信二级商户进件状态
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/api.merchantApplymentStatusResponse'
-        "401":
-          description: Unauthorized
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "404":
-          description: Not Found
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: Internal Server Error
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 查询商户开户状态
-      tags:
-      - 商户
-  /v1/merchant/bindbank:
+  /v1/merchant/applyment/bindbank:
     post:
       consumes:
       - application/json
@@ -14093,6 +14269,35 @@ paths:
       security:
       - BearerAuth: []
       summary: 商户绑定银行卡并提交微信开户
+      tags:
+      - 商户
+  /v1/merchant/applyment/status:
+    get:
+      consumes:
+      - application/json
+      description: 查询商户微信二级商户进件状态
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.merchantApplymentStatusResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询商户开户状态
       tags:
       - 商户
   /v1/merchant/claims:
@@ -14395,7 +14600,7 @@ paths:
     post:
       consumes:
       - application/json
-      description: 商户注册新的云打印机设备，支持飞鹅云和易联云
+      description: 商户注册新的云打印机设备，当前仅支持飞鹅云
       parameters:
       - description: 打印机信息
         in: body
@@ -14589,11 +14794,64 @@ paths:
       summary: 更新打印机配置
       tags:
       - 商户设备管理
+  /v1/merchant/devices/{id}/status:
+    get:
+      consumes:
+      - application/json
+      description: 向飞鹅云查询打印机在线状态与基础能力信息
+      parameters:
+      - description: 打印机ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回实时状态
+          schema:
+            $ref: '#/definitions/api.printerLiveStatusResponse'
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 打印机不属于该商户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 打印机不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+        "501":
+          description: 当前环境不支持查询
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: 云打印平台调用失败
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取打印机实时状态
+      tags:
+      - 商户设备管理
   /v1/merchant/devices/{id}/test:
     post:
       consumes:
       - application/json
-      description: 向打印机发送测试打印命令（功能尚未接入云打印服务）
+      description: 向飞鹅云打印机发送在线测试打印命令；未配置云打印客户端时返回暂不支持
       parameters:
       - description: 打印机ID
         in: path
@@ -14641,6 +14899,99 @@ paths:
       security:
       - Bearer: []
       summary: 测试打印机
+      tags:
+      - 商户设备管理
+  /v1/merchant/devices/reconciliation-jobs:
+    get:
+      consumes:
+      - application/json
+      description: 商户查看云打印机远端补偿失败后待处理的对账任务，可选查看已解决任务
+      parameters:
+      - description: 任务状态，默认 pending
+        enum:
+        - pending
+        - resolved
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回任务列表
+          schema:
+            $ref: '#/definitions/api.printerReconciliationJobListResponse'
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 商户不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取打印机异常对账任务
+      tags:
+      - 商户设备管理
+  /v1/merchant/devices/reconciliation-jobs/{id}/retry:
+    post:
+      consumes:
+      - application/json
+      description: 商户对远端补偿失败的打印机任务发起重试，成功后将任务标记为 resolved
+      parameters:
+      - description: 对账任务ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重试结果
+          schema:
+            $ref: '#/definitions/api.printerReconciliationJobResponse'
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 任务不属于该商户
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: 任务不存在
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+        "501":
+          description: 当前环境不支持重试
+          schema:
+            additionalProperties: true
+            type: object
+        "502":
+          description: 云打印平台调用失败
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 重试打印机异常对账任务
       tags:
       - 商户设备管理
   /v1/merchant/display-config:
@@ -15380,6 +15731,193 @@ paths:
       summary: 完成订单
       tags:
       - 商户订单管理
+  /v1/merchant/orders/{id}/print-jobs:
+    get:
+      consumes:
+      - application/json
+      description: 查询指定订单的打印任务执行记录，包括打印机、状态和失败原因
+      parameters:
+      - description: 订单ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 打印记录列表
+          schema:
+            $ref: '#/definitions/api.listMerchantOrderPrintJobsResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 订单不属于当前商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询订单打印记录
+      tags:
+      - 商户订单管理
+    post:
+      consumes:
+      - application/json
+      description: 在手动打印模式下，为指定订单创建一次异步打印任务
+      parameters:
+      - description: 订单ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 打印任务已创建
+          schema:
+            $ref: '#/definitions/api.printMerchantOrderResponse'
+        "400":
+          description: 订单或打印配置不允许手动打印
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 订单不属于当前商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 手动创建订单打印任务
+      tags:
+      - 商户订单管理
+  /v1/merchant/orders/{id}/print-jobs/{print_log_id}/retry:
+    post:
+      consumes:
+      - application/json
+      description: 基于原始打印记录重新投递一次同打印机补打任务
+      parameters:
+      - description: 订单ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      - description: 打印记录ID
+        in: path
+        minimum: 1
+        name: print_log_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 重试任务已创建
+          schema:
+            $ref: '#/definitions/api.retryMerchantOrderPrintJobResponse'
+        "400":
+          description: 打印记录当前不可重试
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 订单不属于当前商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 订单或打印记录不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 重试异常打印任务
+      tags:
+      - 商户订单管理
+  /v1/merchant/orders/{id}/print-jobs/{print_log_id}/status:
+    get:
+      consumes:
+      - application/json
+      description: 查询指定订单打印任务在飞鹅云侧的执行状态
+      parameters:
+      - description: 订单ID
+        in: path
+        minimum: 1
+        name: id
+        required: true
+        type: integer
+      - description: 打印记录ID
+        in: path
+        minimum: 1
+        name: print_log_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 打印任务云端状态
+          schema:
+            $ref: '#/definitions/api.merchantOrderPrintJobStatusResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 订单不属于当前商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 订单或打印记录不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "501":
+          description: 当前环境不支持查询
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 云打印平台调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询打印任务云端状态
+      tags:
+      - 商户订单管理
   /v1/merchant/orders/{id}/ready:
     post:
       consumes:
@@ -15472,6 +16010,58 @@ paths:
       security:
       - BearerAuth: []
       summary: 商户拒单
+      tags:
+      - 商户订单管理
+  /v1/merchant/orders/print-anomalies:
+    get:
+      consumes:
+      - application/json
+      description: 查询商户当前仍未恢复的打印异常，按订单和打印机聚合最新一次结果
+      parameters:
+      - description: 页码(从1开始)
+        in: query
+        minimum: 1
+        name: page_id
+        type: integer
+      - description: 每页条数
+        in: query
+        maximum: 50
+        minimum: 5
+        name: page_size
+        type: integer
+      - description: 异常状态过滤
+        enum:
+        - failed
+        - pending
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 打印异常列表
+          schema:
+            $ref: '#/definitions/api.listMerchantPrintAnomaliesResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询打印异常列表
       tags:
       - 商户订单管理
   /v1/merchant/orders/stats:

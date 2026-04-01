@@ -1122,12 +1122,12 @@ func (server *Server) createGroupJoinRequest(ctx *gin.Context) {
 		return
 	}
 
-	binding, err := server.store.GetMerchantGroupBinding(ctx, merchant.ID)
+	affiliation, err := server.store.GetMerchantGroupAffiliation(ctx, merchant.ID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	if binding.GroupID.Valid {
+	if affiliation.GroupID.Valid {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("merchant already in a group")))
 		return
 	}

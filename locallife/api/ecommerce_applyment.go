@@ -51,7 +51,7 @@ type merchantBindBankResponse struct {
 // @Failure 401 {object} ErrorResponse
 // @Failure 403 {object} ErrorResponse
 // @Failure 500 {object} ErrorResponse
-// @Router /v1/merchant/bindbank [post]
+// @Router /v1/merchant/applyment/bindbank [post]
 // @Security BearerAuth
 func (server *Server) merchantBindBank(ctx *gin.Context) {
 	var req merchantBindBankRequest
@@ -64,7 +64,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
@@ -421,7 +421,7 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	// 获取商户信息
-	merchant, err := server.store.GetMerchantByOwner(ctx, authPayload.UserID)
+	merchant, err := server.getMerchantFromContextOrStore(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))

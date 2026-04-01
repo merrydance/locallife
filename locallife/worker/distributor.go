@@ -242,6 +242,13 @@ type TaskDistributor interface {
 		payload *PayloadProcessAnomalyRefund,
 		opts ...asynq.Option,
 	) error
+
+	// DistributeTaskPrintOrder 分发订单打印任务
+	DistributeTaskPrintOrder(
+		ctx context.Context,
+		payload *PrintOrderPayload,
+		opts ...asynq.Option,
+	) error
 }
 
 type RedisTaskDistributor struct {

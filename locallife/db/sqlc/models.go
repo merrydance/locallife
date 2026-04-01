@@ -323,6 +323,26 @@ type CloudPrinter struct {
 	IsActive         bool               `json:"is_active"`
 	CreatedAt        time.Time          `json:"created_at"`
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	PrinterRole      string             `json:"printer_role"`
+}
+
+type CloudPrinterReconciliationJob struct {
+	ID            int64              `json:"id"`
+	MerchantID    int64              `json:"merchant_id"`
+	PrinterID     pgtype.Int8        `json:"printer_id"`
+	PrinterName   string             `json:"printer_name"`
+	PrinterSn     string             `json:"printer_sn"`
+	PrinterKey    pgtype.Text        `json:"printer_key"`
+	PrinterType   string             `json:"printer_type"`
+	DesiredAction string             `json:"desired_action"`
+	SourceAction  string             `json:"source_action"`
+	Status        string             `json:"status"`
+	FailureReason string             `json:"failure_reason"`
+	LastError     string             `json:"last_error"`
+	RetryCount    int32              `json:"retry_count"`
+	ResolvedAt    pgtype.Timestamptz `json:"resolved_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	UpdatedAt     time.Time          `json:"updated_at"`
 }
 
 // 合单支付主表，支持多商户一次支付
@@ -1026,6 +1046,18 @@ type MerchantMembershipSetting struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 商户订单级包装策略配置
+type MerchantPackagingPolicy struct {
+	ID         int64 `json:"id"`
+	MerchantID int64 `json:"merchant_id"`
+	// 触发包装策略的订单类型，当前仅允许 takeout 与 takeaway
+	ApplicableOrderTypes []string `json:"applicable_order_types"`
+	// 可选包装菜品 ID 列表，命中场景时订单中必须恰选 1 个
+	CandidateDishIds []int64            `json:"candidate_dish_ids"`
+	CreatedAt        time.Time          `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 // 商户微信支付配置（平台收付通）
 type MerchantPaymentConfig struct {
 	ID         int64 `json:"id"`
@@ -1314,19 +1346,21 @@ type Order struct {
 }
 
 type OrderDisplayConfig struct {
-	ID               int64              `json:"id"`
-	MerchantID       int64              `json:"merchant_id"`
-	EnablePrint      bool               `json:"enable_print"`
-	PrintTakeout     bool               `json:"print_takeout"`
-	PrintDineIn      bool               `json:"print_dine_in"`
-	PrintReservation bool               `json:"print_reservation"`
-	EnableVoice      bool               `json:"enable_voice"`
-	VoiceTakeout     bool               `json:"voice_takeout"`
-	VoiceDineIn      bool               `json:"voice_dine_in"`
-	EnableKds        bool               `json:"enable_kds"`
-	KdsUrl           pgtype.Text        `json:"kds_url"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                int64              `json:"id"`
+	MerchantID        int64              `json:"merchant_id"`
+	EnablePrint       bool               `json:"enable_print"`
+	PrintTakeout      bool               `json:"print_takeout"`
+	PrintDineIn       bool               `json:"print_dine_in"`
+	PrintReservation  bool               `json:"print_reservation"`
+	EnableVoice       bool               `json:"enable_voice"`
+	VoiceTakeout      bool               `json:"voice_takeout"`
+	VoiceDineIn       bool               `json:"voice_dine_in"`
+	EnableKds         bool               `json:"enable_kds"`
+	KdsUrl            pgtype.Text        `json:"kds_url"`
+	CreatedAt         time.Time          `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	PrintDispatchMode string             `json:"print_dispatch_mode"`
+	PrintTriggerMode  string             `json:"print_trigger_mode"`
 }
 
 type OrderItem struct {
@@ -1340,6 +1374,14 @@ type OrderItem struct {
 	Subtotal       int64       `json:"subtotal"`
 	Customizations []byte      `json:"customizations"`
 	CreatedAt      time.Time   `json:"created_at"`
+}
+
+type OrderPickupCounter struct {
+	MerchantID   int64              `json:"merchant_id"`
+	PickupDate   pgtype.Date        `json:"pickup_date"`
+	LastSequence int32              `json:"last_sequence"`
+	CreatedAt    time.Time          `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
 type OrderStatusLog struct {
@@ -1403,14 +1445,16 @@ type PlatformConfig struct {
 }
 
 type PrintLog struct {
-	ID           int64              `json:"id"`
-	OrderID      int64              `json:"order_id"`
-	PrinterID    int64              `json:"printer_id"`
-	PrintContent string             `json:"print_content"`
-	Status       string             `json:"status"`
-	ErrorMessage pgtype.Text        `json:"error_message"`
-	PrintedAt    pgtype.Timestamptz `json:"printed_at"`
-	CreatedAt    time.Time          `json:"created_at"`
+	ID            int64              `json:"id"`
+	OrderID       int64              `json:"order_id"`
+	PrinterID     int64              `json:"printer_id"`
+	PrintContent  string             `json:"print_content"`
+	Status        string             `json:"status"`
+	ErrorMessage  pgtype.Text        `json:"error_message"`
+	PrintedAt     pgtype.Timestamptz `json:"printed_at"`
+	CreatedAt     time.Time          `json:"created_at"`
+	VendorOrderID pgtype.Text        `json:"vendor_order_id"`
+	TaskKey       pgtype.Text        `json:"task_key"`
 }
 
 // 分账规则配置表（Phase2 草案）

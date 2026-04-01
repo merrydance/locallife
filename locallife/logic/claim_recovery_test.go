@@ -364,19 +364,24 @@ func TestCreateMerchantClaimRecoveryPaymentCreateUniqueViolationReusesExisting(t
 		GetClaimRecoveryByClaimID(gomock.Any(), claimID).
 		Times(1).
 		Return(recovery, nil)
-	store.EXPECT().
-		GetLatestPaymentOrderByBusinessTypeAndAttach(gomock.Any(), gomock.Any()).
-		Times(2).
-		Return(db.PaymentOrder{}, db.ErrRecordNotFound).
-		Return(existingPayment, nil)
-	store.EXPECT().
-		GetUser(gomock.Any(), payerUserID).
-		Times(1).
-		Return(db.User{ID: payerUserID, WechatOpenid: "openid_merchant_payer"}, nil)
-	store.EXPECT().
-		CreatePaymentOrder(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.PaymentOrder{}, db.ErrUniqueViolation)
+	gomock.InOrder(
+		store.EXPECT().
+			GetLatestPaymentOrderByBusinessTypeAndAttach(gomock.Any(), gomock.Any()).
+			Times(1).
+			Return(db.PaymentOrder{}, db.ErrRecordNotFound),
+		store.EXPECT().
+			GetUser(gomock.Any(), payerUserID).
+			Times(1).
+			Return(db.User{ID: payerUserID, WechatOpenid: "openid_merchant_payer"}, nil),
+		store.EXPECT().
+			CreatePaymentOrder(gomock.Any(), gomock.Any()).
+			Times(1).
+			Return(db.PaymentOrder{}, db.ErrUniqueViolation),
+		store.EXPECT().
+			GetLatestPaymentOrderByBusinessTypeAndAttach(gomock.Any(), gomock.Any()).
+			Times(1).
+			Return(existingPayment, nil),
+	)
 	paymentClient.EXPECT().
 		GenerateJSAPIPayParams("prepay_claim_recovery_existing").
 		Times(1).

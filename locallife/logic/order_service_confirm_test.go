@@ -45,6 +45,10 @@ func (s *confirmOrderTaskSchedulerStub) ScheduleProfitSharingReturnResult(ctx co
 	return nil
 }
 
+func (s *confirmOrderTaskSchedulerStub) ScheduleOrderPrint(ctx context.Context, input OrderPrintTaskInput) error {
+	return nil
+}
+
 func TestOrderServiceConfirmOrder_DoesNotScheduleProfitSharing(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

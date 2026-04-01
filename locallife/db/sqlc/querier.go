@@ -45,6 +45,7 @@ type Querier interface {
 	AddToDeliveryPool(ctx context.Context, arg AddToDeliveryPoolParams) (DeliveryPool, error)
 	// 增加用户余额（入账）
 	AddUserBalance(ctx context.Context, arg AddUserBalanceParams) (UserBalance, error)
+	AllocateDailyPickupSequence(ctx context.Context, arg AllocateDailyPickupSequenceParams) (int32, error)
 	// 审核通过商户申请
 	ApproveMerchantApplication(ctx context.Context, id int64) (MerchantApplication, error)
 	// 审核通过运营商申请（平台管理员操作）
@@ -169,6 +170,7 @@ type Querier interface {
 	CountMerchantFinanceOrders(ctx context.Context, arg CountMerchantFinanceOrdersParams) (int64, error)
 	// 统计商户在某时间后特定状态的订单数
 	CountMerchantOrdersByStatusAfterTime(ctx context.Context, arg CountMerchantOrdersByStatusAfterTimeParams) (int64, error)
+	CountMerchantPrintAnomalies(ctx context.Context, arg CountMerchantPrintAnomaliesParams) (int64, error)
 	CountMerchantPromotionOrders(ctx context.Context, arg CountMerchantPromotionOrdersParams) (int64, error)
 	CountMerchantSettlementAdjustments(ctx context.Context, arg CountMerchantSettlementAdjustmentsParams) (int64, error)
 	CountMerchantSettlementTimeline(ctx context.Context, arg CountMerchantSettlementTimelineParams) (int64, error)
@@ -549,6 +551,7 @@ type Querier interface {
 	// 探索附近包间（无需指定预订日期时段），用于本地包间浏览流
 	// 返回包间信息 + 商户信息 + 主图 + 近30天预订量
 	ExploreNearbyRooms(ctx context.Context, arg ExploreNearbyRoomsParams) ([]ExploreNearbyRoomsRow, error)
+	FailCloudPrinterReconciliationJobRetry(ctx context.Context, arg FailCloudPrinterReconciliationJobRetryParams) (CloudPrinterReconciliationJob, error)
 	FailOCRJob(ctx context.Context, arg FailOCRJobParams) (OcrJob, error)
 	FailPendingOCRJob(ctx context.Context, arg FailPendingOCRJobParams) (OcrJob, error)
 	// 冻结用户余额（提现申请时）
@@ -617,6 +620,7 @@ type Querier interface {
 	GetClosestRegion(ctx context.Context, arg GetClosestRegionParams) (Region, error)
 	GetCloudPrinter(ctx context.Context, id int64) (CloudPrinter, error)
 	GetCloudPrinterBySN(ctx context.Context, printerSn string) (CloudPrinter, error)
+	GetCloudPrinterReconciliationJob(ctx context.Context, id int64) (CloudPrinterReconciliationJob, error)
 	GetCombinedPaymentOrder(ctx context.Context, id int64) (CombinedPaymentOrder, error)
 	GetCombinedPaymentOrderByOutTradeNo(ctx context.Context, combineOutTradeNo string) (CombinedPaymentOrder, error)
 	GetCombinedPaymentOrderForUpdate(ctx context.Context, id int64) (CombinedPaymentOrder, error)
@@ -710,6 +714,7 @@ type Querier interface {
 	GetLatestPaymentOrderByBusinessTypeAndAttach(ctx context.Context, arg GetLatestPaymentOrderByBusinessTypeAndAttachParams) (PaymentOrder, error)
 	GetLatestPaymentOrderByOrder(ctx context.Context, arg GetLatestPaymentOrderByOrderParams) (PaymentOrder, error)
 	GetLatestPaymentOrderByReservation(ctx context.Context, arg GetLatestPaymentOrderByReservationParams) (PaymentOrder, error)
+	GetLatestPrintLogByOrderAndPrinter(ctx context.Context, arg GetLatestPrintLogByOrderAndPrinterParams) (PrintLog, error)
 	GetLatestWeatherCoefficient(ctx context.Context, regionID int64) (WeatherCoefficient, error)
 	GetMaliciousClaims(ctx context.Context, createdAt time.Time) ([]Claim, error)
 	GetMatchingRechargeRule(ctx context.Context, arg GetMatchingRechargeRuleParams) (RechargeRule, error)
@@ -761,7 +766,7 @@ type Querier interface {
 	// 商户财务概览：统计收入、服务费、净收入
 	GetMerchantFinanceOverview(ctx context.Context, arg GetMerchantFinanceOverviewParams) (GetMerchantFinanceOverviewRow, error)
 	GetMerchantGroup(ctx context.Context, id int64) (MerchantGroup, error)
-	GetMerchantGroupBinding(ctx context.Context, id int64) (GetMerchantGroupBindingRow, error)
+	GetMerchantGroupAffiliation(ctx context.Context, id int64) (GetMerchantGroupAffiliationRow, error)
 	// 商户增长统计
 	GetMerchantGrowthStats(ctx context.Context, arg GetMerchantGrowthStatsParams) ([]GetMerchantGrowthStatsRow, error)
 	// 商户时段分析: 按小时统计订单分布
@@ -777,6 +782,8 @@ type Querier interface {
 	GetMerchantOrderSourceStats(ctx context.Context, arg GetMerchantOrderSourceStatsParams) ([]GetMerchantOrderSourceStatsRow, error)
 	// 商户概览: 指定日期范围的汇总统计
 	GetMerchantOverview(ctx context.Context, arg GetMerchantOverviewParams) (GetMerchantOverviewRow, error)
+	// 商户包装策略查询
+	GetMerchantPackagingPolicy(ctx context.Context, merchantID int64) (MerchantPackagingPolicy, error)
 	GetMerchantPaymentConfig(ctx context.Context, merchantID int64) (MerchantPaymentConfig, error)
 	GetMerchantPaymentConfigBySubMchID(ctx context.Context, subMchID string) (MerchantPaymentConfig, error)
 	GetMerchantProfile(ctx context.Context, merchantID int64) (GetMerchantProfileRow, error)
@@ -885,6 +892,7 @@ type Querier interface {
 	GetPopularMerchants(ctx context.Context, arg GetPopularMerchantsParams) ([]GetPopularMerchantsRow, error)
 	GetPrimaryTableImage(ctx context.Context, tableID int64) (TableImage, error)
 	GetPrintLog(ctx context.Context, id int64) (PrintLog, error)
+	GetPrintLogByTaskKeyAndPrinter(ctx context.Context, arg GetPrintLogByTaskKeyAndPrinterParams) (PrintLog, error)
 	GetProfitSharingOrder(ctx context.Context, id int64) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByOutOrderNo(ctx context.Context, outOrderNo string) (ProfitSharingOrder, error)
 	GetProfitSharingOrderByPaymentOrder(ctx context.Context, paymentOrderID int64) (ProfitSharingOrder, error)
@@ -1133,6 +1141,7 @@ type Querier interface {
 	// ==========================================
 	// 查询指定时间窗口内的索赔（用于协同欺诈检测）
 	ListClaimsByTimeWindow(ctx context.Context, arg ListClaimsByTimeWindowParams) ([]ListClaimsByTimeWindowRow, error)
+	ListCloudPrinterReconciliationJobsByMerchant(ctx context.Context, arg ListCloudPrinterReconciliationJobsByMerchantParams) ([]CloudPrinterReconciliationJob, error)
 	ListCloudPrintersByMerchant(ctx context.Context, merchantID int64) ([]CloudPrinter, error)
 	// 获取指定日期范围内所有合单（收付通）支付订单（用于每日对账）
 	ListCombinedPaymentOrdersForReconciliation(ctx context.Context, arg ListCombinedPaymentOrdersForReconciliationParams) ([]ListCombinedPaymentOrdersForReconciliationRow, error)
@@ -1225,6 +1234,7 @@ type Querier interface {
 	// ==================== KDS 厨房显示系统查询 ====================
 	// 根据商户ID和状态查询订单（用于厨房显示）
 	ListMerchantOrdersByStatus(ctx context.Context, arg ListMerchantOrdersByStatusParams) ([]Order, error)
+	ListMerchantPrintAnomalies(ctx context.Context, arg ListMerchantPrintAnomaliesParams) ([]ListMerchantPrintAnomaliesRow, error)
 	// 商户满返支出明细
 	ListMerchantPromotionOrders(ctx context.Context, arg ListMerchantPromotionOrdersParams) ([]ListMerchantPromotionOrdersRow, error)
 	ListMerchantRechargeRules(ctx context.Context, merchantID int64) ([]RechargeRule, error)
@@ -1392,6 +1402,7 @@ type Querier interface {
 	ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, error)
 	// 获取已送达但未完成超过一定时间的外卖订单（用于自动完成）
 	ListTakeoutOrdersDeliveredBefore(ctx context.Context, arg ListTakeoutOrdersDeliveredBeforeParams) ([]Order, error)
+	ListTimedOutPrintAnomalies(ctx context.Context, arg ListTimedOutPrintAnomaliesParams) ([]ListTimedOutPrintAnomaliesRow, error)
 	// 获取今日预订列表
 	ListTodayReservationsByMerchant(ctx context.Context, merchantID int64) ([]ListTodayReservationsByMerchantRow, error)
 	ListUserActiveSessions(ctx context.Context, userID int64) ([]Session, error)
@@ -1474,6 +1485,7 @@ type Querier interface {
 	// 手动重置申请为草稿状态，并清空审核痕迹
 	ResetRiderApplicationToDraft(ctx context.Context, id int64) (RiderApplication, error)
 	ResetStaleMerchantOCRStatus(ctx context.Context, updatedAt time.Time) error
+	ResolveCloudPrinterReconciliationJob(ctx context.Context, id int64) (CloudPrinterReconciliationJob, error)
 	RestoreRiderDepositCreditByPaymentOrderID(ctx context.Context, arg RestoreRiderDepositCreditByPaymentOrderIDParams) (RiderDepositCredit, error)
 	ResumeClaimRecoveryAfterAppeal(ctx context.Context, id int64) (ClaimRecovery, error)
 	// 审核未通过后退回草稿，保留失败原因
@@ -1631,8 +1643,8 @@ type Querier interface {
 	UpdateMerchantBossStatus(ctx context.Context, arg UpdateMerchantBossStatusParams) (MerchantBoss, error)
 	UpdateMerchantDishCategoryOrder(ctx context.Context, arg UpdateMerchantDishCategoryOrderParams) (MerchantDishCategory, error)
 	UpdateMerchantGroup(ctx context.Context, arg UpdateMerchantGroupParams) (MerchantGroup, error)
-	// Merchant binding
-	UpdateMerchantGroupBinding(ctx context.Context, arg UpdateMerchantGroupBindingParams) error
+	// Merchant affiliation
+	UpdateMerchantGroupAffiliation(ctx context.Context, arg UpdateMerchantGroupAffiliationParams) error
 	// ==================== 商户营业状态管理 ====================
 	// 更新商户营业状态（手动开店/打烊）
 	UpdateMerchantIsOpen(ctx context.Context, arg UpdateMerchantIsOpenParams) (Merchant, error)
@@ -1759,11 +1771,13 @@ type Querier interface {
 	// 同步状态变更（由微信通知或轮询驱动）
 	UpdateWechatComplaintState(ctx context.Context, arg UpdateWechatComplaintStateParams) (WechatComplaint, error)
 	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
+	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)
 	// 添加或更新菜品标签关联
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
 	// Group policies
 	UpsertGroupPolicies(ctx context.Context, arg UpsertGroupPoliciesParams) (GroupPolicy, error)
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
+	UpsertMerchantPackagingPolicy(ctx context.Context, arg UpsertMerchantPackagingPolicyParams) (MerchantPackagingPolicy, error)
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)

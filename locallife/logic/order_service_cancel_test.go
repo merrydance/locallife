@@ -41,6 +41,10 @@ func (s *cancelOrderTaskSchedulerStub) ScheduleProfitSharingReturnResult(ctx con
 	return nil
 }
 
+func (s *cancelOrderTaskSchedulerStub) ScheduleOrderPrint(ctx context.Context, input OrderPrintTaskInput) error {
+	return nil
+}
+
 type cancelOrderAuditLoggerStub struct {
 	entries []AuditLogInput
 }

@@ -198,6 +198,54 @@ func TestCreateDish(t *testing.T) {
 	createRandomDish(t, merchant.ID, category.ID)
 }
 
+func TestCreateDishTxRollbackOnCustomizationFailure(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+
+	beforeCount, err := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.CreateDishTx(context.Background(), CreateDishTxParams{
+		MerchantID:  merchant.ID,
+		CategoryID:  pgtype.Int8{Int64: category.ID, Valid: true},
+		Name:        util.RandomString(10),
+		Description: pgtype.Text{String: util.RandomString(20), Valid: true},
+		Price:       util.RandomMoney(),
+		IsAvailable: true,
+		IsOnline:    true,
+		SortOrder:   int16(util.RandomInt(1, 100)),
+		PrepareTime: 10,
+		CustomizationGroups: []CustomizationGroupInput{
+			{
+				Name:       "辣度",
+				IsRequired: true,
+				SortOrder:  1,
+				Options: []CustomizationOptionInput{
+					{
+						TagID:      -1,
+						ExtraPrice: 100,
+						SortOrder:  1,
+					},
+				},
+			},
+		},
+	})
+	require.Error(t, err)
+
+	afterCount, countErr := testStore.CountDishesByMerchant(context.Background(), CountDishesByMerchantParams{
+		MerchantID: merchant.ID,
+	})
+	require.NoError(t, countErr)
+	require.Equal(t, beforeCount, afterCount)
+
+	if result.Dish.ID != 0 {
+		_, getErr := testStore.GetDish(context.Background(), result.Dish.ID)
+		require.Error(t, getErr)
+	}
+}
+
 func TestGetDish(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
 	category := createRandomDishCategory(t)

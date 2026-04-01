@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -618,13 +619,18 @@ func TestConfirmReservationAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				store.EXPECT().
 					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(paidReservation.ID)).
 					Times(1).
 					Return(paidReservation, nil)
+
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: merchant.ID, IsTakeoutSuspended: false}, nil)
 
 				store.EXPECT().
 					ConfirmReservationTx(gomock.Any(), gomock.Any()).
@@ -660,7 +666,7 @@ func TestConfirmReservationAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				pendingReservation := paidReservation
@@ -670,9 +676,56 @@ func TestConfirmReservationAPI(t *testing.T) {
 					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(paidReservation.ID)).
 					Times(1).
 					Return(pendingReservation, nil)
+
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: merchant.ID, IsTakeoutSuspended: false}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name:          "CashierAllowed",
+			reservationID: paidReservation.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				staffMerchant := merchant
+				staffMerchant.OwnerUserID = user.ID + 100
+
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(2).
+					Return(staffMerchant, nil)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return("cashier", nil)
+
+				store.EXPECT().
+					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(paidReservation.ID)).
+					Times(1).
+					Return(paidReservation, nil)
+
+				store.EXPECT().
+					GetMerchantProfile(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(db.GetMerchantProfileRow{MerchantID: merchant.ID, IsTakeoutSuspended: false}, nil)
+
+				store.EXPECT().
+					ConfirmReservationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ConfirmReservationTxResult{Reservation: confirmedReservation, Table: room}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 	}
@@ -939,10 +992,50 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// 不应调用任何数据库方法
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name:  "CashierAllowed",
+			query: "page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				staffMerchant := merchant
+				staffMerchant.OwnerUserID = user.ID + 100
+
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(staffMerchant, nil)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return("cashier", nil)
+
+				store.EXPECT().
+					ListReservationsByMerchant(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return([]db.ListReservationsByMerchantRow{}, nil)
+
+				store.EXPECT().
+					CountReservationsByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+					Times(1).
+					Return(int64(0), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 	}
@@ -1000,7 +1093,7 @@ func TestCompleteReservationAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -1048,7 +1141,7 @@ func TestCompleteReservationAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				pendingReservation := confirmedReservation
@@ -1075,7 +1168,7 @@ func TestCompleteReservationAPI(t *testing.T) {
 
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					Times(2).
 					Return(differentMerchant, nil)
 
 				store.EXPECT().
@@ -1085,6 +1178,48 @@ func TestCompleteReservationAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:          "CashierAllowed",
+			reservationID: confirmedReservation.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				staffMerchant := merchant
+				staffMerchant.OwnerUserID = user.ID + 100
+
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(2).
+					Return(staffMerchant, nil)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return("cashier", nil)
+
+				store.EXPECT().
+					GetTableReservationForUpdate(gomock.Any(), gomock.Eq(confirmedReservation.ID)).
+					Times(1).
+					Return(confirmedReservation, nil)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(confirmedReservation.TableID)).
+					Times(1).
+					Return(room, nil)
+
+				store.EXPECT().
+					CompleteReservationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CompleteReservationTxResult{Reservation: completedReservation, TableUpdated: true}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 	}
@@ -1142,7 +1277,7 @@ func TestMarkNoShowAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -1195,7 +1330,7 @@ func TestMarkNoShowAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
+					Times(2).
 					Return(merchant, nil)
 
 				pendingReservation := confirmedReservation
@@ -1208,6 +1343,33 @@ func TestMarkNoShowAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
+			},
+		},
+		{
+			name:          "CashierForbidden",
+			reservationID: confirmedReservation.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				staffMerchant := merchant
+				staffMerchant.OwnerUserID = user.ID + 100
+
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(staffMerchant, nil)
+
+				store.EXPECT().
+					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+						MerchantID: merchant.ID,
+						UserID:     user.ID,
+					})).
+					Times(1).
+					Return("cashier", nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}
@@ -1318,4 +1480,167 @@ func TestGetReservationStatsAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestMerchantCreateReservationAPICashierAllowed(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 100)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		})).
+		Times(1).
+		Return("cashier", nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequest(http.MethodPost, "/v1/reservations/merchant/create", bytes.NewReader([]byte(`{"date":"bad"}`)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestMerchantCreateReservationAPISuccess(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomRoom(merchant.ID)
+	reservationDate := time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC)
+	reservationTime := time.Date(0, 1, 1, 18, 30, 0, 0, time.UTC)
+	createdReservation := randomReservation(table.ID, user.ID, merchant.ID)
+	createdReservation.Status = "confirmed"
+	createdReservation.PaymentMode = PaymentModeDeposit
+	createdReservation.DepositAmount = 0
+	createdReservation.PrepaidAmount = 0
+	createdReservation.ReservationDate = pgtype.Date{Time: reservationDate, Valid: true}
+	createdReservation.ReservationTime = pgtype.Time{Microseconds: int64((18*3600 + 30*60) * 1000000), Valid: true}
+	createdReservation.ContactName = "Alice"
+	createdReservation.ContactPhone = "13800138000"
+	createdReservation.GuestCount = 4
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	staffMerchant := merchant
+	staffMerchant.OwnerUserID = user.ID + 100
+
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(staffMerchant, nil)
+
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		})).
+		Times(1).
+		Return("cashier", nil)
+
+	store.EXPECT().
+		GetTable(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return(table, nil)
+
+	store.EXPECT().
+		ListReservationsByTableAndDate(gomock.Any(), gomock.Eq(db.ListReservationsByTableAndDateParams{
+			TableID:         table.ID,
+			ReservationDate: pgtype.Date{Time: reservationDate, Valid: true},
+		})).
+		Times(1).
+		Return([]db.TableReservation{}, nil)
+
+	store.EXPECT().
+		ListMerchantBusinessHours(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return([]db.MerchantBusinessHour{}, nil)
+
+	store.EXPECT().
+		CreateTableReservationByMerchant(gomock.Any(), gomock.Any()).
+		Times(1).
+		DoAndReturn(func(_ context.Context, arg db.CreateTableReservationByMerchantParams) (db.TableReservation, error) {
+			require.Equal(t, table.ID, arg.TableID)
+			require.Equal(t, user.ID, arg.UserID)
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.Equal(t, pgtype.Date{Time: reservationDate, Valid: true}, arg.ReservationDate)
+			require.Equal(t, pgtype.Time{Microseconds: int64((reservationTime.Hour()*3600 + reservationTime.Minute()*60) * 1000000), Valid: true}, arg.ReservationTime)
+			require.Equal(t, int16(4), arg.GuestCount)
+			require.Equal(t, "Alice", arg.ContactName)
+			require.Equal(t, "13800138000", arg.ContactPhone)
+			require.Equal(t, PaymentModeDeposit, arg.PaymentMode)
+			require.Equal(t, int64(0), arg.DepositAmount)
+			require.Equal(t, int64(0), arg.PrepaidAmount)
+			require.Equal(t, pgtype.Text{}, arg.Notes)
+			require.Equal(t, pgtype.Text{String: ReservationSourceMerchant, Valid: true}, arg.Source)
+			require.False(t, arg.RefundDeadline.IsZero())
+			require.False(t, arg.PaymentDeadline.IsZero())
+			return createdReservation, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	reqBody := []byte(`{"table_id":` + fmt.Sprint(table.ID) + `,"date":"2026-04-02","time":"18:30","guest_count":4,"contact_name":"Alice","contact_phone":"13800138000"}`)
+	req, err := http.NewRequest(http.MethodPost, "/v1/reservations/merchant/create", bytes.NewReader(reqBody))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp reservationResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, createdReservation.ID, resp.ID)
+	require.Equal(t, "confirmed", resp.Status)
+	require.Equal(t, PaymentModeDeposit, resp.PaymentMode)
+	require.Equal(t, merchant.ID, resp.MerchantID)
+	require.Equal(t, table.ID, resp.TableID)
+	require.Equal(t, "2026-04-02", resp.ReservationDate)
+	require.Equal(t, "18:30", resp.ReservationTime)
+}
+
+func TestMerchantUpdateReservationAPICashierForbidden(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 100)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     user.ID,
+		})).
+		Times(1).
+		Return("cashier", nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	req, err := http.NewRequest(http.MethodPut, "/v1/reservations/1/update", bytes.NewReader([]byte(`{}`)))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusForbidden, recorder.Code)
 }

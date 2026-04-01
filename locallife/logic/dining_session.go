@@ -466,7 +466,7 @@ func TransferDiningSessionTable(ctx context.Context, store db.Store, input Trans
 func CheckoutDiningSession(ctx context.Context, store db.Store, input CheckoutDiningSessionInput) (CheckoutDiningSessionResult, error) {
 	var result CheckoutDiningSessionResult
 
-	merchant, err := store.GetMerchantByOwner(ctx, input.UserID)
+	merchant, err := resolveMerchantForUser(ctx, store, input.UserID)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
 			return result, NewRequestError(http.StatusForbidden, errors.New("您不是商户，无法操作"))

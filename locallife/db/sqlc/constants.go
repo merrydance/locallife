@@ -69,4 +69,13 @@ const (
 	FulfillmentStatusReady          = "ready"
 	FulfillmentStatusCompleted      = "completed"
 	FulfillmentStatusCancelled      = "cancelled"
+
+	CloudPrinterReconciliationActionRegister = "register"
+	CloudPrinterReconciliationActionRemove   = "remove"
+
+	CloudPrinterReconciliationSourceCreate = "create"
+	CloudPrinterReconciliationSourceDelete = "delete"
+
+	CloudPrinterReconciliationStatusPending  = "pending"
+	CloudPrinterReconciliationStatusResolved = "resolved"
 )

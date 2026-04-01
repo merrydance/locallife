@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/merrydance/locallife/cloudprint"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
@@ -28,6 +30,7 @@ func randomCloudPrinter(merchantID int64) db.CloudPrinter {
 		PrinterSn:        util.RandomString(20),
 		PrinterKey:       util.RandomString(32),
 		PrinterType:      "feieyun",
+		PrinterRole:      "front",
 		PrintTakeout:     true,
 		PrintDineIn:      true,
 		PrintReservation: true,
@@ -39,20 +42,80 @@ func randomCloudPrinter(merchantID int64) db.CloudPrinter {
 
 func randomOrderDisplayConfig(merchantID int64) db.OrderDisplayConfig {
 	return db.OrderDisplayConfig{
-		ID:               util.RandomInt(1, 1000),
-		MerchantID:       merchantID,
-		EnablePrint:      true,
-		PrintTakeout:     true,
-		PrintDineIn:      true,
-		PrintReservation: true,
-		EnableVoice:      false,
-		VoiceTakeout:     true,
-		VoiceDineIn:      true,
-		EnableKds:        false,
-		KdsUrl:           pgtype.Text{String: "", Valid: false},
-		CreatedAt:        time.Now(),
-		UpdatedAt:        pgtype.Timestamptz{Time: time.Now(), Valid: true},
+		ID:                util.RandomInt(1, 1000),
+		MerchantID:        merchantID,
+		EnablePrint:       true,
+		PrintTakeout:      true,
+		PrintDineIn:       true,
+		PrintReservation:  true,
+		PrintDispatchMode: "single_full",
+		PrintTriggerMode:  "accepted",
+		EnableVoice:       false,
+		VoiceTakeout:      true,
+		VoiceDineIn:       true,
+		EnableKds:         false,
+		KdsUrl:            pgtype.Text{String: "", Valid: false},
+		CreatedAt:         time.Now(),
+		UpdatedAt:         pgtype.Timestamptz{Time: time.Now(), Valid: true},
 	}
+}
+
+type printerClientStub struct {
+	addInputs             []cloudprint.AddPrinterInput
+	removeInputs          []cloudprint.RemovePrinterInput
+	printInputs           []cloudprint.PrintInput
+	addErr                error
+	removeErr             error
+	printErr              error
+	printOrderID          string
+	queryOrderID          string
+	queryPrinted          bool
+	queryOrderErr         error
+	queryPrinterSN        string
+	queryPrinterStatus    string
+	queryPrinterStatusErr error
+	queryPrinterInfoSN    string
+	queryPrinterInfo      cloudprint.PrinterInfo
+	queryPrinterInfoErr   error
+}
+
+func (s *printerClientStub) AddPrinter(ctx context.Context, input cloudprint.AddPrinterInput) error {
+	s.addInputs = append(s.addInputs, input)
+	return s.addErr
+}
+
+func (s *printerClientStub) RemovePrinter(ctx context.Context, input cloudprint.RemovePrinterInput) error {
+	s.removeInputs = append(s.removeInputs, input)
+	return s.removeErr
+}
+
+func (s *printerClientStub) Print(ctx context.Context, input cloudprint.PrintInput) (string, error) {
+	s.printInputs = append(s.printInputs, input)
+	if s.printOrderID == "" {
+		s.printOrderID = "vendor-order-id"
+	}
+	return s.printOrderID, s.printErr
+}
+
+func (s *printerClientStub) QueryOrderState(ctx context.Context, orderID string) (bool, error) {
+	s.queryOrderID = orderID
+	return s.queryPrinted, s.queryOrderErr
+}
+
+func (s *printerClientStub) QueryPrinterStatus(ctx context.Context, sn string) (string, error) {
+	s.queryPrinterSN = sn
+	if s.queryPrinterStatus == "" {
+		s.queryPrinterStatus = "在线，工作状态正常"
+	}
+	return s.queryPrinterStatus, s.queryPrinterStatusErr
+}
+
+func (s *printerClientStub) GetPrinterInfo(ctx context.Context, sn string) (cloudprint.PrinterInfo, error) {
+	s.queryPrinterInfoSN = sn
+	if s.queryPrinterInfo.Model == "" {
+		s.queryPrinterInfo = cloudprint.PrinterInfo{Model: "FEIE-58", Status: "online"}
+	}
+	return s.queryPrinterInfo, s.queryPrinterInfoErr
 }
 
 // ==================== 创建打印机测试 ====================
@@ -116,7 +179,7 @@ func TestCreatePrinterAPI(t *testing.T) {
 			},
 		},
 		{
-			name: "OK_WithOtherPrinterType",
+			name: "InvalidPrinterType",
 			body: map[string]interface{}{
 				"printer_name": "其他打印机",
 				"printer_sn":   "SN_OTHER_001",
@@ -131,31 +194,9 @@ func TestCreatePrinterAPI(t *testing.T) {
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return(merchant, nil)
-
-				store.EXPECT().
-					GetCloudPrinterBySN(gomock.Any(), gomock.Eq("SN_OTHER_001")).
-					Times(1).
-					Return(db.CloudPrinter{}, db.ErrRecordNotFound)
-
-				store.EXPECT().
-					CreateCloudPrinter(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.CloudPrinter{
-						ID:          1,
-						MerchantID:  merchant.ID,
-						PrinterName: "其他打印机",
-						PrinterSn:   "SN_OTHER_001",
-						PrinterType: "other",
-						IsActive:    true,
-						CreatedAt:   time.Now(),
-					}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusCreated, recorder.Code)
-
-				var response printerResponse
-				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, "other", response.PrinterType)
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -196,7 +237,7 @@ func TestCreatePrinterAPI(t *testing.T) {
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
@@ -237,8 +278,9 @@ func TestCreatePrinterAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -256,8 +298,9 @@ func TestCreatePrinterAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -276,8 +319,9 @@ func TestCreatePrinterAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -296,8 +340,9 @@ func TestCreatePrinterAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -330,6 +375,48 @@ func TestCreatePrinterAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestCreatePrinterAPIRecordsReconciliationOnStoreFailureAfterRemoteRegistration(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	printerClient := &printerClientStub{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetCloudPrinterBySN(gomock.Any(), gomock.Eq("SN123456789")).
+		Times(1).
+		Return(db.CloudPrinter{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		CreateCloudPrinter(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CloudPrinter{}, fmt.Errorf("insert failed"))
+	store.EXPECT().
+		UpsertCloudPrinterReconciliationJob(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CloudPrinterReconciliationJob{}, nil)
+
+	server := newTestServer(t, store)
+	server.SetPrinterClientForTest(printerClient)
+	recorder := httptest.NewRecorder()
+
+	body := []byte(`{"printer_name":"测试打印机","printer_sn":"SN123456789","printer_key":"KEY123456789","printer_type":"feieyun"}`)
+	request, err := http.NewRequest(http.MethodPost, "/v1/merchant/devices", bytes.NewReader(body))
+	require.NoError(t, err)
+	request.Header.Set("Content-Type", "application/json")
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Len(t, printerClient.addInputs, 1)
+	require.Empty(t, printerClient.removeInputs)
 }
 
 // ==================== 获取打印机列表测试 ====================
@@ -427,7 +514,7 @@ func TestListPrintersAPI(t *testing.T) {
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}
@@ -561,8 +648,9 @@ func TestGetPrinterAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -757,8 +845,9 @@ func TestUpdatePrinterAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -917,6 +1006,84 @@ func TestDeletePrinterAPI(t *testing.T) {
 	}
 }
 
+func TestDeletePrinterAPIRemovesRemotePrinter(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	printer := randomCloudPrinter(merchant.ID)
+	printerClient := &printerClientStub{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).
+		Times(1).
+		Return(printer, nil)
+	store.EXPECT().
+		DeleteCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).
+		Times(1).
+		Return(nil)
+
+	server := newTestServer(t, store)
+	server.SetPrinterClientForTest(printerClient)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/v1/merchant/devices/%d", printer.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Len(t, printerClient.removeInputs, 1)
+	require.Equal(t, printer.PrinterSn, printerClient.removeInputs[0].SN)
+}
+
+func TestDeletePrinterAPIRecordsReconciliationOnStoreFailureAfterRemoteDeletion(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	printer := randomCloudPrinter(merchant.ID)
+	printerClient := &printerClientStub{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(merchant, nil)
+	store.EXPECT().
+		GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).
+		Times(1).
+		Return(printer, nil)
+	store.EXPECT().
+		DeleteCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).
+		Times(1).
+		Return(fmt.Errorf("delete failed"))
+	store.EXPECT().
+		UpsertCloudPrinterReconciliationJob(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.CloudPrinterReconciliationJob{}, nil)
+
+	server := newTestServer(t, store)
+	server.SetPrinterClientForTest(printerClient)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodDelete, fmt.Sprintf("/v1/merchant/devices/%d", printer.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	require.Len(t, printerClient.removeInputs, 1)
+	require.Empty(t, printerClient.addInputs)
+}
+
 // ==================== 测试打印机测试 ====================
 
 func TestTestPrinterAPI(t *testing.T) {
@@ -1037,6 +1204,100 @@ func TestTestPrinterAPI(t *testing.T) {
 	}
 }
 
+func TestGetPrinterLiveStatusAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	printer := randomCloudPrinter(merchant.ID)
+
+	testCases := []struct {
+		name          string
+		printerID     int64
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		buildClient   func() *printerClientStub
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub)
+	}{
+		{
+			name:      "OK",
+			printerID: printer.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).Times(1).Return(merchant, nil)
+				store.EXPECT().GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).Times(1).Return(printer, nil)
+			},
+			buildClient: func() *printerClientStub {
+				logo := true
+				scan := false
+				return &printerClientStub{
+					queryPrinterStatus: "在线，工作状态正常",
+					queryPrinterInfo: cloudprint.PrinterInfo{
+						Model:      "FEIE-80",
+						Status:     "online",
+						PrintLogo:  &logo,
+						ScanSwitch: &scan,
+					},
+				}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var resp printerLiveStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, printer.ID, resp.PrinterID)
+				require.True(t, resp.Online)
+				require.True(t, resp.Working)
+				require.NotNil(t, resp.Model)
+				require.Equal(t, "FEIE-80", *resp.Model)
+				require.Equal(t, printer.PrinterSn, client.queryPrinterSN)
+				require.Equal(t, printer.PrinterSn, client.queryPrinterInfoSN)
+			},
+		},
+		{
+			name:      "PrinterNotBelongToMerchant",
+			printerID: printer.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).Times(1).Return(merchant, nil)
+				otherPrinter := printer
+				otherPrinter.MerchantID = merchant.ID + 1
+				store.EXPECT().GetCloudPrinter(gomock.Any(), gomock.Eq(printer.ID)).Times(1).Return(otherPrinter, nil)
+			},
+			buildClient: func() *printerClientStub { return &printerClientStub{} },
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, client *printerClientStub) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+				require.Empty(t, client.queryPrinterSN)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			client := tc.buildClient()
+			server.SetPrinterClientForTest(client)
+			recorder := httptest.NewRecorder()
+
+			url := fmt.Sprintf("/v1/merchant/devices/%d/status", tc.printerID)
+			request, err := http.NewRequest(http.MethodGet, url, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder, client)
+		})
+	}
+}
+
 // ==================== 获取展示配置测试 ====================
 
 func TestGetDisplayConfigAPI(t *testing.T) {
@@ -1129,7 +1390,7 @@ func TestGetDisplayConfigAPI(t *testing.T) {
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 	}
@@ -1272,7 +1533,7 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 					Return(db.Merchant{}, db.ErrRecordNotFound)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusNotFound, recorder.Code)
+				require.Equal(t, http.StatusForbidden, recorder.Code)
 			},
 		},
 		{
@@ -1286,8 +1547,9 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1304,8 +1566,9 @@ func TestUpdateDisplayConfigAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(0)
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return(merchant, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

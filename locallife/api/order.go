@@ -7,11 +7,13 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/rules"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
 	"github.com/rs/zerolog/log"
@@ -269,7 +271,7 @@ func (server *Server) requireMerchantForOrder(ctx *gin.Context, userID int64) (d
 		return merchant, true
 	}
 
-	merchant, err := server.store.GetMerchantByOwner(ctx, userID)
+	merchant, err := server.resolveMerchantForUser(ctx, userID)
 	if err != nil {
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("you are not a merchant")))
@@ -472,22 +474,13 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 func (server *Server) createOrder(ctx *gin.Context) {
 	var req createOrderRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
-		log.Warn().Err(err).Msg("[DEBUG] createOrder: binding failed")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
-	log.Info().
-		Int64("merchant_id", req.MerchantID).
-		Str("order_type", req.OrderType).
-		Int("items_count", len(req.Items)).
-		Interface("address_id", req.AddressID).
-		Msg("[DEBUG] createOrder: request parsed")
-
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 	if err := validateOrderTypeFields(req); err != nil {
-		log.Warn().Err(err).Msg("[DEBUG] createOrder: validateOrderTypeFields failed")
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -1488,6 +1481,146 @@ type completeOrderRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1" example:"100001"`
 }
 
+type printMerchantOrderRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1" example:"100001"`
+}
+
+type printMerchantOrderResponse struct {
+	Message string `json:"message"`
+	OrderID int64  `json:"order_id"`
+	Trigger string `json:"trigger"`
+}
+
+type listMerchantOrderPrintJobsRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1" example:"100001"`
+}
+
+type getMerchantOrderPrintJobStatusRequest struct {
+	ID         int64 `uri:"id" binding:"required,min=1" example:"100001"`
+	PrintLogID int64 `uri:"print_log_id" binding:"required,min=1" example:"200001"`
+}
+
+type merchantOrderPrintJobResponse struct {
+	ID            int64      `json:"id"`
+	OrderID       int64      `json:"order_id"`
+	PrinterID     int64      `json:"printer_id"`
+	PrinterName   string     `json:"printer_name"`
+	Status        string     `json:"status"`
+	VendorOrderID *string    `json:"vendor_order_id,omitempty"`
+	ErrorMessage  *string    `json:"error_message,omitempty"`
+	PrintedAt     *time.Time `json:"printed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
+type listMerchantOrderPrintJobsResponse struct {
+	OrderID int64                           `json:"order_id"`
+	Items   []merchantOrderPrintJobResponse `json:"items"`
+}
+
+type merchantOrderPrintJobStatusResponse struct {
+	PrintLogID          int64     `json:"print_log_id"`
+	OrderID             int64     `json:"order_id"`
+	PrinterID           int64     `json:"printer_id"`
+	PrinterName         string    `json:"printer_name"`
+	LocalStatus         string    `json:"local_status"`
+	VendorOrderID       *string   `json:"vendor_order_id,omitempty"`
+	CloudQueryAvailable bool      `json:"cloud_query_available"`
+	CloudPrinted        *bool     `json:"cloud_printed,omitempty"`
+	CheckedAt           time.Time `json:"checked_at"`
+}
+
+type listMerchantPrintAnomaliesRequest struct {
+	PageID   int32  `form:"page_id" binding:"omitempty,min=1" example:"1"`
+	PageSize int32  `form:"page_size" binding:"omitempty,min=5,max=50" example:"20"`
+	Status   string `form:"status" binding:"omitempty,oneof=failed pending" example:"failed"`
+}
+
+type merchantPrintAnomalyResponse struct {
+	PrintLogID    int64     `json:"print_log_id"`
+	OrderID       int64     `json:"order_id"`
+	OrderNo       string    `json:"order_no"`
+	OrderType     string    `json:"order_type"`
+	PrinterID     int64     `json:"printer_id"`
+	PrinterName   string    `json:"printer_name"`
+	LocalStatus   string    `json:"local_status"`
+	ErrorMessage  *string   `json:"error_message,omitempty"`
+	VendorOrderID *string   `json:"vendor_order_id,omitempty"`
+	LastAttemptAt time.Time `json:"last_attempt_at"`
+	CanRetry      bool      `json:"can_retry"`
+	RetryHint     string    `json:"retry_hint,omitempty"`
+}
+
+type listMerchantPrintAnomaliesResponse struct {
+	Items    []merchantPrintAnomalyResponse `json:"items"`
+	Total    int64                          `json:"total"`
+	PageID   int32                          `json:"page_id"`
+	PageSize int32                          `json:"page_size"`
+}
+
+type retryMerchantOrderPrintJobRequest struct {
+	ID         int64 `uri:"id" binding:"required,min=1" example:"100001"`
+	PrintLogID int64 `uri:"print_log_id" binding:"required,min=1" example:"200001"`
+}
+
+type retryMerchantOrderPrintJobResponse struct {
+	Message    string `json:"message"`
+	OrderID    int64  `json:"order_id"`
+	PrintLogID int64  `json:"print_log_id"`
+	Trigger    string `json:"trigger"`
+}
+
+func toMerchantOrderPrintJobResponse(item db.ListPrintLogsByOrderRow) merchantOrderPrintJobResponse {
+	responseItem := merchantOrderPrintJobResponse{
+		ID:          item.ID,
+		OrderID:     item.OrderID,
+		PrinterID:   item.PrinterID,
+		PrinterName: item.PrinterName,
+		Status:      item.Status,
+		CreatedAt:   item.CreatedAt,
+	}
+	if item.VendorOrderID.Valid {
+		vendorOrderID := item.VendorOrderID.String
+		responseItem.VendorOrderID = &vendorOrderID
+	}
+	if item.ErrorMessage.Valid {
+		errorMessage := item.ErrorMessage.String
+		responseItem.ErrorMessage = &errorMessage
+	}
+	if item.PrintedAt.Valid {
+		printedAt := item.PrintedAt.Time
+		responseItem.PrintedAt = &printedAt
+	}
+	return responseItem
+}
+
+func toMerchantPrintAnomalyResponse(item db.ListMerchantPrintAnomaliesRow) merchantPrintAnomalyResponse {
+	responseItem := merchantPrintAnomalyResponse{
+		PrintLogID:    item.ID,
+		OrderID:       item.OrderID,
+		OrderNo:       item.OrderNo,
+		OrderType:     item.OrderType,
+		PrinterID:     item.PrinterID,
+		PrinterName:   item.PrinterName,
+		LocalStatus:   item.Status,
+		LastAttemptAt: item.CreatedAt,
+		CanRetry:      item.PrinterType == printerTypeFeieyun && item.IsActive,
+	}
+	if item.ErrorMessage.Valid {
+		errorMessage := item.ErrorMessage.String
+		responseItem.ErrorMessage = &errorMessage
+	}
+	if item.VendorOrderID.Valid {
+		vendorOrderID := item.VendorOrderID.String
+		responseItem.VendorOrderID = &vendorOrderID
+	}
+	if !item.IsActive {
+		responseItem.RetryHint = "printer is inactive"
+	} else if item.PrinterType != printerTypeFeieyun {
+		responseItem.RetryHint = "printer type is not supported for retry"
+	}
+	return responseItem
+}
+
 // completeOrder godoc
 // @Summary 完成订单
 // @Description 商户标记订单已完成（堂食/打包自取订单）
@@ -1553,6 +1686,496 @@ func (server *Server) completeOrder(ctx *gin.Context) {
 	})
 
 	ctx.JSON(http.StatusOK, newOrderResponse(completedOrder))
+}
+
+// listMerchantOrderPrintJobs godoc
+// @Summary 查询订单打印记录
+// @Description 查询指定订单的打印任务执行记录，包括打印机、状态和失败原因
+// @Tags 商户订单管理
+// @Accept json
+// @Produce json
+// @Param id path int true "订单ID" minimum(1)
+// @Success 200 {object} listMerchantOrderPrintJobsResponse "打印记录列表"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "订单不属于当前商户"
+// @Failure 404 {object} ErrorResponse "订单不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchant/orders/{id}/print-jobs [get]
+// @Security BearerAuth
+func (server *Server) listMerchantOrderPrintJobs(ctx *gin.Context) {
+	var req listMerchantOrderPrintJobsRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
+	if !ok {
+		return
+	}
+
+	service := server.orderQuerySvc
+	if service == nil {
+		if qs, ok := server.buildOrderCommandService().(logic.OrderQueryService); ok {
+			service = qs
+		}
+	}
+	if service == nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("order query service is not configured")))
+		return
+	}
+
+	result, err := service.GetMerchantOrder(ctx, logic.GetMerchantOrderQueryInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+	})
+	if err != nil {
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Status == http.StatusForbidden && reqErr.Err != nil && reqErr.Err.Error() == "order does not belong to your merchant" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "merchant_resource_access_denied",
+				TargetType:  "order",
+				TargetID:    &req.ID,
+				RegionID:    &merchant.RegionID,
+				Metadata: map[string]any{
+					"reason":      "order_not_belong_to_merchant",
+					"merchant_id": merchant.ID,
+					"order_id":    req.ID,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	logs, err := server.store.ListPrintLogsByOrder(ctx, result.Order.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	items := make([]merchantOrderPrintJobResponse, 0, len(logs))
+	for _, item := range logs {
+		items = append(items, toMerchantOrderPrintJobResponse(item))
+	}
+
+	ctx.JSON(http.StatusOK, listMerchantOrderPrintJobsResponse{
+		OrderID: result.Order.ID,
+		Items:   items,
+	})
+}
+
+// getMerchantOrderPrintJobStatus godoc
+// @Summary 查询打印任务云端状态
+// @Description 查询指定订单打印任务在飞鹅云侧的执行状态
+// @Tags 商户订单管理
+// @Accept json
+// @Produce json
+// @Param id path int true "订单ID" minimum(1)
+// @Param print_log_id path int true "打印记录ID" minimum(1)
+// @Success 200 {object} merchantOrderPrintJobStatusResponse "打印任务云端状态"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "订单不属于当前商户"
+// @Failure 404 {object} ErrorResponse "订单或打印记录不存在"
+// @Failure 501 {object} ErrorResponse "当前环境不支持查询"
+// @Failure 502 {object} ErrorResponse "云打印平台调用失败"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchant/orders/{id}/print-jobs/{print_log_id}/status [get]
+// @Security BearerAuth
+func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
+	var req getMerchantOrderPrintJobStatusRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
+	if !ok {
+		return
+	}
+
+	service := server.orderQuerySvc
+	if service == nil {
+		if qs, ok := server.buildOrderCommandService().(logic.OrderQueryService); ok {
+			service = qs
+		}
+	}
+	if service == nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("order query service is not configured")))
+		return
+	}
+
+	result, err := service.GetMerchantOrder(ctx, logic.GetMerchantOrderQueryInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	printLog, err := server.store.GetPrintLog(ctx, req.PrintLogID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("print log not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if printLog.OrderID != result.Order.ID {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("print log not found")))
+		return
+	}
+
+	printer, err := server.store.GetCloudPrinter(ctx, printLog.PrinterID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if printer.PrinterType != printerTypeFeieyun || server.printerClient == nil {
+		ctx.JSON(http.StatusNotImplemented, errorResponse(errors.New("current printer type or environment does not support cloud print status query")))
+		return
+	}
+
+	resp := merchantOrderPrintJobStatusResponse{
+		PrintLogID:          printLog.ID,
+		OrderID:             printLog.OrderID,
+		PrinterID:           printLog.PrinterID,
+		PrinterName:         printer.PrinterName,
+		LocalStatus:         printLog.Status,
+		CloudQueryAvailable: printLog.VendorOrderID.Valid,
+		CheckedAt:           time.Now(),
+	}
+	if printLog.VendorOrderID.Valid {
+		vendorOrderID := printLog.VendorOrderID.String
+		resp.VendorOrderID = &vendorOrderID
+		cloudPrinted, err := server.printerClient.QueryOrderState(ctx, vendorOrderID)
+		if err != nil {
+			ctx.JSON(http.StatusBadGateway, errorResponse(err))
+			return
+		}
+		resp.CloudPrinted = &cloudPrinted
+	}
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// listMerchantPrintAnomalies godoc
+// @Summary 查询打印异常列表
+// @Description 查询商户当前仍未恢复的打印异常，按订单和打印机聚合最新一次结果
+// @Tags 商户订单管理
+// @Accept json
+// @Produce json
+// @Param page_id query int false "页码(从1开始)" minimum(1)
+// @Param page_size query int false "每页条数" minimum(5) maximum(50)
+// @Param status query string false "异常状态过滤" Enums(failed,pending)
+// @Success 200 {object} listMerchantPrintAnomaliesResponse "打印异常列表"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "非商户用户"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchant/orders/print-anomalies [get]
+// @Security BearerAuth
+func (server *Server) listMerchantPrintAnomalies(ctx *gin.Context) {
+	var req listMerchantPrintAnomaliesRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.PageID == 0 {
+		req.PageID = 1
+	}
+	if req.PageSize == 0 {
+		req.PageSize = 20
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
+	if !ok {
+		return
+	}
+
+	status := pgtype.Text{}
+	if req.Status != "" {
+		status = pgtype.Text{String: req.Status, Valid: true}
+	}
+	offset := (req.PageID - 1) * req.PageSize
+	items, err := server.store.ListMerchantPrintAnomalies(ctx, db.ListMerchantPrintAnomaliesParams{
+		MerchantID: merchant.ID,
+		Limit:      req.PageSize,
+		Offset:     offset,
+		Status:     status,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	total, err := server.store.CountMerchantPrintAnomalies(ctx, db.CountMerchantPrintAnomaliesParams{
+		MerchantID: merchant.ID,
+		Status:     status,
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	responseItems := make([]merchantPrintAnomalyResponse, 0, len(items))
+	for _, item := range items {
+		responseItems = append(responseItems, toMerchantPrintAnomalyResponse(item))
+	}
+
+	ctx.JSON(http.StatusOK, listMerchantPrintAnomaliesResponse{
+		Items:    responseItems,
+		Total:    total,
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
+	})
+}
+
+// retryMerchantOrderPrintJob godoc
+// @Summary 重试异常打印任务
+// @Description 基于原始打印记录重新投递一次同打印机补打任务
+// @Tags 商户订单管理
+// @Accept json
+// @Produce json
+// @Param id path int true "订单ID" minimum(1)
+// @Param print_log_id path int true "打印记录ID" minimum(1)
+// @Success 200 {object} retryMerchantOrderPrintJobResponse "重试任务已创建"
+// @Failure 400 {object} ErrorResponse "打印记录当前不可重试"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "订单不属于当前商户"
+// @Failure 404 {object} ErrorResponse "订单或打印记录不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchant/orders/{id}/print-jobs/{print_log_id}/retry [post]
+// @Security BearerAuth
+func (server *Server) retryMerchantOrderPrintJob(ctx *gin.Context) {
+	var req retryMerchantOrderPrintJobRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
+	if !ok {
+		return
+	}
+
+	service := server.orderQuerySvc
+	if service == nil {
+		if qs, ok := server.buildOrderCommandService().(logic.OrderQueryService); ok {
+			service = qs
+		}
+	}
+	if service == nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("order query service is not configured")))
+		return
+	}
+
+	result, err := service.GetMerchantOrder(ctx, logic.GetMerchantOrderQueryInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	printLog, err := server.store.GetPrintLog(ctx, req.PrintLogID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("print log not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if printLog.OrderID != result.Order.ID {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("print log not found")))
+		return
+	}
+	if printLog.Status != "failed" {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only failed print logs can be retried")))
+		return
+	}
+
+	latestPrintLog, err := server.store.GetLatestPrintLogByOrderAndPrinter(ctx, db.GetLatestPrintLogByOrderAndPrinterParams{
+		OrderID:   result.Order.ID,
+		PrinterID: printLog.PrinterID,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("print log not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if latestPrintLog.ID != printLog.ID {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("only the latest failed print log can be retried")))
+		return
+	}
+
+	printer, err := server.store.GetCloudPrinter(ctx, printLog.PrinterID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if printer.MerchantID != merchant.ID {
+		ctx.JSON(http.StatusNotFound, errorResponse(errors.New("printer not found")))
+		return
+	}
+	if !printer.IsActive {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("printer is inactive")))
+		return
+	}
+	if printer.PrinterType != printerTypeFeieyun {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("current printer type does not support retry")))
+		return
+	}
+	if server.taskDistributor == nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("print scheduler is not configured")))
+		return
+	}
+
+	if err := server.taskDistributor.DistributeTaskPrintOrder(ctx, &worker.PrintOrderPayload{
+		OrderID:         req.ID,
+		Trigger:         "retry",
+		RetryPrintLogID: req.PrintLogID,
+		TaskKey:         buildRetryOrderPrintTaskKey(req.ID, req.PrintLogID),
+	}); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "order_print_retry_requested",
+		TargetType:  "print_log",
+		TargetID:    &printLog.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"order_id":     result.Order.ID,
+			"order_no":     result.Order.OrderNo,
+			"printer_id":   printer.ID,
+			"printer_name": printer.PrinterName,
+			"trigger":      "retry",
+		},
+	})
+
+	ctx.JSON(http.StatusOK, retryMerchantOrderPrintJobResponse{
+		Message:    "print retry task scheduled",
+		OrderID:    result.Order.ID,
+		PrintLogID: printLog.ID,
+		Trigger:    "retry",
+	})
+}
+
+// printMerchantOrder godoc
+// @Summary 手动创建订单打印任务
+// @Description 在手动打印模式下，为指定订单创建一次异步打印任务
+// @Tags 商户订单管理
+// @Accept json
+// @Produce json
+// @Param id path int true "订单ID" minimum(1)
+// @Success 200 {object} printMerchantOrderResponse "打印任务已创建"
+// @Failure 400 {object} ErrorResponse "订单或打印配置不允许手动打印"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "订单不属于当前商户"
+// @Failure 404 {object} ErrorResponse "订单不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchant/orders/{id}/print-jobs [post]
+// @Security BearerAuth
+func (server *Server) printMerchantOrder(ctx *gin.Context) {
+	var req printMerchantOrderRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
+	if !ok {
+		return
+	}
+
+	service := server.orderCommandSvc
+	if service == nil {
+		service = server.buildOrderCommandService()
+	}
+
+	result, err := service.PrintMerchantOrder(ctx, logic.MerchantOrderPrintInput{
+		MerchantID: merchant.ID,
+		OrderID:    req.ID,
+		OperatorID: authPayload.UserID,
+	})
+	if err != nil {
+		var reqErr *logic.RequestError
+		if errors.As(err, &reqErr) && reqErr.Status == http.StatusForbidden && reqErr.Err != nil && reqErr.Err.Error() == "order does not belong to your merchant" {
+			server.writeAuditLog(ctx, AuditLogInput{
+				ActorUserID: authPayload.UserID,
+				ActorRole:   "merchant",
+				Action:      "merchant_resource_access_denied",
+				TargetType:  "order",
+				TargetID:    &req.ID,
+				RegionID:    &merchant.RegionID,
+				Metadata: map[string]any{
+					"reason":      "order_not_belong_to_merchant",
+					"merchant_id": merchant.ID,
+					"order_id":    req.ID,
+				},
+			})
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	server.writeAuditLog(ctx, AuditLogInput{
+		ActorUserID: authPayload.UserID,
+		ActorRole:   "merchant",
+		Action:      "order_print_requested",
+		TargetType:  "order",
+		TargetID:    &result.Order.ID,
+		RegionID:    &merchant.RegionID,
+		Metadata: map[string]any{
+			"order_no":   result.Order.OrderNo,
+			"order_type": result.Order.OrderType,
+			"trigger":    "manual",
+		},
+	})
+
+	ctx.JSON(http.StatusOK, printMerchantOrderResponse{
+		Message: "print task scheduled",
+		OrderID: result.Order.ID,
+		Trigger: "manual",
+	})
 }
 
 // getOrderStats 获取订单统计

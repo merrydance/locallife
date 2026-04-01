@@ -17,7 +17,6 @@ import (
 	"github.com/merrydance/locallife/util"
 
 	"github.com/gin-gonic/gin"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/rs/zerolog/log"
 )
@@ -68,23 +67,10 @@ func parseNumericString(s string) (pgtype.Numeric, error) {
 	}, nil
 }
 
+// resolveMerchantForUser returns the merchant currently associated with the user.
+// The association may come from owner_user_id or active merchant_staff records.
 func (server *Server) resolveMerchantForUser(ctx *gin.Context, userID int64) (db.Merchant, error) {
-	merchant, err := server.store.GetMerchantByOwner(ctx, userID)
-	if err == nil {
-		return merchant, nil
-	}
-	if !isNotFoundError(err) {
-		return db.Merchant{}, err
-	}
-
-	merchants, err := server.store.ListMerchantsByStaff(ctx, userID)
-	if err != nil {
-		return db.Merchant{}, err
-	}
-	if len(merchants) == 0 {
-		return db.Merchant{}, pgx.ErrNoRows
-	}
-	return merchants[0], nil
+	return server.getMerchantFromContextOrStore(ctx, userID)
 }
 
 type merchantVersionConflictResponse struct {

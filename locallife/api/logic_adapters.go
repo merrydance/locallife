@@ -171,6 +171,21 @@ func (s apiTaskScheduler) ScheduleProfitSharingReturnResult(ctx context.Context,
 	}, asynq.ProcessIn(input.Delay))
 }
 
+func (s apiTaskScheduler) ScheduleOrderPrint(ctx context.Context, input logic.OrderPrintTaskInput) error {
+	if s.server.taskDistributor == nil {
+		return nil
+	}
+	taskKey := buildStableOrderPrintTaskKey(input.OrderID, input.Trigger)
+	if input.Trigger == "manual" {
+		taskKey = buildUniqueOrderPrintTaskKey(input.OrderID, input.Trigger)
+	}
+	return s.server.taskDistributor.DistributeTaskPrintOrder(ctx, &worker.PrintOrderPayload{
+		OrderID: input.OrderID,
+		Trigger: input.Trigger,
+		TaskKey: taskKey,
+	})
+}
+
 type apiDishCustomizationNormalizer struct {
 	server *Server
 }

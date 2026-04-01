@@ -328,6 +328,91 @@ func TestCreateDishAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "OKWithCustomizations",
+			body: gin.H{
+				"category_id":  category.ID,
+				"name":         dish.Name,
+				"price":        dish.Price,
+				"is_available": dish.IsAvailable,
+				"is_online":    dish.IsOnline,
+				"customization_groups": []gin.H{
+					{
+						"name":        "辣度",
+						"is_required": true,
+						"sort_order":  1,
+						"options": []gin.H{
+							{
+								"tag_id":      int64(101),
+								"extra_price": int64(200),
+								"sort_order":  1,
+							},
+						},
+					},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					AnyTimes().
+					Return(merchant, nil)
+
+				store.EXPECT().
+					GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+						MerchantID: merchant.ID,
+						CategoryID: category.ID,
+					})).
+					Times(1).
+					Return(db.MerchantDishCategory{}, nil)
+
+				store.EXPECT().
+					GetTag(gomock.Any(), gomock.Eq(int64(101))).
+					Times(1).
+					Return(db.Tag{ID: 101, Name: "微辣"}, nil)
+
+				store.EXPECT().
+					CreateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreateDishTxResult{
+						Dish: dish,
+						CustomizationGroups: []db.DishCustomizationGroupWithOptions{
+							{
+								Group: db.DishCustomizationGroup{
+									ID:         1,
+									DishID:     dish.ID,
+									Name:       "辣度",
+									IsRequired: true,
+									SortOrder:  1,
+								},
+								Options: []db.DishCustomizationOption{
+									{
+										ID:         11,
+										GroupID:    1,
+										TagID:      101,
+										ExtraPrice: 200,
+										SortOrder:  1,
+									},
+								},
+							},
+						},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var resp dishResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.CustomizationGroups, 1)
+				require.Equal(t, "辣度", resp.CustomizationGroups[0].Name)
+				require.Len(t, resp.CustomizationGroups[0].Options, 1)
+				require.Equal(t, int64(101), resp.CustomizationGroups[0].Options[0].TagID)
+				require.Equal(t, "微辣", resp.CustomizationGroups[0].Options[0].TagName)
+				require.Equal(t, int64(200), resp.CustomizationGroups[0].Options[0].ExtraPrice)
+			},
+		},
+		{
 			name: "InvalidPrice",
 			body: gin.H{
 				"name":  dish.Name,

@@ -8974,53 +8974,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/merchant/applyment/status": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "查询商户微信二级商户进件状态",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户"
-                ],
-                "summary": "查询商户开户状态",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api.merchantApplymentStatusResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "Unauthorized",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "Not Found",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "Internal Server Error",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
-        "/v1/merchant/bindbank": {
+        "/v1/merchant/applyment/bindbank": {
             "post": {
                 "security": [
                     {
@@ -9070,6 +9024,52 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/applyment/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询商户微信二级商户进件状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "查询商户开户状态",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantApplymentStatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -9530,7 +9530,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "商户注册新的云打印机设备，支持飞鹅云和易联云",
+                "description": "商户注册新的云打印机设备，当前仅支持飞鹅云",
                 "consumes": [
                     "application/json"
                 ],
@@ -9589,6 +9589,146 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/devices/reconciliation-jobs": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户查看云打印机远端补偿失败后待处理的对账任务，可选查看已解决任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户设备管理"
+                ],
+                "summary": "获取打印机异常对账任务",
+                "parameters": [
+                    {
+                        "enum": [
+                            "pending",
+                            "resolved"
+                        ],
+                        "type": "string",
+                        "description": "任务状态，默认 pending",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回任务列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.printerReconciliationJobListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/devices/reconciliation-jobs/{id}/retry": {
+            "post": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "商户对远端补偿失败的打印机任务发起重试，成功后将任务标记为 resolved",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户设备管理"
+                ],
+                "summary": "重试打印机异常对账任务",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "对账任务ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "重试结果",
+                        "schema": {
+                            "$ref": "#/definitions/api.printerReconciliationJobResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "任务不属于该商户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "任务不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "501": {
+                        "description": "当前环境不支持重试",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "云打印平台调用失败",
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
@@ -9819,6 +9959,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/devices/{id}/status": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "向飞鹅云查询打印机在线状态与基础能力信息",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户设备管理"
+                ],
+                "summary": "获取打印机实时状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "打印机ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回实时状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.printerLiveStatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "打印机不属于该商户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "打印机不存在",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "501": {
+                        "description": "当前环境不支持查询",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "502": {
+                        "description": "云打印平台调用失败",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/devices/{id}/test": {
             "post": {
                 "security": [
@@ -9826,7 +10045,7 @@ const docTemplate = `{
                         "Bearer": []
                     }
                 ],
-                "description": "向打印机发送测试打印命令（功能尚未接入云打印服务）",
+                "description": "向飞鹅云打印机发送在线测试打印命令；未配置云打印客户端时返回暂不支持",
                 "consumes": [
                     "application/json"
                 ],
@@ -10762,6 +10981,85 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/orders/print-anomalies": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询商户当前仍未恢复的打印异常，按订单和打印机聚合最新一次结果",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户订单管理"
+                ],
+                "summary": "查询打印异常列表",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码(从1开始)",
+                        "name": "page_id",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 50,
+                        "minimum": 5,
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "page_size",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "failed",
+                            "pending"
+                        ],
+                        "type": "string",
+                        "description": "异常状态过滤",
+                        "name": "status",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "打印异常列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listMerchantPrintAnomaliesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/orders/stats": {
             "get": {
                 "security": [
@@ -11027,6 +11325,292 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/orders/{id}/print-jobs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询指定订单的打印任务执行记录，包括打印机、状态和失败原因",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户订单管理"
+                ],
+                "summary": "查询订单打印记录",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "打印记录列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listMerchantOrderPrintJobsResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "订单不属于当前商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "在手动打印模式下，为指定订单创建一次异步打印任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户订单管理"
+                ],
+                "summary": "手动创建订单打印任务",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "打印任务已创建",
+                        "schema": {
+                            "$ref": "#/definitions/api.printMerchantOrderResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "订单或打印配置不允许手动打印",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "订单不属于当前商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/orders/{id}/print-jobs/{print_log_id}/retry": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "基于原始打印记录重新投递一次同打印机补打任务",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户订单管理"
+                ],
+                "summary": "重试异常打印任务",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "打印记录ID",
+                        "name": "print_log_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "重试任务已创建",
+                        "schema": {
+                            "$ref": "#/definitions/api.retryMerchantOrderPrintJobResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "打印记录当前不可重试",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "订单不属于当前商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "订单或打印记录不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/orders/{id}/print-jobs/{print_log_id}/status": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询指定订单打印任务在飞鹅云侧的执行状态",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户订单管理"
+                ],
+                "summary": "查询打印任务云端状态",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "打印记录ID",
+                        "name": "print_log_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "打印任务云端状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantOrderPrintJobStatusResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "订单不属于当前商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "订单或打印记录不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "501": {
+                        "description": "当前环境不支持查询",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "云打印平台调用失败",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -29595,6 +30179,13 @@ const docTemplate = `{
                     "type": "string",
                     "maxLength": 100
                 },
+                "printer_role": {
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "kitchen"
+                    ]
+                },
                 "printer_sn": {
                     "type": "string",
                     "maxLength": 100
@@ -29602,9 +30193,7 @@ const docTemplate = `{
                 "printer_type": {
                     "type": "string",
                     "enum": [
-                        "feieyun",
-                        "yilianyun",
-                        "other"
+                        "feieyun"
                     ]
                 }
             }
@@ -30957,11 +31546,17 @@ const docTemplate = `{
                 "print_dine_in": {
                     "type": "boolean"
                 },
+                "print_dispatch_mode": {
+                    "type": "string"
+                },
                 "print_reservation": {
                     "type": "boolean"
                 },
                 "print_takeout": {
                     "type": "boolean"
+                },
+                "print_trigger_mode": {
+                    "type": "string"
                 },
                 "updated_at": {
                     "type": "string"
@@ -31579,6 +32174,20 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listMerchantOrderPrintJobsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantOrderPrintJobResponse"
+                    }
+                },
+                "order_id": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.listMerchantOrdersResponse": {
             "type": "object",
             "properties": {
@@ -31586,6 +32195,26 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/api.orderResponse"
+                    }
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.listMerchantPrintAnomaliesResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantPrintAnomalyResponse"
                     }
                 },
                 "page_id": {
@@ -32665,6 +33294,70 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantOrderPrintJobResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "printed_at": {
+                    "type": "string"
+                },
+                "printer_id": {
+                    "type": "integer"
+                },
+                "printer_name": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "vendor_order_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantOrderPrintJobStatusResponse": {
+            "type": "object",
+            "properties": {
+                "checked_at": {
+                    "type": "string"
+                },
+                "cloud_printed": {
+                    "type": "boolean"
+                },
+                "cloud_query_available": {
+                    "type": "boolean"
+                },
+                "local_status": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "print_log_id": {
+                    "type": "integer"
+                },
+                "printer_id": {
+                    "type": "integer"
+                },
+                "printer_name": {
+                    "type": "string"
+                },
+                "vendor_order_id": {
+                    "type": "string"
+                }
+            }
+        },
         "api.merchantOrderSourceStatsRow": {
             "type": "object",
             "properties": {
@@ -32696,6 +33389,47 @@ const docTemplate = `{
                 },
                 "total_sales": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.merchantPrintAnomalyResponse": {
+            "type": "object",
+            "properties": {
+                "can_retry": {
+                    "type": "boolean"
+                },
+                "error_message": {
+                    "type": "string"
+                },
+                "last_attempt_at": {
+                    "type": "string"
+                },
+                "local_status": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "order_no": {
+                    "type": "string"
+                },
+                "order_type": {
+                    "type": "string"
+                },
+                "print_log_id": {
+                    "type": "integer"
+                },
+                "printer_id": {
+                    "type": "integer"
+                },
+                "printer_name": {
+                    "type": "string"
+                },
+                "retry_hint": {
+                    "type": "string"
+                },
+                "vendor_order_id": {
+                    "type": "string"
                 }
             }
         },
@@ -34296,6 +35030,125 @@ const docTemplate = `{
                 }
             }
         },
+        "api.printMerchantOrderResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "trigger": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.printerLiveStatusResponse": {
+            "type": "object",
+            "properties": {
+                "checked_at": {
+                    "type": "string"
+                },
+                "info_status": {
+                    "type": "string"
+                },
+                "model": {
+                    "type": "string"
+                },
+                "online": {
+                    "type": "boolean"
+                },
+                "print_logo": {
+                    "type": "boolean"
+                },
+                "printer_id": {
+                    "type": "integer"
+                },
+                "printer_name": {
+                    "type": "string"
+                },
+                "printer_sn": {
+                    "type": "string"
+                },
+                "printer_type": {
+                    "type": "string"
+                },
+                "provider_status": {
+                    "type": "string"
+                },
+                "scan_switch": {
+                    "type": "boolean"
+                },
+                "working": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.printerReconciliationJobListResponse": {
+            "type": "object",
+            "properties": {
+                "jobs": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.printerReconciliationJobResponse"
+                    }
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.printerReconciliationJobResponse": {
+            "type": "object",
+            "properties": {
+                "can_retry": {
+                    "type": "boolean"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "desired_action": {
+                    "type": "string"
+                },
+                "failure_reason": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "printer_id": {
+                    "type": "integer"
+                },
+                "printer_name": {
+                    "type": "string"
+                },
+                "printer_sn": {
+                    "type": "string"
+                },
+                "printer_type": {
+                    "type": "string"
+                },
+                "resolved_at": {
+                    "type": "string"
+                },
+                "retry_count": {
+                    "type": "integer"
+                },
+                "source_action": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "api.printerResponse": {
             "type": "object",
             "properties": {
@@ -34321,6 +35174,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "printer_name": {
+                    "type": "string"
+                },
+                "printer_role": {
                     "type": "string"
                 },
                 "printer_sn": {
@@ -35566,6 +36422,23 @@ const docTemplate = `{
                         "resolved",
                         "rejected"
                     ]
+                }
+            }
+        },
+        "api.retryMerchantOrderPrintJobResponse": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "order_id": {
+                    "type": "integer"
+                },
+                "print_log_id": {
+                    "type": "integer"
+                },
+                "trigger": {
+                    "type": "string"
                 }
             }
         },
@@ -37354,11 +38227,26 @@ const docTemplate = `{
                 "print_dine_in": {
                     "type": "boolean"
                 },
+                "print_dispatch_mode": {
+                    "type": "string",
+                    "enum": [
+                        "single_full",
+                        "split"
+                    ]
+                },
                 "print_reservation": {
                     "type": "boolean"
                 },
                 "print_takeout": {
                     "type": "boolean"
+                },
+                "print_trigger_mode": {
+                    "type": "string",
+                    "enum": [
+                        "accepted",
+                        "ready",
+                        "manual"
+                    ]
                 },
                 "voice_dine_in": {
                     "type": "boolean"
@@ -37664,6 +38552,13 @@ const docTemplate = `{
                 "printer_name": {
                     "type": "string",
                     "maxLength": 100
+                },
+                "printer_role": {
+                    "type": "string",
+                    "enum": [
+                        "front",
+                        "kitchen"
+                    ]
                 }
             }
         },

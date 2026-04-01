@@ -1167,8 +1167,8 @@ export function MerchantSettingsPageClient() {
                     <AlertCircle className="h-4 w-4 text-primary" /> 加入须知
                   </h4>
                   <ul className="text-xs space-y-3 text-muted-foreground list-disc pl-4">
-                    <li>加入后，您的菜品分类可能由集团统一管理。</li>
-                    <li>部分营销活动可能由集团强制推行或参与。</li>
+                    <li>加入后，集团可统一查看门店归属、品牌关系和协同偏好。</li>
+                    <li>当前不会自动接管您的菜单、库存或营销执行，相关业务仍以门店链路为准。</li>
                     <li>集团管理员将拥有查看您店铺流水和经营数据的权限。</li>
                     <li>一旦加入，解除绑定需由集团端发起或联系平台客服。</li>
                   </ul>

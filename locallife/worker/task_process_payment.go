@@ -35,6 +35,7 @@ const (
 	AlertTypeRiderDepositExpiry  AlertType = "RIDER_DEPOSIT_EXPIRY"
 	AlertTypeOCRJobFailed        AlertType = "OCR_JOB_FAILED"
 	AlertTypeOCRRetryExhausted   AlertType = "OCR_RETRY_EXHAUSTED"
+	AlertTypePrintAnomalyTimeout AlertType = "PRINT_ANOMALY_TIMEOUT"
 )
 
 const profitSharingEnqueueDedupWindow = 12 * time.Minute

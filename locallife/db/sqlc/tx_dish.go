@@ -9,29 +9,32 @@ import (
 
 // CreateDishTxParams contains the input parameters for creating a dish with ingredients and tags
 type CreateDishTxParams struct {
-	MerchantID    int64
-	CategoryID    pgtype.Int8
-	Name          string
-	Description   pgtype.Text
-	Price         int64
-	MemberPrice   pgtype.Int8
-	IsAvailable   bool
-	IsOnline      bool
-	SortOrder     int16
-	PrepareTime   int16 // 预估制作时间（分钟）
-	IngredientIDs []int64
-	TagIDs        []int64
+	MerchantID          int64
+	CategoryID          pgtype.Int8
+	Name                string
+	Description         pgtype.Text
+	ImageMediaAssetID   pgtype.Int8
+	Price               int64
+	MemberPrice         pgtype.Int8
+	IsAvailable         bool
+	IsOnline            bool
+	SortOrder           int16
+	PrepareTime         int16 // 预估制作时间（分钟）
+	IngredientIDs       []int64
+	TagIDs              []int64
+	CustomizationGroups []CustomizationGroupInput
 }
 
 // CreateDishTxResult contains the result of the create dish transaction
 type CreateDishTxResult struct {
-	Dish        Dish
-	Ingredients []DishIngredient
-	Tags        []DishTag
+	Dish                Dish
+	Ingredients         []DishIngredient
+	Tags                []DishTag
+	CustomizationGroups []DishCustomizationGroupWithOptions
 }
 
-// CreateDishTx creates a dish with all its ingredients and tags in a single transaction.
-// This ensures atomicity: if adding ingredients or tags fails, the dish is rolled back.
+// CreateDishTx creates a dish with its image, ingredients, tags, and customizations in a single transaction.
+// This ensures atomicity: if any follow-up step fails, the dish creation is rolled back.
 func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams) (CreateDishTxResult, error) {
 	var result CreateDishTxResult
 
@@ -79,6 +82,25 @@ func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams)
 				return fmt.Errorf("add dish tag %d: %w", tagID, err)
 			}
 			result.Tags = append(result.Tags, dt)
+		}
+
+		// Step 4: Set dish image if provided
+		if arg.ImageMediaAssetID.Valid {
+			result.Dish, err = q.UpdateDish(ctx, UpdateDishParams{
+				ID:                result.Dish.ID,
+				ImageMediaAssetID: arg.ImageMediaAssetID,
+			})
+			if err != nil {
+				return fmt.Errorf("set dish image: %w", err)
+			}
+		}
+
+		// Step 5: Create customization groups and options if provided
+		if len(arg.CustomizationGroups) > 0 {
+			result.CustomizationGroups, err = replaceDishCustomizationGroups(ctx, q, result.Dish.ID, arg.CustomizationGroups)
+			if err != nil {
+				return err
+			}
 		}
 
 		return nil
@@ -218,53 +240,57 @@ type DishCustomizationGroupWithOptions struct {
 	Options []DishCustomizationOption
 }
 
+func replaceDishCustomizationGroups(ctx context.Context, q *Queries, dishID int64, groups []CustomizationGroupInput) ([]DishCustomizationGroupWithOptions, error) {
+	if err := q.DeleteAllDishCustomizationGroups(ctx, dishID); err != nil {
+		return nil, fmt.Errorf("delete all customization groups: %w", err)
+	}
+
+	resultGroups := make([]DishCustomizationGroupWithOptions, 0, len(groups))
+	for _, g := range groups {
+		group, err := q.CreateDishCustomizationGroup(ctx, CreateDishCustomizationGroupParams{
+			DishID:     dishID,
+			Name:       g.Name,
+			IsRequired: g.IsRequired,
+			SortOrder:  g.SortOrder,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("create customization group %s: %w", g.Name, err)
+		}
+
+		options := make([]DishCustomizationOption, 0, len(g.Options))
+		for _, o := range g.Options {
+			option, err := q.CreateDishCustomizationOption(ctx, CreateDishCustomizationOptionParams{
+				GroupID:    group.ID,
+				TagID:      o.TagID,
+				ExtraPrice: o.ExtraPrice,
+				SortOrder:  o.SortOrder,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("create customization option for tag %d: %w", o.TagID, err)
+			}
+			options = append(options, option)
+		}
+
+		resultGroups = append(resultGroups, DishCustomizationGroupWithOptions{
+			Group:   group,
+			Options: options,
+		})
+	}
+
+	return resultGroups, nil
+}
+
 // SetDishCustomizationsTx replaces all customization groups and options for a dish in a single transaction.
 // This ensures atomicity: either all groups/options are replaced or none are.
 func (store *SQLStore) SetDishCustomizationsTx(ctx context.Context, arg SetDishCustomizationsTxParams) (SetDishCustomizationsTxResult, error) {
 	var result SetDishCustomizationsTxResult
 
 	err := store.execTx(ctx, func(q *Queries) error {
-		// Step 1: Delete all existing customization groups (CASCADE will delete options)
-		err := q.DeleteAllDishCustomizationGroups(ctx, arg.DishID)
+		groups, err := replaceDishCustomizationGroups(ctx, q, arg.DishID, arg.Groups)
 		if err != nil {
-			return fmt.Errorf("delete all customization groups: %w", err)
+			return err
 		}
-
-		// Step 2: Create new groups and options
-		result.Groups = make([]DishCustomizationGroupWithOptions, 0, len(arg.Groups))
-		for _, g := range arg.Groups {
-			// Create group
-			group, err := q.CreateDishCustomizationGroup(ctx, CreateDishCustomizationGroupParams{
-				DishID:     arg.DishID,
-				Name:       g.Name,
-				IsRequired: g.IsRequired,
-				SortOrder:  g.SortOrder,
-			})
-			if err != nil {
-				return fmt.Errorf("create customization group %s: %w", g.Name, err)
-			}
-
-			// Create options
-			options := make([]DishCustomizationOption, 0, len(g.Options))
-			for _, o := range g.Options {
-				option, err := q.CreateDishCustomizationOption(ctx, CreateDishCustomizationOptionParams{
-					GroupID:    group.ID,
-					TagID:      o.TagID,
-					ExtraPrice: o.ExtraPrice,
-					SortOrder:  o.SortOrder,
-				})
-				if err != nil {
-					return fmt.Errorf("create customization option for tag %d: %w", o.TagID, err)
-				}
-				options = append(options, option)
-			}
-
-			result.Groups = append(result.Groups, DishCustomizationGroupWithOptions{
-				Group:   group,
-				Options: options,
-			})
-		}
-
+		result.Groups = groups
 		return nil
 	})
 
