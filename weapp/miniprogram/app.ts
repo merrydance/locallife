@@ -319,16 +319,17 @@ App<IAppOption>({
       language: 'zh_CN'
     }
     // 缓存完整角色列表（小写），供 user_center onShow 快速恢复工作台
-    this.globalData.userRoles = (user.roles || []).map((r: string) => String(r).toLowerCase())
-    if (user.roles.includes('merchant')) {
+    const normalizedRoles = (user.roles || []).map((r: string) => String(r).toLowerCase())
+    this.globalData.userRoles = normalizedRoles
+    if (normalizedRoles.some((role: string) => ['merchant', 'merchant_owner', 'merchant_boss', 'merchant_staff'].includes(role))) {
       this.globalData.userRole = 'merchant'
-    } else if (user.roles.includes('rider')) {
+    } else if (normalizedRoles.includes('rider')) {
       this.globalData.userRole = 'rider'
-    } else if (user.roles.includes('operator')) {
+    } else if (normalizedRoles.includes('operator')) {
       this.globalData.userRole = 'operator'
-    } else if (user.roles.includes('admin')) {
+    } else if (normalizedRoles.includes('admin')) {
       this.globalData.userRole = 'operator' // admin 降级到 operator 以满足类型约束
-    } else if (user.roles.includes('customer')) {
+    } else if (normalizedRoles.includes('customer')) {
       this.globalData.userRole = 'customer'
     }
   },

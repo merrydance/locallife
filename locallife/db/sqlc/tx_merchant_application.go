@@ -29,7 +29,7 @@ type ApproveMerchantApplicationTxResult struct {
 }
 
 // ApproveMerchantApplicationTx approves a merchant application, creates merchant record,
-// and assigns merchant role to user in a single transaction.
+// assigns merchant owner role, and ensures the owner is present in merchant_staff.
 // This ensures atomicity: if any step fails, all changes are rolled back.
 func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg ApproveMerchantApplicationTxParams) (ApproveMerchantApplicationTxResult, error) {
 	var result ApproveMerchantApplicationTxResult
@@ -102,7 +102,34 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 			return fmt.Errorf("set merchant closed: %w", err)
 		}
 
-		// Step 3: 创建或更新用户商户角色
+		// Step 3: 确保老板在 merchant_staff 中有 owner 记录。
+		staff, err := q.GetMerchantStaff(ctx, GetMerchantStaffParams{
+			MerchantID: result.Merchant.ID,
+			UserID:     arg.UserID,
+		})
+		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				_, err = q.CreateMerchantStaff(ctx, CreateMerchantStaffParams{
+					MerchantID: result.Merchant.ID,
+					UserID:     arg.UserID,
+					Role:       MerchantStaffRoleOwner,
+					Status:     MerchantStaffStatusActive,
+					InvitedBy:  pgtype.Int8{},
+				})
+			} else {
+				return fmt.Errorf("get merchant staff: %w", err)
+			}
+		} else if staff.Role != MerchantStaffRoleOwner || staff.Status != MerchantStaffStatusActive {
+			_, err = q.UpdateMerchantStaffRole(ctx, UpdateMerchantStaffRoleParams{
+				ID:   staff.ID,
+				Role: MerchantStaffRoleOwner,
+			})
+		}
+		if err != nil {
+			return fmt.Errorf("ensure merchant owner staff: %w", err)
+		}
+
+		// Step 4: 创建或更新用户商户老板角色。
 		// 检查是否已有该角色
 		roles, err := q.ListUserRoles(ctx, arg.UserID)
 		if err != nil {
@@ -111,7 +138,7 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 
 		hasMerchantRole := false
 		for _, r := range roles {
-			if r.Role == "merchant" {
+			if r.Role == UserRoleMerchantOwner {
 				hasMerchantRole = true
 				// 如果角色已存在但关联实体 ID 不对，或者状态不是 active，可以在这里更新
 				// 但目前 CreateUserRole 足够，如果已存在则跳过
@@ -123,7 +150,7 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 		if !hasMerchantRole {
 			result.UserRole, err = q.CreateUserRole(ctx, CreateUserRoleParams{
 				UserID:          arg.UserID,
-				Role:            "merchant",
+				Role:            UserRoleMerchantOwner,
 				Status:          "active",
 				RelatedEntityID: pgtype.Int8{Int64: result.Merchant.ID, Valid: true},
 			})

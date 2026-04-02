@@ -1,6 +1,16 @@
 package db
 
 const (
+	UserRoleAdmin         = "admin"
+	UserRoleOperator      = "operator"
+	UserRoleMerchantOwner = "merchant_owner"
+	UserRoleMerchantStaff = "merchant_staff"
+	UserRoleRider         = "rider"
+	UserRoleCustomer      = "customer"
+
+	MerchantStaffRoleOwner    = "owner"
+	MerchantStaffStatusActive = "active"
+
 	// Order statuses (SSOT — 所有层引用此处)
 	OrderStatusPending         = "pending"
 	OrderStatusPaid            = "paid"
