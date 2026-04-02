@@ -69,12 +69,14 @@ Backend:
 
 Web:
 
+- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - `.github/standards/web/WEB_UI_STANDARDS.md`
 - `.github/standards/web/DESIGN_GUARDRAILS.md`
 - `.github/standards/web/design-system.md`
 
 Mini Program:
 
+- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - `.github/standards/weapp/DESIGN_SYSTEM.md`
 - `.github/standards/weapp/api/README.md`
 

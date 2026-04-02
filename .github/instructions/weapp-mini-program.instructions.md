@@ -10,8 +10,10 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 
 ## Read First
 
+- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - `.github/standards/weapp/DESIGN_SYSTEM.md`
 - `.github/standards/weapp/api/README.md`
+- `weapp/docs/miniprogram-prompt-system.md`
 
 ## Working Style
 
@@ -28,6 +30,7 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 - Avoid full-screen spinner-only loading patterns when a skeleton or structural placeholder is more appropriate.
 - Keep business styles out of shared global styles and keep developer-facing wording out of user-visible copy.
 - Do not surface raw backend, database, provider, or English diagnostic strings directly in page copy, dialogs, or toasts. Map failures into scene-appropriate Chinese business messages and keep technical detail in logs only.
+- Treat prompt behavior as a shared frontend constraint: one event one primary prompt, no redundant success Toast after jump/refresh/state change, and first-screen failure must have page-level recovery.
 
 ## Full-Path Integrity Rules
 

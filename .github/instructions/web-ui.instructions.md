@@ -10,6 +10,7 @@ More specific web instruction files under `.github/instructions/` take precedenc
 
 ## Read First
 
+- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - `.github/standards/web/WEB_UI_STANDARDS.md`
 - `.github/standards/web/DESIGN_GUARDRAILS.md`
 - `web/README.md`
@@ -29,6 +30,7 @@ More specific web instruction files under `.github/instructions/` take precedenc
 - Keep a single business flow within at most two card layers unless the task explicitly changes the visual system.
 - Prefer the existing component white list and semantics from `.github/standards/web/WEB_UI_STANDARDS.md`: status filters should use `Select`, category switching should use `Tabs`, and list data should use the existing table patterns.
 - Keep user-facing copy business-readable. Map backend enum values to readable labels instead of exposing raw enum strings.
+- Treat feedback behavior as a system rule: no raw backend errors in UI, no redundant success prompt after navigation or structural page update, and no Toast-only handling for first-screen failures.
 - Do not use developer-facing phrasing such as `debug`, `fallback`, `proxy`, or “与小程序一致” in operator-facing or merchant-facing UI copy.
 
 ## Validation Defaults
