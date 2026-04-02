@@ -77,7 +77,7 @@ func TestAutoConfirmDelivery_Success(t *testing.T) {
 		DeliveryLongitude: numericFromFloatStatus(120.0),
 		DeliveryLatitude:  numericFromFloatStatus(30.0),
 	}
-	order := db.Order{ID: 3, Status: "delivering"}
+	order := db.Order{ID: 3, Status: "delivering", TotalAmount: 12345}
 
 	store.EXPECT().
 		GetOrder(gomock.Any(), int64(3)).
@@ -86,13 +86,16 @@ func TestAutoConfirmDelivery_Success(t *testing.T) {
 	store.EXPECT().
 		CompleteDeliveryTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.CompleteDeliveryTxResult{Delivery: delivery}, nil)
+		DoAndReturn(func(ctx context.Context, arg db.CompleteDeliveryTxParams) (db.CompleteDeliveryTxResult, error) {
+			require.Equal(t, int64(12345), arg.UnfreezeAmount)
+			return db.CompleteDeliveryTxResult{Delivery: delivery}, nil
+		})
 	store.EXPECT().
 		CreateOrderStatusLog(gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(db.OrderStatusLog{}, nil)
 
-	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120, 5000)
+	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120)
 	require.NoError(t, err)
 	require.True(t, result.Updated)
 	require.Equal(t, "rider_delivered", result.Order.Status)
@@ -109,7 +112,7 @@ func TestAutoConfirmDelivery_RiderLocationMissing(t *testing.T) {
 		DeliveryLatitude:  numericFromFloatStatus(30.0),
 	}
 
-	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120, 5000)
+	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120)
 	require.Error(t, err)
 	require.Equal(t, "骑手定位缺失，无法确认送达，请先刷新定位", err.Error())
 	require.False(t, result.Updated)
@@ -130,7 +133,7 @@ func TestAutoConfirmDelivery_RiderLocationStale(t *testing.T) {
 		DeliveryLatitude:  numericFromFloatStatus(30.0),
 	}
 
-	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120, 5000)
+	result, err := AutoConfirmDelivery(context.Background(), store, delivery, rider, 500, 120)
 	require.Error(t, err)
 	require.Equal(t, "骑手定位已过期，无法确认送达，请刷新定位后重试", err.Error())
 	require.False(t, result.Updated)

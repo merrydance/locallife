@@ -67,28 +67,13 @@ func TestPaymentOrderServiceCreatePaymentOrder_RecreatesPendingOrderWhenAmountCh
 		Times(1).
 		Return(existingPayment, nil)
 	store.EXPECT().
-		GetCombinedPaymentOrder(gomock.Any(), int64(5001)).
-		Times(1).
-		Return(db.CombinedPaymentOrder{ID: 5001, CombineOutTradeNo: "old-combine", Status: paymentStatusPending}, nil)
-	store.EXPECT().
-		ListCombinedPaymentSubOrders(gomock.Any(), int64(5001)).
-		Times(1).
-		Return([]db.CombinedPaymentSubOrder{{SubMchid: "sub-old", OutTradeNo: "old-out-trade-no"}}, nil)
-	ecommerceClient.EXPECT().
-		CloseCombineOrder(gomock.Any(), "old-combine", []wechat.SubOrderClose{{MchID: "sub-old", OutTradeNo: "old-out-trade-no"}}).
-		Times(1).
-		Return(nil)
-	store.EXPECT().
-		CloseCombinedPaymentOrderTx(gomock.Any(), db.CloseCombinedPaymentOrderTxParams{
-			CombinedPaymentOrderID: 5001,
-			SubOrderOutTradeNos:    []string{"old-out-trade-no"},
-		}).
-		Times(1).
-		Return(db.CloseCombinedPaymentOrderTxResult{}, nil)
-	store.EXPECT().
-		GetPaymentOrder(gomock.Any(), int64(4001)).
+		UpdatePaymentOrderToClosed(gomock.Any(), int64(4001)).
 		Times(1).
 		Return(db.PaymentOrder{ID: 4001, UserID: input.UserID, Status: "closed"}, nil)
+	store.EXPECT().
+		UpdateCombinedPaymentOrderToClosed(gomock.Any(), int64(5001)).
+		Times(1).
+		Return(db.CombinedPaymentOrder{ID: 5001, Status: "closed"}, nil)
 	store.EXPECT().
 		GetUser(gomock.Any(), input.UserID).
 		Times(1).

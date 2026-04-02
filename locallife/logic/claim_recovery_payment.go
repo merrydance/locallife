@@ -116,7 +116,13 @@ func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClie
 		return ClaimRecoveryPaymentResult{}, err
 	}
 	if existing != nil {
-		return reuseClaimRecoveryPayment(paymentClient, recovery, *existing)
+		if shouldRotateExpiredClaimRecoveryPayment(*existing, time.Now()) {
+			if err := closeExpiredClaimRecoveryPayment(ctx, store, paymentClient, *existing); err != nil {
+				return ClaimRecoveryPaymentResult{}, err
+			}
+		} else {
+			return reuseClaimRecoveryPayment(paymentClient, recovery, *existing)
+		}
 	}
 
 	user, err := store.GetUser(ctx, payerUserID)
@@ -220,6 +226,29 @@ func reuseClaimRecoveryPayment(paymentClient wechat.PaymentClientInterface, reco
 		return ClaimRecoveryPaymentResult{}, err
 	}
 	return ClaimRecoveryPaymentResult{Recovery: recovery, PaymentOrder: paymentOrder, PayParams: payParams}, nil
+}
+
+func shouldRotateExpiredClaimRecoveryPayment(paymentOrder db.PaymentOrder, now time.Time) bool {
+	return paymentOrder.Status == "pending" &&
+		paymentOrder.ExpiresAt.Valid &&
+		!paymentOrder.ExpiresAt.Time.After(now)
+}
+
+func closeExpiredClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, paymentOrder db.PaymentOrder) error {
+	if paymentOrder.OutTradeNo != "" && paymentClient != nil {
+		if err := paymentClient.CloseOrder(ctx, paymentOrder.OutTradeNo); err != nil {
+			log.Warn().Err(err).
+				Str("out_trade_no", paymentOrder.OutTradeNo).
+				Int64("payment_order_id", paymentOrder.ID).
+				Msg("close expired claim recovery wechat order failed")
+		}
+	}
+
+	if _, err := store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+		return fmt.Errorf("close expired claim recovery payment order: %w", err)
+	}
+
+	return nil
 }
 
 func marshalClaimRecoveryPaymentAttach(recovery db.ClaimRecovery) (string, error) {

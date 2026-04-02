@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var ErrOrderPendingPaymentConflict = errors.New("order already has a pending payment order")
+
 // CreateCombinedPaymentTxParams 包含创建合单支付事务的参数
 type CreateCombinedPaymentTxParams struct {
 	UserID            int64
@@ -105,20 +107,11 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 				if existingPO.Status != "pending" && existingPO.Status != "closed" && existingPO.Status != "failed" {
 					return fmt.Errorf("order %d has %s payment order", orderID, existingPO.Status)
 				}
-				// 如果有 pending 的，我们应该关闭它或者复用它？
-				// 原逻辑是：如果是 pending 且金额一致，复用。
-				// 但这里是合单，复用有点麻烦，因为我们要把这个 PO 关联到新的 Combined ID。
-				// 简单起见：如果是 Pending，将其 Close，然后创建新的。这样更干净。
 				if existingPO.Status == "pending" {
-					_, err = q.UpdatePaymentOrderToClosed(ctx, existingPO.ID)
-					if err != nil {
-						return fmt.Errorf("close existing payment order: %w", err)
-					}
+					return fmt.Errorf("order %d has pending payment order: %w", orderID, ErrOrderPendingPaymentConflict)
 				}
-			} else if !errors.Is(err, ErrRecordNotFound) { // sql.ErrNoRows in pgx is likely wrapped or different, sqlc uses wrapper
-				// ErrRecordNotFound needed check
-				// 假设 q.GetLatest... 返回 error 是 sql.ErrNoRows
-				// 这里实际上 sqlc 生成的代码在 no rows 时返回 err
+			} else if !errors.Is(err, ErrRecordNotFound) {
+				return fmt.Errorf("get latest payment order for order %d: %w", orderID, err)
 			}
 
 			tempInfos = append(tempInfos, tempOrderInfo{

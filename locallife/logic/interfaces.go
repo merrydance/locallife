@@ -119,8 +119,10 @@ type OrderEventPublisher interface {
 type ProcessRefundTaskInput struct {
 	PaymentOrderID int64
 	OrderID        int64
+	ReservationID  int64
 	RefundAmount   int64
 	Reason         string
+	OutRefundNo    string
 }
 
 type ProfitSharingReturnResultTaskInput struct {

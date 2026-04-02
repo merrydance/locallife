@@ -130,6 +130,8 @@ UPDATE payment_orders
 SET
     prepay_id = $2
 WHERE id = $1
+    AND status = 'pending'
+    AND prepay_id IS NULL
 RETURNING *;
 
 -- name: UpdatePaymentOrderToPaid :one

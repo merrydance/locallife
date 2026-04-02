@@ -1342,7 +1342,12 @@ type Order struct {
 	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
 	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
 	// 配送预计在途时间（秒），由 LBS 真实路径计算得出
-	DeliveryDuration pgtype.Int4 `json:"delivery_duration"`
+	DeliveryDuration             pgtype.Int4    `json:"delivery_duration"`
+	DeliveryContactNameSnapshot  pgtype.Text    `json:"delivery_contact_name_snapshot"`
+	DeliveryContactPhoneSnapshot pgtype.Text    `json:"delivery_contact_phone_snapshot"`
+	DeliveryAddressSnapshot      pgtype.Text    `json:"delivery_address_snapshot"`
+	DeliveryLongitudeSnapshot    pgtype.Numeric `json:"delivery_longitude_snapshot"`
+	DeliveryLatitudeSnapshot     pgtype.Numeric `json:"delivery_latitude_snapshot"`
 }
 
 type OrderDisplayConfig struct {

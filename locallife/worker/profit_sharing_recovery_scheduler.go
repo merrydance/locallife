@@ -114,20 +114,18 @@ func (s *ProfitSharingRecoveryScheduler) runOnce(ctx context.Context) {
 			continue
 		}
 
-		if !paymentOrder.OrderID.Valid {
+		retryPayload, ok := buildProfitSharingPayloadFromPaymentOrder(paymentOrder)
+		if !ok {
 			log.Warn().
 				Int64("profit_sharing_order_id", order.ID).
 				Int64("payment_order_id", order.PaymentOrderID).
-				Msg("payment order missing order_id, skip profit sharing retry")
+				Msg("payment order missing order_id and reservation_id, skip profit sharing retry")
 			continue
 		}
 
 		err = s.distributor.DistributeTaskProcessProfitSharing(
 			ctx,
-			&ProfitSharingPayload{
-				PaymentOrderID: order.PaymentOrderID,
-				OrderID:        paymentOrder.OrderID.Int64,
-			},
+			&retryPayload,
 			asynq.MaxRetry(5),
 			asynq.Queue(QueueCritical),
 		)

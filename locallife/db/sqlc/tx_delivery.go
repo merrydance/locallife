@@ -8,12 +8,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var ErrDeliveryStateTransitionConflict = errors.New("delivery state changed concurrently")
+
 // ==================== 骑手抢单事务 ====================
 
 // GrabOrderTxParams contains the input parameters for grabbing an order
 type GrabOrderTxParams struct {
 	DeliveryID   int64
 	RiderID      int64
+	RiderUserID  int64
 	OrderID      int64
 	FreezeAmount int64 // 需要冻结的押金金额
 }
@@ -21,7 +24,9 @@ type GrabOrderTxParams struct {
 // GrabOrderTxResult contains the result of the grab order transaction
 type GrabOrderTxResult struct {
 	Delivery   Delivery
+	Order      Order
 	DepositLog RiderDeposit
+	StatusLog  OrderStatusLog
 }
 
 // ==================== 配送状态同步事务 ====================
@@ -64,13 +69,16 @@ func (store *SQLStore) UpdateDeliveryToPickupTx(ctx context.Context, arg UpdateD
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
 		})
 		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
 			return fmt.Errorf("update delivery to picking: %w", err)
 		}
 
 		result.Order, err = q.UpdateOrderToCourierAccepted(ctx, arg.OrderID)
 		if err != nil {
 			if errors.Is(err, ErrRecordNotFound) {
-				return nil
+				return ErrDeliveryStateTransitionConflict
 			}
 			return fmt.Errorf("update order to courier_accepted: %w", err)
 		}
@@ -93,13 +101,16 @@ func (store *SQLStore) UpdateDeliveryToPickedTx(ctx context.Context, arg UpdateD
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
 		})
 		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
 			return fmt.Errorf("update delivery to picked: %w", err)
 		}
 
 		result.Order, err = q.UpdateOrderToPicked(ctx, arg.OrderID)
 		if err != nil {
 			if errors.Is(err, ErrRecordNotFound) {
-				return nil
+				return ErrDeliveryStateTransitionConflict
 			}
 			return fmt.Errorf("update order to picked: %w", err)
 		}
@@ -135,13 +146,16 @@ func (store *SQLStore) UpdateDeliveryToDeliveringTx(ctx context.Context, arg Upd
 			RiderID: pgtype.Int8{Int64: arg.RiderID, Valid: true},
 		})
 		if err != nil {
+			if errors.Is(err, ErrRecordNotFound) {
+				return ErrDeliveryStateTransitionConflict
+			}
 			return fmt.Errorf("update delivery to delivering: %w", err)
 		}
 
 		result.Order, err = q.UpdateOrderToDelivering(ctx, arg.OrderID)
 		if err != nil {
 			if errors.Is(err, ErrRecordNotFound) {
-				return nil
+				return ErrDeliveryStateTransitionConflict
 			}
 			return fmt.Errorf("update order to delivering: %w", err)
 		}
@@ -164,6 +178,11 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 
 	err := store.execTx(ctx, func(q *Queries) error {
 		var err error
+
+		order, err := q.GetOrderForUpdate(ctx, arg.OrderID)
+		if err != nil {
+			return fmt.Errorf("get order for update: %w", err)
+		}
 
 		// 1. 使用 FOR UPDATE 锁定骑手行，获取最新押金数据
 		rider, err := q.GetRiderForUpdate(ctx, arg.RiderID)
@@ -222,6 +241,25 @@ func (store *SQLStore) GrabOrderTx(ctx context.Context, arg GrabOrderTxParams) (
 		})
 		if err != nil {
 			return fmt.Errorf("create deposit log: %w", err)
+		}
+
+		result.Order, err = q.UpdateOrderToCourierAccepted(ctx, arg.OrderID)
+		if err != nil {
+			return fmt.Errorf("update order to courier_accepted: %w", err)
+		}
+
+		if order.Status != OrderStatusCourierAccepted {
+			result.StatusLog, err = q.CreateOrderStatusLog(ctx, CreateOrderStatusLogParams{
+				OrderID:      arg.OrderID,
+				FromStatus:   pgtype.Text{String: order.Status, Valid: true},
+				ToStatus:     OrderStatusCourierAccepted,
+				OperatorID:   pgtype.Int8{Int64: arg.RiderUserID, Valid: true},
+				OperatorType: pgtype.Text{String: "rider", Valid: true},
+				Notes:        pgtype.Text{String: "骑手接单", Valid: true},
+			})
+			if err != nil {
+				return fmt.Errorf("create order status log: %w", err)
+			}
 		}
 
 		return nil

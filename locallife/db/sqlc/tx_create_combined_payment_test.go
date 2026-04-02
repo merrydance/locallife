@@ -2,9 +2,11 @@ package db
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/util"
 	"github.com/stretchr/testify/require"
 )
@@ -149,4 +151,53 @@ func TestCreateCombinedPaymentTx_UsesRemainingPayableAmount(t *testing.T) {
 	}
 	require.Equal(t, int64(800), amountByOrderID[order1.ID])
 	require.Equal(t, int64(2000), amountByOrderID[order2.ID])
+}
+
+func TestCreateCombinedPaymentTx_ReturnsPendingPaymentConflict(t *testing.T) {
+	store := testStore
+	user := createRandomUser(t)
+	merchant := createRandomMerchantForTest(t)
+	_ = createRandomMerchantPaymentConfig(t, merchant)
+	order := createRandomOrderWithUserAndMerchant(t, user.ID, merchant.ID)
+
+	combinedPayment, err := store.CreateCombinedPaymentOrder(context.Background(), CreateCombinedPaymentOrderParams{
+		UserID:            user.ID,
+		CombineOutTradeNo: "CP" + util.RandomString(10),
+		TotalAmount:       order.TotalAmount,
+		Status:            "pending",
+		ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+	})
+	require.NoError(t, err)
+
+	existingPayment, err := store.CreatePaymentOrder(context.Background(), CreatePaymentOrderParams{
+		OrderID:       pgtype.Int8{Int64: order.ID, Valid: true},
+		ReservationID: pgtype.Int8{Valid: false},
+		UserID:        user.ID,
+		PaymentType:   "profit_sharing",
+		BusinessType:  "order",
+		Amount:        order.TotalAmount,
+		OutTradeNo:    "CP" + util.RandomString(20),
+		ExpiresAt:     pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		Attach:        pgtype.Text{String: "合单测试", Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = store.SetPaymentOrderCombinedID(context.Background(), SetPaymentOrderCombinedIDParams{
+		ID:                existingPayment.ID,
+		CombinedPaymentID: pgtype.Int8{Int64: combinedPayment.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = store.CreateCombinedPaymentTx(context.Background(), CreateCombinedPaymentTxParams{
+		UserID:            user.ID,
+		OrderIDs:          []int64{order.ID},
+		CombineOutTradeNo: "CP" + util.RandomString(10),
+		ExpiresAt:         time.Now().Add(time.Hour),
+	})
+	require.Error(t, err)
+	require.True(t, errors.Is(err, ErrOrderPendingPaymentConflict))
+
+	latestPayment, getErr := store.GetPaymentOrder(context.Background(), existingPayment.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, "pending", latestPayment.Status)
 }

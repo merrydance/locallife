@@ -129,8 +129,10 @@ func (s apiTaskScheduler) ScheduleProcessRefund(ctx context.Context, input logic
 	return s.server.taskDistributor.DistributeTaskProcessRefund(ctx, &worker.PayloadProcessRefund{
 		PaymentOrderID: input.PaymentOrderID,
 		OrderID:        input.OrderID,
+		ReservationID:  input.ReservationID,
 		RefundAmount:   input.RefundAmount,
 		Reason:         input.Reason,
+		OutRefundNo:    input.OutRefundNo,
 	})
 }
 

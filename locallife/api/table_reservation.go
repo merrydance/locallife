@@ -1497,13 +1497,14 @@ func (server *Server) modifyReservationDishes(ctx *gin.Context) {
 		}
 	}
 
-	result, err := logic.ModifyReservationDishes(ctx, server.store, server.ecommerceClient, logic.ModifyReservationDishesInput{
+	result, err := logic.ModifyReservationDishes(ctx, server.store, logic.ModifyReservationDishesInput{
 		UserID:          authPayload.UserID,
 		ReservationID:   uriReq.ID,
 		Items:           modifyItems,
 		Now:             time.Now(),
 		EcommerceClient: server.ecommerceClient,
 		ClientIP:        ctx.ClientIP(),
+		TaskScheduler:   apiTaskScheduler{server: server},
 	})
 	if err != nil {
 		if writeLogicRequestError(ctx, err) {

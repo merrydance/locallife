@@ -1318,6 +1318,7 @@ type Querier interface {
 	ListPendingOrdersBefore(ctx context.Context, arg ListPendingOrdersBeforeParams) ([]Order, error)
 	// 管理后台：列出所有待审核的区域扩展申请
 	ListPendingRegionApplications(ctx context.Context, arg ListPendingRegionApplicationsParams) ([]ListPendingRegionApplicationsRow, error)
+	ListPendingReservationRefundOrdersForRecovery(ctx context.Context, arg ListPendingReservationRefundOrdersForRecoveryParams) ([]ListPendingReservationRefundOrdersForRecoveryRow, error)
 	// Find pending reservations within N minutes of payment deadline (for reminder notifications)
 	ListPendingReservationsNearDeadline(ctx context.Context, minutesBefore pgtype.Interval) ([]TableReservation, error)
 	// 运营商查看所有待处理投诉（按投诉时间倒序）

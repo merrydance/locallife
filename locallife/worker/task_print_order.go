@@ -347,8 +347,8 @@ func buildFeieReceipt(order db.GetOrderWithDetailsRow, items []db.ListOrderItems
 		if customerName := resolvePrintCustomerName(order, user); customerName != "" {
 			builder.WriteString("顾客：" + customerName + "<BR>")
 		}
-		if order.OrderType == db.OrderTypeTakeout && order.DeliveryAddress.Valid {
-			builder.WriteString("地址：" + order.DeliveryAddress.String + "<BR>")
+		if order.OrderType == db.OrderTypeTakeout && strings.TrimSpace(order.DeliveryAddress) != "" {
+			builder.WriteString("地址：" + order.DeliveryAddress + "<BR>")
 		}
 	}
 
@@ -397,8 +397,8 @@ func printerSupportsOrder(printer db.CloudPrinter, orderType string) bool {
 }
 
 func resolvePrintCustomerName(order db.GetOrderWithDetailsRow, user db.User) string {
-	if order.DeliveryContactName.Valid && order.DeliveryContactName.String != "" {
-		return order.DeliveryContactName.String
+	if name := strings.TrimSpace(order.DeliveryContactName); name != "" {
+		return name
 	}
 	return strings.TrimSpace(user.FullName)
 }

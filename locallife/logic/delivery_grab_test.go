@@ -135,19 +135,12 @@ func TestGrabDeliveryOrder_Success(t *testing.T) {
 	store.EXPECT().
 		GrabOrderTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.GrabOrderTxResult{Delivery: delivery}, nil)
-	store.EXPECT().
-		UpdateOrderToCourierAccepted(gomock.Any(), int64(2)).
-		Times(1).
-		Return(db.Order{ID: 2, Status: "courier_accepted"}, nil)
-	store.EXPECT().
-		CreateOrderStatusLog(gomock.Any(), gomock.Any()).
-		Times(1).
-		Return(db.OrderStatusLog{}, nil)
+		Return(db.GrabOrderTxResult{Delivery: delivery, Order: db.Order{ID: 2, Status: db.OrderStatusCourierAccepted}}, nil)
 
 	result, err := GrabDeliveryOrder(context.Background(), store, GrabOrderInput{UserID: 1, OrderID: 2, MaxDistanceMeters: 5000})
 	require.NoError(t, err)
 	require.Equal(t, delivery.ID, result.Delivery.ID)
+	require.Equal(t, db.OrderStatusCourierAccepted, result.Order.Status)
 }
 
 func TestGrabDeliveryOrder_PreparingOrderRejected(t *testing.T) {

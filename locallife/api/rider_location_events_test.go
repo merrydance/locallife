@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -259,9 +260,10 @@ func TestMaybeAutoConfirmDelivery(t *testing.T) {
 	}
 
 	order := db.Order{
-		ID:     delivery.OrderID,
-		UserID: 201,
-		Status: OrderStatusDelivering,
+		ID:          delivery.OrderID,
+		UserID:      201,
+		Status:      OrderStatusDelivering,
+		TotalAmount: 12345,
 	}
 
 	store.EXPECT().
@@ -272,7 +274,10 @@ func TestMaybeAutoConfirmDelivery(t *testing.T) {
 	store.EXPECT().
 		CompleteDeliveryTx(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(db.CompleteDeliveryTxResult{Delivery: delivery}, nil)
+		DoAndReturn(func(ctx context.Context, arg db.CompleteDeliveryTxParams) (db.CompleteDeliveryTxResult, error) {
+			require.Equal(t, int64(12345), arg.UnfreezeAmount)
+			return db.CompleteDeliveryTxResult{Delivery: delivery}, nil
+		})
 
 	store.EXPECT().
 		CreateOrderStatusLog(gomock.Any(), gomock.Any()).

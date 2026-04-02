@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -20,6 +21,7 @@ import (
 const (
 	riderDepositCreditReminderBatchLimit = int32(200)
 	riderDepositCreditExpireBatchLimit   = int32(200)
+	expiredCombinedPaymentBatchLimit     = int32(200)
 	timedOutPrintAnomalyBatchLimit       = int32(200)
 	timedOutPrintAnomalyThreshold        = 15 * time.Minute
 	timedOutPrintAnomalyAlertInterval    = time.Hour
@@ -662,15 +664,45 @@ func (s *DataCleanupScheduler) cleanupExpiredPaymentOrders() {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	count, err := s.store.CloseExpiredPaymentOrders(ctx)
+	paymentCount, err := s.store.CloseExpiredPaymentOrders(ctx)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to close expired payment orders")
 		return
 	}
 
-	if count > 0 {
-		log.Info().Int64("count", count).Msg("closed expired payment orders")
+	if paymentCount > 0 {
+		log.Info().Int64("count", paymentCount).Msg("closed expired payment orders")
 	}
+
+	combinedCount, err := s.closeExpiredCombinedPaymentOrders(ctx)
+	if err != nil {
+		log.Error().Err(err).Msg("failed to close expired combined payment orders")
+		return
+	}
+
+	if combinedCount > 0 {
+		log.Info().Int("count", combinedCount).Msg("closed expired combined payment orders")
+	}
+}
+
+func (s *DataCleanupScheduler) closeExpiredCombinedPaymentOrders(ctx context.Context) (int, error) {
+	combinedOrders, err := s.store.ListPendingCombinedPaymentOrders(ctx, expiredCombinedPaymentBatchLimit)
+	if err != nil {
+		return 0, fmt.Errorf("list expired combined payment orders: %w", err)
+	}
+
+	closedCount := 0
+	for _, combinedOrder := range combinedOrders {
+		if _, err := s.store.UpdateCombinedPaymentOrderToClosed(ctx, combinedOrder.ID); err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				continue
+			}
+			return closedCount, fmt.Errorf("close expired combined payment order %d: %w", combinedOrder.ID, err)
+		}
+		closedCount++
+	}
+
+	return closedCount, nil
 }
 
 // backfillAbnormalStatsDaily 回填异常统计日表（默认回填最近3天）

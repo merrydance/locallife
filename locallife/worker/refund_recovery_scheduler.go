@@ -189,4 +189,47 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 				Msg("reservation refund recovery task enqueued")
 		}
 	}
+
+	// ==================== 预定退款单 pending 恢复 ====================
+	pendingReservationRefundOrders, err := s.store.ListPendingReservationRefundOrdersForRecovery(ctx, db.ListPendingReservationRefundOrdersForRecoveryParams{
+		CreatedBefore: time.Now().Add(-1 * time.Minute),
+		Limit:         refundRecoveryBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("list pending reservation refund orders for recovery failed")
+		return
+	}
+
+	for _, refundOrder := range pendingReservationRefundOrders {
+		if !refundOrder.ReservationID.Valid {
+			continue
+		}
+
+		reason := "系统自动退款补偿（预订退款）"
+		if refundOrder.RefundReason.Valid && refundOrder.RefundReason.String != "" {
+			reason = refundOrder.RefundReason.String
+		}
+
+		err = s.distributor.DistributeTaskProcessRefund(ctx, &PayloadProcessRefund{
+			PaymentOrderID: refundOrder.PaymentOrderID,
+			ReservationID:  refundOrder.ReservationID.Int64,
+			RefundAmount:   refundOrder.RefundAmount,
+			Reason:         reason,
+			OutRefundNo:    refundOrder.OutRefundNo,
+		})
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Int64("payment_order_id", refundOrder.PaymentOrderID).
+				Str("business_type", refundOrder.BusinessType).
+				Msg("enqueue pending reservation refund recovery task failed")
+			continue
+		}
+
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Int64("payment_order_id", refundOrder.PaymentOrderID).
+			Str("business_type", refundOrder.BusinessType).
+			Msg("pending reservation refund recovery task enqueued")
+	}
 }

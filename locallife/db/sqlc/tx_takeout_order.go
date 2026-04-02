@@ -143,9 +143,9 @@ func ensureTakeoutDeliveryCreated(ctx context.Context, q *Queries, order Order) 
 		return Delivery{}, fmt.Errorf("get merchant: %w", err)
 	}
 
-	userAddress, err := q.GetUserAddress(ctx, order.AddressID.Int64)
+	deliverySnapshot, err := resolveTakeoutDeliverySnapshot(ctx, q, order)
 	if err != nil {
-		return Delivery{}, fmt.Errorf("get user address: %w", err)
+		return Delivery{}, err
 	}
 
 	now := time.Now()
@@ -201,11 +201,11 @@ func ensureTakeoutDeliveryCreated(ctx context.Context, q *Queries, order Order) 
 		PickupLatitude:      merchant.Latitude,
 		PickupContact:       pgtype.Text{String: merchant.Name, Valid: true},
 		PickupPhone:         pgtype.Text{String: merchant.Phone, Valid: true},
-		DeliveryAddress:     userAddress.DetailAddress,
-		DeliveryLongitude:   userAddress.Longitude,
-		DeliveryLatitude:    userAddress.Latitude,
-		DeliveryContact:     pgtype.Text{String: userAddress.ContactName, Valid: true},
-		DeliveryPhone:       pgtype.Text{String: userAddress.ContactPhone, Valid: true},
+		DeliveryAddress:     deliverySnapshot.Address,
+		DeliveryLongitude:   deliverySnapshot.Longitude,
+		DeliveryLatitude:    deliverySnapshot.Latitude,
+		DeliveryContact:     deliverySnapshot.ContactName,
+		DeliveryPhone:       deliverySnapshot.ContactPhone,
 		Distance:            deliveryDistance,
 		DeliveryFee:         order.DeliveryFee,
 		EstimatedPickupAt:   pgtype.Timestamptz{Time: estimatedPickupAt, Valid: true},
@@ -216,6 +216,39 @@ func ensureTakeoutDeliveryCreated(ctx context.Context, q *Queries, order Order) 
 	}
 
 	return delivery, nil
+}
+
+type takeoutDeliverySnapshot struct {
+	ContactName  pgtype.Text
+	ContactPhone pgtype.Text
+	Address      string
+	Longitude    pgtype.Numeric
+	Latitude     pgtype.Numeric
+}
+
+func resolveTakeoutDeliverySnapshot(ctx context.Context, q *Queries, order Order) (takeoutDeliverySnapshot, error) {
+	if order.DeliveryAddressSnapshot.Valid && order.DeliveryLongitudeSnapshot.Valid && order.DeliveryLatitudeSnapshot.Valid {
+		return takeoutDeliverySnapshot{
+			ContactName:  order.DeliveryContactNameSnapshot,
+			ContactPhone: order.DeliveryContactPhoneSnapshot,
+			Address:      order.DeliveryAddressSnapshot.String,
+			Longitude:    order.DeliveryLongitudeSnapshot,
+			Latitude:     order.DeliveryLatitudeSnapshot,
+		}, nil
+	}
+
+	userAddress, err := q.GetUserAddress(ctx, order.AddressID.Int64)
+	if err != nil {
+		return takeoutDeliverySnapshot{}, fmt.Errorf("get user address: %w", err)
+	}
+
+	return takeoutDeliverySnapshot{
+		ContactName:  pgtype.Text{String: userAddress.ContactName, Valid: true},
+		ContactPhone: pgtype.Text{String: userAddress.ContactPhone, Valid: true},
+		Address:      userAddress.DetailAddress,
+		Longitude:    userAddress.Longitude,
+		Latitude:     userAddress.Latitude,
+	}, nil
 }
 
 func addTakeoutOrderToDeliveryPool(ctx context.Context, q *Queries, order Order, delivery Delivery) (DeliveryPool, error) {

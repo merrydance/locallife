@@ -107,9 +107,9 @@ func orderWithDetailsFromOrder(order db.Order) db.GetOrderWithDetailsRow {
 		MerchantName:         "",
 		MerchantPhone:        "",
 		MerchantAddress:      "",
-		DeliveryContactName:  pgtype.Text{},
-		DeliveryContactPhone: pgtype.Text{},
-		DeliveryAddress:      pgtype.Text{},
+		DeliveryContactName:  "",
+		DeliveryContactPhone: "",
+		DeliveryAddress:      "",
 	}
 }
 

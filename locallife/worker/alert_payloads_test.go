@@ -179,3 +179,60 @@ func TestProcessTaskMerchantWithdrawResult_QueryFailureKeepsPendingForRecovery(t
 	require.Equal(t, "req-1", extra["out_request_no"])
 	require.Equal(t, queryErr.Error(), extra["fail_reason"])
 }
+
+func TestProcessTaskMerchantWithdrawResult_RequestNotFoundMarksFailed(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	processor := NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	publisher := &testPublisher{}
+	processor.pubSubPublisher = publisher
+	queryErr := &wechat.WechatPayError{StatusCode: 404, Code: "RESOURCE_NOT_EXISTS", Message: "withdraw not found"}
+
+	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   88,
+		SubMchID:     "sub-mch-1",
+		OutRequestNo: "req-404",
+	})
+	require.NoError(t, err)
+
+	record := db.WithdrawalRecord{
+		ID:          67,
+		UserID:      99,
+		Amount:      12345,
+		Status:      "pending",
+		Channel:     merchantWithdrawChannel,
+		AccountInfo: accountInfoBytes,
+	}
+
+	store.EXPECT().GetWithdrawalRecord(gomock.Any(), record.ID).Return(record, nil)
+	ecommerceClient.EXPECT().QueryEcommerceWithdrawByOutRequestNo(gomock.Any(), "sub-mch-1", "req-404").Return(nil, queryErr)
+	store.EXPECT().UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(ctx context.Context, arg db.UpdateWithdrawalStatusParams) (db.WithdrawalRecord, error) {
+			require.Equal(t, record.ID, arg.ID)
+			require.Equal(t, "failed", arg.Status)
+			require.True(t, arg.Reason.Valid)
+			require.Contains(t, arg.Reason.String, "withdraw request not found in wechat")
+			return record, nil
+		},
+	)
+
+	payloadBytes, err := json.Marshal(MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID, RetryCount: merchantWithdrawMaxRetry})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskMerchantWithdrawResult(context.Background(), asynq.NewTask(TaskProcessMerchantWithdrawResult, payloadBytes))
+	require.Error(t, err)
+	require.Equal(t, AlertChannel, publisher.channel)
+
+	var published map[string]interface{}
+	require.NoError(t, json.Unmarshal(publisher.payload, &published))
+	data := published["data"].(map[string]interface{})
+	require.Equal(t, "商户提现提交状态不明", data["title"])
+	extra := data["extra"].(map[string]interface{})
+	require.EqualValues(t, float64(record.ID), extra["withdrawal_record_id"])
+	require.Equal(t, "req-404", extra["out_request_no"])
+	require.Equal(t, "withdraw_request_not_found", extra["result"])
+	require.Contains(t, extra["fail_reason"].(string), "RESOURCE_NOT_EXISTS")
+}

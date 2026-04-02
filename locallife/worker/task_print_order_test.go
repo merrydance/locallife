@@ -73,8 +73,8 @@ func TestProcessTaskPrintOrder_SplitFrontAndKitchenReceipts(t *testing.T) {
 		Notes:               pgText("少辣"),
 		PickupCode:          pgText("105"),
 		CreatedAt:           time.Date(2026, 4, 1, 9, 30, 0, 0, time.Local),
-		DeliveryContactName: pgText("张三"),
-		DeliveryAddress:     pgText("测试路 88 号"),
+		DeliveryContactName: "张三",
+		DeliveryAddress:     "测试路 88 号",
 	}
 	config := db.OrderDisplayConfig{
 		MerchantID:        order.MerchantID,

@@ -150,6 +150,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	var deliveryDistance int32
 	var deliveryFeeDiscount int64
 	var deliveryDuration int32
+	var takeoutAddress *db.UserAddress
 	if input.OrderType == "takeout" && input.AddressID != nil {
 		address, getErr := s.store.GetUserAddress(ctx, *input.AddressID)
 		if getErr != nil {
@@ -158,6 +159,10 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 			}
 			return CreateOrderCommandResult{}, getErr
 		}
+		if address.UserID != input.UserID {
+			return CreateOrderCommandResult{}, NewRequestError(http.StatusForbidden, errors.New("address does not belong to you"))
+		}
+		takeoutAddress = &address
 
 		if input.DeliveryFeeCalculator == nil {
 			return CreateOrderCommandResult{}, NewRequestError(http.StatusInternalServerError, errors.New("delivery fee calculator is required"))
@@ -273,6 +278,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	if input.AddressID != nil {
 		createParams.AddressID = pgtype.Int8{Int64: *input.AddressID, Valid: true}
 	}
+	if takeoutAddress != nil {
+		createParams.DeliveryContactNameSnapshot = pgtype.Text{String: takeoutAddress.ContactName, Valid: true}
+		createParams.DeliveryContactPhoneSnapshot = pgtype.Text{String: takeoutAddress.ContactPhone, Valid: true}
+		createParams.DeliveryAddressSnapshot = pgtype.Text{String: takeoutAddress.DetailAddress, Valid: true}
+		createParams.DeliveryLongitudeSnapshot = takeoutAddress.Longitude
+		createParams.DeliveryLatitudeSnapshot = takeoutAddress.Latitude
+	}
 	if deliveryDistance > 0 {
 		createParams.DeliveryDistance = pgtype.Int4{Int32: deliveryDistance, Valid: true}
 	}
@@ -296,19 +308,23 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	}
 
 	txResult, err := s.store.CreateOrderTx(ctx, db.CreateOrderTxParams{
-		CreateOrderParams:  createParams,
-		Items:              items,
-		BillingGroupID:     input.BillingGroupID,
-		UserVoucherID:      userVoucherID,
-		VoucherAmount:      voucherAmount,
-		MembershipID:       membershipID,
-		BalancePaid:        totals.BalancePaid,
-		DeliveryDuration:   deliveryDuration,
-		RiderAverageSpeed:  input.RiderAverageSpeed,
-		DefaultPrepareTime: input.DefaultPrepareTime,
-		PickupTime:         s.clock.Now(),
+		CreateOrderParams:                   createParams,
+		Items:                               items,
+		BillingGroupID:                      input.BillingGroupID,
+		EnforceSingleActiveReservationOrder: reservation != nil && reservation.PaymentMode == "deposit",
+		UserVoucherID:                       userVoucherID,
+		VoucherAmount:                       voucherAmount,
+		MembershipID:                        membershipID,
+		BalancePaid:                         totals.BalancePaid,
+		DeliveryDuration:                    deliveryDuration,
+		RiderAverageSpeed:                   input.RiderAverageSpeed,
+		DefaultPrepareTime:                  input.DefaultPrepareTime,
+		PickupTime:                          s.clock.Now(),
 	})
 	if err != nil {
+		if errors.Is(err, db.ErrReservationActiveOrderConflict) {
+			return CreateOrderCommandResult{}, NewRequestError(http.StatusConflict, errors.New("reservation already has an active order"))
+		}
 		if err.Error() == "voucher already used" {
 			return CreateOrderCommandResult{}, NewRequestError(http.StatusBadRequest, errors.New("优惠券已被使用"))
 		}

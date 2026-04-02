@@ -196,7 +196,7 @@ func (q *Queries) GetRefundOrderForUpdate(ctx context.Context, id int64) (Refund
 const getTotalRefundedByPaymentOrder = `-- name: GetTotalRefundedByPaymentOrder :one
 SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
-WHERE payment_order_id = $1 AND status = 'success'
+WHERE payment_order_id = $1 AND status IN ('pending', 'processing', 'success')
 `
 
 func (q *Queries) GetTotalRefundedByPaymentOrder(ctx context.Context, paymentOrderID int64) (int64, error) {
@@ -246,6 +246,69 @@ func (q *Queries) ListEcommerceRefundOrdersForReconciliation(ctx context.Context
 			&i.RefundID,
 			&i.RefundAmount,
 			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPendingReservationRefundOrdersForRecovery = `-- name: ListPendingReservationRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.refund_reason,
+    ro.out_refund_no,
+    po.reservation_id,
+    po.business_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'pending'
+    AND po.status = 'paid'
+    AND po.reservation_id IS NOT NULL
+    AND po.business_type IN ('reservation', 'reservation_addon')
+    AND ro.created_at < $1
+ORDER BY ro.created_at ASC
+LIMIT $2::int
+`
+
+type ListPendingReservationRefundOrdersForRecoveryParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+type ListPendingReservationRefundOrdersForRecoveryRow struct {
+	ID             int64       `json:"id"`
+	PaymentOrderID int64       `json:"payment_order_id"`
+	RefundAmount   int64       `json:"refund_amount"`
+	RefundReason   pgtype.Text `json:"refund_reason"`
+	OutRefundNo    string      `json:"out_refund_no"`
+	ReservationID  pgtype.Int8 `json:"reservation_id"`
+	BusinessType   string      `json:"business_type"`
+}
+
+func (q *Queries) ListPendingReservationRefundOrdersForRecovery(ctx context.Context, arg ListPendingReservationRefundOrdersForRecoveryParams) ([]ListPendingReservationRefundOrdersForRecoveryRow, error) {
+	rows, err := q.db.Query(ctx, listPendingReservationRefundOrdersForRecovery, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListPendingReservationRefundOrdersForRecoveryRow{}
+	for rows.Next() {
+		var i ListPendingReservationRefundOrdersForRecoveryRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.PaymentOrderID,
+			&i.RefundAmount,
+			&i.RefundReason,
+			&i.OutRefundNo,
+			&i.ReservationID,
+			&i.BusinessType,
 		); err != nil {
 			return nil, err
 		}

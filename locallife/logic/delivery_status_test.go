@@ -66,6 +66,38 @@ func TestStartPickup_Success(t *testing.T) {
 	require.Equal(t, delivery.ID, result.Delivery.ID)
 }
 
+func TestStartPickup_StateConflict(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	rider := db.Rider{ID: 10, UserID: 1}
+	delivery := db.Delivery{ID: 20, OrderID: 2, Status: "assigned", RiderID: pgtype.Int8{Int64: 10, Valid: true}}
+	order := db.Order{ID: 2, Status: "courier_accepted"}
+
+	store.EXPECT().
+		GetRiderByUserID(gomock.Any(), int64(1)).
+		Times(1).
+		Return(rider, nil)
+	store.EXPECT().
+		GetDelivery(gomock.Any(), int64(2)).
+		Times(1).
+		Return(delivery, nil)
+	store.EXPECT().
+		GetOrder(gomock.Any(), int64(2)).
+		Times(1).
+		Return(order, nil)
+	store.EXPECT().
+		UpdateDeliveryToPickupTx(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(db.UpdateDeliveryToPickupTxResult{}, db.ErrDeliveryStateTransitionConflict)
+
+	_, err := StartPickup(context.Background(), store, DeliveryStatusInput{UserID: 1, DeliveryID: 2})
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 409, reqErr.Status)
+	require.Equal(t, "配送状态已变化，请刷新后重试", reqErr.Err.Error())
+}
+
 func TestConfirmPickup_Success(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

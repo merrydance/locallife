@@ -317,6 +317,44 @@ func TestCreateOrderTxEmptyItems(t *testing.T) {
 	require.Len(t, result.Items, 0)
 }
 
+func TestCreateOrderTxRejectsDuplicateActiveReservationOrder(t *testing.T) {
+	user := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, createRandomUser(t).ID)
+	room := createRandomRoom(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, room.ID, "confirmed")
+
+	newReservationOrderParams := func(orderNo string) CreateOrderTxParams {
+		return CreateOrderTxParams{
+			CreateOrderParams: CreateOrderParams{
+				OrderNo:       orderNo,
+				UserID:        user.ID,
+				MerchantID:    merchant.ID,
+				OrderType:     OrderTypeReservation,
+				ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+				Subtotal:      5000,
+				TotalAmount:   5000,
+				Status:        OrderStatusPending,
+			},
+			EnforceSingleActiveReservationOrder: true,
+		}
+	}
+
+	first, err := testStore.CreateOrderTx(context.Background(), newReservationOrderParams(util.RandomString(20)))
+	require.NoError(t, err)
+	require.NotZero(t, first.Order.ID)
+
+	_, err = testStore.CreateOrderTx(context.Background(), newReservationOrderParams(util.RandomString(20)))
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrReservationActiveOrderConflict)
+	require.Equal(t, "reservation already has an active order", err.Error())
+
+	latestOrder, err := testStore.GetLatestOrderByReservation(context.Background(), pgtype.Int8{Int64: reservation.ID, Valid: true})
+	require.NoError(t, err)
+	require.Equal(t, first.Order.ID, latestOrder.ID)
+	require.False(t, latestOrder.ReplacedByOrderID.Valid)
+	require.NotEqual(t, OrderStatusCancelled, latestOrder.Status)
+}
+
 // ==================== CreateOrderTx with Voucher Tests ====================
 
 func TestCreateOrderTxWithVoucher(t *testing.T) {

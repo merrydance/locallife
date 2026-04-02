@@ -286,7 +286,7 @@ func (server *Server) maybeAutoConfirmDelivery(ctx context.Context, delivery db.
 		return
 	}
 
-	result, err := logic.AutoConfirmDelivery(ctx, server.store, delivery, rider, DeliveryConfirmRadiusMeters, DeliveryConfirmLocationMaxAgeSec, 5000)
+	result, err := logic.AutoConfirmDelivery(ctx, server.store, delivery, rider, DeliveryConfirmRadiusMeters, DeliveryConfirmLocationMaxAgeSec)
 	if err != nil {
 		var confirmErr *logic.DeliveryConfirmValidationError
 		if errors.As(err, &confirmErr) {

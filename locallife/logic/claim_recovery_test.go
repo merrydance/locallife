@@ -400,6 +400,98 @@ func TestCreateMerchantClaimRecoveryPaymentCreateUniqueViolationReusesExisting(t
 	require.Equal(t, "prepay_id=prepay_claim_recovery_existing", result.PayParams.Package)
 }
 
+func TestCreateMerchantClaimRecoveryPaymentExpiredPendingCreatesFreshPayment(t *testing.T) {
+	claimID := int64(10)
+	merchantID := int64(20)
+	payerUserID := int64(21)
+	recoveryID := int64(30)
+	recovery := db.ClaimRecovery{
+		ID:             recoveryID,
+		ClaimID:        claimID,
+		OrderID:        40,
+		RecoveryAmount: 500,
+		Status:         "pending",
+		RecoveryTarget: pgtype.Text{String: "merchant", Valid: true},
+	}
+	existingPayment := db.PaymentOrder{
+		ID:           100,
+		UserID:       payerUserID,
+		Amount:       recovery.RecoveryAmount,
+		BusinessType: businessTypeClaimRecovery,
+		Status:       "pending",
+		OutTradeNo:   "CR_test_expired",
+		PrepayID:     pgtype.Text{String: "prepay_expired", Valid: true},
+		ExpiresAt:    pgtype.Timestamptz{Time: time.Now().Add(-5 * time.Minute), Valid: true},
+	}
+	createdPayment := db.PaymentOrder{
+		ID:           101,
+		UserID:       payerUserID,
+		Amount:       recovery.RecoveryAmount,
+		BusinessType: businessTypeClaimRecovery,
+		Status:       "pending",
+		OutTradeNo:   "CR_test_fresh",
+	}
+	updatedPayment := createdPayment
+	updatedPayment.PrepayID = pgtype.Text{String: "prepay_claim_recovery_fresh", Valid: true}
+	updatedPayment.ExpiresAt = pgtype.Timestamptz{Time: time.Now().Add(30 * time.Minute), Valid: true}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
+
+	store.EXPECT().
+		GetClaimForAppeal(gomock.Any(), claimID).
+		Times(1).
+		Return(claimInfoFor(merchantID, 99, nil), nil)
+	store.EXPECT().
+		GetClaimRecoveryByClaimID(gomock.Any(), claimID).
+		Times(1).
+		Return(recovery, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByBusinessTypeAndAttach(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(existingPayment, nil)
+	paymentClient.EXPECT().
+		CloseOrder(gomock.Any(), existingPayment.OutTradeNo).
+		Times(1).
+		Return(nil)
+	store.EXPECT().
+		UpdatePaymentOrderToClosed(gomock.Any(), existingPayment.ID).
+		Times(1).
+		Return(db.PaymentOrder{ID: existingPayment.ID, Status: "closed"}, nil)
+	store.EXPECT().
+		GetUser(gomock.Any(), payerUserID).
+		Times(1).
+		Return(db.User{ID: payerUserID, WechatOpenid: "openid_merchant_payer"}, nil)
+	store.EXPECT().
+		CreatePaymentOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(createdPayment, nil)
+	paymentClient.EXPECT().
+		CreateJSAPIOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.JSAPIOrderResponse{PrepayID: "prepay_claim_recovery_fresh"}, &wechat.JSAPIPayParams{Package: "prepay_id=prepay_claim_recovery_fresh"}, nil)
+	store.EXPECT().
+		UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(updatedPayment, nil)
+
+	result, err := CreateMerchantClaimRecoveryPayment(context.Background(), store, paymentClient, CreateMerchantClaimRecoveryPaymentInput{
+		ClaimID:     claimID,
+		MerchantID:  merchantID,
+		PayerUserID: payerUserID,
+		ClientIP:    "127.0.0.1",
+	})
+
+	require.NoError(t, err)
+	require.Equal(t, createdPayment.ID, result.PaymentOrder.ID)
+	require.Equal(t, updatedPayment.PrepayID.String, result.PaymentOrder.PrepayID.String)
+	require.NotNil(t, result.PayParams)
+	require.Equal(t, "prepay_id=prepay_claim_recovery_fresh", result.PayParams.Package)
+}
+
 func TestPayRiderClaimRecoverySuccess(t *testing.T) {
 	claimID := int64(10)
 	riderID := int64(20)

@@ -196,6 +196,78 @@ func TestMarkTakeoutOrderReadyTx_AddsOrderToDeliveryPool(t *testing.T) {
 	require.Equal(t, result.PoolItem.ID, poolItem.ID)
 }
 
+func TestMarkTakeoutOrderReadyTx_UsesOrderDeliverySnapshotAfterAddressUpdate(t *testing.T) {
+	user := createRandomUser(t)
+	merchantOwner := createRandomUser(t)
+	merchant := createMerchantWithLocation(t, merchantOwner.ID)
+	address := createRandomUserAddress(t, user)
+
+	createResult, err := testStore.CreateOrderTx(context.Background(), CreateOrderTxParams{
+		CreateOrderParams: CreateOrderParams{
+			OrderNo:                      util.RandomString(20),
+			UserID:                       user.ID,
+			MerchantID:                   merchant.ID,
+			OrderType:                    OrderTypeTakeout,
+			AddressID:                    pgtype.Int8{Int64: address.ID, Valid: true},
+			DeliveryContactNameSnapshot:  pgtype.Text{String: address.ContactName, Valid: true},
+			DeliveryContactPhoneSnapshot: pgtype.Text{String: address.ContactPhone, Valid: true},
+			DeliveryAddressSnapshot:      pgtype.Text{String: address.DetailAddress, Valid: true},
+			DeliveryLongitudeSnapshot:    address.Longitude,
+			DeliveryLatitudeSnapshot:     address.Latitude,
+			DeliveryFee:                  1500,
+			DeliveryDistance:             pgtype.Int4{Int32: 3600, Valid: true},
+			Subtotal:                     5000,
+			TotalAmount:                  6500,
+			Status:                       OrderStatusPending,
+		},
+		Items: []CreateOrderItemParams{{
+			DishID:    pgtype.Int8{Int64: 1, Valid: true},
+			Name:      "外卖出餐快照测试菜品",
+			UnitPrice: 5000,
+			Quantity:  1,
+			Subtotal:  5000,
+		}},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.ProcessOrderPaymentTx(context.Background(), ProcessOrderPaymentTxParams{OrderID: createResult.Order.ID})
+	require.NoError(t, err)
+
+	_, err = testStore.AcceptTakeoutOrderTx(context.Background(), AcceptTakeoutOrderTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPaid,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateUserAddress(context.Background(), UpdateUserAddressParams{
+		ID:            address.ID,
+		UserID:        user.ID,
+		ContactName:   pgtype.Text{String: "修改后的联系人", Valid: true},
+		ContactPhone:  pgtype.Text{String: "13999990000", Valid: true},
+		DetailAddress: pgtype.Text{String: "北京市朝阳区修改后的地址", Valid: true},
+		Longitude:     numericFromFloat(116.512345),
+		Latitude:      numericFromFloat(39.923456),
+	})
+	require.NoError(t, err)
+
+	result, err := testStore.MarkTakeoutOrderReadyTx(context.Background(), MarkTakeoutOrderReadyTxParams{
+		OrderID:      createResult.Order.ID,
+		OldStatus:    OrderStatusPreparing,
+		OperatorID:   merchantOwner.ID,
+		OperatorType: "merchant",
+	})
+	require.NoError(t, err)
+	require.Equal(t, address.DetailAddress, result.Delivery.DeliveryAddress)
+	require.True(t, result.Delivery.DeliveryContact.Valid)
+	require.Equal(t, address.ContactName, result.Delivery.DeliveryContact.String)
+	require.True(t, result.Delivery.DeliveryPhone.Valid)
+	require.Equal(t, address.ContactPhone, result.Delivery.DeliveryPhone.String)
+	require.Equal(t, address.Longitude, result.Delivery.DeliveryLongitude)
+	require.Equal(t, address.Latitude, result.Delivery.DeliveryLatitude)
+}
+
 func TestUpdateOrderStatusTx_MarkReady(t *testing.T) {
 	user := createRandomUser(t)
 	merchantOwner := createRandomUser(t)

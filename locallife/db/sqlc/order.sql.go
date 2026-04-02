@@ -24,7 +24,7 @@ SET
 WHERE id = $1
     AND order_type = 'takeout'
     AND status IN ('rider_delivered', 'user_delivered')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 // 系统自动完成（外卖）：1h 未手动完成且无索赔时触发，记录 auto_user_delivered_at
@@ -79,6 +79,11 @@ func (q *Queries) AutoCompleteTakeoutOrder(ctx context.Context, id int64) (Order
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -94,7 +99,7 @@ SET
 WHERE id = $1
     AND order_type = 'takeout'
     AND status IN ('rider_delivered', 'user_delivered')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 // 用户点击完成（外卖）：直接进入 completed，并补齐 user_delivered_at
@@ -149,6 +154,11 @@ func (q *Queries) CompleteTakeoutOrderByUser(ctx context.Context, id int64) (Ord
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -294,6 +304,11 @@ INSERT INTO orders (
     merchant_id,
     order_type,
     address_id,
+    delivery_contact_name_snapshot,
+    delivery_contact_phone_snapshot,
+    delivery_address_snapshot,
+    delivery_longitude_snapshot,
+    delivery_latitude_snapshot,
     delivery_fee,
     delivery_distance,
     delivery_duration,
@@ -313,34 +328,39 @@ INSERT INTO orders (
     replaced_by_order_id,
     pickup_code
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
-) RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
+) RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 type CreateOrderParams struct {
-	OrderNo             string      `json:"order_no"`
-	UserID              int64       `json:"user_id"`
-	MerchantID          int64       `json:"merchant_id"`
-	OrderType           string      `json:"order_type"`
-	AddressID           pgtype.Int8 `json:"address_id"`
-	DeliveryFee         int64       `json:"delivery_fee"`
-	DeliveryDistance    pgtype.Int4 `json:"delivery_distance"`
-	DeliveryDuration    pgtype.Int4 `json:"delivery_duration"`
-	TableID             pgtype.Int8 `json:"table_id"`
-	ReservationID       pgtype.Int8 `json:"reservation_id"`
-	Subtotal            int64       `json:"subtotal"`
-	DiscountAmount      int64       `json:"discount_amount"`
-	DeliveryFeeDiscount int64       `json:"delivery_fee_discount"`
-	TotalAmount         int64       `json:"total_amount"`
-	Status              string      `json:"status"`
-	FulfillmentStatus   string      `json:"fulfillment_status"`
-	Notes               pgtype.Text `json:"notes"`
-	UserVoucherID       pgtype.Int8 `json:"user_voucher_id"`
-	VoucherAmount       int64       `json:"voucher_amount"`
-	BalancePaid         int64       `json:"balance_paid"`
-	MembershipID        pgtype.Int8 `json:"membership_id"`
-	ReplacedByOrderID   pgtype.Int8 `json:"replaced_by_order_id"`
-	PickupCode          pgtype.Text `json:"pickup_code"`
+	OrderNo                      string         `json:"order_no"`
+	UserID                       int64          `json:"user_id"`
+	MerchantID                   int64          `json:"merchant_id"`
+	OrderType                    string         `json:"order_type"`
+	AddressID                    pgtype.Int8    `json:"address_id"`
+	DeliveryContactNameSnapshot  pgtype.Text    `json:"delivery_contact_name_snapshot"`
+	DeliveryContactPhoneSnapshot pgtype.Text    `json:"delivery_contact_phone_snapshot"`
+	DeliveryAddressSnapshot      pgtype.Text    `json:"delivery_address_snapshot"`
+	DeliveryLongitudeSnapshot    pgtype.Numeric `json:"delivery_longitude_snapshot"`
+	DeliveryLatitudeSnapshot     pgtype.Numeric `json:"delivery_latitude_snapshot"`
+	DeliveryFee                  int64          `json:"delivery_fee"`
+	DeliveryDistance             pgtype.Int4    `json:"delivery_distance"`
+	DeliveryDuration             pgtype.Int4    `json:"delivery_duration"`
+	TableID                      pgtype.Int8    `json:"table_id"`
+	ReservationID                pgtype.Int8    `json:"reservation_id"`
+	Subtotal                     int64          `json:"subtotal"`
+	DiscountAmount               int64          `json:"discount_amount"`
+	DeliveryFeeDiscount          int64          `json:"delivery_fee_discount"`
+	TotalAmount                  int64          `json:"total_amount"`
+	Status                       string         `json:"status"`
+	FulfillmentStatus            string         `json:"fulfillment_status"`
+	Notes                        pgtype.Text    `json:"notes"`
+	UserVoucherID                pgtype.Int8    `json:"user_voucher_id"`
+	VoucherAmount                int64          `json:"voucher_amount"`
+	BalancePaid                  int64          `json:"balance_paid"`
+	MembershipID                 pgtype.Int8    `json:"membership_id"`
+	ReplacedByOrderID            pgtype.Int8    `json:"replaced_by_order_id"`
+	PickupCode                   pgtype.Text    `json:"pickup_code"`
 }
 
 func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order, error) {
@@ -350,6 +370,11 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		arg.MerchantID,
 		arg.OrderType,
 		arg.AddressID,
+		arg.DeliveryContactNameSnapshot,
+		arg.DeliveryContactPhoneSnapshot,
+		arg.DeliveryAddressSnapshot,
+		arg.DeliveryLongitudeSnapshot,
+		arg.DeliveryLatitudeSnapshot,
 		arg.DeliveryFee,
 		arg.DeliveryDistance,
 		arg.DeliveryDuration,
@@ -418,12 +443,17 @@ func (q *Queries) CreateOrder(ctx context.Context, arg CreateOrderParams) (Order
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
 
 const getLatestOrderByReservation = `-- name: GetLatestOrderByReservation :one
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE reservation_id = $1
     AND replaced_by_order_id IS NULL
 ORDER BY created_at DESC
@@ -481,6 +511,11 @@ func (q *Queries) GetLatestOrderByReservation(ctx context.Context, reservationID
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -595,7 +630,7 @@ func (q *Queries) GetMerchantPromotionExpenses(ctx context.Context, arg GetMerch
 }
 
 const getOrder = `-- name: GetOrder :one
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE id = $1 LIMIT 1
 `
 
@@ -650,12 +685,17 @@ func (q *Queries) GetOrder(ctx context.Context, id int64) (Order, error) {
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
 
 const getOrderByOrderNo = `-- name: GetOrderByOrderNo :one
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE order_no = $1 LIMIT 1
 `
 
@@ -710,12 +750,17 @@ func (q *Queries) GetOrderByOrderNo(ctx context.Context, orderNo string) (Order,
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
 
 const getOrderForUpdate = `-- name: GetOrderForUpdate :one
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE id = $1 LIMIT 1
 FOR UPDATE
 `
@@ -771,6 +816,11 @@ func (q *Queries) GetOrderForUpdate(ctx context.Context, id int64) (Order, error
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -823,13 +873,13 @@ func (q *Queries) GetOrderStats(ctx context.Context, arg GetOrderStatsParams) (G
 
 const getOrderWithDetails = `-- name: GetOrderWithDetails :one
 SELECT 
-    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
     m.name as merchant_name,
     m.phone as merchant_phone,
     m.address as merchant_address,
-    ua.contact_name as delivery_contact_name,
-    ua.contact_phone as delivery_contact_phone,
-    ua.detail_address as delivery_address
+    COALESCE(o.delivery_contact_name_snapshot, ua.contact_name) as delivery_contact_name,
+    COALESCE(o.delivery_contact_phone_snapshot, ua.contact_phone) as delivery_contact_phone,
+    COALESCE(o.delivery_address_snapshot, ua.detail_address) as delivery_address
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 LEFT JOIN user_addresses ua ON o.address_id = ua.id
@@ -837,59 +887,64 @@ WHERE o.id = $1
 `
 
 type GetOrderWithDetailsRow struct {
-	ID                   int64              `json:"id"`
-	OrderNo              string             `json:"order_no"`
-	UserID               int64              `json:"user_id"`
-	MerchantID           int64              `json:"merchant_id"`
-	OrderType            string             `json:"order_type"`
-	AddressID            pgtype.Int8        `json:"address_id"`
-	DeliveryFee          int64              `json:"delivery_fee"`
-	DeliveryDistance     pgtype.Int4        `json:"delivery_distance"`
-	TableID              pgtype.Int8        `json:"table_id"`
-	ReservationID        pgtype.Int8        `json:"reservation_id"`
-	Subtotal             int64              `json:"subtotal"`
-	DiscountAmount       int64              `json:"discount_amount"`
-	DeliveryFeeDiscount  int64              `json:"delivery_fee_discount"`
-	TotalAmount          int64              `json:"total_amount"`
-	Status               string             `json:"status"`
-	PaymentMethod        pgtype.Text        `json:"payment_method"`
-	PaidAt               pgtype.Timestamptz `json:"paid_at"`
-	Notes                pgtype.Text        `json:"notes"`
-	CreatedAt            time.Time          `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	CompletedAt          pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt          pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason         pgtype.Text        `json:"cancel_reason"`
-	FinalAmount          pgtype.Int8        `json:"final_amount"`
-	PlatformCommission   pgtype.Int8        `json:"platform_commission"`
-	UserVoucherID        pgtype.Int8        `json:"user_voucher_id"`
-	VoucherAmount        int64              `json:"voucher_amount"`
-	BalancePaid          int64              `json:"balance_paid"`
-	MembershipID         pgtype.Int8        `json:"membership_id"`
-	FulfillmentStatus    string             `json:"fulfillment_status"`
-	ReplacedByOrderID    pgtype.Int8        `json:"replaced_by_order_id"`
-	PickupCode           pgtype.Text        `json:"pickup_code"`
-	DispatchOrderID      pgtype.Int8        `json:"dispatch_order_id"`
-	FlowID               pgtype.Int8        `json:"flow_id"`
-	StatusHint           pgtype.Text        `json:"status_hint"`
-	Badges               []byte             `json:"badges"`
-	ExceptionState       pgtype.Text        `json:"exception_state"`
-	ClaimChannel         pgtype.Text        `json:"claim_channel"`
-	Overtime             bool               `json:"overtime"`
-	PrepStartAt          pgtype.Timestamptz `json:"prep_start_at"`
-	ReadyAt              pgtype.Timestamptz `json:"ready_at"`
-	CourierAcceptAt      pgtype.Timestamptz `json:"courier_accept_at"`
-	PickedAt             pgtype.Timestamptz `json:"picked_at"`
-	RiderDeliveredAt     pgtype.Timestamptz `json:"rider_delivered_at"`
-	UserDeliveredAt      pgtype.Timestamptz `json:"user_delivered_at"`
-	AutoUserDeliveredAt  pgtype.Timestamptz `json:"auto_user_delivered_at"`
-	DeliveryDuration     pgtype.Int4        `json:"delivery_duration"`
-	MerchantName         string             `json:"merchant_name"`
-	MerchantPhone        string             `json:"merchant_phone"`
-	MerchantAddress      string             `json:"merchant_address"`
-	DeliveryContactName  pgtype.Text        `json:"delivery_contact_name"`
-	DeliveryContactPhone pgtype.Text        `json:"delivery_contact_phone"`
-	DeliveryAddress      pgtype.Text        `json:"delivery_address"`
+	ID                           int64              `json:"id"`
+	OrderNo                      string             `json:"order_no"`
+	UserID                       int64              `json:"user_id"`
+	MerchantID                   int64              `json:"merchant_id"`
+	OrderType                    string             `json:"order_type"`
+	AddressID                    pgtype.Int8        `json:"address_id"`
+	DeliveryFee                  int64              `json:"delivery_fee"`
+	DeliveryDistance             pgtype.Int4        `json:"delivery_distance"`
+	TableID                      pgtype.Int8        `json:"table_id"`
+	ReservationID                pgtype.Int8        `json:"reservation_id"`
+	Subtotal                     int64              `json:"subtotal"`
+	DiscountAmount               int64              `json:"discount_amount"`
+	DeliveryFeeDiscount          int64              `json:"delivery_fee_discount"`
+	TotalAmount                  int64              `json:"total_amount"`
+	Status                       string             `json:"status"`
+	PaymentMethod                pgtype.Text        `json:"payment_method"`
+	PaidAt                       pgtype.Timestamptz `json:"paid_at"`
+	Notes                        pgtype.Text        `json:"notes"`
+	CreatedAt                    time.Time          `json:"created_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt                  pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason                 pgtype.Text        `json:"cancel_reason"`
+	FinalAmount                  pgtype.Int8        `json:"final_amount"`
+	PlatformCommission           pgtype.Int8        `json:"platform_commission"`
+	UserVoucherID                pgtype.Int8        `json:"user_voucher_id"`
+	VoucherAmount                int64              `json:"voucher_amount"`
+	BalancePaid                  int64              `json:"balance_paid"`
+	MembershipID                 pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus            string             `json:"fulfillment_status"`
+	ReplacedByOrderID            pgtype.Int8        `json:"replaced_by_order_id"`
+	PickupCode                   pgtype.Text        `json:"pickup_code"`
+	DispatchOrderID              pgtype.Int8        `json:"dispatch_order_id"`
+	FlowID                       pgtype.Int8        `json:"flow_id"`
+	StatusHint                   pgtype.Text        `json:"status_hint"`
+	Badges                       []byte             `json:"badges"`
+	ExceptionState               pgtype.Text        `json:"exception_state"`
+	ClaimChannel                 pgtype.Text        `json:"claim_channel"`
+	Overtime                     bool               `json:"overtime"`
+	PrepStartAt                  pgtype.Timestamptz `json:"prep_start_at"`
+	ReadyAt                      pgtype.Timestamptz `json:"ready_at"`
+	CourierAcceptAt              pgtype.Timestamptz `json:"courier_accept_at"`
+	PickedAt                     pgtype.Timestamptz `json:"picked_at"`
+	RiderDeliveredAt             pgtype.Timestamptz `json:"rider_delivered_at"`
+	UserDeliveredAt              pgtype.Timestamptz `json:"user_delivered_at"`
+	AutoUserDeliveredAt          pgtype.Timestamptz `json:"auto_user_delivered_at"`
+	DeliveryDuration             pgtype.Int4        `json:"delivery_duration"`
+	DeliveryContactNameSnapshot  pgtype.Text        `json:"delivery_contact_name_snapshot"`
+	DeliveryContactPhoneSnapshot pgtype.Text        `json:"delivery_contact_phone_snapshot"`
+	DeliveryAddressSnapshot      pgtype.Text        `json:"delivery_address_snapshot"`
+	DeliveryLongitudeSnapshot    pgtype.Numeric     `json:"delivery_longitude_snapshot"`
+	DeliveryLatitudeSnapshot     pgtype.Numeric     `json:"delivery_latitude_snapshot"`
+	MerchantName                 string             `json:"merchant_name"`
+	MerchantPhone                string             `json:"merchant_phone"`
+	MerchantAddress              string             `json:"merchant_address"`
+	DeliveryContactName          string             `json:"delivery_contact_name"`
+	DeliveryContactPhone         string             `json:"delivery_contact_phone"`
+	DeliveryAddress              string             `json:"delivery_address"`
 }
 
 func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWithDetailsRow, error) {
@@ -943,6 +998,11 @@ func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWi
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 		&i.MerchantName,
 		&i.MerchantPhone,
 		&i.MerchantAddress,
@@ -975,7 +1035,7 @@ func (q *Queries) HasUserOrderedFromMerchant(ctx context.Context, arg HasUserOrd
 
 const listMerchantOrdersByStatus = `-- name: ListMerchantOrdersByStatus :many
 
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = $2 AND replaced_by_order_id IS NULL
 ORDER BY created_at ASC
 LIMIT $3 OFFSET $4
@@ -1052,6 +1112,11 @@ func (q *Queries) ListMerchantOrdersByStatus(ctx context.Context, arg ListMercha
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1142,7 +1207,7 @@ func (q *Queries) ListMerchantPromotionOrders(ctx context.Context, arg ListMerch
 }
 
 const listOrdersByMerchant = `-- name: ListOrdersByMerchant :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -1211,6 +1276,11 @@ func (q *Queries) ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerc
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1223,7 +1293,7 @@ func (q *Queries) ListOrdersByMerchant(ctx context.Context, arg ListOrdersByMerc
 }
 
 const listOrdersByMerchantAndStatus = `-- name: ListOrdersByMerchantAndStatus :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = $2
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -1298,6 +1368,11 @@ func (q *Queries) ListOrdersByMerchantAndStatus(ctx context.Context, arg ListOrd
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1310,7 +1385,7 @@ func (q *Queries) ListOrdersByMerchantAndStatus(ctx context.Context, arg ListOrd
 }
 
 const listOrdersByMerchantAndStatuses = `-- name: ListOrdersByMerchantAndStatuses :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1 AND status = ANY($2::text[])
 ORDER BY created_at DESC
 LIMIT $3 OFFSET $4
@@ -1385,6 +1460,11 @@ func (q *Queries) ListOrdersByMerchantAndStatuses(ctx context.Context, arg ListO
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1397,7 +1477,7 @@ func (q *Queries) ListOrdersByMerchantAndStatuses(ctx context.Context, arg ListO
 }
 
 const listOrdersByMerchantWithFilters = `-- name: ListOrdersByMerchantWithFilters :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE merchant_id = $1
     AND ($2::text IS NULL OR status = $2::text)
     AND ($3::text IS NULL OR order_type = $3::text)
@@ -1476,6 +1556,11 @@ func (q *Queries) ListOrdersByMerchantWithFilters(ctx context.Context, arg ListO
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -1489,7 +1574,7 @@ func (q *Queries) ListOrdersByMerchantWithFilters(ctx context.Context, arg ListO
 
 const listOrdersByUser = `-- name: ListOrdersByUser :many
 SELECT 
-    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
     m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
@@ -1505,54 +1590,59 @@ type ListOrdersByUserParams struct {
 }
 
 type ListOrdersByUserRow struct {
-	ID                  int64              `json:"id"`
-	OrderNo             string             `json:"order_no"`
-	UserID              int64              `json:"user_id"`
-	MerchantID          int64              `json:"merchant_id"`
-	OrderType           string             `json:"order_type"`
-	AddressID           pgtype.Int8        `json:"address_id"`
-	DeliveryFee         int64              `json:"delivery_fee"`
-	DeliveryDistance    pgtype.Int4        `json:"delivery_distance"`
-	TableID             pgtype.Int8        `json:"table_id"`
-	ReservationID       pgtype.Int8        `json:"reservation_id"`
-	Subtotal            int64              `json:"subtotal"`
-	DiscountAmount      int64              `json:"discount_amount"`
-	DeliveryFeeDiscount int64              `json:"delivery_fee_discount"`
-	TotalAmount         int64              `json:"total_amount"`
-	Status              string             `json:"status"`
-	PaymentMethod       pgtype.Text        `json:"payment_method"`
-	PaidAt              pgtype.Timestamptz `json:"paid_at"`
-	Notes               pgtype.Text        `json:"notes"`
-	CreatedAt           time.Time          `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason        pgtype.Text        `json:"cancel_reason"`
-	FinalAmount         pgtype.Int8        `json:"final_amount"`
-	PlatformCommission  pgtype.Int8        `json:"platform_commission"`
-	UserVoucherID       pgtype.Int8        `json:"user_voucher_id"`
-	VoucherAmount       int64              `json:"voucher_amount"`
-	BalancePaid         int64              `json:"balance_paid"`
-	MembershipID        pgtype.Int8        `json:"membership_id"`
-	FulfillmentStatus   string             `json:"fulfillment_status"`
-	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
-	PickupCode          pgtype.Text        `json:"pickup_code"`
-	DispatchOrderID     pgtype.Int8        `json:"dispatch_order_id"`
-	FlowID              pgtype.Int8        `json:"flow_id"`
-	StatusHint          pgtype.Text        `json:"status_hint"`
-	Badges              []byte             `json:"badges"`
-	ExceptionState      pgtype.Text        `json:"exception_state"`
-	ClaimChannel        pgtype.Text        `json:"claim_channel"`
-	Overtime            bool               `json:"overtime"`
-	PrepStartAt         pgtype.Timestamptz `json:"prep_start_at"`
-	ReadyAt             pgtype.Timestamptz `json:"ready_at"`
-	CourierAcceptAt     pgtype.Timestamptz `json:"courier_accept_at"`
-	PickedAt            pgtype.Timestamptz `json:"picked_at"`
-	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
-	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
-	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
-	DeliveryDuration    pgtype.Int4        `json:"delivery_duration"`
-	MerchantName        string             `json:"merchant_name"`
+	ID                           int64              `json:"id"`
+	OrderNo                      string             `json:"order_no"`
+	UserID                       int64              `json:"user_id"`
+	MerchantID                   int64              `json:"merchant_id"`
+	OrderType                    string             `json:"order_type"`
+	AddressID                    pgtype.Int8        `json:"address_id"`
+	DeliveryFee                  int64              `json:"delivery_fee"`
+	DeliveryDistance             pgtype.Int4        `json:"delivery_distance"`
+	TableID                      pgtype.Int8        `json:"table_id"`
+	ReservationID                pgtype.Int8        `json:"reservation_id"`
+	Subtotal                     int64              `json:"subtotal"`
+	DiscountAmount               int64              `json:"discount_amount"`
+	DeliveryFeeDiscount          int64              `json:"delivery_fee_discount"`
+	TotalAmount                  int64              `json:"total_amount"`
+	Status                       string             `json:"status"`
+	PaymentMethod                pgtype.Text        `json:"payment_method"`
+	PaidAt                       pgtype.Timestamptz `json:"paid_at"`
+	Notes                        pgtype.Text        `json:"notes"`
+	CreatedAt                    time.Time          `json:"created_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt                  pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason                 pgtype.Text        `json:"cancel_reason"`
+	FinalAmount                  pgtype.Int8        `json:"final_amount"`
+	PlatformCommission           pgtype.Int8        `json:"platform_commission"`
+	UserVoucherID                pgtype.Int8        `json:"user_voucher_id"`
+	VoucherAmount                int64              `json:"voucher_amount"`
+	BalancePaid                  int64              `json:"balance_paid"`
+	MembershipID                 pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus            string             `json:"fulfillment_status"`
+	ReplacedByOrderID            pgtype.Int8        `json:"replaced_by_order_id"`
+	PickupCode                   pgtype.Text        `json:"pickup_code"`
+	DispatchOrderID              pgtype.Int8        `json:"dispatch_order_id"`
+	FlowID                       pgtype.Int8        `json:"flow_id"`
+	StatusHint                   pgtype.Text        `json:"status_hint"`
+	Badges                       []byte             `json:"badges"`
+	ExceptionState               pgtype.Text        `json:"exception_state"`
+	ClaimChannel                 pgtype.Text        `json:"claim_channel"`
+	Overtime                     bool               `json:"overtime"`
+	PrepStartAt                  pgtype.Timestamptz `json:"prep_start_at"`
+	ReadyAt                      pgtype.Timestamptz `json:"ready_at"`
+	CourierAcceptAt              pgtype.Timestamptz `json:"courier_accept_at"`
+	PickedAt                     pgtype.Timestamptz `json:"picked_at"`
+	RiderDeliveredAt             pgtype.Timestamptz `json:"rider_delivered_at"`
+	UserDeliveredAt              pgtype.Timestamptz `json:"user_delivered_at"`
+	AutoUserDeliveredAt          pgtype.Timestamptz `json:"auto_user_delivered_at"`
+	DeliveryDuration             pgtype.Int4        `json:"delivery_duration"`
+	DeliveryContactNameSnapshot  pgtype.Text        `json:"delivery_contact_name_snapshot"`
+	DeliveryContactPhoneSnapshot pgtype.Text        `json:"delivery_contact_phone_snapshot"`
+	DeliveryAddressSnapshot      pgtype.Text        `json:"delivery_address_snapshot"`
+	DeliveryLongitudeSnapshot    pgtype.Numeric     `json:"delivery_longitude_snapshot"`
+	DeliveryLatitudeSnapshot     pgtype.Numeric     `json:"delivery_latitude_snapshot"`
+	MerchantName                 string             `json:"merchant_name"`
 }
 
 func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserParams) ([]ListOrdersByUserRow, error) {
@@ -1612,6 +1702,11 @@ func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserPara
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 			&i.MerchantName,
 		); err != nil {
 			return nil, err
@@ -1626,7 +1721,7 @@ func (q *Queries) ListOrdersByUser(ctx context.Context, arg ListOrdersByUserPara
 
 const listOrdersByUserAndStatus = `-- name: ListOrdersByUserAndStatus :many
 SELECT 
-    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration,
+    o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
     m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
@@ -1643,54 +1738,59 @@ type ListOrdersByUserAndStatusParams struct {
 }
 
 type ListOrdersByUserAndStatusRow struct {
-	ID                  int64              `json:"id"`
-	OrderNo             string             `json:"order_no"`
-	UserID              int64              `json:"user_id"`
-	MerchantID          int64              `json:"merchant_id"`
-	OrderType           string             `json:"order_type"`
-	AddressID           pgtype.Int8        `json:"address_id"`
-	DeliveryFee         int64              `json:"delivery_fee"`
-	DeliveryDistance    pgtype.Int4        `json:"delivery_distance"`
-	TableID             pgtype.Int8        `json:"table_id"`
-	ReservationID       pgtype.Int8        `json:"reservation_id"`
-	Subtotal            int64              `json:"subtotal"`
-	DiscountAmount      int64              `json:"discount_amount"`
-	DeliveryFeeDiscount int64              `json:"delivery_fee_discount"`
-	TotalAmount         int64              `json:"total_amount"`
-	Status              string             `json:"status"`
-	PaymentMethod       pgtype.Text        `json:"payment_method"`
-	PaidAt              pgtype.Timestamptz `json:"paid_at"`
-	Notes               pgtype.Text        `json:"notes"`
-	CreatedAt           time.Time          `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason        pgtype.Text        `json:"cancel_reason"`
-	FinalAmount         pgtype.Int8        `json:"final_amount"`
-	PlatformCommission  pgtype.Int8        `json:"platform_commission"`
-	UserVoucherID       pgtype.Int8        `json:"user_voucher_id"`
-	VoucherAmount       int64              `json:"voucher_amount"`
-	BalancePaid         int64              `json:"balance_paid"`
-	MembershipID        pgtype.Int8        `json:"membership_id"`
-	FulfillmentStatus   string             `json:"fulfillment_status"`
-	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
-	PickupCode          pgtype.Text        `json:"pickup_code"`
-	DispatchOrderID     pgtype.Int8        `json:"dispatch_order_id"`
-	FlowID              pgtype.Int8        `json:"flow_id"`
-	StatusHint          pgtype.Text        `json:"status_hint"`
-	Badges              []byte             `json:"badges"`
-	ExceptionState      pgtype.Text        `json:"exception_state"`
-	ClaimChannel        pgtype.Text        `json:"claim_channel"`
-	Overtime            bool               `json:"overtime"`
-	PrepStartAt         pgtype.Timestamptz `json:"prep_start_at"`
-	ReadyAt             pgtype.Timestamptz `json:"ready_at"`
-	CourierAcceptAt     pgtype.Timestamptz `json:"courier_accept_at"`
-	PickedAt            pgtype.Timestamptz `json:"picked_at"`
-	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
-	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
-	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
-	DeliveryDuration    pgtype.Int4        `json:"delivery_duration"`
-	MerchantName        string             `json:"merchant_name"`
+	ID                           int64              `json:"id"`
+	OrderNo                      string             `json:"order_no"`
+	UserID                       int64              `json:"user_id"`
+	MerchantID                   int64              `json:"merchant_id"`
+	OrderType                    string             `json:"order_type"`
+	AddressID                    pgtype.Int8        `json:"address_id"`
+	DeliveryFee                  int64              `json:"delivery_fee"`
+	DeliveryDistance             pgtype.Int4        `json:"delivery_distance"`
+	TableID                      pgtype.Int8        `json:"table_id"`
+	ReservationID                pgtype.Int8        `json:"reservation_id"`
+	Subtotal                     int64              `json:"subtotal"`
+	DiscountAmount               int64              `json:"discount_amount"`
+	DeliveryFeeDiscount          int64              `json:"delivery_fee_discount"`
+	TotalAmount                  int64              `json:"total_amount"`
+	Status                       string             `json:"status"`
+	PaymentMethod                pgtype.Text        `json:"payment_method"`
+	PaidAt                       pgtype.Timestamptz `json:"paid_at"`
+	Notes                        pgtype.Text        `json:"notes"`
+	CreatedAt                    time.Time          `json:"created_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt                  pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason                 pgtype.Text        `json:"cancel_reason"`
+	FinalAmount                  pgtype.Int8        `json:"final_amount"`
+	PlatformCommission           pgtype.Int8        `json:"platform_commission"`
+	UserVoucherID                pgtype.Int8        `json:"user_voucher_id"`
+	VoucherAmount                int64              `json:"voucher_amount"`
+	BalancePaid                  int64              `json:"balance_paid"`
+	MembershipID                 pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus            string             `json:"fulfillment_status"`
+	ReplacedByOrderID            pgtype.Int8        `json:"replaced_by_order_id"`
+	PickupCode                   pgtype.Text        `json:"pickup_code"`
+	DispatchOrderID              pgtype.Int8        `json:"dispatch_order_id"`
+	FlowID                       pgtype.Int8        `json:"flow_id"`
+	StatusHint                   pgtype.Text        `json:"status_hint"`
+	Badges                       []byte             `json:"badges"`
+	ExceptionState               pgtype.Text        `json:"exception_state"`
+	ClaimChannel                 pgtype.Text        `json:"claim_channel"`
+	Overtime                     bool               `json:"overtime"`
+	PrepStartAt                  pgtype.Timestamptz `json:"prep_start_at"`
+	ReadyAt                      pgtype.Timestamptz `json:"ready_at"`
+	CourierAcceptAt              pgtype.Timestamptz `json:"courier_accept_at"`
+	PickedAt                     pgtype.Timestamptz `json:"picked_at"`
+	RiderDeliveredAt             pgtype.Timestamptz `json:"rider_delivered_at"`
+	UserDeliveredAt              pgtype.Timestamptz `json:"user_delivered_at"`
+	AutoUserDeliveredAt          pgtype.Timestamptz `json:"auto_user_delivered_at"`
+	DeliveryDuration             pgtype.Int4        `json:"delivery_duration"`
+	DeliveryContactNameSnapshot  pgtype.Text        `json:"delivery_contact_name_snapshot"`
+	DeliveryContactPhoneSnapshot pgtype.Text        `json:"delivery_contact_phone_snapshot"`
+	DeliveryAddressSnapshot      pgtype.Text        `json:"delivery_address_snapshot"`
+	DeliveryLongitudeSnapshot    pgtype.Numeric     `json:"delivery_longitude_snapshot"`
+	DeliveryLatitudeSnapshot     pgtype.Numeric     `json:"delivery_latitude_snapshot"`
+	MerchantName                 string             `json:"merchant_name"`
 }
 
 func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersByUserAndStatusParams) ([]ListOrdersByUserAndStatusRow, error) {
@@ -1755,6 +1855,11 @@ func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersB
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 			&i.MerchantName,
 		); err != nil {
 			return nil, err
@@ -1769,7 +1874,7 @@ func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersB
 
 const listOrdersByUserWithFilters = `-- name: ListOrdersByUserWithFilters :many
 SELECT
-        o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration,
+        o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
         m.name as merchant_name
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
@@ -1791,54 +1896,59 @@ type ListOrdersByUserWithFiltersParams struct {
 }
 
 type ListOrdersByUserWithFiltersRow struct {
-	ID                  int64              `json:"id"`
-	OrderNo             string             `json:"order_no"`
-	UserID              int64              `json:"user_id"`
-	MerchantID          int64              `json:"merchant_id"`
-	OrderType           string             `json:"order_type"`
-	AddressID           pgtype.Int8        `json:"address_id"`
-	DeliveryFee         int64              `json:"delivery_fee"`
-	DeliveryDistance    pgtype.Int4        `json:"delivery_distance"`
-	TableID             pgtype.Int8        `json:"table_id"`
-	ReservationID       pgtype.Int8        `json:"reservation_id"`
-	Subtotal            int64              `json:"subtotal"`
-	DiscountAmount      int64              `json:"discount_amount"`
-	DeliveryFeeDiscount int64              `json:"delivery_fee_discount"`
-	TotalAmount         int64              `json:"total_amount"`
-	Status              string             `json:"status"`
-	PaymentMethod       pgtype.Text        `json:"payment_method"`
-	PaidAt              pgtype.Timestamptz `json:"paid_at"`
-	Notes               pgtype.Text        `json:"notes"`
-	CreatedAt           time.Time          `json:"created_at"`
-	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	CompletedAt         pgtype.Timestamptz `json:"completed_at"`
-	CancelledAt         pgtype.Timestamptz `json:"cancelled_at"`
-	CancelReason        pgtype.Text        `json:"cancel_reason"`
-	FinalAmount         pgtype.Int8        `json:"final_amount"`
-	PlatformCommission  pgtype.Int8        `json:"platform_commission"`
-	UserVoucherID       pgtype.Int8        `json:"user_voucher_id"`
-	VoucherAmount       int64              `json:"voucher_amount"`
-	BalancePaid         int64              `json:"balance_paid"`
-	MembershipID        pgtype.Int8        `json:"membership_id"`
-	FulfillmentStatus   string             `json:"fulfillment_status"`
-	ReplacedByOrderID   pgtype.Int8        `json:"replaced_by_order_id"`
-	PickupCode          pgtype.Text        `json:"pickup_code"`
-	DispatchOrderID     pgtype.Int8        `json:"dispatch_order_id"`
-	FlowID              pgtype.Int8        `json:"flow_id"`
-	StatusHint          pgtype.Text        `json:"status_hint"`
-	Badges              []byte             `json:"badges"`
-	ExceptionState      pgtype.Text        `json:"exception_state"`
-	ClaimChannel        pgtype.Text        `json:"claim_channel"`
-	Overtime            bool               `json:"overtime"`
-	PrepStartAt         pgtype.Timestamptz `json:"prep_start_at"`
-	ReadyAt             pgtype.Timestamptz `json:"ready_at"`
-	CourierAcceptAt     pgtype.Timestamptz `json:"courier_accept_at"`
-	PickedAt            pgtype.Timestamptz `json:"picked_at"`
-	RiderDeliveredAt    pgtype.Timestamptz `json:"rider_delivered_at"`
-	UserDeliveredAt     pgtype.Timestamptz `json:"user_delivered_at"`
-	AutoUserDeliveredAt pgtype.Timestamptz `json:"auto_user_delivered_at"`
-	DeliveryDuration    pgtype.Int4        `json:"delivery_duration"`
-	MerchantName        string             `json:"merchant_name"`
+	ID                           int64              `json:"id"`
+	OrderNo                      string             `json:"order_no"`
+	UserID                       int64              `json:"user_id"`
+	MerchantID                   int64              `json:"merchant_id"`
+	OrderType                    string             `json:"order_type"`
+	AddressID                    pgtype.Int8        `json:"address_id"`
+	DeliveryFee                  int64              `json:"delivery_fee"`
+	DeliveryDistance             pgtype.Int4        `json:"delivery_distance"`
+	TableID                      pgtype.Int8        `json:"table_id"`
+	ReservationID                pgtype.Int8        `json:"reservation_id"`
+	Subtotal                     int64              `json:"subtotal"`
+	DiscountAmount               int64              `json:"discount_amount"`
+	DeliveryFeeDiscount          int64              `json:"delivery_fee_discount"`
+	TotalAmount                  int64              `json:"total_amount"`
+	Status                       string             `json:"status"`
+	PaymentMethod                pgtype.Text        `json:"payment_method"`
+	PaidAt                       pgtype.Timestamptz `json:"paid_at"`
+	Notes                        pgtype.Text        `json:"notes"`
+	CreatedAt                    time.Time          `json:"created_at"`
+	UpdatedAt                    pgtype.Timestamptz `json:"updated_at"`
+	CompletedAt                  pgtype.Timestamptz `json:"completed_at"`
+	CancelledAt                  pgtype.Timestamptz `json:"cancelled_at"`
+	CancelReason                 pgtype.Text        `json:"cancel_reason"`
+	FinalAmount                  pgtype.Int8        `json:"final_amount"`
+	PlatformCommission           pgtype.Int8        `json:"platform_commission"`
+	UserVoucherID                pgtype.Int8        `json:"user_voucher_id"`
+	VoucherAmount                int64              `json:"voucher_amount"`
+	BalancePaid                  int64              `json:"balance_paid"`
+	MembershipID                 pgtype.Int8        `json:"membership_id"`
+	FulfillmentStatus            string             `json:"fulfillment_status"`
+	ReplacedByOrderID            pgtype.Int8        `json:"replaced_by_order_id"`
+	PickupCode                   pgtype.Text        `json:"pickup_code"`
+	DispatchOrderID              pgtype.Int8        `json:"dispatch_order_id"`
+	FlowID                       pgtype.Int8        `json:"flow_id"`
+	StatusHint                   pgtype.Text        `json:"status_hint"`
+	Badges                       []byte             `json:"badges"`
+	ExceptionState               pgtype.Text        `json:"exception_state"`
+	ClaimChannel                 pgtype.Text        `json:"claim_channel"`
+	Overtime                     bool               `json:"overtime"`
+	PrepStartAt                  pgtype.Timestamptz `json:"prep_start_at"`
+	ReadyAt                      pgtype.Timestamptz `json:"ready_at"`
+	CourierAcceptAt              pgtype.Timestamptz `json:"courier_accept_at"`
+	PickedAt                     pgtype.Timestamptz `json:"picked_at"`
+	RiderDeliveredAt             pgtype.Timestamptz `json:"rider_delivered_at"`
+	UserDeliveredAt              pgtype.Timestamptz `json:"user_delivered_at"`
+	AutoUserDeliveredAt          pgtype.Timestamptz `json:"auto_user_delivered_at"`
+	DeliveryDuration             pgtype.Int4        `json:"delivery_duration"`
+	DeliveryContactNameSnapshot  pgtype.Text        `json:"delivery_contact_name_snapshot"`
+	DeliveryContactPhoneSnapshot pgtype.Text        `json:"delivery_contact_phone_snapshot"`
+	DeliveryAddressSnapshot      pgtype.Text        `json:"delivery_address_snapshot"`
+	DeliveryLongitudeSnapshot    pgtype.Numeric     `json:"delivery_longitude_snapshot"`
+	DeliveryLatitudeSnapshot     pgtype.Numeric     `json:"delivery_latitude_snapshot"`
+	MerchantName                 string             `json:"merchant_name"`
 }
 
 func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error) {
@@ -1905,6 +2015,11 @@ func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrder
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 			&i.MerchantName,
 		); err != nil {
 			return nil, err
@@ -1919,7 +2034,7 @@ func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrder
 
 const listPendingOrdersBefore = `-- name: ListPendingOrdersBefore :many
 
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE status = $1
   AND created_at < $2
 ORDER BY created_at ASC
@@ -1991,6 +2106,11 @@ func (q *Queries) ListPendingOrdersBefore(ctx context.Context, arg ListPendingOr
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -2003,7 +2123,7 @@ func (q *Queries) ListPendingOrdersBefore(ctx context.Context, arg ListPendingOr
 }
 
 const listTakeoutOrdersDeliveredBefore = `-- name: ListTakeoutOrdersDeliveredBefore :many
-SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration FROM orders
+SELECT id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot FROM orders
 WHERE order_type = 'takeout'
     AND status IN ('rider_delivered', 'user_delivered')
     AND rider_delivered_at IS NOT NULL
@@ -2076,6 +2196,11 @@ func (q *Queries) ListTakeoutOrdersDeliveredBefore(ctx context.Context, arg List
 			&i.UserDeliveredAt,
 			&i.AutoUserDeliveredAt,
 			&i.DeliveryDuration,
+			&i.DeliveryContactNameSnapshot,
+			&i.DeliveryContactPhoneSnapshot,
+			&i.DeliveryAddressSnapshot,
+			&i.DeliveryLongitudeSnapshot,
+			&i.DeliveryLatitudeSnapshot,
 		); err != nil {
 			return nil, err
 		}
@@ -2097,7 +2222,7 @@ SET
     replaced_by_order_id = $2,
     updated_at = now()
 WHERE id = $3
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 type MarkOrderReplacedParams struct {
@@ -2157,6 +2282,11 @@ func (q *Queries) MarkOrderReplaced(ctx context.Context, arg MarkOrderReplacedPa
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2168,7 +2298,7 @@ SET
     claim_channel = $2,
     updated_at = now()
 WHERE id = $3
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 type UpdateOrderExceptionStateParams struct {
@@ -2228,6 +2358,11 @@ func (q *Queries) UpdateOrderExceptionState(ctx context.Context, arg UpdateOrder
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2240,7 +2375,7 @@ SET
     updated_at = now()
 WHERE id = $3
     AND status = $4
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 type UpdateOrderStatusParams struct {
@@ -2306,6 +2441,11 @@ func (q *Queries) UpdateOrderStatus(ctx context.Context, arg UpdateOrderStatusPa
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2320,7 +2460,7 @@ SET
     updated_at = now()
 WHERE id = $2
     AND status = $3
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 type UpdateOrderToCancelledParams struct {
@@ -2380,6 +2520,11 @@ func (q *Queries) UpdateOrderToCancelled(ctx context.Context, arg UpdateOrderToC
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2393,7 +2538,7 @@ SET
     updated_at = now()
 WHERE id = $1
     AND status NOT IN ('cancelled', 'completed')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 func (q *Queries) UpdateOrderToCompleted(ctx context.Context, id int64) (Order, error) {
@@ -2447,6 +2592,11 @@ func (q *Queries) UpdateOrderToCompleted(ctx context.Context, id int64) (Order, 
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2458,7 +2608,7 @@ SET
     courier_accept_at = COALESCE(courier_accept_at, now()),
     updated_at = now()
 WHERE id = $1 AND status IN ('ready', 'courier_accepted')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 func (q *Queries) UpdateOrderToCourierAccepted(ctx context.Context, id int64) (Order, error) {
@@ -2512,6 +2662,11 @@ func (q *Queries) UpdateOrderToCourierAccepted(ctx context.Context, id int64) (O
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2522,7 +2677,7 @@ SET
     status = 'delivering',
     updated_at = now()
 WHERE id = $1 AND status IN ('picked', 'delivering')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 func (q *Queries) UpdateOrderToDelivering(ctx context.Context, id int64) (Order, error) {
@@ -2576,6 +2731,11 @@ func (q *Queries) UpdateOrderToDelivering(ctx context.Context, id int64) (Order,
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2589,7 +2749,7 @@ SET
     fulfillment_status = COALESCE($2, fulfillment_status),
     updated_at = now()
 WHERE id = $3 AND status = 'pending'
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 type UpdateOrderToPaidParams struct {
@@ -2649,6 +2809,11 @@ func (q *Queries) UpdateOrderToPaid(ctx context.Context, arg UpdateOrderToPaidPa
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2660,7 +2825,7 @@ SET
     picked_at = COALESCE(picked_at, now()),
     updated_at = now()
 WHERE id = $1 AND status IN ('courier_accepted', 'picked')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 func (q *Queries) UpdateOrderToPicked(ctx context.Context, id int64) (Order, error) {
@@ -2714,6 +2879,11 @@ func (q *Queries) UpdateOrderToPicked(ctx context.Context, id int64) (Order, err
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2726,7 +2896,7 @@ SET
     prep_start_at = COALESCE(prep_start_at, now()),
     updated_at = now()
 WHERE id = $1 AND status = 'paid'
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 // P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
@@ -2781,6 +2951,11 @@ func (q *Queries) UpdateOrderToPreparing(ctx context.Context, id int64) (Order, 
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2793,7 +2968,7 @@ SET
     ready_at = COALESCE(ready_at, now()),
     updated_at = now()
 WHERE id = $1 AND status = 'preparing'
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 // P1-035 修复：带状态前置条件的厨房状态变更，防止并发竞态
@@ -2848,6 +3023,11 @@ func (q *Queries) UpdateOrderToReady(ctx context.Context, id int64) (Order, erro
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2859,7 +3039,7 @@ SET
     rider_delivered_at = COALESCE(rider_delivered_at, now()),
     updated_at = now()
 WHERE id = $1 AND status IN ('delivering', 'rider_delivered')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 func (q *Queries) UpdateOrderToRiderDelivered(ctx context.Context, id int64) (Order, error) {
@@ -2913,6 +3093,11 @@ func (q *Queries) UpdateOrderToRiderDelivered(ctx context.Context, id int64) (Or
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }
@@ -2925,7 +3110,7 @@ SET
     completed_at = COALESCE(completed_at, now()),
     updated_at = now()
 WHERE id = $1 AND status IN ('rider_delivered', 'user_delivered')
-RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration
+RETURNING id, order_no, user_id, merchant_id, order_type, address_id, delivery_fee, delivery_distance, table_id, reservation_id, subtotal, discount_amount, delivery_fee_discount, total_amount, status, payment_method, paid_at, notes, created_at, updated_at, completed_at, cancelled_at, cancel_reason, final_amount, platform_commission, user_voucher_id, voucher_amount, balance_paid, membership_id, fulfillment_status, replaced_by_order_id, pickup_code, dispatch_order_id, flow_id, status_hint, badges, exception_state, claim_channel, overtime, prep_start_at, ready_at, courier_accept_at, picked_at, rider_delivered_at, user_delivered_at, auto_user_delivered_at, delivery_duration, delivery_contact_name_snapshot, delivery_contact_phone_snapshot, delivery_address_snapshot, delivery_longitude_snapshot, delivery_latitude_snapshot
 `
 
 func (q *Queries) UpdateOrderToUserDelivered(ctx context.Context, id int64) (Order, error) {
@@ -2979,6 +3164,11 @@ func (q *Queries) UpdateOrderToUserDelivered(ctx context.Context, id int64) (Ord
 		&i.UserDeliveredAt,
 		&i.AutoUserDeliveredAt,
 		&i.DeliveryDuration,
+		&i.DeliveryContactNameSnapshot,
+		&i.DeliveryContactPhoneSnapshot,
+		&i.DeliveryAddressSnapshot,
+		&i.DeliveryLongitudeSnapshot,
+		&i.DeliveryLatitudeSnapshot,
 	)
 	return i, err
 }

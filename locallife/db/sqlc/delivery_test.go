@@ -133,6 +133,23 @@ func TestUpdateDeliveryToPickup(t *testing.T) {
 	require.Equal(t, "picking", updated.Status)
 }
 
+func TestUpdateDeliveryToPickup_RequiresAssignedStatus(t *testing.T) {
+	rider := createOnlineRider(t)
+	delivery := createAssignedDelivery(t, rider.ID)
+
+	_, err := testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.UpdateDeliveryToPickup(context.Background(), UpdateDeliveryToPickupParams{
+		ID:      delivery.ID,
+		RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+	})
+	require.ErrorIs(t, err, ErrRecordNotFound)
+}
+
 func TestUpdateDeliveryToPicked(t *testing.T) {
 	rider := createOnlineRider(t)
 	delivery := createAssignedDelivery(t, rider.ID)
@@ -378,6 +395,12 @@ func TestListRiderActiveDeliveries(t *testing.T) {
 
 func createRandomDeliveryPoolItem(t *testing.T) DeliveryPool {
 	order := createRandomOrder(t)
+	_, err := testStore.UpdateOrderStatus(context.Background(), UpdateOrderStatusParams{
+		ID:             order.ID,
+		Status:         OrderStatusReady,
+		ExpectedStatus: order.Status,
+	})
+	require.NoError(t, err)
 	merchant, err := testStore.GetMerchant(context.Background(), order.MerchantID)
 	require.NoError(t, err)
 
@@ -604,6 +627,7 @@ func TestGrabOrderTx(t *testing.T) {
 	result, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
 		OrderID:      poolItem.OrderID,
 		FreezeAmount: 500, // 冻结5元
 	})
@@ -617,6 +641,10 @@ func TestGrabOrderTx(t *testing.T) {
 	require.Equal(t, rider.ID, result.DepositLog.RiderID)
 	require.Equal(t, int64(500), result.DepositLog.Amount)
 	require.Equal(t, "freeze", result.DepositLog.Type)
+	require.Equal(t, OrderStatusCourierAccepted, result.Order.Status)
+	require.Equal(t, OrderStatusCourierAccepted, result.StatusLog.ToStatus)
+	require.True(t, result.StatusLog.FromStatus.Valid)
+	require.Equal(t, OrderStatusReady, result.StatusLog.FromStatus.String)
 
 	// 验证订单已从配送池移除
 	_, err = testStore.GetDeliveryPoolByOrderID(context.Background(), poolItem.OrderID)
@@ -626,6 +654,24 @@ func TestGrabOrderTx(t *testing.T) {
 	updatedRider, err := testStore.GetRider(context.Background(), rider.ID)
 	require.NoError(t, err)
 	require.Equal(t, int64(500), updatedRider.FrozenDeposit)
+}
+
+func TestUpdateDeliveryToPickupTx_RollsBackWhenOrderSyncFails(t *testing.T) {
+	rider := createOnlineRider(t)
+	delivery := createAssignedDelivery(t, rider.ID)
+
+	result, err := testStore.UpdateDeliveryToPickupTx(context.Background(), UpdateDeliveryToPickupTxParams{
+		DeliveryID: delivery.ID,
+		RiderID:    rider.ID,
+		OrderID:    delivery.OrderID,
+	})
+	require.Error(t, err)
+	require.ErrorIs(t, err, ErrDeliveryStateTransitionConflict)
+	require.Equal(t, delivery.ID, result.Delivery.ID)
+
+	latestDelivery, getErr := testStore.GetDelivery(context.Background(), delivery.ID)
+	require.NoError(t, getErr)
+	require.Equal(t, "assigned", latestDelivery.Status)
 }
 
 // TestGrabOrderTx_InsufficientDeposit 测试押金不足时抢单失败
@@ -647,6 +693,7 @@ func TestGrabOrderTx_InsufficientDeposit(t *testing.T) {
 	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
 		OrderID:      poolItem.OrderID,
 		FreezeAmount: 500,
 	})
@@ -682,6 +729,7 @@ func TestGrabOrderTx_Concurrent(t *testing.T) {
 			result, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 				DeliveryID:   delivery.ID,
 				RiderID:      r.ID,
+				RiderUserID:  r.UserID,
 				OrderID:      poolItem.OrderID,
 				FreezeAmount: 500,
 			})
@@ -732,6 +780,7 @@ func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 	_, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      rider1.ID,
+		RiderUserID:  rider1.UserID,
 		OrderID:      poolItem.OrderID,
 		FreezeAmount: 500,
 	})
@@ -741,6 +790,7 @@ func TestGrabOrderTx_AlreadyAssignedDelivery(t *testing.T) {
 	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      rider2.ID,
+		RiderUserID:  rider2.UserID,
 		OrderID:      poolItem.OrderID,
 		FreezeAmount: 500,
 	})
@@ -762,6 +812,7 @@ func TestGrabOrderTx_NotFoundDelivery(t *testing.T) {
 	_, err = testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   999999999,
 		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
 		OrderID:      999999999,
 		FreezeAmount: 500,
 	})
@@ -777,6 +828,7 @@ func TestGrabOrderTx_RiderNotFound(t *testing.T) {
 	_, err := testStore.GrabOrderTx(context.Background(), GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      999999999,
+		RiderUserID:  999999999,
 		OrderID:      poolItem.OrderID,
 		FreezeAmount: 500,
 	})

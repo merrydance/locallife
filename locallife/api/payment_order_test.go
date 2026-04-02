@@ -276,6 +276,57 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "ConcurrentPendingPaymentConflict_ReusesExistingPayment",
+			body: gin.H{
+				"order_id":      order.ID,
+				"payment_type":  "miniprogram",
+				"business_type": "order",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				existingPendingPayment := paymentOrder
+				existingPendingPayment.PrepayID = pgtype.Text{String: "wx123", Valid: true}
+
+				gomock.InOrder(
+					store.EXPECT().
+						GetOrder(gomock.Any(), order.ID).
+						Times(1).
+						Return(order, nil),
+					store.EXPECT().
+						GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(db.PaymentOrder{}, db.ErrRecordNotFound),
+					store.EXPECT().
+						GetUser(gomock.Any(), user.ID).
+						Times(1).
+						Return(user, nil),
+					store.EXPECT().
+						CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(db.CreateCombinedPaymentTxResult{}, db.ErrOrderPendingPaymentConflict),
+					store.EXPECT().
+						GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(existingPendingPayment, nil),
+					ecommerceClient.EXPECT().
+						GenerateJSAPIPayParams("wx123").
+						Times(1).
+						Return(payParams, nil),
+				)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var response paymentOrderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, paymentOrder.ID, response.ID)
+				require.Equal(t, "pending", response.Status)
+				require.NotNil(t, response.PayParams)
+			},
+		},
+		{
 			name: "InvalidPaymentType",
 			body: gin.H{
 				"order_id":      order.ID,

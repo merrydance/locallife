@@ -27,6 +27,7 @@ const (
 const (
 	outTradeNoMaxRetry      = 3
 	outTradeNoRetryBaseBack = 50 * time.Millisecond
+	concurrentPaymentRetry  = 2
 )
 
 // PaymentOrderService encapsulates payment order creation logic.
@@ -174,29 +175,12 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 	}
 	if err == nil && existingPayment.Status == paymentStatusPending {
 		if existingPayment.Amount != amount {
-			if _, closeErr := svc.closePendingPaymentOrder(ctx, existingPayment); closeErr != nil {
+			if closeErr := svc.supersedePendingPaymentOrder(ctx, existingPayment); closeErr != nil {
 				return result, closeErr
 			}
 		} else {
 			result.PaymentOrder = existingPayment
-			// 干等返回时，若已有 prepay_id 则重新签名生成 pay_params，
-			// 避免前端因收到 null pay_params 而无法调起支付。
-			if existingPayment.PrepayID.Valid {
-				switch existingPayment.PaymentType {
-				case "profit_sharing":
-					if svc.ecommerceClient != nil {
-						if payParams, signErr := svc.ecommerceClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
-							result.PayParams = payParams
-						}
-					}
-				default:
-					if svc.paymentClient != nil {
-						if payParams, signErr := svc.paymentClient.GenerateJSAPIPayParams(existingPayment.PrepayID.String); signErr == nil {
-							result.PayParams = payParams
-						}
-					}
-				}
-			}
+			result.PayParams = svc.signExistingPaymentOrder(existingPayment)
 			return result, nil
 		}
 	}
@@ -208,7 +192,7 @@ func (svc *PaymentOrderService) CreatePaymentOrder(ctx context.Context, input Cr
 		return svc.createReservationEcommercePayment(ctx, input, merchantID, merchantName, amount, attach, expiresAt)
 	}
 	if input.BusinessType == businessTypeOrder {
-		return svc.createOrderEcommercePayment(ctx, input, merchantName, expiresAt)
+		return svc.createOrderEcommercePayment(ctx, input, merchantName, amount, expiresAt)
 	}
 
 	// ==================== 订单走直连或扫码支付 ====================
@@ -431,6 +415,7 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 	ctx context.Context,
 	input CreatePaymentOrderInput,
 	merchantName string,
+	expectedAmount int64,
 	expiresAt time.Time,
 ) (CreatePaymentOrderResult, error) {
 	var result CreatePaymentOrderResult
@@ -452,13 +437,30 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 		return result, fmt.Errorf("generate combine out trade no: %w", err)
 	}
 
-	txResult, err := svc.store.CreateCombinedPaymentTx(ctx, db.CreateCombinedPaymentTxParams{
-		UserID:            input.UserID,
-		OrderIDs:          []int64{input.OrderID},
-		CombineOutTradeNo: combineOutTradeNo,
-		ExpiresAt:         expiresAt,
-	})
-	if err != nil {
+	var txResult db.CreateCombinedPaymentTxResult
+	for attempt := 1; attempt <= concurrentPaymentRetry; attempt++ {
+		txResult, err = svc.store.CreateCombinedPaymentTx(ctx, db.CreateCombinedPaymentTxParams{
+			UserID:            input.UserID,
+			OrderIDs:          []int64{input.OrderID},
+			CombineOutTradeNo: combineOutTradeNo,
+			ExpiresAt:         expiresAt,
+		})
+		if err == nil {
+			break
+		}
+		if errors.Is(err, db.ErrOrderPendingPaymentConflict) {
+			resolved, handled, resolveErr := svc.resolveConcurrentOrderPayment(ctx, input, expectedAmount)
+			if resolveErr != nil {
+				return result, resolveErr
+			}
+			if handled {
+				return resolved, nil
+			}
+			if attempt < concurrentPaymentRetry {
+				continue
+			}
+			return result, NewRequestError(http.StatusConflict, errors.New("payment order is being recreated, please retry"))
+		}
 		if mapped := mapCombinedPaymentError(err); mapped != nil {
 			return result, mapped
 		}
@@ -528,6 +530,97 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 	result.PaymentOrder = updatedPayment
 	result.PayParams = payParams
 	return result, nil
+}
+
+func (svc *PaymentOrderService) signExistingPaymentOrder(paymentOrder db.PaymentOrder) *wechat.JSAPIPayParams {
+	if !paymentOrder.PrepayID.Valid {
+		return nil
+	}
+
+	switch paymentOrder.PaymentType {
+	case "profit_sharing":
+		if svc.ecommerceClient != nil {
+			if payParams, err := svc.ecommerceClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String); err == nil {
+				return payParams
+			}
+		}
+	default:
+		if svc.paymentClient != nil {
+			if payParams, err := svc.paymentClient.GenerateJSAPIPayParams(paymentOrder.PrepayID.String); err == nil {
+				return payParams
+			}
+		}
+	}
+
+	return nil
+}
+
+func (svc *PaymentOrderService) supersedePendingPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) error {
+	if paymentOrder.PrepayID.Valid {
+		_, err := svc.closePendingPaymentOrder(ctx, paymentOrder)
+		return err
+	}
+
+	if _, err := svc.store.UpdatePaymentOrderToClosed(ctx, paymentOrder.ID); err != nil {
+		return err
+	}
+	if paymentOrder.CombinedPaymentID.Valid {
+		if _, err := svc.store.UpdateCombinedPaymentOrderToClosed(ctx, paymentOrder.CombinedPaymentID.Int64); err != nil && !errors.Is(err, db.ErrRecordNotFound) {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func (svc *PaymentOrderService) resolveConcurrentOrderPayment(
+	ctx context.Context,
+	input CreatePaymentOrderInput,
+	expectedAmount int64,
+) (CreatePaymentOrderResult, bool, error) {
+	var result CreatePaymentOrderResult
+
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		paymentOrder, err := svc.store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: input.OrderID, Valid: true},
+			BusinessType: input.BusinessType,
+		})
+		if err != nil {
+			if errors.Is(err, db.ErrRecordNotFound) {
+				if attempt < outTradeNoMaxRetry {
+					if !sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
+						return result, true, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
+					}
+					continue
+				}
+				return result, false, nil
+			}
+			return result, true, fmt.Errorf("get latest payment order after concurrent conflict: %w", err)
+		}
+
+		if paymentOrder.Status != paymentStatusPending {
+			return result, false, nil
+		}
+
+		if paymentOrder.Amount != expectedAmount {
+			if err := svc.supersedePendingPaymentOrder(ctx, paymentOrder); err != nil {
+				return result, true, err
+			}
+			return result, false, nil
+		}
+
+		result.PaymentOrder = paymentOrder
+		result.PayParams = svc.signExistingPaymentOrder(paymentOrder)
+		if result.PayParams != nil || attempt == outTradeNoMaxRetry {
+			return result, true, nil
+		}
+
+		if !sleepWithContext(ctx, outTradeNoRetryBaseBack*time.Duration(attempt)) {
+			return result, true, NewRequestError(http.StatusRequestTimeout, errors.New("request canceled"))
+		}
+	}
+
+	return result, false, nil
 }
 
 // generateCombineOutTradeNoForSingle 生成单子商户合单主单号

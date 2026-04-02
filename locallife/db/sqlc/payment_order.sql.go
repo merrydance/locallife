@@ -978,6 +978,8 @@ UPDATE payment_orders
 SET
     prepay_id = $2
 WHERE id = $1
+    AND status = 'pending'
+    AND prepay_id IS NULL
 RETURNING id, order_id, reservation_id, user_id, payment_type, business_type, amount, out_trade_no, transaction_id, prepay_id, status, paid_at, created_at, expires_at, attach, combined_payment_id, processed_at
 `
 

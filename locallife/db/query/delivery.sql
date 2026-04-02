@@ -46,7 +46,7 @@ RETURNING *;
 UPDATE deliveries
 SET 
     status = 'picking'
-WHERE id = $1 AND rider_id = $2
+WHERE id = $1 AND rider_id = $2 AND status = 'assigned'
 RETURNING *;
 
 -- name: UpdateDeliveryToPicked :one

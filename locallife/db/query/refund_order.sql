@@ -41,6 +41,25 @@ WHERE status = $1
 ORDER BY created_at
 LIMIT $2 OFFSET $3;
 
+-- name: ListPendingReservationRefundOrdersForRecovery :many
+SELECT
+    ro.id,
+    ro.payment_order_id,
+    ro.refund_amount,
+    ro.refund_reason,
+    ro.out_refund_no,
+    po.reservation_id,
+    po.business_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'pending'
+    AND po.status = 'paid'
+    AND po.reservation_id IS NOT NULL
+    AND po.business_type IN ('reservation', 'reservation_addon')
+    AND ro.created_at < sqlc.arg('created_before')
+ORDER BY ro.created_at ASC
+LIMIT sqlc.arg('limit')::int;
+
 -- name: UpdateRefundOrderToProcessing :one
 UPDATE refund_orders
 SET
@@ -74,7 +93,7 @@ RETURNING *;
 -- name: GetTotalRefundedByPaymentOrder :one
 SELECT COALESCE(SUM(refund_amount), 0)::bigint as total_refunded
 FROM refund_orders
-WHERE payment_order_id = $1 AND status = 'success';
+WHERE payment_order_id = $1 AND status IN ('pending', 'processing', 'success');
 
 -- name: GetPendingRiderDepositRefundAmountByUserID :one
 SELECT COALESCE(SUM(ro.refund_amount), 0)::bigint AS pending_rider_deposit_refund_amount

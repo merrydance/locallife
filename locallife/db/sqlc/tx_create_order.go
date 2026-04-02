@@ -11,11 +11,14 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+var ErrReservationActiveOrderConflict = errors.New("reservation already has an active order")
+
 // CreateOrderTxParams contains the input parameters for creating an order with items
 type CreateOrderTxParams struct {
-	CreateOrderParams CreateOrderParams
-	Items             []CreateOrderItemParams
-	BillingGroupID    *int64
+	CreateOrderParams                   CreateOrderParams
+	Items                               []CreateOrderItemParams
+	BillingGroupID                      *int64
+	EnforceSingleActiveReservationOrder bool
 
 	// 优惠券相关（可选）
 	UserVoucherID *int64 // 用户优惠券ID
@@ -67,6 +70,21 @@ func (store *SQLStore) CreateOrderTx(ctx context.Context, arg CreateOrderTxParam
 			}
 
 			arg.CreateOrderParams.PickupCode = pgtype.Text{String: strconv.FormatInt(int64(sequence), 10), Valid: true}
+		}
+
+		if arg.EnforceSingleActiveReservationOrder && arg.CreateOrderParams.ReservationID.Valid {
+			if _, err := q.GetTableReservationForUpdate(ctx, arg.CreateOrderParams.ReservationID.Int64); err != nil {
+				return fmt.Errorf("lock table reservation: %w", err)
+			}
+
+			existingOrder, err := q.GetLatestOrderByReservation(ctx, arg.CreateOrderParams.ReservationID)
+			if err != nil {
+				if !errors.Is(err, ErrRecordNotFound) {
+					return fmt.Errorf("get latest reservation order: %w", err)
+				}
+			} else if existingOrder.Status != OrderStatusCancelled && !existingOrder.ReplacedByOrderID.Valid {
+				return ErrReservationActiveOrderConflict
+			}
 		}
 
 		// 1. 如果使用优惠券，先验证并锁定

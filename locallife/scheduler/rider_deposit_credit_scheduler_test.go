@@ -181,3 +181,43 @@ func TestDataCleanupScheduler_MarkExpiredRiderDepositCredits(t *testing.T) {
 	require.Equal(t, string(worker.AlertTypeRiderDepositExpiry), alertData["alert_type"])
 	require.Equal(t, "骑手押金退款凭证已过期", alertData["title"])
 }
+
+func TestDataCleanupScheduler_CleanupExpiredPaymentOrders_ClosesExpiredCombinedPaymentOrders(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	s := NewDataCleanupScheduler(store, nil, nil)
+
+	combinedA := db.CombinedPaymentOrder{ID: 3001, Status: "pending"}
+	combinedB := db.CombinedPaymentOrder{ID: 3002, Status: "pending"}
+
+	gomock.InOrder(
+		store.EXPECT().CloseExpiredPaymentOrders(gomock.Any()).Return(int64(2), nil),
+		store.EXPECT().ListPendingCombinedPaymentOrders(gomock.Any(), expiredCombinedPaymentBatchLimit).Return([]db.CombinedPaymentOrder{combinedA, combinedB}, nil),
+		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedA.ID).Return(db.CombinedPaymentOrder{ID: combinedA.ID, Status: "closed"}, nil),
+		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedB.ID).Return(db.CombinedPaymentOrder{ID: combinedB.ID, Status: "closed"}, nil),
+	)
+
+	s.cleanupExpiredPaymentOrders()
+}
+
+func TestDataCleanupScheduler_CleanupExpiredPaymentOrders_IgnoresCombinedPaymentStateRace(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	s := NewDataCleanupScheduler(store, nil, nil)
+
+	combinedA := db.CombinedPaymentOrder{ID: 3101, Status: "pending"}
+	combinedB := db.CombinedPaymentOrder{ID: 3102, Status: "pending"}
+
+	gomock.InOrder(
+		store.EXPECT().CloseExpiredPaymentOrders(gomock.Any()).Return(int64(0), nil),
+		store.EXPECT().ListPendingCombinedPaymentOrders(gomock.Any(), expiredCombinedPaymentBatchLimit).Return([]db.CombinedPaymentOrder{combinedA, combinedB}, nil),
+		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedA.ID).Return(db.CombinedPaymentOrder{}, db.ErrRecordNotFound),
+		store.EXPECT().UpdateCombinedPaymentOrderToClosed(gomock.Any(), combinedB.ID).Return(db.CombinedPaymentOrder{ID: combinedB.ID, Status: "closed"}, nil),
+	)
+
+	s.cleanupExpiredPaymentOrders()
+}

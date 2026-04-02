@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
 )
@@ -134,30 +133,14 @@ func GrabDeliveryOrder(ctx context.Context, store db.Store, input GrabOrderInput
 	txResult, err := store.GrabOrderTx(ctx, db.GrabOrderTxParams{
 		DeliveryID:   delivery.ID,
 		RiderID:      rider.ID,
+		RiderUserID:  rider.UserID,
 		OrderID:      input.OrderID,
 		FreezeAmount: freezeAmount,
 	})
 	if err != nil {
 		return result, err
 	}
-
-	if _, err := store.UpdateOrderToCourierAccepted(ctx, input.OrderID); err != nil {
-		if errors.Is(err, db.ErrRecordNotFound) {
-			return result, NewRequestError(http.StatusBadRequest, errors.New("订单状态已变化，请刷新后重试"))
-		}
-		return result, err
-	}
-	if oldStatus != db.OrderStatusCourierAccepted {
-		_, _ = store.CreateOrderStatusLog(ctx, db.CreateOrderStatusLogParams{
-			OrderID:      order.ID,
-			FromStatus:   pgtype.Text{String: oldStatus, Valid: true},
-			ToStatus:     db.OrderStatusCourierAccepted,
-			OperatorID:   pgtype.Int8{Int64: rider.UserID, Valid: true},
-			OperatorType: pgtype.Text{String: "rider", Valid: true},
-			Notes:        pgtype.Text{String: "骑手接单", Valid: true},
-		})
-	}
-	order.Status = db.OrderStatusCourierAccepted
+	order = txResult.Order
 
 	result = GrabOrderResult{
 		Delivery:       txResult.Delivery,

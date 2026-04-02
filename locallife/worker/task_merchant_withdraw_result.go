@@ -3,12 +3,14 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
 
@@ -110,6 +112,28 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 
 	resp, err := processor.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, accountInfo.SubMchID, accountInfo.OutRequestNo)
 	if err != nil {
+		if payload.RetryCount >= merchantWithdrawMaxRetry && isWechatWithdrawRequestNotFound(err) {
+			_, _ = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
+				ID:     record.ID,
+				Status: "failed",
+				Reason: pgtype.Text{String: fmt.Sprintf("withdraw request not found in wechat after retries: %v", err), Valid: true},
+			})
+			processor.publishAlert(ctx, AlertData{
+				AlertType:   AlertTypeWithdrawFailed,
+				Level:       AlertLevelCritical,
+				Title:       "商户提现提交状态不明",
+				Message:     fmt.Sprintf("提现记录 %d 多次查询仍未在微信侧找到对应申请单，已收敛为 failed，请人工确认是否为本地僵尸提现单。", record.ID),
+				RelatedID:   record.ID,
+				RelatedType: "withdrawal_record",
+				Extra: withdrawalAlertExtra(record, accountInfo, map[string]interface{}{
+					"retry_count": payload.RetryCount,
+					"fail_reason": err.Error(),
+					"result":      "withdraw_request_not_found",
+				}),
+			})
+			return fmt.Errorf("withdraw request not found after retries: %w", asynq.SkipRetry)
+		}
+
 		if payload.RetryCount >= merchantWithdrawMaxRetry {
 			_, _ = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
 				ID:     record.ID,
@@ -185,4 +209,14 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 	}
 
 	return nil
+}
+
+func isWechatWithdrawRequestNotFound(err error) bool {
+	var payErr *wechat.WechatPayError
+	if !errors.As(err, &payErr) {
+		return false
+	}
+
+	code := strings.ToUpper(payErr.Code)
+	return payErr.StatusCode == 404 || strings.Contains(code, "NOT_FOUND") || strings.Contains(code, "RESOURCE_NOT_EXISTS")
 }

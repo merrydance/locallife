@@ -34,6 +34,13 @@ type DeliveryStatusResult struct {
 	PreviousStatus string
 }
 
+func mapDeliveryStateTransitionError(err error) error {
+	if errors.Is(err, db.ErrDeliveryStateTransitionConflict) {
+		return NewRequestError(http.StatusConflict, errors.New("配送状态已变化，请刷新后重试"))
+	}
+	return err
+}
+
 func validateDeliveryConfirmRadius(rider db.Rider, delivery db.Delivery, confirmRadiusMeters int, locationMaxAgeSec int) error {
 	riderLng, riderLngOk := floatFromNumeric(rider.CurrentLongitude)
 	riderLat, riderLatOk := floatFromNumeric(rider.CurrentLatitude)
@@ -146,7 +153,7 @@ func StartPickup(ctx context.Context, store db.Store, input DeliveryStatusInput)
 		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
-		return result, err
+		return result, mapDeliveryStateTransitionError(err)
 	}
 
 	return DeliveryStatusResult{
@@ -203,7 +210,7 @@ func ConfirmPickup(ctx context.Context, store db.Store, input DeliveryStatusInpu
 		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
-		return result, err
+		return result, mapDeliveryStateTransitionError(err)
 	}
 
 	if oldStatus != "picked" {
@@ -270,7 +277,7 @@ func StartDelivery(ctx context.Context, store db.Store, input DeliveryStatusInpu
 		OrderID:    delivery.OrderID,
 	})
 	if err != nil {
-		return result, err
+		return result, mapDeliveryStateTransitionError(err)
 	}
 
 	if oldStatus != "delivering" {

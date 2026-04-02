@@ -325,9 +325,15 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 	if o.MerchantPhone != "" {
 		resp.MerchantPhone = &o.MerchantPhone
 	}
-	resp.DeliveryContactName = pgtypeTextPtr(o.DeliveryContactName)
-	resp.DeliveryContactPhone = pgtypeTextPtr(o.DeliveryContactPhone)
-	resp.DeliveryAddress = pgtypeTextPtr(o.DeliveryAddress)
+	if o.DeliveryContactName != "" {
+		resp.DeliveryContactName = ptrString(o.DeliveryContactName)
+	}
+	if o.DeliveryContactPhone != "" {
+		resp.DeliveryContactPhone = ptrString(o.DeliveryContactPhone)
+	}
+	if o.DeliveryAddress != "" {
+		resp.DeliveryAddress = ptrString(o.DeliveryAddress)
+	}
 
 	resp.Actions = orderActions(db.Order{
 		ID:                o.ID,

@@ -50,7 +50,7 @@ func (store *SQLStore) CreateRefundOrderTx(ctx context.Context, arg CreateRefund
 			return &requestError{statusCode: http.StatusBadRequest, err: errors.New("payment order is not paid")}
 		}
 
-		// 在持锁状态下统计已成功退款金额（含 processing 状态、避免双重退款）
+		// 在持锁状态下统计已占用退款额度（pending/processing/success 都占用额度）
 		alreadyRefunded, err := q.GetTotalRefundedByPaymentOrder(ctx, arg.PaymentOrderID)
 		if err != nil {
 			return fmt.Errorf("get total refunded: %w", err)

@@ -235,7 +235,7 @@ func TestGrabOrderAPI(t *testing.T) {
 				store.EXPECT().
 					GrabOrderTx(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(db.GrabOrderTxResult{Delivery: delivery}, nil)
+					Return(db.GrabOrderTxResult{Delivery: delivery, Order: db.Order{ID: orderID, Status: db.OrderStatusCourierAccepted}}, nil)
 
 				// Mock for notification - GetOrder
 				order := db.Order{
@@ -259,16 +259,6 @@ func TestGrabOrderAPI(t *testing.T) {
 					ListOrderItemsByOrder(gomock.Any(), gomock.Eq(orderID)).
 					Times(1).
 					Return([]db.OrderItem{}, nil)
-				store.EXPECT().
-					UpdateOrderToCourierAccepted(gomock.Any(), gomock.Eq(orderID)).
-					Times(1).
-					Return(db.Order{}, nil)
-
-				store.EXPECT().
-					CreateOrderStatusLog(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.OrderStatusLog{}, nil)
-
 				store.EXPECT().
 					UpdateDeliveryEstimatedTime(gomock.Any(), gomock.Any()).
 					AnyTimes().

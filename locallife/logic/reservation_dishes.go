@@ -17,6 +17,7 @@ import (
 const (
 	reservationAddonBusiness = "reservation_addon"
 	paymentStatusPaid        = "paid"
+	reservationRefundReason  = "Reservation dish change refund"
 )
 
 // AddReservationDishesInput describes the add-dishes request.
@@ -110,6 +111,7 @@ type ModifyReservationDishesInput struct {
 	Now             time.Time
 	EcommerceClient wechat.EcommerceClientInterface
 	ClientIP        string
+	TaskScheduler   TaskScheduler
 }
 
 // ModifyReservationDishesResult returns modify-dishes outcomes.
@@ -122,11 +124,15 @@ type ModifyReservationDishesResult struct {
 	RefundInitiated bool
 }
 
+type reservationRefundAllocation struct {
+	PaymentOrder db.PaymentOrder
+	RefundAmount int64
+}
+
 // ModifyReservationDishes replaces reservation items and handles payment/refund if needed.
 func ModifyReservationDishes(
 	ctx context.Context,
 	store db.Store,
-	ecommerceClient wechat.EcommerceClientInterface,
 	input ModifyReservationDishesInput,
 ) (ModifyReservationDishesResult, error) {
 	var result ModifyReservationDishesResult
@@ -164,6 +170,14 @@ func ModifyReservationDishes(
 	}
 
 	delta := newTotal - currentTotal
+
+	var refundAllocations []reservationRefundAllocation
+	if reservation.PaymentMode == paymentModeFull && delta < 0 {
+		refundAllocations, err = buildReservationRefundAllocations(ctx, store, reservation.ID, minInt64(-delta, reservation.PrepaidAmount))
+		if err != nil {
+			return result, err
+		}
+	}
 
 	createItems := make([]db.CreateReservationItemParams, 0, len(validatedItems))
 	for _, item := range validatedItems {
@@ -208,64 +222,55 @@ func ModifyReservationDishes(
 		return result, nil
 	}
 
-	refundAmount := -delta
-	if refundAmount > reservation.PrepaidAmount {
-		refundAmount = reservation.PrepaidAmount
-	}
-	if refundAmount <= 0 || ecommerceClient == nil {
+	refundAmount := sumReservationRefundAllocations(refundAllocations)
+	if refundAmount <= 0 {
 		return result, nil
 	}
-
-	paymentOrder, err := store.GetLatestPaymentOrderByReservation(ctx, db.GetLatestPaymentOrderByReservationParams{
-		ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
-		BusinessType:  businessTypeReservation,
-	})
-	if err != nil {
-		return result, err
-	}
-	if paymentOrder.Status != paymentStatusPaid {
-		return result, nil
-	}
-
-	outRefundNo, err := generateOutRefundNo()
-	if err != nil {
-		return result, fmt.Errorf("generate out refund no: %w", err)
-	}
-	refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-		PaymentOrderID: paymentOrder.ID,
-		RefundType:     "partial",
-		RefundAmount:   refundAmount,
-		RefundReason:   pgtype.Text{String: "Reservation dish change refund", Valid: true},
-		OutRefundNo:    outRefundNo,
-		Status:         "pending",
-	})
-	if err != nil {
-		return result, err
-	}
-
-	wxRefund, err := ecommerceClient.CreateEcommerceRefund(ctx, &wechat.EcommerceRefundRequest{
-		SubMchID:    getSingleSubMchID(ctx, store, paymentOrder),
-		OutTradeNo:  paymentOrder.OutTradeNo,
-		OutRefundNo: outRefundNo,
-		Reason:      "Reservation dish change refund",
-		RefundAmount: refundAmount,
-		TotalAmount:  paymentOrder.Amount,
-	})
-	if err != nil {
-		if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
+	for _, allocation := range refundAllocations {
+		outRefundNo, genErr := generateOutRefundNo()
+		if genErr != nil {
+			return result, fmt.Errorf("generate out refund no: %w", genErr)
 		}
-		return result, err
-	}
-	if wxRefund.Status == wechat.RefundStatusSuccess {
-		if _, dbErr := store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID); dbErr != nil {
-			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as success")
+
+		refundType := allocation.PaymentOrder.PaymentType
+		if refundType == paymentTypeNative {
+			refundType = paymentTypeMiniProgram
 		}
-		if _, dbErr := store.AddReservationPrepaidAmount(ctx, db.AddReservationPrepaidAmountParams{
-			ID:            reservation.ID,
-			PrepaidAmount: -refundAmount,
-		}); dbErr != nil {
-			log.Error().Err(dbErr).Int64("reservation_id", reservation.ID).Msg("failed to update reservation prepaid amount")
+
+		if _, createErr := store.CreateRefundOrderTx(ctx, db.CreateRefundOrderTxParams{
+			PaymentOrderID: allocation.PaymentOrder.ID,
+			RefundType:     refundType,
+			RefundAmount:   allocation.RefundAmount,
+			RefundReason:   reservationRefundReason,
+			OutRefundNo:    outRefundNo,
+		}); createErr != nil {
+			if statusCode, ok := db.IsRefundRequestError(createErr); ok {
+				return result, NewRequestError(statusCode, errors.Unwrap(createErr))
+			}
+			return result, fmt.Errorf("create reservation dish change refund order: %w", createErr)
+		}
+
+		if input.TaskScheduler == nil {
+			log.Error().
+				Int64("payment_order_id", allocation.PaymentOrder.ID).
+				Str("out_refund_no", outRefundNo).
+				Msg("reservation dish change refund task scheduler not configured; relying on recovery scheduler")
+			continue
+		}
+
+		scheduleErr := input.TaskScheduler.ScheduleProcessRefund(ctx, ProcessRefundTaskInput{
+			PaymentOrderID: allocation.PaymentOrder.ID,
+			ReservationID:  reservation.ID,
+			RefundAmount:   allocation.RefundAmount,
+			Reason:         reservationRefundReason,
+			OutRefundNo:    outRefundNo,
+		})
+		if scheduleErr != nil {
+			log.Error().
+				Err(scheduleErr).
+				Int64("payment_order_id", allocation.PaymentOrder.ID).
+				Str("out_refund_no", outRefundNo).
+				Msg("failed to enqueue reservation dish change refund task; pending recovery remains available")
 		}
 	}
 
@@ -274,20 +279,68 @@ func ModifyReservationDishes(
 	return result, nil
 }
 
-// getSingleSubMchID looks up the sub-merchant ID for an ecommerce refund on a reservation payment order.
-func getSingleSubMchID(ctx context.Context, store db.Store, paymentOrder db.PaymentOrder) string {
-	if !paymentOrder.ReservationID.Valid {
-		return ""
+func buildReservationRefundAllocations(
+	ctx context.Context,
+	store db.Store,
+	reservationID int64,
+	desiredRefundAmount int64,
+) ([]reservationRefundAllocation, error) {
+	if desiredRefundAmount <= 0 {
+		return nil, nil
 	}
-	reservation, err := store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
+
+	paymentOrders, err := store.GetPaymentOrdersByReservation(ctx, pgtype.Int8{Int64: reservationID, Valid: true})
 	if err != nil {
-		return ""
+		return nil, fmt.Errorf("get payment orders by reservation: %w", err)
 	}
-	cfg, err := store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
-	if err != nil {
-		return ""
+
+	allocations := make([]reservationRefundAllocation, 0)
+	remainingRefund := desiredRefundAmount
+	for _, paymentOrder := range paymentOrders {
+		if remainingRefund <= 0 {
+			break
+		}
+		if paymentOrder.Status != paymentStatusPaid {
+			continue
+		}
+		if paymentOrder.BusinessType != businessTypeReservation && paymentOrder.BusinessType != reservationAddonBusiness {
+			continue
+		}
+
+		occupiedAmount, occupiedErr := store.GetTotalRefundedByPaymentOrder(ctx, paymentOrder.ID)
+		if occupiedErr != nil {
+			return nil, fmt.Errorf("get occupied refund amount by payment order %d: %w", paymentOrder.ID, occupiedErr)
+		}
+
+		availableAmount := paymentOrder.Amount - occupiedAmount
+		if availableAmount <= 0 {
+			continue
+		}
+
+		allocationAmount := minInt64(remainingRefund, availableAmount)
+		allocations = append(allocations, reservationRefundAllocation{
+			PaymentOrder: paymentOrder,
+			RefundAmount: allocationAmount,
+		})
+		remainingRefund -= allocationAmount
 	}
-	return cfg.SubMchID
+
+	return allocations, nil
+}
+
+func sumReservationRefundAllocations(allocations []reservationRefundAllocation) int64 {
+	var total int64
+	for _, allocation := range allocations {
+		total += allocation.RefundAmount
+	}
+	return total
+}
+
+func minInt64(left, right int64) int64 {
+	if left < right {
+		return left
+	}
+	return right
 }
 
 func createReservationAddonPaymentOrder(

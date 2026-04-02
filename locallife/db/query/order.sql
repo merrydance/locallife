@@ -5,6 +5,11 @@ INSERT INTO orders (
     merchant_id,
     order_type,
     address_id,
+    delivery_contact_name_snapshot,
+    delivery_contact_phone_snapshot,
+    delivery_address_snapshot,
+    delivery_longitude_snapshot,
+    delivery_latitude_snapshot,
     delivery_fee,
     delivery_distance,
     delivery_duration,
@@ -24,7 +29,7 @@ INSERT INTO orders (
     replaced_by_order_id,
     pickup_code
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
 ) RETURNING *;
 
 -- name: GetOrder :one
@@ -46,9 +51,9 @@ SELECT
     m.name as merchant_name,
     m.phone as merchant_phone,
     m.address as merchant_address,
-    ua.contact_name as delivery_contact_name,
-    ua.contact_phone as delivery_contact_phone,
-    ua.detail_address as delivery_address
+    COALESCE(o.delivery_contact_name_snapshot, ua.contact_name) as delivery_contact_name,
+    COALESCE(o.delivery_contact_phone_snapshot, ua.contact_phone) as delivery_contact_phone,
+    COALESCE(o.delivery_address_snapshot, ua.detail_address) as delivery_address
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 LEFT JOIN user_addresses ua ON o.address_id = ua.id
