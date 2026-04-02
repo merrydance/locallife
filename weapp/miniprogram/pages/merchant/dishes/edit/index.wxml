@@ -46,7 +46,7 @@
         <t-input
           label="会员价(元)"
           type="digit"
-          placeholder="可选"
+          placeholder="{{isEdit ? '留空则清除会员价' : '可选'}}"
           value="{{displayMemberPrice}}"
           bind:change="onMemberPriceChange"
         />
@@ -64,6 +64,25 @@
         maxlength="200"
         indicator
       />
+    </view>
+
+    <view class="card">
+      <view class="section-title">菜品标签</view>
+      <view class="helper-row">
+        <view class="helper-text">用于标记口味、卖点等普通属性，推荐/热卖请使用下方排序标签。</view>
+        <t-button size="small" theme="primary" variant="outline" bindtap="onCreateDishTag" loading="{{tagSubmitting}}">新增标签</t-button>
+      </view>
+
+      <checkbox-group bindchange="onDishTagChange" wx:if="{{availableDishTags.length}}">
+        <view class="tag-grid">
+          <label class="tag-option" wx:for="{{availableDishTags}}" wx:key="id">
+            <checkbox value="{{item.id + ''}}" checked="{{selectedDishTagIds.indexOf(item.id) !== -1}}" color="var(--td-brand-color)" />
+            <text class="tag-option-label">{{item.name}}</text>
+          </label>
+        </view>
+      </checkbox-group>
+
+      <view wx:else class="helper-text">暂无普通菜品标签，可先新增标签。</view>
     </view>
 
     <view class="card">
@@ -185,6 +204,14 @@
           value="{{formData.prepare_time}}"
           bind:change="onInputChange"
           data-field="prepare_time"
+        />
+        <t-input
+          label="排序值"
+          type="number"
+          placeholder="0"
+          value="{{formData.sort_order}}"
+          bind:change="onInputChange"
+          data-field="sort_order"
         />
       </t-cell-group>
     </view>

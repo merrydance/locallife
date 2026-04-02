@@ -11,14 +11,6 @@
   </view>
 
   <block wx:else>
-    <view class="hero-card">
-      <view>
-        <text class="hero-title">商户主体申请中心</text>
-        <text class="hero-subtitle">{{getStatusGuide(status)}}</text>
-      </view>
-      <t-tag theme="{{getStatusTheme(status)}}" variant="dark" size="small">{{getStatusText(status)}}</t-tag>
-    </view>
-
     <view class="meta-strip">
       <view class="meta-row">
         <text class="meta-label">申请单号</text>
@@ -28,10 +20,20 @@
         <text class="meta-label">最后更新时间</text>
         <text class="meta-value">{{updatedAtLabel}}</text>
       </view>
+      <view class="meta-row">
+        <text class="meta-label">当前状态</text>
+        <view class="meta-value">
+          <t-tag theme="{{getStatusTheme(status)}}" variant="dark" size="small">{{getStatusText(status)}}</t-tag>
+        </view>
+      </view>
     </view>
 
     <view wx:if="{{actionNoticeMessage}}" class="section-block hint-card hint-card-success action-notice-card">
       <text class="action-notice-text">{{actionNoticeMessage}}</text>
+    </view>
+
+    <view wx:if="{{status && getStatusGuide(status)}}" class="section-block hint-card hint-card-info">
+      <text>{{getStatusGuide(status)}}</text>
     </view>
 
     <view wx:if="{{rejectReason}}" class="section-block">

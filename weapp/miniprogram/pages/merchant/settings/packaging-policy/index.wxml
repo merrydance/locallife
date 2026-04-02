@@ -1,0 +1,66 @@
+<custom-navbar title="包装费策略" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载包装费策略中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '包装费策略加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">适用订单类型</view>
+      <view class="type-list">
+        <view wx:for="{{orderTypeOptions}}" wx:key="key" class="type-card {{form.orderTypes[item.key] ? 'type-card-active' : ''}}" data-key="{{item.key}}" bindtap="onToggleOrderType">
+          <view class="type-head">
+            <text class="type-title">{{item.label}}</text>
+            <text class="type-check">{{form.orderTypes[item.key] ? '已启用' : '未启用'}}</text>
+          </view>
+          <text class="type-desc">{{item.desc}}</text>
+        </view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title-row">
+        <view class="section-title">包装菜品候选</view>
+        <text class="section-meta">已选 {{form.selectedDishIds.length}} 个</text>
+      </view>
+
+      <view wx:if="{{dishesError}}" class="inline-banner inline-banner-warning">
+        <text class="inline-banner-text">{{dishesErrorMessage}}</text>
+        <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+      </view>
+
+      <t-empty wx:if="{{!dishOptions.length}}" icon="info-circle" description="当前暂无可配置的菜品，请先维护门店菜品" />
+
+      <view wx:else class="dish-list">
+        <view wx:for="{{dishOptions}}" wx:key="id" class="dish-card {{item.selected ? 'dish-card-active' : ''}}" data-id="{{item.id}}" bindtap="onToggleDish">
+          <view class="dish-head">
+            <view>
+              <view class="dish-name">{{item.name}}</view>
+              <view class="dish-price">¥{{item.price / 100}}</view>
+            </view>
+            <text class="dish-check">{{item.selected ? '已选中' : '点击选择'}}</text>
+          </view>
+          <view class="dish-tags">
+            <t-tag size="small" variant="dark" theme="{{item.is_online ? 'success' : 'default'}}">{{item.is_online ? '已上架' : '未上架'}}</t-tag>
+            <t-tag size="small" variant="dark" theme="{{item.is_available ? 'primary' : 'warning'}}">{{item.is_available ? '可售' : '暂停售卖'}}</t-tag>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <view class="save-wrap">
+      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存包装费策略</t-button>
+    </view>
+  </block>
+</view>

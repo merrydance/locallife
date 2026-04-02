@@ -1,0 +1,245 @@
+.page-container {
+  min-height: 100vh;
+  padding: 24rpx;
+  box-sizing: border-box;
+  background: var(--td-bg-color-page);
+}
+
+.state-block,
+.empty-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24rpx;
+  padding: 140rpx 24rpx;
+}
+
+.state-block-compact {
+  padding: 80rpx 24rpx;
+}
+
+.retry-button {
+  padding: 18rpx 36rpx;
+  border-radius: 999rpx;
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+  font-size: 26rpx;
+}
+
+.inline-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 24rpx;
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+}
+
+.inline-banner-success {
+  background: var(--td-success-color-1);
+}
+
+.inline-banner-danger {
+  background: var(--td-error-color-1);
+}
+
+.inline-banner-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.inline-banner-action {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-brand-color);
+  font-weight: 600;
+}
+
+.hero-card,
+.review-card,
+.popup-sheet {
+  background: var(--td-bg-color-container);
+  border-radius: 20rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-card {
+  padding: 28rpx;
+  margin-bottom: 24rpx;
+}
+
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.hero-title,
+.review-order,
+.reply-section-title {
+  color: var(--td-text-color-primary);
+}
+
+.hero-title {
+  font-size: 32rpx;
+  font-weight: 700;
+}
+
+.hero-subtitle,
+.hero-meta,
+.review-time,
+.content-block,
+.reply-section-time,
+.reply-content,
+.reply-placeholder,
+.reply-hint,
+.popup-subtitle {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.review-card {
+  padding: 24rpx;
+}
+
+.card-header,
+.card-head-left,
+.tag-stack,
+.reply-section-head {
+  display: flex;
+}
+
+.card-header,
+.reply-section-head {
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.card-header {
+  align-items: flex-start;
+}
+
+.card-head-left {
+  flex-direction: column;
+  gap: 6rpx;
+  min-width: 0;
+}
+
+.review-order {
+  font-size: 30rpx;
+  font-weight: 600;
+}
+
+.tag-stack {
+  flex-shrink: 0;
+  gap: 12rpx;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.content-block {
+  margin-top: 18rpx;
+  padding: 18rpx 20rpx;
+  border-radius: 16rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-primary);
+  white-space: pre-wrap;
+}
+
+.image-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-top: 18rpx;
+}
+
+.image-thumb {
+  width: 180rpx;
+  height: 180rpx;
+  border-radius: 16rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.reply-section {
+  margin-top: 18rpx;
+  padding: 20rpx;
+  border-radius: 16rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.reply-section-head {
+  align-items: center;
+}
+
+.reply-section-title {
+  font-size: 28rpx;
+  font-weight: 600;
+}
+
+.reply-content,
+.reply-placeholder,
+.reply-hint {
+  margin-top: 14rpx;
+}
+
+.reply-content {
+  color: var(--td-text-color-primary);
+  white-space: pre-wrap;
+}
+
+.reply-hint {
+  color: var(--td-brand-color);
+}
+
+.action-row,
+.more-wrap,
+.popup-actions {
+  display: flex;
+}
+
+.action-row {
+  justify-content: flex-end;
+  margin-top: 20rpx;
+}
+
+.more-wrap {
+  justify-content: center;
+  padding: 12rpx 0 32rpx;
+}
+
+.popup-sheet {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  padding: 32rpx 24rpx calc(32rpx + constant(safe-area-inset-bottom));
+  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.popup-title {
+  font-size: 32rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.popup-subtitle {
+  display: block;
+  margin: 12rpx 0 24rpx;
+}
+
+.popup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 24rpx;
+}

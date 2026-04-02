@@ -115,7 +115,8 @@
               <text>{{item.guest_count}} 人 · {{item.paymentLabel}}</text>
             </view>
             <view class="reservation-items">{{item.itemPreview}}</view>
-            <view wx:if="{{item.canEdit || item.canCancel || item.canConfirm || item.canNoShow || item.canComplete}}" class="reservation-actions">
+            <view wx:if="{{item.cookingStartedNotice}}" class="notice-banner">{{item.cookingStartedNotice}}</view>
+            <view wx:if="{{item.canEdit || item.canCancel || item.canConfirm || item.canCheckIn || item.canStartCooking || item.canNoShow || item.canComplete}}" class="reservation-actions">
               <t-button
                 wx:if="{{item.canEdit}}"
                 size="small"
@@ -146,6 +147,28 @@
                 loading="{{actionSubmittingKey === ('confirm:' + item.id)}}"
                 catchtap="onConfirmReservation"
               >确认预订</t-button>
+              <t-button
+                wx:if="{{item.canCheckIn}}"
+                size="small"
+                theme="primary"
+                variant="outline"
+                shape="round"
+                data-id="{{item.id}}"
+                data-contact="{{item.contact_name}}"
+                loading="{{actionSubmittingKey === ('check_in:' + item.id)}}"
+                catchtap="onCheckInReservation"
+              >登记到店</t-button>
+              <t-button
+                wx:if="{{item.canStartCooking}}"
+                size="small"
+                theme="primary"
+                variant="outline"
+                shape="round"
+                data-id="{{item.id}}"
+                data-contact="{{item.contact_name}}"
+                loading="{{actionSubmittingKey === ('start_cooking:' + item.id)}}"
+                catchtap="onStartCookingReservation"
+              >通知后厨起菜</t-button>
               <t-button
                 wx:if="{{item.canNoShow}}"
                 size="small"

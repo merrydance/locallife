@@ -1,11 +1,6 @@
 <custom-navbar title="配置中心" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view class="hero-card">
-    <view class="hero-title">设置导航</view>
-    <view class="hero-copy">这里只保留长期配置能力。订单、商品、售后、索赔等日常经营动作统一回到工作台或对应业务页处理。</view>
-  </view>
-
   <view wx:for="{{configSections}}" wx:key="id" class="section-block">
     <view class="section-head">
       <view class="section-title">{{item.title}}</view>

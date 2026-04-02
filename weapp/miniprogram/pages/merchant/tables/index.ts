@@ -591,6 +591,7 @@ Page({
 
     const formData = this.data.formData
     const tableNo = (formData.table_no || '').trim()
+    const accessCode = (formData.access_code || '').trim()
     if (!tableNo) {
       wx.showToast({ title: '请填写桌号', icon: 'none' })
       return
@@ -598,6 +599,11 @@ Page({
 
     if (!Number.isInteger(formData.capacity) || formData.capacity < 1 || formData.capacity > 100) {
       wx.showToast({ title: '人数需在1-100之间', icon: 'none' })
+      return
+    }
+
+    if (accessCode && (accessCode.length < 4 || accessCode.length > 32)) {
+      wx.showToast({ title: '访问码需为4-32位', icon: 'none' })
       return
     }
 
@@ -617,7 +623,7 @@ Page({
       capacity: formData.capacity,
       description: (formData.description || '').trim() || undefined,
       minimum_spend: minimumSpend,
-      access_code: (formData.access_code || '').trim() || undefined,
+      access_code: accessCode || undefined,
       tag_ids: formData.tag_ids
     }
 

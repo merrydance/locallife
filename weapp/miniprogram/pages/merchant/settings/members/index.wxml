@@ -1,0 +1,150 @@
+<custom-navbar title="会员管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载会员列表中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '会员列表加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view wx:if="{{members.length}}" class="inline-banner inline-banner-info">
+      <text class="inline-banner-text">当前已加载 {{members.length}} 位会员，可进入详情查看流水或调整余额。</text>
+    </view>
+
+    <view wx:if="{{!members.length}}" class="state-block state-compact">
+      <t-empty description="当前还没有会员，顾客开通会员后会出现在这里" />
+    </view>
+
+    <view wx:else class="member-list">
+      <view wx:for="{{members}}" wx:key="user_id" class="member-card" data-user-id="{{item.user_id}}" bindtap="onOpenDetail">
+        <view class="member-header">
+          <view class="member-profile">
+            <image wx:if="{{item.avatar_url}}" class="member-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
+            <view wx:else class="member-avatar member-avatar-fallback">{{item.display_name.slice(0, 1)}}</view>
+            <view class="member-meta">
+              <text class="member-name">{{item.display_name}}</text>
+              <text class="member-submeta">{{item.phone_text}} · 开通于 {{item.joined_at_label}}</text>
+            </view>
+          </view>
+          <t-tag size="small" variant="dark" theme="primary">余额 {{item.balance_text}}</t-tag>
+        </view>
+
+        <view class="member-stats">
+          <view class="member-stat">
+            <text class="member-stat-label">累计充值</text>
+            <text class="member-stat-value">{{item.recharged_text}}</text>
+          </view>
+          <view class="member-stat">
+            <text class="member-stat-label">累计消费</text>
+            <text class="member-stat-value">{{item.consumed_text}}</text>
+          </view>
+        </view>
+
+        <view class="member-footer">
+          <text class="member-footer-text">查看详情与最近流水</text>
+          <text class="member-footer-arrow">></text>
+        </view>
+      </view>
+
+      <view wx:if="{{loadingMore}}" class="load-more">加载更多会员中...</view>
+      <view wx:elif="{{!hasMore}}" class="load-more load-more-end">没有更多会员了</view>
+    </view>
+  </block>
+
+  <t-popup visible="{{detailVisible}}" placement="bottom" bind:visible-change="onCloseDetail">
+    <view class="popup-sheet detail-sheet">
+      <view wx:if="{{detailLoading}}" class="popup-state">
+        <t-loading theme="circular" size="40rpx" text="加载会员详情中..." vertical />
+      </view>
+
+      <scroll-view wx:elif="{{selectedMember}}" scroll-y class="detail-scroll">
+        <view class="detail-header">
+          <view>
+            <view class="detail-name-row">
+              <text class="detail-name">{{selectedMember.display_name}}</text>
+              <t-tag size="small" variant="dark" theme="primary">余额 {{selectedMember.balance_text}}</t-tag>
+            </view>
+            <text class="detail-submeta">{{selectedMember.phone_text}} · 会员 ID {{selectedMember.membership_id}}</text>
+          </view>
+          <view class="detail-actions">
+            <t-button wx:if="{{selectedMember.phone}}" size="small" theme="default" variant="outline" shape="round" bindtap="onCallMember">联系会员</t-button>
+            <t-button size="small" theme="primary" shape="round" bindtap="onOpenAdjustPopup">调整余额</t-button>
+          </view>
+        </view>
+
+        <view class="summary-strip">
+          <view class="summary-item">
+            <text class="summary-value">{{selectedMember.recharged_text}}</text>
+            <text class="summary-label">累计充值</text>
+          </view>
+          <view class="summary-item">
+            <text class="summary-value">{{selectedMember.consumed_text}}</text>
+            <text class="summary-label">累计消费</text>
+          </view>
+        </view>
+
+        <view class="detail-section">
+          <view class="detail-section-title">最近流水</view>
+          <view wx:if="{{!selectedMember.transactions.length}}" class="detail-empty">当前没有返回交易记录</view>
+          <view wx:else class="transaction-list">
+            <view wx:for="{{selectedMember.transactions}}" wx:key="id" class="transaction-card">
+              <view class="transaction-header">
+                <t-tag size="small" variant="light" theme="{{item.theme}}">{{item.type_label}}</t-tag>
+                <text class="transaction-amount">{{item.amount_text}}</text>
+              </view>
+              <view class="transaction-row">
+                <text class="transaction-label">时间</text>
+                <text class="transaction-value">{{item.created_at_label}}</text>
+              </view>
+              <view class="transaction-row">
+                <text class="transaction-label">调整后余额</text>
+                <text class="transaction-value">{{item.balance_after_text}}</text>
+              </view>
+              <view wx:if="{{item.related_order_id}}" class="transaction-row">
+                <text class="transaction-label">关联订单</text>
+                <text class="transaction-value">#{{item.related_order_id}}</text>
+              </view>
+              <view wx:if="{{item.notes}}" class="transaction-notes">备注：{{item.notes}}</view>
+            </view>
+          </view>
+        </view>
+      </scroll-view>
+    </view>
+  </t-popup>
+
+  <t-popup visible="{{adjustVisible}}" placement="bottom" bind:visible-change="onCloseAdjustPopup">
+    <view class="popup-sheet">
+      <view class="popup-title">调整会员余额</view>
+      <text class="popup-subtitle">对 {{adjustTargetName}} 执行人工余额调整，正向用于补偿或退款，负向用于冲销。</text>
+
+      <view class="direction-row">
+        <view class="direction-chip {{adjustForm.direction === 'increase' ? 'is-active' : ''}}" data-direction="increase" bindtap="onChangeAdjustDirection">增加余额</view>
+        <view class="direction-chip {{adjustForm.direction === 'decrease' ? 'is-active' : ''}}" data-direction="decrease" bindtap="onChangeAdjustDirection">扣减余额</view>
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">调整金额（元）</text>
+        <input class="form-input" type="digit" value="{{adjustForm.amount_yuan}}" data-field="amount_yuan" placeholder="请输入正数金额" bindinput="onAdjustInput" />
+      </view>
+
+      <view class="form-item">
+        <text class="form-label">调整备注</text>
+        <textarea class="form-textarea" value="{{adjustForm.notes}}" data-field="notes" maxlength="200" placeholder="说明调整原因，后台会记录在交易流水中" bindinput="onAdjustInput" />
+      </view>
+
+      <view class="popup-actions">
+        <t-button theme="default" shape="round" bindtap="onCloseAdjustPopup">取消</t-button>
+        <t-button theme="primary" shape="round" loading="{{adjustSubmitting}}" bindtap="onSubmitAdjust">提交调整</t-button>
+      </view>
+    </view>
+  </t-popup>
+</view>

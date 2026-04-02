@@ -90,6 +90,209 @@
         <t-cell wx:if="{{order.notes}}" title="备注信息" note="{{order.notes}}" note-class="notes-text" bordered="{{false}}" />
       </view>
 
+      <view class="card-wrap refund-card">
+        <view class="card-title-row">
+          <view>
+            <view class="card-title">退款记录</view>
+            <view class="refund-card-hint">自动拒单退款和手动退款都会汇总到这里，便于跟进支付回退进度。</view>
+          </view>
+          <t-button
+            wx:if="{{payment && payment.can_create_refund}}"
+            size="small"
+            variant="outline"
+            theme="primary"
+            shape="round"
+            loading="{{refundSubmitting}}"
+            disabled="{{refundSubmitting}}"
+            bind:tap="onOpenRefundPopup"
+          >发起退款</t-button>
+        </view>
+
+        <view wx:if="{{refundNoticeMessage}}" class="card-inline-hint card-inline-hint-success">{{refundNoticeMessage}}</view>
+
+        <view wx:if="{{refundsError && !payment && !refunds.length}}" class="card-state-block">
+          <t-empty icon="error-circle" description="{{refundsErrorMessage || '退款信息加载失败，请稍后重试'}}" />
+          <t-button theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新加载</t-button>
+        </view>
+
+        <block wx:elif="{{payment}}">
+          <view wx:if="{{refundsError}}" class="card-inline-hint">{{refundsErrorMessage}}</view>
+
+          <view class="refund-payment-summary">
+            <view class="refund-payment-main">
+              <view class="refund-payment-top">
+                <text class="refund-payment-no">支付单 {{payment.out_trade_no}}</text>
+                <t-tag size="small" variant="dark" theme="{{payment.status_theme}}">{{payment.status_label}}</t-tag>
+              </view>
+              <view class="refund-payment-meta">创建于 {{payment.created_at_fmt}} · 支付金额 {{payment.amount_text}}</view>
+            </view>
+            <view class="refund-summary-strip">
+              <view class="refund-summary-item">
+                <text class="refund-summary-value">{{payment.refund_count}}</text>
+                <text class="refund-summary-label">退款笔数</text>
+              </view>
+              <view class="refund-summary-item">
+                <text class="refund-summary-value">{{payment.remaining_refund_text}}</text>
+                <text class="refund-summary-label">剩余可退</text>
+              </view>
+            </view>
+          </view>
+
+          <view wx:if="{{refunds.length}}" class="refund-list">
+            <view class="refund-item-card" wx:for="{{refunds}}" wx:key="id">
+              <view class="refund-item-header">
+                <view class="refund-item-main">
+                  <text class="refund-item-amount">{{item.refund_amount_text}}</text>
+                  <text class="refund-item-time">申请于 {{item.created_at_fmt}}</text>
+                </view>
+                <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
+              </view>
+
+              <view class="refund-item-row">
+                <text class="refund-item-label">退款类型</text>
+                <text class="refund-item-value">{{item.refund_type_label}}</text>
+              </view>
+              <view class="refund-item-row refund-item-row-top">
+                <text class="refund-item-label">退款单号</text>
+                <text class="refund-item-value refund-item-value-break">{{item.out_refund_no}}</text>
+              </view>
+              <view wx:if="{{item.refund_reason_label}}" class="refund-item-row refund-item-row-top">
+                <text class="refund-item-label">退款原因</text>
+                <text class="refund-item-value refund-item-value-break">{{item.refund_reason_label}}</text>
+              </view>
+              <view class="refund-item-row">
+                <text class="refund-item-label">完成时间</text>
+                <text class="refund-item-value">{{item.refunded_at_fmt}}</text>
+              </view>
+
+              <view wx:if="{{item.returns.length}}" class="refund-return-section">
+                <view class="refund-return-title">分账回退 {{item.return_count}} 笔</view>
+                <view wx:for="{{item.returns}}" wx:key="id" wx:for-item="returnItem" class="refund-return-card">
+                  <view class="refund-return-header">
+                    <text class="refund-return-amount">{{returnItem.amount_text}}</text>
+                    <t-tag size="small" variant="dark" theme="{{returnItem.status_theme}}">{{returnItem.status_label}}</t-tag>
+                  </view>
+                  <view class="refund-item-row refund-item-row-top">
+                    <text class="refund-item-label">回退单号</text>
+                    <text class="refund-item-value refund-item-value-break">{{returnItem.out_return_no}}</text>
+                  </view>
+                  <view class="refund-item-row refund-item-row-top">
+                    <text class="refund-item-label">回退商户号</text>
+                    <text class="refund-item-value refund-item-value-break">{{returnItem.return_mchid}}</text>
+                  </view>
+                  <view wx:if="{{returnItem.fail_reason_label}}" class="refund-item-row refund-item-row-top">
+                    <text class="refund-item-label">失败原因</text>
+                    <text class="refund-item-value refund-item-value-break">{{returnItem.fail_reason_label}}</text>
+                  </view>
+                  <view class="refund-item-row">
+                    <text class="refund-item-label">创建时间</text>
+                    <text class="refund-item-value">{{returnItem.created_at_fmt}}</text>
+                  </view>
+                  <view class="refund-item-row">
+                    <text class="refund-item-label">完成时间</text>
+                    <text class="refund-item-value">{{returnItem.finished_at_fmt}}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <t-empty wx:else icon="info-circle" description="当前支付单暂无退款记录" />
+        </block>
+
+        <t-empty wx:else icon="info-circle" description="当前订单暂无已支付支付单，暂时不能发起退款" />
+      </view>
+
+      <view class="card-wrap print-card">
+        <view class="card-title-row">
+          <view>
+            <view class="card-title">打印状态</view>
+            <view class="print-card-hint">支持查看打印记录、查询云端回执，并按需手动补打。</view>
+          </view>
+          <t-button
+            wx:if="{{order.can_manual_print}}"
+            size="small"
+            variant="outline"
+            theme="primary"
+            shape="round"
+            loading="{{manualPrinting}}"
+            disabled="{{manualPrinting}}"
+            bind:tap="onManualPrint"
+          >手动补打</t-button>
+        </view>
+
+        <view wx:if="{{printJobsError && !printJobs.length}}" class="card-state-block">
+          <t-empty icon="error-circle" description="{{printJobsErrorMessage || '打印状态加载失败，请稍后重试'}}" />
+          <t-button theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新加载</t-button>
+        </view>
+
+        <block wx:elif="{{printJobs.length}}">
+          <view wx:if="{{printJobsError}}" class="card-inline-hint">{{printJobsErrorMessage}}</view>
+
+          <view class="print-job-card" wx:for="{{printJobs}}" wx:key="id">
+            <view class="print-job-header">
+              <view class="print-job-main">
+                <text class="print-job-name">{{item.printer_name}}</text>
+                <text class="print-job-time">创建于 {{item.created_at_fmt}}</text>
+              </view>
+              <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
+            </view>
+
+            <view class="print-job-summary">{{item.summary}}</view>
+
+            <view class="print-job-row">
+              <text class="print-job-label">打印完成</text>
+              <text class="print-job-value">{{item.printed_at_fmt}}</text>
+            </view>
+
+            <view wx:if="{{item.vendor_order_id_label}}" class="print-job-row print-job-row-top">
+              <text class="print-job-label">云端单号</text>
+              <text class="print-job-value print-job-value-break">{{item.vendor_order_id_label}}</text>
+            </view>
+
+            <view wx:if="{{item.error_message_label}}" class="print-job-row print-job-row-top">
+              <text class="print-job-label">失败原因</text>
+              <text class="print-job-value print-job-value-break">{{item.error_message_label}}</text>
+            </view>
+
+            <view wx:if="{{item.cloud_status_label}}" class="print-job-row print-job-row-top">
+              <text class="print-job-label">云端状态</text>
+              <view class="print-job-value print-job-value-break">
+                <text>{{item.cloud_status_label}}</text>
+                <text wx:if="{{item.cloud_status_checked_at}}" class="print-job-status-time">最近查询 {{item.cloud_status_checked_at}}</text>
+              </view>
+            </view>
+
+            <view class="print-job-actions">
+              <t-button
+                wx:if="{{item.can_query_cloud_status}}"
+                size="small"
+                variant="outline"
+                theme="primary"
+                shape="round"
+                loading="{{queryingPrintJobStatusId === item.id}}"
+                disabled="{{queryingPrintJobStatusId === item.id || retryingPrintJobId === item.id}}"
+                bind:tap="onQueryPrintJobStatus"
+                data-id="{{item.id}}"
+              >查询云端状态</t-button>
+              <t-button
+                wx:if="{{item.can_retry}}"
+                size="small"
+                theme="primary"
+                shape="round"
+                loading="{{retryingPrintJobId === item.id}}"
+                disabled="{{retryingPrintJobId === item.id}}"
+                bind:tap="onRetryPrintJob"
+                data-id="{{item.id}}"
+                data-printer-name="{{item.printer_name}}"
+              >重试打印</t-button>
+            </view>
+          </view>
+        </block>
+
+        <t-empty wx:else icon="info-circle" description="当前订单暂无打印任务记录" />
+      </view>
+
       <view class="card-wrap timeline-card">
         <view class="card-title">订单进度</view>
         <t-steps layout="vertical" current="{{order.step_current}}" theme="dot">
@@ -118,3 +321,50 @@
 </view>
 
 <t-dialog id="t-dialog" />
+
+<t-popup wx:if="{{refundPopupVisible}}" visible="{{refundPopupVisible}}" placement="bottom" bind:visible-change="onRefundPopupVisibleChange">
+  <view class="popup-sheet">
+    <view class="popup-title">发起退款</view>
+    <text class="popup-subtitle">剩余可退金额 {{payment ? payment.remaining_refund_text : '--'}}，提交后会按微信侧退款进度继续流转。</text>
+
+    <view class="popup-block">
+      <text class="popup-label">退款方式</text>
+      <radio-group class="refund-type-options" bindchange="onRefundTypeChange">
+        <label wx:for="{{refundAvailableTypes}}" wx:key="*this" class="refund-type-option">
+          <radio value="{{item}}" checked="{{refundForm.refund_type === item}}" color="var(--td-brand-color)" />
+          <text>{{item === 'full' ? '全额退款' : '部分退款'}}</text>
+        </label>
+      </radio-group>
+      <text wx:if="{{payment && !payment.allow_full_refund}}" class="popup-tip">当前支付单已有退款记录，仅支持继续发起部分退款。</text>
+    </view>
+
+    <view wx:if="{{refundForm.refund_type === 'full'}}" class="refund-full-hint">将按剩余可退金额 {{payment ? payment.remaining_refund_text : '--'}} 发起退款。</view>
+
+    <view wx:else class="popup-block">
+      <t-input
+        label="退款金额"
+        type="digit"
+        value="{{refundForm.refund_amount}}"
+        data-field="refund_amount"
+        placeholder="请输入退款金额，单位元"
+        bindchange="onRefundFieldChange"
+      />
+    </view>
+
+    <view class="popup-block">
+      <t-textarea
+        value="{{refundForm.refund_reason}}"
+        data-field="refund_reason"
+        placeholder="可选，建议填写退款原因，方便门店复盘和顾客沟通"
+        maxlength="200"
+        indicator
+        bindchange="onRefundFieldChange"
+      />
+    </view>
+
+    <view class="popup-actions">
+      <t-button theme="default" shape="round" disabled="{{refundSubmitting}}" bind:tap="onCloseRefundPopup">取消</t-button>
+      <t-button theme="primary" shape="round" loading="{{refundSubmitting}}" bind:tap="onSubmitRefund">提交退款</t-button>
+    </view>
+  </view>
+</t-popup>

@@ -48,89 +48,57 @@
         </view>
       </view>
 
-      <view class="shortcut-row">
-        <t-button size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoStats">经营统计</t-button>
+      <view wx:if="{{todayTodos.length}}" class="todo-strip">
+        <view class="todo-chip" wx:for="{{todayTodos}}" wx:key="id" data-path="{{item.path}}" bindtap="onGoShortcut">
+          <text class="todo-chip__title">{{item.title}}</text>
+          <text class="todo-chip__count">{{item.count > 99 ? '99+' : item.count}}</text>
+        </view>
       </view>
 
-      <view class="shortcut-grid">
-        <view class="shortcut-card" wx:for="{{shortcutItems}}" wx:key="id" data-path="{{item.path}}" bindtap="onGoShortcut">
-          <view class="shortcut-title-row">
-            <text class="shortcut-title">{{item.title}}</text>
-            <view wx:if="{{item.badge}}" class="shortcut-badge">{{item.badge > 99 ? '99+' : item.badge}}</view>
-          </view>
-          <text class="shortcut-desc">{{item.desc}}</text>
+      <view class="focus-panel">
+        <view class="focus-panel__header">
+          <text class="focus-panel__label">快捷操作</text>
+          <text class="focus-panel__status">{{businessStatusText}}</text>
         </view>
+        <view class="focus-panel__actions">
+          <t-button block size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoOrderList">订单中心</t-button>
+          <t-button block size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoKitchen">进入后厨</t-button>
+          <t-button block size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoStats">经营统计</t-button>
+        </view>
+      </view>
+
+      <view class="business-strip {{isOpen ? 'is-open' : 'is-closed'}}">
+        <view class="business-strip__copy">
+          <view class="business-strip__title-row">
+            <t-icon name="{{isOpen ? 'check-circle' : 'error-circle'}}" size="28rpx" />
+            <text class="business-strip__title">{{isOpen ? '当前营业中' : '当前已打烊'}}</text>
+          </view>
+          <text class="business-strip__desc">{{isOpen ? '顾客可正常下单，忙时也可临时打烊' : '顾客暂时无法下单，已生成订单仍需继续处理'}}</text>
+        </view>
+        <t-button size="small" variant="outline" theme="default" shape="round" bind:tap="onToggleBusiness" loading="{{businessStatusSubmitting}}">{{isOpen ? '打烊' : '开门'}}</t-button>
       </view>
     </view>
   </t-skeleton>
 
-  <!-- 2. 在线开关 (粘性设计) -->
-  <t-sticky offsetTop="{{navBarHeight}}">
-    <view class="ops-bar-container">
-      <view class="ops-bar {{isOpen ? 'is-open' : 'is-closed'}}">
-        <view class="ops-info">
-          <t-icon name="{{isOpen ? 'check-circle' : 'error-circle'}}" size="32rpx" />
-          <text class="ops-text">{{isOpen ? '正在接收订单中' : '已暂停接单'}}</text>
-        </view>
-        <t-button size="extra-small" theme="primary" bind:tap="onToggleBusiness" shape="round" loading="{{businessStatusSubmitting}}">
-          {{isOpen ? '打烊' : '开门'}}
-        </t-button>
-      </view>
-    </view>
-  </t-sticky>
-
-  <t-skeleton 
-    loading="{{initialLoading}}" 
-    theme="paragraph"
+  <t-skeleton
+    loading="{{initialLoading}}"
+    rowCol="{{ [{ width: '100%', height: '260rpx' }] }}"
     t-class="skeleton-body"
-    rowCol="{{ [1, 1, { width: '100%', height: '400rpx' }, 1, 1] }}"
   >
-    <view class="card-section">
-      <view class="card-head">
-        <view class="card-title">订单流</view>
-        <t-button size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoKitchen">进入后厨</t-button>
-      </view>
-      <t-tabs value="{{currentOrderTab}}" bind:change="onOrderTabChange" t-class="order-tabs">
-        <t-tab-panel label="待接单" value="paid" />
-        <t-tab-panel label="制作中" value="preparing" />
-        <t-tab-panel label="待完成" value="ready" />
-        <t-tab-panel label="已完成" value="completed" />
-      </t-tabs>
-
-      <view wx:if="{{orderFlowLoading && !orderFlow.length}}" class="loading-state">
-        <t-loading theme="circular" text="加载订单中..." vertical />
-      </view>
-
-      <view wx:elif="{{orderFlowError && !orderFlow.length}}" class="section-state-block">
-        <t-empty icon="info-circle" description="当前分类订单暂未展示" />
-      </view>
-
-      <t-empty wx:elif="{{!orderFlow.length}}" icon="info-circle" description="当前分类暂无订单" />
-
-      <view wx:else class="order-flow-list">
-        <view class="order-card" wx:for="{{orderFlow}}" wx:key="id" data-id="{{item.id}}" bindtap="onOrderTap">
-          <view class="order-header">
-            <view class="order-left">
-              <t-tag size="small" variant="dark">{{item.order_type_label}}</t-tag>
-              <text class="order-no">#{{item.order_no_short}}</text>
-            </view>
-            <text class="order-status" style="color: {{item.status_color}}">{{item.status_label}}</text>
-          </view>
-
-          <view class="order-items">
-            <text wx:for="{{item.items}}" wx:key="id" wx:for-item="dish" wx:if="{{index < 2}}" class="order-item-line">
-              {{dish.name}} x{{dish.quantity}}
-            </text>
-          </view>
-
-          <view class="order-footer">
-            <text class="order-time">{{item.time_label}}</text>
-            <text class="order-total">¥{{item.total_amount / 100}}</text>
-          </view>
+    <view class="insight-section">
+      <view class="insight-section__head">
+        <view>
+          <view class="insight-section__title">经营洞察</view>
+          <text class="insight-section__desc">只展示首页需要快速判断的统计信息</text>
         </view>
+        <t-button size="small" variant="text" theme="primary" bind:tap="onGoStats">查看详情</t-button>
+      </view>
 
-        <view class="more-wrap">
-          <t-button size="small" theme="primary" bind:tap="onGoOrderList" shape="round">查看更多订单</t-button>
+      <view class="insight-grid">
+        <view class="insight-card" wx:for="{{insightItems}}" wx:key="id">
+          <text class="insight-card__title">{{item.title}}</text>
+          <text class="insight-card__value">{{item.value}}</text>
+          <text class="insight-card__desc">{{item.desc}}</text>
         </view>
       </view>
     </view>

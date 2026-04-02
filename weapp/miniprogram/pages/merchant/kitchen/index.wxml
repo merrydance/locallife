@@ -82,7 +82,10 @@
               <text>{{item.notes}}</text>
             </view>
 
-            <t-button block theme="primary" size="small" shape="round" bind:tap="onStartPreparing" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'preparing'}}">开始制作</t-button>
+            <view class="card-actions">
+              <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+              <t-button theme="primary" size="small" shape="round" bind:tap="onStartPreparing" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'preparing'}}">开始制作</t-button>
+            </view>
           </view>
         </view>
       </view>
@@ -126,7 +129,10 @@
               </view>
             </view>
 
-            <t-button block theme="primary" size="small" shape="round" bind:tap="onMarkReady" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'ready'}}">标记出餐</t-button>
+            <view class="card-actions">
+              <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+              <t-button theme="primary" size="small" shape="round" bind:tap="onMarkReady" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'ready'}}">标记出餐</t-button>
+            </view>
           </view>
         </view>
       </view>
@@ -162,6 +168,10 @@
             <view class="ready-hint">
               <t-icon name="check-circle" size="24rpx" />
               <text>等待骑手或顾客取餐</text>
+            </view>
+
+            <view class="card-actions card-actions-single">
+              <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
             </view>
           </view>
         </view>

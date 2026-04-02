@@ -11,14 +11,6 @@
   </view>
 
   <block wx:else>
-    <view class="hero-card">
-      <view>
-        <text class="hero-title">店铺基础设置</text>
-        <text class="hero-subtitle">维护顾客可见的店铺名称、联系电话、地址与介绍</text>
-      </view>
-      <t-tag theme="{{isOpen ? 'success' : 'warning'}}" variant="light" size="small">{{isOpen ? '营业中' : '休息中'}}</t-tag>
-    </view>
-
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
       <text class="inline-banner-text">{{refreshErrorMessage}}</text>
       <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
@@ -41,6 +33,8 @@
         <t-input label="店铺名称" value="{{form.name}}" data-field="name" placeholder="请输入店铺名称" bindchange="onInputChange" />
         <t-input label="联系电话" type="number" value="{{form.phone}}" data-field="phone" placeholder="11位联系电话" bindchange="onInputChange" />
         <t-input label="店铺地址" value="{{form.address}}" data-field="address" placeholder="请输入店铺地址" bindchange="onInputChange" />
+        <t-input label="纬度" type="digit" value="{{form.latitude}}" data-field="latitude" placeholder="例如 31.2304，范围 3.0-54.0" bindchange="onInputChange" />
+        <t-input label="经度" type="digit" value="{{form.longitude}}" data-field="longitude" placeholder="例如 121.4737，范围 73.0-135.0" bindchange="onInputChange" />
         <t-textarea label="店铺介绍" value="{{form.description}}" data-field="description" placeholder="介绍店铺招牌菜、经营特色和营业氛围" maxlength="500" indicator bindchange="onInputChange" />
       </t-cell-group>
     </view>

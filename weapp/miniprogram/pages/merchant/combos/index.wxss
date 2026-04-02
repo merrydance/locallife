@@ -4,6 +4,28 @@
   padding-bottom: 120rpx;
 }
 
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  padding: 24rpx;
+  padding-bottom: 0;
+}
+
+.filter-chip {
+  padding: 12rpx 24rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-secondary);
+  box-shadow: var(--shadow-sm);
+  font-size: 24rpx;
+}
+
+.filter-chip-active {
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+}
+
 .loading-state {
   padding: 120rpx 0;
 }
@@ -62,12 +84,36 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  gap: 16rpx;
+}
+
+.combo-price-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.combo-price-row {
+  display: flex;
+  align-items: baseline;
+  gap: 12rpx;
 }
 
 .combo-price {
   font-size: 30rpx;
   font-weight: 600;
   color: var(--td-text-color-primary);
+}
+
+.combo-original-price {
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+  text-decoration: line-through;
+}
+
+.combo-savings {
+  font-size: 22rpx;
+  color: var(--td-brand-color);
 }
 
 .combo-actions {

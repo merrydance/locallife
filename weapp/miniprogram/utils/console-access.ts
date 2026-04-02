@@ -6,7 +6,7 @@ export interface ConsoleWorkbench {
 }
 
 // 临时测试开关，角色联调完成后改回 false。
-const TEMP_DISABLE_USER_CENTER_ROLE_VALIDATION = true
+const TEMP_DISABLE_USER_CENTER_ROLE_VALIDATION = false
 
 const ALL_CONSOLE_WORKBENCHES: ConsoleWorkbench[] = [
   {

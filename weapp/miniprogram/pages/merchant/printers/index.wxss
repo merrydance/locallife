@@ -4,6 +4,13 @@
   padding-bottom: 120rpx;
 }
 
+.page-content {
+  padding: var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
 .loading-state {
   padding: 200rpx 0;
   display: flex;
@@ -44,20 +51,164 @@
   font-weight: 600;
 }
 
+.section-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  padding: var(--spacer-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.section-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.section-title {
+  font-size: var(--font-size-heading);
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.section-desc {
+  margin-top: var(--spacer-xs);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
+.section-loading {
+  padding: var(--spacer-md) 0;
+  display: flex;
+  justify-content: center;
+}
+
+.section-state-block {
+  min-height: 220rpx;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
+
+.section-empty-hint {
+  border-radius: var(--radius-md);
+  padding: var(--spacer-md);
+  background: var(--td-bg-color-secondarycontainer);
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-secondary);
+}
+
+.reconciliation-tabs {
+  --td-tabs-bg-color: transparent;
+}
+
+.reconciliation-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.reconciliation-card {
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.reconciliation-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.reconciliation-header-main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xs);
+}
+
+.reconciliation-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.reconciliation-meta {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.reconciliation-summary {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.reconciliation-info-row {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+}
+
+.reconciliation-label {
+  width: 128rpx;
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.reconciliation-value {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  flex: 1;
+  word-break: break-all;
+}
+
+.reconciliation-sn {
+  font-family: 'Courier New', monospace;
+  letter-spacing: 1px;
+}
+
+.reconciliation-multiline {
+  white-space: pre-wrap;
+  line-height: 1.6;
+}
+
+.reconciliation-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--spacer-xs);
+}
+
+.reconciliation-resolved-hint {
+  padding-top: var(--spacer-xs);
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+  text-align: right;
+}
+
 /* ==================== 打印机列表 ==================== */
 
 .printer-list {
-  padding: 24rpx;
   display: flex;
   flex-direction: column;
-  gap: 24rpx;
+  gap: var(--spacer-md);
 }
 
 .printer-card {
-  background-color: #fff;
-  border-radius: 16rpx;
+  background-color: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
   padding: 28rpx 24rpx;
-  box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.04);
+  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   gap: 20rpx;
@@ -142,7 +293,8 @@
 .form-scroll {
   max-height: 85vh;
   box-sizing: border-box;
-  padding: 32rpx 24rpx;
+  padding: 32rpx 24rpx calc(32rpx + constant(safe-area-inset-bottom));
+  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
 }
 
 .form-title {
@@ -155,6 +307,13 @@
 
 .form-item {
   margin-bottom: 28rpx;
+}
+
+.form-helper {
+  font-size: 22rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-placeholder);
+  margin-bottom: 12rpx;
 }
 
 .form-item-switch {
@@ -202,12 +361,82 @@
 }
 
 .form-actions {
-  display: flex;
-  gap: 20rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
   margin-top: 36rpx;
-  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.status-popup {
+  background: var(--td-bg-color-container);
+  border-top-left-radius: 20rpx;
+  border-top-right-radius: 20rpx;
+  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.status-popup-title {
+  text-align: center;
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.status-popup-subtitle {
+  margin-top: 12rpx;
+  text-align: center;
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.status-popup-loading {
+  padding: 48rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+.status-panel {
+  margin-top: 28rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 20rpx;
+}
+
+.status-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.status-label {
+  width: 140rpx;
+  flex-shrink: 0;
+  font-size: 24rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.status-value {
+  flex: 1;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+  word-break: break-all;
+}
+
+.status-multiline {
+  white-space: pre-wrap;
+}
+
+.status-popup-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 36rpx;
 }
 
 .form-actions t-button {
+  flex: 1;
+}
+
+.status-popup-actions t-button {
   flex: 1;
 }

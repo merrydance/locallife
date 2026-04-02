@@ -7,14 +7,16 @@ export interface Review {
     order_id: number
     user_id: number
     merchant_id: number
-    rating: number
     content: string
-    tags?: string[]       // 快捷标签
+    rating?: number
+    tags?: string[]
+    image_urls?: string[]
     images?: string[]
     is_visible: boolean
     merchant_reply?: string
     replied_at?: string
     merchant_name?: string
+    merchant_logo_url?: string
     merchant_logo?: string
     created_at: string
 }
@@ -34,13 +36,41 @@ type ReviewsResponse = PaginationEnvelope & {
     reviews?: Review[]
 }
 
-// Params
 export interface CreateReviewParams {
     order_id: number
-    rating: number
     content: string
-    tags?: string[]       // 快捷标签
-    media_asset_ids?: number[]  // 图片媒体资产ID列表（新）
+    rating?: number
+    tags?: string[]
+    media_asset_ids?: number[]
+}
+
+export interface ReplyReviewParams {
+    reply: string
+}
+
+function normalizeReview(review: Review): Review {
+    const imageUrls = Array.isArray(review.image_urls)
+        ? review.image_urls
+        : Array.isArray(review.images)
+            ? review.images
+            : []
+
+    return {
+        ...review,
+        image_urls: imageUrls,
+        images: imageUrls,
+        merchant_logo: review.merchant_logo || review.merchant_logo_url
+    }
+}
+
+function normalizeReviewListResponse(reviews: Review[] | undefined, pageId: number, pageSize: number, envelope: ReviewsResponse): ReviewListResult {
+    const normalizedReviews = Array.isArray(reviews) ? reviews.map(normalizeReview) : []
+    const normalized = normalizePaginatedResult(normalizedReviews, envelope, { page: pageId, pageSize })
+
+    return {
+        ...normalized,
+        reviews: normalizedReviews
+    }
 }
 
 export class ReviewService {
@@ -55,13 +85,17 @@ export class ReviewService {
             data: { page_id: pageId, page_size: pageSize }
         })
 
-        const reviews = Array.isArray(res?.reviews) ? res.reviews : []
-        const normalized = normalizePaginatedResult(reviews, res, { page: pageId, pageSize })
+        return normalizeReviewListResponse(res?.reviews, pageId, pageSize, res || {})
+    }
 
-        return {
-            ...normalized,
-            reviews
-        }
+    static async listMerchantAllReviews(merchantId: number, pageId: number = 1, pageSize: number = 20): Promise<ReviewListResult> {
+        const res = await request<ReviewsResponse>({
+            url: `/v1/reviews/merchants/${merchantId}/all`,
+            method: 'GET',
+            data: { page_id: pageId, page_size: pageSize }
+        })
+
+        return normalizeReviewListResponse(res?.reviews, pageId, pageSize, res || {})
     }
 
     /**
@@ -69,11 +103,13 @@ export class ReviewService {
      * POST /v1/reviews
      */
     static async createReview(data: CreateReviewParams): Promise<Review> {
-        return await request({
+        const review = await request<Review>({
             url: '/v1/reviews',
             method: 'POST',
             data
         })
+
+        return normalizeReview(review)
     }
 
     /**
@@ -81,10 +117,12 @@ export class ReviewService {
      * GET /v1/reviews/orders/:order_id
      */
     static async getReviewByOrderId(orderId: number): Promise<Review> {
-        return await request({
+        const review = await request<Review>({
             url: `/v1/reviews/orders/${orderId}`,
             method: 'GET'
         })
+
+        return normalizeReview(review)
     }
 
     /**
@@ -92,10 +130,22 @@ export class ReviewService {
      * GET /v1/reviews/:id
      */
     static async getReview(id: number): Promise<Review> {
-        return await request({
+        const review = await request<Review>({
             url: `/v1/reviews/${id}`,
             method: 'GET'
         })
+
+        return normalizeReview(review)
+    }
+
+    static async replyToReview(reviewId: number, data: ReplyReviewParams): Promise<Review> {
+        const review = await request<Review>({
+            url: `/v1/reviews/${reviewId}/reply`,
+            method: 'POST',
+            data
+        })
+
+        return normalizeReview(review)
     }
 
     /**

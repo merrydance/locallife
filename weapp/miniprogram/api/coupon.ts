@@ -13,14 +13,19 @@ export type CouponStatus = 'available' | 'used' | 'expired'
 interface BackendVoucher {
     id: number
     merchant_id: number
+    code?: string
     merchant_name?: string
     name: string
+    description?: string
     amount: number
     min_order_amount: number
     valid_from?: string
     valid_until?: string
     total_quantity?: number
     claimed_quantity?: number
+    used_quantity?: number
+    is_active?: boolean
+    allowed_order_types?: string[]
 }
 
 interface BackendUserVoucher {
@@ -54,6 +59,51 @@ export interface Coupon {
     total_count: number
     claimed_count: number
     is_claimed?: boolean // 当前用户是否已领取（列表查询时返回）
+}
+
+export interface MerchantVoucher {
+    id: number
+    merchant_id: number
+    code: string
+    name: string
+    description: string
+    amount: number
+    min_order_amount: number
+    total_quantity: number
+    claimed_quantity: number
+    used_quantity: number
+    valid_from: string
+    valid_until: string
+    is_active: boolean
+    allowed_order_types: string[]
+}
+
+export interface MerchantVoucherListResult extends PaginatedListResult<MerchantVoucher> {
+    vouchers: MerchantVoucher[]
+}
+
+export interface CreateMerchantVoucherParams {
+    code?: string
+    name: string
+    description?: string
+    amount: number
+    min_order_amount: number
+    total_quantity: number
+    valid_from: string
+    valid_until: string
+    allowed_order_types?: string[]
+}
+
+export interface UpdateMerchantVoucherParams {
+    name?: string
+    description?: string
+    amount?: number
+    min_order_amount?: number
+    total_quantity?: number
+    valid_from?: string
+    valid_until?: string
+    is_active?: boolean
+    allowed_order_types?: string[]
 }
 
 /**
@@ -117,6 +167,25 @@ function normalizeVoucherToCoupon(item: BackendVoucher): Coupon {
         total_count: item.total_quantity || 0,
         claimed_count: item.claimed_quantity || 0,
         is_claimed: false
+    }
+}
+
+function normalizeMerchantVoucher(item: BackendVoucher): MerchantVoucher {
+    return {
+        id: item.id,
+        merchant_id: item.merchant_id,
+        code: item.code || '',
+        name: item.name,
+        description: item.description || '',
+        amount: item.amount,
+        min_order_amount: item.min_order_amount,
+        total_quantity: item.total_quantity || 0,
+        claimed_quantity: item.claimed_quantity || 0,
+        used_quantity: item.used_quantity || 0,
+        valid_from: item.valid_from || '',
+        valid_until: item.valid_until || '',
+        is_active: typeof item.is_active === 'boolean' ? item.is_active : true,
+        allowed_order_types: Array.isArray(item.allowed_order_types) ? item.allowed_order_types : []
     }
 }
 
@@ -251,6 +320,51 @@ export class CouponService {
         const coupons = vouchers.map(normalizeUserVoucher)
 
         return buildCouponListResult(coupons, res, params)
+    }
+}
+
+export class MerchantVoucherService {
+    static async listMerchantVouchers(merchantId: number, pageId: number = 1, pageSize: number = 20): Promise<MerchantVoucherListResult> {
+        const res = await request<VoucherListResponse<BackendVoucher>>({
+            url: `/v1/merchants/${merchantId}/vouchers`,
+            method: 'GET',
+            data: { page_id: pageId, page_size: pageSize }
+        })
+
+        const vouchers = Array.isArray(res?.vouchers) ? res.vouchers.map(normalizeMerchantVoucher) : []
+        const normalized = normalizePaginatedResult(vouchers, res, { page: pageId, pageSize })
+
+        return {
+            ...normalized,
+            vouchers
+        }
+    }
+
+    static async createMerchantVoucher(merchantId: number, data: CreateMerchantVoucherParams): Promise<MerchantVoucher> {
+        const res = await request<BackendVoucher>({
+            url: `/v1/merchants/${merchantId}/vouchers`,
+            method: 'POST',
+            data
+        })
+
+        return normalizeMerchantVoucher(res)
+    }
+
+    static async updateMerchantVoucher(merchantId: number, voucherId: number, data: UpdateMerchantVoucherParams): Promise<MerchantVoucher> {
+        const res = await request<BackendVoucher>({
+            url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
+            method: 'PATCH',
+            data
+        })
+
+        return normalizeMerchantVoucher(res)
+    }
+
+    static async deleteMerchantVoucher(merchantId: number, voucherId: number): Promise<void> {
+        await request({
+            url: `/v1/merchants/${merchantId}/vouchers/${voucherId}`,
+            method: 'DELETE'
+        })
     }
 }
 

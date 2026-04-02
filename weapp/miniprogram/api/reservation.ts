@@ -174,6 +174,8 @@ export interface ReservationResponse {
   notes?: string
   paid_at?: string
   confirmed_at?: string
+  checked_in_at?: string
+  cooking_started_at?: string
   completed_at?: string
   cancelled_at?: string
   cancel_reason?: string

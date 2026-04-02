@@ -370,6 +370,18 @@
           <text class="section-subtitle">最近 5 笔</text>
         </view>
 
+        <view class="filter-chip-group">
+          <view
+            wx:for="{{settlementStatusOptions}}"
+            wx:key="key"
+            class="filter-chip {{currentSettlementStatus === item.key ? 'filter-chip-active' : ''}}"
+            data-key="{{item.key}}"
+            bindtap="onSelectSettlementStatus"
+          >
+            {{item.label}}
+          </view>
+        </view>
+
         <view class="fee-summary-grid">
           <view class="fee-summary-card">
             <text class="stats-label">结算总额</text>

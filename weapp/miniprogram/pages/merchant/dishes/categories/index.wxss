@@ -43,7 +43,8 @@
 
 .add-popup {
   background: var(--td-bg-color-container);
-  padding: var(--spacer-md);
+  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + constant(safe-area-inset-bottom));
+  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + env(safe-area-inset-bottom));
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
 }
@@ -85,7 +86,7 @@
 
 .popup-actions {
   margin-top: var(--spacer-lg);
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--spacer-sm);
 }

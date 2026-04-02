@@ -1,0 +1,116 @@
+<custom-navbar title="满减规则管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="hero-card">
+    <view class="hero-copy">
+      <text class="hero-title">店铺满减规则</text>
+      <text class="hero-subtitle">维护门店订单满减活动，并控制是否允许与代金券、会员权益叠加。</text>
+    </view>
+    <t-button theme="primary" shape="round" size="small" bind:tap="onAddRule">新建规则</t-button>
+  </view>
+
+  <view wx:if="{{loading && !rules.length}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载满减规则中..." vertical />
+  </view>
+
+  <t-empty wx:elif="{{!loading && !rules.length}}" description="当前还没有满减规则，点击上方按钮开始创建" />
+
+  <view wx:else class="rule-list">
+    <view wx:for="{{rules}}" wx:key="id" class="rule-card">
+      <view class="rule-header">
+        <view class="rule-main">
+          <text class="rule-name">{{item.name}}</text>
+          <text class="rule-desc">{{item.description || '未填写规则说明'}}</text>
+        </view>
+        <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
+      </view>
+
+      <view class="rule-body">
+        <view class="rule-highlight">满 {{item.min_order_amount_text}} 减 {{item.discount_amount_text}}</view>
+        <view class="rule-meta-row">
+          <text class="rule-meta-label">有效期</text>
+          <text class="rule-meta-value">{{item.valid_range_text}}</text>
+        </view>
+        <view class="rule-meta-row">
+          <text class="rule-meta-label">叠加规则</text>
+          <text class="rule-meta-value">{{item.stacking_text}}</text>
+        </view>
+      </view>
+
+      <view class="rule-actions">
+        <t-button size="small" theme="default" variant="outline" shape="round" data-id="{{item.id}}" bind:tap="onEditRule">编辑</t-button>
+        <t-button size="small" theme="primary" variant="outline" shape="round" data-id="{{item.id}}" data-active="{{item.is_active}}" bind:tap="onToggleRuleStatus">{{item.is_active ? '停用' : '启用'}}</t-button>
+        <t-button size="small" theme="danger" variant="outline" shape="round" data-id="{{item.id}}" data-name="{{item.name}}" bind:tap="onDeleteRule">删除</t-button>
+      </view>
+    </view>
+  </view>
+
+  <t-popup visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
+    <view class="form-popup">
+      <scroll-view scroll-y class="form-scroll">
+        <view class="form-title">{{isEdit ? '编辑满减规则' : '新建满减规则'}}</view>
+
+        <view class="form-item">
+          <text class="form-label">规则名称 <text class="required">*</text></text>
+          <input class="form-input" value="{{form.name}}" data-field="name" placeholder="如 午市满减" bindinput="onTextInput" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">规则说明</text>
+          <textarea class="form-textarea" value="{{form.description}}" data-field="description" placeholder="可选，说明适用时段或展示文案" bindinput="onTextInput" />
+        </view>
+
+        <view class="form-row">
+          <view class="form-item form-item-half">
+            <text class="form-label">门槛金额（元） <text class="required">*</text></text>
+            <input class="form-input" type="digit" value="{{form.min_order_amount_yuan}}" data-field="min_order_amount_yuan" placeholder="如 50" bindinput="onTextInput" />
+          </view>
+          <view class="form-item form-item-half">
+            <text class="form-label">优惠金额（元） <text class="required">*</text></text>
+            <input class="form-input" type="digit" value="{{form.discount_amount_yuan}}" data-field="discount_amount_yuan" placeholder="如 8" bindinput="onTextInput" />
+          </view>
+        </view>
+
+        <view class="form-row">
+          <view class="form-item form-item-half">
+            <text class="form-label">开始日期 <text class="required">*</text></text>
+            <picker mode="date" value="{{form.valid_from}}" data-field="valid_from" bindchange="onDateChange">
+              <view class="form-picker {{form.valid_from ? '' : 'is-placeholder'}}">{{form.valid_from || '请选择开始日期'}}</view>
+            </picker>
+          </view>
+          <view class="form-item form-item-half">
+            <text class="form-label">结束日期 <text class="required">*</text></text>
+            <picker mode="date" value="{{form.valid_until}}" data-field="valid_until" bindchange="onDateChange">
+              <view class="form-picker {{form.valid_until ? '' : 'is-placeholder'}}">{{form.valid_until || '请选择结束日期'}}</view>
+            </picker>
+          </view>
+        </view>
+
+        <view class="form-item form-item-switch">
+          <text class="form-label">可与代金券叠加</text>
+          <t-switch value="{{form.can_stack_with_voucher}}" data-field="can_stack_with_voucher" bind:change="onSwitchChange" size="large" />
+        </view>
+
+        <view class="form-item form-item-switch">
+          <text class="form-label">可与会员权益叠加</text>
+          <t-switch value="{{form.can_stack_with_membership}}" data-field="can_stack_with_membership" bind:change="onSwitchChange" size="large" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">叠加分组</text>
+          <input class="form-input" value="{{form.stacking_group}}" data-field="stacking_group" placeholder="可选，例如 lunch，便于后端分组互斥" bindinput="onTextInput" />
+        </view>
+
+        <view class="form-item form-item-switch" wx:if="{{isEdit}}">
+          <text class="form-label">立即启用</text>
+          <t-switch value="{{form.is_active}}" data-field="is_active" bind:change="onSwitchChange" size="large" />
+        </view>
+
+        <view class="form-actions">
+          <t-button theme="default" shape="round" bind:tap="onCloseForm">取消</t-button>
+          <t-button theme="primary" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
+        </view>
+      </scroll-view>
+    </view>
+  </t-popup>
+</view>

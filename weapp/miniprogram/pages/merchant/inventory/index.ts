@@ -159,11 +159,26 @@ Page({
         dish_id: item.dish_id,
         total_quantity: item.draft_total_quantity
       })
+
+      const soldQuantity = toSafeNumber(updated.sold_quantity, item.sold_quantity)
+      const reservedQuantity = toSafeNumber(updated.reserved_quantity, item.reserved_quantity)
+      const totalQuantity = toSafeNumber(updated.total_quantity, item.total_quantity)
+      const available = typeof updated.available === 'number' && Number.isFinite(updated.available)
+        ? updated.available
+        : calculateAvailable(totalQuantity, soldQuantity, reservedQuantity)
+
       this.setData({
-        [`inventories[${index}].total_quantity`]: updated.total_quantity,
-        [`inventories[${index}].available`]: updated.available,
-        [`inventories[${index}].draft_total_quantity`]: updated.total_quantity,
-        [`inventories[${index}].draft_available`]: updated.available
+        [`inventories[${index}]`]: {
+          ...item,
+          ...updated,
+          sold_quantity: soldQuantity,
+          reserved_quantity: reservedQuantity,
+          total_quantity: totalQuantity,
+          available,
+          draft_total_quantity: totalQuantity,
+          draft_available: available,
+          submitting: true
+        }
       })
     } catch (err) {
       logger.error('Update inventory failed', err)

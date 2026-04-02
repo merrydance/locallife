@@ -29,6 +29,35 @@
   color: var(--td-text-color-secondary);
 }
 
+.helper-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-md);
+}
+
+.tag-grid {
+  margin-top: var(--spacer-md);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
+}
+
+.tag-option {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-height: 56rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-page);
+}
+
+.tag-option-label {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+}
+
 .spec-empty {
   margin-top: var(--spacer-md);
   padding: var(--spacer-md);

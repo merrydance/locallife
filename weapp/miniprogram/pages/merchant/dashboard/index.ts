@@ -1,6 +1,11 @@
 import { getStableBarHeights } from '../../../utils/responsive'
-import { MerchantOrderManagementService, OrderManagementAdapter, OrderResponse } from '../../../api/order-management'
-import { MerchantStatsService } from '../../../api/merchant-stats'
+import { MerchantOrderManagementService } from '../../../api/order-management'
+import {
+  MerchantHourlyStatRow,
+  MerchantOrderSourceStatRow,
+  MerchantRepurchaseRateResponse,
+  MerchantStatsService
+} from '../../../api/merchant-stats'
 import { listMerchantComplaints } from '../../../api/merchant-complaints'
 import { ReservationService } from '../../../api/reservation'
 import { getUserInfo } from '../../../api/auth'
@@ -14,58 +19,136 @@ import { wsManager, WSMessageType } from '../../../utils/websocket'
 import { playNewOrderAlert, destroyAudioAlert } from '../../../utils/audio-alert'
 
 type WsUnsubscribe = () => void
-type OrderStatusTab = 'paid' | 'preparing' | 'ready' | 'completed'
 
-interface DashboardOrderItem extends OrderResponse {
-  order_no_short: string
-  order_type_label: string
-  status_label: string
-  status_color: string
-  time_label: string
-}
-
-interface DashboardShortcutItem {
+interface DashboardTodoItem {
   id: string
   title: string
-  desc: string
   path: string
-  badge?: number
+  count: number
+  accent: 'urgent' | 'warning' | 'neutral'
 }
 
-function buildShortcutItems(pendingReservations: number, pendingComplaints: number): DashboardShortcutItem[] {
-  return [
+interface DashboardInsightItem {
+  id: string
+  title: string
+  value: string
+  desc: string
+}
+
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  takeout: '外卖',
+  dine_in: '堂食',
+  takeaway: '自取',
+  reservation: '预订'
+}
+
+function buildTodoItems(params: {
+  pendingPaidOrders: number
+  pendingReservations: number
+  pendingComplaints: number
+  printAnomalies: number
+}): DashboardTodoItem[] {
+  const items: DashboardTodoItem[] = [
+    {
+      id: 'paidOrders',
+      title: '待接单',
+      path: '/pages/merchant/orders/list/index?status=paid',
+      count: params.pendingPaidOrders,
+      accent: 'urgent'
+    },
     {
       id: 'reservations',
-      title: '预订管理',
-      desc: '处理当日预订',
+      title: '待确认预订',
       path: '/pages/merchant/reservations/index',
-      badge: pendingReservations > 0 ? pendingReservations : undefined
+      count: params.pendingReservations,
+      accent: 'warning'
     },
     {
       id: 'complaints',
-      title: '投诉处理',
-      desc: '及时回复投诉',
+      title: '待回复投诉',
       path: '/pages/merchant/complaints/index',
-      badge: pendingComplaints > 0 ? pendingComplaints : undefined
+      count: params.pendingComplaints,
+      accent: 'warning'
     },
     {
-      id: 'staff',
-      title: '员工管理',
-      desc: '分配角色与邀请',
-      path: '/pages/merchant/staff/index'
-    },
-    {
-      id: 'config',
-      title: '配置中心',
-      desc: '统一维护店铺设置',
-      path: '/pages/merchant/config/index'
+      id: 'printAnomalies',
+      title: '打印异常',
+      path: '/pages/merchant/printers/index',
+      count: params.printAnomalies,
+      accent: 'neutral'
     }
   ]
+
+  return items.filter((item) => item.count > 0)
 }
 
-function getShortcutBadge(items: DashboardShortcutItem[], id: string) {
+function getTodoCount(items: DashboardTodoItem[], id: string) {
   const matched = items.find((item) => item.id === id)
-  return typeof matched?.badge === 'number' ? matched.badge : 0
+  return typeof matched?.count === 'number' ? matched.count : 0
+}
+
+function formatAmount(fen: number): string {
+  return `¥${(fen / 100).toFixed(2)}`
+}
+
+function formatPercent(value: number): string {
+  if (!Number.isFinite(value)) return '--'
+  return `${value.toFixed(1)}%`
+}
+
+function buildInsightItems(params: {
+  hourlyStats?: MerchantHourlyStatRow[]
+  sourceStats?: MerchantOrderSourceStatRow[]
+  repurchase?: MerchantRepurchaseRateResponse
+}): DashboardInsightItem[] {
+  const insights: DashboardInsightItem[] = []
+
+  const peakHour = (params.hourlyStats || []).reduce<MerchantHourlyStatRow | null>((best, current) => {
+    if (!best) return current
+    return (current.order_count || 0) > (best.order_count || 0) ? current : best
+  }, null)
+
+  insights.push({
+    id: 'peak-hour',
+    title: '今日高峰',
+    value: peakHour ? `${String(peakHour.hour).padStart(2, '0')}:00` : '--',
+    desc: peakHour ? `${peakHour.order_count || 0} 单，客单 ${formatAmount(peakHour.avg_order_amount || 0)}` : '今日暂未形成明显高峰'
+  })
+
+  const sourceRows = params.sourceStats || []
+  const totalSourceOrders = sourceRows.reduce((sum, item) => sum + (item.order_count || 0), 0)
+  const dominantSource = sourceRows.reduce<MerchantOrderSourceStatRow | null>((best, current) => {
+    if (!best) return current
+    return (current.order_count || 0) > (best.order_count || 0) ? current : best
+  }, null)
+
+  insights.push({
+    id: 'order-structure',
+    title: '订单结构',
+    value: dominantSource ? (ORDER_TYPE_LABELS[dominantSource.order_type] || dominantSource.order_type || '其他') : '--',
+    desc: dominantSource && totalSourceOrders > 0
+      ? `占比 ${(((dominantSource.order_count || 0) / totalSourceOrders) * 100).toFixed(1)}%，共 ${dominantSource.order_count || 0} 单`
+      : '今日暂无来源结构数据'
+  })
+
+  insights.push({
+    id: 'repurchase',
+    title: '近30天复购',
+    value: params.repurchase ? formatPercent(params.repurchase.repurchase_rate || 0) : '--',
+    desc: params.repurchase
+      ? `${params.repurchase.repeat_users || 0} 位复购用户，人均 ${Number.isFinite(params.repurchase.avg_orders_per_user) ? params.repurchase.avg_orders_per_user.toFixed(2) : '--'} 单`
+      : '近30天复购数据暂未同步'
+  })
+
+  return insights
+}
+
+function buildBusinessStatusText(isOpen: boolean, todoCount: number) {
+  if (isOpen) {
+    return todoCount > 0 ? `营业中，当前有 ${todoCount} 项待跟进` : '营业中，当前经营平稳'
+  }
+
+  return todoCount > 0 ? `已暂停接单，仍有 ${todoCount} 项待处理` : '已暂停接单，可优先处理配置与复盘'
 }
 
 function buildRefreshErrorMessage(messages: string[]) {
@@ -93,12 +176,9 @@ Page({
       orderCount: 0,
       avgOrderPrice: 0
     },
-    shortcutItems: buildShortcutItems(0, 0) as DashboardShortcutItem[],
-    currentOrderTab: 'paid' as OrderStatusTab,
-    orderFlowLoading: false,
-    orderFlowError: false,
-    orderFlowErrorMessage: '',
-    orderFlow: [] as DashboardOrderItem[],
+    todayTodos: [] as DashboardTodoItem[],
+    insightItems: buildInsightItems({}) as DashboardInsightItem[],
+    businessStatusText: '营业中，当前经营平稳',
     loading: false,
     businessStatusSubmitting: false,
     accessDenied: false,
@@ -218,6 +298,7 @@ Page({
       const today = dayjs().format('YYYY-MM-DD')
       let runtimeLoaded = false
       let summaryLoaded = false
+      let resolvedIsOpen = this.data.isOpen
       const refreshErrors: string[] = []
       const refreshErrorStates: Array<{ message: string, canRetry: boolean }> = []
       const addRefreshError = (error: unknown, fallback: string) => {
@@ -238,12 +319,13 @@ Page({
           : null
 
         runtimeLoaded = true
+        resolvedIsOpen = merchantOpenStatus?.is_open ?? merchantProfile.is_open
         this.setData({
           merchantInfo: {
             name: merchantProfile.name,
             merchant_id: merchantProfile.id
           },
-          isOpen: merchantOpenStatus?.is_open ?? merchantProfile.is_open
+          isOpen: resolvedIsOpen
         })
 
         try {
@@ -263,22 +345,30 @@ Page({
         addRefreshError(merchantProfileResult.reason, '工作台基础信息加载失败，请重试')
       }
 
-      const [overview, reservationStats, complaintResult] = await settleAll([
+      const recentThirtyDays = dayjs().subtract(29, 'day').format('YYYY-MM-DD')
+      const [overview, reservationStats, complaintResult, printAnomaliesResult, hourlyResult, sourceResult, repurchaseResult] = await settleAll([
         MerchantStatsService.getOverview({
           start_date: today,
           end_date: today
         }),
         ReservationService.getReservationStats(),
-        listMerchantComplaints({ state: 'PENDING_RESPONSE', page: 1, limit: 100 })
+        listMerchantComplaints({ state: 'PENDING_RESPONSE', page: 1, limit: 100 }),
+        MerchantOrderManagementService.listPrintAnomalies({ page_id: 1, page_size: 1, status: 'failed' }),
+        MerchantStatsService.getHourlyStats({ start_date: today, end_date: today }),
+        MerchantStatsService.getOrderSources({ start_date: today, end_date: today }),
+        MerchantStatsService.getRepurchaseRate({ start_date: recentThirtyDays, end_date: today })
       ] as const)
 
-      const currentShortcutItems = this.data.shortcutItems
+      const currentTodoItems = this.data.todayTodos
       const pendingReservations = reservationStats.status === 'fulfilled'
         ? reservationStats.value.paid_count || 0
-        : getShortcutBadge(currentShortcutItems, 'reservations')
+        : getTodoCount(currentTodoItems, 'reservations')
       const pendingComplaints = complaintResult.status === 'fulfilled'
         ? complaintResult.value.complaints.length
-        : getShortcutBadge(currentShortcutItems, 'complaints')
+        : getTodoCount(currentTodoItems, 'complaints')
+      const printAnomalies = printAnomaliesResult.status === 'fulfilled'
+        ? printAnomaliesResult.value.total || printAnomaliesResult.value.items.length
+        : getTodoCount(currentTodoItems, 'printAnomalies')
 
       if (overview.status === 'fulfilled') {
         summaryLoaded = true
@@ -291,12 +381,7 @@ Page({
             revenue,
             orderCount,
             avgOrderPrice: orderCount > 0 ? Math.round(revenue / orderCount) : 0
-          },
-          shortcutItems: buildShortcutItems(pendingReservations, pendingComplaints)
-        })
-      } else {
-        this.setData({
-          shortcutItems: buildShortcutItems(pendingReservations, pendingComplaints)
+          }
         })
       }
 
@@ -315,32 +400,77 @@ Page({
         addRefreshError(complaintResult.reason, '投诉待办同步失败，请稍后重试')
       }
 
+      if (printAnomaliesResult.status === 'rejected') {
+        logger.error('Failed to fetch printer anomaly reminders', printAnomaliesResult.reason)
+        addRefreshError(printAnomaliesResult.reason, '打印异常同步失败，请稍后重试')
+      }
+
+      if (hourlyResult.status === 'rejected') {
+        logger.error('Failed to fetch dashboard hourly insights', hourlyResult.reason)
+        addRefreshError(hourlyResult.reason, '高峰时段同步失败，请稍后重试')
+      }
+
+      if (sourceResult.status === 'rejected') {
+        logger.error('Failed to fetch dashboard source insights', sourceResult.reason)
+        addRefreshError(sourceResult.reason, '订单结构同步失败，请稍后重试')
+      }
+
+      if (repurchaseResult.status === 'rejected') {
+        logger.error('Failed to fetch dashboard repurchase insights', repurchaseResult.reason)
+        addRefreshError(repurchaseResult.reason, '复购数据同步失败，请稍后重试')
+      }
+
+      let pendingPaidOrders = getTodoCount(currentTodoItems, 'paidOrders')
+
       try {
-        const orderFlow = await this.fetchOrderFlow(this.data.currentOrderTab)
+        const paidOrderResult = await MerchantOrderManagementService.getOrderList({
+          page_id: 1,
+          page_size: 1,
+          status: 'paid'
+        })
+        pendingPaidOrders = paidOrderResult.total || 0
+
+        const todayTodos = buildTodoItems({
+          pendingPaidOrders,
+          pendingReservations,
+          pendingComplaints,
+          printAnomalies
+        })
+        const todoCount = todayTodos.reduce((sum, item) => sum + item.count, 0)
+        const nextInsights = buildInsightItems({
+          hourlyStats: hourlyResult.status === 'fulfilled' ? hourlyResult.value : this.data.insightItems[0] ? undefined : [],
+          sourceStats: sourceResult.status === 'fulfilled' ? sourceResult.value : this.data.insightItems[1] ? undefined : [],
+          repurchase: repurchaseResult.status === 'fulfilled' ? repurchaseResult.value : undefined
+        })
+
         this.setData({
-          orderFlow,
-          orderFlowError: false,
-          orderFlowErrorMessage: ''
+          todayTodos,
+          insightItems: nextInsights,
+          businessStatusText: buildBusinessStatusText(resolvedIsOpen, todoCount)
         })
       } catch (error) {
-        const errorState = getConsoleDashboardErrorState('merchant', error, '订单流加载失败，请稍后重试')
+        const errorState = getConsoleDashboardErrorState('merchant', error, '待接单数量同步失败，请稍后重试')
         const message = errorState.message
+        const todayTodos = buildTodoItems({
+          pendingPaidOrders,
+          pendingReservations,
+          pendingComplaints,
+          printAnomalies
+        })
+        const todoCount = todayTodos.reduce((sum, item) => sum + item.count, 0)
         logger.error('Load dashboard order flow failed', error)
         this.setData({
-          orderFlowError: true,
-          orderFlowErrorMessage: message,
-          ...(isFirstLoad ? { orderFlow: [] } : {})
+          todayTodos,
+          businessStatusText: buildBusinessStatusText(resolvedIsOpen, todoCount)
         })
         refreshErrors.push(message)
         refreshErrorStates.push({ message, canRetry: errorState.canRetry })
       }
 
-      const orderFlowLoaded = !this.data.orderFlowError
-
-      if (isFirstLoad && (!runtimeLoaded || !summaryLoaded || !orderFlowLoaded)) {
+      if (isFirstLoad && (!runtimeLoaded || !summaryLoaded)) {
         const initialErrorState = refreshErrorStates[0] || getConsoleDashboardErrorState(
           'merchant',
-          refreshErrors[0] || this.data.orderFlowErrorMessage,
+          refreshErrors[0],
           '商户工作台暂时无法加载，请稍后重试。'
         )
         this.setData({
@@ -383,65 +513,8 @@ Page({
     this.refreshData()
   },
 
-  async fetchOrderFlow(status: OrderStatusTab): Promise<DashboardOrderItem[]> {
-    const result = await MerchantOrderManagementService.getOrderList({
-      page_id: 1,
-      page_size: 10,
-      status
-    })
-    const orderList = result.orders || []
-    return orderList.map((order) => ({
-      ...order,
-      order_no_short: order.order_no.slice(-6).toUpperCase(),
-      order_type_label: OrderManagementAdapter.formatOrderType(order.order_type),
-      status_label: OrderManagementAdapter.formatOrderStatus(order.status),
-      status_color: OrderManagementAdapter.getStatusColor(order.status),
-      time_label: dayjs(order.created_at).format('HH:mm')
-    }))
-  },
-
-  async loadOrderFlow(status: OrderStatusTab) {
-    this.setData({
-      orderFlowLoading: true,
-      orderFlowError: false,
-      orderFlowErrorMessage: '',
-      refreshErrorMessage: '',
-      refreshErrorCanRetry: true,
-      orderFlow: []
-    })
-    try {
-      const orderFlow = await this.fetchOrderFlow(status)
-      this.setData({
-        orderFlow,
-        orderFlowError: false,
-        orderFlowErrorMessage: '',
-        refreshErrorMessage: '',
-        refreshErrorCanRetry: true
-      })
-    } catch (err) {
-      const errorState = getConsoleDashboardErrorState('merchant', err, '订单流加载失败，请稍后重试')
-      const message = errorState.message
-      logger.error('Load dashboard order flow failed', err)
-      this.setData({
-        orderFlow: [],
-        orderFlowError: true,
-        orderFlowErrorMessage: message,
-        refreshErrorMessage: errorState.canRetry ? `${message}，当前已保留上次同步结果` : message,
-        refreshErrorCanRetry: errorState.canRetry
-      })
-    } finally {
-      this.setData({ orderFlowLoading: false })
-    }
-  },
-
-  onOrderTabChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatusTab }>) {
-    const value = e.detail.value
-    this.setData({ currentOrderTab: value })
-    this.loadOrderFlow(value)
-  },
-
   onGoOrderList() {
-    wx.navigateTo({ url: `/pages/merchant/orders/list/index?status=${this.data.currentOrderTab}` })
+    wx.navigateTo({ url: '/pages/merchant/orders/list/index' })
   },
 
   onGoKitchen() {
@@ -458,12 +531,6 @@ Page({
     wx.navigateTo({ url: path })
   },
 
-  onOrderTap(e: WechatMiniprogram.TouchEvent) {
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-    wx.navigateTo({ url: `/pages/merchant/orders/detail/index?id=${id}` })
-  },
-
   onRetry() {
     this.refreshData()
   },
@@ -472,19 +539,34 @@ Page({
     this.refreshData()
   },
 
-  onRetryOrderFlow() {
-    this.loadOrderFlow(this.data.currentOrderTab)
-  },
-
   async onToggleBusiness() {
     if (this.data.businessStatusSubmitting) return
 
     const targetOpen = !this.data.isOpen
+    const confirmed = await new Promise<boolean>((resolve) => {
+      wx.showModal({
+        title: targetOpen ? '确认开始营业' : '确认暂停接单',
+        content: targetOpen
+          ? '恢复营业后，顾客可以重新下单，工作台会继续接收新订单提醒。'
+          : '暂停接单后，顾客暂时无法提交新订单，已生成订单仍需继续处理。',
+        confirmText: targetOpen ? '确认开门' : '确认打烊',
+        cancelText: '取消',
+        success: (res) => resolve(!!res.confirm),
+        fail: () => resolve(false)
+      })
+    })
+
+    if (!confirmed) return
+
     this.setData({ businessStatusSubmitting: true })
 
     try {
       const response = await updateMyMerchantOpenStatus(targetOpen)
-      this.setData({ isOpen: response.is_open })
+      const todoCount = this.data.todayTodos.reduce((sum, item) => sum + item.count, 0)
+      this.setData({
+        isOpen: response.is_open,
+        businessStatusText: buildBusinessStatusText(response.is_open, todoCount)
+      })
       this.refreshData().catch((err) => logger.error('Refresh dashboard after toggle failed', err))
     } catch (err: unknown) {
       logger.error('Update merchant open status failed', err)

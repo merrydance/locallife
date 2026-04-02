@@ -20,6 +20,20 @@
     <t-tab-panel label="全部" value="" />
   </t-tabs>
 
+  <scroll-view scroll-x class="type-filter-strip" show-scrollbar="false">
+    <view class="type-filter-row">
+      <view
+        wx:for="{{orderTypeOptions}}"
+        wx:key="value"
+        class="type-filter-pill {{orderTypeFilter === item.value ? 'is-active' : ''}}"
+        data-value="{{item.value}}"
+        bindtap="onOrderTypeChange"
+      >
+        {{item.label}}
+      </view>
+    </view>
+  </scroll-view>
+
   <view class="list-section">
     <view wx:if="{{refreshErrorMessage}}" class="section-error-hint">
       <text>{{refreshErrorMessage}}</text>

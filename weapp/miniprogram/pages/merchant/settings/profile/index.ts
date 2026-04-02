@@ -8,13 +8,17 @@ interface MerchantProfileForm {
   phone: string
   address: string
   description: string
+  latitude: string
+  longitude: string
 }
 
 const EMPTY_FORM: MerchantProfileForm = {
   name: '',
   phone: '',
   address: '',
-  description: ''
+  description: '',
+  latitude: '',
+  longitude: ''
 }
 
 function buildForm(profile: MerchantOperatorResponse): MerchantProfileForm {
@@ -22,7 +26,9 @@ function buildForm(profile: MerchantOperatorResponse): MerchantProfileForm {
     name: profile.name || '',
     phone: profile.phone || '',
     address: profile.address || '',
-    description: profile.description || ''
+    description: profile.description || '',
+    latitude: profile.latitude || '',
+    longitude: profile.longitude || ''
   }
 }
 
@@ -31,6 +37,13 @@ function hasFormChanged(current: MerchantProfileForm, initial: MerchantProfileFo
     || current.phone !== initial.phone
     || current.address !== initial.address
     || current.description !== initial.description
+    || current.latitude !== initial.latitude
+    || current.longitude !== initial.longitude
+}
+
+function isCoordinateInRange(value: string, min: number, max: number): boolean {
+  const parsed = Number.parseFloat(value)
+  return Number.isFinite(parsed) && parsed >= min && parsed <= max
 }
 
 const getErrorMessage = getErrorUserMessage
@@ -149,7 +162,7 @@ Page({
   },
 
   validateForm() {
-    const { name, phone, address, description } = this.data.form
+    const { name, phone, address, description, latitude, longitude } = this.data.form
     if (name.trim().length < 2) {
       wx.showToast({ title: '店铺名称至少 2 个字', icon: 'none' })
       return false
@@ -166,6 +179,32 @@ Page({
       wx.showToast({ title: '店铺介绍最多 500 字', icon: 'none' })
       return false
     }
+
+    const latitudeValue = latitude.trim()
+    const longitudeValue = longitude.trim()
+    const initialLatitudeValue = this.data.initialForm.latitude.trim()
+    const initialLongitudeValue = this.data.initialForm.longitude.trim()
+
+    if (!latitudeValue && initialLatitudeValue) {
+      wx.showToast({ title: '当前暂不支持清空纬度，请填写有效值', icon: 'none' })
+      return false
+    }
+
+    if (!longitudeValue && initialLongitudeValue) {
+      wx.showToast({ title: '当前暂不支持清空经度，请填写有效值', icon: 'none' })
+      return false
+    }
+
+    if (latitudeValue && !isCoordinateInRange(latitudeValue, 3, 54)) {
+      wx.showToast({ title: '纬度需在 3.0 到 54.0 之间', icon: 'none' })
+      return false
+    }
+
+    if (longitudeValue && !isCoordinateInRange(longitudeValue, 73, 135)) {
+      wx.showToast({ title: '经度需在 73.0 到 135.0 之间', icon: 'none' })
+      return false
+    }
+
     return true
   },
 
@@ -177,12 +216,16 @@ Page({
     wx.showLoading({ title: '保存中...' })
 
     try {
+      const latitude = this.data.form.latitude.trim()
+      const longitude = this.data.form.longitude.trim()
       const payload = {
         version: this.data.version,
         name: this.data.form.name.trim(),
         phone: this.data.form.phone.trim() || undefined,
         address: this.data.form.address.trim() || undefined,
-        description: this.data.form.description.trim() || undefined
+        description: this.data.form.description.trim() || undefined,
+        latitude: latitude || undefined,
+        longitude: longitude || undefined
       }
       const updated = await updateMyMerchantProfile(payload)
       const form = buildForm(updated)

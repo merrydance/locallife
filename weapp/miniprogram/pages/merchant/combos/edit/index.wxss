@@ -42,9 +42,39 @@
   color: var(--td-text-color-secondary);
 }
 
+.tag-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin-bottom: 12rpx;
+}
+
+.tag-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.tag-option {
+  display: flex;
+  align-items: center;
+  gap: 10rpx;
+  min-height: 52rpx;
+  padding: 10rpx 18rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-page);
+}
+
+.tag-option-label {
+  font-size: 24rpx;
+  color: var(--td-text-color-primary);
+}
+
 .dish-option {
   display: flex;
   align-items: center;
+  gap: 12rpx;
   padding: 12rpx 0;
 }
 
@@ -57,7 +87,21 @@
 }
 
 .dish-meta {
+  flex: 1;
   margin-left: 12rpx;
+}
+
+.dish-qty-control {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8rpx;
+  flex-shrink: 0;
+}
+
+.dish-qty-label {
+  font-size: 22rpx;
+  color: var(--td-text-color-secondary);
 }
 
 .dish-name {
@@ -124,6 +168,10 @@
   margin-top: 8rpx;
   font-size: 24rpx;
   color: var(--td-text-color-secondary);
+}
+
+.summary-note-inline {
+  margin-top: 16rpx;
 }
 
 .footer {

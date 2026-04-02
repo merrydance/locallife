@@ -11,15 +11,6 @@
   </view>
 
   <block wx:else>
-    <view class="hero-card">
-      <text class="hero-title">每周营业时段</text>
-      <text class="hero-subtitle">支持为同一天配置多个营业时段。已有特殊日期安排会在保存时原样保留，不会被这次修改覆盖。</text>
-      <view class="hero-tags">
-        <t-tag theme="primary" variant="light" size="small">每周配置</t-tag>
-        <t-tag wx:if="{{specialHours.length}}" theme="warning" variant="light" size="small">特殊日期 {{specialHours.length}} 条</t-tag>
-      </view>
-    </view>
-
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
       <text class="inline-banner-text">{{refreshErrorMessage}}</text>
       <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>

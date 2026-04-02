@@ -23,7 +23,10 @@
           {{item.label}}
         </view>
       </view>
-      <text class="updated-at">更新于 {{updatedAtLabel}}</text>
+      <view class="toolbar-actions">
+        <t-button size="small" theme="primary" variant="outline" shape="round" bind:tap="onGoCustomerStats">客户分析</t-button>
+        <text class="updated-at">更新于 {{updatedAtLabel}}</text>
+      </view>
     </view>
 
     <view wx:if="{{summaryAvailable}}">
@@ -110,6 +113,195 @@
       <view wx:else class="section-state-block section-state-block-compact">
         <t-empty description="{{topDishesErrorMessage || '热销菜加载失败，请重试'}}" />
         <view class="retry-button" bindtap="onRetryTopDishes">重新加载热销菜</view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <text class="section-title">日趋势</text>
+        <text class="section-subtitle">观察每天营收与订单波动</text>
+      </view>
+
+      <view wx:if="{{dailyStatsError && dailyStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
+        <text>{{dailyStatsErrorMessage}}</text>
+        <text class="section-error-action" bindtap="onRetryDailyStats">重新同步</text>
+      </view>
+
+      <view wx:if="{{dailyStatsAvailable}}">
+        <t-empty wx:if="{{!dailyStats.length}}" description="当前区间暂无日趋势数据" />
+
+        <view wx:else class="insight-list">
+          <view wx:for="{{dailyStats}}" wx:key="date" class="insight-card">
+            <view class="insight-head">
+              <text class="insight-title">{{item.dateLabel}}</text>
+              <text class="insight-value">{{item.totalSalesText}}</text>
+            </view>
+            <view class="insight-meta">
+              <text>{{item.orderCountLabel}}</text>
+              <text>{{item.orderMixLabel}}</text>
+              <text>服务费 {{item.commissionText}}</text>
+            </view>
+            <view class="insight-progress-track">
+              <view class="insight-progress-fill insight-progress-fill-daily" style="width: {{item.barWidth}}"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:else class="section-state-block section-state-block-compact">
+        <t-empty description="{{dailyStatsErrorMessage || '日趋势加载失败，请重试'}}" />
+        <view class="retry-button" bindtap="onRetryDailyStats">重新加载日趋势</view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <text class="section-title">订单来源</text>
+        <text class="section-subtitle">看清本期成交结构</text>
+      </view>
+
+      <view wx:if="{{sourceStatsError && sourceStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
+        <text>{{sourceStatsErrorMessage}}</text>
+        <text class="section-error-action" bindtap="onRetrySourceStats">重新同步</text>
+      </view>
+
+      <view wx:if="{{sourceStatsAvailable}}">
+        <t-empty wx:if="{{!sourceStats.length}}" description="当前区间暂无订单来源数据" />
+
+        <view wx:else class="insight-list">
+          <view wx:for="{{sourceStats}}" wx:key="order_type" class="insight-card">
+            <view class="insight-head">
+              <text class="insight-title">{{item.orderTypeLabel}}</text>
+              <text class="insight-value">{{item.totalSalesText}}</text>
+            </view>
+            <view class="insight-meta">
+              <text>{{item.orderCountLabel}}</text>
+              <text>{{item.shareText}}</text>
+            </view>
+            <view class="insight-progress-track">
+              <view class="insight-progress-fill" style="width: {{item.barWidth}}"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:else class="section-state-block section-state-block-compact">
+        <t-empty description="{{sourceStatsErrorMessage || '订单来源加载失败，请重试'}}" />
+        <view class="retry-button" bindtap="onRetrySourceStats">重新加载订单来源</view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <text class="section-title">高峰时段</text>
+        <text class="section-subtitle">辅助排班与备餐</text>
+      </view>
+
+      <view wx:if="{{hourlyStatsError && hourlyStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
+        <text>{{hourlyStatsErrorMessage}}</text>
+        <text class="section-error-action" bindtap="onRetryHourlyStats">重新同步</text>
+      </view>
+
+      <view wx:if="{{hourlyStatsAvailable}}">
+        <t-empty wx:if="{{!hourlyStats.length}}" description="当前区间暂无时段成交数据" />
+
+        <view wx:else class="insight-list">
+          <view wx:for="{{hourlyStats}}" wx:key="hour" class="insight-card insight-card-compact">
+            <view class="insight-head">
+              <text class="insight-title">{{item.hourLabel}}</text>
+              <text class="insight-value">{{item.orderCountLabel}}</text>
+            </view>
+            <view class="insight-progress-track">
+              <view class="insight-progress-fill insight-progress-fill-accent" style="width: {{item.barWidth}}"></view>
+            </view>
+            <view class="insight-meta">
+              <text>平均客单 {{item.avgOrderAmountText}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:else class="section-state-block section-state-block-compact">
+        <t-empty description="{{hourlyStatsErrorMessage || '高峰时段加载失败，请重试'}}" />
+        <view class="retry-button" bindtap="onRetryHourlyStats">重新加载高峰时段</view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <text class="section-title">顾客复购</text>
+        <text class="section-subtitle">观察回头客质量</text>
+      </view>
+
+      <view wx:if="{{repurchaseError && repurchaseAvailable}}" class="section-error-hint section-error-hint-spaced">
+        <text>{{repurchaseErrorMessage}}</text>
+        <text class="section-error-action" bindtap="onRetryRepurchase">重新同步</text>
+      </view>
+
+      <view wx:if="{{repurchaseAvailable}}" class="insight-grid">
+        <view class="insight-stat-card accent-soft">
+          <text class="insight-stat-label">复购率</text>
+          <text class="insight-stat-value">{{repurchaseSummary.repurchaseRateText}}</text>
+          <text class="insight-stat-meta">近 {{currentRange === '7d' ? '7' : '30'}} 天</text>
+        </view>
+        <view class="insight-stat-card">
+          <text class="insight-stat-label">累计顾客</text>
+          <text class="insight-stat-value">{{repurchaseSummary.totalUsers}}</text>
+          <text class="insight-stat-meta">参与下单用户</text>
+        </view>
+        <view class="insight-stat-card">
+          <text class="insight-stat-label">复购顾客</text>
+          <text class="insight-stat-value">{{repurchaseSummary.repeatUsers}}</text>
+          <text class="insight-stat-meta">至少下单 2 次</text>
+        </view>
+        <view class="insight-stat-card">
+          <text class="insight-stat-label">人均订单</text>
+          <text class="insight-stat-value">{{repurchaseSummary.avgOrdersPerUserText}}</text>
+          <text class="insight-stat-meta">顾客平均下单频次</text>
+        </view>
+      </view>
+
+      <view wx:else class="section-state-block section-state-block-compact">
+        <t-empty description="{{repurchaseErrorMessage || '顾客复购加载失败，请重试'}}" />
+        <view class="retry-button" bindtap="onRetryRepurchase">重新加载顾客复购</view>
+      </view>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <text class="section-title">分类销售</text>
+        <text class="section-subtitle">看清哪类菜品更能带动营收</text>
+      </view>
+
+      <view wx:if="{{categoryStatsError && categoryStatsAvailable}}" class="section-error-hint section-error-hint-spaced">
+        <text>{{categoryStatsErrorMessage}}</text>
+        <text class="section-error-action" bindtap="onRetryCategoryStats">重新同步</text>
+      </view>
+
+      <view wx:if="{{categoryStatsAvailable}}">
+        <t-empty wx:if="{{!categoryStats.length}}" description="当前区间暂无分类销售数据" />
+
+        <view wx:else class="insight-list">
+          <view wx:for="{{categoryStats}}" wx:key="category_name" class="insight-card">
+            <view class="insight-head">
+              <text class="insight-title">{{item.category_name || '未分类菜品'}}</text>
+              <text class="insight-value">{{item.totalSalesText}}</text>
+            </view>
+            <view class="insight-meta">
+              <text>{{item.orderCountLabel}}</text>
+              <text>{{item.totalQuantityLabel}}</text>
+              <text>{{item.shareText}}</text>
+            </view>
+            <view class="insight-progress-track">
+              <view class="insight-progress-fill" style="width: {{item.barWidth}}"></view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <view wx:else class="section-state-block section-state-block-compact">
+        <t-empty description="{{categoryStatsErrorMessage || '分类销售加载失败，请重试'}}" />
+        <view class="retry-button" bindtap="onRetryCategoryStats">重新加载分类销售</view>
       </view>
     </view>
 

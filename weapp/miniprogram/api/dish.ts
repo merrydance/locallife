@@ -110,14 +110,6 @@ export interface DishCategory {
 }
 
 /**
- * 创建/更新分类请求
- */
-export interface CreateDishCategoryRequest {
-    name: string
-    sort_order?: number
-}
-
-/**
  * 菜品列表响应 - 对齐 api.listDishesResponse
  */
 export interface ListDishesResponse {
@@ -187,6 +179,7 @@ export interface ComboSetResponse {
     id: number                                   // 套餐ID
     name: string                                 // 套餐名称
     description?: string                         // 套餐描述
+    original_price: number                       // 原价（分）
     combo_price: number                          // 套餐价格（分）
     is_online: boolean                           // 是否上架
     dish_image_urls?: string[]                   // 成员菜品图片列表（后端真实字段）
@@ -237,18 +230,6 @@ export interface UpdateComboSetRequest extends Record<string, unknown> {
     name?: string                                // 套餐名称，最大100字符
     dishes?: ComboDishInput[]                    // 可选：更新套餐菜品列表（带数量）
     tag_ids?: number[]                           // 可选：更新属性标签ID列表（最多10个）
-}
-
-/**
- * 创建套餐请求 - 对齐 api.createComboSetRequest
- */
-export interface CreateComboSetRequest extends Record<string, unknown> {
-    combo_price: number                          // 套餐价格（分，必填）
-    description?: string                         // 描述，最大500字符
-    is_online?: boolean                          // 是否上架
-    name: string                                 // 套餐名称，最大100字符（必填）
-    dish_ids?: number[]                          // 套餐包含的菜品ID列表
-    tag_ids?: number[]                           // 属性标签ID列表（最多10个）
 }
 
 // ==================== 库存数据类型定义 ====================
@@ -464,6 +445,7 @@ export interface CreateComboSetRequest extends Record<string, unknown> {
     is_online?: boolean                          // 是否上线
     dish_ids?: number[]                          // 向后兼容：关联菜品ID列表（最多50个）
     dishes?: ComboDishInput[]                    // 推荐：带数量的菜品列表
+    tag_ids?: number[]                           // 属性标签ID列表（最多10个）
 }
 
 /**
@@ -800,7 +782,7 @@ export class DishManagementService {
      * 更新菜品分类
      * PATCH /v1/dishes/categories/{id}
      */
-    static async updateDishCategory(id: number, data: CreateDishCategoryRequest): Promise<DishCategory> {
+    static async updateDishCategory(id: number, data: UpdateDishCategoryRequest): Promise<DishCategory> {
         return await request({
             url: `/v1/dishes/categories/${id}`,
             method: 'PATCH',

@@ -7,7 +7,9 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-switch": "tdesign-miniprogram/switch/switch"
+    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-radio": "tdesign-miniprogram/radio/radio",
+    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

@@ -232,5 +232,13 @@ Page({
 
   onRetry() {
     this.loadSettings()
+  },
+
+  onOpenRechargeRules() {
+    wx.navigateTo({ url: '/pages/merchant/settings/recharge-rules/index' })
+  },
+
+  onOpenMembers() {
+    wx.navigateTo({ url: '/pages/merchant/settings/members/index' })
   }
 })

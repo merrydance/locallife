@@ -1,0 +1,132 @@
+<custom-navbar title="代金券管理" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="hero-card">
+    <view class="hero-copy">
+      <text class="hero-title">商户代金券</text>
+      <text class="hero-subtitle">维护门店代金券的金额、门槛、有效期和适用订单类型，便于做长期营销配置。</text>
+    </view>
+    <t-button theme="primary" shape="round" size="small" bind:tap="onAddVoucher">新建代金券</t-button>
+  </view>
+
+  <view wx:if="{{loading && !vouchers.length}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载代金券中..." vertical />
+  </view>
+
+  <t-empty wx:elif="{{!loading && !vouchers.length}}" description="当前还没有代金券，点击上方按钮开始创建" />
+
+  <view wx:else class="voucher-list">
+    <view wx:for="{{vouchers}}" wx:key="id" class="voucher-card">
+      <view class="voucher-header">
+        <view class="voucher-main">
+          <text class="voucher-name">{{item.name}}</text>
+          <text class="voucher-code">券码 {{item.code || '自动生成'}}</text>
+        </view>
+        <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
+      </view>
+
+      <view class="voucher-amount-row">
+        <text class="voucher-amount">{{item.amount_text}}</text>
+        <text class="voucher-threshold">满 {{item.min_order_amount_text}} 可用</text>
+      </view>
+
+      <view wx:if="{{item.description}}" class="voucher-desc">{{item.description}}</view>
+
+      <view class="voucher-info-row">
+        <text class="voucher-info-label">有效期</text>
+        <text class="voucher-info-value">{{item.valid_range_text}}</text>
+      </view>
+      <view class="voucher-info-row">
+        <text class="voucher-info-label">发放进度</text>
+        <text class="voucher-info-value">已领 {{item.claimed_quantity}}，已用 {{item.used_quantity}}，剩余 {{item.remaining_quantity_text}}</text>
+      </view>
+
+      <view class="voucher-tags">
+        <t-tag wx:for="{{item.order_type_labels}}" wx:key="*this" size="small" variant="dark" theme="primary">{{item}}</t-tag>
+      </view>
+
+      <view class="voucher-actions">
+        <t-button size="small" theme="default" variant="outline" shape="round" data-id="{{item.id}}" bind:tap="onEditVoucher">编辑</t-button>
+        <t-button size="small" theme="primary" variant="outline" shape="round" data-id="{{item.id}}" data-active="{{item.is_active}}" data-name="{{item.name}}" bind:tap="onToggleVoucherStatus">{{item.is_active ? '停用' : '启用'}}</t-button>
+        <t-button size="small" theme="danger" variant="outline" shape="round" data-id="{{item.id}}" data-name="{{item.name}}" bind:tap="onDeleteVoucher">删除</t-button>
+      </view>
+    </view>
+  </view>
+
+  <t-popup visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
+    <view class="form-popup">
+      <scroll-view scroll-y class="form-scroll">
+        <view class="form-title">{{isEdit ? '编辑代金券' : '新建代金券'}}</view>
+
+        <view class="form-item" wx:if="{{!isEdit}}">
+          <text class="form-label">券码</text>
+          <input class="form-input" value="{{form.code}}" data-field="code" placeholder="选填，留空由系统自动生成" bindinput="onTextInput" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">名称 <text class="required">*</text></text>
+          <input class="form-input" value="{{form.name}}" data-field="name" placeholder="如 午市立减券" bindinput="onTextInput" />
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">描述</text>
+          <textarea class="form-textarea" value="{{form.description}}" data-field="description" placeholder="可选，说明适用场景和提醒文案" bindinput="onTextInput" />
+        </view>
+
+        <view class="form-item-grid">
+          <view class="form-item form-item-half">
+            <text class="form-label">抵扣金额（元） <text class="required">*</text></text>
+            <input class="form-input" type="digit" value="{{form.amount_yuan}}" data-field="amount_yuan" placeholder="如 10" bindinput="onTextInput" />
+          </view>
+          <view class="form-item form-item-half">
+            <text class="form-label">使用门槛（元）</text>
+            <input class="form-input" type="digit" value="{{form.min_order_amount_yuan}}" data-field="min_order_amount_yuan" placeholder="为空表示无门槛" bindinput="onTextInput" />
+          </view>
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">发放数量 <text class="required">*</text></text>
+          <input class="form-input" type="number" value="{{form.total_quantity}}" data-field="total_quantity" placeholder="请输入总发放张数" bindinput="onTextInput" />
+        </view>
+
+        <view class="form-item-grid">
+          <view class="form-item form-item-half">
+            <text class="form-label">开始日期 <text class="required">*</text></text>
+            <picker mode="date" value="{{form.valid_from}}" data-field="valid_from" bindchange="onDateChange">
+              <view class="form-picker {{form.valid_from ? '' : 'is-placeholder'}}">{{form.valid_from || '请选择开始日期'}}</view>
+            </picker>
+          </view>
+          <view class="form-item form-item-half">
+            <text class="form-label">结束日期 <text class="required">*</text></text>
+            <picker mode="date" value="{{form.valid_until}}" data-field="valid_until" bindchange="onDateChange">
+              <view class="form-picker {{form.valid_until ? '' : 'is-placeholder'}}">{{form.valid_until || '请选择结束日期'}}</view>
+            </picker>
+          </view>
+        </view>
+
+        <view class="form-item">
+          <text class="form-label">适用订单类型 <text class="required">*</text></text>
+          <view class="order-type-options">
+            <view
+              wx:for="{{orderTypeOptions}}"
+              wx:key="value"
+              class="order-type-option {{form.allowed_order_types.indexOf(item.value) >= 0 ? 'is-selected' : ''}}"
+              data-value="{{item.value}}"
+              bindtap="onToggleOrderType"
+            >{{item.label}}</view>
+          </view>
+        </view>
+
+        <view class="form-item form-item-switch" wx:if="{{isEdit}}">
+          <text class="form-label">立即启用</text>
+          <t-switch value="{{form.is_active}}" data-field="is_active" bind:change="onSwitchChange" size="large" />
+        </view>
+
+        <view class="form-actions">
+          <t-button theme="default" shape="round" bind:tap="onCloseForm">取消</t-button>
+          <t-button theme="primary" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
+        </view>
+      </scroll-view>
+    </view>
+  </t-popup>
+</view>

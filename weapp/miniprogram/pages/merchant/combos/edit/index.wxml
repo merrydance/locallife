@@ -29,6 +29,17 @@
             <view class="dish-name">{{item.name}}</view>
             <view class="dish-extra">¥{{item.price / 100}} · {{item.is_online ? '已上架' : '未上架'}}</view>
           </view>
+          <view wx:if="{{item.checked}}" class="dish-qty-control">
+            <text class="dish-qty-label">份数</text>
+            <t-stepper
+              value="{{item.quantity}}"
+              min="{{1}}"
+              max="{{99}}"
+              theme="filled"
+              data-id="{{item.id}}"
+              bind:change="onDishQuantityChange"
+            />
+          </view>
         </view>
       </checkbox-group>
       <t-empty wx:if="{{!dishes.length}}" icon="info-circle" description="{{dishEmptyDescription}}" />
@@ -50,7 +61,43 @@
     </view>
 
     <view class="section">
-      <view class="section-title">3. 上下架状态（单选）</view>
+      <view class="section-title">3. 套餐信息</view>
+      <t-input
+        label="套餐名称"
+        placeholder="请输入套餐名称"
+        value="{{comboName}}"
+        maxlength="100"
+        bind:change="onComboNameChange"
+      />
+      <t-textarea
+        value="{{comboDescription}}"
+        placeholder="可填写套餐卖点、适用人群或搭配说明"
+        maxlength="500"
+        indicator
+        bind:change="onComboDescriptionChange"
+      />
+      <view class="summary-note summary-note-inline">默认会根据已选菜品生成名称，你也可以手动修改。</view>
+    </view>
+
+    <view class="section">
+      <view class="section-title">4. 套餐标签</view>
+      <view class="tag-header">
+        <text class="filter-label">用于标记套餐属性或活动主题</text>
+        <t-button size="small" variant="outline" shape="round" loading="{{tagSubmitting}}" bind:tap="onCreateTag">新增标签</t-button>
+      </view>
+      <checkbox-group bindchange="onTagChange" wx:if="{{availableTags.length}}">
+        <view class="tag-grid">
+          <label class="tag-option" wx:for="{{availableTags}}" wx:key="id">
+            <checkbox value="{{item.id + ''}}" checked="{{selectedTagIds.indexOf(item.id) !== -1}}" color="var(--td-brand-color)" />
+            <text class="tag-option-label">{{item.name}}</text>
+          </label>
+        </view>
+      </checkbox-group>
+      <t-empty wx:else icon="info-circle" description="暂无套餐标签，可先新增标签" />
+    </view>
+
+    <view class="section">
+      <view class="section-title">5. 上下架状态（单选）</view>
       <radio-group bindchange="onOnlineChoiceChange">
         <label class="radio-option">
           <radio value="online" checked="{{onlineChoice === 'online'}}" color="var(--td-brand-color)" />
@@ -69,11 +116,11 @@
       </view>
       <view class="summary-row">
         <text class="label">套餐名称</text>
-        <text class="value">{{autoName}}</text>
+        <text class="value">{{comboName || autoName}}</text>
       </view>
       <view class="summary-row">
         <text class="label">已选菜品</text>
-        <text class="value">{{selectedDishIds.length}} 个</text>
+        <text class="value">{{selectedDishIds.length}} 款 / {{selectedDishQuantityTotal}} 份</text>
       </view>
       <view class="summary-row">
         <text class="label">原价合计</text>
@@ -83,7 +130,7 @@
         <text class="label">套餐价格</text>
         <text class="value">¥{{comboPricePreview / 100}}</text>
       </view>
-      <view class="summary-note">名称自动生成：{{autoName}}</view>
+      <view class="summary-note">自动建议名称：{{autoName}}</view>
     </view>
 
     <view class="footer">

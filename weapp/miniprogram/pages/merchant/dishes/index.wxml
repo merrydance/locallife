@@ -1,6 +1,6 @@
 <custom-navbar title="菜品管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: {{batchMode ? 180 : 0}}rpx;">
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载菜品中..." vertical />
   </view>
@@ -13,10 +13,41 @@
   <block wx:else>
     <view class="header-actions">
       <t-button size="small" theme="primary" bind:tap="onManageCategories" shape="round">分类管理</t-button>
+      <t-button size="small" theme="{{batchMode ? 'default' : 'primary'}}" variant="{{batchMode ? 'outline' : 'base'}}" bind:tap="onToggleBatchMode" shape="round">
+        {{batchMode ? '退出批量' : '批量管理'}}
+      </t-button>
     </view>
 
     <view class="search-wrap">
       <t-search value="{{searchKeyword}}" placeholder="搜索菜品名称" bind:change="onSearchChange" bind:submit="onSearchSubmit" center />
+    </view>
+
+    <view class="filter-section">
+      <view class="filter-group">
+        <text class="filter-group-label">上架状态</text>
+        <view class="filter-chip-list">
+          <view
+            wx:for="{{onlineFilterOptions}}"
+            wx:key="value"
+            class="filter-chip {{currentOnlineFilter === item.value ? 'filter-chip-active' : ''}}"
+            data-value="{{item.value}}"
+            bindtap="onOnlineFilterChange"
+          >{{item.label}}</view>
+        </view>
+      </view>
+
+      <view class="filter-group">
+        <text class="filter-group-label">可售状态</text>
+        <view class="filter-chip-list">
+          <view
+            wx:for="{{availabilityFilterOptions}}"
+            wx:key="value"
+            class="filter-chip {{currentAvailabilityFilter === item.value ? 'filter-chip-active' : ''}}"
+            data-value="{{item.value}}"
+            bindtap="onAvailabilityFilterChange"
+          >{{item.label}}</view>
+        </view>
+      </view>
     </view>
 
     <t-tabs value="{{currentCategoryId}}" bind:change="onTabChange" t-class="tabs-container">
@@ -30,20 +61,59 @@
         <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
       </view>
 
+      <view wx:if="{{batchMode && dishes.length}}" class="batch-toolbar">
+        <text class="batch-toolbar-text">已选 {{selectedCount}} 项</text>
+        <text class="batch-toolbar-action" bindtap="onSelectAllLoaded">{{allLoadedSelected ? '取消全选当前列表' : '全选当前列表'}}</text>
+      </view>
+
       <view wx:if="{{loading && !dishes.length}}" class="loading-state">
         <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
       </view>
 
-      <t-empty wx:elif="{{!loading && !dishes.length}}" icon="info-circle" description="{{searchKeyword ? '未找到匹配菜品' : '暂无菜品'}}" />
+      <t-empty wx:elif="{{!loading && !dishes.length}}" icon="info-circle" description="{{searchKeyword ? '未找到匹配菜品' : ((currentOnlineFilter !== 'all' || currentAvailabilityFilter !== 'all' || currentCategoryId > 0) ? '暂无符合筛选条件的菜品' : '暂无菜品')}}" />
 
       <block wx:else>
-        <t-swipe-cell wx:for="{{dishes || []}}" wx:key="id">
-          <view class="dish-item" bindtap="onEditDish" data-id="{{item.id}}">
+        <block wx:for="{{dishes || []}}" wx:key="id">
+          <t-swipe-cell wx:if="{{!batchMode}}">
+            <view class="dish-item" bindtap="onEditDish" data-id="{{item.id}}">
+              <view class="dish-main">
+                <image class="dish-img" src="{{item.image_url || '/assets/icons/empty.svg'}}" mode="aspectFill" binderror="onDishImageError" data-id="{{item.id}}" />
+                <view class="dish-info">
+                  <view class="dish-name-row">
+                    <text class="dish-name">{{item.name}}</text>
+                    <t-tag wx:if="{{!item.is_online}}" theme="danger" variant="dark" size="extra-small">已下架</t-tag>
+                  </view>
+                  <view class="dish-desc">{{item.description || '暂无描述'}}</view>
+                  <view class="dish-price-row">
+                    <text class="price-unit">¥</text>
+                    <text class="price-value">{{item.price / 100}}</text>
+                    <text wx:if="{{item.member_price}}" class="member-price">会员价 ¥{{item.member_price / 100}}</text>
+                  </view>
+                </view>
+              </view>
+
+              <view class="dish-status-toggle" catchtap="onToggleStatus" data-id="{{item.id}}" data-online="{{item.is_online}}">
+                <text class="toggle-label">{{item.is_online ? '上架中' : '已下架'}}</text>
+                <t-switch value="{{item.is_online}}" size="small" />
+              </view>
+            </view>
+
+            <view slot="right" class="swipe-action-wrap">
+              <view class="action-btn delete-btn" bindtap="onDeleteDish" data-id="{{item.id}}">删除</view>
+            </view>
+          </t-swipe-cell>
+
+          <view wx:if="{{batchMode}}" class="dish-item dish-item-batch" catchtap="onSelectDish" data-id="{{item.id}}">
+            <view class="dish-select-wrap">
+              <t-checkbox checked="{{item.selected}}" borderless disabled />
+            </view>
+
             <view class="dish-main">
               <image class="dish-img" src="{{item.image_url || '/assets/icons/empty.svg'}}" mode="aspectFill" binderror="onDishImageError" data-id="{{item.id}}" />
               <view class="dish-info">
                 <view class="dish-name-row">
                   <text class="dish-name">{{item.name}}</text>
+                  <t-tag wx:if="{{item.selected}}" theme="primary" variant="light" size="extra-small">已选中</t-tag>
                   <t-tag wx:if="{{!item.is_online}}" theme="danger" variant="dark" size="extra-small">已下架</t-tag>
                 </view>
                 <view class="dish-desc">{{item.description || '暂无描述'}}</view>
@@ -55,16 +125,11 @@
               </view>
             </view>
 
-            <view class="dish-status-toggle" catchtap="onToggleStatus" data-id="{{item.id}}" data-online="{{item.is_online}}">
-              <text class="toggle-label">{{item.is_online ? '上架中' : '已下架'}}</text>
-              <t-switch value="{{item.is_online}}" size="small" />
+            <view class="dish-status-summary">
+              <text class="toggle-label">{{item.is_online ? '当前上架中' : '当前已下架'}}</text>
             </view>
           </view>
-
-          <view slot="right" class="swipe-action-wrap">
-            <view class="action-btn delete-btn" bindtap="onDeleteDish" data-id="{{item.id}}">删除</view>
-          </view>
-        </t-swipe-cell>
+        </block>
       </block>
 
       <view wx:if="{{hasMore && !searchKeyword}}" class="load-more" bindtap="onLoadMore">
@@ -74,8 +139,20 @@
     </view>
   </block>
 
+  <view wx:if="{{batchMode}}" class="batch-action-bar">
+    <view class="batch-action-summary">
+      <text class="batch-selected-count">已选 {{selectedCount}} 个菜品</text>
+      <text class="batch-summary-hint">仅对当前已勾选项生效</text>
+    </view>
+    <view class="batch-action-buttons">
+      <t-button size="small" variant="outline" bind:tap="onCancelBatchMode" disabled="{{batchSubmitting}}">取消</t-button>
+      <t-button size="small" theme="warning" variant="outline" bind:tap="onBatchUpdateStatus" data-online="false" disabled="{{!selectedCount || batchSubmitting}}" loading="{{batchSubmitting && batchTargetStatus === 'offline'}}">批量下架</t-button>
+      <t-button size="small" theme="primary" bind:tap="onBatchUpdateStatus" data-online="true" disabled="{{!selectedCount || batchSubmitting}}" loading="{{batchSubmitting && batchTargetStatus === 'online'}}">批量上架</t-button>
+    </view>
+  </view>
+
   <!-- 悬浮添加按钮 -->
-  <t-fab icon="add" bind:click="onAddDish" />
+  <t-fab wx:if="{{!batchMode}}" icon="add" bind:click="onAddDish" />
 </view>
 
 <!-- 删除确认 -->

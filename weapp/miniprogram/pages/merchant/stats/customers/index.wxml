@@ -1,0 +1,78 @@
+<custom-navbar title="客户分析" showBack="{{true}}" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载客户分析中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty description="{{initialErrorMessage || '客户分析加载失败，请重试'}}" />
+    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  </view>
+
+  <block wx:else>
+    <view wx:if="{{refreshErrorMessage}}" class="section-error-hint">
+      <text>{{refreshErrorMessage}}</text>
+      <text class="section-error-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view class="hero-card">
+      <text class="hero-title">顾客消费画像</text>
+      <text class="hero-subtitle">按最近下单、累计消费或订单次数查看本店顾客，便于识别复购人群与高价值顾客。</text>
+      <text class="hero-meta">已加载 {{customers.length}} / 共 {{total}} 位顾客</text>
+    </view>
+
+    <view class="sort-row">
+      <view
+        wx:for="{{sortOptions}}"
+        wx:key="key"
+        class="sort-chip {{currentSort === item.key ? 'sort-chip-active' : ''}}"
+        data-key="{{item.key}}"
+        bindtap="onChangeSort"
+      >{{item.label}}</view>
+    </view>
+
+    <t-empty wx:if="{{!customers.length}}" icon="info-circle" description="当前没有可分析的顾客数据" />
+
+    <view wx:else class="customer-list">
+      <view wx:for="{{customers}}" wx:key="user_id" class="customer-card" data-user-id="{{item.user_id}}" bindtap="onViewCustomerDetail">
+        <view class="customer-header">
+          <view class="customer-main">
+            <text class="customer-name">{{item.display_name}}</text>
+            <text class="customer-phone">{{item.phone_text}}</text>
+          </view>
+          <t-tag size="small" variant="dark" theme="primary">{{item.total_amount_text}}</t-tag>
+        </view>
+
+        <view class="stats-grid">
+          <view class="stats-item">
+            <text class="stats-label">订单次数</text>
+            <text class="stats-value">{{item.total_orders}}</text>
+          </view>
+          <view class="stats-item">
+            <text class="stats-label">平均客单</text>
+            <text class="stats-value">{{item.avg_order_amount_text}}</text>
+          </view>
+        </view>
+
+        <view class="meta-row">
+          <text class="meta-label">首次下单</text>
+          <text class="meta-value">{{item.first_order_at_text}}</text>
+        </view>
+        <view class="meta-row">
+          <text class="meta-label">最近下单</text>
+          <text class="meta-value">{{item.last_order_at_text}}</text>
+        </view>
+
+        <view class="hint-block">{{item.activity_hint}}</view>
+
+        <view class="action-row">
+          <t-button size="small" theme="primary" variant="outline" shape="round">查看详情</t-button>
+        </view>
+      </view>
+
+      <view wx:if="{{loadingMore}}" class="load-more">加载更多顾客中...</view>
+      <view wx:elif="{{!hasMore}}" class="load-more load-more-end">没有更多顾客了</view>
+    </view>
+  </block>
+</view>

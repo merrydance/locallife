@@ -11,6 +11,12 @@ import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type OrderStatus = OrderResponse['status']
 type OrderStatusFilter = '' | OrderStatus
+type OrderTypeFilter = '' | OrderResponse['order_type']
+
+interface OrderTypeOption {
+  label: string
+  value: OrderTypeFilter
+}
 
 interface MerchantOrderListItem extends OrderResponse {
   order_no_short: string
@@ -30,8 +36,16 @@ interface MerchantOrderListItem extends OrderResponse {
 
 interface OrdersPageOptions {
   status?: OrderStatusFilter
-  order_type?: OrderResponse['order_type']
+  order_type?: OrderTypeFilter
 }
+
+const ORDER_TYPE_OPTIONS: OrderTypeOption[] = [
+  { label: '全部类型', value: '' },
+  { label: '外卖', value: 'takeout' },
+  { label: '堂食', value: 'dine_in' },
+  { label: '自取', value: 'takeaway' },
+  { label: '预订', value: 'reservation' }
+]
 
 const getErrorMessage = getErrorUserMessage
 
@@ -45,8 +59,9 @@ Page({
     loading: false,
     orders: [] as MerchantOrderListItem[],
     currentStatus: 'paid' as OrderStatusFilter,
-    orderTypeFilter: '' as '' | OrderResponse['order_type'],
-    pageTitle: '订单管理',
+    orderTypeFilter: '' as OrderTypeFilter,
+    orderTypeOptions: ORDER_TYPE_OPTIONS,
+    pageTitle: '订单中心',
     page: 1,
     pageSize: 10,
     hasMore: true
@@ -58,11 +73,7 @@ Page({
       navBarHeight,
       currentStatus: options.status || 'paid',
       orderTypeFilter: options.order_type || '',
-      pageTitle: options.order_type === 'takeout'
-        ? '外卖订单'
-        : options.order_type === 'dine_in'
-          ? '堂食订单'
-          : '订单管理'
+      pageTitle: '订单中心'
     })
     this.loadOrders(true)
   },
@@ -215,6 +226,19 @@ Page({
     })
   },
 
+  onOrderTypeChange(e: WechatMiniprogram.TouchEvent) {
+    const { value } = e.currentTarget.dataset as { value?: OrderTypeFilter }
+    this.setData({
+      orderTypeFilter: value || '',
+      orders: [],
+      page: 1,
+      hasMore: true,
+      refreshErrorMessage: ''
+    }, () => {
+      this.loadOrders(true)
+    })
+  },
+
   onPullDownRefresh() {
     this.loadOrders(true, false)
   },
@@ -292,7 +316,6 @@ Page({
     try {
       const updatedOrder = await request() as OrderResponse
       this.syncOrderAfterAction(updatedOrder)
-      await this.loadOrders(true, false)
     } catch (err) {
       logger.error('Order action failed', err)
       wx.showToast({ title: getErrorMessage(err, '操作失败，请稍后重试'), icon: 'none' })

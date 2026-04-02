@@ -1,5 +1,14 @@
 import dayjs from 'dayjs'
-import { MerchantStatsService, MerchantOverviewResponse, TopSellingDishRow } from '../../../api/merchant-stats'
+import {
+  MerchantCategoryStatRow,
+  MerchantDailyStatRow,
+  MerchantHourlyStatRow,
+  MerchantOrderSourceStatRow,
+  MerchantOverviewResponse,
+  MerchantRepurchaseRateResponse,
+  MerchantStatsService,
+  TopSellingDishRow
+} from '../../../api/merchant-stats'
 import { MerchantOrderManagementService, OrderStatsResponse } from '../../../api/order-management'
 import { ReservationService, ReservationStats } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
@@ -38,6 +47,45 @@ interface TopDishViewModel extends TopSellingDishRow {
   soldLabel: string
 }
 
+interface DailyStatsViewModel extends MerchantDailyStatRow {
+  dateLabel: string
+  totalSalesText: string
+  commissionText: string
+  orderCountLabel: string
+  orderMixLabel: string
+  barWidth: string
+}
+
+interface HourlyStatsViewModel extends MerchantHourlyStatRow {
+  hourLabel: string
+  orderCountLabel: string
+  avgOrderAmountText: string
+  barWidth: string
+}
+
+interface SourceStatsViewModel extends MerchantOrderSourceStatRow {
+  orderTypeLabel: string
+  totalSalesText: string
+  orderCountLabel: string
+  shareText: string
+  barWidth: string
+}
+
+interface RepurchaseSummaryViewModel {
+  totalUsers: number
+  repeatUsers: number
+  repurchaseRateText: string
+  avgOrdersPerUserText: string
+}
+
+interface CategoryStatsViewModel extends MerchantCategoryStatRow {
+  totalSalesText: string
+  orderCountLabel: string
+  totalQuantityLabel: string
+  shareText: string
+  barWidth: string
+}
+
 const RANGE_OPTIONS: RangeOption[] = [
   { key: '7d', label: '近7天', days: 7 },
   { key: '30d', label: '近30天', days: 30 }
@@ -71,6 +119,20 @@ const EMPTY_RESERVATION_STATS: ReservationStats = {
   no_show_count: 0
 }
 
+const EMPTY_REPURCHASE_SUMMARY: RepurchaseSummaryViewModel = {
+  totalUsers: 0,
+  repeatUsers: 0,
+  repurchaseRateText: '--',
+  avgOrdersPerUserText: '--'
+}
+
+const ORDER_TYPE_LABELS: Record<string, string> = {
+  takeout: '外卖',
+  dine_in: '堂食',
+  takeaway: '自提',
+  reservation: '预订'
+}
+
 function formatAmount(fen: number): string {
   return `¥${(fen / 100).toFixed(2)}`
 }
@@ -78,6 +140,15 @@ function formatAmount(fen: number): string {
 function formatPercent(value: number): string {
   if (!Number.isFinite(value)) return '--'
   return `${value.toFixed(1)}%`
+}
+
+function formatDecimal(value: number): string {
+  if (!Number.isFinite(value)) return '--'
+  return value.toFixed(2)
+}
+
+function padHour(hour: number): string {
+  return String(Math.max(0, Math.min(23, Math.round(hour)))).padStart(2, '0')
 }
 
 function buildRange(rangeKey: StatsRangeKey) {
@@ -125,6 +196,85 @@ function buildTopDishRows(rows: TopSellingDishRow[]): TopDishViewModel[] {
   }))
 }
 
+function buildDailyRows(rows: MerchantDailyStatRow[]): DailyStatsViewModel[] {
+  const maxSales = rows.reduce((max, item) => Math.max(max, item.total_sales || 0), 0)
+
+  return rows.map((item) => {
+    const widthPercent = maxSales > 0 ? Math.round(((item.total_sales || 0) / maxSales) * 100) : 0
+
+    return {
+      ...item,
+      dateLabel: dayjs(item.date).isValid() ? dayjs(item.date).format('MM.DD') : item.date,
+      totalSalesText: formatAmount(item.total_sales || 0),
+      commissionText: formatAmount(item.commission || 0),
+      orderCountLabel: `${item.order_count || 0} 单`,
+      orderMixLabel: `外卖 ${item.takeout_orders || 0} / 堂食 ${item.dine_in_orders || 0}`,
+      barWidth: `${Math.max(widthPercent, item.total_sales > 0 ? 18 : 0)}%`
+    }
+  })
+}
+
+function buildHourlyRows(rows: MerchantHourlyStatRow[]): HourlyStatsViewModel[] {
+  const maxOrderCount = rows.reduce((max, item) => Math.max(max, item.order_count || 0), 0)
+
+  return rows.map((item) => {
+    const widthPercent = maxOrderCount > 0 ? Math.round(((item.order_count || 0) / maxOrderCount) * 100) : 0
+
+    return {
+      ...item,
+      hourLabel: `${padHour(item.hour)}:00`,
+      orderCountLabel: `${item.order_count || 0} 单`,
+      avgOrderAmountText: formatAmount(item.avg_order_amount || 0),
+      barWidth: `${Math.max(widthPercent, item.order_count > 0 ? 18 : 0)}%`
+    }
+  })
+}
+
+function buildSourceRows(rows: MerchantOrderSourceStatRow[]): SourceStatsViewModel[] {
+  const totalOrders = rows.reduce((sum, item) => sum + (item.order_count || 0), 0)
+  const maxOrderCount = rows.reduce((max, item) => Math.max(max, item.order_count || 0), 0)
+
+  return rows.map((item) => {
+    const widthPercent = maxOrderCount > 0 ? Math.round(((item.order_count || 0) / maxOrderCount) * 100) : 0
+
+    return {
+      ...item,
+      orderTypeLabel: ORDER_TYPE_LABELS[item.order_type] || item.order_type || '其他',
+      totalSalesText: formatAmount(item.total_sales || 0),
+      orderCountLabel: `${item.order_count || 0} 单`,
+      shareText: totalOrders > 0 ? `订单占比 ${(((item.order_count || 0) / totalOrders) * 100).toFixed(1)}%` : '订单占比 --',
+      barWidth: `${Math.max(widthPercent, item.order_count > 0 ? 18 : 0)}%`
+    }
+  })
+}
+
+function buildRepurchaseSummary(data: MerchantRepurchaseRateResponse): RepurchaseSummaryViewModel {
+  return {
+    totalUsers: data.total_users || 0,
+    repeatUsers: data.repeat_users || 0,
+    repurchaseRateText: formatPercent(data.repurchase_rate || 0),
+    avgOrdersPerUserText: `${formatDecimal(data.avg_orders_per_user || 0)} 单`
+  }
+}
+
+function buildCategoryRows(rows: MerchantCategoryStatRow[]): CategoryStatsViewModel[] {
+  const totalSales = rows.reduce((sum, item) => sum + (item.total_sales || 0), 0)
+  const maxSales = rows.reduce((max, item) => Math.max(max, item.total_sales || 0), 0)
+
+  return rows.map((item) => {
+    const widthPercent = maxSales > 0 ? Math.round(((item.total_sales || 0) / maxSales) * 100) : 0
+
+    return {
+      ...item,
+      totalSalesText: formatAmount(item.total_sales || 0),
+      orderCountLabel: `${item.order_count || 0} 单`,
+      totalQuantityLabel: `${item.total_quantity || 0} 份`,
+      shareText: totalSales > 0 ? `营收占比 ${(((item.total_sales || 0) / totalSales) * 100).toFixed(1)}%` : '营收占比 --',
+      barWidth: `${Math.max(widthPercent, item.total_sales > 0 ? 18 : 0)}%`
+    }
+  })
+}
+
 const getErrorMessage = getErrorUserMessage
 
 function getSummaryErrorMessage(
@@ -139,6 +289,13 @@ function getSummaryErrorMessage(
   }
   if (orderStatsResult.status === 'rejected') {
     return getErrorMessage(orderStatsResult.reason, '订单统计同步失败，请稍后重试')
+  }
+  return ''
+}
+
+function getSectionErrorMessage<T>(result: SettledResult<T>, fallback: string) {
+  if (result.status === 'rejected') {
+    return getErrorMessage(result.reason, fallback)
   }
   return ''
 }
@@ -159,12 +316,32 @@ Page({
     topDishesAvailable: false,
     topDishesError: false,
     topDishesErrorMessage: '',
+    dailyStatsAvailable: false,
+    dailyStatsError: false,
+    dailyStatsErrorMessage: '',
+    hourlyStatsAvailable: false,
+    hourlyStatsError: false,
+    hourlyStatsErrorMessage: '',
+    sourceStatsAvailable: false,
+    sourceStatsError: false,
+    sourceStatsErrorMessage: '',
+    repurchaseAvailable: false,
+    repurchaseError: false,
+    repurchaseErrorMessage: '',
+    categoryStatsAvailable: false,
+    categoryStatsError: false,
+    categoryStatsErrorMessage: '',
     reservationStatsAvailable: false,
     reservationStatsError: false,
     reservationStatsErrorMessage: '',
     updatedAtLabel: '--',
     summary: buildSummary(EMPTY_OVERVIEW, EMPTY_ORDER_STATS, '--'),
     topDishes: [] as TopDishViewModel[],
+    dailyStats: [] as DailyStatsViewModel[],
+    hourlyStats: [] as HourlyStatsViewModel[],
+    sourceStats: [] as SourceStatsViewModel[],
+    repurchaseSummary: EMPTY_REPURCHASE_SUMMARY as RepurchaseSummaryViewModel,
+    categoryStats: [] as CategoryStatsViewModel[],
     reservationStats: EMPTY_RESERVATION_STATS as ReservationStats
   },
 
@@ -199,6 +376,16 @@ Page({
             summaryErrorMessage: '',
             topDishesError: false,
             topDishesErrorMessage: '',
+            dailyStatsError: false,
+            dailyStatsErrorMessage: '',
+            hourlyStatsError: false,
+            hourlyStatsErrorMessage: '',
+            sourceStatsError: false,
+            sourceStatsErrorMessage: '',
+            repurchaseError: false,
+            repurchaseErrorMessage: '',
+            categoryStatsError: false,
+            categoryStatsErrorMessage: '',
             reservationStatsError: false,
             reservationStatsErrorMessage: ''
           }
@@ -206,17 +393,27 @@ Page({
     })
 
     try {
-      const [overviewResult, orderStatsResult, topDishesResult, reservationStatsResult] = await settleAll([
+      const [overviewResult, orderStatsResult, topDishesResult, dailyStatsResult, hourlyStatsResult, sourceStatsResult, repurchaseResult, categoryStatsResult, reservationStatsResult] = await settleAll([
         MerchantStatsService.getOverview(params),
         MerchantOrderManagementService.getOrderStats(params),
         MerchantStatsService.getTopSellingDishes({ ...params, limit: 5 }),
+        MerchantStatsService.getDailyStats(params),
+        MerchantStatsService.getHourlyStats(params),
+        MerchantStatsService.getOrderSources(params),
+        MerchantStatsService.getRepurchaseRate(params),
+        MerchantStatsService.getCategoryStats(params),
         ReservationService.getReservationStats()
       ] as const)
 
       const summarySuccess = overviewResult.status === 'fulfilled' && orderStatsResult.status === 'fulfilled'
       const topDishesSuccess = topDishesResult.status === 'fulfilled'
+      const dailyStatsSuccess = dailyStatsResult.status === 'fulfilled'
+      const hourlyStatsSuccess = hourlyStatsResult.status === 'fulfilled'
+      const sourceStatsSuccess = sourceStatsResult.status === 'fulfilled'
+      const repurchaseSuccess = repurchaseResult.status === 'fulfilled'
+      const categoryStatsSuccess = categoryStatsResult.status === 'fulfilled'
       const reservationStatsSuccess = reservationStatsResult.status === 'fulfilled'
-      const hasSuccessfulResult = summarySuccess || topDishesSuccess || reservationStatsSuccess
+      const hasSuccessfulResult = summarySuccess || topDishesSuccess || dailyStatsSuccess || hourlyStatsSuccess || sourceStatsSuccess || repurchaseSuccess || categoryStatsSuccess || reservationStatsSuccess
       const canPreserveExisting = silent && this.data.hasLoadedData
 
       if (!hasSuccessfulResult && !canPreserveExisting) {
@@ -259,6 +456,81 @@ Page({
         nextState.topDishesAvailable = false
         nextState.topDishesError = true
         nextState.topDishesErrorMessage = getErrorMessage(topDishesResult.reason, '热销菜加载失败，请稍后重试')
+      }
+
+      if (dailyStatsSuccess) {
+        nextState.dailyStats = buildDailyRows(dailyStatsResult.value || [])
+        nextState.dailyStatsAvailable = true
+        nextState.dailyStatsError = false
+        nextState.dailyStatsErrorMessage = ''
+      } else if (canPreserveExisting && this.data.dailyStatsAvailable) {
+        nextState.dailyStatsError = true
+        nextState.dailyStatsErrorMessage = `${getSectionErrorMessage(dailyStatsResult, '日趋势同步失败，请稍后重试')}，当前已保留上次结果`
+      } else {
+        nextState.dailyStats = []
+        nextState.dailyStatsAvailable = false
+        nextState.dailyStatsError = true
+        nextState.dailyStatsErrorMessage = getSectionErrorMessage(dailyStatsResult, '日趋势加载失败，请稍后重试')
+      }
+
+      if (hourlyStatsSuccess) {
+        nextState.hourlyStats = buildHourlyRows(hourlyStatsResult.value || [])
+        nextState.hourlyStatsAvailable = true
+        nextState.hourlyStatsError = false
+        nextState.hourlyStatsErrorMessage = ''
+      } else if (canPreserveExisting && this.data.hourlyStatsAvailable) {
+        nextState.hourlyStatsError = true
+        nextState.hourlyStatsErrorMessage = `${getSectionErrorMessage(hourlyStatsResult, '时段分析同步失败，请稍后重试')}，当前已保留上次结果`
+      } else {
+        nextState.hourlyStats = []
+        nextState.hourlyStatsAvailable = false
+        nextState.hourlyStatsError = true
+        nextState.hourlyStatsErrorMessage = getSectionErrorMessage(hourlyStatsResult, '时段分析加载失败，请稍后重试')
+      }
+
+      if (sourceStatsSuccess) {
+        nextState.sourceStats = buildSourceRows(sourceStatsResult.value || [])
+        nextState.sourceStatsAvailable = true
+        nextState.sourceStatsError = false
+        nextState.sourceStatsErrorMessage = ''
+      } else if (canPreserveExisting && this.data.sourceStatsAvailable) {
+        nextState.sourceStatsError = true
+        nextState.sourceStatsErrorMessage = `${getSectionErrorMessage(sourceStatsResult, '订单来源同步失败，请稍后重试')}，当前已保留上次结果`
+      } else {
+        nextState.sourceStats = []
+        nextState.sourceStatsAvailable = false
+        nextState.sourceStatsError = true
+        nextState.sourceStatsErrorMessage = getSectionErrorMessage(sourceStatsResult, '订单来源加载失败，请稍后重试')
+      }
+
+      if (repurchaseSuccess) {
+        nextState.repurchaseSummary = buildRepurchaseSummary(repurchaseResult.value)
+        nextState.repurchaseAvailable = true
+        nextState.repurchaseError = false
+        nextState.repurchaseErrorMessage = ''
+      } else if (canPreserveExisting && this.data.repurchaseAvailable) {
+        nextState.repurchaseError = true
+        nextState.repurchaseErrorMessage = `${getSectionErrorMessage(repurchaseResult, '复购数据同步失败，请稍后重试')}，当前已保留上次结果`
+      } else {
+        nextState.repurchaseSummary = EMPTY_REPURCHASE_SUMMARY
+        nextState.repurchaseAvailable = false
+        nextState.repurchaseError = true
+        nextState.repurchaseErrorMessage = getSectionErrorMessage(repurchaseResult, '复购数据加载失败，请稍后重试')
+      }
+
+      if (categoryStatsSuccess) {
+        nextState.categoryStats = buildCategoryRows(categoryStatsResult.value || [])
+        nextState.categoryStatsAvailable = true
+        nextState.categoryStatsError = false
+        nextState.categoryStatsErrorMessage = ''
+      } else if (canPreserveExisting && this.data.categoryStatsAvailable) {
+        nextState.categoryStatsError = true
+        nextState.categoryStatsErrorMessage = `${getSectionErrorMessage(categoryStatsResult, '分类销售同步失败，请稍后重试')}，当前已保留上次结果`
+      } else {
+        nextState.categoryStats = []
+        nextState.categoryStatsAvailable = false
+        nextState.categoryStatsError = true
+        nextState.categoryStatsErrorMessage = getSectionErrorMessage(categoryStatsResult, '分类销售加载失败，请稍后重试')
       }
 
       if (reservationStatsSuccess) {
@@ -315,7 +587,31 @@ Page({
     this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
   },
 
+  onRetryDailyStats() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
+  onRetryHourlyStats() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
+  onRetrySourceStats() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
+  onRetryRepurchase() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
+  onRetryCategoryStats() {
+    this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
   onRetryReservationStats() {
     this.loadStats({ showLoading: false, silent: this.data.hasLoadedData })
+  },
+
+  onGoCustomerStats() {
+    wx.navigateTo({ url: '/pages/merchant/stats/customers/index' })
   }
 })

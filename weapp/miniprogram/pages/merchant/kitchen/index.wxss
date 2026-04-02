@@ -210,3 +210,13 @@
 .progress-row {
   justify-content: flex-start;
 }
+
+.card-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12rpx;
+}
+
+.card-actions-single {
+  justify-content: flex-start;
+}

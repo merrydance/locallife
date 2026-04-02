@@ -104,6 +104,57 @@
   padding-bottom: var(--spacer-lg);
 }
 
+.mode-card {
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: var(--spacer-md);
+}
+
+.mode-card + .mode-card {
+  margin-top: var(--spacer-sm);
+}
+
+.mode-card-disabled {
+  opacity: 0.66;
+}
+
+.mode-title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+  margin-bottom: var(--spacer-sm);
+}
+
+.mode-option {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm) 0;
+}
+
+.mode-option + .mode-option {
+  border-top: 1px solid var(--td-component-stroke);
+}
+
+.mode-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 6rpx;
+}
+
+.mode-option-title {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+}
+
+.mode-option-desc {
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
 .hero-card-loading,
 .section-block-loading {
   overflow: hidden;

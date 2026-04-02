@@ -250,6 +250,12 @@ Page({
     await this.runKitchenAction(id, 'preparing', KitchenDisplayService.startPreparing(id), '已开始制作')
   },
 
+  onViewDetail(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+    wx.navigateTo({ url: `/pages/merchant/kitchen/detail/index?id=${id}` })
+  },
+
   async onMarkReady(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as { id?: number }
     if (!id) return

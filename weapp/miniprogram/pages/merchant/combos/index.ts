@@ -3,11 +3,26 @@ import { ComboManagementService, ComboSetResponse } from '../../../api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
 
+type ComboFilterKey = 'all' | 'online' | 'offline'
+
 interface ComboViewItem extends ComboSetResponse {
   coverImageUrl: string
   imageCount: number
+  savingsAmount: number
+  hasDiscount: boolean
   submitting: boolean
 }
+
+interface ComboFilterOption {
+  key: ComboFilterKey
+  label: string
+}
+
+const COMBO_FILTER_OPTIONS: ComboFilterOption[] = [
+  { key: 'all', label: '全部' },
+  { key: 'online', label: '已上架' },
+  { key: 'offline', label: '未上架' }
+]
 
 function normalizeComboImages(urls?: string[]): string[] {
   if (!Array.isArray(urls)) return []
@@ -18,6 +33,8 @@ Page({
   data: {
     navBarHeight: 88,
     loading: false,
+    filterOptions: COMBO_FILTER_OPTIONS,
+    currentFilter: 'all' as ComboFilterKey,
     combos: [] as ComboViewItem[],
     pageId: 1,
     pageSize: 20,
@@ -41,9 +58,15 @@ Page({
     this.setData({ loading: true })
     try {
       const pageId = reset ? 1 : this.data.pageId
+      const isOnline = this.data.currentFilter === 'all'
+        ? undefined
+        : this.data.currentFilter === 'online'
+          ? true
+          : false
       const response = await ComboManagementService.listCombos({
         page_id: pageId,
-        page_size: this.data.pageSize
+        page_size: this.data.pageSize,
+        ...(typeof isOnline === 'boolean' ? { is_online: isOnline } : {})
       })
 
       const combos = (response.combo_sets || []).map((combo) => ({
@@ -51,6 +74,8 @@ Page({
         dish_image_urls: normalizeComboImages(combo.dish_image_urls),
         coverImageUrl: normalizeComboImages(combo.dish_image_urls)[0] || '',
         imageCount: normalizeComboImages(combo.dish_image_urls).length,
+        savingsAmount: Math.max((combo.original_price || 0) - (combo.combo_price || 0), 0),
+        hasDiscount: (combo.original_price || 0) > (combo.combo_price || 0),
         submitting: false
       }))
 
@@ -75,6 +100,22 @@ Page({
     this.loadCombos(true)
   },
 
+  onSelectFilter(e: WechatMiniprogram.TouchEvent) {
+    const { key } = e.currentTarget.dataset as { key?: ComboFilterKey }
+    if (!key || key === this.data.currentFilter) return
+
+    this.setData(
+      {
+        currentFilter: key,
+        pageId: 1,
+        hasMore: true
+      },
+      () => {
+        this.loadCombos(true)
+      }
+    )
+  },
+
   onReachBottom() {
     this.loadCombos()
   },
@@ -93,9 +134,13 @@ Page({
       const updated = await ComboManagementService.updateComboOnlineStatus(id, {
         is_online: !current.is_online
       })
-      this.setData({
-        [`combos[${index}].is_online`]: updated.is_online
-      })
+      if (this.data.currentFilter !== 'all') {
+        this.loadCombos(true)
+      } else {
+        this.setData({
+          [`combos[${index}].is_online`]: updated.is_online
+        })
+      }
     } catch (err) {
       logger.error('Toggle combo status failed', err)
       wx.showToast({ title: '操作失败', icon: 'none' })

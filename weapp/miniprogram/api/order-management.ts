@@ -114,6 +114,70 @@ export interface MerchantOrderListResult {
     page_size: number
 }
 
+export interface MerchantOrderPrintJobResponse {
+    id: number
+    order_id: number
+    printer_id: number
+    printer_name: string
+    status: string
+    vendor_order_id?: string
+    error_message?: string
+    printed_at?: string
+    created_at: string
+}
+
+export interface MerchantOrderPrintJobsResult {
+    order_id: number
+    items: MerchantOrderPrintJobResponse[]
+}
+
+export interface MerchantOrderPrintJobStatusResponse {
+    print_log_id: number
+    order_id: number
+    printer_id: number
+    printer_name: string
+    local_status: string
+    vendor_order_id?: string
+    cloud_query_available: boolean
+    cloud_printed?: boolean
+    checked_at: string
+}
+
+export interface RetryMerchantOrderPrintJobResponse {
+    message: string
+    order_id: number
+    print_log_id: number
+    trigger: string
+}
+
+export interface PrintMerchantOrderResponse {
+    message: string
+    order_id: number
+    trigger: string
+}
+
+export interface MerchantPrintAnomalyItem {
+    print_log_id: number
+    order_id: number
+    order_no: string
+    order_type: OrderResponse['order_type'] | string
+    printer_id: number
+    printer_name: string
+    local_status: string
+    error_message?: string
+    vendor_order_id?: string
+    last_attempt_at: string
+    can_retry: boolean
+    retry_hint?: string
+}
+
+export interface MerchantPrintAnomaliesResult {
+    items: MerchantPrintAnomalyItem[]
+    total: number
+    page_id: number
+    page_size: number
+}
+
 /**
  * 拒单请求 - 对齐 api.rejectOrderRequest
  */
@@ -151,6 +215,7 @@ export interface KitchenOrderResponse {
  * 后厨订单商品项 - 对齐 api.kitchenOrderItem
  */
 export interface KitchenOrderItem {
+    category_name?: string                        // 商品分类名称
     customizations?: OrderItemCustomization[]    // 定制化选项
     id: number                                   // 商品项ID
     image_url: string                            // 商品图片URL
@@ -292,6 +357,66 @@ export class MerchantOrderManagementService {
         return await request({
             url: `/v1/merchant/orders/${orderId}/complete`,
             method: 'POST'
+        })
+    }
+
+    /**
+     * 获取订单打印任务列表
+     * GET /v1/merchant/orders/{id}/print-jobs
+     */
+    static async listOrderPrintJobs(orderId: number): Promise<MerchantOrderPrintJobsResult> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 重试订单打印任务
+     * POST /v1/merchant/orders/{id}/print-jobs/{print_log_id}/retry
+     */
+    static async retryOrderPrintJob(orderId: number, printLogId: number): Promise<RetryMerchantOrderPrintJobResponse> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs/${printLogId}/retry`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 查询订单打印任务的云端执行状态
+     * GET /v1/merchant/orders/{id}/print-jobs/{print_log_id}/status
+     */
+    static async getOrderPrintJobStatus(orderId: number, printLogId: number): Promise<MerchantOrderPrintJobStatusResponse> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs/${printLogId}/status`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 手动创建订单打印任务
+     * POST /v1/merchant/orders/{id}/print-jobs
+     */
+    static async printOrder(orderId: number): Promise<PrintMerchantOrderResponse> {
+        return await request({
+            url: `/v1/merchant/orders/${orderId}/print-jobs`,
+            method: 'POST'
+        })
+    }
+
+    /**
+     * 获取商户打印异常列表
+     * GET /v1/merchant/orders/print-anomalies
+     */
+    static async listPrintAnomalies(params: {
+        page_id: number
+        page_size: number
+        status?: 'failed' | 'pending'
+    }): Promise<MerchantPrintAnomaliesResult> {
+        return await request({
+            url: '/v1/merchant/orders/print-anomalies',
+            method: 'GET',
+            data: params
         })
     }
 }

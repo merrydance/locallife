@@ -10,6 +10,8 @@ interface DisplayConfigForm {
   print_takeout: boolean
   print_dine_in: boolean
   print_reservation: boolean
+  print_dispatch_mode: 'single_full' | 'split'
+  print_trigger_mode: 'accepted' | 'ready' | 'manual'
   voice_takeout: boolean
   voice_dine_in: boolean
   kds_url: string
@@ -34,6 +36,10 @@ function buildForm(config?: DisplayConfigResponse): DisplayConfigForm {
     print_takeout: Boolean(config?.print_takeout),
     print_dine_in: Boolean(config?.print_dine_in),
     print_reservation: Boolean(config?.print_reservation),
+    print_dispatch_mode: config?.print_dispatch_mode === 'split' ? 'split' : 'single_full',
+    print_trigger_mode: config?.print_trigger_mode === 'ready' || config?.print_trigger_mode === 'manual'
+      ? config.print_trigger_mode
+      : 'accepted',
     voice_takeout: Boolean(config?.voice_takeout),
     voice_dine_in: Boolean(config?.voice_dine_in),
     kds_url: config?.kds_url || ''
@@ -57,7 +63,16 @@ Page({
     saving: false,
     form: buildForm() as DisplayConfigForm,
     initialForm: buildForm() as DisplayConfigForm,
-    hasChanges: false
+    hasChanges: false,
+    printDispatchModeOptions: [
+      { label: '整单分发', value: 'single_full', desc: '每台打印机收到完整订单，适合前台与综合出单场景' },
+      { label: '按职责拆单', value: 'split', desc: '结合打印机角色拆分前台与后厨单据，减少重复打印' }
+    ],
+    printTriggerModeOptions: [
+      { label: '接单即打印', value: 'accepted', desc: '商户确认接单后立即触发打印' },
+      { label: '备餐完成后打印', value: 'ready', desc: '适合需要在出餐节点再分发小票的场景' },
+      { label: '仅手动打印', value: 'manual', desc: '保留订单内手动打印，不自动推送小票' }
+    ]
   },
 
   onLoad() {
@@ -152,6 +167,30 @@ Page({
       ...this.data.form,
       kds_url: e.detail.value || ''
     })
+    this.setData({
+      refreshErrorMessage: '',
+      form,
+      hasChanges: hasFormChanged(form, this.data.initialForm)
+    })
+  },
+
+  onDispatchModeChange(e: WechatMiniprogram.CustomEvent) {
+    const form = {
+      ...this.data.form,
+      print_dispatch_mode: e.detail.value as DisplayConfigForm['print_dispatch_mode']
+    }
+    this.setData({
+      refreshErrorMessage: '',
+      form,
+      hasChanges: hasFormChanged(form, this.data.initialForm)
+    })
+  },
+
+  onTriggerModeChange(e: WechatMiniprogram.CustomEvent) {
+    const form = {
+      ...this.data.form,
+      print_trigger_mode: e.detail.value as DisplayConfigForm['print_trigger_mode']
+    }
     this.setData({
       refreshErrorMessage: '',
       form,

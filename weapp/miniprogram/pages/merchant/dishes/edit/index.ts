@@ -5,6 +5,7 @@ import {
   CreateDishRequest,
   UpdateDishRequest,
   TagService,
+  TagInfo,
   CustomizationGroup,
   CustomizationGroupInput
 } from '../../../../api/dish'
@@ -44,6 +45,7 @@ interface CustomizationGroupDraft {
 }
 
 const MAX_CUSTOMIZATION_GROUPS = 20
+const FEATURED_TAG_NAMES = new Set(['推荐', '热卖'])
 
 function buildDraftKey(prefix: string): string {
   return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -106,6 +108,9 @@ Page({
     isIPhoneX: false,
     isFeatured: false,  // 推荐
     isHotSelling: false, // 热卖
+    tagSubmitting: false,
+    availableDishTags: [] as TagInfo[],
+    selectedDishTagIds: [] as number[],
     formData: {
       name: '',
       description: '',
@@ -114,6 +119,7 @@ Page({
       member_price: 0, // 分
       is_online: true,
       is_available: true,
+      sort_order: 0,
       prepare_time: 15,
       image_asset_id: 0,   // 图片媒体资产 ID（新）
       image_preview_url: '' // 本地/CDN 预览 URL
@@ -142,8 +148,21 @@ Page({
     })
 
     this.loadCategories()
+    this.loadDishTags()
     if (this.data.isEdit) {
       this.loadDishDetail()
+    }
+  },
+
+  async loadDishTags() {
+    try {
+      const tags = await TagService.listDishTags()
+      this.setData({
+        availableDishTags: (Array.isArray(tags) ? tags : []).filter((tag) => !FEATURED_TAG_NAMES.has(tag.name))
+      })
+    } catch (err) {
+      logger.error('Load dish tags failed', err)
+      this.setData({ availableDishTags: [] })
     }
   },
 
@@ -195,6 +214,7 @@ Page({
           member_price: res.member_price || 0,
           is_online: res.is_online,
           is_available: res.is_available,
+          sort_order: res.sort_order || 0,
           prepare_time: res.prepare_time || 15,
           image_asset_id: res.image_asset_id || 0,
           image_preview_url: previewUrl
@@ -208,6 +228,10 @@ Page({
         selectedCategoryValue: res.category_id ? String(res.category_id) : '',
         isFeatured: res.tags?.some((t: { name: string }) => t.name === '推荐') ?? false,
         isHotSelling: res.tags?.some((t: { name: string }) => t.name === '热卖') ?? false,
+        selectedDishTagIds: (res.tags || [])
+          .filter((tag) => !FEATURED_TAG_NAMES.has(tag.name))
+          .map((tag) => tag.id)
+          .filter((id) => Number.isFinite(id) && id > 0),
         customizationGroups
       })
     } catch (err) {
@@ -229,6 +253,11 @@ Page({
       this.setData({ [`formData.${field}`]: Number.isFinite(prepareTime) ? prepareTime : 0 })
       return
     }
+    if (field === 'sort_order') {
+      const sortOrder = Number.parseInt(value, 10)
+      this.setData({ [`formData.${field}`]: Number.isFinite(sortOrder) ? sortOrder : 0 })
+      return
+    }
     this.setData({ [`formData.${field}`]: value.replace(/^\s+/, '') })
   },
 
@@ -245,6 +274,63 @@ Page({
     const { value } = e.detail
     if (tag === '推荐') this.setData({ isFeatured: value })
     else if (tag === '热卖') this.setData({ isHotSelling: value })
+  },
+
+  onDishTagChange(e: WechatMiniprogram.CustomEvent<{ value: string[] }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const selectedDishTagIds = values
+      .map((value) => Number(value))
+      .filter((id) => Number.isFinite(id) && id > 0)
+
+    this.setData({ selectedDishTagIds })
+  },
+
+  onCreateDishTag() {
+    if (this.data.tagSubmitting) {
+      return
+    }
+
+    wx.showModal({
+      title: '新增菜品标签',
+      editable: true,
+      placeholderText: '请输入标签名称',
+      success: async (res) => {
+        if (!res.confirm) {
+          return
+        }
+
+        const name = (res.content || '').trim()
+        if (!name) {
+          wx.showToast({ title: '标签名称不能为空', icon: 'none' })
+          return
+        }
+        if (FEATURED_TAG_NAMES.has(name)) {
+          wx.showToast({ title: '推荐和热卖请使用下方排序标签开关', icon: 'none' })
+          return
+        }
+
+        this.setData({ tagSubmitting: true })
+        try {
+          const created = await TagService.createTag({ name, type: 'dish' })
+          const availableDishTags = this.data.availableDishTags.some((tag) => tag.id === created.id)
+            ? this.data.availableDishTags
+            : [...this.data.availableDishTags, created]
+          const selectedDishTagIds = this.data.selectedDishTagIds.includes(created.id)
+            ? this.data.selectedDishTagIds
+            : [...this.data.selectedDishTagIds, created.id]
+
+          this.setData({
+            availableDishTags,
+            selectedDishTagIds
+          })
+        } catch (err) {
+          logger.error('Create dish tag failed', err)
+          wx.showToast({ title: '新增标签失败，请重试', icon: 'none' })
+        } finally {
+          this.setData({ tagSubmitting: false })
+        }
+      }
+    })
   },
 
   onPriceChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
@@ -607,7 +693,7 @@ Page({
       is_online: this.data.formData.is_online,
       is_available: this.data.formData.is_available,
       prepare_time: this.data.formData.prepare_time,
-      sort_order: 0
+      sort_order: this.data.formData.sort_order
     }
 
     if (description) {
@@ -616,11 +702,27 @@ Page({
     if (this.data.formData.image_asset_id) {
       payload.image_asset_id = this.data.formData.image_asset_id
     }
-    if (this.data.formData.member_price > 0) {
+    if (this.data.selectedDishTagIds.length > 0 || this.data.isEdit) {
+      payload.tag_ids = this.data.selectedDishTagIds
+    }
+
+    // 编辑页采用整表单提交语义，会员价清空时也要显式下发 0，避免旧值残留在后端。
+    if (this.data.isEdit || this.data.formData.member_price > 0) {
       payload.member_price = this.data.formData.member_price
     }
 
     return payload
+  },
+
+  buildFeaturedTags(): string[] {
+    const featuredTags: string[] = []
+    if (this.data.isFeatured) {
+      featuredTags.push('推荐')
+    }
+    if (this.data.isHotSelling) {
+      featuredTags.push('热卖')
+    }
+    return featuredTags
   },
 
   async onSubmit() {
@@ -641,6 +743,10 @@ Page({
       wx.showToast({ title: '出餐时间需在1-120分钟', icon: 'none' })
       return
     }
+    if (formData.sort_order < 0 || formData.sort_order > 999) {
+      wx.showToast({ title: '排序值需在0-999之间', icon: 'none' })
+      return
+    }
 
     this.setData({ submitting: true })
     let currentDishId = this.data.dishId
@@ -648,6 +754,7 @@ Page({
     try {
       const categoryId = await this.ensureCategoryForSubmit()
       const customizationGroups = await this.buildCustomizationPayload()
+      const featuredTags = this.buildFeaturedTags()
       const payload = this.buildSubmitPayload(categoryId)
 
       if (this.data.isEdit) {
@@ -655,16 +762,15 @@ Page({
         currentDishId = this.data.dishId
         baseDishSaved = true
         this.applyPersistedDishState(updatedDish, this.data.formData.image_preview_url)
-        // 更新推荐/热卖标签
-        const featuredTags: string[] = []
-        if (this.data.isFeatured) featuredTags.push('推荐')
-        if (this.data.isHotSelling) featuredTags.push('热卖')
-        await DishManagementService.setDishFeaturedTags(this.data.dishId, featuredTags)
       } else {
         const createdDish = await DishManagementService.createDish(payload as CreateDishRequest)
         currentDishId = createdDish.id
         baseDishSaved = true
         this.applyPersistedDishState(createdDish, this.data.formData.image_preview_url)
+      }
+
+      if (currentDishId > 0) {
+        await DishManagementService.setDishFeaturedTags(currentDishId, featuredTags)
       }
 
       if (currentDishId > 0 && (this.data.isEdit || customizationGroups.length > 0)) {

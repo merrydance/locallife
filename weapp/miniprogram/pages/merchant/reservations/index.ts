@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
   cancelReservation,
+  checkInReservation,
   completeReservationByMerchant,
   confirmReservationByMerchant,
   markReservationNoShow,
@@ -10,6 +11,7 @@ import {
   ReservationResponse,
   ReservationStatus,
   ReservationService,
+  startCookingReservation,
   updateReservation
 } from '../../../api/reservation'
 import { tableManagementService, TableResponse } from '../../../api/table-device-management'
@@ -28,9 +30,12 @@ interface ReservationCardView extends ReservationResponse {
   contactLabel: string
   paymentLabel: string
   itemPreview: string
+  cookingStartedNotice: string
   canEdit: boolean
   canCancel: boolean
   canConfirm: boolean
+  canCheckIn: boolean
+  canStartCooking: boolean
   canNoShow: boolean
   canComplete: boolean
 }
@@ -139,6 +144,15 @@ function formatReservationItems(reservation: ReservationResponse): string {
     .join('，')
 }
 
+function formatCookingStartedNotice(value?: string): string {
+  if (!value) return ''
+
+  const startedAt = dayjs(value)
+  if (!startedAt.isValid()) return '已通知后厨起菜'
+
+  return `已于 ${startedAt.format('HH:mm')} 通知后厨起菜`
+}
+
 function buildReservationCard(reservation: ReservationResponse): ReservationCardView {
   return {
     ...reservation,
@@ -148,9 +162,12 @@ function buildReservationCard(reservation: ReservationResponse): ReservationCard
     contactLabel: `${reservation.contact_name} · ${reservation.contact_phone}`,
     paymentLabel: formatPaymentMode(reservation.payment_mode),
     itemPreview: formatReservationItems(reservation),
+    cookingStartedNotice: formatCookingStartedNotice(reservation.cooking_started_at),
     canEdit: !['completed', 'cancelled', 'expired'].includes(reservation.status),
     canCancel: ['pending', 'paid', 'confirmed'].includes(reservation.status),
     canConfirm: reservation.status === 'paid',
+    canCheckIn: reservation.status === 'paid' || reservation.status === 'confirmed',
+    canStartCooking: ['confirmed', 'checked_in'].includes(reservation.status) && !reservation.cooking_started_at,
     canNoShow: reservation.status === 'paid' || reservation.status === 'confirmed',
     canComplete: reservation.status === 'confirmed' || reservation.status === 'checked_in'
   }
@@ -591,7 +608,7 @@ Page({
 
   async runReservationAction(
     reservationId: number,
-    actionKey: 'cancel' | 'confirm' | 'no_show' | 'complete',
+    actionKey: 'cancel' | 'confirm' | 'check_in' | 'start_cooking' | 'no_show' | 'complete',
     request: () => Promise<unknown>,
     modalTitle: string,
     modalContent: string,
@@ -655,6 +672,34 @@ Page({
       '标记未到店',
       `确认 ${contact || '该顾客'} 未到店后，预订会进入“未到店”状态且不可直接恢复。`,
       '已标记未到店'
+    )
+  },
+
+  onCheckInReservation(e: WechatMiniprogram.TouchEvent) {
+    const { id, contact } = e.currentTarget.dataset as { id?: number, contact?: string }
+    if (!id) return
+
+    this.runReservationAction(
+      id,
+      'check_in',
+      () => checkInReservation(id),
+      '登记顾客到店',
+      `${contact || '该顾客'} 到店后，预订会进入“已到店”状态，可继续安排入座或完成预订。`,
+      '已登记顾客到店'
+    )
+  },
+
+  onStartCookingReservation(e: WechatMiniprogram.TouchEvent) {
+    const { id, contact } = e.currentTarget.dataset as { id?: number, contact?: string }
+    if (!id) return
+
+    this.runReservationAction(
+      id,
+      'start_cooking',
+      () => startCookingReservation(id),
+      '通知后厨起菜',
+      `确认通知后厨为${contact || '该顾客'}备菜后，厨房看板会同步显示起菜状态。`,
+      '已通知后厨起菜'
     )
   },
 

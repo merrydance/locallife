@@ -2,12 +2,6 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
   <view wx:if="{{initialLoading}}" class="loading-shell">
-    <view class="hero-card hero-card-loading">
-      <view class="skeleton-line skeleton-title skeleton-shimmer"></view>
-      <view class="skeleton-line skeleton-text skeleton-shimmer"></view>
-      <view class="skeleton-line skeleton-text skeleton-short skeleton-shimmer"></view>
-    </view>
-
     <view class="section-block section-block-loading" wx:for="{{[1, 2, 3]}}" wx:key="*this">
       <view class="skeleton-line skeleton-heading skeleton-shimmer"></view>
       <view class="skeleton-cell" wx:for="{{[1, 2]}}" wx:key="*this">
@@ -23,11 +17,6 @@
   </view>
 
   <block wx:else>
-    <view class="hero-card">
-      <text class="hero-title">订单分发与提醒</text>
-      <text class="hero-subtitle">统一维护打印、语音播报和 KDS 能力，保证后厨、前台和提醒链路的表现一致。</text>
-    </view>
-
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
       <text class="inline-banner-text">{{refreshErrorMessage}}</text>
       <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
@@ -62,6 +51,37 @@
           <t-switch slot="note" value="{{form.print_reservation}}" data-field="print_reservation" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_print}}" />
         </t-cell>
       </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">打印分发策略</view>
+      <view class="section-desc">对齐后端的分发与触发模式，决定订单在什么节点、按什么方式推送到打印机。</view>
+
+      <view class="mode-card {{!form.enable_print ? 'mode-card-disabled' : ''}}">
+        <view class="mode-title">分发模式</view>
+        <radio-group bindchange="onDispatchModeChange">
+          <label class="mode-option" wx:for="{{printDispatchModeOptions}}" wx:key="value">
+            <radio value="{{item.value}}" checked="{{form.print_dispatch_mode === item.value}}" color="var(--td-brand-color)" disabled="{{!form.enable_print}}" />
+            <view class="mode-copy">
+              <text class="mode-option-title">{{item.label}}</text>
+              <text class="mode-option-desc">{{item.desc}}</text>
+            </view>
+          </label>
+        </radio-group>
+      </view>
+
+      <view class="mode-card {{!form.enable_print ? 'mode-card-disabled' : ''}}">
+        <view class="mode-title">触发时机</view>
+        <radio-group bindchange="onTriggerModeChange">
+          <label class="mode-option" wx:for="{{printTriggerModeOptions}}" wx:key="value">
+            <radio value="{{item.value}}" checked="{{form.print_trigger_mode === item.value}}" color="var(--td-brand-color)" disabled="{{!form.enable_print}}" />
+            <view class="mode-copy">
+              <text class="mode-option-title">{{item.label}}</text>
+              <text class="mode-option-desc">{{item.desc}}</text>
+            </view>
+          </label>
+        </radio-group>
+      </view>
     </view>
 
     <view class="section-block">

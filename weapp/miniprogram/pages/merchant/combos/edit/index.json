@@ -4,7 +4,10 @@
     "t-button": "tdesign-miniprogram/button/button",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-empty": "tdesign-miniprogram/empty/empty",
-    "t-switch": "tdesign-miniprogram/switch/switch"
+    "t-switch": "tdesign-miniprogram/switch/switch",
+    "t-stepper": "tdesign-miniprogram/stepper/stepper",
+    "t-input": "tdesign-miniprogram/input/input",
+    "t-textarea": "tdesign-miniprogram/textarea/textarea"
   },
   "navigationStyle": "custom"
 }

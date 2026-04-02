@@ -11,11 +11,6 @@
   </view>
 
   <block wx:else>
-    <view class="hero-card">
-      <text class="hero-title">收款开通与签约</text>
-      <text class="hero-subtitle">在这里完成收付通进件、签约和重提资料。资金余额与提现记录仍在资金账户页查看。</text>
-    </view>
-
     <view class="section-block">
       <view class="section-title">当前进度</view>
 

@@ -1,0 +1,260 @@
+.page-container {
+  background: var(--td-bg-color-page);
+  min-height: 100vh;
+  padding: 24rpx;
+  padding-bottom: 120rpx;
+  box-sizing: border-box;
+}
+
+.hero-card,
+.voucher-card,
+.form-popup {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.hero-card {
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20rpx;
+}
+
+.hero-copy {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.hero-title {
+  font-size: var(--font-size-heading);
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.hero-subtitle {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.state-block {
+  padding: 180rpx 0;
+  display: flex;
+  justify-content: center;
+}
+
+.voucher-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.voucher-card {
+  padding: var(--spacer-md);
+}
+
+.voucher-header,
+.voucher-amount-row,
+.voucher-info-row,
+.voucher-actions,
+.form-item-switch,
+.form-actions {
+  display: flex;
+}
+
+.voucher-header,
+.voucher-amount-row,
+.voucher-info-row,
+.form-item-switch,
+.form-actions {
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.voucher-header {
+  align-items: flex-start;
+}
+
+.voucher-main {
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.voucher-name {
+  font-size: 30rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.voucher-code,
+.voucher-desc,
+.voucher-info-label,
+.voucher-info-value {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.voucher-amount-row {
+  align-items: baseline;
+  margin-top: 20rpx;
+}
+
+.voucher-amount {
+  font-size: var(--font-size-display);
+  font-weight: 700;
+  color: var(--td-brand-color);
+}
+
+.voucher-threshold {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
+}
+
+.voucher-desc {
+  margin-top: 16rpx;
+  padding: 18rpx 20rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.voucher-info-row {
+  align-items: flex-start;
+  margin-top: 16rpx;
+}
+
+.voucher-info-label {
+  width: 140rpx;
+  flex-shrink: 0;
+}
+
+.voucher-info-value {
+  flex: 1;
+  text-align: right;
+  color: var(--td-text-color-primary);
+}
+
+.voucher-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 18rpx;
+}
+
+.voucher-actions {
+  justify-content: flex-end;
+  gap: 16rpx;
+  margin-top: 20rpx;
+  padding-top: 20rpx;
+  border-top: 1rpx solid var(--td-component-stroke);
+  flex-wrap: wrap;
+}
+
+.form-popup {
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+  max-height: 85vh;
+}
+
+.form-scroll {
+  max-height: 85vh;
+  padding: 32rpx 24rpx calc(32rpx + constant(safe-area-inset-bottom));
+  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+}
+
+.form-title {
+  font-size: 34rpx;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+  text-align: center;
+  margin-bottom: 32rpx;
+}
+
+.form-item {
+  margin-bottom: 24rpx;
+}
+
+.form-item-grid {
+  display: flex;
+  gap: 20rpx;
+}
+
+.form-item-half {
+  flex: 1;
+}
+
+.form-label {
+  display: block;
+  margin-bottom: 10rpx;
+  font-size: 26rpx;
+  color: var(--td-text-color-primary);
+}
+
+.required {
+  color: var(--td-error-color);
+}
+
+.form-input,
+.form-textarea,
+.form-picker {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 20rpx;
+  border: 1rpx solid var(--td-component-stroke);
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  font-size: 28rpx;
+  color: var(--td-text-color-primary);
+}
+
+.form-input {
+  min-height: 84rpx;
+}
+
+.form-picker {
+  min-height: 84rpx;
+  display: flex;
+  align-items: center;
+}
+
+.form-textarea {
+  min-height: 180rpx;
+}
+
+.form-picker.is-placeholder {
+  color: var(--td-text-color-placeholder);
+}
+
+.order-type-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+}
+
+.order-type-option {
+  padding: 16rpx 24rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-secondary);
+  font-size: 24rpx;
+}
+
+.order-type-option.is-selected {
+  background: var(--td-brand-color-light);
+  color: var(--td-brand-color);
+  font-weight: 600;
+}
+
+.form-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
+  margin-top: 16rpx;
+}

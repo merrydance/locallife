@@ -214,7 +214,8 @@
 .popup-sheet {
   background: var(--td-bg-color-container);
   border-radius: 24rpx 24rpx 0 0;
-  padding: 32rpx 24rpx 40rpx;
+  padding: 32rpx 24rpx calc(40rpx + constant(safe-area-inset-bottom));
+  padding: 32rpx 24rpx calc(40rpx + env(safe-area-inset-bottom));
 }
 
 .popup-title {
@@ -284,8 +285,8 @@
 }
 
 .popup-actions {
-  display: flex;
-  justify-content: flex-end;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16rpx;
   margin-top: 28rpx;
 }

@@ -11,12 +11,6 @@
   </view>
 
   <block wx:else>
-    <view class="hero-card">
-      <text class="hero-title">会员权益使用规则</text>
-      <text class="hero-subtitle">控制余额和赠送金在哪些业务场景可用，以及是否允许与优惠叠加。</text>
-      <text class="hero-meta">商户 ID {{merchantId}}</text>
-    </view>
-
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
       <text class="inline-banner-text">{{refreshErrorMessage}}</text>
       <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
@@ -34,6 +28,14 @@
         <t-input label="最高抵扣比例" type="number" value="{{form.max_deduction_percent}}" placeholder="1-100" bindchange="onPercentChange">
           <text slot="suffix">%</text>
         </t-input>
+      </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-title">充值活动</view>
+      <t-cell-group theme="card">
+        <t-cell title="充值规则管理" description="维护顾客可见的充值赠送活动、有效期和启停状态" arrow bind:tap="onOpenRechargeRules" />
+        <t-cell title="会员管理" description="查看门店会员余额、消费流水，并支持人工余额调整" arrow bind:tap="onOpenMembers" />
       </t-cell-group>
     </view>
 

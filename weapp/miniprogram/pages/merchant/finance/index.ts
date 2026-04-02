@@ -36,11 +36,17 @@ type InputChangeDetail = {
 }
 
 type FinanceRangeKey = '7d' | '30d'
+type SettlementStatusFilter = 'all' | 'pending' | 'processing' | 'finished' | 'failed'
 
 type RangeOption = {
   key: FinanceRangeKey
   label: string
   days: number
+}
+
+type SettlementStatusOption = {
+  key: SettlementStatusFilter
+  label: string
 }
 
 const emptyApplyment: ApplymentStatusResponse = {
@@ -51,6 +57,14 @@ const emptyApplyment: ApplymentStatusResponse = {
 const FINANCE_RANGE_OPTIONS: RangeOption[] = [
   { key: '7d', label: '近7天', days: 7 },
   { key: '30d', label: '近30天', days: 30 }
+]
+
+const SETTLEMENT_STATUS_OPTIONS: SettlementStatusOption[] = [
+  { key: 'all', label: '全部' },
+  { key: 'pending', label: '待结算' },
+  { key: 'processing', label: '处理中' },
+  { key: 'finished', label: '已完成' },
+  { key: 'failed', label: '失败' }
 ]
 
 const EMPTY_FINANCE_OVERVIEW: MerchantFinanceOverviewResponse = {
@@ -123,6 +137,8 @@ Page({
     balanceStatusDesc: '',
     rangeOptions: FINANCE_RANGE_OPTIONS,
     currentRange: '7d' as FinanceRangeKey,
+    settlementStatusOptions: SETTLEMENT_STATUS_OPTIONS,
+    currentSettlementStatus: 'all' as SettlementStatusFilter,
     financeLoaded: false,
     financeLoading: true,
     financeError: false,
@@ -197,7 +213,14 @@ Page({
         getMerchantServiceFees(params),
         getMerchantPromotionExpenses({ ...params, page: 1, limit: 5 }),
         getMerchantDailyFinance(params),
-        listMerchantSettlements({ ...params, page: 1, limit: 5 }),
+        listMerchantSettlements({
+          ...params,
+          page: 1,
+          limit: 5,
+          ...(this.data.currentSettlementStatus !== 'all'
+            ? { status: this.data.currentSettlementStatus }
+            : {})
+        }),
         listMerchantSettlementTimeline({ ...params, page: 1, limit: 5 })
       ] as const)
 
@@ -410,6 +433,13 @@ Page({
     const { key } = e.currentTarget.dataset as { key?: FinanceRangeKey }
     if (!key || key === this.data.currentRange) return
     this.setData({ currentRange: key })
+    this.loadFinanceInsights()
+  },
+
+  onSelectSettlementStatus(e: WechatMiniprogram.TouchEvent) {
+    const { key } = e.currentTarget.dataset as { key?: SettlementStatusFilter }
+    if (!key || key === this.data.currentSettlementStatus) return
+    this.setData({ currentSettlementStatus: key })
     this.loadFinanceInsights()
   },
 

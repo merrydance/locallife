@@ -114,6 +114,13 @@
   gap: 16rpx;
 }
 
+.filter-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16rpx;
+  margin-bottom: var(--spacer-sm);
+}
+
 .range-chip {
   padding: 12rpx 24rpx;
   border-radius: var(--radius-round);
@@ -124,6 +131,20 @@
 }
 
 .range-chip-active {
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+}
+
+.filter-chip {
+  padding: 10rpx 22rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-bg-color-container);
+  color: var(--td-text-color-secondary);
+  box-shadow: var(--shadow-sm);
+  font-size: var(--font-size-xs);
+}
+
+.filter-chip-active {
   background: var(--td-brand-color);
   color: var(--td-text-color-anti);
 }

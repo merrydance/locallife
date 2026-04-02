@@ -8,6 +8,38 @@
   box-shadow: var(--shadow-sm);
 }
 
+.type-filter-strip {
+  white-space: nowrap;
+  background: var(--td-bg-color-container);
+  padding: 16rpx 16rpx 8rpx;
+  box-shadow: var(--shadow-sm);
+}
+
+.type-filter-row {
+  display: inline-flex;
+  gap: 16rpx;
+  padding-right: 16rpx;
+}
+
+.type-filter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120rpx;
+  height: 56rpx;
+  padding: 0 20rpx;
+  border-radius: 999rpx;
+  background: var(--td-bg-color-page);
+  color: var(--td-text-color-secondary);
+  font-size: 24rpx;
+  transition: all 0.2s ease;
+}
+
+.type-filter-pill.is-active {
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+}
+
 .list-section {
   padding: 24rpx 16rpx;
 }

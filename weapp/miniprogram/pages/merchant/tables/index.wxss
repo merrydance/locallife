@@ -107,7 +107,8 @@
 .form-scroll {
   max-height: 80vh;
   box-sizing: border-box;
-  padding: 24rpx;
+  padding: 24rpx 24rpx calc(24rpx + constant(safe-area-inset-bottom));
+  padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom));
 }
 
 .form-title {
@@ -244,7 +245,7 @@
 
 .form-actions {
   margin-top: 24rpx;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12rpx;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
 }

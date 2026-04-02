@@ -1,9 +1,12 @@
 import { getStableBarHeights } from '../../../../utils/responsive'
 import {
+  ComboDishInput,
   ComboManagementService,
   ComboSetWithDetailsResponse,
   DishManagementService,
-  DishResponse
+  DishResponse,
+  TagInfo,
+  TagService
 } from '../../../../api/dish'
 import { getPublicImageUrl } from '../../../../utils/image'
 import { logger } from '../../../../utils/logger'
@@ -18,6 +21,7 @@ interface DishOption {
   is_online: boolean
   image_url: string
   checked: boolean
+  quantity: number
 }
 
 interface ComboEditOptions {
@@ -33,6 +37,30 @@ const PRICING_MODE_OPTIONS = [
   { label: '保持当前价(仅编辑)', value: 'keep' }
 ]
 
+function normalizeDishQuantity(quantity?: number): number {
+  if (!Number.isFinite(quantity) || !quantity) {
+    return 1
+  }
+
+  const safeQuantity = Math.round(quantity)
+  if (safeQuantity < 1) {
+    return 1
+  }
+  if (safeQuantity > 99) {
+    return 99
+  }
+  return safeQuantity
+}
+
+function buildSelectedComboDishes(dishes: DishOption[]): ComboDishInput[] {
+  return dishes
+    .filter((dish) => dish.checked)
+    .map((dish) => ({
+      dish_id: dish.id,
+      quantity: normalizeDishQuantity(dish.quantity)
+    }))
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -44,6 +72,12 @@ Page({
     comboId: 0,
     existingName: '',
     existingPrice: 0,
+    comboName: '精选套餐',
+    comboDescription: '',
+    comboNameCustomized: false,
+    availableTags: [] as TagInfo[],
+    selectedTagIds: [] as number[],
+    tagSubmitting: false,
     selectedDishIds: [] as number[],
     allDishes: [] as DishOption[],
     dishes: [] as DishOption[],
@@ -54,15 +88,17 @@ Page({
     autoName: '精选套餐',
     originalTotal: 0,
     comboPricePreview: 0,
+    selectedDishQuantityTotal: 0,
     selectedDishPreviews: [] as string[],
     dishEmptyDescription: '暂无可选菜品，请先创建菜品'
   },
 
-  applyPersistedComboState(combo: Pick<ComboSetWithDetailsResponse, 'id' | 'name' | 'combo_price' | 'is_online'>, selectedDishIds: number[]) {
-    const selectedSet = new Set(selectedDishIds)
+  applyPersistedComboState(combo: Pick<ComboSetWithDetailsResponse, 'id' | 'name' | 'combo_price' | 'is_online'>, selectedDishes: ComboDishInput[]) {
+    const quantityByDishId = new Map(selectedDishes.map((dish) => [dish.dish_id, normalizeDishQuantity(dish.quantity)]))
     const allDishes = this.data.allDishes.map((dish) => ({
       ...dish,
-      checked: selectedSet.has(dish.id)
+      checked: quantityByDishId.has(dish.id),
+      quantity: quantityByDishId.get(dish.id) || dish.quantity || 1
     }))
 
     this.setData(
@@ -71,15 +107,25 @@ Page({
         isEdit: combo.id > 0,
         existingName: combo.name,
         existingPrice: combo.combo_price,
+        comboName: combo.name,
+        comboNameCustomized: true,
         onlineChoice: combo.is_online ? 'online' : 'offline',
-        selectedDishIds,
         allDishes
       },
       () => {
+        this.syncSelectedDishState()
         this.syncVisibleDishes()
         this.recomputePreview()
       }
     )
+  },
+
+  syncSelectedDishState() {
+    const selectedDishIds = this.data.allDishes
+      .filter((dish) => dish.checked)
+      .map((dish) => dish.id)
+
+    this.setData({ selectedDishIds })
   },
 
   onLoad(options: ComboEditOptions) {
@@ -126,11 +172,12 @@ Page({
       initialErrorMessage: ''
     })
     try {
-      const [allDishesResponse, comboRes] = await Promise.all([
+      const [allDishesResponse, comboRes, availableTags] = await Promise.all([
         this.fetchAllDishes(),
         this.data.isEdit
           ? ComboManagementService.getComboDetail(this.data.comboId)
-          : Promise.resolve(null as ComboSetWithDetailsResponse | null)
+          : Promise.resolve(null as ComboSetWithDetailsResponse | null),
+        TagService.listTags('combo').catch(() => [] as TagInfo[])
       ])
 
       const dishes = allDishesResponse.map((dish: DishResponse) => ({
@@ -139,15 +186,20 @@ Page({
         price: dish.price,
         is_online: dish.is_online,
         image_url: getPublicImageUrl(dish.image_url || ''),
-        checked: false
+        checked: false,
+        quantity: 1
       }))
 
-      const selectedDishIds = comboRes?.dishes?.map((dish) => dish.dish_id) || []
+      const quantityByDishId = new Map(
+        (comboRes?.dishes || []).map((dish) => [dish.dish_id, normalizeDishQuantity(dish.quantity)])
+      )
+      const selectedDishIds = Array.from(quantityByDishId.keys())
 
       const selectedSet = new Set(selectedDishIds)
       const dishOptions = dishes.map((dish) => ({
         ...dish,
-        checked: selectedSet.has(dish.id)
+        checked: selectedSet.has(dish.id),
+        quantity: quantityByDishId.get(dish.id) || 1
       }))
 
       this.setData({
@@ -155,6 +207,15 @@ Page({
         selectedDishIds,
         existingName: comboRes?.name || '',
         existingPrice: comboRes?.combo_price || 0,
+        comboName: comboRes?.name || this.data.comboName,
+        comboDescription: comboRes?.description || '',
+        comboNameCustomized: !!comboRes?.name,
+        availableTags,
+        selectedTagIds: Array.isArray(comboRes?.tags)
+          ? comboRes.tags
+            .map((tag) => Number(tag.id))
+            .filter((id) => Number.isFinite(id) && id > 0)
+          : [],
         onlineChoice: comboRes?.is_online === false ? 'offline' : 'online',
         initialError: false,
         initialErrorMessage: ''
@@ -183,11 +244,39 @@ Page({
     const selectedSet = new Set(selectedDishIds)
     const allDishes = this.data.allDishes.map((dish) => ({
       ...dish,
-      checked: selectedSet.has(dish.id)
+      checked: selectedSet.has(dish.id),
+      quantity: dish.quantity || 1
     }))
-    this.setData({ selectedDishIds, allDishes })
-    this.syncVisibleDishes()
-    this.recomputePreview()
+    this.setData({ allDishes }, () => {
+      this.syncSelectedDishState()
+      this.syncVisibleDishes()
+      this.recomputePreview()
+    })
+  },
+
+  onDishQuantityChange(
+    e: WechatMiniprogram.CustomEvent<{ value: number }> & { currentTarget: { dataset: { id?: number } } }
+  ) {
+    const { id } = e.currentTarget.dataset
+    if (!id) {
+      return
+    }
+
+    const index = this.data.allDishes.findIndex((dish) => dish.id === id)
+    if (index < 0 || !this.data.allDishes[index].checked) {
+      return
+    }
+
+    const quantity = normalizeDishQuantity(e.detail?.value)
+    this.setData(
+      {
+        [`allDishes[${index}].quantity`]: quantity
+      },
+      () => {
+        this.syncVisibleDishes()
+        this.recomputePreview()
+      }
+    )
   },
 
   onShowOnlineOnlyChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
@@ -200,13 +289,83 @@ Page({
     this.recomputePreview()
   },
 
+  onComboNameChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({
+      comboName: (e.detail.value || '').replace(/^\s+/, ''),
+      comboNameCustomized: true
+    })
+  },
+
+  onComboDescriptionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
+    this.setData({
+      comboDescription: (e.detail.value || '').replace(/^\s+/, '')
+    })
+  },
+
+  onTagChange(e: WechatMiniprogram.CustomEvent<{ value: string[] }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const selectedTagIds = values
+      .map((value) => Number(value))
+      .filter((id) => Number.isFinite(id) && id > 0)
+
+    this.setData({ selectedTagIds })
+  },
+
+  onCreateTag() {
+    if (this.data.tagSubmitting) {
+      return
+    }
+
+    wx.showModal({
+      title: '新增套餐标签',
+      editable: true,
+      placeholderText: '请输入标签名称',
+      success: async (res) => {
+        if (!res.confirm) {
+          return
+        }
+
+        const name = (res.content || '').trim()
+        if (!name) {
+          wx.showToast({ title: '标签名称不能为空', icon: 'none' })
+          return
+        }
+
+        this.setData({ tagSubmitting: true })
+        try {
+          const created = await TagService.createTag({ name, type: 'combo' })
+          const availableTags = this.data.availableTags.some((tag) => tag.id === created.id)
+            ? this.data.availableTags
+            : [...this.data.availableTags, created]
+          const selectedTagIds = this.data.selectedTagIds.includes(created.id)
+            ? this.data.selectedTagIds
+            : [...this.data.selectedTagIds, created.id]
+
+          this.setData({
+            availableTags,
+            selectedTagIds
+          })
+        } catch (err) {
+          logger.error('Create combo tag failed', err)
+          wx.showToast({ title: getErrorMessage(err, '新增标签失败，请稍后重试'), icon: 'none' })
+        } finally {
+          this.setData({ tagSubmitting: false })
+        }
+      }
+    })
+  },
+
   onOnlineChoiceChange(e: WechatMiniprogram.CustomEvent) {
     this.setData({ onlineChoice: e.detail.value as 'online' | 'offline' })
   },
 
   calcOriginalTotal() {
-    const dishPriceMap = new Map(this.data.allDishes.map((dish) => [dish.id, dish.price]))
-    return this.data.selectedDishIds.reduce((sum, dishId) => sum + (dishPriceMap.get(dishId) || 0), 0)
+    return this.data.allDishes.reduce((sum, dish) => {
+      if (!dish.checked) {
+        return sum
+      }
+      return sum + dish.price * normalizeDishQuantity(dish.quantity)
+    }, 0)
   },
 
   calcComboPrice(originalTotal: number) {
@@ -228,9 +387,12 @@ Page({
   },
 
   buildAutoName() {
-    const dishMap = new Map(this.data.allDishes.map((dish) => [dish.id, dish.name]))
-    const selectedNames = this.data.selectedDishIds
-      .map((dishId) => dishMap.get(dishId) || '')
+    const selectedNames = this.data.allDishes
+      .filter((dish) => dish.checked)
+      .map((dish) => {
+        const quantity = normalizeDishQuantity(dish.quantity)
+        return quantity > 1 ? `${dish.name}x${quantity}` : dish.name
+      })
       .filter((name) => !!name)
 
     if (selectedNames.length === 0) {
@@ -242,6 +404,11 @@ Page({
     }
 
     return `${selectedNames.slice(0, 2).join('+')}等${selectedNames.length}款套餐`
+  },
+
+  buildComboName(autoName: string) {
+    const comboName = this.data.comboName.trim()
+    return comboName || autoName
   },
 
   async onSubmit() {
@@ -259,8 +426,11 @@ Page({
     }
 
     const comboPrice = this.calcComboPrice(originalTotal)
-    const name = this.buildAutoName()
+  const autoName = this.buildAutoName()
+  const name = this.buildComboName(autoName)
+  const description = this.data.comboDescription.trim()
     const isOnline = this.data.onlineChoice === 'online'
+    const selectedDishes = buildSelectedComboDishes(this.data.allDishes)
 
     this.setData({ submitting: true })
     try {
@@ -268,20 +438,31 @@ Page({
       if (this.data.isEdit) {
         savedCombo = await ComboManagementService.updateCombo(this.data.comboId, {
           name,
+          description,
           combo_price: comboPrice,
           is_online: isOnline,
-          dishes: this.data.selectedDishIds.map((dishId) => ({ dish_id: dishId, quantity: 1 }))
+          dishes: selectedDishes,
+          tag_ids: this.data.selectedTagIds
         })
       } else {
         savedCombo = await ComboManagementService.createCombo({
           name,
+          description,
+          original_price: originalTotal,
           combo_price: comboPrice,
           is_online: isOnline,
-          dish_ids: this.data.selectedDishIds
+          dishes: selectedDishes,
+          tag_ids: this.data.selectedTagIds
         })
       }
 
-      this.applyPersistedComboState(savedCombo, this.data.selectedDishIds)
+      this.applyPersistedComboState(savedCombo, selectedDishes)
+
+      const pages = getCurrentPages()
+      const prevPage = pages[pages.length - 2] as { loadCombos?: (reset?: boolean) => void } | undefined
+      if (prevPage?.loadCombos) {
+        prevPage.loadCombos(true)
+      }
 
       wx.navigateBack()
     } catch (err) {
@@ -296,11 +477,27 @@ Page({
     const originalTotal = this.calcOriginalTotal()
     const comboPricePreview = this.calcComboPrice(originalTotal)
     const autoName = this.buildAutoName()
+    const selectedDishQuantityTotal = this.data.allDishes
+      .filter((dish) => dish.checked)
+      .reduce((sum, dish) => sum + normalizeDishQuantity(dish.quantity), 0)
     const selectedDishPreviews = this.data.allDishes
-      .filter((dish) => this.data.selectedDishIds.includes(dish.id) && dish.image_url)
+      .filter((dish) => dish.checked && dish.image_url)
       .map((dish) => dish.image_url)
       .slice(0, 4)
-    this.setData({ originalTotal, comboPricePreview, autoName, selectedDishPreviews })
+
+    const updates: WechatMiniprogram.Page.DataOption = {
+      originalTotal,
+      comboPricePreview,
+      autoName,
+      selectedDishQuantityTotal,
+      selectedDishPreviews
+    }
+
+    if (!this.data.comboNameCustomized) {
+      updates.comboName = autoName
+    }
+
+    this.setData(updates)
   },
 
   syncVisibleDishes() {

@@ -4,27 +4,6 @@
   padding: var(--spacer-md);
 }
 
-.hero-card {
-  background: var(--td-bg-color-container);
-  border-radius: var(--radius-xl);
-  padding: var(--spacer-lg);
-  margin-bottom: var(--spacer-md);
-  box-shadow: var(--shadow-card);
-}
-
-.hero-title {
-  font-size: var(--font-size-lg);
-  font-weight: 600;
-  color: var(--td-text-color-primary);
-  margin-bottom: var(--spacer-xs);
-}
-
-.hero-copy {
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-secondary);
-  line-height: 1.6;
-}
-
 .section-block {
   margin-bottom: var(--spacer-md);
 }

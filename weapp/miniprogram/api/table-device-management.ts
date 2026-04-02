@@ -18,6 +18,12 @@ export type TableStatus = 'available' | 'occupied' | 'reserved' | 'disabled'
 /** 打印机类型枚举 - 基于swagger定义 */
 export type PrinterType = 'feieyun' | 'yilianyun' | 'other'
 
+/** 打印机角色枚举 - 对齐后端 api.createPrinterRequest */
+export type PrinterRole = 'front' | 'kitchen'
+
+/** 打印机异常对账任务状态 */
+export type PrinterReconciliationJobStatus = 'pending' | 'resolved'
+
 // ==================== 桌台管理相关类型 ====================
 
 /** 创建桌台请求 - 基于swagger api.createTableRequest */
@@ -25,6 +31,7 @@ export interface CreateTableRequest extends Record<string, unknown> {
     table_no: string
     table_type: TableType
     capacity: number
+    access_code?: string
     description?: string
     minimum_spend?: number
     qr_code_url?: string
@@ -34,6 +41,7 @@ export interface CreateTableRequest extends Record<string, unknown> {
 /** 更新桌台请求 - 基于swagger api.updateTableRequest */
 /** 更新桌台请求 - 对齐 api.updateTableRequest */
 export interface UpdateTableRequest extends Record<string, unknown> {
+    access_code?: string
     capacity?: number
     description?: string
     minimum_spend?: number
@@ -96,6 +104,7 @@ export interface CreatePrinterRequest extends Record<string, unknown> {
     printer_type: PrinterType
     printer_sn: string
     printer_key: string
+    printer_role?: PrinterRole
     print_takeout?: boolean
     print_dine_in?: boolean
     print_reservation?: boolean
@@ -109,6 +118,7 @@ export interface UpdatePrinterRequest extends Record<string, unknown> {
     print_takeout?: boolean
     printer_key?: string                         // 打印机密钥
     printer_name?: string
+    printer_role?: PrinterRole
 }
 
 /** 打印机响应 - 基于swagger api.printerResponse */
@@ -117,6 +127,7 @@ export interface PrinterResponse {
     merchant_id: number
     printer_name: string
     printer_type: PrinterType
+    printer_role: PrinterRole
     printer_sn: string
     is_active: boolean
     print_takeout: boolean
@@ -124,6 +135,47 @@ export interface PrinterResponse {
     print_reservation: boolean
     created_at: string
     updated_at: string
+}
+
+/** 打印机实时状态响应 - 对齐 api.printerLiveStatusResponse */
+export interface PrinterLiveStatusResponse {
+    printer_id: number
+    printer_name: string
+    printer_sn: string
+    printer_type: PrinterType
+    provider_status: string
+    online: boolean
+    working: boolean
+    model?: string
+    print_logo?: boolean
+    scan_switch?: boolean
+    checked_at: string
+    info_status?: string
+}
+
+/** 打印机异常对账任务响应 */
+export interface PrinterReconciliationJobResponse {
+    id: number
+    printer_id?: number
+    printer_name: string
+    printer_sn: string
+    printer_type: PrinterType
+    desired_action: 'register' | 'remove' | string
+    source_action: string
+    status: PrinterReconciliationJobStatus | string
+    failure_reason: string
+    last_error: string
+    retry_count: number
+    can_retry: boolean
+    created_at: string
+    updated_at: string
+    resolved_at?: string
+}
+
+/** 打印机异常对账任务列表响应 */
+export interface PrinterReconciliationJobListResponse {
+    jobs: PrinterReconciliationJobResponse[]
+    total: number
 }
 
 /** 打印机测试请求 */
@@ -143,6 +195,8 @@ export interface DisplayConfigResponse {
     print_takeout: boolean
     print_dine_in: boolean
     print_reservation: boolean
+    print_dispatch_mode: 'single_full' | 'split' | string
+    print_trigger_mode: 'accepted' | 'ready' | 'manual' | string
     voice_takeout: boolean
     voice_dine_in: boolean
     kds_url?: string
@@ -158,6 +212,8 @@ export interface UpdateDisplayConfigRequest extends Record<string, unknown> {
     print_takeout?: boolean
     print_dine_in?: boolean
     print_reservation?: boolean
+    print_dispatch_mode?: 'single_full' | 'split' | string
+    print_trigger_mode?: 'accepted' | 'ready' | 'manual' | string
     voice_takeout?: boolean
     voice_dine_in?: boolean
     kds_url?: string
@@ -379,12 +435,37 @@ export class DeviceManagementService {
     }
 
     /**
+     * 获取打印机异常对账任务
+     * @param status 任务状态，默认 pending
+     */
+    async listPrinterReconciliationJobs(
+        status: PrinterReconciliationJobStatus = 'pending'
+    ): Promise<PrinterReconciliationJobListResponse> {
+        return request({
+            url: '/v1/merchant/devices/reconciliation-jobs',
+            method: 'GET',
+            data: { status }
+        })
+    }
+
+    /**
      * 获取打印机详情
      * @param printerId 打印机ID
      */
     async getPrinterDetail(printerId: number): Promise<PrinterResponse> {
         return request({
             url: `/v1/merchant/devices/${printerId}`,
+            method: 'GET'
+        })
+    }
+
+    /**
+     * 获取打印机实时状态
+     * @param printerId 打印机ID
+     */
+    async getPrinterLiveStatus(printerId: number): Promise<PrinterLiveStatusResponse> {
+        return request({
+            url: `/v1/merchant/devices/${printerId}/status`,
             method: 'GET'
         })
     }
@@ -435,6 +516,17 @@ export class DeviceManagementService {
             url: `/v1/merchant/devices/${printerId}/test`,
             method: 'POST',
             data: testData || {}
+        })
+    }
+
+    /**
+     * 重试打印机异常对账任务
+     * @param jobId 对账任务ID
+     */
+    async retryPrinterReconciliationJob(jobId: number): Promise<PrinterReconciliationJobResponse> {
+        return request({
+            url: `/v1/merchant/devices/reconciliation-jobs/${jobId}/retry`,
+            method: 'POST'
         })
     }
 }
