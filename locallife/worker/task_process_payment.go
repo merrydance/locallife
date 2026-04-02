@@ -1046,7 +1046,12 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			return fmt.Errorf("get order: %w", err)
 		}
 		merchantID = order.MerchantID
-		totalAmount = order.TotalAmount
+		// 分账基数使用 paymentOrder.Amount（微信实际冻结金额）而非 order.TotalAmount。
+		// 当用户使用会员余额部分支付时，order.TotalAmount = WeChat支付额 + 余额支付额，
+		// 而 paymentOrder.Amount = order.TotalAmount - order.BalancePaid = 微信冻结额。
+		// 若以 order.TotalAmount 为基数，接收方总额可能超过微信冻结额，导致分账 API 失败。
+		// 注意：满减、优惠券、配送费折扣、押金抵扣均已在 order.TotalAmount 中扣除，无需额外处理。
+		totalAmount = paymentOrder.Amount
 		deliveryFee = order.DeliveryFee
 		orderSource = order.OrderType
 		outOrderNoSuffix = fmt.Sprintf("%d", payload.OrderID)
@@ -1124,6 +1129,13 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		riderEnabled = false
 	}
 
+	// 堂食/打包自提强制禁用平台与运营商分账（防御性校验，避免错误 DB 配置产生误收）
+	if orderSource == "dine_in" || orderSource == "takeaway" {
+		platformRate = 0
+		operatorRate = 0
+		riderEnabled = false
+	}
+
 	if payload.OrderID > 0 && riderEnabled && deliveryFee > 0 {
 		delivery, err := processor.store.GetDeliveryByOrderID(ctx, payload.OrderID)
 		if err != nil {
@@ -1147,6 +1159,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			} else {
 				hasRider = true
 				riderAmount = deliveryFee
+				// 当用户使用会员余额大额支付时，微信冻结额可能小于配送费。
+				// 将骑手分账金额上限对齐至实际微信冻结额，避免接收方总额超出冻结额。
+				if riderAmount > totalAmount {
+					riderAmount = totalAmount
+				}
 				riderUserOpenID = user.WechatOpenid
 			}
 		}
@@ -1177,17 +1194,27 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	}
 	merchantAmount = distributableAmount - platformCommission - operatorCommission
 	if merchantAmount < 0 {
-		log.Warn().
+		log.Error().
 			Int64("payment_order_id", payload.PaymentOrderID).
 			Int64("total_amount", totalAmount).
 			Int64("distributable_amount", distributableAmount).
 			Int64("platform_commission", platformCommission).
 			Int64("operator_commission", operatorCommission).
 			Int64("rider_amount", riderAmount).
-			Msg("merchant amount computed negative, clamp to zero")
+			Msg("merchant amount computed negative: platform+operator rates exceed 100%, check profit sharing config")
+		processor.publishAlert(ctx, AlertData{
+			AlertType:   AlertTypeSystemError,
+			Level:       AlertLevelCritical,
+			Title:       "分账配置错误",
+			Message:     fmt.Sprintf("支付单 %d 分账计算商户金额为负（平台+运营商比例之和超过100%%），请检查分账配置", payload.PaymentOrderID),
+			RelatedID:   payload.PaymentOrderID,
+			RelatedType: "payment_order",
+		})
 		merchantAmount = 0
 	}
-	needProfitSharing := platformCommission > 0 || operatorCommission > 0 || riderAmount > 0
+	// needProfitSharing 在加载/创建分账订单（可能覆盖 commission 值）之后再求值，
+	// 以确保重试路径中复用的是存储值，而不是本次重新计算的值。
+	var needProfitSharing bool
 
 	// 若已有分账记录，复用并尝试重试
 	existingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, payload.PaymentOrderID)
@@ -1270,6 +1297,9 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			return fmt.Errorf("create profit sharing order: %w", err)
 		}
 	}
+
+	// 在加载/创建分账订单后求值，确保使用最终存储的 commission 值（而非本次重新计算值）
+	needProfitSharing = platformCommission > 0 || operatorCommission > 0 || riderAmount > 0
 
 	log.Info().
 		Int64("payment_order_id", payload.PaymentOrderID).
