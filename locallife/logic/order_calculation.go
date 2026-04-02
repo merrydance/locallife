@@ -105,7 +105,7 @@ func CalculateOrderPreview(
 				}
 			}
 			if normalize == nil {
-				return result, NewRequestError(http.StatusInternalServerError, errors.New("customizations handler is not configured"))
+				return result, fmt.Errorf("customizations handler: not configured")
 			}
 			_, extraPrice, err := normalize(ctx, item.DishID.Int64, customizationMap)
 			if err != nil {
@@ -191,7 +191,7 @@ func CalculateOrderPreview(
 		}
 
 		if calculateFee == nil {
-			return result, NewRequestError(http.StatusInternalServerError, errors.New("delivery fee calculator is required"))
+			return result, fmt.Errorf("delivery fee calculator: not configured")
 		}
 		feeResult, err := calculateFee(ctx, regionID, input.MerchantID, deliveryDistance, result.Subtotal)
 		if err == nil {

@@ -97,8 +97,7 @@ func (processor *RedisTaskProcessor) HandleCheckMerchantForeignObject(ctx contex
 			TakeoutSuspendReason: pgtype.Text{String: reason, Valid: true},
 			TakeoutSuspendUntil:  pgtype.Timestamptz{Time: time.Now().Add(24 * time.Hour), Valid: true},
 		}); err != nil {
-			log.Error().Err(err).Int64("merchant_id", payload.MerchantID).Msg("failed to suspend merchant takeout")
-			return fmt.Errorf("suspend merchant takeout: %w", err)
+			return fmt.Errorf("suspend merchant %d takeout: %w", payload.MerchantID, err)
 		}
 
 		// 获取商户负责人，向其发送站内信通知

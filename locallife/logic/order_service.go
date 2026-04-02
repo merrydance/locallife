@@ -165,7 +165,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 		takeoutAddress = &address
 
 		if input.DeliveryFeeCalculator == nil {
-			return CreateOrderCommandResult{}, NewRequestError(http.StatusInternalServerError, errors.New("delivery fee calculator is required"))
+			return CreateOrderCommandResult{}, fmt.Errorf("delivery fee calculator: not configured")
 		}
 
 		quote, calcErr := ComputeDeliveryQuote(ctx, DeliveryQuoteInput{
@@ -690,7 +690,7 @@ func (s *OrderService) PrintMerchantOrder(ctx context.Context, input MerchantOrd
 		return MerchantOrderPrintResult{}, NewRequestError(http.StatusBadRequest, errors.New("cancelled orders cannot be printed"))
 	}
 	if s.taskScheduler == nil {
-		return MerchantOrderPrintResult{}, NewRequestError(http.StatusInternalServerError, errors.New("print scheduler is not configured"))
+		return MerchantOrderPrintResult{}, fmt.Errorf("print scheduler: not configured")
 	}
 
 	config := s.loadOrderPrintConfig(ctx, order.MerchantID)

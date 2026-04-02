@@ -296,7 +296,7 @@ func (svc *PaymentOrderService) createReservationEcommercePayment(
 	var result CreatePaymentOrderResult
 
 	if svc.ecommerceClient == nil {
-		return result, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return result, fmt.Errorf("ecommerce client: not configured")
 	}
 
 	user, err := svc.store.GetUser(ctx, input.UserID)
@@ -421,7 +421,7 @@ func (svc *PaymentOrderService) createOrderEcommercePayment(
 	var result CreatePaymentOrderResult
 
 	if svc.ecommerceClient == nil {
-		return result, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return result, fmt.Errorf("ecommerce client: not configured")
 	}
 
 	user, err := svc.store.GetUser(ctx, input.UserID)
@@ -736,7 +736,7 @@ func (svc *PaymentOrderService) closePendingPaymentOrder(ctx context.Context, pa
 
 func (svc *PaymentOrderService) closeCombinedPaymentOrder(ctx context.Context, paymentOrder db.PaymentOrder) (ClosePaymentOrderResult, error) {
 	if svc.ecommerceClient == nil {
-		return ClosePaymentOrderResult{}, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return ClosePaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
 	}
 
 	combinedPayment, err := svc.store.GetCombinedPaymentOrder(ctx, paymentOrder.CombinedPaymentID.Int64)

@@ -220,7 +220,7 @@ func (server *Server) retryPrinterReconciliationJob(ctx *gin.Context) {
 		err = server.printerClient.RemovePrinter(ctx, cloudprint.RemovePrinterInput{SN: job.PrinterSn})
 	case db.CloudPrinterReconciliationActionRegister:
 		if !job.PrinterKey.Valid || job.PrinterKey.String == "" {
-			ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("printer key missing for register reconciliation")))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("printer key missing for register reconciliation")))
 			return
 		}
 		err = server.printerClient.AddPrinter(ctx, cloudprint.AddPrinterInput{
@@ -229,7 +229,7 @@ func (server *Server) retryPrinterReconciliationJob(ctx *gin.Context) {
 			Name: job.PrinterName,
 		})
 	default:
-		ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("unsupported reconciliation action")))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("unsupported reconciliation action")))
 		return
 	}
 	if err != nil {

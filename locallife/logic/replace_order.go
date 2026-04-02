@@ -222,7 +222,7 @@ func createReplaceOrderEcommercePayment(
 	amount int64,
 ) (db.PaymentOrder, error) {
 	if ecommerceClient == nil {
-		return db.PaymentOrder{}, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return db.PaymentOrder{}, fmt.Errorf("ecommerce client: not configured")
 	}
 
 	user, err := store.GetUser(ctx, userID)

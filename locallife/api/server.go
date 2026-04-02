@@ -1651,6 +1651,10 @@ func errorResponse(err error) ErrorResponse {
 //
 //	ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 func internalError(ctx *gin.Context, err error) ErrorResponse {
+	return loggedServerError(ctx, err, "internal server error", "internal error")
+}
+
+func loggedServerError(ctx *gin.Context, err error, publicMessage string, logMessage string) ErrorResponse {
 	// Attach to gin context so RequestLoggingMiddleware can include it
 	_ = ctx.Error(err)
 
@@ -1671,9 +1675,9 @@ func internalError(ctx *gin.Context, err error) ErrorResponse {
 			Str("pg_constraint", pgErr.ConstraintName)
 	}
 
-	evt.Msg("internal error")
+	evt.Msg(logMessage)
 
-	return ErrorResponse{Error: "internal server error"}
+	return ErrorResponse{Error: publicMessage}
 }
 
 // successMessage creates a standard message response for simple ok/action-complete results.

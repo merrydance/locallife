@@ -93,7 +93,7 @@ func (server *Server) submitSafetyReport(ctx *gin.Context) {
 	// 2. 存储报告
 	_, err = server.store.CreateSafetyReport(ctx, arg)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -106,7 +106,7 @@ func (server *Server) submitSafetyReport(ctx *gin.Context) {
 			// 或者返回部分成功？为了数据一致性，这里记录错误并返回给前端 warning，或者直接报错。
 			// 考虑到安全性优先，这里记录错误但告知用户报告已提交但熔断失败可能需要人工介入
 			// 简单起见，这里直接返回错误
-			ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 	}
@@ -158,13 +158,13 @@ func (server *Server) listSafetyReports(ctx *gin.Context) {
 			Offset:   offset,
 		})
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 
 		total, err := server.store.CountSafetyReportsByRegion(ctx, regionID)
 		if err != nil {
-			ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
 
@@ -181,7 +181,7 @@ func (server *Server) listSafetyReports(ctx *gin.Context) {
 		Offset:   offset,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -190,7 +190,7 @@ func (server *Server) listSafetyReports(ctx *gin.Context) {
 		Status:   req.Status,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -230,7 +230,7 @@ func (server *Server) getSafetyReportDetail(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -285,7 +285,7 @@ func (server *Server) resolveSafetyReport(ctx *gin.Context) {
 			ctx.JSON(http.StatusNotFound, errorResponse(err))
 			return
 		}
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 	if report.RegionID != regionID {
@@ -302,7 +302,7 @@ func (server *Server) resolveSafetyReport(ctx *gin.Context) {
 		},
 	})
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -319,15 +319,15 @@ func (server *Server) resolveSafetyReport(ctx *gin.Context) {
 		}
 
 		if merchantErr = server.store.UnsuspendMerchant(ctx, merchantID); merchantErr != nil {
-			ctx.JSON(http.StatusInternalServerError, errorResponse(merchantErr))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, merchantErr))
 			return
 		}
 		if merchantErr = server.store.UnsuspendMerchantTakeout(ctx, merchantID); merchantErr != nil {
-			ctx.JSON(http.StatusInternalServerError, errorResponse(merchantErr))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, merchantErr))
 			return
 		}
 		if _, merchantErr = server.store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchantID, Status: "active"}); merchantErr != nil {
-			ctx.JSON(http.StatusInternalServerError, errorResponse(merchantErr))
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, merchantErr))
 			return
 		}
 		recoveredMerchantIDs = append(recoveredMerchantIDs, merchantID)

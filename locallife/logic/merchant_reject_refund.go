@@ -120,7 +120,6 @@ func processMerchantRejectEcommerceRefund(
 
 	paymentConfig, err := store.GetMerchantPaymentConfig(ctx, merchantID)
 	if err != nil {
-		log.Error().Err(err).Int64("merchant_id", merchantID).Msg("get merchant payment config for reject refund failed")
 		return fmt.Errorf("get merchant payment config: %w", err)
 	}
 

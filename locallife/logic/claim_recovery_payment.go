@@ -97,7 +97,7 @@ func CreateRiderClaimRecoveryPayment(ctx context.Context, store db.Store, paymen
 
 func createClaimRecoveryPayment(ctx context.Context, store db.Store, paymentClient wechat.PaymentClientInterface, recovery db.ClaimRecovery, payerUserID int64, clientIP string, recoveryTarget string) (ClaimRecoveryPaymentResult, error) {
 	if paymentClient == nil {
-		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusServiceUnavailable, errors.New("payment client not configured"))
+		return ClaimRecoveryPaymentResult{}, fmt.Errorf("payment client: not configured")
 	}
 	if recovery.Status == "paid" {
 		return ClaimRecoveryPaymentResult{}, NewRequestError(http.StatusBadRequest, errors.New("claim recovery already paid"))

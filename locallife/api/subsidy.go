@@ -191,7 +191,7 @@ func (server *Server) createSubsidy(ctx *gin.Context) {
 			ID:         subsidyOrder.ID,
 			FailReason: pgtype.Text{String: wxErr.Error(), Valid: true},
 		})
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("WeChat subsidy API failed: "+wxErr.Error())))
+		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("subsidy api unavailable")))
 		return
 	}
 
@@ -297,7 +297,7 @@ func (server *Server) returnSubsidy(ctx *gin.Context) {
 			OutReturnNo:      pgtype.Text{String: outReturnNo, Valid: true},
 			ReturnFailReason: pgtype.Text{String: wxErr.Error(), Valid: true},
 		})
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("WeChat subsidy return API failed: "+wxErr.Error())))
+		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("subsidy return api unavailable")))
 		return
 	}
 
@@ -367,7 +367,7 @@ func (server *Server) cancelSubsidy(ctx *gin.Context) {
 	})
 	if wxErr != nil {
 		log.Error().Err(wxErr).Str("out_subsidy_no", subsidyOrder.OutSubsidyNo).Msg("cancel subsidy: wxpay api failed")
-		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("WeChat cancel subsidy API failed: "+wxErr.Error())))
+		ctx.JSON(http.StatusBadGateway, errorResponse(errors.New("cancel subsidy api unavailable")))
 		return
 	}
 

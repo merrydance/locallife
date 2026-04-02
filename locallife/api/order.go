@@ -1872,7 +1872,7 @@ func (server *Server) getMerchantOrderPrintJobStatus(ctx *gin.Context) {
 		resp.VendorOrderID = &vendorOrderID
 		cloudPrinted, err := server.printerClient.QueryOrderState(ctx, vendorOrderID)
 		if err != nil {
-			ctx.JSON(http.StatusBadGateway, errorResponse(err))
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud print status unavailable", "cloud print order state query failed"))
 			return
 		}
 		resp.CloudPrinted = &cloudPrinted

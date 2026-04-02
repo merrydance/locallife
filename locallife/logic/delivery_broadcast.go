@@ -38,7 +38,6 @@ func NewDeliveryBroadcastLogic(store db.Store, redisClient *redis.Client) *Deliv
 func (l *DeliveryBroadcastLogic) BroadcastOrderGone(ctx context.Context, orderID int64, pickupLat float64, pickupLng float64) error {
 	riders, err := l.listNearbyBroadcastRiders(ctx, pickupLat, pickupLng)
 	if err != nil {
-		log.Error().Err(err).Float64("pickup_lat", pickupLat).Float64("pickup_lng", pickupLng).Msg("failed to list nearby riders for broadcast")
 		return err
 	}
 
@@ -79,7 +78,6 @@ func (l *DeliveryBroadcastLogic) BroadcastNewOrderNotification(ctx context.Conte
 
 	riders, err := l.listNearbyBroadcastRiders(ctx, lat.Float64, lng.Float64)
 	if err != nil {
-		log.Error().Err(err).Int64("order_id", poolItem.OrderID).Float64("pickup_lat", lat.Float64).Float64("pickup_lng", lng.Float64).Msg("failed to list nearby riders for new order broadcast")
 		return err
 	}
 

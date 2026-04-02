@@ -33,7 +33,7 @@ type RoleAccessResponse struct {
 func (server *Server) getRoleAccessMetadata(ctx *gin.Context) {
 	entries, err := buildRoleAccessEntries()
 	if err != nil {
-		ctx.JSON(http.StatusServiceUnavailable, errorResponse(err))
+		ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "role access metadata unavailable", "role access metadata build failed"))
 		return
 	}
 

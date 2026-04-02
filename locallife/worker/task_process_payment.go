@@ -526,12 +526,10 @@ func (processor *RedisTaskProcessor) ProcessTaskPaymentSuccess(ctx context.Conte
 	})
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			log.Error().Int64("payment_order_id", payload.PaymentOrderID).Msg("payment order not found")
-			return fmt.Errorf("payment order not found: %w", asynq.SkipRetry)
+			return fmt.Errorf("payment order %d not found: %w", payload.PaymentOrderID, asynq.SkipRetry)
 		}
 		if errors.Is(err, db.ErrPaymentMissingOrderID) {
-			log.Error().Int64("payment_order_id", payload.PaymentOrderID).Msg("payment order missing order_id, requires manual intervention")
-			return fmt.Errorf("payment order missing order_id: %w", asynq.SkipRetry)
+			return fmt.Errorf("payment order %d missing order_id: %w", payload.PaymentOrderID, asynq.SkipRetry)
 		}
 		return fmt.Errorf("process payment success: %w", err)
 	}
@@ -884,8 +882,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 	refundOrder, err := processor.store.GetRefundOrderByOutRefundNo(ctx, payload.OutRefundNo)
 	if err != nil {
 		if errors.Is(err, db.ErrRecordNotFound) {
-			log.Error().Str("out_refund_no", payload.OutRefundNo).Msg("refund order not found")
-			return fmt.Errorf("refund order not found: %w", asynq.SkipRetry)
+			return fmt.Errorf("refund order %s not found: %w", payload.OutRefundNo, asynq.SkipRetry)
 		}
 		return fmt.Errorf("get refund order: %w", err)
 	}
@@ -1334,8 +1331,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 检查是否配置了平台收付通客户端
 	if processor.ecommerceClient == nil {
-		log.Error().Msg("ecommerce client not configured, cannot process profit sharing")
-		return fmt.Errorf("ecommerce client not configured: %w", asynq.SkipRetry)
+		return fmt.Errorf("ecommerce client not configured for profit sharing: %w", asynq.SkipRetry)
 	}
 
 	// 构建分账接收方列表
@@ -1644,8 +1640,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 
 	// 检查是否有微信支付客户端
 	if processor.ecommerceClient == nil {
-		log.Error().Msg("ecommerce client not configured, cannot process refund")
-		return fmt.Errorf("ecommerce client not configured")
+		return fmt.Errorf("ecommerce client not configured for refund")
 	}
 
 	if paymentOrder.PaymentType == "profit_sharing" {
@@ -2184,8 +2179,7 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 	})
 	if err != nil {
 		// 保持 pending 状态，由恢复调度器重试
-		log.Error().Err(err).Int64("refund_order_id", refundOrder.ID).Msg("wechat ecommerce refund api failed for reservation")
-		return fmt.Errorf("call wechat ecommerce refund API: %w", err)
+		return fmt.Errorf("reservation refund order %d: call wechat ecommerce refund API: %w", refundOrder.ID, err)
 	}
 
 	switch refundResp.Status {

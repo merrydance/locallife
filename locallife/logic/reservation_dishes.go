@@ -356,7 +356,7 @@ func createReservationAddonPaymentOrder(
 		return db.PaymentOrder{}, nil, NewRequestError(http.StatusBadRequest, errors.New("payment amount must be greater than 0"))
 	}
 	if ecommerceClient == nil {
-		return db.PaymentOrder{}, nil, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return db.PaymentOrder{}, nil, fmt.Errorf("ecommerce client: not configured")
 	}
 
 	user, err := store.GetUser(ctx, userID)

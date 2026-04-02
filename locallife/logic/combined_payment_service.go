@@ -101,7 +101,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	var result CreateCombinedPaymentOrderResult
 
 	if svc.ecommerceClient == nil {
-		return result, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return result, fmt.Errorf("ecommerce client: not configured")
 	}
 
 	orderIDs := dedupePositiveIDs(input.OrderIDs)
@@ -238,7 +238,7 @@ func (svc *CombinedPaymentService) GetCombinedPaymentOrder(ctx context.Context, 
 
 func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context, input CloseCombinedPaymentOrderInput) (CloseCombinedPaymentOrderResult, error) {
 	if svc.ecommerceClient == nil {
-		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return CloseCombinedPaymentOrderResult{}, fmt.Errorf("ecommerce client: not configured")
 	}
 
 	combinedRow, err := svc.store.GetCombinedPaymentOrderWithSubOrders(ctx, input.CombinedPaymentID)

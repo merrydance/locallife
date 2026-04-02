@@ -547,7 +547,6 @@ func CancelReservation(
 
 			paymentConfig, err := store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
 			if err != nil {
-				log.Error().Err(err).Int64("merchant_id", reservation.MerchantID).Msg("get merchant payment config for reservation refund failed")
 				return ReservationStatusUpdateResult{}, fmt.Errorf("get merchant payment config: %w", err)
 			}
 

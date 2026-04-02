@@ -143,7 +143,7 @@ func (server *Server) createPrinter(ctx *gin.Context) {
 			Key:  req.PrinterKey,
 			Name: req.PrinterName,
 		}); err != nil {
-			ctx.JSON(http.StatusBadGateway, errorResponse(err))
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer add failed"))
 			return
 		}
 	}
@@ -359,12 +359,12 @@ func (server *Server) getPrinterLiveStatus(ctx *gin.Context) {
 
 	providerStatus, err := server.printerClient.QueryPrinterStatus(ctx, printer.PrinterSn)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, errorResponse(err))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer status query failed"))
 		return
 	}
 	info, err := server.printerClient.GetPrinterInfo(ctx, printer.PrinterSn)
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, errorResponse(err))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer status unavailable", "cloud printer info query failed"))
 		return
 	}
 
@@ -559,7 +559,7 @@ func (server *Server) deletePrinter(ctx *gin.Context) {
 	removedRemotely := printer.PrinterType == printerTypeFeieyun && server.printerClient != nil
 	if removedRemotely {
 		if err := server.printerClient.RemovePrinter(ctx, cloudprint.RemovePrinterInput{SN: printer.PrinterSn}); err != nil {
-			ctx.JSON(http.StatusBadGateway, errorResponse(err))
+			ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer remove failed"))
 			return
 		}
 	}
@@ -665,7 +665,7 @@ func (server *Server) testPrinter(ctx *gin.Context) {
 		Copies:  1,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, errorResponse(err))
+		ctx.JSON(http.StatusBadGateway, loggedServerError(ctx, err, "cloud printer provider unavailable", "cloud printer test print failed"))
 		return
 	}
 

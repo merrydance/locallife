@@ -293,7 +293,7 @@ func (s *RefundService) processProfitSharingRefund(
 		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 		}
-		return NewRequestError(http.StatusInternalServerError, errors.New("ecommerce client not configured"))
+		return fmt.Errorf("ecommerce client: not configured")
 	}
 
 	profitSharingOrder, err := s.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
@@ -489,33 +489,30 @@ func (s *RefundService) processProfitSharingRefund(
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, s.paymentFacade.SpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission, delay); returnErr != nil {
 			// 单方失败：记录到 profit_sharing_return 记录，整体退款单标记为 partial_failed
 			// ProfitSharingRecoveryScheduler 会扫描并重试失败的回退单
-			log.Error().Err(returnErr).Int64("refund_order_id", refundOrder.ID).Msg("platform profit sharing return failed")
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 			}
-			return NewRequestError(http.StatusInternalServerError, errors.New("platform profit sharing return failed"))
+			return fmt.Errorf("platform profit sharing return: %w", returnErr)
 		}
 	}
 	if profitSharingOrder.OperatorCommission > 0 {
 		outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission, delay); returnErr != nil {
-			log.Error().Err(returnErr).Int64("refund_order_id", refundOrder.ID).Msg("operator profit sharing return failed")
 			// 平台回退可能已成功，不在这里标记整体为 failed；仅标记本次尝试失败
 			// 后续退款单维持 pending 等 recovery 扫描到 failed 的 profit_sharing_return 后重试
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 			}
-			return NewRequestError(http.StatusInternalServerError, errors.New("operator profit sharing return failed"))
+			return fmt.Errorf("operator profit sharing return: %w", returnErr)
 		}
 	}
 	if profitSharingOrder.RiderAmount > 0 {
 		outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
 		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypePersonal, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount, delay); returnErr != nil {
-			log.Error().Err(returnErr).Int64("refund_order_id", refundOrder.ID).Msg("rider profit sharing return failed")
 			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 			}
-			return NewRequestError(http.StatusInternalServerError, errors.New("rider profit sharing return failed"))
+			return fmt.Errorf("rider profit sharing return: %w", returnErr)
 		}
 	}
 

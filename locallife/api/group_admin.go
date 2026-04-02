@@ -42,7 +42,7 @@ func (server *Server) listGroupApplicationsAdmin(ctx *gin.Context) {
 
 	sqlStore, ok := server.store.(*db.SQLStore)
 	if !ok {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(errors.New("store does not support group admin queries")))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, errors.New("store does not support group admin queries")))
 		return
 	}
 

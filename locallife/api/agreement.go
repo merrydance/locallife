@@ -23,7 +23,7 @@ type listActiveAgreementsResponse struct {
 func (server *Server) listAgreements(ctx *gin.Context) {
 	agreements, err := server.store.ListActiveAgreements(ctx)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -53,7 +53,7 @@ func (server *Server) getAgreement(ctx *gin.Context) {
 
 	agreement, err := server.store.GetActiveAgreementByType(ctx, agreementType)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, errorResponse(err))
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
