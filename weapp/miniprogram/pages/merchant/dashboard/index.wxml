@@ -3,12 +3,15 @@
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
   <t-empty wx:if="{{accessDenied}}" icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
 
-  <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty icon="error-circle" description="{{initialErrorMessage || '工作台加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
-  </view>
-
   <block wx:else>
+  <view wx:if="{{initialError || refreshErrorMessage}}" class="console-error-banner">
+    <view class="console-error-banner__body">
+      <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
+      <text class="console-error-banner__text">{{initialError ? (initialErrorMessage || '工作台加载失败，请重试') : refreshErrorMessage}}</text>
+    </view>
+    <t-button wx:if="{{initialError && initialErrorCanRetry}}" theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+    <t-button wx:elif="{{!initialError && refreshErrorCanRetry}}" theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
+  </view>
   <t-skeleton 
     loading="{{initialLoading}}" 
     rowCol="{{ [{ width: '100%', height: '300rpx' }] }}" 
@@ -61,11 +64,6 @@
     </view>
   </t-skeleton>
 
-  <view wx:if="{{refreshErrorMessage}}" class="refresh-banner">
-    <text class="refresh-banner-text">{{refreshErrorMessage}}</text>
-    <t-button size="small" theme="primary" variant="outline" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
-  </view>
-
   <!-- 2. 在线开关 (粘性设计) -->
   <t-sticky offsetTop="{{navBarHeight}}">
     <view class="ops-bar-container">
@@ -104,17 +102,12 @@
       </view>
 
       <view wx:elif="{{orderFlowError && !orderFlow.length}}" class="section-state-block">
-        <t-empty icon="error-circle" description="{{orderFlowErrorMessage || '订单流加载失败，请重试'}}" />
-        <t-button size="small" theme="primary" shape="round" bind:tap="onRetryOrderFlow">重试订单流</t-button>
+        <t-empty icon="info-circle" description="当前分类订单暂未展示" />
       </view>
 
       <t-empty wx:elif="{{!orderFlow.length}}" icon="info-circle" description="当前分类暂无订单" />
 
       <view wx:else class="order-flow-list">
-        <view wx:if="{{orderFlowError}}" class="section-error-hint">
-          <text>{{orderFlowErrorMessage}}</text>
-          <t-button size="small" theme="primary" variant="outline" shape="round" bind:tap="onRetryOrderFlow">重试</t-button>
-        </view>
         <view class="order-card" wx:for="{{orderFlow}}" wx:key="id" data-id="{{item.id}}" bindtap="onOrderTap">
           <view class="order-header">
             <view class="order-left">

@@ -1,23 +1,10 @@
 import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merchant'
 import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } from '../../../adapters/consumer-merchant-detail'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RestaurantInfoViewModel = ConsumerMerchantDetailViewModel
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
-    const { userMessage } = error as { userMessage?: unknown }
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {

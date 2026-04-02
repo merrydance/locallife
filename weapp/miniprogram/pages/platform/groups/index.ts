@@ -3,6 +3,7 @@ import {
   platformManagementService,
   type AdminGroupApplicationItem
 } from '@/api/platform-management'
+import { getErrorUserMessage } from '@/utils/user-facing'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {
@@ -78,9 +79,8 @@ Page({
         hasMore: response.has_more
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载集团申请失败，请稍后重试'
+      const message = getErrorUserMessage(error, '加载集团申请失败，请稍后重试')
       this.setData({ error: message })
-      wx.showToast({ title: '加载失败', icon: 'none' })
     } finally {
       this.setData({ loading: false, requesting: false })
     }

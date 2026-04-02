@@ -5,6 +5,7 @@ import {
 } from '../../../../api/merchant'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface BusinessHourSlot {
   key: string
@@ -149,15 +150,7 @@ function buildPayload(weekly: WeeklyBusinessHour[], special: SpecialBusinessHour
   }
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -368,7 +361,6 @@ Page({
         specialHours: normalized.special,
         hasChanges: false
       })
-      wx.showToast({ title: '营业时间已保存', icon: 'success' })
     } catch (err: unknown) {
       logger.error('Save merchant business hours failed', err)
       const message = getErrorMessage(err, '保存失败，请稍后重试')

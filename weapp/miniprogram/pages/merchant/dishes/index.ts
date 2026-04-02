@@ -2,16 +2,9 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import { DishManagementService, DishResponse, DishCategory } from '../../../api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function normalizeDish(dish: DishResponse): DishResponse {
   return {
@@ -137,7 +130,7 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
-      } else if (isSilentRefresh) {
+      } else if (hasExistingDishes) {
         this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
@@ -246,8 +239,7 @@ Page({
         const key = `dishes[${index}].is_online`
         this.setData({ [key]: targetStatus })
       }
-      
-      wx.showToast({ title: targetStatus ? '上架成功' : '已下架', icon: 'success' })
+
     } catch (err) {
       logger.error('Toggle dish status failed', err)
       wx.showToast({ title: '操作失败', icon: 'error' })
@@ -296,7 +288,6 @@ Page({
           this.setData({
             dishes: this.data.dishes.filter((d) => d.id !== id)
           })
-          wx.showToast({ title: '删除成功', icon: 'success' })
         } catch (err) {
           logger.error('Delete dish failed', err)
           wx.showToast({ title: '删除失败', icon: 'none' })

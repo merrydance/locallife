@@ -8,6 +8,7 @@ import { DishManagementService, DishResponse } from '../../../api/dish'
 import { getMerchantReviews } from '../../../api/personal'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ExtraInfo = {
   shopName?: string
@@ -79,21 +80,7 @@ type DishViewModel = {
   estimated_delivery_time_display: string
 }
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
-    const { userMessage } = error as { userMessage?: unknown }
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -327,9 +314,9 @@ Page({
     this.setData({ quantity })
   },
 
-  async onAddToCart() {
+  async onAddToCart(options?: { silentSuccess?: boolean }) {
     const { dish, selectedSpecs, quantity, totalPrice } = this.data
-    if (!dish) return
+    if (!dish) return false
 
     // 构建规格描述
     const specNames: string[] = []
@@ -361,7 +348,7 @@ Page({
     })
 
     if (!success) {
-      return
+      return false
     }
 
     tracker.log(EventType.ADD_CART, String(dish.id), {
@@ -371,11 +358,16 @@ Page({
       tags: dish.tags
     })
 
-    wx.showToast({ title: '已加入购物车', icon: 'success' })
+    if (!options?.silentSuccess) {
+      wx.showToast({ title: '已加入购物车', icon: 'success' })
+    }
+
+    return true
   },
 
-  onBuyNow() {
-    this.onAddToCart()
+  async onBuyNow() {
+    const success = await this.onAddToCart({ silentSuccess: true })
+    if (!success) return
     wx.navigateTo({ url: '/pages/takeout/cart/index' })
   },
 

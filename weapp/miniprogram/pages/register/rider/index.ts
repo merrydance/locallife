@@ -12,6 +12,7 @@ import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../api/agreement-consent'
 import type { ApplicationStatus } from '../../../api/onboarding'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type UploadEvent = WechatMiniprogram.CustomEvent<{ path?: string }>
 
@@ -61,14 +62,7 @@ const DEFAULT_RIDER_UPLOAD_FEEDBACK: RiderUploadFeedback = {
   healthCert: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object') {
-    const maybeError = error as { userMessage?: string, message?: string }
-    if (maybeError.userMessage) return maybeError.userMessage
-    if (maybeError.message) return maybeError.message
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function createUploadFeedback(state: UploadFeedbackState, title = '', description = ''): UploadFeedback {
   return { state, title, description }
@@ -148,10 +142,13 @@ Page({
         
         if (res.status === 'submitted') {
           this.setData({ currentStep: 4, isSubmitting: true })
-          wx.showToast({ title: '申请审核中', icon: 'none' })
         } else if (res.status === 'approved') {
-          wx.showToast({ title: '您已入驻成功' })
-          setTimeout(() => wx.reLaunch({ url: '/pages/rider/dashboard/index' }), 1000)
+          wx.showModal({
+            title: '审核通过',
+            content: '恭喜！您已正式成为 LocalLife 骑手。',
+            showCancel: false,
+            success: () => wx.reLaunch({ url: '/pages/rider/dashboard/index' })
+          })
         } else if (isRejectedRiderApplication(res)) {
           this.showRejectedApplicationModal(res)
         }
@@ -645,7 +642,6 @@ Page({
           this.showRejectedApplicationModal(res)
         } else if (res.status === 'submitted') {
           this.setData({ isSubmitting: true, currentStep: 4 })
-          wx.showToast({ title: '申请审核中', icon: 'none' })
         }
       }, 1500)
     } catch (e: unknown) {

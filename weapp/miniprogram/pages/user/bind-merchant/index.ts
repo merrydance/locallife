@@ -5,20 +5,13 @@
 
 import { bindMerchant, BindMerchantResponse } from '../../../api/personal'
 import { getWebLoginSessionStatus, confirmWebLoginSession } from '../../../api/auth'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
 
 const isBindMerchantError = (error: unknown): error is { statusCode?: number, message?: string } => {
     return !!error && typeof error === 'object'
 }
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-    if (error && typeof error === 'object' && 'message' in error) {
-        const { message } = error as { message?: unknown }
-        if (typeof message === 'string' && message.trim()) {
-            return message
-        }
-    }
-    return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
     data: {
@@ -195,14 +188,13 @@ Page({
                 result,
                 loading: false
             })
-
-            wx.showToast({ title: '加入成功', icon: 'success' })
         } catch (error: unknown) {
             console.error('绑定失败:', error)
             this.setData({ loading: false })
 
             // 友好提示已入职情况
-            if (isBindMerchantError(error) && (error.statusCode === 409 || error.message?.includes('already'))) {
+            const debugMessage = getErrorDebugMessage(error).toLowerCase()
+            if (isBindMerchantError(error) && (error.statusCode === 409 || debugMessage.includes('already'))) {
                 wx.showModal({
                     title: '已入职',
                     content: '您已经是该商户的员工，无需重复绑定',
@@ -210,7 +202,7 @@ Page({
                     confirmText: '我知道了'
                 })
             } else {
-                wx.showToast({ title: error instanceof Error ? error.message : '绑定失败', icon: 'none' })
+                wx.showToast({ title: getErrorUserMessage(error, '绑定失败，请稍后重试'), icon: 'none' })
             }
         }
     },

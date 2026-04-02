@@ -6,6 +6,7 @@ import {
 } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ClaimTagTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
 type ClaimBucketTab = 'all' | 'pending_action' | 'appealed' | 'closed'
@@ -48,10 +49,6 @@ interface ClaimSummary {
   pendingAction: number
   appealed: number
   closed: number
-}
-
-interface UserMessageError {
-  userMessage?: string
 }
 
 function formatMoney(cents?: number): string {
@@ -164,10 +161,7 @@ function getActionHint(claim: ClaimResponse): string {
   return '进入详情查看责任判定，并决定是否申诉或支付追偿。'
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  const userMessage = (err as UserMessageError).userMessage
-  return typeof userMessage === 'string' && userMessage.trim() ? userMessage : fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function buildClaimView(claim: ClaimResponse): RiderClaimView {
   return {
@@ -247,6 +241,7 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     loadingMore: false,
     sectionTab: 'claims' as ClaimsSectionTab,
@@ -280,6 +275,10 @@ Page({
     this.reloadPageData(false)
   },
 
+  onRetryRefresh() {
+    this.reloadPageData(false)
+  },
+
   onReachBottom() {
     if (this.data.sectionTab === 'claims') {
       this.loadMoreClaims()
@@ -301,15 +300,18 @@ Page({
       hasMore: false,
       loading: true,
       initialError: false,
-      initialErrorMessage: ''
+      initialErrorMessage: '',
+      refreshErrorMessage: ''
     })
     this.loadClaimList(bucketTab)
   },
 
   async reloadPageData(silent = false) {
-    if (!silent) {
-      this.setData({ loading: true, initialError: false, initialErrorMessage: '' })
-    }
+    this.setData(
+      silent
+        ? { refreshErrorMessage: '' }
+        : { loading: true, initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+    )
 
     try {
       const [summary, claimsPage, appealsResult] = await Promise.all([
@@ -329,7 +331,8 @@ Page({
         loadingMore: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (error) {
       logger.error('Load rider claims failed', error)
@@ -341,6 +344,7 @@ Page({
           initialLoading: false,
           initialError: true,
           initialErrorMessage: message,
+          refreshErrorMessage: '',
           claims: [],
           appeals: [],
           hasMore: false,
@@ -352,8 +356,11 @@ Page({
           }
         })
       } else {
-        wx.showToast({ title: message, icon: 'none' })
-        this.setData({ loading: false, loadingMore: false })
+        this.setData({
+          loading: false,
+          loadingMore: false,
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
       }
     } finally {
       wx.stopPullDownRefresh()

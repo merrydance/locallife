@@ -8,6 +8,7 @@ import { getStableBarHeights } from '../../../utils/responsive'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 import { networkMonitor } from '../../../utils/network-monitor'
 import { request } from '../../../utils/request'
+import { getConsoleDashboardErrorMessage, getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
 
 const MAX_GRAB_DISTANCE = 5000 // 最大抢单距离 5km
 const DEPOSIT_BLOCK_REASON_PATTERN = /押金不足/
@@ -27,10 +28,6 @@ type DashboardDeliveryView = Delivery & {
   is_very_urgent: boolean
 }
 
-interface UserMessageError {
-  userMessage?: string
-}
-
 interface DeliveryActionConfig {
   method: DeliveryActionMethod
   loading: string
@@ -38,8 +35,20 @@ interface DeliveryActionConfig {
 }
 
 function getUserMessage(err: unknown, fallback: string) {
-  const userMessage = (err as UserMessageError).userMessage
-  return typeof userMessage === 'string' && userMessage ? userMessage : fallback
+  return getConsoleDashboardErrorMessage('rider', err, fallback)
+}
+
+function buildBannerState(states: Array<{ message: string, canRetry: boolean }>) {
+  if (!states.length) {
+    return { message: '', canRetry: true }
+  }
+
+  const uniqueMessages = Array.from(new Set(states.map((state) => state.message).filter(Boolean)))
+
+  return {
+    message: uniqueMessages.join('；'),
+    canRetry: states.every((state) => state.canRetry)
+  }
 }
 
 function formatRelativeTime(timeStr: string): string {
@@ -90,6 +99,7 @@ Page({
     loading: false,
     onlineSwitchLoading: false,
     initError: '',
+    initErrorCanRetry: true,
     hallLoadError: '',
     myLoadError: '',
     isRefresherTriggered: false,
@@ -186,9 +196,12 @@ Page({
     runtimeNetworkUnsubscribe = networkMonitor.subscribe((state) => {
       if (!state.isConnected) {
         if (this.data.isOnline && this.data.recommendOrders.length === 0 && this.data.activeDeliveries.length === 0) {
+          const errorState = getConsoleDashboardErrorState('rider', '网络已断开，请恢复后重试', '网络已断开，请恢复后重试')
           this.setData({
-            hallLoadError: '网络已断开，请恢复后重试',
-            myLoadError: '网络已断开，请恢复后重试'
+            initError: errorState.message,
+            initErrorCanRetry: errorState.canRetry,
+            hallLoadError: '',
+            myLoadError: ''
           })
         }
         return
@@ -226,11 +239,11 @@ Page({
       }
     } catch (err: unknown) {
       logger.error('Failed to init rider data', err)
-      const userMessage = (err as UserMessageError).userMessage
-      const message = typeof userMessage === 'string' && userMessage ? userMessage : '骑手工作台加载失败，请稍后重试'
+      const errorState = getConsoleDashboardErrorState('rider', err, '骑手工作台暂时无法加载，请稍后重试。')
       const statusViewData = this.buildStatusViewData(null, null)
       this.setData({
-        initError: message,
+        initError: errorState.message,
+        initErrorCanRetry: errorState.canRetry,
         hallLoadError: '',
         myLoadError: '',
         riderInfo: null,
@@ -309,6 +322,7 @@ Page({
     this.setData({
       riderInfo: info,
       initError: '',
+      initErrorCanRetry: true,
       stats: {
         todayCount: info.total_orders || 0,
         todayEarnings: info.total_earnings || 0,
@@ -334,13 +348,16 @@ Page({
       const activeDeliveriesRequest = request({ url: '/v1/delivery/active', method: 'GET' }) as Promise<Delivery[]>
 
       let hallLoadError = ''
+      const bannerStates: Array<{ message: string, canRetry: boolean }> = []
       const location = await this.getLocation().catch(() => null)
       const hallOrdersRequest = location
         ? DeliveryService.getRecommendedOrders(location.longitude, location.latitude)
         : Promise.resolve([] as RecommendedOrder[])
 
       if (!location) {
-        hallLoadError = '暂时无法获取当前位置，抢单大厅稍后再试'
+        const errorState = getConsoleDashboardErrorState('rider', '暂时无法获取当前位置，抢单大厅稍后再试', '暂时无法获取当前位置，抢单大厅稍后再试')
+        hallLoadError = errorState.message
+        bannerStates.push({ message: errorState.message, canRetry: errorState.canRetry })
       }
 
       const [hallOrdersResult, myDeliveriesResult] = await Promise.all([
@@ -365,7 +382,9 @@ Page({
         : []
 
       if (!hallOrdersResult.ok && !hallLoadError) {
-        hallLoadError = getUserMessage(hallOrdersResult.reason, '抢单大厅加载失败，请重试')
+        const errorState = getConsoleDashboardErrorState('rider', hallOrdersResult.reason, '抢单大厅加载失败，请重试')
+        hallLoadError = errorState.message
+        bannerStates.push({ message: errorState.message, canRetry: errorState.canRetry })
       }
 
       let myLoadError = ''
@@ -374,7 +393,9 @@ Page({
         : this.data.activeDeliveries
 
       if (!myDeliveriesResult.ok) {
-        myLoadError = getUserMessage(myDeliveriesResult.reason, '我的任务加载失败，请重试')
+        const errorState = getConsoleDashboardErrorState('rider', myDeliveriesResult.reason, '我的任务加载失败，请重试')
+        myLoadError = errorState.message
+        bannerStates.push({ message: errorState.message, canRetry: errorState.canRetry })
       }
 
       const myDeliveries = myDeliveriesSource.map((d: Delivery) => {
@@ -392,13 +413,15 @@ Page({
 
       const currentDelivery = myDeliveries.find((delivery) => isTrackableDelivery(delivery.status)) || myDeliveries[0] || null
       const tabLabels = this.buildTabLabels(hallOrders.length, myDeliveries.length)
+      const bannerState = buildBannerState(bannerStates)
 
       this.setData({
         recommendOrders: hallOrders,
         activeDeliveries: myDeliveries,
         currentDelivery,
         isRefresherTriggered: false,
-        initError: '',
+        initError: bannerState.message,
+        initErrorCanRetry: bannerState.canRetry,
         hallLoadError,
         myLoadError,
         ...tabLabels
@@ -407,11 +430,13 @@ Page({
       await this.syncLocationSession(myDeliveries)
     } catch (err: unknown) {
       logger.error('Refresh data error', err)
-      const message = getUserMessage(err, '任务数据加载失败，请重试')
+      const errorState = getConsoleDashboardErrorState('rider', err, '任务数据加载失败，请重试')
       this.setData({ 
         isRefresherTriggered: false,
-        hallLoadError: message,
-        myLoadError: message
+        initError: errorState.message,
+        initErrorCanRetry: errorState.canRetry,
+        hallLoadError: '',
+        myLoadError: ''
       })
     }
   },
@@ -581,12 +606,10 @@ Page({
     try {
       await this.syncDeliveryLocation(id, config.source)
       await config.method(id)
-      wx.showToast({ title: '操作成功', icon: 'success' })
-      this.refreshData()
+      await this.refreshData()
     } catch (err: unknown) {
       const reconciled = await this.reconcileDeliveryAction(id, action)
       if (reconciled) {
-        wx.showToast({ title: '状态已同步，请查看最新进度', icon: 'success' })
         return
       }
 
@@ -705,7 +728,6 @@ Page({
       let info: RiderInfo
       if (targetOnline) {
         info = await RiderService.goOnline()
-        wx.showToast({ title: '已上线，可以接单', icon: 'success' })
       } else {
         info = await RiderService.goOffline()
         wx.showToast({ title: '已下线', icon: 'none' })
@@ -729,6 +751,7 @@ Page({
       this.setData({
         riderInfo: info,
         initError: '',
+        initErrorCanRetry: true,
         ...statusViewData
       })
       
@@ -811,15 +834,13 @@ Page({
 
       wx.showLoading({ title: '抢单中...' })
       await DeliveryService.grabOrder(orderId)
-      wx.showToast({ title: '抢单成功！', icon: 'success' })
-      
+
       // 切换到“我的”并刷新
       this.setData({ activeTab: 'my' })
-      this.refreshData()
+      await this.refreshData()
     } catch (err: unknown) {
       const reconciled = await this.reconcileGrabOrder(orderId)
       if (reconciled) {
-        wx.showToast({ title: '订单已同步到我的任务', icon: 'success' })
         return
       }
 
@@ -969,8 +990,6 @@ Page({
         await riderLiveLocationSession.refreshNow('rider_dashboard_manual_retry')
         await riderLiveLocationSession.flushNow()
       }
-
-      wx.showToast({ title: '定位已刷新', icon: 'success' })
     } catch (err: unknown) {
       const message = getUserMessage(err, '定位刷新失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
@@ -987,8 +1006,6 @@ Page({
         wx.showToast({ title: '请先开启定位权限', icon: 'none' })
         return
       }
-
-      wx.showToast({ title: '定位已开启', icon: 'success' })
     } finally {
       wx.hideLoading()
     }

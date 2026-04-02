@@ -1,16 +1,11 @@
 import { ReservationService } from '../../../api/reservation'
 import ReservationAdapter from '../../../adapters/reservation'
 import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ValueEvent<T> = WechatMiniprogram.CustomEvent<{ value: T }>
 
-function getErrorMsg(error: unknown, fallback: string): string {
-    if (error && typeof error === 'object' && 'message' in error) {
-        const message = (error as { message?: string }).message
-        if (message) return message
-    }
-    return fallback
-}
+const getErrorMsg = getErrorUserMessage
 
 Page({
     data: {
@@ -166,11 +161,7 @@ Page({
                 notes
             })
 
-            wx.showToast({ title: '预订成功', icon: 'success' })
-
-            setTimeout(() => {
-                Navigation.redirectToReservationList()
-            }, 1000)
+            Navigation.redirectToReservationList()
 
         } catch (error: unknown) {
             wx.showToast({ title: getErrorMsg(error, '预订失败'), icon: 'none' })

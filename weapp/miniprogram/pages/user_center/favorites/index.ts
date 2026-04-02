@@ -148,9 +148,7 @@ Page({
                          } else {
                              await FavoriteService.removeFavoriteMerchant(item.targetId)
                          }
-                         
-                         wx.showToast({ title: '已取消', icon: 'success' })
-                         
+
                          // Refresh list
                          const favorites = this.data.favorites.filter((f) => f.id !== item.id)
                          this.setData({ favorites })

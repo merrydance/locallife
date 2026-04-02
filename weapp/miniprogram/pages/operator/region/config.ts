@@ -1,6 +1,7 @@
 
 import { deliveryFeeService } from '../../../api/delivery-fee'
 import type { DeliveryFeeConfigResponse, PeakHourConfigResponse } from '../../../api/delivery-fee'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface RegionConfigPageOptions {
     id?: string
@@ -132,7 +133,7 @@ Page({
                 peakSummary: buildPeakSummary(peakConfigs)
             })
         } catch (err: unknown) {
-            const errorMsg = err instanceof Error ? err.message : '加载配置失败'
+            const errorMsg = getErrorUserMessage(err, '加载配置失败，请稍后重试')
             this.setData({
                 initialLoading: false,
                 error: errorMsg

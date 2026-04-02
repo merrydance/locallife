@@ -4,6 +4,7 @@ import {
 } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ClaimTagTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
 
@@ -184,15 +185,7 @@ function getActionHint(options: {
   return '点击查看索赔详情与处理进度。'
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function buildBaseClaimView(claim: ClaimResponse): MerchantClaimView {
   const appealStatus = claim.appeal_status
@@ -281,6 +274,7 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     loadingMore: false,
     currentTab: 'all' as ClaimFilterTab,
@@ -318,7 +312,8 @@ Page({
       hasMore: false,
       loading: true,
       initialError: false,
-      initialErrorMessage: ''
+      initialErrorMessage: '',
+      refreshErrorMessage: ''
     })
     this.loadClaimList(currentTab)
   },
@@ -345,7 +340,7 @@ Page({
 
   async reloadPageData(silent = false) {
     if (!silent) {
-      this.setData({ loading: true, initialError: false, initialErrorMessage: '' })
+      this.setData({ loading: true, initialError: false, initialErrorMessage: '', refreshErrorMessage: '' })
     }
 
     try {
@@ -366,7 +361,8 @@ Page({
         loadingMore: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
       this.hydrateClaimSummaries(page.claims)
     } catch (error) {
@@ -379,17 +375,25 @@ Page({
           initialLoading: false,
           initialError: true,
           initialErrorMessage: message,
+          refreshErrorMessage: '',
           claims: [],
           filteredClaims: [],
           hasMore: false
         })
       } else {
-        wx.showToast({ title: message, icon: 'none' })
-        this.setData({ loading: false, loadingMore: false })
+        this.setData({
+          loading: false,
+          loadingMore: false,
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
       }
     } finally {
       wx.stopPullDownRefresh()
     }
+  },
+
+  onRetryRefresh() {
+    this.reloadPageData(true)
   },
 
   async loadClaimList(currentTab: ClaimFilterTab) {
@@ -405,7 +409,8 @@ Page({
         loadingMore: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
       this.hydrateClaimSummaries(page.claims)
     } catch (error) {
@@ -417,6 +422,7 @@ Page({
         initialLoading: false,
         initialError: true,
         initialErrorMessage: message,
+        refreshErrorMessage: '',
         claims: [],
         filteredClaims: [],
         hasMore: false

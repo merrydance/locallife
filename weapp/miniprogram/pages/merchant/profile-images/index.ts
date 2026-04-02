@@ -3,6 +3,7 @@ import { logger } from '../../../utils/logger'
 import { uploadMerchantImage, getMerchantApplication, updateShopImages, waitForPublicMediaDisplayUrl } from '../../../api/onboarding'
 import { getMyMerchantProfile, updateMyMerchantLogo } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ImageItem = { url: string, rawUrl?: string, assetId?: number }
 
@@ -16,23 +17,7 @@ function hasAnyImages(logoImage: ImageItem | null, storefrontImages: ImageItem[]
   return !!logoImage || storefrontImages.length > 0 || environmentImages.length > 0
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
-    const userMessage = (error as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function toImageItems(rawUrls?: string[] | null): ImageItem[] {
   if (!Array.isArray(rawUrls)) return []
@@ -166,7 +151,6 @@ Page({
         logoUploading: false
       })
       wx.hideLoading()
-      wx.showToast({ title: 'Logo 已更新', icon: 'success' })
     } catch (err) {
       wx.hideLoading()
       this.setData({ logoUploading: false })
@@ -190,7 +174,6 @@ Page({
             _merchantVersion: updated.version
           })
           wx.hideLoading()
-          wx.showToast({ title: '已删除', icon: 'success' })
         } catch (err) {
           wx.hideLoading()
           logger.error('[ProfileImages] 删除 Logo 失败', err)
@@ -248,10 +231,6 @@ Page({
       }
 
       wx.hideLoading()
-      wx.showToast({
-        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
-        icon: 'success'
-      })
     } catch (err) {
       wx.hideLoading()
       this.setData({ storefrontSaving: false })
@@ -279,7 +258,6 @@ Page({
         storefrontSaving: false
       })
       wx.hideLoading()
-      wx.showToast({ title: '门头照已删除', icon: 'success' })
     } catch (err) {
       logger.error('[ProfileImages] 删除门头照失败', err)
       this.setData({ storefrontSaving: false })
@@ -336,10 +314,6 @@ Page({
       }
 
       wx.hideLoading()
-      wx.showToast({
-        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
-        icon: 'success'
-      })
     } catch (err) {
       wx.hideLoading()
       this.setData({ environmentSaving: false })
@@ -367,7 +341,6 @@ Page({
         environmentSaving: false
       })
       wx.hideLoading()
-      wx.showToast({ title: '环境照已删除', icon: 'success' })
     } catch (err) {
       logger.error('[ProfileImages] 删除环境照失败', err)
       this.setData({ environmentSaving: false })

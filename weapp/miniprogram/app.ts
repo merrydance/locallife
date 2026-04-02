@@ -7,6 +7,8 @@ import { networkMonitor } from './utils/network-monitor'
 import { themeManager } from './utils/theme'
 import { locationService } from './utils/location'
 import { confirmOrder } from './api/order'
+import { getErrorDebugMessage, isRetryableNetworkError } from './utils/user-facing'
+import { installPromptFeedbackGuards } from './utils/prompt-feedback'
 
 // 微信发货信息管理 — 确认收货组件的 appId
 const WECHAT_ORDER_CONFIRM_APPID = 'wx1183b055aeec94d1'
@@ -44,6 +46,7 @@ App<IAppOption>({
 
   onLaunch() {
     logger.info('🚀 小程序启动', undefined, 'App.onLaunch')
+    installPromptFeedbackGuards()
 
     // 检查小程序版本更新
     if (wx.canIUse('getUpdateManager')) {
@@ -180,10 +183,7 @@ App<IAppOption>({
     // 后端服务不可用时使用简洁日志
     const reason = res.reason
     const isNetworkAppError = reason instanceof AppError && reason.type === ErrorType.NETWORK
-    const reasonMessage =
-      reason && typeof reason === 'object' && 'message' in reason
-        ? (reason as { message?: string }).message
-        : undefined
+    const reasonMessage = getErrorDebugMessage(reason)
     const reasonStr = String(reasonMessage || reason)
     const isBackendError = reasonStr.includes('502') || reasonStr.includes('503') || reasonStr.includes('504')
 
@@ -398,15 +398,9 @@ App<IAppOption>({
             }
 
           } catch (error) {
-            const appError = error as { message?: string }
-            const errorMsg = appError.message || ''
+            const errorMsg = getErrorDebugMessage(error)
 
-            const isRetryable = errorMsg.includes('502') ||
-              errorMsg.includes('503') ||
-              errorMsg.includes('504') ||
-              errorMsg.includes('timeout') ||
-              errorMsg.includes('request:fail') ||
-              errorMsg.includes('网络请求失败')
+            const isRetryable = isRetryableNetworkError(error)
 
             if (isRetryable && attempt < max - 1) {
               const delay = delays[attempt + 1] || 4000

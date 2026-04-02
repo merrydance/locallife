@@ -8,6 +8,7 @@ import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface CartItemView {
   id: number
@@ -190,7 +191,7 @@ Page({
       logger.error('Load cart failed', error, 'Order-confirm')
       this.setData({
         initLoading: false,
-        loadError: error instanceof Error && error.message ? error.message : '购物车加载失败，请重试'
+        loadError: getErrorUserMessage(error, '购物车加载失败，请重试')
       })
     }
   },
@@ -314,7 +315,7 @@ Page({
   /**
    * 计算配送费并更新应付总额
    */
-  async calculateDeliveryFee(silent: boolean = false) {
+  async calculateDeliveryFee(_silent: boolean = false) {
     const { address } = this.data
     const currentCarts = this.data.carts
     if (!currentCarts || currentCarts.length === 0) return
@@ -408,11 +409,8 @@ Page({
       })
     } catch (error) {
       logger.error('Calculate delivery fee failed', error, 'Order-confirm')
-      const pricingError = error instanceof Error && error.message ? error.message : '配送费计算失败，请重试'
+      const pricingError = getErrorUserMessage(error, '配送费计算失败，请重试')
       this.setData({ pricingError })
-      if (!silent) {
-        wx.showToast({ title: '配送费计算失败', icon: 'none' })
-      }
     }
   },
 
@@ -521,7 +519,7 @@ Page({
       }
     } catch (error) {
       logger.error('Create order failed:', error, 'Order-confirm')
-      wx.showToast({ title: '下单失败', icon: 'error' })
+      wx.showToast({ title: getErrorUserMessage(error, '下单失败，请稍后重试'), icon: 'none' })
       this.setData({ loading: false })
     }
   },
@@ -529,25 +527,27 @@ Page({
   async handlePayment(orderId: number) {
     try {
       const paymentResult = await createOrderPayment(orderId)
+      const amount = (paymentResult.amount / 100).toFixed(2)
+      const orderNo = paymentResult.out_trade_no || String(orderId)
 
       if (paymentResult.pay_params) {
         try {
           await invokeWechatPay(paymentResult.pay_params)
-          wx.showToast({ title: '支付成功', icon: 'success' })
+          Navigation.toPaymentSuccess({
+            orderId: String(orderId),
+            orderNo,
+            amount
+          })
         } catch (err) {
           console.log('[Order-confirm] Payment cancelled or failed:', err)
           wx.showToast({ title: '支付取消', icon: 'none' })
-        } finally {
-          setTimeout(() => {
-            wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
-          }, 1500)
         }
       } else if (paymentResult.status === 'paid') {
-        // 余额全额支付成功
-        wx.showToast({ title: '余额支付成功', icon: 'success' })
-        setTimeout(() => {
-          wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
-        }, 1500)
+        Navigation.toPaymentSuccess({
+          orderId: String(orderId),
+          orderNo,
+          amount
+        })
       } else {
         this.showPaymentDevModal(orderId)
       }
@@ -560,24 +560,32 @@ Page({
   async handleCombinedPayment(orderIds: number[]) {
     try {
       const combinedPayment = await createCombinedPaymentOrder({ order_ids: orderIds })
+      const firstOrderId = combinedPayment.sub_orders?.[0]?.order_id || orderIds[0]
+      const amount = (combinedPayment.total_amount / 100).toFixed(2)
+      const orderNo = combinedPayment.combine_out_trade_no || String(firstOrderId)
 
       if (combinedPayment.pay_params) {
         try {
           await invokeWechatPay(combinedPayment.pay_params)
-          wx.showToast({ title: '支付成功', icon: 'success' })
+          Navigation.toPaymentSuccess({
+            orderId: String(firstOrderId),
+            orderNo,
+            amount,
+            isCombined: true,
+            orderCount: orderIds.length
+          })
         } catch (err) {
           console.log('[Order-confirm] Combined payment cancelled or failed:', err)
           wx.showToast({ title: '支付取消', icon: 'none' })
-        } finally {
-          setTimeout(() => {
-            Navigation.redirectToOrderList()
-          }, 1500)
         }
       } else if (combinedPayment.status === 'paid') {
-        wx.showToast({ title: '支付成功', icon: 'success' })
-        setTimeout(() => {
-          Navigation.redirectToOrderList()
-        }, 1500)
+        Navigation.toPaymentSuccess({
+          orderId: String(firstOrderId),
+          orderNo,
+          amount,
+          isCombined: true,
+          orderCount: orderIds.length
+        })
       } else {
         wx.showModal({
           title: '订单已创建',
@@ -638,11 +646,7 @@ Page({
 })
 
 function showDebugModal(title: string, error: unknown) {
-  const message = error instanceof Error
-    ? error.message
-    : typeof error === 'string'
-      ? error
-      : JSON.stringify(error)
+  const message = getErrorUserMessage(error, '订单已创建，但购物车清理失败，请稍后检查订单状态')
   wx.showModal({
     title,
     content: message || '未知错误',

@@ -2,6 +2,7 @@ import { ReviewService, CreateReviewParams } from '../../../../api/review'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface ReviewUploadFile {
   url: string
@@ -183,8 +184,7 @@ Page({
     } catch (error: unknown) {
       logger.error('提交评价失败', error, 'reviews/create')
       this.setData({ submitting: false })
-      // 这里的友好提示可以根据错误码处理
-      const msg = error instanceof Error ? error.message : '提交失败，请重试'
+      const msg = getErrorUserMessage(error, '提交失败，请重试')
       wx.showToast({ title: msg, icon: 'none' })
     }
   }

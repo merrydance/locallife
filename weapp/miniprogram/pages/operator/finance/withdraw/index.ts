@@ -30,6 +30,8 @@ interface CommissionListResponseLike {
   }>
 }
 
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
+
 Page({
   data: {
     navBarHeight: 88,
@@ -147,7 +149,6 @@ Page({
 
     try {
       await withdrawOperator({ amount: amountFen })
-      wx.showToast({ title: '提现申请已提交', icon: 'success' })
       this.setData({ amountInput: '' })
       await this.loadOverview()
     } catch (error: unknown) {
@@ -221,7 +222,7 @@ Page({
   },
 
   getWithdrawErrorMessage(error: unknown): string {
-    const rawMessage = error instanceof Error ? error.message : '提现申请失败'
+    const rawMessage = getErrorDebugMessage(error) || '提现申请失败'
     const lowerMessage = rawMessage.toLowerCase()
 
     if (lowerMessage.includes('wallet account not bound')) {
@@ -236,6 +237,6 @@ Page({
       return '账号未激活，暂不可提现'
     }
 
-    return rawMessage || '提现申请失败'
+    return getErrorUserMessage(error, '提现申请失败')
   }
 })

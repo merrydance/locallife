@@ -3,16 +3,9 @@ import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 import { ReservationCardAdapter, ReservationDetailViewModel } from '../../../adapters/reservation-card'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-    if (error && typeof error === 'object' && 'message' in error) {
-        const { message } = error as { message?: unknown }
-        if (typeof message === 'string' && message.trim()) {
-            return message
-        }
-    }
-    return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 // 取消原因
 const CANCEL_REASONS = [
@@ -29,6 +22,7 @@ Page({
         loading: true,
         isError: false,
         errorMessage: '',
+        refreshErrorMessage: '',
         navBarHeight: 88,
         
         // Dialog State
@@ -62,7 +56,9 @@ Page({
         // Only show full page loading if no data yet (first load or retry)
         const isFirstLoad = !this.data.reservation
         if (isFirstLoad) {
-           this.setData({ loading: true, isError: false })
+              this.setData({ loading: true, isError: false, refreshErrorMessage: '' })
+          } else {
+              this.setData({ refreshErrorMessage: '' })
         }
         
         try {
@@ -71,7 +67,8 @@ Page({
 
             this.setData({
                 reservation: viewModel,
-                loading: false
+                loading: false,
+                refreshErrorMessage: ''
             })
         } catch (error: unknown) {
             logger.error('Load reservation detail failed', error)
@@ -80,12 +77,19 @@ Page({
                 this.setData({ 
                     loading: false,
                     isError: true,
-                    errorMessage: getErrorMessage(error, '加载失败')
+                    errorMessage: getErrorMessage(error, '加载失败'),
+                    refreshErrorMessage: ''
                 })
             } else {
-                wx.showToast({ title: '刷新失败', icon: 'none' })
+                this.setData({
+                    refreshErrorMessage: `${getErrorMessage(error, '刷新失败，请稍后重试')}，当前已保留上次结果`
+                })
             }
         }
+    },
+
+    onRetryRefresh() {
+        this.loadDetail()
     },
 
     // Navigation
@@ -142,7 +146,6 @@ Page({
         wx.showLoading({ title: '提交中' })
         try {
             await ReservationService.cancelReservation(this.data.id, this.data.cancelReason)
-            wx.showToast({ title: '已取消', icon: 'success' })
             this.closeCancelDialog()
             this.loadDetail()
         } catch (e) {

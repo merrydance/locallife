@@ -10,6 +10,7 @@ import {
     type MerchantQueryParams,
     type MerchantStatus
 } from '@/api/operator-merchant-management'
+import { getErrorUserMessage } from '@/utils/user-facing'
 
 interface MerchantListPageDataset {
     id?: number
@@ -108,9 +109,12 @@ Page({
         } catch (error) {
             console.error('加载商户列表失败:', error)
             if (refresh) {
-                this.setData({ error: '加载商户列表失败', initialLoading: false })
+                this.setData({
+                    error: getErrorUserMessage(error, '加载商户列表失败，请稍后重试'),
+                    initialLoading: false
+                })
             } else {
-                wx.showToast({ title: '加载更多失败', icon: 'none' })
+                wx.showToast({ title: getErrorUserMessage(error, '加载更多失败，请稍后重试'), icon: 'none' })
             }
         } finally {
             this.setData({
@@ -226,7 +230,7 @@ Page({
         } catch (error) {
             console.error('暂停商户失败:', error)
             wx.showToast({
-                title: '操作失败',
+                title: getErrorUserMessage(error, '暂停失败，请稍后重试'),
                 icon: 'none'
             })
         } finally {
@@ -279,7 +283,7 @@ Page({
         } catch (error) {
             console.error('恢复商户失败:', error)
             wx.showToast({
-                title: '操作失败',
+                title: getErrorUserMessage(error, '恢复失败，请稍后重试'),
                 icon: 'none'
             })
         } finally {

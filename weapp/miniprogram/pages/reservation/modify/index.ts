@@ -2,6 +2,7 @@ import { ReservationItem, ReservationResponse, ReservationService } from '../../
 import { getPublicMerchantDishes, DishDTO } from '../../../api/merchant'
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface DishView {
     id: number
@@ -169,7 +170,7 @@ Page({
 
             this.updateTotals()
         } catch (error) {
-            const errMessage = error instanceof Error ? error.message : String(error)
+            const errMessage = getErrorUserMessage(error, '加载失败，请稍后重试')
             console.error(error)
             this.setData({
                 loading: false,
@@ -314,12 +315,9 @@ Page({
         try {
             this.setData({ submitting: true })
             await ReservationService.modifyDishes(this.data.reservationId, items)
-            wx.showToast({ title: '修改成功', icon: 'success' })
-            setTimeout(() => {
-                wx.navigateBack()
-            }, 1200)
+            wx.navigateBack()
         } catch (error) {
-            const errMessage = error instanceof Error ? error.message : String(error)
+            const errMessage = getErrorUserMessage(error, '修改失败，请稍后重试')
             wx.showToast({ title: errMessage || '修改失败', icon: 'none' })
         } finally {
             this.setData({ submitting: false })

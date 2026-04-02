@@ -1,4 +1,5 @@
 import { getOperatorApplymentStatus, operatorBindBank, type OperatorApplymentStatusResponse } from '../../../api/operator-applyment'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type AccountType = 'ACCOUNT_TYPE_PRIVATE' | 'ACCOUNT_TYPE_BUSINESS'
 
@@ -123,7 +124,7 @@ Page({
         statusView: buildStatusView(status)
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '获取开户状态失败'
+      const message = getErrorUserMessage(error, '获取开户状态失败，请稍后重试')
       this.setData({
         error: message,
         status: null,
@@ -161,12 +162,10 @@ Page({
         contact_email: form.contact_email || undefined
       })
       this.setData({ success: resp.message || '开户申请已提交' })
-      wx.showToast({ title: '提交成功', icon: 'success' })
       await this.loadStatus()
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '提交开户申请失败'
+      const message = getErrorUserMessage(error, '提交开户申请失败，请稍后重试')
       this.setData({ error: message })
-      wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitting: false })
     }

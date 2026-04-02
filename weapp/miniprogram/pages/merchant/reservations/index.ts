@@ -15,6 +15,7 @@ import {
 import { tableManagementService, TableResponse } from '../../../api/table-device-management'
 import { logger } from '../../../utils/logger'
 import { settleAll } from '../../../utils/promise'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ReservationFilterTab = 'all' | ReservationStatus
 type ReservationStatusTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
@@ -163,15 +164,7 @@ function filterReservations(
   return reservations.filter((reservation) => reservation.status === tab)
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 async function loadAllMerchantReservations(date: string) {
   const reservations: ReservationResponse[] = []
@@ -563,7 +556,6 @@ Page({
         editingReservationId: 0,
         createForm: createDefaultReservationForm(form.date)
       })
-      wx.showToast({ title: isEdit ? '预订已更新' : '预订已创建', icon: 'success' })
       await this.loadData(form.date)
     } catch (err) {
       logger.error(isEdit ? 'Update merchant reservation failed' : 'Create merchant reservation failed', err)
@@ -603,7 +595,7 @@ Page({
     request: () => Promise<unknown>,
     modalTitle: string,
     modalContent: string,
-    successMessage: string
+    _successMessage: string
   ) {
     if (this.data.actionSubmittingKey) return
 
@@ -625,7 +617,6 @@ Page({
 
     try {
       await request()
-      wx.showToast({ title: successMessage, icon: 'success' })
       await this.loadData(this.data.date)
     } catch (err) {
       logger.error(`Reservation action failed: ${actionKey}`, err)

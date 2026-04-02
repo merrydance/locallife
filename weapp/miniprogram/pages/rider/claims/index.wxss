@@ -37,6 +37,33 @@
   margin-bottom: var(--spacer-sm);
 }
 
+.inline-banner {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  padding: var(--spacer-sm);
+  border-radius: var(--radius-lg);
+  margin-bottom: var(--spacer-sm);
+}
+
+.inline-banner-danger {
+  background: var(--td-error-color-1);
+  color: var(--td-error-color-7);
+}
+
+.inline-banner-text {
+  flex: 1;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.inline-banner-action {
+  color: var(--td-brand-color);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
+}
+
 .tips {
   flex: 1;
   background: var(--td-brand-color-light);

@@ -7,6 +7,7 @@ import {
 } from '../../../../api/order-management'
 import { logger } from '../../../../utils/logger'
 import dayjs from 'dayjs'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type OrderStatus = OrderResponse['status']
 type OrderStatusFilter = '' | OrderStatus
@@ -32,15 +33,7 @@ interface OrdersPageOptions {
   order_type?: OrderResponse['order_type']
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -291,7 +284,7 @@ Page({
     await this.performAction(id, () => MerchantOrderManagementService.completeOrder(id), '订单已核销')
   },
 
-  async performAction(id: number, request: () => Promise<unknown>, successMsg: string) {
+  async performAction(id: number, request: () => Promise<unknown>, _successMsg: string) {
     const index = this.data.orders.findIndex((order) => order.id === id)
     if (index === -1) return
 
@@ -299,8 +292,7 @@ Page({
     try {
       const updatedOrder = await request() as OrderResponse
       this.syncOrderAfterAction(updatedOrder)
-      wx.showToast({ title: successMsg, icon: 'success' })
-      setTimeout(() => this.loadOrders(true, false), 500)
+      await this.loadOrders(true, false)
     } catch (err) {
       logger.error('Order action failed', err)
       wx.showToast({ title: getErrorMessage(err, '操作失败，请稍后重试'), icon: 'none' })

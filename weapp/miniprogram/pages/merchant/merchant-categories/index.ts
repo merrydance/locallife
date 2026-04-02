@@ -6,19 +6,13 @@ import {
   setMyMerchantTags,
   MerchantCategoryTag
 } from '../../../api/merchant'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TagItem extends MerchantCategoryTag {
   selected: boolean
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === 'object') {
-    const knownError = error as { userMessage?: string, message?: string }
-    return knownError.userMessage || knownError.message || fallback
-  }
-
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function buildTagItems(allTags: MerchantCategoryTag[], selectedTags: MerchantCategoryTag[]) {
   const selectedIds = new Set((selectedTags || []).map((tag) => tag.id))
@@ -170,7 +164,6 @@ Page({
         ...nextState,
         hasChanges: false
       })
-      wx.showToast({ title: '经营类目已保存', icon: 'success' })
     } catch (err) {
       logger.error('[MerchantCategories] 保存失败', err)
       wx.showToast({

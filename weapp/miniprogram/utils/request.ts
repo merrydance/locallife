@@ -7,6 +7,7 @@ import { networkMonitor } from './network-monitor'
 import { CacheManager, CacheStrategy } from './cache'
 import { API_CONFIG, ENV } from '../config/index'
 import { performanceMonitor } from './performance-monitor'
+import { mapBackendMessageToUserMessage } from './user-facing'
 
 export const API_BASE = API_CONFIG.BASE_URL
 
@@ -112,18 +113,30 @@ function mapSearchBadRequestMessage(url: string, backendMessage: string, fallbac
   return '当前区域暂无可用内容'
 }
 
-function containsChinese(text: string): boolean {
-  return /[\u4e00-\u9fff]/.test(text)
-}
-
-function isEnglishOnlyMessage(text: string): boolean {
-  return /[a-zA-Z]/.test(text) && !containsChinese(text)
-}
-
 function mapKnownBackendMessage(url: string, backendMessage: string): string | undefined {
   const normalized = backendMessage.trim().toLowerCase()
   if (!normalized) {
     return undefined
+  }
+
+  if (normalized.includes('this endpoint requires merchant role') || normalized.includes('merchant owner role not found') || normalized.includes('not a merchant')) {
+    return '当前角色不支持使用此功能，请切换到商户角色后再试。'
+  }
+
+  if (normalized.includes('this endpoint requires rider role') || normalized.includes('rider role not found') || normalized.includes('not a rider')) {
+    return '当前角色不支持使用此功能，请切换到骑手角色后再试。'
+  }
+
+  if (normalized.includes('this endpoint requires operator role') || normalized.includes('operator role not found') || normalized.includes('operator not found in context')) {
+    return '当前角色不支持使用此功能，请切换到运营角色后再试。'
+  }
+
+  if (normalized.includes('this endpoint requires admin role') || normalized.includes('platform role not found') || normalized.includes('admin role not found')) {
+    return '当前角色不支持使用此功能，请切换到平台管理员角色后再试。'
+  }
+
+  if (normalized.includes('operator account is not active') || normalized.includes('operator is not active')) {
+    return '当前运营账号尚未完成开户，暂时不能加载运营中心数据。'
   }
 
   if (normalized === 'merchant is closed') {
@@ -198,15 +211,7 @@ function normalizeBackendUserMessage(url: string, backendMessage: string, fallba
     return mappedMessage
   }
 
-  if (containsChinese(backendMessage)) {
-    return backendMessage
-  }
-
-  if (isEnglishOnlyMessage(backendMessage)) {
-    return fallback
-  }
-
-  return backendMessage
+  return mapBackendMessageToUserMessage(backendMessage, fallback)
 }
 
 function isExpectedOperatorApplicationNotFound(
@@ -459,7 +464,9 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
         throw new AppError({
           type: errorType,
           message: errorDetail,
-          userMessage
+          userMessage,
+          code: displayCode,
+          statusCode: result.statusCode
         }, responseData)
         }
 
@@ -499,7 +506,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       throw new AppError({
         type: errorType,
         message: errorDetail,
-        userMessage
+        userMessage,
+        statusCode: result.statusCode
       })
     }
 
@@ -624,7 +632,8 @@ export async function request<T = unknown>(options: RequestOptions): Promise<T> 
       throw new AppError({
         type: ErrorType.BUSINESS,
         message: `API错误 [${errorCode}]: ${errorMessage}`,
-        userMessage: friendlyMessage
+        userMessage: friendlyMessage,
+        code: typeof errorCode === 'number' || typeof errorCode === 'string' ? errorCode : undefined
       })
     }
     } catch (error) {

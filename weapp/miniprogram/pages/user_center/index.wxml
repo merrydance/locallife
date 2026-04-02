@@ -61,6 +61,10 @@
         </view>
       </view>
 
+      <view wx:if="{{actionNoticeMessage}}" class="action-notice-card">
+        <text class="action-notice-text">{{actionNoticeMessage}}</text>
+      </view>
+
       <!-- Workbenches (for registered roles) -->
       <view wx:if="{{workbenches.length > 0}}" class="card-section">
         <view class="card-title">商家及运营服务</view>

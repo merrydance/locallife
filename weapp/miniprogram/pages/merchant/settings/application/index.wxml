@@ -30,6 +30,10 @@
       </view>
     </view>
 
+    <view wx:if="{{actionNoticeMessage}}" class="section-block hint-card hint-card-success action-notice-card">
+      <text class="action-notice-text">{{actionNoticeMessage}}</text>
+    </view>
+
     <view wx:if="{{rejectReason}}" class="section-block">
       <view class="section-title">驳回原因</view>
       <view class="hint-card hint-card-error">{{rejectReason}}</view>

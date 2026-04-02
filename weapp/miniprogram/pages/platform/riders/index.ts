@@ -3,6 +3,7 @@ import {
   platformManagementService,
   type AdminRiderItem
 } from '@/api/platform-management'
+import { getErrorUserMessage } from '@/utils/user-facing'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type TapEvent = WechatMiniprogram.CustomEvent & {
@@ -85,9 +86,8 @@ Page({
         hasMore: response.has_more
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载骑手列表失败，请稍后重试'
+      const message = getErrorUserMessage(error, '加载骑手列表失败，请稍后重试')
       this.setData({ error: message })
-      wx.showToast({ title: '加载失败', icon: 'none' })
     } finally {
       this.setData({ loading: false, requesting: false })
     }
@@ -118,10 +118,9 @@ Page({
     try {
       this.setData({ submitting: true })
       await platformManagementService.approveRider(riderID, {})
-      wx.showToast({ title: '审核通过', icon: 'success' })
       await this.loadRiders(true)
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '审核失败'
+      const message = getErrorUserMessage(error, '审核失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitting: false })
@@ -168,11 +167,10 @@ Page({
     try {
       this.setData({ submitting: true })
       await platformManagementService.rejectRider(riderID, { rejection_reason: rejectionReason })
-      wx.showToast({ title: '已驳回', icon: 'success' })
       this.onRejectCancel()
       await this.loadRiders(true)
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '驳回失败'
+      const message = getErrorUserMessage(error, '驳回失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitting: false })

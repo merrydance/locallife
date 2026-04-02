@@ -32,6 +32,11 @@
 
     <!-- 3. 正常数据 -->
     <block wx:else>
+      <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+        <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+        <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+      </view>
+
       <!-- 空状态 -->
       <view wx:if="{{orders.length === 0}}" class="empty-state">
         <t-empty icon="order-adjustment" description="暂无相关订单" />

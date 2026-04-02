@@ -16,6 +16,7 @@ import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { logger } from '../../../../utils/logger'
 import { getMediaDisplayUrl } from '../../../../utils/media'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
 
 type ApplicationForm = {
   merchantName: string
@@ -48,22 +49,11 @@ const EMPTY_FORM: ApplicationForm = {
 }
 
 function extractErrorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === 'object') {
-    const knownError = error as {
-      userMessage?: string
-      message?: string
-      originalError?: { message?: string }
-    }
-    return knownError.userMessage
-      || knownError.message
-      || knownError.originalError?.message
-      || fallback
-  }
-  return fallback
+  return getErrorUserMessage(error, fallback)
 }
 
 function shouldFallbackToLatest(error: unknown) {
-  const message = extractErrorMessage(error, '').toLowerCase()
+  const message = getErrorDebugMessage(error).toLowerCase()
   return message.includes('409')
     || message.includes('冲突')
     || message.includes('submitted')
@@ -211,6 +201,7 @@ Page({
     status: 'draft',
     rejectReason: '',
     updatedAtLabel: '--',
+    actionNoticeMessage: '',
     regionId: 0,
     latitude: '',
     longitude: '',
@@ -259,7 +250,7 @@ Page({
 
     this.setData({
       loading: true,
-      ...(showLoading ? { initialError: false, initialErrorMessage: '' } : {})
+      ...(showLoading ? { initialError: false, initialErrorMessage: '', actionNoticeMessage: '' } : {})
     })
 
     try {
@@ -368,7 +359,8 @@ Page({
     }
     this.setData({
       form: nextForm,
-      hasChanges: hasFormChanged(nextForm, this.data.initialForm)
+      hasChanges: hasFormChanged(nextForm, this.data.initialForm),
+      actionNoticeMessage: ''
     })
   },
 
@@ -441,7 +433,7 @@ Page({
       const updated = await updateMerchantBasicInfo(this.buildBasicPayload())
       await this.applyDraftToPage(updated, false)
       if (showSuccessToast) {
-        wx.showToast({ title: '草稿已保存', icon: 'success' })
+        this.setData({ actionNoticeMessage: '草稿已保存，可继续补充证照或直接提交审核。' })
       }
       return true
     } catch (error) {
@@ -483,7 +475,11 @@ Page({
 
       const result = await submitMerchantApplication(consentPayload)
       await this.applyDraftToPage(result, false)
-      wx.showToast({ title: result.status === 'approved' ? '申请已通过' : '申请已提交', icon: 'success' })
+      this.setData({
+        actionNoticeMessage: result.status === 'approved'
+          ? '主体申请已通过，可继续完成收付通进件和签约配置。'
+          : '主体申请已提交审核，请留意当前状态更新。'
+      })
     } catch (error) {
       logger.error('Submit merchant application failed', error, 'merchant-application-page')
       wx.showToast({ title: extractErrorMessage(error, '申请提交失败，请稍后重试'), icon: 'none' })
@@ -511,7 +507,7 @@ Page({
     try {
       const result = await resetMerchantApplication()
       await this.applyDraftToPage(result, false)
-      wx.showToast({ title: '已重置为草稿', icon: 'success' })
+      this.setData({ actionNoticeMessage: '申请已重置为草稿，可修改资料后重新提交。' })
     } catch (error) {
       logger.error('Reset merchant application failed', error, 'merchant-application-page')
       wx.showToast({ title: extractErrorMessage(error, '申请重置失败，请稍后重试'), icon: 'none' })

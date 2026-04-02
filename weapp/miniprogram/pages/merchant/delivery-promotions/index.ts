@@ -6,6 +6,7 @@ import {
   DeliveryFeeAdapter
 } from '../../../api/delivery-fee'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 // ==================== 类型定义 ====================
 
@@ -234,7 +235,6 @@ Page({
           valid_until: toRFC3339End(form.valid_until),
           is_active: form.is_active
         })
-        wx.showToast({ title: '更新成功', icon: 'success' })
       } else {
         const payload: CreateDeliveryPromotionRequest = {
           name: form.name.trim(),
@@ -244,13 +244,12 @@ Page({
           valid_until: toRFC3339End(form.valid_until)
         }
         await deliveryFeeService.createMerchantPromotion(merchantId, payload)
-        wx.showToast({ title: '创建成功', icon: 'success' })
       }
       this.setData({ formVisible: false })
       await this.loadPromotions()
     } catch (err: unknown) {
       logger.error('Submit promotion failed', err)
-      const msg = (err instanceof Error ? err.message : '') || (isEdit ? '更新失败' : '创建失败')
+      const msg = getErrorUserMessage(err, isEdit ? '更新失败，请稍后重试' : '创建失败，请稍后重试')
       wx.showToast({ title: msg, icon: 'none' })
     } finally {
       this.setData({ submitting: false })
@@ -273,7 +272,6 @@ Page({
         const updated = buildPromotionView({ ...this.data.promotions[idx], is_active: targetActive })
         this.setData({ [`promotions[${idx}]`]: updated })
       }
-      wx.showToast({ title: targetActive ? '已启用' : '已停用', icon: 'success' })
     } catch (err) {
       logger.error('Toggle promo status failed', err)
       wx.showToast({ title: '操作失败', icon: 'none' })
@@ -296,7 +294,6 @@ Page({
         wx.showLoading({ title: '删除中...' })
         try {
           await deliveryFeeService.deleteMerchantPromotion(this.data.merchantId, id)
-          wx.showToast({ title: '已删除', icon: 'success' })
           await this.loadPromotions()
         } catch (err) {
           logger.error('Delete promotion failed', err)

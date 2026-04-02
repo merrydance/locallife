@@ -7,6 +7,7 @@ import {
 } from '../../../../api/dish'
 import { getPublicImageUrl } from '../../../../utils/image'
 import { logger } from '../../../../utils/logger'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type PricingMode = 'sum' | 'off_90' | 'off_80' | 'keep'
 
@@ -23,16 +24,7 @@ interface ComboEditOptions {
   id?: string
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object') {
-    const message = (error as { userMessage?: string, message?: string }).userMessage || (error as { message?: string }).message
-    if (typeof message === 'string' && message.trim()) {
-      return message.trim()
-    }
-  }
-
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 const PRICING_MODE_OPTIONS = [
   { label: '原价合计', value: 'sum' },
@@ -291,10 +283,7 @@ Page({
 
       this.applyPersistedComboState(savedCombo, this.data.selectedDishIds)
 
-      wx.showToast({ title: this.data.isEdit ? '套餐已更新' : '套餐已创建', icon: 'success' })
-      setTimeout(() => {
-        wx.navigateBack()
-      }, 500)
+      wx.navigateBack()
     } catch (err) {
       logger.error('Submit combo failed', err)
       wx.showToast({ title: getErrorMessage(err, '保存失败，请稍后重试'), icon: 'none' })

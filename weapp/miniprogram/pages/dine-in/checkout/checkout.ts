@@ -6,6 +6,8 @@ import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 import { getTableDetail } from '../../../api/table'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
+import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type PromotionItem = NonNullable<CalculateCartResponse['applied_promotions']>[number] & {
     amountDisplay: string
@@ -169,7 +171,7 @@ Page({
             this.renderData(merchantInfo, cart, calculationResult)
 
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : '加载失败，请重试'
+            const message = getErrorUserMessage(error, '加载失败，请重试')
             console.error('初始化失败:', error)
             this.setData({ 
                 isError: true, 
@@ -295,7 +297,7 @@ Page({
             await this.handlePayment(order.id)
 
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : '下单失败'
+            const message = getErrorUserMessage(error, '下单失败，请稍后重试')
             wx.showToast({ title: message, icon: 'error' })
             this.setData({ submitting: false })
         }
@@ -307,10 +309,12 @@ Page({
             if (payment.pay_params) {
                 await invokeWechatPay(payment.pay_params)
             }
-            wx.showToast({ title: '支付成功', icon: 'success' })
-            setTimeout(() => {
-                wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
-            }, 1000)
+            Navigation.toDineInPaymentSuccess({
+                orderId: String(orderId),
+                amount: formatPriceNoSymbol(payment.amount || this.data.calculation.total_amount || 0),
+                merchantName: this.data.merchantInfo?.name,
+                tableNumber: String((this.data.tableInfo?.table_no as string | undefined) || '')
+            })
         } catch (error) {
             console.error('支付失败', error)
             wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })

@@ -6,6 +6,7 @@ import {
 } from '../../../../api/merchant'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface MembershipFormState {
   allow_with_voucher: boolean
@@ -48,15 +49,7 @@ function hasFormChanged(current: MembershipFormState, initial: MembershipFormSta
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -151,7 +144,7 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
-      } else if (isSilentRefresh) {
+      } else if (hasExistingData) {
         this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
@@ -227,7 +220,6 @@ Page({
         initialForm: JSON.parse(JSON.stringify(form)),
         hasChanges: false
       })
-      wx.showToast({ title: '会员设置已保存', icon: 'success' })
     } catch (err: unknown) {
       logger.error('Save merchant membership settings failed', err)
       const message = getErrorMessage(err, '保存失败，请稍后重试')

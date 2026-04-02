@@ -9,6 +9,8 @@ import { checkRoomAvailability } from '../../../api/room'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 import { createReservationPayment, invokeWechatPay } from '../../../api/payment'
 import { calculateCart, CalculateCartResponse } from '../../../api/cart'
+import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TimeSlot {
   time: string
@@ -411,17 +413,18 @@ Page({
         // 定金模式：发起支付
         try {
           const paymentResult = await createReservationPayment(reservation.id)
+          const amount = ((paymentResult.amount || this.data.deposit) / 100).toFixed(2)
 
           if (paymentResult.pay_params) {
             await invokeWechatPay(paymentResult.pay_params)
-            wx.showToast({ title: '支付成功', icon: 'success' })
           } else if (paymentResult.status === 'paid') {
-            wx.showToast({ title: '余额支付成功', icon: 'success' })
+            // 支付已完成，统一走成功页承接反馈
           }
-
-          setTimeout(() => {
-            wx.redirectTo({ url: `/pages/reservation/detail/index?id=${reservation.id}` })
-          }, 1500)
+          Navigation.toPaymentSuccess({
+            orderId: String(reservation.id),
+            orderNo: String(reservation.id),
+            amount
+          })
           
         } catch (payErr) {
           console.error('[预订支付] 支付失败或取消:', payErr)
@@ -432,7 +435,7 @@ Page({
         }
       }
     } catch (error) {
-      const errMessage = error instanceof Error ? error.message : String(error)
+      const errMessage = getErrorUserMessage(error, '提交失败，请稍后重试')
       console.error('预定提交失败:', error)
       wx.showToast({ title: errMessage || '提交失败', icon: 'none' })
     } finally {

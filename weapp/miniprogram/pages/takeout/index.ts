@@ -5,6 +5,7 @@ import { searchMerchantsWithMeta, MerchantSummary, getPublicMerchantDishes, getP
 import { getActiveCategories, ActiveCategory } from '../../api/location'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
+import { isRateLimitError } from '../../utils/user-facing'
 import { ErrorHandler } from '../../utils/error-handler'
 import { globalStore } from '../../utils/global-store'
 import { requestManager } from '../../utils/request-manager'
@@ -203,7 +204,6 @@ Page({
 
         // 重新加载基于新位置的推荐
         this.onLocationChange()
-        wx.showToast({ title: '已更新位置推荐', icon: 'success', duration: 1500 })
       },
       fail: () => {
         // 用户取消选择
@@ -387,8 +387,6 @@ Page({
 
         // 重新加载数据
         this.loadData()
-
-        wx.showToast({ title: '位置已更新', icon: 'success', duration: 1500 })
       },
       fail: (err) => {
         logger.warn('用户取消选择位置', err, 'Takeout.openLocationPicker')
@@ -877,7 +875,7 @@ Page({
       }
       
       // 如果是 429 错误，显示更友好的提示
-      if (error?.message?.includes('429')) {
+      if (isRateLimitError(error)) {
         wx.showToast({ title: '请求太频繁，请稍后再试', icon: 'none', duration: 2000 })
       } else {
         wx.showToast({ title: '加载失败，请重试', icon: 'none' })

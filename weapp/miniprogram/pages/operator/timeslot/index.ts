@@ -1,5 +1,6 @@
 import { deliveryFeeService } from '../../../api/delivery-fee'
 import type { PeakHourConfigResponse, CreatePeakHourConfigRequest } from '../../../api/delivery-fee'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface PeakHourViewItem extends PeakHourConfigResponse {
   daysText: string
@@ -104,7 +105,7 @@ Page({
       }))
       this.setData({ peakConfigs: mapped, loading: false, initialLoading: false })
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : '加载时段配置失败'
+      const message = getErrorUserMessage(err, '加载时段配置失败，请稍后重试')
       this.setData({ loading: false, initialLoading: false, error: message })
     }
   },
@@ -193,9 +194,8 @@ Page({
       await deliveryFeeService.createPeakConfig(selectedRegionId, data)
       this.setData({ showPeakModal: false })
       await this.loadPeakConfigs(selectedRegionId)
-      wx.showToast({ title: '添加成功', icon: 'success' })
-    } catch (_err) {
-      wx.showToast({ title: '添加失败', icon: 'none' })
+    } catch (err) {
+      wx.showToast({ title: getErrorUserMessage(err, '添加失败，请稍后重试'), icon: 'none' })
     } finally {
       this.setData({ saving: false })
     }
@@ -214,9 +214,8 @@ Page({
         try {
           await deliveryFeeService.deletePeakConfig(id)
           await this.loadPeakConfigs(this.data.selectedRegionId)
-          wx.showToast({ title: '删除成功', icon: 'success' })
-        } catch (_err) {
-          wx.showToast({ title: '删除失败', icon: 'none' })
+        } catch (err) {
+          wx.showToast({ title: getErrorUserMessage(err, '删除失败，请稍后重试'), icon: 'none' })
         }
       }
     })

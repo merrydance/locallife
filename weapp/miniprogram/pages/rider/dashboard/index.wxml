@@ -1,12 +1,14 @@
 <custom-navbar title="骑手工作台" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view wx:if="{{initError && !loading}}" class="page-state-card">
-    <t-empty icon="error-circle" description="{{initError}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetryLoad">重新加载工作台</t-button>
+  <view wx:if="{{initError && !loading}}" class="console-error-banner">
+    <view class="console-error-banner__body">
+      <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
+      <text class="console-error-banner__text">{{initError}}</text>
+    </view>
+    <t-button wx:if="{{initErrorCanRetry}}" theme="primary" shape="round" size="small" bindtap="onRetryLoad">重新加载</t-button>
   </view>
 
-  <block wx:else>
   <!-- 1. 骑手状态与简报 -->
   <view class="rider-header-card">
     <view class="header-top">
@@ -245,11 +247,12 @@
             </view>
           </block>
 
-          <view wx:elif="{{hallLoadError && !loading}}" class="inline-state-card">
-            <t-empty icon="error-circle" description="{{hallLoadError}}" />
-            <t-button theme="primary" shape="round" bindtap="onRetryLoad" size="medium">重新加载</t-button>
-          </view>
-          
+          <t-empty
+            wx:elif="{{hallLoadError && !loading}}"
+            icon="info-circle"
+            description="抢单大厅暂未展示"
+          />
+
           <t-empty 
             wx:elif="{{!loading}}"
             icon="info-circle" 
@@ -381,10 +384,11 @@
             </view>
           </block>
 
-          <view wx:elif="{{myLoadError && !loading}}" class="inline-state-card">
-            <t-empty icon="error-circle" description="{{myLoadError}}" />
-            <t-button theme="primary" shape="round" bindtap="onRetryLoad" size="medium">重新加载</t-button>
-          </view>
+          <t-empty
+            wx:elif="{{myLoadError && !loading}}"
+            icon="info-circle"
+            description="任务列表暂未展示"
+          />
 
           <t-empty wx:elif="{{!loading}}" icon="info-circle" description="当前没有进行中的任务">
             <t-button theme="primary" shape="round" size="medium" bindtap="onSwitchToHall">去抢单大厅</t-button>
@@ -393,5 +397,4 @@
       </t-tab-panel>
     </t-tabs>
   </view>
-  </block>
 </view>

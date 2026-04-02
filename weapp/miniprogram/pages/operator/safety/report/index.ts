@@ -2,6 +2,7 @@ import {
   operatorBasicManagementService,
   SubmitSafetyReportRequest
 } from '../../../../api/operator-basic-management'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type SafetyStatusFilter = '' | 'pending' | 'resolved' | 'rejected'
 
@@ -117,7 +118,7 @@ Page({
         initialLoading: false
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载食安事件失败'
+      const message = getErrorUserMessage(error, '加载食安事件失败，请稍后重试')
       this.setData({ loading: false, loadingMore: false, initialLoading: false, error: message })
     }
   },
@@ -178,7 +179,6 @@ Page({
       this.setData({ submitLoading: true })
       wx.showLoading({ title: '提交中', mask: true })
       await operatorBasicManagementService.submitSafetyReport(payload)
-      wx.showToast({ title: '提交成功', icon: 'success' })
       this.setData({
         submitVisible: false,
         submitTitle: '',
@@ -188,7 +188,7 @@ Page({
       })
       this.loadReports(true)
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '提交失败'
+      const message = getErrorUserMessage(error, '提交失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitLoading: false })

@@ -7,6 +7,37 @@
   box-sizing: border-box;
 }
 
+.console-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 24rpx 0 8rpx;
+  padding: 20rpx 24rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+}
+
+.console-error-banner__body {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.console-error-banner__text {
+  flex: 1;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.console-error-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+
 /* 1. Finance Card (The "Wow" Header) */
 .finance-section {
   padding: 24rpx 0;

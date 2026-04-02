@@ -324,8 +324,6 @@ Page({
         await riderLiveLocationSession.refreshNow('rider_navigation_manual_retry')
         await riderLiveLocationSession.flushNow()
       }
-
-      wx.showToast({ title: '定位已刷新', icon: 'success' })
     } finally {
       wx.hideLoading()
     }

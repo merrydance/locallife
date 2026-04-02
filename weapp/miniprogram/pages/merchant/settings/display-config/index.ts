@@ -1,6 +1,7 @@
 import { displayConfigService, DisplayConfigResponse } from '../../../../api/table-device-management'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface DisplayConfigForm {
   enable_print: boolean
@@ -43,15 +44,7 @@ function hasFormChanged(current: DisplayConfigForm, initial: DisplayConfigForm) 
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -198,7 +191,6 @@ Page({
         hasChanges: false,
         refreshErrorMessage: ''
       })
-      wx.showToast({ title: '显示配置已保存', icon: 'success' })
     } catch (err) {
       logger.error('Save merchant display config failed', err)
       wx.showToast({ title: getErrorMessage(err, '保存失败，请稍后重试'), icon: 'none' })

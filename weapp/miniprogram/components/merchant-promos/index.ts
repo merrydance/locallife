@@ -7,6 +7,7 @@
 import { rechargeMembership, getMyMemberships, MembershipResponse } from '../../api/personal'
 import { formatPriceNoSymbol } from '../../utils/util'
 import { request } from '../../utils/request'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../utils/user-facing'
 
 /** 优惠项目类型 - 对齐后端 api.promotionItem */
 interface PromotionItem {
@@ -278,8 +279,8 @@ Component({
             } catch (err) {
                 console.error('充值失败:', err)
                 wx.showToast({
-                    title: err instanceof Error ? err.message : '充值失败',
-                    icon: 'error'
+                    title: getErrorUserMessage(err, '充值失败，请稍后重试'),
+                    icon: 'none'
                 })
             } finally {
                 this.setData({ recharging: false })
@@ -320,14 +321,15 @@ Component({
                 })
 
             } catch (err) {
-                const errorMsg = err instanceof Error ? err.message : '领取失败'
+                const debugMessage = getErrorDebugMessage(err).toLowerCase()
+                const errorMsg = getErrorUserMessage(err, '领取失败，请稍后重试')
                 
                 // 已领取的情况
-                if (errorMsg.includes('already') || errorMsg.includes('已领取')) {
+                if (debugMessage.includes('already') || errorMsg.includes('已领取')) {
                     wx.showToast({ title: '您已领取过该优惠券', icon: 'none' })
-                } else if (errorMsg.includes('expired') || errorMsg.includes('过期')) {
+                } else if (debugMessage.includes('expired') || errorMsg.includes('过期')) {
                     wx.showToast({ title: '优惠券已过期', icon: 'none' })
-                } else if (errorMsg.includes('out') || errorMsg.includes('领完')) {
+                } else if (debugMessage.includes('out') || errorMsg.includes('领完')) {
                     wx.showToast({ title: '优惠券已领完', icon: 'none' })
                 } else {
                     wx.showToast({ title: errorMsg, icon: 'none' })

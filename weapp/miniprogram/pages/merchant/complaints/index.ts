@@ -6,6 +6,7 @@ import {
 } from '../../../api/merchant-complaints'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ComplaintTab = 'all' | MerchantComplaintState
 type ComplaintTagTheme = 'danger' | 'warning' | 'success'
@@ -76,15 +77,7 @@ function toComplaintCard(item: MerchantComplaintItem): MerchantComplaintCardView
   }
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {

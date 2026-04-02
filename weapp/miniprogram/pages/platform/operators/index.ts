@@ -4,6 +4,7 @@ import {
   type AdminOperatorApplicationItem,
   type AdminRegionExpansionApplicationItem
 } from '@/api/platform-management'
+import { getErrorUserMessage } from '@/utils/user-facing'
 
 type OperatorApplicationStatus = 'all' | 'submitted' | 'approved' | 'rejected'
 type SortBy =
@@ -146,9 +147,8 @@ Page({
         filterStats
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载申请失败，请稍后重试'
+      const message = getErrorUserMessage(error, '加载申请失败，请稍后重试')
       this.setData({ error: message })
-      wx.showToast({ title: '加载申请失败', icon: 'none' })
     } finally {
       this.setData({ loading: false, requesting: false })
     }
@@ -192,7 +192,7 @@ Page({
         regionFilterStats
       })
     } catch (e: unknown) {
-      this.setData({ regionError: e instanceof Error ? e.message : '加载失败' })
+      this.setData({ regionError: getErrorUserMessage(e, '区域申请加载失败，请稍后重试') })
     } finally {
       this.setData({ regionLoading: false })
     }
@@ -235,10 +235,9 @@ Page({
   async _doApprove(id: number) {
     try {
       await platformManagementService.approveRegionExpansionApplication(id)
-      wx.showToast({ title: '已通过', icon: 'success' })
       await this.loadRegionApplications(true)
     } catch (e: unknown) {
-      wx.showToast({ title: e instanceof Error ? e.message : '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(e, '审核失败，请稍后重试'), icon: 'none' })
     }
   },
 
@@ -269,11 +268,10 @@ Page({
     this.setData({ submittingReject: true })
     try {
       await platformManagementService.rejectRegionExpansionApplication(rejectTargetId, { reject_reason: rejectReason.trim() })
-      wx.showToast({ title: '已驳回', icon: 'success' })
       this.setData({ rejectDialogVisible: false })
       await this.loadRegionApplications(true)
     } catch (e: unknown) {
-      wx.showToast({ title: e instanceof Error ? e.message : '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(e, '驳回失败，请稍后重试'), icon: 'none' })
     } finally {
       this.setData({ submittingReject: false })
     }

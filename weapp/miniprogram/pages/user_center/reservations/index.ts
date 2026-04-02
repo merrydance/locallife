@@ -148,8 +148,7 @@ Page({
         try {
             await ReservationService.cancelReservation(reservationId, reason)
             wx.hideLoading()
-            wx.showToast({ title: '已取消', icon: 'success' })
-            setTimeout(() => this.loadReservations(true), 1500)
+            await this.loadReservations(true)
         } catch (error) {
             wx.hideLoading()
             logger.error('取消预订失败', error, 'reservations.doCancelReservation')

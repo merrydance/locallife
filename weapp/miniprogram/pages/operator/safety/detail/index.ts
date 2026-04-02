@@ -1,4 +1,5 @@
 import { operatorBasicManagementService, SafetyReportItem } from '../../../../api/operator-basic-management'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type ResolveStatus = 'resolved' | 'rejected'
 
@@ -61,7 +62,7 @@ Page({
         initialLoading: false
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载详情失败'
+      const message = getErrorUserMessage(error, '加载详情失败，请稍后重试')
       this.setData({ loading: false, initialLoading: false, error: message })
     }
   },
@@ -129,10 +130,9 @@ Page({
         recover_reason: this.data.recoverReason || undefined
       })
       this.setData({ recoveredMerchantIds: result.recovered_merchant_ids || [] })
-      wx.showToast({ title: '处置成功', icon: 'success' })
       await this.loadDetail()
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '处置失败'
+      const message = getErrorUserMessage(error, '处置失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitting: false })
@@ -160,7 +160,6 @@ Page({
       this.setData({ resumeSubmitting: true })
       wx.showLoading({ title: '恢复中' })
       await operatorBasicManagementService.resumeMerchant(merchantId, this.data.singleResumeReason)
-      wx.showToast({ title: '恢复成功', icon: 'success' })
       this.setData({
         singleResumeMerchantId: '',
         singleResumeReason: '',
@@ -168,7 +167,7 @@ Page({
       })
       await this.loadDetail()
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '恢复失败'
+      const message = getErrorUserMessage(error, '恢复失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ resumeSubmitting: false })

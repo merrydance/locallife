@@ -5,6 +5,7 @@ import {
   RiderStatus,
   OperatorRiderItem
 } from '../../../api/operator-rider-management'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RiderListPageOptions = {
   region_id?: string
@@ -165,7 +166,7 @@ Page({
         initialLoading: false
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载骑手失败'
+      const message = getErrorUserMessage(error, '加载骑手失败，请稍后重试')
       this.setData({ loading: false, loadingMore: false, initialLoading: false, error: message })
     }
   },
@@ -246,12 +247,11 @@ Page({
       await operatorRiderManagementService.suspendRider(this.data.selectedRider.id, {
         reason: this.data.actionReason
       })
-      wx.showToast({ title: '暂停成功', icon: 'success' })
       this.setData({ suspendDialogVisible: false })
       this.loadRiders(true)
     } catch (error) {
       console.error('暂停骑手失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }
@@ -264,12 +264,11 @@ Page({
       await operatorRiderManagementService.resumeRider(this.data.selectedRider.id, {
         reason
       })
-      wx.showToast({ title: '恢复成功', icon: 'success' })
       this.setData({ resumeDialogVisible: false })
       this.loadRiders(true)
     } catch (error) {
       console.error('恢复骑手失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }

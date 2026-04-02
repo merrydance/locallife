@@ -130,8 +130,7 @@ Page({
         if (res.confirm) {
           try {
             await AddressService.deleteAddress(id)
-            wx.showToast({ title: '已删除', icon: 'success' })
-            this.loadAddresses()
+            await this.loadAddresses()
           } catch (error) {
             ErrorHandler.handle(error, 'Addresses.deleteAddress')
           }
@@ -170,8 +169,7 @@ Page({
       wx.showLoading({ title: '设置中' })
       await AddressService.setDefaultAddress(id)
       wx.hideLoading()
-      wx.showToast({ title: '已设为默认', icon: 'success' })
-      this.loadAddresses()
+      await this.loadAddresses()
     } catch (error) {
       wx.hideLoading()
       ErrorHandler.handle(error, 'Addresses.setDefault')

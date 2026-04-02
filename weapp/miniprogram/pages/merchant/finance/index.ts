@@ -29,6 +29,7 @@ import {
 import { logger } from '../../../utils/logger'
 import { settleAll } from '../../../utils/promise'
 import dayjs from 'dayjs'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
 
 type InputChangeDetail = {
   value: string
@@ -108,17 +109,7 @@ function buildFinanceRange(rangeKey: FinanceRangeKey) {
   }
 }
 
-function getErrorMessage(error: unknown, fallback: string) {
-  if (error && typeof error === 'object') {
-    const knownError = error as { userMessage?: string, message?: string, originalError?: { message?: string } }
-    return knownError.userMessage
-      || knownError.message
-      || knownError.originalError?.message
-      || fallback
-  }
-
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -272,7 +263,7 @@ Page({
         balanceStatusDesc: statusDesc
       })
     } catch (error: unknown) {
-      const msg = (error instanceof Error ? error.message : '') || ''
+      const msg = getErrorDebugMessage(error)
       if (msg.includes('404')) {
         this.setData({
           notConfigured: true,
@@ -305,7 +296,7 @@ Page({
         applymentErrorMessage: ''
       })
     } catch (error: unknown) {
-      const msg = (error instanceof Error ? error.message : '') || ''
+      const msg = getErrorDebugMessage(error)
       if (msg.includes('404')) {
         this.setData({
           applymentStatus: null,

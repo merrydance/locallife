@@ -154,7 +154,6 @@ Page({
         name: targetName,
         sort_order: this.data.categories.length + 1
       })
-      wx.showToast({ title: '已关联分类', icon: 'success' })
       this.setData({ addPopupVisible: false })
       await this.loadCategories()
     } catch (err) {
@@ -182,7 +181,6 @@ Page({
         name,
         sort_order: this.data.categories.length + 1
       })
-      wx.showToast({ title: '创建成功', icon: 'success' })
       this.setData({ addPopupVisible: false })
       await this.loadCategories()
     } catch (err) {
@@ -204,7 +202,6 @@ Page({
     this.setData({ submitting: true })
     try {
       await DishManagementService.updateDishCategory(id, { name: nextName })
-      wx.showToast({ title: '更新成功', icon: 'success' })
       await this.loadCategories()
     } catch (err) {
       logger.error('Update dish category failed', err)
@@ -225,7 +222,6 @@ Page({
         if (!res.confirm) return
         try {
           await DishManagementService.deleteDishCategory(id)
-          wx.showToast({ title: '删除成功', icon: 'success' })
           this.loadCategories()
         } catch (err) {
           logger.error('Delete dish category failed', err)

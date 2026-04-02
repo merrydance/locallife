@@ -94,6 +94,33 @@
   background: var(--td-bg-color-container);
 }
 
+.inline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  border-radius: var(--radius-md);
+  padding: var(--spacer-sm) var(--spacer-md);
+  margin-bottom: var(--spacer-sm);
+}
+
+.inline-banner-danger {
+  background: rgba(229, 57, 53, 0.08);
+  color: var(--td-error-color);
+}
+
+.inline-banner-text {
+  flex: 1;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+}
+
+.inline-banner-action {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--td-brand-color);
+}
+
 .empty-wrap {
   margin-top: 120rpx;
 }

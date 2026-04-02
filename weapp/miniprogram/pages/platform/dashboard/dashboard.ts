@@ -5,6 +5,7 @@
 
 import { platformDashboardService, type RealtimeDashboardData, type PlatformOverviewResponse } from '@/api/platform-dashboard'
 import { responsiveBehavior } from '@/utils/responsive'
+import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
 
 type ActionTapEvent = WechatMiniprogram.CustomEvent & {
     currentTarget: {
@@ -48,6 +49,7 @@ Page({
         refreshing: false,
         requesting: false,
         error: null as string | null,
+        errorCanRetry: true,
         overviewData: null as PlatformOverviewResponse | null,
         realtimeData: null as RealtimeDashboardData | null,
         summaryCards: {
@@ -183,9 +185,15 @@ Page({
             })
         } catch (error) {
             console.error('加载平台管理中心数据失败:', error)
-            const errMsg = error instanceof Error ? error.message : '加载失败，请稍后重试'
-            this.setData({ error: errMsg })
-            if (!silent) {
+            const errorState = getConsoleDashboardErrorState('platform', error, '平台管理中心暂时无法加载，请稍后重试。')
+            const hasLoadedDashboard = !!this.data.overviewData || !!this.data.realtimeData
+            const shouldSurfaceError = !silent || !hasLoadedDashboard || !errorState.canRetry
+
+            if (shouldSurfaceError) {
+                this.setData({ error: errorState.message, errorCanRetry: errorState.canRetry })
+            }
+
+            if (!silent && errorState.canRetry) {
                 wx.showToast({
                     title: '加载失败，请重试',
                     icon: 'none'

@@ -1,5 +1,6 @@
 import { searchGroups, applyToJoinGroup } from '../../../../api/group-application'
 import { logger } from '../../../../utils/logger'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type NavHeightEvent = {
   detail: {
@@ -24,15 +25,7 @@ type ApplyEvent = {
 
 type GroupItem = Record<string, unknown>
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {

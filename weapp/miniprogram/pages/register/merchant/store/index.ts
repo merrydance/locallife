@@ -20,6 +20,7 @@ import {
 } from '../../../../api/onboarding'
 import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { getMediaDisplayUrl } from '../../../../utils/media'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 import { getCurrentRegion, searchRegions, type RegionSearchResult } from '../../../../api/location'
@@ -218,17 +219,7 @@ type DraftData = {
   }
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object') {
-    const maybeError = error as {
-      userMessage?: string
-      message?: string
-      data?: { message?: string }
-    }
-    return maybeError.userMessage || maybeError.message || maybeError.data?.message || fallback
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function isMerchantCorrectionError(message: string): boolean {
   return [
@@ -399,10 +390,7 @@ Page({
 
       // 检查申请状态 - 如果已提交或已通过，直接跳转
       if (data.status === 'approved') {
-        wx.showToast({ title: '您已是商户', icon: 'success' })
-        setTimeout(() => {
-          wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
-        }, 1000)
+        wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
         return
       }
       if (data.status === 'submitted') {
@@ -1817,10 +1805,7 @@ Page({
         app.globalData.userRole = 'merchant'
         // 商户ID将在商户后台页面加载时从API获取
 
-        wx.showToast({ title: '审核通过', icon: 'success' })
-        setTimeout(() => {
-          wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
-        }, 1000)
+        wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
         return // 立即返回，不重置 isSubmitting
       } else if (result.status === 'rejected') {
         this.setData({
@@ -1910,7 +1895,6 @@ Page({
       wx.showLoading({ title: '重置中...' })
       await resetMerchantApplication()
       wx.hideLoading()
-      wx.showToast({ title: '已重置，可重新编辑', icon: 'success' })
       this.setData({ currentStep: 1 })
       void this.initApplication()
     } catch (e) {

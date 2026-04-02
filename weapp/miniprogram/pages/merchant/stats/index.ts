@@ -5,6 +5,7 @@ import { ReservationService, ReservationStats } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
 import { settleAll } from '../../../utils/promise'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type StatsRangeKey = '7d' | '30d'
 
@@ -124,15 +125,7 @@ function buildTopDishRows(rows: TopSellingDishRow[]): TopDishViewModel[] {
   }))
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function getSummaryErrorMessage(
   overviewResult: SettledResult<MerchantOverviewResponse>,

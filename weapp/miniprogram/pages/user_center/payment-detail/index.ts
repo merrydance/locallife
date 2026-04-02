@@ -179,11 +179,11 @@ Page({
                 return
             }
 
-            wx.showToast({ title: '支付成功', icon: 'success' })
             if (latestPayment.id) {
                 this.setData({ paymentId: latestPayment.id })
             }
-            setTimeout(() => this.loadPaymentDetail(), 1200)
+            await new Promise((resolve) => setTimeout(resolve, 1200))
+            await this.loadPaymentDetail()
         } catch (error) {
             logger.error('继续支付失败', error, 'payment-detail.onContinuePay')
             wx.showToast({ title: '支付失败', icon: 'none' })
@@ -261,14 +261,14 @@ Page({
                     wx.showLoading({ title: '处理中...' })
                     try {
                         await closePayment(this.data.paymentId)
-                        wx.hideLoading()
-                        wx.showToast({ title: '已关闭', icon: 'success' })
-                        setTimeout(() => this.loadPaymentDetail(), 1500)
+                        await this.loadPaymentDetail()
                     } catch (error) {
                         wx.hideLoading()
                         logger.error('关闭支付失败', error, 'payment-detail.onClosePayment')
                         wx.showToast({ title: '操作失败', icon: 'error' })
+                        return
                     }
+                    wx.hideLoading()
                 }
             }
         })

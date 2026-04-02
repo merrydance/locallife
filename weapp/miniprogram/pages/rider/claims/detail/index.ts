@@ -14,6 +14,7 @@ import { invokeWechatPay, pollPaymentStatus } from '../../../../api/payment'
 import { logger } from '../../../../utils/logger'
 import { settleAll } from '../../../../utils/promise'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface ClaimDetailOptions {
   id?: string
@@ -146,32 +147,11 @@ function formatCompensationSource(source?: string): string {
   return map[source] || source
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function isClaimRecoveryNotFoundError(err: unknown) {
-  const candidates: string[] = []
-
-  if (typeof err === 'object' && err !== null) {
-    const knownError = err as { userMessage?: unknown, message?: unknown, originalError?: { message?: unknown } }
-    if (typeof knownError.userMessage === 'string') candidates.push(knownError.userMessage)
-    if (typeof knownError.message === 'string') candidates.push(knownError.message)
-    if (typeof knownError.originalError?.message === 'string') candidates.push(knownError.originalError.message)
-  } else if (typeof err === 'string') {
-    candidates.push(err)
-  }
-
-  return candidates.some((text) => {
-    const normalized = text.toLowerCase()
-    return normalized.includes('claim recovery not found') || normalized.includes('追偿单不存在')
-  })
+  const normalized = getErrorDebugMessage(err).toLowerCase()
+  return normalized.includes('claim recovery not found') || normalized.includes('追偿单不存在')
 }
 
 function formatRate(value?: number) {
@@ -298,7 +278,7 @@ Page({
     this.loadDetail(Boolean(this.data.detail))
   },
 
-  async loadDetail(silent = false) {
+  async loadDetail(silent = false, preserveActionNotice = false) {
     if (!silent) {
       this.setData({
         loading: true,
@@ -391,7 +371,7 @@ Page({
         initialError: false,
         initialErrorMessage: '',
         refreshErrorMessage: '',
-        actionNoticeMessage: '',
+        actionNoticeMessage: preserveActionNotice ? this.data.actionNoticeMessage : '',
         appealReason: claim.appeal_reason || '',
         decisionLoading: false,
         decisionError,
@@ -598,8 +578,7 @@ Page({
         reason
       })
       this.applyAppealSubmitted(appeal, reason)
-      wx.showToast({ title: '申诉已提交', icon: 'success' })
-      await this.loadDetail(true)
+      await this.loadDetail(true, true)
     } catch (error) {
       logger.error('Submit rider appeal failed', error)
       wx.showToast({ title: getErrorMessage(error, '提交申诉失败，请稍后重试'), icon: 'none' })
@@ -634,7 +613,7 @@ Page({
       }
 
       this.applyRecoveryPaymentState(paymentResult.recovery, paymentResult.status)
-      await this.loadDetail(true)
+      await this.loadDetail(true, true)
     } catch (error) {
       logger.error('Confirm rider claim recovery failed', error)
       wx.showToast({ title: getErrorMessage(error, '支付追偿款失败，请稍后重试'), icon: 'none' })
@@ -663,12 +642,10 @@ Page({
         logger.error('Poll rider claim recovery payment status timeout', error)
       }
 
-      wx.showToast({ title: '追偿支付已提交', icon: 'success' })
       return true
     }
 
     if (paymentResult.status === 'paid') {
-      wx.showToast({ title: '追偿款已支付', icon: 'success' })
       return true
     }
 

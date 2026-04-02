@@ -1,15 +1,10 @@
 import { ReservationService, ReservationStatus, ReservationResponse } from '../../../api/reservation'
 import ReservationAdapter from '../../../adapters/reservation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ValueEvent<T> = WechatMiniprogram.CustomEvent<{ value: T }>
 
-function getErrorMsg(error: unknown, fallback: string): string {
-    if (error && typeof error === 'object' && 'message' in error) {
-        const message = (error as { message?: string }).message
-        if (message) return message
-    }
-    return fallback
-}
+const getErrorMsg = getErrorUserMessage
 
 Page({
     data: {

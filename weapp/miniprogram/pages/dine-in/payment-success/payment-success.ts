@@ -23,8 +23,8 @@ Page({
         this.setData({
             orderId: parseInt(order_id || '0', 10) || 0,
             paymentAmount: parseFloat(amount || '0') || 0,
-            merchantInfo: { name: merchant_name || '' },
-            tableInfo: { table_number: table_number || '' }
+            merchantInfo: merchant_name ? { name: merchant_name } : null,
+            tableInfo: table_number ? { table_number } : null
         })
 
         // 开始倒计时

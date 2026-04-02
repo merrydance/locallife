@@ -165,7 +165,6 @@ Page({
         [`inventories[${index}].draft_total_quantity`]: updated.total_quantity,
         [`inventories[${index}].draft_available`]: updated.available
       })
-      wx.showToast({ title: '库存已更新', icon: 'success' })
     } catch (err) {
       logger.error('Update inventory failed', err)
       wx.showToast({ title: '更新失败', icon: 'none' })

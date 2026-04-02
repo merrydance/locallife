@@ -7,6 +7,7 @@ import {
 } from '../../../../api/order-management'
 import { logger } from '../../../../utils/logger'
 import dayjs from 'dayjs'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface MerchantOrderDetailOptions {
   id?: string
@@ -36,15 +37,7 @@ interface MerchantOrderDetailView extends OrderResponse {
   can_complete: boolean
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -323,7 +316,7 @@ Page({
     await this.performAction(() => MerchantOrderManagementService.completeOrder(this.data.orderId), '订单已核销')
   },
 
-  async performAction(request: () => Promise<unknown>, successText: string) {
+  async performAction(request: () => Promise<unknown>, _successText: string) {
     this.setData({ submitting: true })
     try {
       const updatedOrder = await request() as OrderResponse
@@ -331,8 +324,7 @@ Page({
         order: this.formatDetail(updatedOrder),
         refreshErrorMessage: ''
       })
-      wx.showToast({ title: successText, icon: 'success' })
-      setTimeout(() => this.loadDetail(false), 500)
+      await this.loadDetail(false)
 
       const pages = getCurrentPages()
       const listPage = pages[pages.length - 2] as { loadOrders?: (reset?: boolean, showLoading?: boolean) => void } | undefined

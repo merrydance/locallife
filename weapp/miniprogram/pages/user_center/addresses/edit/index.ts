@@ -3,6 +3,7 @@ import { getCurrentRegion } from '../../../../api/location'
 import { listRegions, RegionItem } from '../../../../api/operator-application'
 import { logger } from '../../../../utils/logger'
 import { ErrorHandler } from '../../../../utils/error-handler'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface WechatAddressData {
   contact_name: string
@@ -25,25 +26,6 @@ const extractRegionTokens = (regionAddress: string): { cityName: string, distric
   const cityName = matched.find((item) => item.endsWith('市') || item.endsWith('地区') || item.endsWith('盟') || item.endsWith('州')) || ''
   const districtName = [...matched].reverse().find((item) => item.endsWith('区') || item.endsWith('县') || item.endsWith('旗') || item.endsWith('市')) || ''
   return { cityName, districtName }
-}
-
-const getErrorMessage = (error: unknown): string => {
-  if (!error || typeof error !== 'object') {
-    return ''
-  }
-  const message = (error as { message?: unknown }).message
-  if (typeof message === 'string') {
-    return message
-  }
-  const responseError = (error as { response?: { data?: { error?: unknown } } }).response?.data?.error
-  if (typeof responseError === 'string') {
-    return responseError
-  }
-  const dataError = (error as { data?: { error?: unknown } }).data?.error
-  if (typeof dataError === 'string') {
-    return dataError
-  }
-  return ''
 }
 
 Page({
@@ -122,7 +104,7 @@ Page({
       logger.error('Load address failed:', error, 'AddressEdit')
       this.setData({ 
         initialLoading: false,
-        error: '加载地址详情失败'
+        error: getErrorUserMessage(error, '加载地址详情失败，请稍后重试')
       })
     }
   },
@@ -308,7 +290,7 @@ Page({
       setTimeout(() => wx.navigateBack(), 1000)
     } catch (error) {
       logger.error('Save failed', error)
-      const message = getErrorMessage(error)
+      const message = getErrorDebugMessage(error)
        if (message && (
         message.includes('未能定位') ||
         message.includes('geocode')
@@ -382,8 +364,7 @@ Page({
             wx.showLoading({ title: '删除中' })
           try {
             await AddressService.deleteAddress(this.data.addressId)
-            wx.showToast({ title: '已删除', icon: 'success' })
-            setTimeout(() => wx.navigateBack(), 1000)
+            wx.navigateBack()
           } catch (error) {
             ErrorHandler.handle(error, 'AddressEdit.delete')
           } finally {

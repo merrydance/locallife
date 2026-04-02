@@ -5,6 +5,7 @@ import {
 } from '../../../../api/merchant-finance'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type InputChangeDetail = {
   value: string
@@ -49,15 +50,7 @@ function getApplymentActionHint(status?: string) {
   return '当前状态暂不支持重新提交资料，请先刷新状态。'
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -212,7 +205,6 @@ Page({
         contact_email: bindContactEmail.trim() || undefined
       })
 
-      wx.showToast({ title: '进件资料已提交', icon: 'success' })
       this.setData({
         showBindForm: false,
         bindAccountBank: '',
@@ -251,7 +243,6 @@ Page({
     this.setData({ refreshingStatus: true })
     try {
       await this.loadApplyment(true)
-      wx.showToast({ title: '进件状态已刷新', icon: 'success' })
     } finally {
       this.setData({ refreshingStatus: false })
     }

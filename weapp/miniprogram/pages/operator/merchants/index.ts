@@ -6,6 +6,7 @@ import {
   MerchantQueryParams,
   MerchantStatus
 } from '../../../api/operator-merchant-management'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface MerchantListPageDataset {
   id?: number
@@ -153,10 +154,15 @@ Page({
     } catch (error) {
       console.error('加载商户列表失败:', error)
       if (refresh) {
-        this.setData({ error: '加载商户列表失败', initialLoading: false, loading: false, loadingMore: false })
+        this.setData({
+          error: getErrorUserMessage(error, '加载商户列表失败，请稍后重试'),
+          initialLoading: false,
+          loading: false,
+          loadingMore: false
+        })
       } else {
         this.setData({ loading: false, loadingMore: false })
-        wx.showToast({ title: '加载更多失败', icon: 'none' })
+        wx.showToast({ title: getErrorUserMessage(error, '加载更多失败，请稍后重试'), icon: 'none' })
       }
     }
   },
@@ -225,8 +231,6 @@ Page({
       await operatorMerchantManagementService.suspendMerchant(selectedMerchant.id, {
         reason: suspendReason
       })
-
-      wx.showToast({ title: '暂停成功', icon: 'success' })
       this.setData({
         suspendDialogVisible: false,
         page: 1
@@ -234,7 +238,7 @@ Page({
       this.loadMerchants(true)
     } catch (error) {
       console.error('暂停商户失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }
@@ -266,8 +270,6 @@ Page({
       await operatorMerchantManagementService.resumeMerchant(selectedMerchant.id, {
         reason: '运营商恢复'
       })
-
-      wx.showToast({ title: '恢复成功', icon: 'success' })
       this.setData({
         resumeDialogVisible: false,
         page: 1
@@ -275,7 +277,7 @@ Page({
       this.loadMerchants(true)
     } catch (error) {
       console.error('恢复商户失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }

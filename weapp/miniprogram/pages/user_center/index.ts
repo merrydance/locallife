@@ -5,6 +5,7 @@ import { logger } from '../../utils/logger'
 import { UploadService } from '../../api/upload'
 import { getStableBarHeights } from '../../utils/responsive'
 import { notificationService } from '../../api/notification'
+import { resolveConsoleWorkbenches } from '../../utils/console-access'
 
 const app = getApp<IAppOption>()
 let _refreshUserInfoPromise: Promise<void> | null = null
@@ -100,6 +101,7 @@ Page({
       nickName: '微信用户',
       avatarUrl: ''
     },
+    actionNoticeMessage: '',
     userRoles: [] as Array<{ key: string, label: string }>,
     workbenches: [] as Array<{ id: string, name: string, path: string, icon: string }>,
     registrationOptions: [
@@ -178,13 +180,13 @@ Page({
     await this.refreshUserInfo()
   },
 
-  async refreshUserInfo() {
+  async refreshUserInfo(force: boolean = false, suppressUiError: boolean = false) {
     const now = Date.now()
     if (_refreshUserInfoPromise) {
       return _refreshUserInfoPromise
     }
     // 同一会话内最多每 60 秒请求一次，避免频繁 tab 切换触发大量请求
-    if (now - _lastRefreshUserInfoAt < 60000) {
+    if (!force && now - _lastRefreshUserInfoAt < 60000) {
       return
     }
 
@@ -222,11 +224,13 @@ Page({
         _lastRefreshUserInfoAt = Date.now()
       } catch (err) {
         logger.error('Failed to refresh user info', err)
-        this.setData({
-          error: '加载用户信息失败',
-          loading: false,
-          initialLoading: false
-        })
+        if (!suppressUiError) {
+          this.setData({
+            error: '加载用户信息失败',
+            loading: false,
+            initialLoading: false
+          })
+        }
         // 失败时不更新时间戳，下次 onShow 可以立即重试
       }
     })().finally(() => {
@@ -327,50 +331,7 @@ Page({
   },
 
   loadWorkbenches(roles: string[]) {
-    const normalizedRoles = normalizeRoles(roles)
-    const workbenches = []
-
-    // 商家入口：仅商户相关角色
-    if (normalizedRoles.some((r) => ['merchant', 'merchant_boss', 'merchant_staff'].includes(r))) {
-      workbenches.push({
-        id: 'merchant',
-        name: '商户中心',
-        icon: '/assets/icons/store.svg',
-        path: '/pages/merchant/dashboard/index'
-      })
-    }
-
-    // 骑手入口：仅骑手角色展示
-    if (normalizedRoles.includes('rider')) {
-      workbenches.push({
-        id: 'rider',
-        name: '骑手配送',
-        icon: '/assets/icons/rider.svg',
-        path: '/pages/rider/dashboard/index'
-      })
-    }
-
-    // 运营入口：独立显示
-    if (normalizedRoles.includes('operator')) {
-      workbenches.push({
-        id: 'operator',
-        name: '运营管理中心',
-        icon: '/assets/icons/bill-list.svg',
-        path: '/pages/operator/dashboard/index'
-      })
-    }
-
-    // Admin Entrance
-    if (normalizedRoles.includes('admin')) {
-      workbenches.push({
-        id: 'admin',
-        name: '平台管理中心',
-        icon: '/assets/icons/platform.svg',
-        path: '/pages/platform/dashboard/dashboard'
-      })
-    }
-
-    this.setData({ workbenches })
+    this.setData({ workbenches: resolveConsoleWorkbenches(roles) })
   },
 
   onWorkbenchTap(e: WechatMiniprogram.TouchEvent) {
@@ -404,6 +365,9 @@ Page({
 
   // 扫码入职 - 直接打开相机扫码
   onScanToJoin() {
+    if (this.data.actionNoticeMessage) {
+      this.setData({ actionNoticeMessage: '' })
+    }
     wx.scanCode({
       onlyFromCamera: true,
       scanType: ['qrCode', 'wxCode'],
@@ -541,20 +505,19 @@ Page({
       content: '检测到员工入职码，是否确认加入商户？',
       confirmText: '确认入职',
       cancelText: '取消',
-      success: (modal) => {
+      success: async (modal) => {
         if (!modal.confirm) return
         wx.showLoading({ title: '处理中...' })
-        bindMerchant(code)
-          .then(() => {
-            wx.showToast({ title: '加入成功', icon: 'success' })
-          })
-          .catch((error: unknown) => {
-            const message = toFriendlyMessage(error, '加入失败，请稍后重试')
-            wx.showToast({ title: message, icon: 'none' })
-          })
-          .finally(() => {
-            wx.hideLoading()
-          })
+        try {
+          await bindMerchant(code)
+          await this.refreshUserInfo(true, true)
+          this.setData({ actionNoticeMessage: '已加入商户，可从“商家及运营服务”进入对应工作台。' })
+        } catch (error: unknown) {
+          const message = toFriendlyMessage(error, '加入失败，请稍后重试')
+          wx.showToast({ title: message, icon: 'none' })
+        } finally {
+          wx.hideLoading()
+        }
       }
     })
   },

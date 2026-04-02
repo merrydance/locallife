@@ -22,6 +22,7 @@ import type { CustomizationGroup } from '../../../api/dish'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type MenuDish = {
     id: number
@@ -872,7 +873,7 @@ Page({
             wx.navigateTo({ url })
         } catch (error) {
             console.error('结算失败:', error)
-            wx.showToast({ title: error instanceof Error ? error.message : '结算失败', icon: 'none' })
+            wx.showToast({ title: getErrorUserMessage(error, '结算失败，请稍后重试'), icon: 'none' })
         }
     },
 
@@ -956,7 +957,7 @@ Page({
             this.scheduleCartSync()
         } catch (error) {
             this.loadCart()
-            wx.showToast({ title: error instanceof Error ? error.message : '添加失败', icon: 'none' })
+            wx.showToast({ title: getErrorUserMessage(error, '添加失败，请稍后重试'), icon: 'none' })
         }
     },
 

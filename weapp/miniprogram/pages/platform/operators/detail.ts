@@ -4,6 +4,7 @@ import {
   type AdminOperatorApplicationDetail
 } from '@/api/platform-management'
 import { getPrivateMediaUrl } from '@/utils/image-security'
+import { getErrorUserMessage } from '@/utils/user-facing'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type ImageTapEvent = WechatMiniprogram.CustomEvent & {
@@ -99,7 +100,7 @@ Page({
         statusTheme: status.theme
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载详情失败，请稍后重试'
+      const message = getErrorUserMessage(error, '加载详情失败，请稍后重试')
       this.setData({ error: message })
     } finally {
       this.setData({ loading: false, requesting: false })
@@ -127,10 +128,9 @@ Page({
     try {
       this.setData({ submittingAction: 'approve' })
       await platformManagementService.approveOperatorApplication(id)
-      wx.showToast({ title: '审核通过', icon: 'success' })
       await this.loadDetail()
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '审核失败'
+      const message = getErrorUserMessage(error, '审核失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submittingAction: '' })
@@ -163,11 +163,10 @@ Page({
     try {
       this.setData({ submittingAction: 'reject' })
       await platformManagementService.rejectOperatorApplication(id, { reject_reason: reason })
-      wx.showToast({ title: '已驳回', icon: 'success' })
       this.setData({ rejectReason: '' })
       await this.loadDetail()
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '驳回失败'
+      const message = getErrorUserMessage(error, '驳回失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submittingAction: '' })

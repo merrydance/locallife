@@ -7,6 +7,8 @@ import { getUserInfo } from '../../../api/auth'
 import { getMyMerchantOpenStatus, getMyMerchantProfile, updateMyMerchantOpenStatus } from '../../../api/merchant'
 import { logger } from '../../../utils/logger'
 import { settleAll } from '../../../utils/promise'
+import { shouldBypassConsoleRoleValidation } from '../../../utils/console-access'
+import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
 import dayjs from 'dayjs'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 import { playNewOrderAlert, destroyAudioAlert } from '../../../utils/audio-alert'
@@ -28,16 +30,6 @@ interface DashboardShortcutItem {
   desc: string
   path: string
   badge?: number
-}
-
-function getErrorMessage(error: unknown, fallback: string) {
-  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
-    const userMessage = (error as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
 }
 
 function buildShortcutItems(pendingReservations: number, pendingComplaints: number): DashboardShortcutItem[] {
@@ -90,6 +82,7 @@ Page({
     initialError: false,
     initialErrorMessage: '',
     refreshErrorMessage: '',
+    refreshErrorCanRetry: true,
     isOpen: true,
     merchantInfo: {
       name: '示例餐厅',
@@ -109,6 +102,7 @@ Page({
     loading: false,
     businessStatusSubmitting: false,
     accessDenied: false,
+    initialErrorCanRetry: true,
     _wsListeners: [] as WsUnsubscribe[]
   },
 
@@ -148,6 +142,10 @@ Page({
   },
 
   async ensureMerchantAccess() {
+    if (shouldBypassConsoleRoleValidation()) {
+      return true
+    }
+
     try {
       const user = await getUserInfo()
       const normalizedRoles = (user.roles || []).map((role) => String(role).toLowerCase())
@@ -212,8 +210,8 @@ Page({
     this.setData({
       loading: true,
       ...(isFirstLoad
-        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
-        : { refreshErrorMessage: '' })
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '', refreshErrorCanRetry: true }
+        : { refreshErrorMessage: '', refreshErrorCanRetry: true })
     })
 
     try {
@@ -221,6 +219,12 @@ Page({
       let runtimeLoaded = false
       let summaryLoaded = false
       const refreshErrors: string[] = []
+      const refreshErrorStates: Array<{ message: string, canRetry: boolean }> = []
+      const addRefreshError = (error: unknown, fallback: string) => {
+        const errorState = getConsoleDashboardErrorState('merchant', error, fallback)
+        refreshErrors.push(errorState.message)
+        refreshErrorStates.push({ message: errorState.message, canRetry: errorState.canRetry })
+      }
 
       const [merchantProfileResult, merchantOpenStatusResult] = await settleAll([
         getMyMerchantProfile(),
@@ -256,7 +260,7 @@ Page({
         }
       } else {
         logger.error('Failed to fetch merchant runtime status', merchantProfileResult.reason)
-        refreshErrors.push(getErrorMessage(merchantProfileResult.reason, '工作台基础信息加载失败，请重试'))
+        addRefreshError(merchantProfileResult.reason, '工作台基础信息加载失败，请重试')
       }
 
       const [overview, reservationStats, complaintResult] = await settleAll([
@@ -298,17 +302,17 @@ Page({
 
       if (overview.status === 'rejected') {
         logger.error('Failed to fetch merchant overview', overview.reason)
-        refreshErrors.push(getErrorMessage(overview.reason, '经营概览加载失败，请稍后重试'))
+        addRefreshError(overview.reason, '经营概览加载失败，请稍后重试')
       }
 
       if (reservationStats.status === 'rejected') {
         logger.error('Failed to fetch reservation reminders', reservationStats.reason)
-        refreshErrors.push(getErrorMessage(reservationStats.reason, '预订待办同步失败，请稍后重试'))
+        addRefreshError(reservationStats.reason, '预订待办同步失败，请稍后重试')
       }
 
       if (complaintResult.status === 'rejected') {
         logger.error('Failed to fetch complaint reminders', complaintResult.reason)
-        refreshErrors.push(getErrorMessage(complaintResult.reason, '投诉待办同步失败，请稍后重试'))
+        addRefreshError(complaintResult.reason, '投诉待办同步失败，请稍后重试')
       }
 
       try {
@@ -319,44 +323,55 @@ Page({
           orderFlowErrorMessage: ''
         })
       } catch (error) {
-        const message = getErrorMessage(error, '订单流加载失败，请稍后重试')
+        const errorState = getConsoleDashboardErrorState('merchant', error, '订单流加载失败，请稍后重试')
+        const message = errorState.message
         logger.error('Load dashboard order flow failed', error)
         this.setData({
           orderFlowError: true,
           orderFlowErrorMessage: message,
           ...(isFirstLoad ? { orderFlow: [] } : {})
         })
-
-        if (!isFirstLoad) {
-          wx.showToast({ title: message, icon: 'none' })
-        }
+        refreshErrors.push(message)
+        refreshErrorStates.push({ message, canRetry: errorState.canRetry })
       }
 
       const orderFlowLoaded = !this.data.orderFlowError
 
       if (isFirstLoad && (!runtimeLoaded || !summaryLoaded || !orderFlowLoaded)) {
+        const initialErrorState = refreshErrorStates[0] || getConsoleDashboardErrorState(
+          'merchant',
+          refreshErrors[0] || this.data.orderFlowErrorMessage,
+          '商户工作台暂时无法加载，请稍后重试。'
+        )
         this.setData({
           initialError: true,
-          initialErrorMessage: refreshErrors[0] || this.data.orderFlowErrorMessage || '工作台加载失败，请重试'
+          initialErrorMessage: initialErrorState.message,
+          initialErrorCanRetry: initialErrorState.canRetry
         })
       } else {
         this.setData({
           initialError: false,
           initialErrorMessage: '',
-          refreshErrorMessage: buildRefreshErrorMessage(refreshErrors)
+          initialErrorCanRetry: true,
+          refreshErrorMessage: buildRefreshErrorMessage(refreshErrors),
+          refreshErrorCanRetry: refreshErrorStates.every((state) => state.canRetry)
         })
       }
 
     } catch (err) {
       logger.error('Merchant dashboard refresh failed', err)
-      const message = getErrorMessage(err, '工作台加载失败，请重试')
+      const errorState = getConsoleDashboardErrorState('merchant', err, '商户工作台暂时无法加载，请稍后重试。')
       if (isFirstLoad) {
         this.setData({
           initialError: true,
-          initialErrorMessage: message
+          initialErrorMessage: errorState.message,
+          initialErrorCanRetry: errorState.canRetry
         })
       } else {
-        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+        this.setData({
+          refreshErrorMessage: errorState.canRetry ? `${errorState.message}，当前已保留上次同步结果` : errorState.message,
+          refreshErrorCanRetry: errorState.canRetry
+        })
       }
     } finally {
       this.setData({ loading: false, initialLoading: false })
@@ -386,14 +401,34 @@ Page({
   },
 
   async loadOrderFlow(status: OrderStatusTab) {
-    this.setData({ orderFlowLoading: true, orderFlowError: false, orderFlowErrorMessage: '', orderFlow: [] })
+    this.setData({
+      orderFlowLoading: true,
+      orderFlowError: false,
+      orderFlowErrorMessage: '',
+      refreshErrorMessage: '',
+      refreshErrorCanRetry: true,
+      orderFlow: []
+    })
     try {
       const orderFlow = await this.fetchOrderFlow(status)
-      this.setData({ orderFlow, orderFlowError: false, orderFlowErrorMessage: '' })
+      this.setData({
+        orderFlow,
+        orderFlowError: false,
+        orderFlowErrorMessage: '',
+        refreshErrorMessage: '',
+        refreshErrorCanRetry: true
+      })
     } catch (err) {
-      const message = getErrorMessage(err, '订单流加载失败，请稍后重试')
+      const errorState = getConsoleDashboardErrorState('merchant', err, '订单流加载失败，请稍后重试')
+      const message = errorState.message
       logger.error('Load dashboard order flow failed', err)
-      this.setData({ orderFlow: [], orderFlowError: true, orderFlowErrorMessage: message })
+      this.setData({
+        orderFlow: [],
+        orderFlowError: true,
+        orderFlowErrorMessage: message,
+        refreshErrorMessage: errorState.canRetry ? `${message}，当前已保留上次同步结果` : message,
+        refreshErrorCanRetry: errorState.canRetry
+      })
     } finally {
       this.setData({ orderFlowLoading: false })
     }
@@ -450,7 +485,6 @@ Page({
     try {
       const response = await updateMyMerchantOpenStatus(targetOpen)
       this.setData({ isOpen: response.is_open })
-      wx.showToast({ title: response.message || (response.is_open ? '店铺营业中' : '店铺已打烊'), icon: 'success' })
       this.refreshData().catch((err) => logger.error('Refresh dashboard after toggle failed', err))
     } catch (err: unknown) {
       logger.error('Update merchant open status failed', err)

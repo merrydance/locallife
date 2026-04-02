@@ -5,6 +5,7 @@ import {
     formatAppealStatus,
     OperatorAppealDetailResponse
 } from '../../../../api/appeals-customer-service'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface AppealDetailOptions {
     id?: string
@@ -157,7 +158,7 @@ Page({
             this.setData({ 
                 loading: false,
                 initialLoading: false,
-                error: '加载详情失败'
+                error: getErrorUserMessage(error, '加载详情失败，请稍后重试')
             })
         }
     },
@@ -237,10 +238,9 @@ Page({
                 review_notes: replyContent,
                 compensation_amount: compensationFen
             })
-            wx.showToast({ title: '处理成功', icon: 'success' })
-            setTimeout(() => wx.navigateBack(), 1500)
+            wx.navigateBack()
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : '处理失败'
+            const message = getErrorUserMessage(error, '处理失败，请稍后重试')
             wx.showToast({ title: message, icon: 'none' })
         } finally {
             this.setData({ submitting: false })
@@ -258,10 +258,9 @@ Page({
             this.setData({ recoverySubmitting: true })
             wx.showLoading({ title: '处理中...', mask: true })
             await claimManagementService.waiveOperatorClaimRecovery(appeal.claim_id)
-            wx.showToast({ title: '已核销', icon: 'success' })
             await this.loadRecovery(appeal.claim_id)
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : '核销失败'
+            const message = getErrorUserMessage(error, '核销失败，请稍后重试')
             wx.showToast({ title: message, icon: 'none' })
         } finally {
             this.setData({ recoverySubmitting: false })

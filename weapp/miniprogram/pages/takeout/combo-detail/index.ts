@@ -6,16 +6,11 @@ import { ComboManagementService, ComboSetWithDetailsResponse } from '../../../ap
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { tracker, EventType } from '../../../utils/tracker'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type ValueEvent<T> = WechatMiniprogram.CustomEvent<{ value: T }>
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (error && typeof error === 'object' && 'userMessage' in error) {
-    const userMessage = (error as { userMessage?: string }).userMessage
-    if (userMessage) return userMessage
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 type ExtraInfo = {
   merchantName?: string
@@ -232,9 +227,9 @@ Page({
     })
   },
 
-  async onAddToCart() {
+  async onAddToCart(options?: { silentSuccess?: boolean }) {
     const { combo, quantity, totalPrice } = this.data
-    if (!combo) return
+    if (!combo) return false
 
     const CartService = require('../../../services/cart').default
     
@@ -257,7 +252,7 @@ Page({
       customizations: specDesc ? { selected_options: specDesc } : undefined
     })
 
-    if (!success) return
+    if (!success) return false
 
     tracker.log(EventType.ADD_CART, String(combo.id), {
       is_combo: true,
@@ -267,11 +262,16 @@ Page({
       specs: specDesc
     })
 
-    wx.showToast({ title: '已加入购物车', icon: 'success' })
+    if (!options?.silentSuccess) {
+      wx.showToast({ title: '已加入购物车', icon: 'success' })
+    }
+
+    return true
   },
 
-  onBuyNow() {
-    this.onAddToCart()
+  async onBuyNow() {
+    const success = await this.onAddToCart({ silentSuccess: true })
+    if (!success) return
     wx.navigateTo({ url: '/pages/takeout/cart/index' })
   },
 

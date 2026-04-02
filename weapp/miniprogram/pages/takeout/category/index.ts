@@ -2,6 +2,7 @@ import ConsumerDiscoveryAdapter from '../../../adapters/consumer-discovery'
 import { searchMerchantsWithMeta, MerchantSummary } from '../../../api/merchant'
 import { getUserCarts } from '../../../api/cart'
 import { logger } from '../../../utils/logger'
+import { isRateLimitError } from '../../../utils/user-facing'
 import { globalStore } from '../../../utils/global-store'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { formatPrice } from '../../../utils/util'
@@ -176,7 +177,7 @@ Page({
 
     this.loadMerchants(false).catch((error) => {
       this.setData({ page: nextPage - 1 })
-      if (error?.message?.includes('429')) {
+      if (isRateLimitError(error)) {
         wx.showToast({ title: '请求太频繁，请稍后再试', icon: 'none', duration: 2000 })
       } else {
         wx.showToast({ title: '加载失败，请重试', icon: 'none' })

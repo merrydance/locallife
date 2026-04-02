@@ -154,7 +154,6 @@ Page({
       await notificationService.markAllAsRead()
       const notifs = this.data.notifications.map((n) => ({ ...n, is_read: true }))
       this.setData({ notifications: notifs, unreadCount: 0 })
-      wx.showToast({ title: '已全部标记为已读', icon: 'success' })
     } catch (err) {
       wx.showToast({ title: '操作失败', icon: 'error' })
     }

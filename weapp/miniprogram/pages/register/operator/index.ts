@@ -255,9 +255,16 @@ Page({
             }
           })
         } else if (res.status === 'approved' && !res.is_operator) {
-          // 审核通过但运营商账号尚未建立（极少数中间态）→ 正常进开户流程
-          wx.showToast({ title: '审核通过，请先完成微信开户', icon: 'none' })
-          setTimeout(() => wx.reLaunch({ url: '/pages/operator/applyment/index' }), 1500)
+          // 审核通过但运营商账号尚未建立（极少数中间态）→ 单次确认后进入开户流程
+          wx.showModal({
+            title: '审核通过',
+            content: '请先完成微信开户，开户完成后即可进入运营商控制台。',
+            showCancel: false,
+            confirmText: '去开户',
+            success: () => {
+              wx.reLaunch({ url: '/pages/operator/applyment/index' })
+            }
+          })
         } else if (res.status === 'rejected') {
           wx.showModal({
             title: '审核未通过',

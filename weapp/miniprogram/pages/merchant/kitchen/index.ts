@@ -256,7 +256,7 @@ Page({
     await this.runKitchenAction(id, 'ready', KitchenDisplayService.markKitchenOrderReady(id), '已标记出餐')
   },
 
-  async runKitchenAction(orderId: number, actionType: KitchenActionType, requestPromise: Promise<KitchenOrderResponse>, successMessage: string) {
+  async runKitchenAction(orderId: number, actionType: KitchenActionType, requestPromise: Promise<KitchenOrderResponse>, _successMessage: string) {
     if (this.data.actionOrderId === orderId && this.data.actionType === actionType) return
 
     this.setData({ actionOrderId: orderId, actionType })
@@ -264,7 +264,6 @@ Page({
       const updatedOrder = await requestPromise
       this.syncKitchenOrder(updatedOrder)
       this.setData({ refreshErrorMessage: '' })
-      wx.showToast({ title: successMessage, icon: 'success' })
       await this.loadKitchenOrders(false)
     } catch (err: unknown) {
       logger.error('Kitchen action failed', err)

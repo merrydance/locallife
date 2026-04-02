@@ -5,6 +5,7 @@ import {
   OperatorMerchantDetailResponse
 } from '../../../../api/operator-merchant-management'
 import type { MerchantStatsResponse } from '../../../../api/operator-merchant-management'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type MerchantDetailView = {
   id: number
@@ -107,7 +108,7 @@ Page({
       const detail = adaptMerchantDetail(raw as OperatorMerchantDetailResponse & Record<string, unknown>)
       this.setData({ detail, loading: false })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载商户详情失败'
+      const message = getErrorUserMessage(error, '加载商户详情失败，请稍后重试')
       this.setData({ loading: false, error: message })
       return
     }
@@ -171,12 +172,11 @@ Page({
       await operatorMerchantManagementService.suspendMerchant(this.data.id, {
         reason: this.data.actionReason
       })
-      wx.showToast({ title: '暂停成功', icon: 'success' })
       this.setData({ suspendDialogVisible: false })
       this.loadAll()
     } catch (error) {
       console.error('暂停商户失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(error, '暂停失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }
@@ -190,12 +190,11 @@ Page({
       await operatorMerchantManagementService.resumeMerchant(this.data.id, {
         reason
       })
-      wx.showToast({ title: '恢复成功', icon: 'success' })
       this.setData({ resumeDialogVisible: false })
       this.loadAll()
     } catch (error) {
       console.error('恢复商户失败:', error)
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(error, '恢复失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }

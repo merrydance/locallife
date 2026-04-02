@@ -4,6 +4,7 @@ import DeliveryService, {
 import { getBicyclingDirection } from '../../../api/location'
 import { confirmOrder, getOrderDetail } from '../../../api/order'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface MapPoint {
   latitude: number
@@ -43,15 +44,7 @@ interface DeliveryProgress {
   active: boolean
 }
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -136,8 +129,7 @@ Page({
               try {
                 await confirmOrder(this.data.orderId)
                 wx.hideLoading()
-                wx.showToast({ title: '确认成功', icon: 'success' })
-                setTimeout(() => { wx.navigateBack({ delta: 1 }) }, 1000)
+                wx.navigateBack({ delta: 1 })
               } catch (error) {
                 wx.hideLoading()
                 logger.error('确认收货失败', error, 'Tracking.onConfirmReceipt')

@@ -96,7 +96,6 @@ Page({
       this.setData({
         [`combos[${index}].is_online`]: updated.is_online
       })
-      wx.showToast({ title: updated.is_online ? '已上架' : '已下架', icon: 'success' })
     } catch (err) {
       logger.error('Toggle combo status failed', err)
       wx.showToast({ title: '操作失败', icon: 'none' })
@@ -126,7 +125,6 @@ Page({
           this.setData({
             combos: this.data.combos.filter((combo) => combo.id !== id)
           })
-          wx.showToast({ title: '删除成功', icon: 'success' })
         } catch (err) {
           logger.error('Delete combo failed', err)
           wx.showToast({ title: '删除失败', icon: 'none' })

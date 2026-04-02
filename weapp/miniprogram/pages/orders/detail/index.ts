@@ -8,6 +8,7 @@ import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
 import { ReservationService, ReservationResponse } from '../../../api/reservation'
 import ReviewService from '../../../api/review'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 // 取消原因选项
 const CANCEL_REASONS = [
@@ -32,6 +33,7 @@ Page({
     loading: true,
     isError: false,
     errorMsg: '',
+    refreshErrorMessage: '',
     
     // UI Flags
     showTrackingButton: false,
@@ -71,7 +73,7 @@ Page({
   },
 
   async loadOrderDetail() {
-    this.setData({ isError: false })
+    this.setData({ isError: false, refreshErrorMessage: '' })
     if (!this.data.order) {
        this.setData({ loading: true })
     }
@@ -124,22 +126,26 @@ Page({
       // 检查催单冷却时间
       this.checkUrgeCooldown()
     } catch (error: unknown) {
-      const message =
-        error && typeof error === 'object' && 'message' in error
-          ? String((error as { message?: string }).message || '')
-          : ''
+      const message = getErrorUserMessage(error, '加载订单详情失败，请稍后重试')
       logger.error('Load order detail failed:', error, 'Detail')
       if (!this.data.order) {
         this.setData({ 
           loading: false, 
           isError: true, 
-          errorMsg: message || '加载订单详情失败'
+          errorMsg: message,
+          refreshErrorMessage: ''
         })
       } else {
-        wx.showToast({ title: '刷新失败', icon: 'none' })
-        this.setData({ loading: false })
+        this.setData({
+          loading: false,
+          refreshErrorMessage: `${getErrorUserMessage(error, '刷新失败，请稍后重试')}，当前已保留上次结果`
+        })
       }
     }
+  },
+
+  onRetryRefresh() {
+    this.loadOrderDetail()
   },
 
   checkUrgeCooldown() {
@@ -226,7 +232,6 @@ Page({
     try {
       await cancelOrder(parseInt(this.data.orderId), { reason })
       wx.hideLoading()
-      wx.showToast({ title: '已取消', icon: 'success' })
       this.loadOrderDetail()
     } catch (error) {
       wx.hideLoading()
@@ -243,7 +248,6 @@ Page({
     try {
       await urgeOrder(parseInt(this.data.orderId), { message: '请尽快处理' })
       wx.hideLoading()
-      wx.showToast({ title: '催单成功', icon: 'success' })
 
       this.setData({
         lastUrgeTime: Date.now(),
@@ -303,10 +307,7 @@ Page({
         wx.showToast({ title: '部分商品可能已下架', icon: 'none' })
       }
 
-      wx.showToast({ title: '已加入购物车', icon: 'success' })
-      setTimeout(() => {
-        Navigation.toCart()
-      }, 300)
+      Navigation.toCart()
     } catch (error) {
       logger.error('再次购买失败', error, 'Detail.onReorder')
       wx.showToast({ title: '操作失败', icon: 'error' })
@@ -337,8 +338,7 @@ Page({
           amount: (order.payableAmount / 100).toFixed(2)
         })
       } else {
-        wx.showToast({ title: '支付成功', icon: 'success' })
-        this.loadOrderDetail()
+        await this.loadOrderDetail()
       }
     } catch (error) {
       if (error instanceof PaymentCancelledError) {
@@ -368,8 +368,7 @@ Page({
             try {
               await confirmOrder(parseInt(this.data.orderId))
               wx.hideLoading()
-              wx.showToast({ title: '确认成功', icon: 'success' })
-              this.loadOrderDetail()
+              await this.loadOrderDetail()
             } catch (error) {
               wx.hideLoading()
               logger.error('确认收货失败', error, 'Detail.onConfirmReceipt')

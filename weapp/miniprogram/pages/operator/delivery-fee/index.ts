@@ -1,4 +1,5 @@
 import { deliveryFeeService } from '../../../api/delivery-fee'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface DeliveryFeeConfigView {
     base_fee: string
@@ -80,7 +81,7 @@ Page({
             })
         } catch (error: unknown) {
             console.error(error)
-            const errorMsg = error instanceof Error ? error.message : '加载配置失败'
+            const errorMsg = getErrorUserMessage(error, '加载配置失败，请稍后重试')
             this.setData({
                 error: errorMsg,
                 initialLoading: false
@@ -124,9 +125,8 @@ Page({
             }
 
             await deliveryFeeService.updateRegionConfig(regionId, submitData)
-            wx.showToast({ title: '保存成功', icon: 'success' })
         } catch (error: unknown) {
-            const message = error instanceof Error ? error.message : '保存失败'
+            const message = getErrorUserMessage(error, '保存失败，请稍后重试')
             wx.showToast({ title: message, icon: 'none' })
         } finally {
             wx.hideLoading()

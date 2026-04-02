@@ -4,6 +4,7 @@ import { operatorBasicManagementService, RegionResponse } from '../../../api/ope
 import { operatorAnalyticsService, OperatorAppealService } from '../../../api/operator-analytics'
 import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
 import { operatorRiderManagementService } from '../../../api/operator-rider-management'
+import { getConsoleDashboardErrorState, shouldShowOperatorApplymentEntry } from '../../../utils/console-dashboard'
 
 type TimeDimension = 'day' | 'week' | 'month'
 
@@ -110,6 +111,7 @@ Page({
     loading: false,
     initialLoading: true,
     error: null as string | null,
+    errorCanRetry: true,
     showApplymentEntry: false,
     navBarHeight: 88
   },
@@ -244,17 +246,13 @@ Page({
         console.warn('运营中心财务概览降级：finance overview unavailable')
       }
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '数据加载失败，请重试'
+      const errorState = getConsoleDashboardErrorState('operator', error, '运营中心数据加载失败，请稍后重试。')
       console.error('加载运营仪表盘失败:', error)
-      const normalized = message.toLowerCase()
-      const showApplymentEntry =
-        normalized.includes('operator account is not active') ||
-        normalized.includes('operator is not active') ||
-        normalized.includes('开户') ||
-        normalized.includes('bindbank')
+      const showApplymentEntry = shouldShowOperatorApplymentEntry(error)
       this.setData({ 
         loading: false,
-        error: message,
+        error: errorState.message,
+        errorCanRetry: errorState.canRetry,
         showApplymentEntry
       })
     }

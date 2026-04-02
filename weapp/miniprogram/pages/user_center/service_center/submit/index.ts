@@ -2,6 +2,7 @@ import { claimManagementService } from '../../../../api/appeals-customer-service
 import type { UserClaimType, SubmitClaimResponse } from '../../../../api/appeals-customer-service'
 import { getOrderDetail } from '../../../../api/order'
 import { logger } from '../../../../utils/logger'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 const SUPPORTED_USER_CLAIM_TYPES: UserClaimType[] = ['foreign-object', 'damage', 'timeout']
 
@@ -235,7 +236,7 @@ Page({
       })
     } catch (err: unknown) {
       this.setData({ submitting: false })
-      const message = err instanceof Error ? err.message : '提交失败，请稍后重试'
+      const message = getErrorUserMessage(err, '提交失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none', duration: 3000 })
       logger.error('[SubmitClaim] submit failed', err)
     }

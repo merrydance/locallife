@@ -11,6 +11,7 @@ import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { logger } from '../../../../utils/logger'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type NavHeightEvent = {
   detail: {
@@ -81,18 +82,7 @@ type InputEvent = {
   }
 }
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error && typeof error === 'object') {
-    const maybeError = error as { userMessage?: unknown, message?: unknown }
-    if (typeof maybeError.userMessage === 'string' && maybeError.userMessage.trim()) {
-      return maybeError.userMessage
-    }
-    if (typeof maybeError.message === 'string' && maybeError.message.trim()) {
-      return maybeError.message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 const createUploadFeedback = (state: UploadFeedbackState, title = '', description = ''): UploadFeedback => ({
   state,

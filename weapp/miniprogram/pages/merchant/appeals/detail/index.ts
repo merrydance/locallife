@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { AppealResponse, appealManagementService } from '../../../../api/appeals-customer-service'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface AppealDetailOptions {
   id?: string
@@ -117,15 +118,7 @@ function getResultSummary(appeal: AppealResponse) {
   }
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function toAppealDetailView(appeal: AppealResponse): AppealDetailView {
   const result = getResultSummary(appeal)

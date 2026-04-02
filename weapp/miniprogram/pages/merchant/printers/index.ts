@@ -1,6 +1,7 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { deviceManagementService, CreatePrinterRequest, PrinterResponse, PrinterType, UpdatePrinterRequest } from '../../../api/table-device-management'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 const PRINTER_TYPE_LABELS: Record<PrinterType, string> = {
   feieyun: '飞鹅云',
@@ -36,15 +37,7 @@ function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -126,7 +119,9 @@ Page({
           refreshErrorMessage: `${message}，当前已保留上次同步结果`
         })
       } else {
-        wx.showToast({ title: message, icon: 'none' })
+        this.setData({
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
       }
     } finally {
       this.setData({ loading: false })
@@ -251,7 +246,6 @@ Page({
           updateParams.printer_key = formData.printer_key
         }
         savedPrinter = await deviceManagementService.updatePrinter(editingPrinterId, updateParams)
-        wx.showToast({ title: '更新成功', icon: 'success' })
       } else {
         const createParams: CreatePrinterRequest = {
           printer_name: formData.printer_name,
@@ -263,7 +257,6 @@ Page({
           print_reservation: formData.print_reservation
         }
         savedPrinter = await deviceManagementService.createPrinter(createParams)
-        wx.showToast({ title: '添加成功', icon: 'success' })
       }
       this.patchPrinter(savedPrinter)
       this.setData({ refreshErrorMessage: '' })
@@ -296,7 +289,6 @@ Page({
           if (this.data.editingPrinterId === id) {
             this.resetFormState()
           }
-          wx.showToast({ title: '已删除', icon: 'success' })
           await this.loadPrinters(false)
         } catch (err) {
           logger.error('Delete printer failed', err)

@@ -9,6 +9,7 @@ import {
 } from '../../../../api/merchant-complaints'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface ComplaintDetailOptions {
   id?: string
@@ -70,15 +71,7 @@ function getProgressCurrent(item: MerchantComplaintItem) {
   return 0
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function isComplaintDetailItem(value: unknown): value is MerchantComplaintItem {
   if (typeof value !== 'object' || value === null) return false
@@ -240,8 +233,7 @@ Page({
         actionNoticeMessage,
         detail: isComplaintDetailItem(result) ? toComplaintDetail(result) : this.data.detail
       })
-      wx.showToast({ title: actionNoticeMessage ? '回复已提交，待同步' : '投诉回复已提交', icon: 'success' })
-      await this.loadDetail(true)
+      await this.loadDetail(true, true)
     } catch (err) {
       logger.error('Respond merchant complaint failed', err)
       wx.showToast({ title: getErrorMessage(err, '提交回复失败，请稍后重试'), icon: 'none' })
@@ -281,8 +273,7 @@ Page({
         actionNoticeMessage,
         detail: isComplaintDetailItem(result) ? toComplaintDetail(result) : this.data.detail
       })
-      wx.showToast({ title: actionNoticeMessage ? '已完结，待同步' : '投诉已完结', icon: 'success' })
-      await this.loadDetail(true)
+      await this.loadDetail(true, true)
     } catch (err) {
       logger.error('Complete merchant complaint failed', err)
       wx.showToast({ title: getErrorMessage(err, '完结投诉失败，请稍后重试'), icon: 'none' })
@@ -292,7 +283,7 @@ Page({
     }
   },
 
-  async loadDetail(silent: boolean) {
+  async loadDetail(silent: boolean, preserveActionNotice = false) {
     if (!silent) {
       this.setData({
         loading: true,
@@ -310,7 +301,7 @@ Page({
         initialError: false,
         initialErrorMessage: '',
         refreshErrorMessage: '',
-        actionNoticeMessage: ''
+        actionNoticeMessage: preserveActionNotice ? this.data.actionNoticeMessage : ''
       })
     } catch (err) {
       logger.error('Load merchant complaint detail failed', err)

@@ -14,6 +14,7 @@ import CartService from '../../../services/cart'
 import { OrderAdapter } from '../../../adapters/order'
 import { createCombinedPaymentOrder, createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 // 简化后的状态筛选选项，更符合主流外卖APP习惯
 const STATUS_TABS = [
@@ -58,15 +59,7 @@ const isOrderResponse = (value: unknown): value is OrderResponse => {
   return !!value && typeof value === 'object' && 'id' in value && 'order_no' in value
 }
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   _activeRequestKey: '',
@@ -83,6 +76,7 @@ Page({
     loading: true,
     isError: false,
     errorMsg: '',
+    refreshErrorMessage: '',
     page: 1,
     pageSize: 10,
     hasMore: true,
@@ -174,7 +168,7 @@ Page({
     this._lastRequestKey = requestKey
     this._lastRequestAt = now
 
-    this.setData({ loading: true, isError: false })
+    this.setData({ loading: true, isError: false, refreshErrorMessage: '' })
 
     if (reset) {
       this.setData({ page: 1, orders: [], hasMore: true })
@@ -234,7 +228,8 @@ Page({
         selectedPayCount: this.countSelectedPay(this.pruneSelectedPayMap(orders)),
         pendingPayableCount: this.getPayableOrderIDs(orders).length,
         hasMore: orders.length < totalCount && orderDTOs.length > 0,
-        loading: false
+        loading: false,
+        refreshErrorMessage: ''
       })
       
     } catch (error: unknown) {
@@ -244,15 +239,22 @@ Page({
         this.setData({ 
           loading: false, 
           isError: true, 
-          errorMsg: getErrorMessage(error, '加载订单失败')
+          errorMsg: getErrorMessage(error, '加载订单失败'),
+          refreshErrorMessage: ''
         })
       } else {
-        this.setData({ loading: false })
-        wx.showToast({ title: '加载失败', icon: 'error' })
+        this.setData({
+          loading: false,
+          refreshErrorMessage: `${getErrorMessage(error, '加载失败，请稍后重试')}，当前已保留上次结果`
+        })
       }
     } finally {
       this._activeRequestKey = ''
     }
+  },
+
+  onRetryRefresh() {
+    this.loadOrders(true)
   },
 
   onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatus | '' }>) {
@@ -365,8 +367,7 @@ Page({
     try {
       await cancelOrder(orderId, { reason })
       wx.hideLoading()
-      wx.showToast({ title: '已取消', icon: 'success' })
-      setTimeout(() => this.loadOrders(true), 1500)
+      await this.loadOrders(true)
     } catch (error) {
       wx.hideLoading()
       logger.error('取消订单失败', error, 'List.doCancelOrder')
@@ -509,10 +510,7 @@ Page({
         }
 
         wx.hideLoading()
-        wx.showToast({ title: '已加入购物车', icon: 'success' })
-        setTimeout(() => {
-          wx.navigateTo({ url: '/pages/takeout/cart/index' })
-        }, 300)
+        wx.navigateTo({ url: '/pages/takeout/cart/index' })
       } catch (error) {
         wx.hideLoading()
         logger.error('再次购买失败', error, 'List.onReorder')

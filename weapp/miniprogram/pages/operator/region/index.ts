@@ -1,4 +1,5 @@
 import { operatorBasicManagementService, OperatorBasicManagementAdapter } from '../../../api/operator-basic-management'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RegionListItem = ReturnType<typeof OperatorBasicManagementAdapter.adaptRegionResponse>
 type RegionPageTarget = 'delivery' | 'rules'
@@ -77,13 +78,15 @@ Page({
 
         } catch (err: unknown) {
             console.error(err)
-            const errorMsg = err instanceof Error ? err.message : '加载区域列表失败'
-            this.setData({
-                error: errorMsg,
-                initialLoading: false,
-                loadingMore: false
-            })
-            if (!reset) {
+            const errorMsg = getErrorUserMessage(err, '加载区域列表失败，请稍后重试')
+            if (reset) {
+                this.setData({
+                    error: errorMsg,
+                    initialLoading: false,
+                    loadingMore: false
+                })
+            } else {
+                this.setData({ loadingMore: false })
                 wx.showToast({ title: errorMsg, icon: 'none' })
             }
         } finally {

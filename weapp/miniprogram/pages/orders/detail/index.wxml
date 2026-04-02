@@ -39,6 +39,11 @@
 
   <!-- 3. 正常内容 -->
   <view wx:if="{{order}}" class="detail-content animate-fade-in">
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
     <!-- 顶部状态区 -->
     <view class="status-header">
       <view class="status-left">

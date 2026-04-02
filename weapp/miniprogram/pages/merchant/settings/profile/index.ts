@@ -1,6 +1,7 @@
 import { getMyMerchantOpenStatus, getMyMerchantProfile, MerchantOperatorResponse, updateMyMerchantProfile } from '../../../../api/merchant'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface MerchantProfileForm {
   name: string
@@ -32,15 +33,7 @@ function hasFormChanged(current: MerchantProfileForm, initial: MerchantProfileFo
     || current.description !== initial.description
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -212,8 +205,6 @@ Page({
       } catch (storageErr) {
         logger.warn('Sync merchant profile cache failed', storageErr)
       }
-
-      wx.showToast({ title: '店铺资料已保存', icon: 'success' })
     } catch (err: unknown) {
       logger.error('Save merchant profile settings failed', err)
       const message = getErrorMessage(err, '保存失败，请稍后重试')

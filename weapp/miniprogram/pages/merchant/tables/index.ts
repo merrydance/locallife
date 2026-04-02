@@ -3,6 +3,7 @@ import { tableManagementService, CreateTableRequest, TableImageResponse, TableRe
 import { TagService } from '../../../api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type TableTab = 'all' | 'table' | 'room'
 
@@ -27,23 +28,7 @@ interface TableFormData {
   tag_ids: number[]
 }
 
-function getErrorMessage(error: unknown, fallback: string): string {
-  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
-    const userMessage = (error as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-
-  if (typeof error === 'object' && error !== null && 'message' in error) {
-    const message = (error as { message?: unknown }).message
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function createDefaultFormData(): TableFormData {
   return {
@@ -245,7 +230,6 @@ Page({
         if (!res.confirm) return
         try {
           await tableManagementService.updateTableStatus(id, { status: 'available' })
-          wx.showToast({ title: '已释放', icon: 'success' })
           this.loadTables()
         } catch (err) {
           logger.error('Release table failed', err)
@@ -388,8 +372,6 @@ Page({
           pendingImagePreviews: [...pendingImagePreviews, displayUrl]
         })
       }
-
-      wx.showToast({ title: '图片已添加', icon: 'success' })
     } catch (err) {
       logger.error('Choose/upload table image failed', err)
       wx.showToast({ title: getErrorMessage(err, '图片上传失败，请稍后重试'), icon: 'none' })
@@ -410,7 +392,6 @@ Page({
       try {
         await tableManagementService.deleteTableImage(this.data.editingTableId, imageId)
         await this.loadTableImages(this.data.editingTableId)
-        wx.showToast({ title: '图片已删除', icon: 'success' })
       } catch (err) {
         logger.error('Delete table image failed', err)
         wx.showToast({ title: getErrorMessage(err, '删除图片失败，请稍后重试'), icon: 'none' })
@@ -439,7 +420,6 @@ Page({
     try {
       await tableManagementService.setPrimaryTableImage(this.data.editingTableId, imageId)
       await this.loadTableImages(this.data.editingTableId)
-      wx.showToast({ title: '已设为主图', icon: 'success' })
     } catch (err) {
       logger.error('Set primary table image failed', err)
       wx.showToast({ title: getErrorMessage(err, '设置主图失败，请稍后重试'), icon: 'none' })
@@ -550,7 +530,6 @@ Page({
             availableTags: nextTags,
             'formData.tag_ids': nextSelected
           })
-          wx.showToast({ title: '标签已新增', icon: 'success' })
         } catch (err) {
           logger.error('Create table tag failed', err)
           wx.showToast({ title: '新增标签失败', icon: 'none' })
@@ -589,7 +568,6 @@ Page({
           this.setData({
             'formData.tag_ids': selectedTagIds.filter((tagId) => tagId !== id)
           })
-          wx.showToast({ title: isEdit ? '标签已取消关联' : '标签已取消选择', icon: 'success' })
         } catch (err) {
           logger.error('Remove table tag failed', err)
           wx.showToast({ title: isEdit ? '取消关联失败' : '取消选择失败', icon: 'none' })
@@ -652,20 +630,17 @@ Page({
         }
         await tableManagementService.updateTable(this.data.editingTableId, updatePayload)
         this.resetFormState()
-        this.loadTables()
-        wx.showToast({ title: '桌台已更新', icon: 'success' })
+        await this.loadTables()
       } else {
         const created = await tableManagementService.createTable(createPayload)
 
         const { failedCount } = await this.uploadPendingImages(created.id)
 
         this.resetFormState()
-        this.loadTables()
+        await this.loadTables()
 
         if (failedCount > 0) {
           wx.showToast({ title: '桌台已创建，部分图片添加失败，请进入编辑页重试', icon: 'none', duration: 3000 })
-        } else {
-          wx.showToast({ title: '桌台已创建', icon: 'success' })
         }
       }
     } catch (err) {

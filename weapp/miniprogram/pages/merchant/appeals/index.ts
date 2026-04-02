@@ -2,6 +2,7 @@ import dayjs from 'dayjs'
 import { AppealResponse, AppealStatus, appealManagementService } from '../../../api/appeals-customer-service'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type AppealTagTheme = 'warning' | 'success' | 'danger' | 'primary'
 
@@ -86,15 +87,7 @@ function getResultHint(appeal: AppealResponse) {
   return '平台已驳回异议，需继续按原结果处理。'
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 function toAppealStatus(tab: AppealTab): AppealStatus | undefined {
   return tab === 'all' ? undefined : tab
@@ -162,6 +155,7 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: true,
     loadingMore: false,
     currentTab: 'all' as AppealTab,
@@ -190,7 +184,8 @@ Page({
       hasMore: false,
       loading: true,
       initialError: false,
-      initialErrorMessage: ''
+      initialErrorMessage: '',
+      refreshErrorMessage: ''
     })
     this.loadAppealList(currentTab)
   },
@@ -217,7 +212,7 @@ Page({
 
   async reloadPageData(silent = false) {
     if (!silent) {
-      this.setData({ loading: true, initialError: false, initialErrorMessage: '' })
+      this.setData({ loading: true, initialError: false, initialErrorMessage: '', refreshErrorMessage: '' })
     }
 
     try {
@@ -238,7 +233,8 @@ Page({
         loadingMore: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (error) {
       logger.error('Load merchant appeals failed', error)
@@ -250,17 +246,25 @@ Page({
           initialLoading: false,
           initialError: true,
           initialErrorMessage: message,
+          refreshErrorMessage: '',
           appeals: [],
           filteredAppeals: [],
           hasMore: false
         })
       } else {
-        wx.showToast({ title: message, icon: 'none' })
-        this.setData({ loading: false, loadingMore: false })
+        this.setData({
+          loading: false,
+          loadingMore: false,
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
       }
     } finally {
       wx.stopPullDownRefresh()
     }
+  },
+
+  onRetryRefresh() {
+    this.reloadPageData(true)
   },
 
   async loadAppealList(tab: AppealTab) {
@@ -276,7 +280,8 @@ Page({
         loadingMore: false,
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: ''
       })
     } catch (error) {
       logger.error('Switch merchant appeals tab failed', error)
@@ -287,6 +292,7 @@ Page({
         initialLoading: false,
         initialError: true,
         initialErrorMessage: message,
+        refreshErrorMessage: '',
         appeals: [],
         filteredAppeals: [],
         hasMore: false

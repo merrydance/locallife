@@ -1,27 +1,27 @@
 <custom-navbar title="运营中心" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <!-- 错误状态 -->
-  <view wx:if="{{error && !initialLoading}}" class="error-container">
-    <t-empty icon="info-circle" description="{{error}}">
-      <view slot="action" class="error-actions">
-        <t-button theme="primary" size="small" bindtap="onRetry" shape="round">重试</t-button>
-        <t-button wx:if="{{showApplymentEntry}}" theme="primary" size="small" bindtap="onOpenApplyment" shape="round">去微信开户</t-button>
-      </view>
-    </t-empty>
+  <view wx:if="{{error && !initialLoading}}" class="console-error-banner">
+    <view class="console-error-banner__body">
+      <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
+      <text class="console-error-banner__text">{{error}}</text>
+    </view>
+    <view class="console-error-banner__actions">
+      <t-button wx:if="{{errorCanRetry}}" theme="primary" size="small" bindtap="onRetry" shape="round">重新加载</t-button>
+      <t-button wx:if="{{showApplymentEntry}}" theme="primary" variant="outline" size="small" bindtap="onOpenApplyment" shape="round">去微信开户</t-button>
+    </view>
   </view>
 
-  <block wx:else>
-    <!-- Loading (Skeleton) -->
-    <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
-      <view class="skeleton-header-card"></view>
-      <view class="stats-skeleton">
-        <card-skeleton wx:for="{{4}}" wx:key="index" t-class="stat-skeleton-item" />
-      </view>
-      <list-skeleton row="3" t-class="section-skeleton" />
+  <!-- Loading (Skeleton) -->
+  <view wx:if="{{initialLoading}}" class="skeleton-container animate-fade-in">
+    <view class="skeleton-header-card"></view>
+    <view class="stats-skeleton">
+      <card-skeleton wx:for="{{4}}" wx:key="index" t-class="stat-skeleton-item" />
     </view>
+    <list-skeleton row="3" t-class="section-skeleton" />
+  </view>
 
-    <view wx:else class="content animate-fade-in">
+  <view wx:else class="content animate-fade-in">
       
       <!-- 1. 资产/收入概览卡片 (Premium Glassmorphism Style) -->
       <view class="finance-section">
@@ -213,6 +213,5 @@
       </view>
 
       <view class="safe-bottom"></view>
-    </view>
-  </block>
+  </view>
 </view>

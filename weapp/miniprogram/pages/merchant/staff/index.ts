@@ -9,6 +9,7 @@ import {
 } from '../../../api/merchant-staff'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type EditableMerchantStaffRole = Exclude<MerchantStaffRole, 'owner' | 'pending'>
 
@@ -112,15 +113,7 @@ function toStaffView(item: MerchantStaffItem, canManageRoles: boolean): StaffVie
   }
 }
 
-function getErrorMessage(err: unknown, fallback: string) {
-  if (typeof err === 'object' && err !== null && 'userMessage' in err) {
-    const userMessage = (err as { userMessage?: unknown }).userMessage
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -208,7 +201,7 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
-      } else if (isSilentRefresh) {
+      } else if (hasExistingStaff) {
         this.setData({
           refreshErrorMessage: `${message}，当前已保留上次同步结果`
         })
@@ -311,7 +304,6 @@ Page({
         role: updatedStaff.role,
         status: updatedStaff.status
       }, this.data.canManageRoles))
-      wx.showToast({ title: '角色已更新', icon: 'success' })
       this.onCloseRolePopup()
       await this.loadStaff(false)
     } catch (err: unknown) {
@@ -344,7 +336,6 @@ Page({
             ...item,
             status: 'disabled'
           }, this.data.canManageRoles))
-          wx.showToast({ title: '员工已移除', icon: 'success' })
           await this.loadStaff(false)
         } catch (err: unknown) {
           logger.error('Remove merchant staff failed', err)

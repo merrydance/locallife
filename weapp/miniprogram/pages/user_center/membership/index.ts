@@ -195,11 +195,8 @@ Page({
 
       wx.hideLoading()
       await invokeWechatPay(rechargeResult.pay_params)
-      wx.showToast({ title: '支付成功', icon: 'success' })
-
-      setTimeout(() => {
-        void this.loadMemberships(true)
-      }, 1200)
+      await new Promise((resolve) => setTimeout(resolve, 1200))
+      await this.loadMemberships(true)
     } catch (error) {
       wx.hideLoading()
       if (error instanceof PaymentCancelledError) {

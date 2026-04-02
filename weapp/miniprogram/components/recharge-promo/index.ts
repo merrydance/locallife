@@ -5,6 +5,7 @@
 
 import { getPublicRechargeRules, rechargeMembership, RechargeRuleResponse, getMyMemberships, MembershipResponse } from '../../api/personal'
 import { formatPriceNoSymbol } from '../../utils/util'
+import { getErrorUserMessage } from '../../utils/user-facing'
 
 interface RuleView extends RechargeRuleResponse {
     rechargeDisplay: string      // 充值金额展示
@@ -168,8 +169,8 @@ Component({
             } catch (err) {
                 console.error('充值失败:', err)
                 wx.showToast({
-                    title: err instanceof Error ? err.message : '充值失败',
-                    icon: 'error'
+                    title: getErrorUserMessage(err, '充值失败，请稍后重试'),
+                    icon: 'none'
                 })
             } finally {
                 this.setData({ recharging: false })

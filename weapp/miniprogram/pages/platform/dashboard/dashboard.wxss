@@ -15,6 +15,31 @@
   padding: var(--spacer-md);
 }
 
+.console-error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  margin-bottom: var(--spacer-md);
+  padding: var(--spacer-sm) var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: var(--td-warning-color-1);
+}
+
+.console-error-banner__body {
+  flex: 1;
+  display: flex;
+  align-items: flex-start;
+  gap: 12rpx;
+}
+
+.console-error-banner__text {
+  flex: 1;
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
 .section-card {
   background: var(--td-bg-color-container);
   border-radius: var(--radius-md);

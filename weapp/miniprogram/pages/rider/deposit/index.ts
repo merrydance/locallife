@@ -199,6 +199,8 @@ Page({
         loadingMore: false,
         accountError: '',
         listError: '',
+                actionNoticeMessage: '',
+                actionNoticeTheme: 'success' as 'success' | 'warning',
     
     // 账户余额数据
     totalDeposit: 0,
@@ -229,9 +231,20 @@ Page({
         this.reloadPage(true)
   },
 
+    setActionNotice(message: string, theme: 'success' | 'warning' = 'success') {
+        this.setData({ actionNoticeMessage: message, actionNoticeTheme: theme })
+    },
+
+    clearActionNotice() {
+        if (!this.data.actionNoticeMessage) {
+            return
+        }
+        this.setData({ actionNoticeMessage: '' })
+    },
+
     async reloadPage(showLoading: boolean = false) {
         if (showLoading) {
-            this.setData({ loading: true })
+            this.setData({ loading: true, actionNoticeMessage: '' })
         } else {
             this.setData({ refreshing: true })
         }
@@ -311,6 +324,7 @@ Page({
     },
 
   onShowRecharge() {
+        this.clearActionNotice()
     this.setData({ isRechargeVisible: true, rechargeAmount: '' })
   },
 
@@ -319,12 +333,14 @@ Page({
             wx.showToast({ title: this.data.withdrawHint, icon: 'none' })
             return
         }
+                this.clearActionNotice()
         this.setData({ isWithdrawVisible: true, withdrawAmount: '' })
     },
 
     onInputAmount(e: WechatMiniprogram.CustomEvent<AmountInputDetail>) {
         const { field } = e.currentTarget.dataset as AmountInputDataset
         if (!field) return
+        this.clearActionNotice()
     this.setData({ [field]: e.detail.value })
   },
 
@@ -382,12 +398,12 @@ Page({
             if (res.payment_order_id) {
                 try {
                     await pollPaymentStatus(res.payment_order_id, 5, 1500)
-                    wx.showToast({ title: '充值成功', icon: 'success' })
+                    this.setActionNotice('充值已完成，账户余额和账单已同步更新。')
                 } catch (_error) {
-                    wx.showToast({ title: '支付已提交，余额稍后刷新', icon: 'none' })
+                    this.setActionNotice('支付已提交，余额和账单会在稍后自动刷新。', 'warning')
                 }
             } else {
-                wx.showToast({ title: '支付已提交', icon: 'success' })
+                this.setActionNotice('支付已提交，余额和账单会在稍后自动刷新。', 'warning')
             }
 
             this.setData({ isRechargeVisible: false, rechargeAmount: '' })
@@ -427,8 +443,10 @@ Page({
                 remark: '骑手押金提现'
             })
 
-            const message = result.status === 'success' ? '提现已完成' : '提现申请已提交'
-            wx.showToast({ title: message, icon: 'success' })
+            const message = result.status === 'success'
+                ? '提现已完成，账单记录已经同步更新。'
+                : '提现申请已提交，到账进度会同步到账单列表。'
+            this.setActionNotice(message, result.status === 'success' ? 'success' : 'warning')
             this.setData({ isWithdrawVisible: false, withdrawAmount: '' })
             this.scheduleFinanceRefresh()
         } catch (err: unknown) {

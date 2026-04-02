@@ -20,11 +20,11 @@
         <text class="info-label">支付金额</text>
         <text class="info-value amount">¥{{paymentAmount}}</text>
       </view>
-      <view class="info-row">
+      <view wx:if="{{tableInfo && tableInfo.table_number}}" class="info-row">
         <text class="info-label">用餐桌台</text>
         <text class="info-value">{{tableInfo.table_number}}号桌</text>
       </view>
-      <view class="info-row">
+      <view wx:if="{{merchantInfo && merchantInfo.name}}" class="info-row">
         <text class="info-label">商户名称</text>
         <text class="info-value">{{merchantInfo.name}}</text>
       </view>

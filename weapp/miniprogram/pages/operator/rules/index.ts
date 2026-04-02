@@ -200,7 +200,6 @@ Page({
       )
       
       wx.hideLoading()
-      wx.showToast({ title: '更新成功', icon: 'success' })
       this.setData({ showEdit: false, editingRule: null, newValue: '', valueError: '', saving: false })
       this.loadRules() // 重新加载以确认为最新数据
     } catch (err: unknown) {

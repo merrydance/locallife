@@ -2,18 +2,11 @@ import { getRoomDetail, Room } from '../../../api/reservation'
 import { checkRoomAvailability, RoomAvailabilityResponse, TimeSlot } from '../../../api/room'
 import { formatPriceNoSymbol } from '@/utils/util'
 import { settleAll } from '../../../utils/promise'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 const ROOM_AVAILABILITY_BATCH_SIZE = 3
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 interface DayAvailability {
   date: string

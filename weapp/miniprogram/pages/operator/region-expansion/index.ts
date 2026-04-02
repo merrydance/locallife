@@ -6,6 +6,7 @@ import {
   type RegionExpansionApplication
 } from '../../../api/operator-application'
 import { logger } from '../../../utils/logger'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type CityOption = { label: string, value: number }
 type RegionOption = { label: string, secondary: string, value: number }
@@ -68,7 +69,7 @@ Page({
       const apps = (res.applications || []).map((a) => ({ ...a, created_at: formatDate(a.created_at) }))
       this.setData({ applications: apps })
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '加载失败'
+      const msg = getErrorUserMessage(e, '加载申请记录失败，请稍后重试')
       this.setData({ listError: msg })
       logger.error('Load region expansion applications failed', e)
     } finally {
@@ -184,11 +185,10 @@ Page({
     this.setData({ submitting: true })
     try {
       await applyRegionExpansion(selectedRegionId)
-      wx.showToast({ title: '申请已提交，等待审核', icon: 'success' })
       this.setData({ showForm: false, selectedRegionId: 0, selectedRegionName: '' })
       await this.loadApplications()
     } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : '提交失败'
+      const msg = getErrorUserMessage(e, '提交失败，请稍后重试')
       wx.showToast({ title: msg, icon: 'none' })
       logger.error('Submit region expansion failed', e)
     } finally {

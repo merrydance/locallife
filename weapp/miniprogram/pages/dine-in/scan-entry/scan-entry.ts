@@ -5,6 +5,7 @@
 
 import { scanTable, getTableDetail, ScanTableMerchantInfo, TableStatus } from '../../../api/table'
 import { transferDiningSessionTable, DiningSessionDTO } from '../../../api/dining-session'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TableInfo {
     id: number
@@ -152,7 +153,7 @@ Page({
             this.checkActiveSessionAndPrompt()
 
         } catch (error) {
-            const errMessage = error instanceof Error ? error.message : String(error)
+            const errMessage = getErrorUserMessage(error, '获取桌台信息失败，请重试')
             console.error('加载桌台信息失败:', error)
             this.setData({
                 loading: false,
@@ -183,7 +184,7 @@ Page({
             this.trackScanBehavior(table.id, merchantId)
             this.checkActiveSessionAndPrompt()
         } catch (error) {
-            const errMessage = error instanceof Error ? error.message : String(error)
+            const errMessage = getErrorUserMessage(error, '获取桌台信息失败，请重试')
             console.error('加载桌台信息失败:', error)
             this.setData({
                 loading: false,
@@ -249,7 +250,7 @@ Page({
             this.setData({ showTransferDialog: false, transferSubmitting: false, transferCode: '' })
             this.startDining()
         } catch (error) {
-            const errMessage = error instanceof Error ? error.message : String(error)
+            const errMessage = getErrorUserMessage(error, '换桌失败，请稍后重试')
             console.error('转台失败:', error)
             wx.showToast({ title: errMessage || '换桌失败', icon: 'error' })
             this.setData({ transferSubmitting: false })

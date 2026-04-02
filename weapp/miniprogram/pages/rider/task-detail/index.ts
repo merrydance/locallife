@@ -456,18 +456,18 @@ Page({
                             delivery: updatedView,
                             currentStep: this.mapStatusToStep(updated.status)
                         })
-                        wx.showToast({ title: '操作成功', icon: 'success' })
                         
                         if (updated.status === 'completed' || updated.status === 'delivered') {
-                            setTimeout(() => wx.navigateBack(), 1500)
+                            wx.navigateBack()
+                            return
                         }
                     } catch (err: unknown) {
                         const reconciled = await this.reconcileDeliveryState(nextExpectedStatus)
                         if (reconciled) {
-                            wx.showToast({ title: '状态已同步，请查看最新进度', icon: 'success' })
                             const latestStatus = this.data.delivery?.status
                             if (latestStatus === 'completed' || latestStatus === 'delivered') {
-                                setTimeout(() => wx.navigateBack(), 1500)
+                                wx.navigateBack()
+                                return
                             }
                             return
                         }
@@ -540,7 +540,6 @@ Page({
             }
 
             this.applyLocationSessionState(riderLiveLocationSession.getState())
-            wx.showToast({ title: '定位已刷新', icon: 'success' })
         } catch (err: unknown) {
             const message = getUserMessage(err, '定位刷新失败，请稍后重试')
             wx.showToast({ title: message, icon: 'none' })

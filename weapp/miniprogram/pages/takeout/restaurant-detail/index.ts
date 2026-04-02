@@ -11,6 +11,7 @@ import ConsumerMerchantDetailAdapter, { type ConsumerMerchantDetailViewModel } f
 import { getPublicImageUrl } from '../../../utils/image'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import Navigation from '../../../utils/navigation'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type RestaurantViewModel = ConsumerMerchantDetailViewModel
 
@@ -47,21 +48,7 @@ interface ComboView {
   dish_images: string[] // 新增：包含菜品的图片列表
 }
 
-const getErrorMessage = (error: unknown, fallback: string): string => {
-  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
-    const { userMessage } = error as { userMessage?: unknown }
-    if (typeof userMessage === 'string' && userMessage.trim()) {
-      return userMessage
-    }
-  }
-  if (error && typeof error === 'object' && 'message' in error) {
-    const { message } = error as { message?: unknown }
-    if (typeof message === 'string' && message.trim()) {
-      return message
-    }
-  }
-  return fallback
-}
+const getErrorMessage = getErrorUserMessage
 
 const ORDERING_SUSPENDED_MESSAGE = '当前商户暂停接单，请稍后再试'
 

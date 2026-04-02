@@ -110,6 +110,20 @@
   transform: scale(0.95);
 }
 
+.action-notice-card {
+  margin-bottom: var(--spacer-md);
+  padding: var(--spacer-sm) var(--spacer-md);
+  background: var(--td-success-color-1);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-notice-text {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
 /* 卡片区块 */
 .card-section {
   margin-bottom: var(--spacer-md);

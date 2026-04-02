@@ -4,6 +4,7 @@ import {
   type PlatformOperatorRuleItem,
   type PlatformProfitSharingConfigItem
 } from '@/api/platform-management'
+import { getErrorUserMessage } from '@/utils/user-facing'
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
 type CategoryChangeEvent = WechatMiniprogram.TouchEvent & {
@@ -152,9 +153,8 @@ Page({
         activeCategory: categories.some((c) => c.value === this.data.activeCategory) ? this.data.activeCategory : 'all'
       })
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '加载规则失败，请稍后重试'
+      const message = getErrorUserMessage(error, '加载规则失败，请稍后重试')
       this.setData({ error: message })
-      wx.showToast({ title: '加载失败', icon: 'none' })
     } finally {
       this.setData({ loading: false })
     }
@@ -235,11 +235,10 @@ Page({
         await platformManagementService.createPlatformProfitSharingConfig(payload)
       }
 
-      wx.showToast({ title: '分账配置已保存', icon: 'success' })
       await this.loadProfitSharingConfig()
       await this.loadRules()
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '保存失败'
+      const message = getErrorUserMessage(error, '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ commissionSubmitting: false })
@@ -359,11 +358,10 @@ Page({
           commissionDialogPlatformRate: '',
           commissionDialogOperatorRate: ''
         })
-        wx.showToast({ title: '佣金配置已更新', icon: 'success' })
         await this.loadProfitSharingConfig()
         await this.loadRules()
       } catch (error: unknown) {
-        const message = error instanceof Error ? error.message : '更新失败'
+        const message = getErrorUserMessage(error, '更新失败，请稍后重试')
         wx.showToast({ title: message, icon: 'none' })
       } finally {
         this.setData({ commissionSubmitting: false, submitting: false })
@@ -381,11 +379,10 @@ Page({
     try {
       this.setData({ submitting: true })
       await platformManagementService.updatePlatformOperatorRule(editingRule.key, { value: newValue })
-      wx.showToast({ title: '更新成功', icon: 'success' })
       this.setData({ showEdit: false, editingRule: null, newValue: '' })
       await this.loadRules()
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : '更新失败'
+      const message = getErrorUserMessage(error, '更新失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitting: false })

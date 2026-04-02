@@ -310,7 +310,6 @@ Page({
                             billing_group_id: billingGroupId
                         })
 
-                        wx.showToast({ title: '下单成功', icon: 'success' })
                         CartService.clear()
                         this.setData({ cartCount: 0, cartPrice: 0, cartPriceDisplay: '0.00' })
                         await this.loadSharedOrderSummary()

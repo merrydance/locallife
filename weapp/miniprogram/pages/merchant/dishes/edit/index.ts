@@ -309,7 +309,6 @@ Page({
         'formData.image_asset_id': mediaId,
         'formData.image_preview_url': displayUrl
       })
-      wx.showToast({ title: '上传成功', icon: 'success' })
     } catch (err) {
       logger.error('Upload image failed', err)
       this.setData({ fileList: [] })
@@ -671,16 +670,13 @@ Page({
       if (currentDishId > 0 && (this.data.isEdit || customizationGroups.length > 0)) {
         await DishManagementService.setDishCustomizations(currentDishId, { groups: customizationGroups })
       }
-      
-      wx.showToast({ title: '提交成功', icon: 'success' })
-      setTimeout(() => {
-        const pages = getCurrentPages()
-        const prevPage = pages[pages.length - 2] as { refreshAll?: () => void } | undefined
-        if (prevPage?.refreshAll) {
-          prevPage.refreshAll()
-        }
-        wx.navigateBack()
-      }, 1500)
+
+      const pages = getCurrentPages()
+      const prevPage = pages[pages.length - 2] as { refreshAll?: () => void } | undefined
+      if (prevPage?.refreshAll) {
+        prevPage.refreshAll()
+      }
+      wx.navigateBack()
     } catch (err) {
       logger.error('Submit dish failed', err)
       if (baseDishSaved && currentDishId > 0) {

@@ -127,6 +127,7 @@ class Logger {
         error: error instanceof Error ? {
           name: error.name,
           message: error.message,
+          detailMessage: (error as { detailMessage?: unknown }).detailMessage,
           stack: error.stack
         } : error,
         timestamp: Date.now(),
