@@ -47,14 +47,3 @@ func expectNoMerchantAccessResolution(store *mockdb.MockStore) {
 		ListMerchantsByStaff(gomock.Any(), gomock.Any()).
 		Times(0)
 }
-
-func expectResolveOwnedMerchants(store *mockdb.MockStore, userID int64, merchants []db.Merchant) {
-	store.EXPECT().
-		ListMerchantsByOwner(gomock.Any(), gomock.Eq(userID)).
-		AnyTimes().
-		Return(merchants, nil)
-	store.EXPECT().
-		ListMerchantsByStaff(gomock.Any(), gomock.Eq(userID)).
-		AnyTimes().
-		Return([]db.Merchant{}, nil)
-}

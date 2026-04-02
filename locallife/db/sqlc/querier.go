@@ -266,7 +266,7 @@ type Querier interface {
 	CountUserRecentTakeoutOrders(ctx context.Context, arg CountUserRecentTakeoutOrdersParams) (int64, error)
 	CountUserVouchersByStatus(ctx context.Context, userID int64) (CountUserVouchersByStatusRow, error)
 	CountWechatComplaintsByMerchant(ctx context.Context, arg CountWechatComplaintsByMerchantParams) (int64, error)
-	CountWithdrawalRecords(ctx context.Context, userID int64) (int64, error)
+	CountWithdrawalRecords(ctx context.Context, arg CountWithdrawalRecordsParams) (int64, error)
 	// =====================================================================
 	// Appeal Queries - 申诉相关查询
 	// =====================================================================
@@ -1074,6 +1074,7 @@ type Querier interface {
 	GetWechatComplaintByComplaintIDForUpdate(ctx context.Context, complaintID string) (WechatComplaint, error)
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
 	GetWithdrawalRecord(ctx context.Context, id int64) (WithdrawalRecord, error)
+	GetWithdrawalRecordByOutRequestNo(ctx context.Context, outRequestNo pgtype.Text) (WithdrawalRecord, error)
 	HasRole(ctx context.Context, arg HasRoleParams) (bool, error)
 	HasUserOrderedFromMerchant(ctx context.Context, arg HasUserOrderedFromMerchantParams) (bool, error)
 	IncrementMembershipBalance(ctx context.Context, arg IncrementMembershipBalanceParams) (MerchantMembership, error)
@@ -1391,6 +1392,9 @@ type Querier interface {
 	ListSearchHistory(ctx context.Context, arg ListSearchHistoryParams) ([]ListSearchHistoryRow, error)
 	ListStaleUnprocessedWechatNotifications(ctx context.Context, arg ListStaleUnprocessedWechatNotificationsParams) ([]WechatNotification, error)
 	ListStuckProcessingProfitSharingReturns(ctx context.Context, arg ListStuckProcessingProfitSharingReturnsParams) ([]ProfitSharingReturn, error)
+	// 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
+	// 用于运营告警，让人工核查微信商户平台退款结果
+	ListStuckProcessingRefundOrders(ctx context.Context, arg ListStuckProcessingRefundOrdersParams) ([]ListStuckProcessingRefundOrdersRow, error)
 	// 批量查询（用于退款流程判断是否需要退回补差）
 	ListSubsidyOrdersByPaymentIDs(ctx context.Context, paymentOrderIds []int64) ([]SubsidyOrder, error)
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)

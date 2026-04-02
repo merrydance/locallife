@@ -4,9 +4,10 @@ INSERT INTO withdrawal_records (
     amount,
     status,
     channel,
-    account_info
+    account_info,
+    out_request_no
 ) VALUES (
-    $1, $2, $3, $4, $5
+    $1, $2, $3, $4, $5, sqlc.narg(out_request_no)
 ) RETURNING *;
 
 -- name: GetWithdrawalRecord :one
@@ -21,7 +22,12 @@ LIMIT $2 OFFSET $3;
 
 -- name: CountWithdrawalRecords :one
 SELECT count(*) FROM withdrawal_records
-WHERE user_id = $1;
+WHERE user_id = $1
+  AND channel = $2;
+
+-- name: GetWithdrawalRecordByOutRequestNo :one
+SELECT * FROM withdrawal_records
+WHERE out_request_no = $1 LIMIT 1;
 
 -- name: ListPendingWithdrawalRecordsByChannel :many
 SELECT * FROM withdrawal_records

@@ -2333,13 +2333,14 @@ type WechatNotification struct {
 }
 
 type WithdrawalRecord struct {
-	ID          int64       `json:"id"`
-	UserID      int64       `json:"user_id"`
-	Amount      int64       `json:"amount"`
-	Status      string      `json:"status"`
-	Channel     string      `json:"channel"`
-	AccountInfo []byte      `json:"account_info"`
-	Reason      pgtype.Text `json:"reason"`
-	CreatedAt   time.Time   `json:"created_at"`
-	UpdatedAt   time.Time   `json:"updated_at"`
+	ID           int64       `json:"id"`
+	UserID       int64       `json:"user_id"`
+	Amount       int64       `json:"amount"`
+	Status       string      `json:"status"`
+	Channel      string      `json:"channel"`
+	AccountInfo  []byte      `json:"account_info"`
+	Reason       pgtype.Text `json:"reason"`
+	CreatedAt    time.Time   `json:"created_at"`
+	UpdatedAt    time.Time   `json:"updated_at"`
+	OutRequestNo pgtype.Text `json:"out_request_no"`
 }

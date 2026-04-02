@@ -129,6 +129,12 @@ func (s *DataCleanupScheduler) Start() error {
 		return err
 	}
 
+	// 每30分钟检查是否存在卡死在 processing 状态的退款单（微信回调可能永久丢失）
+	_, err = s.cron.AddFunc("0 */30 * * * *", s.alertStuckProcessingRefundOrders)
+	if err != nil {
+		return err
+	}
+
 	s.cron.Start()
 	log.Info().Msg("data cleanup scheduler started")
 	return nil
@@ -962,5 +968,53 @@ func (s *DataCleanupScheduler) cleanupStaleOCRTasks() {
 	if err != nil {
 		log.Error().Err(err).Msg("failed to reset stale merchant ocr status")
 		return
+	}
+}
+
+const (
+	stuckProcessingRefundThreshold  = 2 * time.Hour
+	stuckProcessingRefundBatchLimit = int32(50)
+)
+
+// alertStuckProcessingRefundOrders 扫描持续处于 processing 状态超过阈值的退款单，
+// 向运营平台发布告警。这类退款单的微信回调可能已永久丢失，需人工在微信商户平台核查。
+func (s *DataCleanupScheduler) alertStuckProcessingRefundOrders() {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	createdBefore := time.Now().Add(-stuckProcessingRefundThreshold)
+	orders, err := s.store.ListStuckProcessingRefundOrders(ctx, db.ListStuckProcessingRefundOrdersParams{
+		CreatedBefore: createdBefore,
+		Limit:         stuckProcessingRefundBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("list stuck processing refund orders failed")
+		return
+	}
+	if len(orders) == 0 {
+		return
+	}
+
+	log.Warn().
+		Int("count", len(orders)).
+		Time("threshold", createdBefore).
+		Msg("found stuck processing refund orders — wechat callback may be lost")
+
+	for _, ro := range orders {
+		s.publishPlatformAlert(ctx, worker.AlertData{
+			AlertType:   worker.AlertTypeRefundFailed,
+			Level:       worker.AlertLevelCritical,
+			Title:       "退款单长期卡在 processing — 可能缺失微信回调",
+			Message:     fmt.Sprintf("退款单 %s（ID=%d）于 %s 提交退款请求后超过 %v 仍未收到微信回调，请在微信商户平台查询退款结果并手动更新状态。退款类型：%s。", ro.OutRefundNo, ro.ID, ro.CreatedAt.In(time.Local).Format("2006-01-02 15:04"), stuckProcessingRefundThreshold, ro.PaymentType),
+			RelatedID:   ro.ID,
+			RelatedType: "refund_order",
+			Extra: map[string]interface{}{
+				"out_refund_no": ro.OutRefundNo,
+				"refund_id":     ro.RefundID,
+				"refund_amount": ro.RefundAmount,
+				"payment_type":  ro.PaymentType,
+				"created_at":    ro.CreatedAt,
+			},
+		})
 	}
 }

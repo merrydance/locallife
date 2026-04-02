@@ -150,6 +150,24 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 				return fmt.Errorf("update payment order to closed: %w", err)
 			}
 		}
+		// 取消关联的业务订单（与单笔支付超时逻辑保持一致）
+		if paymentOrder.OrderID.Valid {
+			order, err := p.store.GetOrderForUpdate(ctx, paymentOrder.OrderID.Int64)
+			if err != nil {
+				return fmt.Errorf("get order for combine timeout cancel: %w", err)
+			}
+			if order.Status == db.OrderStatusPending {
+				if _, err = p.store.CancelOrderTx(ctx, db.CancelOrderTxParams{
+					OrderID:      order.ID,
+					OldStatus:    order.Status,
+					CancelReason: "支付超时未完成",
+					OperatorID:   order.UserID,
+					OperatorType: "system",
+				}); err != nil {
+					return fmt.Errorf("cancel order after combined payment timeout: %w", err)
+				}
+			}
+		}
 	}
 
 	log.Info().

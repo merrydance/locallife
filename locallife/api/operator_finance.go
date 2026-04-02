@@ -338,7 +338,10 @@ func (server *Server) listOperatorWithdrawals(ctx *gin.Context) {
 		return
 	}
 
-	totalCount, err := server.store.CountWithdrawalRecords(ctx, authPayload.UserID)
+	totalCount, err := server.store.CountWithdrawalRecords(ctx, db.CountWithdrawalRecordsParams{
+		UserID:  authPayload.UserID,
+		Channel: operatorWithdrawChannel,
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -346,9 +349,6 @@ func (server *Server) listOperatorWithdrawals(ctx *gin.Context) {
 
 	items := make([]operatorWithdrawItem, 0, len(rows))
 	for _, row := range rows {
-		if row.Channel != operatorWithdrawChannel {
-			continue
-		}
 		items = append(items, toOperatorWithdrawItem(row))
 	}
 

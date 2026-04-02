@@ -1375,6 +1375,12 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 		if err != nil {
 			paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "update_profit_sharing_order").Inc()
 			log.Error().Err(err).Int64("id", profitSharingOrder.ID).Msg("update profit sharing order to failed")
+			server.releaseNotification(ctx, notification.ID, "profit_sharing")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+				Code:    "FAIL",
+				Message: "update order failed",
+			})
+			return
 		}
 		log.Error().
 			Int64("profit_sharing_order_id", profitSharingOrder.ID).
@@ -1421,10 +1427,10 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 				AlertType:   websocket.AlertTypeTaskEnqueueFailure,
 				Level:       websocket.AlertLevelCritical,
 				Title:       "分账结果任务入队失败",
-				Message:     fmt.Sprintf("分账单 %s 结果 %s 处理完成，但后续通知任务入队失败，需人工确认处理结果", resource.OutOrderNo, finalResult),
+				Message:     fmt.Sprintf("分账单 %s 结果 %s 已落库，但后续结果任务入队失败。商户（ID=%d）收入到账通知将不会发出；若结果为 FAILED，分账重试任务也不会触发。请人工：1）确认 DB profit_sharing_orders 状态；2）若 SUCCESS 则通知商户资金到账；3）若 FAILED 则手动触发分账重试。", resource.OutOrderNo, finalResult, profitSharingOrder.MerchantID),
 				RelatedID:   profitSharingOrder.ID,
 				RelatedType: "profit_sharing_order",
-				Extra:       map[string]interface{}{"out_order_no": resource.OutOrderNo, "result": finalResult, "error": enqErr.Error()},
+				Extra:       map[string]interface{}{"out_order_no": resource.OutOrderNo, "result": finalResult, "merchant_id": profitSharingOrder.MerchantID, "error": enqErr.Error()},
 			})
 		}
 	}
@@ -2049,6 +2055,9 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 				SubMchID: pgtype.Text{String: resource.SubMchID, Valid: true},
 			}); err != nil {
 				log.Error().Err(err).Int64("operator_id", applyment.SubjectID).Msg("update operator sub_mch_id")
+				server.releaseNotification(ctx, notification.ID, "applyment")
+				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
+				return
 			}
 			// 绑卡成功，恢复到 active（清除 bindbank_submitted 瞬时状态）
 			if _, err = server.store.UpdateOperatorStatus(ctx, db.UpdateOperatorStatusParams{

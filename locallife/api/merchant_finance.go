@@ -1,6 +1,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,10 +11,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hibiken/asynq"
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
+	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
 )
@@ -1267,7 +1271,19 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 
 	outRequestNo := req.OutRequestNo
 	if outRequestNo == "" {
-		outRequestNo = fmt.Sprintf("MW%d%d", merchant.ID, time.Now().UnixNano()/1e6)
+		b := make([]byte, 12)
+		if _, randErr := rand.Read(b); randErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("generate out_request_no: %w", randErr)))
+			return
+		}
+		outRequestNo = fmt.Sprintf("MW%d%s", merchant.ID, hex.EncodeToString(b))
+	}
+
+	// 检查 out_request_no 是否已存在，防止重复提现
+	existing, lookupErr := server.store.GetWithdrawalRecordByOutRequestNo(ctx, pgtype.Text{String: outRequestNo, Valid: true})
+	if lookupErr == nil && existing.Status != "failed" {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("duplicate out_request_no: withdrawal already exists")))
+		return
 	}
 
 	withdrawResp, err := server.ecommerceClient.CreateEcommerceWithdraw(ctx, &wechat.EcommerceWithdrawRequest{
@@ -1296,11 +1312,12 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 	}
 
 	record, err := server.store.CreateWithdrawalRecord(ctx, db.CreateWithdrawalRecordParams{
-		UserID:      authPayload.UserID,
-		Amount:      req.Amount,
-		Status:      status,
-		Channel:     "wechat_ecommerce_fund",
-		AccountInfo: accountInfoBytes,
+		UserID:       authPayload.UserID,
+		Amount:       req.Amount,
+		Status:       status,
+		Channel:      "wechat_ecommerce_fund",
+		AccountInfo:  accountInfoBytes,
+		OutRequestNo: pgtype.Text{String: outRequestNo, Valid: true},
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1316,6 +1333,15 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		if updateErr == nil {
 			record = updated
 		}
+	}
+
+	// 提现发起后立即排队一次状态轮询，不依赖 recovery scheduler 的3分钟间隔
+	if status == "pending" && server.taskDistributor != nil {
+		_ = server.taskDistributor.DistributeTaskProcessMerchantWithdrawResult(ctx,
+			&worker.MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID, RetryCount: 0},
+			asynq.ProcessIn(30*time.Second),
+			asynq.Queue(worker.QueueDefault),
+		)
 	}
 
 	ctx.JSON(http.StatusCreated, merchantWithdrawCreateResponse{
@@ -1374,7 +1400,10 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 		return
 	}
 
-	totalCount, err := server.store.CountWithdrawalRecords(ctx, authPayload.UserID)
+	totalCount, err := server.store.CountWithdrawalRecords(ctx, db.CountWithdrawalRecordsParams{
+		UserID:  authPayload.UserID,
+		Channel: "wechat_ecommerce_fund",
+	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return

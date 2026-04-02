@@ -106,3 +106,15 @@ WHERE r.status = 'success'
   AND r.refunded_at >= $1
   AND r.refunded_at < $2
   AND p.payment_type = 'profit_sharing';
+
+-- name: ListStuckProcessingRefundOrders :many
+-- 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
+-- 用于运营告警，让人工核查微信商户平台退款结果
+SELECT ro.id, ro.out_refund_no, ro.refund_id, ro.refund_amount, ro.status, ro.created_at,
+       po.payment_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'processing'
+  AND ro.created_at < sqlc.arg('created_before')
+ORDER BY ro.created_at ASC
+LIMIT sqlc.arg('limit')::int;

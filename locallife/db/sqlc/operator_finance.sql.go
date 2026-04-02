@@ -14,10 +14,16 @@ import (
 const countWithdrawalRecords = `-- name: CountWithdrawalRecords :one
 SELECT count(*) FROM withdrawal_records
 WHERE user_id = $1
+  AND channel = $2
 `
 
-func (q *Queries) CountWithdrawalRecords(ctx context.Context, userID int64) (int64, error) {
-	row := q.db.QueryRow(ctx, countWithdrawalRecords, userID)
+type CountWithdrawalRecordsParams struct {
+	UserID  int64  `json:"user_id"`
+	Channel string `json:"channel"`
+}
+
+func (q *Queries) CountWithdrawalRecords(ctx context.Context, arg CountWithdrawalRecordsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countWithdrawalRecords, arg.UserID, arg.Channel)
 	var count int64
 	err := row.Scan(&count)
 	return count, err
@@ -29,18 +35,20 @@ INSERT INTO withdrawal_records (
     amount,
     status,
     channel,
-    account_info
+    account_info,
+    out_request_no
 ) VALUES (
-    $1, $2, $3, $4, $5
-) RETURNING id, user_id, amount, status, channel, account_info, reason, created_at, updated_at
+    $1, $2, $3, $4, $5, $6
+) RETURNING id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no
 `
 
 type CreateWithdrawalRecordParams struct {
-	UserID      int64  `json:"user_id"`
-	Amount      int64  `json:"amount"`
-	Status      string `json:"status"`
-	Channel     string `json:"channel"`
-	AccountInfo []byte `json:"account_info"`
+	UserID       int64       `json:"user_id"`
+	Amount       int64       `json:"amount"`
+	Status       string      `json:"status"`
+	Channel      string      `json:"channel"`
+	AccountInfo  []byte      `json:"account_info"`
+	OutRequestNo pgtype.Text `json:"out_request_no"`
 }
 
 func (q *Queries) CreateWithdrawalRecord(ctx context.Context, arg CreateWithdrawalRecordParams) (WithdrawalRecord, error) {
@@ -50,6 +58,7 @@ func (q *Queries) CreateWithdrawalRecord(ctx context.Context, arg CreateWithdraw
 		arg.Status,
 		arg.Channel,
 		arg.AccountInfo,
+		arg.OutRequestNo,
 	)
 	var i WithdrawalRecord
 	err := row.Scan(
@@ -62,12 +71,13 @@ func (q *Queries) CreateWithdrawalRecord(ctx context.Context, arg CreateWithdraw
 		&i.Reason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutRequestNo,
 	)
 	return i, err
 }
 
 const getWithdrawalRecord = `-- name: GetWithdrawalRecord :one
-SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at FROM withdrawal_records
+SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE id = $1 LIMIT 1
 `
 
@@ -84,12 +94,36 @@ func (q *Queries) GetWithdrawalRecord(ctx context.Context, id int64) (Withdrawal
 		&i.Reason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutRequestNo,
+	)
+	return i, err
+}
+
+const getWithdrawalRecordByOutRequestNo = `-- name: GetWithdrawalRecordByOutRequestNo :one
+SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
+WHERE out_request_no = $1 LIMIT 1
+`
+
+func (q *Queries) GetWithdrawalRecordByOutRequestNo(ctx context.Context, outRequestNo pgtype.Text) (WithdrawalRecord, error) {
+	row := q.db.QueryRow(ctx, getWithdrawalRecordByOutRequestNo, outRequestNo)
+	var i WithdrawalRecord
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Amount,
+		&i.Status,
+		&i.Channel,
+		&i.AccountInfo,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OutRequestNo,
 	)
 	return i, err
 }
 
 const listPendingWithdrawalRecordsByChannel = `-- name: ListPendingWithdrawalRecordsByChannel :many
-SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at FROM withdrawal_records
+SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE channel = $1
     AND status = 'pending'
 ORDER BY created_at ASC
@@ -120,6 +154,7 @@ func (q *Queries) ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg
 			&i.Reason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OutRequestNo,
 		); err != nil {
 			return nil, err
 		}
@@ -132,7 +167,7 @@ func (q *Queries) ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg
 }
 
 const listWithdrawalRecords = `-- name: ListWithdrawalRecords :many
-SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at FROM withdrawal_records
+SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE user_id = $1
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $3
@@ -163,6 +198,7 @@ func (q *Queries) ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalR
 			&i.Reason,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.OutRequestNo,
 		); err != nil {
 			return nil, err
 		}
@@ -181,7 +217,7 @@ SET
     reason = COALESCE($3, reason),
     updated_at = now()
 WHERE id = $1
-RETURNING id, user_id, amount, status, channel, account_info, reason, created_at, updated_at
+RETURNING id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no
 `
 
 type UpdateWithdrawalStatusParams struct {
@@ -203,6 +239,7 @@ func (q *Queries) UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdraw
 		&i.Reason,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.OutRequestNo,
 	)
 	return i, err
 }

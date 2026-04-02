@@ -7,6 +7,7 @@ package db
 
 import (
 	"context"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -383,6 +384,62 @@ func (q *Queries) ListRefundOrdersForReconciliation(ctx context.Context, arg Lis
 			&i.RefundID,
 			&i.RefundAmount,
 			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStuckProcessingRefundOrders = `-- name: ListStuckProcessingRefundOrders :many
+SELECT ro.id, ro.out_refund_no, ro.refund_id, ro.refund_amount, ro.status, ro.created_at,
+       po.payment_type
+FROM refund_orders ro
+JOIN payment_orders po ON po.id = ro.payment_order_id
+WHERE ro.status = 'processing'
+  AND ro.created_at < $1
+ORDER BY ro.created_at ASC
+LIMIT $2::int
+`
+
+type ListStuckProcessingRefundOrdersParams struct {
+	CreatedBefore time.Time `json:"created_before"`
+	Limit         int32     `json:"limit"`
+}
+
+type ListStuckProcessingRefundOrdersRow struct {
+	ID           int64       `json:"id"`
+	OutRefundNo  string      `json:"out_refund_no"`
+	RefundID     pgtype.Text `json:"refund_id"`
+	RefundAmount int64       `json:"refund_amount"`
+	Status       string      `json:"status"`
+	CreatedAt    time.Time   `json:"created_at"`
+	PaymentType  string      `json:"payment_type"`
+}
+
+// 查找持续处于 processing 状态超过阈值时间的退款单（微信回调可能永久丢失）
+// 用于运营告警，让人工核查微信商户平台退款结果
+func (q *Queries) ListStuckProcessingRefundOrders(ctx context.Context, arg ListStuckProcessingRefundOrdersParams) ([]ListStuckProcessingRefundOrdersRow, error) {
+	rows, err := q.db.Query(ctx, listStuckProcessingRefundOrders, arg.CreatedBefore, arg.Limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStuckProcessingRefundOrdersRow{}
+	for rows.Next() {
+		var i ListStuckProcessingRefundOrdersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OutRefundNo,
+			&i.RefundID,
+			&i.RefundAmount,
+			&i.Status,
+			&i.CreatedAt,
+			&i.PaymentType,
 		); err != nil {
 			return nil, err
 		}
