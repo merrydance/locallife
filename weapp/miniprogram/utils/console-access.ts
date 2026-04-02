@@ -54,7 +54,7 @@ export function resolveConsoleWorkbenches(roles: string[]): ConsoleWorkbench[] {
 
   const workbenches: ConsoleWorkbench[] = []
 
-  if (normalizedRoles.some((role) => ['merchant', 'merchant_owner', 'merchant_boss', 'merchant_staff'].includes(role))) {
+  if (normalizedRoles.some((role) => ['merchant', 'merchant_owner', 'merchant_staff'].includes(role))) {
     workbenches.push(ALL_CONSOLE_WORKBENCHES[0])
   }
 

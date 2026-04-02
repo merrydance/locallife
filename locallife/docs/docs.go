@@ -33378,6 +33378,9 @@ const docTemplate = `{
                 "avg_daily_sales": {
                     "type": "integer"
                 },
+                "print_anomalies_count": {
+                    "type": "integer"
+                },
                 "total_commission": {
                     "type": "integer"
                 },

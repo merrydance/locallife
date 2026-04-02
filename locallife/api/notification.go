@@ -517,20 +517,7 @@ func (server *Server) handleWebSocket(ctx *gin.Context) {
 	}
 
 	// 检查是否为骑手或商户
-	var clientType websocket.ClientType
-	var entityID int64
-
-	for _, role := range roles {
-		if role.Role == "rider" && role.RelatedEntityID.Valid {
-			clientType = websocket.ClientTypeRider
-			entityID = role.RelatedEntityID.Int64
-			break
-		} else if role.Role == "merchant" && role.RelatedEntityID.Valid {
-			clientType = websocket.ClientTypeMerchant
-			entityID = role.RelatedEntityID.Int64
-			break
-		}
-	}
+	clientType, entityID := websocket.ResolveClientInfoFromRoles(roles)
 
 	if entityID == 0 {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("only riders and merchants can establish WebSocket connection")))

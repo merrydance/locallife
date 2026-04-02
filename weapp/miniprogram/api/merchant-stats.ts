@@ -6,6 +6,7 @@ export interface MerchantOverviewResponse {
   total_sales: number
   total_commission: number
   avg_daily_sales: number
+  print_anomalies_count: number
 }
 
 export interface TopSellingDishRow {

@@ -10,6 +10,7 @@ import (
 	"github.com/merrydance/locallife/token"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 // ==================== 商户日报 ====================
@@ -117,6 +118,7 @@ type merchantOverviewResponse struct {
 	TotalSales      int64 `json:"total_sales"`
 	TotalCommission int64 `json:"total_commission"`
 	AvgDailySales   int64 `json:"avg_daily_sales"`
+	PrintAnomalies  int64 `json:"print_anomalies_count"`
 }
 
 // getMerchantOverview 获取商户概览
@@ -175,12 +177,22 @@ func (server *Server) getMerchantOverview(ctx *gin.Context) {
 		return
 	}
 
+	printAnomaliesCount, err := server.store.CountMerchantPrintAnomalies(ctx, db.CountMerchantPrintAnomaliesParams{
+		MerchantID: merchant.ID,
+		Status:     pgtype.Text{},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, merchantOverviewResponse{
 		TotalDays:       overview.TotalDays,
 		TotalOrders:     overview.TotalOrders,
 		TotalSales:      overview.TotalSales,
 		TotalCommission: overview.TotalCommission,
 		AvgDailySales:   int64(overview.AvgDailySales),
+		PrintAnomalies:  printAnomaliesCount,
 	})
 }
 

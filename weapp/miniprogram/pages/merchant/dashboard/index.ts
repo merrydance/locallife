@@ -201,23 +201,19 @@ Page({
       this.setData({ accessDenied: true, initialLoading: false })
       return
     }
-
-    this.initWebSocket()
   },
 
   onShow() {
     if (this.data.accessDenied) return
     this.refreshData()
-    // 页面重新可见时重新注册 WS 监听（onHide 已清除旧监听，底层连接仍在）
-    this.initWebSocket()
   },
 
   onHide() {
-    this.cleanupWebSocket()
+    this.stopRealtimeRuntime()
   },
 
   onUnload() {
-    this.cleanupWebSocket()
+    this.stopRealtimeRuntime()
     destroyAudioAlert()
   },
 
@@ -230,7 +226,7 @@ Page({
       const user = await getUserInfo()
       const normalizedRoles = (user.roles || []).map((role) => String(role).toLowerCase())
       const isMerchant = normalizedRoles.some((role) =>
-        ['merchant', 'merchant_owner', 'merchant_boss', 'merchant_staff'].includes(role)
+        ['merchant', 'merchant_owner', 'merchant_staff'].includes(role)
       )
 
       if (!isMerchant) {
@@ -277,11 +273,25 @@ Page({
     this.data._wsListeners = [sub]
   },
 
+  syncRealtimeRuntime(isOpen: boolean) {
+    if (!isOpen) {
+      this.stopRealtimeRuntime()
+      return
+    }
+
+    this.initWebSocket()
+  },
+
   cleanupWebSocket() {
     if (this.data._wsListeners) {
       this.data._wsListeners.forEach((unsub) => unsub())
       this.data._wsListeners = []
     }
+  },
+
+  stopRealtimeRuntime() {
+    this.cleanupWebSocket()
+    wsManager.disconnect()
   },
 
   async refreshData() {
@@ -327,6 +337,7 @@ Page({
           },
           isOpen: resolvedIsOpen
         })
+        this.syncRealtimeRuntime(resolvedIsOpen)
 
         try {
           const currentMerchant = wx.getStorageSync('current_merchant') || {}
@@ -342,18 +353,18 @@ Page({
         }
       } else {
         logger.error('Failed to fetch merchant runtime status', merchantProfileResult.reason)
+        this.stopRealtimeRuntime()
         addRefreshError(merchantProfileResult.reason, '工作台基础信息加载失败，请重试')
       }
 
       const recentThirtyDays = dayjs().subtract(29, 'day').format('YYYY-MM-DD')
-      const [overview, reservationStats, complaintResult, printAnomaliesResult, hourlyResult, sourceResult, repurchaseResult] = await settleAll([
+      const [overview, reservationStats, complaintResult, hourlyResult, sourceResult, repurchaseResult] = await settleAll([
         MerchantStatsService.getOverview({
           start_date: today,
           end_date: today
         }),
         ReservationService.getReservationStats(),
         listMerchantComplaints({ state: 'PENDING_RESPONSE', page: 1, limit: 100 }),
-        MerchantOrderManagementService.listPrintAnomalies({ page_id: 1, page_size: 1, status: 'failed' }),
         MerchantStatsService.getHourlyStats({ start_date: today, end_date: today }),
         MerchantStatsService.getOrderSources({ start_date: today, end_date: today }),
         MerchantStatsService.getRepurchaseRate({ start_date: recentThirtyDays, end_date: today })
@@ -366,8 +377,8 @@ Page({
       const pendingComplaints = complaintResult.status === 'fulfilled'
         ? complaintResult.value.complaints.length
         : getTodoCount(currentTodoItems, 'complaints')
-      const printAnomalies = printAnomaliesResult.status === 'fulfilled'
-        ? printAnomaliesResult.value.total || printAnomaliesResult.value.items.length
+      const printAnomalies = overview.status === 'fulfilled'
+        ? overview.value.print_anomalies_count || 0
         : getTodoCount(currentTodoItems, 'printAnomalies')
 
       if (overview.status === 'fulfilled') {
@@ -398,11 +409,6 @@ Page({
       if (complaintResult.status === 'rejected') {
         logger.error('Failed to fetch complaint reminders', complaintResult.reason)
         addRefreshError(complaintResult.reason, '投诉待办同步失败，请稍后重试')
-      }
-
-      if (printAnomaliesResult.status === 'rejected') {
-        logger.error('Failed to fetch printer anomaly reminders', printAnomaliesResult.reason)
-        addRefreshError(printAnomaliesResult.reason, '打印异常同步失败，请稍后重试')
       }
 
       if (hourlyResult.status === 'rejected') {

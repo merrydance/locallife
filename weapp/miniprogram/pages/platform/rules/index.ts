@@ -35,6 +35,12 @@ interface PlatformRuleViewItem extends PlatformOperatorRuleItem {
   status: 'active'
 }
 
+type PlatformRuleCollections = {
+  categories: PlatformRuleCategory[]
+  categorizedRules: Record<string, PlatformRuleViewItem[]>
+  total: number
+}
+
 function normalizeCategory(value?: string): string {
   const raw = String(value || '').trim().toLowerCase()
   if (!raw) return 'platform'
@@ -46,6 +52,60 @@ function displayCategory(value: string): string {
   if (key === 'platform') return '平台维护'
   if (key === 'finance') return '结算'
   return '平台维护'
+}
+
+function createCommissionSummaryRule(platformRate: string, operatorRate: string): PlatformRuleViewItem {
+  return {
+    id: 'platform_rule_commission_combined',
+    name: '佣金比例配置',
+    key: 'COMMISSION_CONFIG',
+    value: `平台 ${platformRate}% / 运营商 ${operatorRate}%`,
+    unit: '',
+    desc: '统一维护平台与运营商佣金比例',
+    category: 'platform',
+    editable: true,
+    categoryKey: 'platform',
+    categoryLabel: '平台维护',
+    status: 'active'
+  }
+}
+
+function buildRuleCollections(rules: PlatformRuleViewItem[]): PlatformRuleCollections {
+  const categoryKeys = Array.from(new Set(rules.map((item) => item.categoryKey)))
+  const categories: PlatformRuleCategory[] = [
+    { label: '全部', value: 'all', icon: 'app' },
+    ...categoryKeys.map((key) => ({
+      label: displayCategory(key),
+      value: key,
+      icon: key === 'finance' ? 'money' : 'setting'
+    }))
+  ]
+
+  const categorized: Record<string, PlatformRuleViewItem[]> = { all: rules }
+  categoryKeys.forEach((key) => {
+    categorized[key] = rules.filter((item) => item.categoryKey === key)
+  })
+
+  return {
+    categories,
+    categorizedRules: categorized,
+    total: rules.length
+  }
+}
+
+function upsertCommissionSummaryRule(
+  rules: PlatformRuleViewItem[],
+  platformRate: string,
+  operatorRate: string
+): PlatformRuleViewItem[] {
+  const commissionRule = createCommissionSummaryRule(platformRate, operatorRate)
+  const existingIndex = rules.findIndex((item) => item.key === 'COMMISSION_CONFIG')
+
+  if (existingIndex === -1) {
+    return [commissionRule, ...rules]
+  }
+
+  return rules.map((item, index) => index === existingIndex ? commissionRule : item)
 }
 
 Page({
@@ -110,19 +170,7 @@ Page({
         const platformRate = String(platformCommissionRule.value || '')
         const operatorRate = String(operatorCommissionRule.value || '')
 
-        mapped.unshift({
-          id: 'platform_rule_commission_combined',
-          name: '佣金比例配置',
-          key: 'COMMISSION_CONFIG',
-          value: `平台 ${platformRate}% / 运营商 ${operatorRate}%`,
-          unit: '',
-          desc: '统一维护平台与运营商佣金比例',
-          category: 'platform',
-          editable: true,
-          categoryKey: 'platform',
-          categoryLabel: '平台维护',
-          status: 'active'
-        })
+		mapped.unshift(createCommissionSummaryRule(platformRate, operatorRate))
 
         this.setData({
           platformRateInput: platformRate,
@@ -130,27 +178,14 @@ Page({
         })
       }
 
-      const categoryKeys = Array.from(new Set(mapped.map((item) => item.categoryKey)))
-      const categories: PlatformRuleCategory[] = [
-        { label: '全部', value: 'all', icon: 'app' },
-        ...categoryKeys.map((key) => ({
-          label: displayCategory(key),
-          value: key,
-          icon: key === 'finance' ? 'money' : 'setting'
-        }))
-      ]
-
-      const categorized: Record<string, PlatformRuleViewItem[]> = { all: mapped }
-      categoryKeys.forEach((key) => {
-        categorized[key] = mapped.filter((item) => item.categoryKey === key)
-      })
+      const collections = buildRuleCollections(mapped)
 
       this.setData({
         rules: mapped,
-        categorizedRules: categorized,
-        categories,
-        total: mapped.length,
-        activeCategory: categories.some((c) => c.value === this.data.activeCategory) ? this.data.activeCategory : 'all'
+        categorizedRules: collections.categorizedRules,
+        categories: collections.categories,
+        total: collections.total,
+        activeCategory: collections.categories.some((c) => c.value === this.data.activeCategory) ? this.data.activeCategory : 'all'
       })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '加载规则失败，请稍后重试')
@@ -230,13 +265,32 @@ Page({
       }
 
       if (commissionConfigId > 0) {
-        await platformManagementService.updatePlatformProfitSharingConfig(commissionConfigId, payload)
+        const savedConfig = await platformManagementService.updatePlatformProfitSharingConfig(commissionConfigId, payload)
+        const updatedRules = upsertCommissionSummaryRule(this.data.rules, String(payload.platform_rate), String(payload.operator_rate))
+        const collections = buildRuleCollections(updatedRules)
+        this.setData({
+          rules: updatedRules,
+          categorizedRules: collections.categorizedRules,
+          categories: collections.categories,
+          total: collections.total,
+          commissionConfigId: savedConfig.id,
+          platformRateInput: String(payload.platform_rate),
+          operatorRateInput: String(payload.operator_rate)
+        })
       } else {
-        await platformManagementService.createPlatformProfitSharingConfig(payload)
+        const savedConfig = await platformManagementService.createPlatformProfitSharingConfig(payload)
+        const updatedRules = upsertCommissionSummaryRule(this.data.rules, String(payload.platform_rate), String(payload.operator_rate))
+        const collections = buildRuleCollections(updatedRules)
+        this.setData({
+          rules: updatedRules,
+          categorizedRules: collections.categorizedRules,
+          categories: collections.categories,
+          total: collections.total,
+          commissionConfigId: savedConfig.id,
+          platformRateInput: String(payload.platform_rate),
+          operatorRateInput: String(payload.operator_rate)
+        })
       }
-
-      await this.loadProfitSharingConfig()
-      await this.loadRules()
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
@@ -346,20 +400,42 @@ Page({
         }
 
         if (configID > 0) {
-          await platformManagementService.updatePlatformProfitSharingConfig(configID, payload)
+      const savedConfig = await platformManagementService.updatePlatformProfitSharingConfig(configID, payload)
+      const updatedRules = upsertCommissionSummaryRule(this.data.rules, String(payload.platform_rate), String(payload.operator_rate))
+      const collections = buildRuleCollections(updatedRules)
+      this.setData({
+        rules: updatedRules,
+        categorizedRules: collections.categorizedRules,
+        categories: collections.categories,
+        total: collections.total,
+        commissionConfigId: savedConfig.id,
+        platformRateInput: String(payload.platform_rate),
+        operatorRateInput: String(payload.operator_rate),
+        showEdit: false,
+        editingRule: null,
+        newValue: '',
+        commissionDialogPlatformRate: '',
+        commissionDialogOperatorRate: ''
+      })
         } else {
-          await platformManagementService.createPlatformProfitSharingConfig(payload)
+      const savedConfig = await platformManagementService.createPlatformProfitSharingConfig(payload)
+      const updatedRules = upsertCommissionSummaryRule(this.data.rules, String(payload.platform_rate), String(payload.operator_rate))
+      const collections = buildRuleCollections(updatedRules)
+      this.setData({
+        rules: updatedRules,
+        categorizedRules: collections.categorizedRules,
+        categories: collections.categories,
+        total: collections.total,
+        commissionConfigId: savedConfig.id,
+        platformRateInput: String(payload.platform_rate),
+        operatorRateInput: String(payload.operator_rate),
+        showEdit: false,
+        editingRule: null,
+        newValue: '',
+        commissionDialogPlatformRate: '',
+        commissionDialogOperatorRate: ''
+      })
         }
-
-        this.setData({
-          showEdit: false,
-          editingRule: null,
-          newValue: '',
-          commissionDialogPlatformRate: '',
-          commissionDialogOperatorRate: ''
-        })
-        await this.loadProfitSharingConfig()
-        await this.loadRules()
       } catch (error: unknown) {
         const message = getErrorUserMessage(error, '更新失败，请稍后重试')
         wx.showToast({ title: message, icon: 'none' })
@@ -379,8 +455,17 @@ Page({
     try {
       this.setData({ submitting: true })
       await platformManagementService.updatePlatformOperatorRule(editingRule.key, { value: newValue })
-      this.setData({ showEdit: false, editingRule: null, newValue: '' })
-      await this.loadRules()
+      const updatedRules = this.data.rules.map((item) => item.key === editingRule.key ? { ...item, value: newValue } : item)
+      const collections = buildRuleCollections(updatedRules)
+      this.setData({
+        rules: updatedRules,
+        categorizedRules: collections.categorizedRules,
+        categories: collections.categories,
+        total: collections.total,
+        showEdit: false,
+        editingRule: null,
+        newValue: ''
+      })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '更新失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })

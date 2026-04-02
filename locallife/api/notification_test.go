@@ -15,9 +15,64 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
 )
+
+func TestResolveWebSocketClientInfo(t *testing.T) {
+	tests := []struct {
+		name           string
+		roles          []db.UserRole
+		expectedType   websocket.ClientType
+		expectedEntity int64
+	}{
+		{
+			name: "merchant owner maps to merchant client",
+			roles: []db.UserRole{{
+				Role:            RoleMerchantOwner,
+				RelatedEntityID: pgtype.Int8{Int64: 21, Valid: true},
+			}},
+			expectedType:   websocket.ClientTypeMerchant,
+			expectedEntity: 21,
+		},
+		{
+			name: "merchant staff maps to merchant client",
+			roles: []db.UserRole{{
+				Role:            RoleMerchantStaff,
+				RelatedEntityID: pgtype.Int8{Int64: 35, Valid: true},
+			}},
+			expectedType:   websocket.ClientTypeMerchant,
+			expectedEntity: 35,
+		},
+		{
+			name: "rider maps to rider client",
+			roles: []db.UserRole{{
+				Role:            RoleRider,
+				RelatedEntityID: pgtype.Int8{Int64: 8, Valid: true},
+			}},
+			expectedType:   websocket.ClientTypeRider,
+			expectedEntity: 8,
+		},
+		{
+			name: "invalid merchant role is ignored",
+			roles: []db.UserRole{{
+				Role:            RoleMerchantOwner,
+				RelatedEntityID: pgtype.Int8{Int64: 0, Valid: false},
+			}},
+			expectedType:   "",
+			expectedEntity: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			clientType, entityID := websocket.ResolveClientInfoFromRoles(tc.roles)
+			require.Equal(t, tc.expectedType, clientType)
+			require.Equal(t, tc.expectedEntity, entityID)
+		})
+	}
+}
 
 func TestListNotificationsAPI(t *testing.T) {
 	user, _ := randomUser(t)

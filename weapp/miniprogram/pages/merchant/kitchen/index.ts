@@ -1,5 +1,6 @@
 import dayjs from 'dayjs'
 import { KitchenDisplayService, KitchenOrderResponse, KitchenOrdersResponse, OrderManagementAdapter } from '../../../api/order-management'
+import { getMyMerchantOpenStatus } from '../../../api/merchant'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
@@ -113,7 +114,7 @@ Page({
   onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.initWebSocket()
+    this.refreshRealtimeRuntime()
     this.loadKitchenOrders()
   },
 
@@ -122,18 +123,18 @@ Page({
   },
 
   onShow() {
-    this.initWebSocket()
+    this.refreshRealtimeRuntime()
     if (!this.data.initialLoading) {
       this.loadKitchenOrders(false)
     }
   },
 
   onHide() {
-    this.cleanupWebSocket()
+    this.stopRealtimeRuntime()
   },
 
   onUnload() {
-    this.cleanupWebSocket()
+    this.stopRealtimeRuntime()
   },
 
   initWebSocket() {
@@ -157,6 +158,30 @@ Page({
     if (this.data._wsListeners?.length) {
       this.data._wsListeners.forEach((unsubscribe) => unsubscribe())
       this.data._wsListeners = []
+    }
+  },
+
+  stopRealtimeRuntime() {
+    this.cleanupWebSocket()
+    wsManager.disconnect()
+  },
+
+  syncRealtimeRuntime(isOpen: boolean) {
+    if (!isOpen) {
+      this.stopRealtimeRuntime()
+      return
+    }
+
+    this.initWebSocket()
+  },
+
+  async refreshRealtimeRuntime() {
+    try {
+      const status = await getMyMerchantOpenStatus()
+      this.syncRealtimeRuntime(Boolean(status?.is_open))
+    } catch (err) {
+      logger.warn('Load merchant open status for kitchen realtime failed', err)
+      this.stopRealtimeRuntime()
     }
   },
 

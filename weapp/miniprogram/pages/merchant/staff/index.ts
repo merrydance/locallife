@@ -69,7 +69,7 @@ function normalizeUserRole(staff: MerchantStaffItem[], currentUserId: number, ro
   }
 
   const normalizedRoles = roles.map((role) => String(role).toLowerCase())
-  const isOwner = normalizedRoles.some((role) => ['merchant', 'merchant_owner', 'merchant_boss'].includes(role))
+  const isOwner = normalizedRoles.some((role) => ['merchant', 'merchant_owner'].includes(role))
   if (isOwner) {
     return {
       currentUserRoleLabel: '老板',

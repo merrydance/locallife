@@ -29,7 +29,6 @@ interface ScanCodeRawPayload {
 const ROLE_LABEL_MAP: Record<string, string> = {
   merchant: '商家',
   merchant_owner: '商户老板',
-  merchant_boss: '店长',
   merchant_staff: '店员',
   rider: '骑手',
   customer: '顾客',
@@ -49,7 +48,7 @@ function normalizeRoles(roles: string[] | string) {
 }
 
 function pickPrimaryRole(roles: string[]) {
-  if (roles.some((role) => ['merchant', 'merchant_owner', 'merchant_boss', 'merchant_staff'].includes(role))) return 'merchant'
+  if (roles.some((role) => ['merchant', 'merchant_owner', 'merchant_staff'].includes(role))) return 'merchant'
   if (roles.includes('rider')) return 'rider'
   if (roles.includes('operator') || roles.includes('admin')) return 'operator'
   if (roles.includes('customer')) return 'customer'

@@ -321,7 +321,7 @@ App<IAppOption>({
     // 缓存完整角色列表（小写），供 user_center onShow 快速恢复工作台
     const normalizedRoles = (user.roles || []).map((r: string) => String(r).toLowerCase())
     this.globalData.userRoles = normalizedRoles
-    if (normalizedRoles.some((role: string) => ['merchant', 'merchant_owner', 'merchant_boss', 'merchant_staff'].includes(role))) {
+    if (normalizedRoles.some((role: string) => ['merchant', 'merchant_owner', 'merchant_staff'].includes(role))) {
       this.globalData.userRole = 'merchant'
     } else if (normalizedRoles.includes('rider')) {
       this.globalData.userRole = 'rider'

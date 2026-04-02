@@ -96,7 +96,8 @@ const EMPTY_OVERVIEW: MerchantOverviewResponse = {
   total_orders: 0,
   total_sales: 0,
   total_commission: 0,
-  avg_daily_sales: 0
+  avg_daily_sales: 0,
+  print_anomalies_count: 0
 }
 
 const EMPTY_ORDER_STATS: OrderStatsResponse = {

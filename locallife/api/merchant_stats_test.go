@@ -265,6 +265,13 @@ func TestGetMerchantOverviewAPI(t *testing.T) {
 						TotalCommission: 500000,
 						AvgDailySales:   333333,
 					}, nil)
+				store.EXPECT().
+					CountMerchantPrintAnomalies(gomock.Any(), gomock.Eq(db.CountMerchantPrintAnomaliesParams{
+						MerchantID: merchant.ID,
+						Status:     pgtype.Text{},
+					})).
+					Times(1).
+					Return(int64(4), nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -274,6 +281,7 @@ func TestGetMerchantOverviewAPI(t *testing.T) {
 				require.Equal(t, int32(30), resp.TotalDays)
 				require.Equal(t, int32(1000), resp.TotalOrders)
 				require.Equal(t, int64(10000000), resp.TotalSales)
+				require.Equal(t, int64(4), resp.PrintAnomalies)
 			},
 		},
 		{

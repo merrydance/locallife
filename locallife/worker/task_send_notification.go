@@ -238,44 +238,18 @@ func (processor *RedisTaskProcessor) tryWebSocketPush(ctx context.Context, userI
 
 	pushed := false
 
-	// 检查是否是骑手
-	for _, role := range roles {
-		if role.Role == "rider" && role.RelatedEntityID.Valid {
-			riderID := role.RelatedEntityID.Int64
-
-			// 通过Redis Pub/Sub发布推送请求
-			pushMsg := websocket.NotificationPushMessage{
-				EntityType: "rider",
-				EntityID:   riderID,
-				Message:    wsMessage,
-			}
-			payload, _ := json.Marshal(pushMsg)
-			channel := fmt.Sprintf("notification:rider:%d", riderID)
-			processor.publishWSMessage(ctx, channel, payload)
-			pushed = true
-			log.Debug().Int64("rider_id", riderID).Msg("published notification push request to Redis")
-			break
+	clientType, entityID := websocket.ResolveClientInfoFromRoles(roles)
+	if entityID > 0 {
+		pushMsg := websocket.NotificationPushMessage{
+			EntityType: string(clientType),
+			EntityID:   entityID,
+			Message:    wsMessage,
 		}
-	}
-
-	// 检查是否是商户
-	for _, role := range roles {
-		if role.Role == "merchant" && role.RelatedEntityID.Valid {
-			merchantID := role.RelatedEntityID.Int64
-
-			// 通过Redis Pub/Sub发布推送请求
-			pushMsg := websocket.NotificationPushMessage{
-				EntityType: "merchant",
-				EntityID:   merchantID,
-				Message:    wsMessage,
-			}
-			payload, _ := json.Marshal(pushMsg)
-			channel := fmt.Sprintf("notification:merchant:%d", merchantID)
-			processor.publishWSMessage(ctx, channel, payload)
-			pushed = true
-			log.Debug().Int64("merchant_id", merchantID).Msg("published notification push request to Redis")
-			break
-		}
+		payload, _ := json.Marshal(pushMsg)
+		channel := fmt.Sprintf("notification:%s:%d", clientType, entityID)
+		processor.publishWSMessage(ctx, channel, payload)
+		pushed = true
+		log.Debug().Str("client_type", string(clientType)).Int64("entity_id", entityID).Msg("published notification push request to Redis")
 	}
 
 	// 标记已推送
