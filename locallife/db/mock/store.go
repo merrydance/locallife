@@ -19384,6 +19384,21 @@ func (mr *MockStoreMockRecorder) UpdateWechatComplaintState(ctx, arg any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWechatComplaintState", reflect.TypeOf((*MockStore)(nil).UpdateWechatComplaintState), ctx, arg)
 }
 
+// UpdateWithdrawalAccountInfo mocks base method.
+func (m *MockStore) UpdateWithdrawalAccountInfo(ctx context.Context, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateWithdrawalAccountInfo", ctx, arg)
+	ret0, _ := ret[0].(db.WithdrawalRecord)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateWithdrawalAccountInfo indicates an expected call of UpdateWithdrawalAccountInfo.
+func (mr *MockStoreMockRecorder) UpdateWithdrawalAccountInfo(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWithdrawalAccountInfo", reflect.TypeOf((*MockStore)(nil).UpdateWithdrawalAccountInfo), ctx, arg)
+}
+
 // UpdateWithdrawalStatus mocks base method.
 func (m *MockStore) UpdateWithdrawalStatus(ctx context.Context, arg db.UpdateWithdrawalStatusParams) (db.WithdrawalRecord, error) {
 	m.ctrl.T.Helper()

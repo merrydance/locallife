@@ -244,6 +244,23 @@ func buildAmountMismatchRefundPayload(paymentOrder db.PaymentOrder, refundAmount
 	return nil, false
 }
 
+func (server *Server) enqueuePaymentSuccessProcessing(ctx context.Context, paymentOrder db.PaymentOrder, transactionID string) error {
+	if server.taskDistributor == nil {
+		return errors.New("task distributor not configured")
+	}
+	return server.taskDistributor.DistributeTaskProcessPaymentSuccess(
+		ctx,
+		&worker.PaymentSuccessPayload{
+			PaymentOrderID: paymentOrder.ID,
+			TransactionID:  transactionID,
+			BusinessType:   paymentOrder.BusinessType,
+		},
+		asynq.MaxRetry(3),
+		asynq.ProcessIn(1*time.Second),
+		asynq.Queue(worker.QueueCritical),
+	)
+}
+
 func (server *Server) markRefundOrderFailed(ctx context.Context, refundOrderID int64) {
 	if refundOrderID == 0 {
 		return
@@ -500,6 +517,21 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	}
 	// 检查是否已处理（幂等）
 	if paymentOrder.Status == PaymentStatusPaid {
+		if !paymentOrder.ProcessedAt.Valid {
+			if err := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, resource.TransactionID); err != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("payment", "reenqueue_payment_success_task").Inc()
+				log.Error().Err(err).
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", paymentOrder.OutTradeNo).
+					Msg("payment order already paid but post-payment processing enqueue failed")
+				server.releaseNotification(ctx, notification.ID, "payment")
+				ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+					Code:    "FAIL",
+					Message: "payment processing enqueue failed, please retry",
+				})
+				return
+			}
+		}
 		log.Info().Int64("id", paymentOrder.ID).Msg("payment order already paid")
 		server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
 		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
@@ -765,45 +797,31 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
-	// 将后续业务逻辑放入队列异步处理
-	// 这样可以快速响应微信，避免超时
-	if server.taskDistributor != nil {
-		err = server.taskDistributor.DistributeTaskProcessPaymentSuccess(
-			ctx,
-			&worker.PaymentSuccessPayload{
-				PaymentOrderID: paymentOrder.ID,
-				TransactionID:  resource.TransactionID,
-				BusinessType:   paymentOrder.BusinessType,
+	if err := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, resource.TransactionID); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("payment", "enqueue_payment_success_task").Inc()
+		log.Error().Err(err).
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", paymentOrder.OutTradeNo).
+			Str("alert_type", "TASK_ENQUEUE_FAILURE").
+			Msg("payment success task enqueue failed")
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "支付成功任务入队失败",
+			Message:     fmt.Sprintf("支付单 %s 支付成功，但后续业务任务入队失败，系统已返回 FAIL 请求微信重试。", paymentOrder.OutTradeNo),
+			RelatedID:   paymentOrder.ID,
+			RelatedType: "payment_order",
+			Extra: map[string]interface{}{
+				"out_trade_no": paymentOrder.OutTradeNo,
+				"error":        err.Error(),
 			},
-			asynq.MaxRetry(3),
-			asynq.ProcessIn(1*time.Second), // 1秒后处理，确保数据库事务提交
-			asynq.Queue(worker.QueueCritical),
-		)
-		if err != nil {
-			// ⚠️ P2-5: 任务入队失败，需要补偿机制处理
-			// 支付状态已更新为paid，但后续业务逻辑未执行
-			// 建议：定时任务扫描已paid但未处理的订单
-			log.Error().Err(err).
-				Int64("payment_order_id", paymentOrder.ID).
-				Str("out_trade_no", paymentOrder.OutTradeNo).
-				Str("alert_type", "TASK_ENQUEUE_FAILURE").
-				Msg("⚠️ ALERT: payment success task enqueue failed - manual intervention may be required")
-			// 发送告警给平台运营人员
-			server.sendAlert(websocket.AlertData{
-				AlertType:   websocket.AlertTypeTaskEnqueueFailure,
-				Level:       websocket.AlertLevelCritical,
-				Title:       "支付成功任务入队失败",
-				Message:     fmt.Sprintf("支付单 %s 支付成功，但后续业务任务入队失败，需要人工介入处理", paymentOrder.OutTradeNo),
-				RelatedID:   paymentOrder.ID,
-				RelatedType: "payment_order",
-				Extra: map[string]interface{}{
-					"out_trade_no": paymentOrder.OutTradeNo,
-					"error":        err.Error(),
-				},
-			})
-		}
-	} else {
-		log.Warn().Msg("task distributor not configured, skip async processing")
+		})
+		server.releaseNotification(ctx, notification.ID, "payment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "payment processing enqueue failed, please retry",
+		})
+		return
 	}
 
 	// 快速返回成功
@@ -1593,6 +1611,19 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 
 		// 检查是否已处理（幂等）
 		if paymentOrder.Status == PaymentStatusPaid {
+			if paymentOrder.ProcessedAt.Valid {
+				successCount++
+				continue
+			}
+			if enqErr := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, subOrder.TransactionID); enqErr != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "reenqueue_payment_success_task").Inc()
+				log.Error().Err(enqErr).
+					Int64("payment_order_id", paymentOrder.ID).
+					Str("out_trade_no", subOrder.OutTradeNo).
+					Msg("combine sub-order already paid but post-payment processing enqueue failed")
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
+			}
 			successCount++
 			continue
 		}
@@ -1719,40 +1750,28 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 
 		successCount++
 
-		// 分发异步任务处理后续业务
-		if server.taskDistributor != nil {
-			enqErr := server.taskDistributor.DistributeTaskProcessPaymentSuccess(
-				ctx,
-				&worker.PaymentSuccessPayload{
-					PaymentOrderID: paymentOrder.ID,
-					TransactionID:  subOrder.TransactionID,
-					BusinessType:   paymentOrder.BusinessType,
+		if enqErr := server.enqueuePaymentSuccessProcessing(ctx, paymentOrder, subOrder.TransactionID); enqErr != nil {
+			paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_payment_success_task").Inc()
+			log.Error().Err(enqErr).
+				Int64("payment_order_id", paymentOrder.ID).
+				Str("out_trade_no", subOrder.OutTradeNo).
+				Msg("combine payment success task enqueue failed")
+			server.sendAlert(websocket.AlertData{
+				AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+				Level:       websocket.AlertLevelCritical,
+				Title:       "合单支付成功任务入队失败",
+				Message:     fmt.Sprintf("合单子订单 %s 已支付，但后续业务任务入队失败，系统已返回 FAIL 请求微信重试。", subOrder.OutTradeNo),
+				RelatedID:   paymentOrder.ID,
+				RelatedType: "payment_order",
+				Extra: map[string]interface{}{
+					"out_trade_no":   subOrder.OutTradeNo,
+					"transaction_id": subOrder.TransactionID,
+					"business_type":  paymentOrder.BusinessType,
+					"error":          enqErr.Error(),
 				},
-				asynq.MaxRetry(3),
-				asynq.ProcessIn(1*time.Second),
-				asynq.Queue(worker.QueueCritical),
-			)
-			if enqErr != nil {
-				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_payment_success_task").Inc()
-				log.Error().Err(enqErr).
-					Int64("payment_order_id", paymentOrder.ID).
-					Str("out_trade_no", subOrder.OutTradeNo).
-					Msg("combine payment success task enqueue failed")
-				server.sendAlert(websocket.AlertData{
-					AlertType:   websocket.AlertTypeTaskEnqueueFailure,
-					Level:       websocket.AlertLevelCritical,
-					Title:       "合单支付成功任务入队失败",
-					Message:     fmt.Sprintf("合单子订单 %s 已支付，但后续业务任务入队失败，需要人工确认订单推进状态", subOrder.OutTradeNo),
-					RelatedID:   paymentOrder.ID,
-					RelatedType: "payment_order",
-					Extra: map[string]interface{}{
-						"out_trade_no":   subOrder.OutTradeNo,
-						"transaction_id": subOrder.TransactionID,
-						"business_type":  paymentOrder.BusinessType,
-						"error":          enqErr.Error(),
-					},
-				})
-			}
+			})
+			failedOrders = append(failedOrders, subOrder.OutTradeNo)
+			continue
 		}
 	}
 

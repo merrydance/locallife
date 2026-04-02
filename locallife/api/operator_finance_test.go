@@ -39,8 +39,9 @@ func TestWithdrawOperatorAPI(t *testing.T) {
 		{
 			name: "OK",
 			body: map[string]interface{}{
-				"amount": 1200,
-				"remark": "测试提现",
+				"amount":         1200,
+				"remark":         "测试提现",
+				"out_request_no": "OW1001",
 			},
 			setupAuth: func(t *testing.T, req *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, req, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -69,15 +70,9 @@ func TestWithdrawOperatorAPI(t *testing.T) {
 						WithdrawableAmount: 100000,
 					}, nil)
 
-				ecommerce.EXPECT().
-					CreateEcommerceWithdraw(gomock.Any(), gomock.Any()).
-					Return(&wechat.EcommerceWithdrawResponse{
-						SubMchID:     activeOperator.SubMchID.String,
-						OutRequestNo: "ow_test_001",
-						WithdrawID:   "withdraw_test_001",
-						Amount:       1200,
-						Status:       "PROCESSING",
-					}, nil)
+				store.EXPECT().
+					GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "OW1001", Valid: true}).
+					Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
 
 				store.EXPECT().
 					CreateWithdrawalRecord(gomock.Any(), gomock.Any()).
@@ -90,6 +85,35 @@ func TestWithdrawOperatorAPI(t *testing.T) {
 						CreatedAt: time.Now(),
 						UpdatedAt: time.Now(),
 					}, nil)
+
+				ecommerce.EXPECT().
+					CreateEcommerceWithdraw(gomock.Any(), gomock.Any()).
+					Return(&wechat.EcommerceWithdrawResponse{
+						SubMchID:     activeOperator.SubMchID.String,
+						OutRequestNo: "ow_test_001",
+						WithdrawID:   "withdraw_test_001",
+						Amount:       1200,
+						Status:       "PROCESSING",
+					}, nil)
+
+				store.EXPECT().
+					UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
+						require.Equal(t, int64(88), arg.ID)
+						info := parseOperatorWithdrawAccountInfo(arg.AccountInfo)
+						require.Equal(t, "OW1001", info.OutRequestNo)
+						require.Equal(t, "withdraw_test_001", info.WithdrawID)
+						return db.WithdrawalRecord{
+							ID:          88,
+							UserID:      user.ID,
+							Amount:      1200,
+							Status:      "pending",
+							Channel:     operatorWithdrawChannel,
+							AccountInfo: arg.AccountInfo,
+							CreatedAt:   time.Now(),
+							UpdatedAt:   time.Now(),
+						}, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -333,15 +357,15 @@ func TestListOperatorWithdrawalsAPI(t *testing.T) {
 		OperatorID:   activeOperator.ID,
 		SubMchID:     activeOperator.SubMchID.String,
 		OutRequestNo: "ow_test_001",
-		WithdrawID:   "withdraw_test_001",
 	})
 	require.NoError(t, err)
 
 	store.EXPECT().
 		ListWithdrawalRecords(gomock.Any(), gomock.Eq(db.ListWithdrawalRecordsParams{
-			UserID: user.ID,
-			Limit:  20,
-			Offset: 0,
+			UserID:  user.ID,
+			Channel: operatorWithdrawChannel,
+			Limit:   20,
+			Offset:  0,
 		})).
 		Return([]db.WithdrawalRecord{
 			{
@@ -354,20 +378,14 @@ func TestListOperatorWithdrawalsAPI(t *testing.T) {
 				CreatedAt:   time.Now(),
 				UpdatedAt:   time.Now(),
 			},
-			{
-				ID:        12,
-				UserID:    user.ID,
-				Amount:    2000,
-				Status:    "pending",
-				Channel:   "wechat_ecommerce_fund",
-				CreatedAt: time.Now(),
-				UpdatedAt: time.Now(),
-			},
 		}, nil)
 
 	store.EXPECT().
-		CountWithdrawalRecords(gomock.Any(), user.ID).
-		Return(int64(2), nil)
+		CountWithdrawalRecords(gomock.Any(), db.CountWithdrawalRecordsParams{
+			UserID:  user.ID,
+			Channel: operatorWithdrawChannel,
+		}).
+		Return(int64(1), nil)
 
 	server := newTestServer(t, store)
 
@@ -386,7 +404,7 @@ func TestListOperatorWithdrawalsAPI(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Len(t, resp.Withdrawals, 1)
 	require.Equal(t, int64(11), resp.Withdrawals[0].ID)
-	require.Equal(t, int64(2), resp.Total)
+	require.Equal(t, int64(1), resp.Total)
 }
 
 func TestGetOperatorWithdrawalAPI(t *testing.T) {
@@ -423,7 +441,6 @@ func TestGetOperatorWithdrawalAPI(t *testing.T) {
 		OperatorID:   activeOperator.ID,
 		SubMchID:     activeOperator.SubMchID.String,
 		OutRequestNo: "ow_test_001",
-		WithdrawID:   "withdraw_test_001",
 	})
 	require.NoError(t, err)
 
@@ -450,6 +467,24 @@ func TestGetOperatorWithdrawalAPI(t *testing.T) {
 			Status:       "PROCESSING",
 		}, nil)
 
+	store.EXPECT().
+		UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
+			require.Equal(t, int64(88), arg.ID)
+			info := parseOperatorWithdrawAccountInfo(arg.AccountInfo)
+			require.Equal(t, "withdraw_test_001", info.WithdrawID)
+			return db.WithdrawalRecord{
+				ID:          88,
+				UserID:      user.ID,
+				Amount:      1200,
+				Status:      "pending",
+				Channel:     operatorWithdrawChannel,
+				AccountInfo: arg.AccountInfo,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			}, nil
+		})
+
 	server := newTestServer(t, store)
 	server.SetEcommerceClientForTest(ecommerce)
 
@@ -467,4 +502,5 @@ func TestGetOperatorWithdrawalAPI(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, int64(88), resp.Withdrawal.ID)
 	require.Equal(t, "pending", resp.Withdrawal.Status)
+	require.Equal(t, "withdraw_test_001", resp.Withdrawal.WithdrawID)
 }

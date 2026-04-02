@@ -169,18 +169,25 @@ func (q *Queries) ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg
 const listWithdrawalRecords = `-- name: ListWithdrawalRecords :many
 SELECT id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no FROM withdrawal_records
 WHERE user_id = $1
+    AND channel = $2
 ORDER BY created_at DESC
-LIMIT $2 OFFSET $3
+LIMIT $3 OFFSET $4
 `
 
 type ListWithdrawalRecordsParams struct {
-	UserID int64 `json:"user_id"`
-	Limit  int32 `json:"limit"`
-	Offset int32 `json:"offset"`
+	UserID  int64  `json:"user_id"`
+	Channel string `json:"channel"`
+	Limit   int32  `json:"limit"`
+	Offset  int32  `json:"offset"`
 }
 
 func (q *Queries) ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error) {
-	rows, err := q.db.Query(ctx, listWithdrawalRecords, arg.UserID, arg.Limit, arg.Offset)
+	rows, err := q.db.Query(ctx, listWithdrawalRecords,
+		arg.UserID,
+		arg.Channel,
+		arg.Limit,
+		arg.Offset,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -208,6 +215,38 @@ func (q *Queries) ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalR
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateWithdrawalAccountInfo = `-- name: UpdateWithdrawalAccountInfo :one
+UPDATE withdrawal_records
+SET
+    account_info = $2,
+    updated_at = now()
+WHERE id = $1
+RETURNING id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no
+`
+
+type UpdateWithdrawalAccountInfoParams struct {
+	ID          int64  `json:"id"`
+	AccountInfo []byte `json:"account_info"`
+}
+
+func (q *Queries) UpdateWithdrawalAccountInfo(ctx context.Context, arg UpdateWithdrawalAccountInfoParams) (WithdrawalRecord, error) {
+	row := q.db.QueryRow(ctx, updateWithdrawalAccountInfo, arg.ID, arg.AccountInfo)
+	var i WithdrawalRecord
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.Amount,
+		&i.Status,
+		&i.Channel,
+		&i.AccountInfo,
+		&i.Reason,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.OutRequestNo,
+	)
+	return i, err
 }
 
 const updateWithdrawalStatus = `-- name: UpdateWithdrawalStatus :one

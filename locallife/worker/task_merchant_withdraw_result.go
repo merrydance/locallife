@@ -113,14 +113,14 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 		if payload.RetryCount >= merchantWithdrawMaxRetry {
 			_, _ = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
 				ID:     record.ID,
-				Status: "failed",
+				Status: "pending",
 				Reason: pgtype.Text{String: fmt.Sprintf("query withdraw result failed: %v", err), Valid: true},
 			})
 			processor.publishAlert(ctx, AlertData{
 				AlertType:   AlertTypeWithdrawFailed,
 				Level:       AlertLevelCritical,
 				Title:       "商户提现结果查询失败",
-				Message:     fmt.Sprintf("提现记录 %d 连续查询失败，已标记为 failed，请人工核查。", record.ID),
+				Message:     fmt.Sprintf("提现记录 %d 连续查询失败，状态保持 pending，等待恢复调度继续核对，请人工关注微信提现结果。", record.ID),
 				RelatedID:   record.ID,
 				RelatedType: "withdrawal_record",
 				Extra: withdrawalAlertExtra(record, accountInfo, map[string]interface{}{

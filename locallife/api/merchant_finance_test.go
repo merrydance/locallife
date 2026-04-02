@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -10,6 +11,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/wechat"
 	mockwechat "github.com/merrydance/locallife/wechat/mock"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -199,15 +201,19 @@ func TestListMerchantAccountWithdrawalsAPIManagerCanReadOwnRecords(t *testing.T)
 
 	store.EXPECT().
 		ListWithdrawalRecords(gomock.Any(), gomock.Eq(db.ListWithdrawalRecordsParams{
-			UserID: manager.ID,
-			Limit:  20,
-			Offset: 0,
+			UserID:  manager.ID,
+			Channel: "wechat_ecommerce_fund",
+			Limit:   20,
+			Offset:  0,
 		})).
 		Times(1).
 		Return([]db.WithdrawalRecord{record}, nil)
 
 	store.EXPECT().
-		CountWithdrawalRecords(gomock.Any(), gomock.Eq(manager.ID)).
+		CountWithdrawalRecords(gomock.Any(), gomock.Eq(db.CountWithdrawalRecordsParams{
+			UserID:  manager.ID,
+			Channel: "wechat_ecommerce_fund",
+		})).
 		Times(1).
 		Return(int64(1), nil)
 
@@ -228,6 +234,99 @@ func TestListMerchantAccountWithdrawalsAPIManagerCanReadOwnRecords(t *testing.T)
 	require.Len(t, resp.Withdrawals, 1)
 	require.Equal(t, record.ID, resp.Withdrawals[0].ID)
 	require.Equal(t, manager.ID, record.UserID)
+}
+
+func TestGetMerchantAccountWithdrawalAPI_PersistsWithdrawIDFromWechat(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := db.Merchant{
+		ID:          1,
+		RegionID:    1,
+		OwnerUserID: user.ID,
+		Name:        "测试商户",
+		Status:      "approved",
+		IsOpen:      true,
+		CreatedAt:   time.Now(),
+	}
+	paymentConfig := db.MerchantPaymentConfig{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_123",
+		Status:     "active",
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		GetMerchantPaymentConfig(gomock.Any(), merchant.ID).
+		Times(1).
+		Return(paymentConfig, nil)
+
+	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   merchant.ID,
+		SubMchID:     paymentConfig.SubMchID,
+		OutRequestNo: "MW1001",
+	})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetWithdrawalRecord(gomock.Any(), int64(88)).
+		Return(db.WithdrawalRecord{
+			ID:          88,
+			UserID:      user.ID,
+			Amount:      1200,
+			Status:      "pending",
+			Channel:     "wechat_ecommerce_fund",
+			AccountInfo: accountInfoBytes,
+			CreatedAt:   time.Now(),
+			UpdatedAt:   time.Now(),
+		}, nil)
+
+	ecommerce.EXPECT().
+		QueryEcommerceWithdrawByOutRequestNo(gomock.Any(), paymentConfig.SubMchID, "MW1001").
+		Return(&wechat.EcommerceWithdrawResponse{
+			SubMchID:     paymentConfig.SubMchID,
+			OutRequestNo: "MW1001",
+			WithdrawID:   "withdraw_test_merchant_001",
+			Amount:       1200,
+			Status:       "PROCESSING",
+		}, nil)
+
+	store.EXPECT().
+		UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
+			require.Equal(t, int64(88), arg.ID)
+			info := parseMerchantWithdrawAccountInfo(arg.AccountInfo)
+			require.Equal(t, "withdraw_test_merchant_001", info.WithdrawID)
+			return db.WithdrawalRecord{
+				ID:          88,
+				UserID:      user.ID,
+				Amount:      1200,
+				Status:      "pending",
+				Channel:     "wechat_ecommerce_fund",
+				AccountInfo: arg.AccountInfo,
+				CreatedAt:   time.Now(),
+				UpdatedAt:   time.Now(),
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/merchant/finance/account/withdrawals/88", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantWithdrawItem
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "withdraw_test_merchant_001", resp.WithdrawID)
 }
 
 func TestGetMerchantFinanceOverviewAPI(t *testing.T) {

@@ -1774,6 +1774,7 @@ type Querier interface {
 	UpdateWechatComplaintResponse(ctx context.Context, arg UpdateWechatComplaintResponseParams) (WechatComplaint, error)
 	// 同步状态变更（由微信通知或轮询驱动）
 	UpdateWechatComplaintState(ctx context.Context, arg UpdateWechatComplaintStateParams) (WechatComplaint, error)
+	UpdateWithdrawalAccountInfo(ctx context.Context, arg UpdateWithdrawalAccountInfoParams) (WithdrawalRecord, error)
 	UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error)
 	UpsertCloudPrinterReconciliationJob(ctx context.Context, arg UpsertCloudPrinterReconciliationJobParams) (CloudPrinterReconciliationJob, error)
 	// 添加或更新菜品标签关联

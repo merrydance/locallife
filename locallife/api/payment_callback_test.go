@@ -969,7 +969,7 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 	assertWechatFailResponse(t, recorder, "get combined payment order failed")
 }
 
-func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureStillReturnsSuccess(t *testing.T) {
+func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -1036,12 +1036,8 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureStillReturnsSucc
 		})
 
 	store.EXPECT().
-		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
-		Return(db.CombinedPaymentOrder{ID: 101, CombineOutTradeNo: combineOutTradeNo}, nil)
-
-	store.EXPECT().
-		UpdateCombinedPaymentOrderToPaid(gomock.Any(), gomock.Any()).
-		Return(db.CombinedPaymentOrder{ID: 101, Status: PaymentStatusPaid}, nil)
+		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+		Return(nil)
 
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	server.SetTaskDistributorForTest(taskDistributor)
@@ -1050,8 +1046,8 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureStillReturnsSucc
 	request := newCombinePaymentNotifyRequest(t, notificationID)
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
-	assertWechatSuccessResponse(t, recorder, "OK")
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "1 orders failed")
 }
 
 func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSuccess(t *testing.T) {
@@ -1299,14 +1295,15 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 	amount := int64(10000) // 100元
 
 	testCases := []struct {
-		name          string
-		buildStubs    func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface)
-		setupRequest  func(t *testing.T) *http.Request
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+		name               string
+		buildStubs         func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor)
+		setupRequest       func(t *testing.T) *http.Request
+		checkResponse      func(t *testing.T, recorder *httptest.ResponseRecorder)
+		useTaskDistributor bool
 	}{
 		{
 			name: "支付成功_完整流程",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				// 1. 签名验证通过
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
@@ -1361,6 +1358,14 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 						UserID:       100,
 						BusinessType: "order",
 					}, nil)
+
+				taskDistributor.EXPECT().
+					DistributeTaskSendNotification(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(nil)
+
+				taskDistributor.EXPECT().
+					DistributeTaskProcessPaymentSuccess(gomock.Any(), gomock.AssignableToTypeOf(&worker.PaymentSuccessPayload{}), gomock.Any(), gomock.Any(), gomock.Any()).
+					Return(nil)
 			},
 			setupRequest: func(t *testing.T) *http.Request {
 				requestBody := map[string]interface{}{
@@ -1395,10 +1400,11 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, "SUCCESS", response["code"])
 			},
+			useTaskDistributor: true,
 		},
 		{
 			name: "金额不匹配_返回SUCCESS避免重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1500,7 +1506,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "归属校验失败_返回FAIL触发重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1576,7 +1582,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "订单不存在_返回FAIL触发重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1650,7 +1656,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "订单不存在_release失败仍返回FAIL触发重试",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1724,7 +1730,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "订单已支付_幂等返回SUCCESS",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1760,6 +1766,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 						OutTradeNo:   outTradeNo,
 						Amount:       amount,
 						Status:       "paid", // 已支付
+						ProcessedAt:  pgtype.Timestamptz{Time: time.Now(), Valid: true},
 						UserID:       100,
 						BusinessType: "order",
 					}, nil)
@@ -1805,7 +1812,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "非SUCCESS事件类型_忽略处理",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				paymentClient.EXPECT().
 					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 					Times(1).
@@ -1847,7 +1854,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 		},
 		{
 			name: "无PaymentClient_返回500",
-			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface) {
+			buildStubs: func(store *mockdb.MockStore, paymentClient *mockwechat.MockPaymentClientInterface, taskDistributor *mockwk.MockTaskDistributor) {
 				// 不设置任何mock，测试nil client场景
 			},
 			setupRequest: func(t *testing.T) *http.Request {
@@ -1883,7 +1890,8 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 
 			store := mockdb.NewMockStore(ctrl)
 			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
-			tc.buildStubs(store, paymentClient)
+			taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+			tc.buildStubs(store, paymentClient, taskDistributor)
 
 			var server *Server
 			if tc.name == "无PaymentClient_返回500" {
@@ -1891,6 +1899,9 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				server = newTestServer(t, store)
 			} else {
 				server = newTestServerWithPaymentClient(t, store, paymentClient)
+				if tc.useTaskDistributor {
+					server.SetTaskDistributorForTest(taskDistributor)
+				}
 			}
 			recorder := httptest.NewRecorder()
 

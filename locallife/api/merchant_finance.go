@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
+	"github.com/merrydance/locallife/websocket"
 	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 
@@ -1107,6 +1109,82 @@ func mapWechatWithdrawStatus(status string) string {
 	}
 }
 
+func (server *Server) updateWithdrawalRecordStatus(ctx *gin.Context, record db.WithdrawalRecord, status, reason string) db.WithdrawalRecord {
+	if status == "" {
+		status = record.Status
+	}
+	reasonArg := pgtype.Text{}
+	if reason != "" {
+		reasonArg = pgtype.Text{String: reason, Valid: true}
+	}
+	if status == record.Status && !reasonArg.Valid {
+		return record
+	}
+	updated, err := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
+		ID:     record.ID,
+		Status: status,
+		Reason: reasonArg,
+	})
+	if err == nil {
+		return updated
+	}
+	return record
+}
+
+func (server *Server) updateWithdrawalRecordAccountInfo(ctx *gin.Context, record db.WithdrawalRecord, accountInfo []byte) db.WithdrawalRecord {
+	if len(accountInfo) == 0 || bytes.Equal(accountInfo, record.AccountInfo) {
+		return record
+	}
+	updated, err := server.store.UpdateWithdrawalAccountInfo(ctx, db.UpdateWithdrawalAccountInfoParams{
+		ID:          record.ID,
+		AccountInfo: accountInfo,
+	})
+	if err == nil {
+		return updated
+	}
+	record.AccountInfo = accountInfo
+	server.sendAlert(websocket.AlertData{
+		AlertType:   websocket.AlertTypeSystemError,
+		Level:       websocket.AlertLevelCritical,
+		Title:       "提现账户信息更新失败",
+		Message:     fmt.Sprintf("提现记录 %d 已拿到微信提现单号，但 account_info 持久化失败，请尽快核查该笔提现的外部流水信息。", record.ID),
+		RelatedID:   record.ID,
+		RelatedType: "withdrawal_record",
+		Extra: map[string]interface{}{
+			"withdrawal_record_id": record.ID,
+			"channel":              record.Channel,
+			"error":                err.Error(),
+		},
+	})
+	return record
+}
+
+func (server *Server) enqueueWithdrawalResultPolling(ctx *gin.Context, record db.WithdrawalRecord) {
+	if record.Status != "pending" || server.taskDistributor == nil {
+		return
+	}
+	if err := server.taskDistributor.DistributeTaskProcessMerchantWithdrawResult(
+		ctx,
+		&worker.MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID, RetryCount: 0},
+		asynq.ProcessIn(30*time.Second),
+		asynq.Queue(worker.QueueDefault),
+	); err != nil {
+		server.sendAlert(websocket.AlertData{
+			AlertType:   websocket.AlertTypeTaskEnqueueFailure,
+			Level:       websocket.AlertLevelCritical,
+			Title:       "提现状态轮询任务入队失败",
+			Message:     fmt.Sprintf("提现记录 %d 已创建，但状态轮询任务入队失败，需依赖恢复调度兜底，请关注 Redis/任务队列状态。", record.ID),
+			RelatedID:   record.ID,
+			RelatedType: "withdrawal_record",
+			Extra: map[string]interface{}{
+				"withdrawal_record_id": record.ID,
+				"channel":              record.Channel,
+				"error":                err.Error(),
+			},
+		})
+	}
+}
+
 func parseMerchantWithdrawAccountInfo(raw []byte) merchantWithdrawAccountInfo {
 	if len(raw) == 0 {
 		return merchantWithdrawAccountInfo{}
@@ -1280,9 +1358,37 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 	}
 
 	// 检查 out_request_no 是否已存在，防止重复提现
-	existing, lookupErr := server.store.GetWithdrawalRecordByOutRequestNo(ctx, pgtype.Text{String: outRequestNo, Valid: true})
-	if lookupErr == nil && existing.Status != "failed" {
+	_, lookupErr := server.store.GetWithdrawalRecordByOutRequestNo(ctx, pgtype.Text{String: outRequestNo, Valid: true})
+	if lookupErr == nil {
 		ctx.JSON(http.StatusConflict, errorResponse(errors.New("duplicate out_request_no: withdrawal already exists")))
+		return
+	}
+	if !isNotFoundError(lookupErr) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, lookupErr))
+		return
+	}
+
+	accountInfoBytes, _ := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   merchant.ID,
+		SubMchID:     paymentConfig.SubMchID,
+		OutRequestNo: outRequestNo,
+		Remark:       req.Remark,
+	})
+
+	record, err := server.store.CreateWithdrawalRecord(ctx, db.CreateWithdrawalRecordParams{
+		UserID:       authPayload.UserID,
+		Amount:       req.Amount,
+		Status:       "pending",
+		Channel:      "wechat_ecommerce_fund",
+		AccountInfo:  accountInfoBytes,
+		OutRequestNo: pgtype.Text{String: outRequestNo, Valid: true},
+	})
+	if err != nil {
+		if db.ErrorCode(err) == db.UniqueViolation {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("duplicate out_request_no: withdrawal already exists")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
@@ -1293,56 +1399,35 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		Remark:       req.Remark,
 	})
 	if err != nil {
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("create ecommerce withdraw: %w", err)))
-		return
+		queryResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, paymentConfig.SubMchID, outRequestNo)
+		if queryErr != nil {
+			record = server.updateWithdrawalRecordStatus(ctx, record, "pending", fmt.Sprintf("withdraw request submitted, awaiting confirmation: %v", err))
+			server.enqueueWithdrawalResultPolling(ctx, record)
+			ctx.JSON(http.StatusAccepted, merchantWithdrawCreateResponse{
+				Withdrawal: toMerchantWithdrawItem(record),
+				Wechat:     nil,
+			})
+			return
+		}
+		withdrawResp = queryResp
 	}
 
-	accountInfoBytes, _ := json.Marshal(merchantWithdrawAccountInfo{
+	accountInfoBytes, _ = json.Marshal(merchantWithdrawAccountInfo{
 		MerchantID:   merchant.ID,
 		SubMchID:     paymentConfig.SubMchID,
 		OutRequestNo: outRequestNo,
 		WithdrawID:   withdrawResp.WithdrawID,
 		Remark:       req.Remark,
 	})
+	record = server.updateWithdrawalRecordAccountInfo(ctx, record, accountInfoBytes)
 
 	status := mapWechatWithdrawStatus(withdrawResp.Status)
 	reason := ""
 	if withdrawResp.FailReason != "" {
 		reason = withdrawResp.FailReason
 	}
-
-	record, err := server.store.CreateWithdrawalRecord(ctx, db.CreateWithdrawalRecordParams{
-		UserID:       authPayload.UserID,
-		Amount:       req.Amount,
-		Status:       status,
-		Channel:      "wechat_ecommerce_fund",
-		AccountInfo:  accountInfoBytes,
-		OutRequestNo: pgtype.Text{String: outRequestNo, Valid: true},
-	})
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if reason != "" {
-		updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-			ID:     record.ID,
-			Status: status,
-			Reason: pgtype.Text{String: reason, Valid: true},
-		})
-		if updateErr == nil {
-			record = updated
-		}
-	}
-
-	// 提现发起后立即排队一次状态轮询，不依赖 recovery scheduler 的3分钟间隔
-	if status == "pending" && server.taskDistributor != nil {
-		_ = server.taskDistributor.DistributeTaskProcessMerchantWithdrawResult(ctx,
-			&worker.MerchantWithdrawResultPayload{WithdrawalRecordID: record.ID, RetryCount: 0},
-			asynq.ProcessIn(30*time.Second),
-			asynq.Queue(worker.QueueDefault),
-		)
-	}
+	record = server.updateWithdrawalRecordStatus(ctx, record, status, reason)
+	server.enqueueWithdrawalResultPolling(ctx, record)
 
 	ctx.JSON(http.StatusCreated, merchantWithdrawCreateResponse{
 		Withdrawal: toMerchantWithdrawItem(record),
@@ -1391,9 +1476,10 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 
 	offset := pageOffset(req.Page, req.Limit)
 	rows, err := server.store.ListWithdrawalRecords(ctx, db.ListWithdrawalRecordsParams{
-		UserID: authPayload.UserID,
-		Limit:  req.Limit,
-		Offset: offset,
+		UserID:  authPayload.UserID,
+		Channel: "wechat_ecommerce_fund",
+		Limit:   req.Limit,
+		Offset:  offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1411,9 +1497,6 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 
 	items := make([]merchantWithdrawItem, 0, len(rows))
 	for _, row := range rows {
-		if row.Channel != "wechat_ecommerce_fund" {
-			continue
-		}
 		items = append(items, toMerchantWithdrawItem(row))
 	}
 
@@ -1503,7 +1586,7 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
 				info.WithdrawID = wxResp.WithdrawID
 				if raw, marshalErr := json.Marshal(info); marshalErr == nil {
-					record.AccountInfo = raw
+					record = server.updateWithdrawalRecordAccountInfo(ctx, record, raw)
 				}
 			}
 		}

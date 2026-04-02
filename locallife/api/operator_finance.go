@@ -249,14 +249,13 @@ func (server *Server) withdrawOperator(ctx *gin.Context) {
 	}
 	remark := normalizeOperatorWithdrawRemark(req.Remark)
 
-	withdrawResp, err := server.ecommerceClient.CreateEcommerceWithdraw(ctx, &wechat.EcommerceWithdrawRequest{
-		SubMchID:     operator.SubMchID.String,
-		OutRequestNo: outRequestNo,
-		Amount:       req.Amount,
-		Remark:       remark,
-	})
-	if err != nil {
-		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("create ecommerce withdraw: %w", err)))
+	_, lookupErr := server.store.GetWithdrawalRecordByOutRequestNo(ctx, pgtype.Text{String: outRequestNo, Valid: true})
+	if lookupErr == nil {
+		ctx.JSON(http.StatusConflict, errorResponse(errors.New("duplicate out_request_no: withdrawal already exists")))
+		return
+	}
+	if !isNotFoundError(lookupErr) {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, lookupErr))
 		return
 	}
 
@@ -264,33 +263,55 @@ func (server *Server) withdrawOperator(ctx *gin.Context) {
 		OperatorID:   operator.ID,
 		SubMchID:     operator.SubMchID.String,
 		OutRequestNo: outRequestNo,
-		WithdrawID:   withdrawResp.WithdrawID,
 		Remark:       remark,
 	})
 
-	status := mapWechatWithdrawStatus(withdrawResp.Status)
 	record, err := server.store.CreateWithdrawalRecord(ctx, db.CreateWithdrawalRecordParams{
-		UserID:      authPayload.UserID,
-		Amount:      req.Amount,
-		Status:      status,
-		Channel:     operatorWithdrawChannel,
-		AccountInfo: accountInfoBytes,
+		UserID:       authPayload.UserID,
+		Amount:       req.Amount,
+		Status:       "pending",
+		Channel:      operatorWithdrawChannel,
+		AccountInfo:  accountInfoBytes,
+		OutRequestNo: pgtype.Text{String: outRequestNo, Valid: true},
 	})
 	if err != nil {
+		if db.ErrorCode(err) == db.UniqueViolation {
+			ctx.JSON(http.StatusConflict, errorResponse(errors.New("duplicate out_request_no: withdrawal already exists")))
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	if withdrawResp.FailReason != "" {
-		updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-			ID:     record.ID,
-			Status: status,
-			Reason: pgtype.Text{String: withdrawResp.FailReason, Valid: true},
-		})
-		if updateErr == nil {
-			record = updated
+	withdrawResp, err := server.ecommerceClient.CreateEcommerceWithdraw(ctx, &wechat.EcommerceWithdrawRequest{
+		SubMchID:     operator.SubMchID.String,
+		OutRequestNo: outRequestNo,
+		Amount:       req.Amount,
+		Remark:       remark,
+	})
+	if err != nil {
+		queryResp, queryErr := server.ecommerceClient.QueryEcommerceWithdrawByOutRequestNo(ctx, operator.SubMchID.String, outRequestNo)
+		if queryErr != nil {
+			record = server.updateWithdrawalRecordStatus(ctx, record, "pending", fmt.Sprintf("withdraw request submitted, awaiting confirmation: %v", err))
+			server.enqueueWithdrawalResultPolling(ctx, record)
+			ctx.JSON(http.StatusAccepted, operatorWithdrawCreateResponse{Withdrawal: toOperatorWithdrawItem(record), Wechat: nil})
+			return
 		}
+		withdrawResp = queryResp
 	}
+
+	accountInfoBytes, _ = json.Marshal(operatorWithdrawAccountInfo{
+		OperatorID:   operator.ID,
+		SubMchID:     operator.SubMchID.String,
+		OutRequestNo: outRequestNo,
+		WithdrawID:   withdrawResp.WithdrawID,
+		Remark:       remark,
+	})
+	record = server.updateWithdrawalRecordAccountInfo(ctx, record, accountInfoBytes)
+
+	status := mapWechatWithdrawStatus(withdrawResp.Status)
+	record = server.updateWithdrawalRecordStatus(ctx, record, status, withdrawResp.FailReason)
+	server.enqueueWithdrawalResultPolling(ctx, record)
 
 	ctx.JSON(http.StatusOK, operatorWithdrawCreateResponse{Withdrawal: toOperatorWithdrawItem(record), Wechat: withdrawResp})
 }
@@ -329,9 +350,10 @@ func (server *Server) listOperatorWithdrawals(ctx *gin.Context) {
 
 	offset := pageOffset(req.Page, req.Limit)
 	rows, err := server.store.ListWithdrawalRecords(ctx, db.ListWithdrawalRecordsParams{
-		UserID: authPayload.UserID,
-		Limit:  req.Limit,
-		Offset: offset,
+		UserID:  authPayload.UserID,
+		Channel: operatorWithdrawChannel,
+		Limit:   req.Limit,
+		Offset:  offset,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -426,7 +448,7 @@ func (server *Server) getOperatorWithdrawal(ctx *gin.Context) {
 			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
 				info.WithdrawID = wxResp.WithdrawID
 				if raw, marshalErr := json.Marshal(info); marshalErr == nil {
-					record.AccountInfo = raw
+					record = server.updateWithdrawalRecordAccountInfo(ctx, record, raw)
 				}
 			}
 		}
