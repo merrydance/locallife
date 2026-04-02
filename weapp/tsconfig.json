@@ -14,16 +14,14 @@
         "strictPropertyInitialization": true,
         "noImplicitThis": true,
         "alwaysStrict": true,
-        "moduleResolution": "node",
         "resolveJsonModule": true,
         "esModuleInterop": true,
         "skipLibCheck": true,
         "noEmit": true,
         "forceConsistentCasingInFileNames": true,
-        "baseUrl": ".",
         "paths": {
             "@/*": [
-                "miniprogram/*"
+                "./miniprogram/*"
             ]
         },
         "types": [
