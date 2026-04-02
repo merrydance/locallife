@@ -42,6 +42,7 @@ func TestGetMerchantPackagingPolicyAPI(t *testing.T) {
 			name:   "OwnerOK",
 			userID: owner.ID,
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(owner.ID)).
 					Times(1).
@@ -79,10 +80,7 @@ func TestGetMerchantPackagingPolicyAPI(t *testing.T) {
 			name:   "ManagerForbidden",
 			userID: manager.ID,
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(manager.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleStaffMerchant(store, manager.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -128,6 +126,7 @@ func TestUpdateMerchantPackagingPolicyAPI(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 
+	expectResolveSingleOwnedMerchant(store, owner.ID, merchant)
 	store.EXPECT().
 		GetMerchantByOwner(gomock.Any(), gomock.Eq(owner.ID)).
 		Times(1).

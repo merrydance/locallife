@@ -195,6 +195,9 @@ func (server *Server) getMerchantTags(ctx *gin.Context) {
 
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
@@ -246,6 +249,9 @@ func (server *Server) setMerchantTags(ctx *gin.Context) {
 
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return

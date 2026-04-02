@@ -40,28 +40,8 @@ func TestGetRegionStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				// LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				// checkOperatorManagesRegion
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   operator.RegionID,
-					}).
-					Return(true, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				// GetRegionStats
 				store.EXPECT().
@@ -93,18 +73,7 @@ func TestGetRegionStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -118,18 +87,7 @@ func TestGetRegionStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -143,37 +101,8 @@ func TestGetRegionStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   operator.RegionID + 999,
-					}).
-					Return(false, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   "operator",
-					}).
-					Return(db.UserRole{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID+999, false)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -187,25 +116,8 @@ func TestGetRegionStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
-
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   operator.RegionID,
-					}).
-					Return(true, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					GetRegionStats(gomock.Any(), gomock.Any()).
@@ -294,18 +206,8 @@ func TestGetOperatorMerchantRankingAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					GetOperatorMerchantRanking(gomock.Any(), gomock.Any()).
@@ -327,18 +229,7 @@ func TestGetOperatorMerchantRankingAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -401,18 +292,8 @@ func TestGetOperatorRiderRankingAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					GetOperatorRiderRanking(gomock.Any(), gomock.Any()).
@@ -484,18 +365,8 @@ func TestGetRegionDailyTrendAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					GetRegionDailyTrend(gomock.Any(), gomock.Any()).
@@ -562,18 +433,8 @@ func TestGetOperatorFinanceOverviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					GetRegion(gomock.Any(), operator.RegionID).
@@ -682,18 +543,8 @@ func TestGetOperatorCommissionAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					GetRegionDailyTrend(gomock.Any(), gomock.Any()).

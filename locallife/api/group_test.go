@@ -601,10 +601,7 @@ func TestCreateGroupJoinRequestAPI(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), user.ID).
-		Times(1).
-		Return(merchant, nil)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 	store.EXPECT().
 		GetMerchantGroupAffiliation(gomock.Any(), merchant.ID).

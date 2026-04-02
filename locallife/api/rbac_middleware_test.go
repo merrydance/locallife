@@ -451,24 +451,7 @@ func TestMerchantOwnerMiddleware(t *testing.T) {
 						},
 					}, nil)
 
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   RoleMerchantOwner,
-					}).
-					Times(1).
-					Return(db.UserRole{
-						ID:              1,
-						UserID:          user.ID,
-						Role:            RoleMerchantOwner,
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: merchantID, Valid: true},
-					}, nil)
-
-				store.EXPECT().
-					GetMerchant(gomock.Any(), merchantID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -493,13 +476,7 @@ func TestMerchantOwnerMiddleware(t *testing.T) {
 						},
 					}, nil)
 
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   RoleMerchantOwner,
-					}).
-					Times(1).
-					Return(db.UserRole{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -524,26 +501,45 @@ func TestMerchantOwnerMiddleware(t *testing.T) {
 						},
 					}, nil)
 
+				suspendedMerchant := merchant
+				suspendedMerchant.Status = "suspended"
+				expectResolveSingleOwnedMerchant(store, user.ID, suspendedMerchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name: "Forbidden_SelectedStaffMerchant",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				request.Header.Set(merchantSelectionHeader, "202")
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				ownerMerchant := merchant
+				staffMerchant := merchant
+				staffMerchant.ID = 202
+				staffMerchant.OwnerUserID = user.ID + 999
+
 				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: user.ID,
-						Role:   RoleMerchantOwner,
-					}).
+					ListUserRoles(gomock.Any(), user.ID).
 					Times(1).
-					Return(db.UserRole{
+					Return([]db.UserRole{{
 						ID:              1,
 						UserID:          user.ID,
 						Role:            RoleMerchantOwner,
 						Status:          "active",
 						RelatedEntityID: pgtype.Int8{Int64: merchantID, Valid: true},
-					}, nil)
+					}}, nil)
 
-				suspendedMerchant := merchant
-				suspendedMerchant.Status = "suspended"
 				store.EXPECT().
-					GetMerchant(gomock.Any(), merchantID).
-					Times(1).
-					Return(suspendedMerchant, nil)
+					ListMerchantsByOwner(gomock.Any(), gomock.Eq(user.ID)).
+					AnyTimes().
+					Return([]db.Merchant{ownerMerchant}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					AnyTimes().
+					Return([]db.Merchant{staffMerchant}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -607,10 +603,7 @@ func TestMerchantOwnerOnlyMiddleware(t *testing.T) {
 		{
 			name: "OK_Owner",
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -625,10 +618,7 @@ func TestMerchantOwnerOnlyMiddleware(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				staffMerchant := merchant
 				staffMerchant.OwnerUserID = util.RandomInt(1000, 2000)
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(staffMerchant, nil)
+				expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -691,10 +681,7 @@ func TestMerchantStaffMiddleware(t *testing.T) {
 			name:         "OK_StaffAssociationAllowed",
 			allowedRoles: []string{"manager"},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleStaffMerchant(store, user.ID, merchant)
 				store.EXPECT().
 					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
 						MerchantID: merchant.ID,
@@ -715,10 +702,7 @@ func TestMerchantStaffMiddleware(t *testing.T) {
 			name:         "Forbidden_ResolvedMerchantButRoleMismatch",
 			allowedRoles: []string{"cashier"},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleStaffMerchant(store, user.ID, merchant)
 				store.EXPECT().
 					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
 						MerchantID: merchant.ID,

@@ -48,10 +48,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				// Mock CreateVoucher
 				store.EXPECT().
@@ -93,10 +90,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, regularUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(regularUser.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, regularUser.ID)
 
 				store.EXPECT().
 					CreateVoucher(gomock.Any(), gomock.Any()).
@@ -121,10 +115,7 @@ func TestCreateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 				store.EXPECT().
 					CreateVoucher(gomock.Any(), gomock.Any()).
 					Times(0)
@@ -381,10 +372,7 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
@@ -411,10 +399,7 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(int64(999))).
@@ -436,10 +421,7 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(otherUser.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, otherUser.ID)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Any()).
@@ -461,10 +443,7 @@ func TestUpdateVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
@@ -526,10 +505,7 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
@@ -559,10 +535,7 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(int64(999))).
@@ -581,10 +554,7 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, otherUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(otherUser.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, otherUser.ID)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Any()).
@@ -602,10 +572,7 @@ func TestDeleteVoucherAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantOwner.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantOwner.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantOwner.ID, merchant)
 
 				store.EXPECT().
 					GetVoucher(gomock.Any(), gomock.Eq(voucher.ID)).
@@ -689,10 +656,7 @@ func TestListMerchantVouchersAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListMerchantVouchers(gomock.Any(), gomock.Any()).

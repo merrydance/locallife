@@ -59,10 +59,7 @@ func TestCompleteComplaintAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, merchantUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerce *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantUser.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantUser.ID, merchant)
 
 				store.EXPECT().
 					GetWechatComplaintByComplaintIDForUpdate(gomock.Any(), gomock.Eq(complaint.ComplaintID)).
@@ -94,10 +91,7 @@ func TestCompleteComplaintAPI(t *testing.T) {
 				otherComplaint := complaint
 				otherComplaint.MerchantID = pgtype.Int8{Int64: merchant.ID + 999, Valid: true}
 
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(merchantUser.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, merchantUser.ID, merchant)
 
 				store.EXPECT().
 					GetWechatComplaintByComplaintIDForUpdate(gomock.Any(), gomock.Eq(complaint.ComplaintID)).
@@ -116,20 +110,7 @@ func TestCompleteComplaintAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerce *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), gomock.Eq(operatorUser.ID)).
-					Times(1).
-					Return([]db.UserRole{{
-						UserID:          operatorUser.ID,
-						Role:            RoleOperator,
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), gomock.Eq(operatorUser.ID)).
-					Times(1).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, operatorUser.ID, operator)
 
 				store.EXPECT().
 					GetWechatComplaintByComplaintIDForUpdate(gomock.Any(), gomock.Eq(complaint.ComplaintID)).

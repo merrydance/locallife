@@ -183,5 +183,29 @@ func (f *DefaultPaymentFacade) SpMchID() string {
 // name the underlying SQL has always supported staff via a LEFT JOIN on
 // merchant_staff. Use this for staff-compatible operations.
 func resolveMerchantForUser(ctx context.Context, store db.Store, userID int64) (db.Merchant, error) {
+	if selectedMerchantID, ok := SelectedMerchantIDFromContext(ctx); ok {
+		merchant, err := store.GetMerchant(ctx, selectedMerchantID)
+		if err != nil {
+			return db.Merchant{}, err
+		}
+
+		if merchant.OwnerUserID == userID {
+			return merchant, nil
+		}
+
+		hasAccess, err := store.CheckUserHasMerchantAccess(ctx, db.CheckUserHasMerchantAccessParams{
+			MerchantID: merchant.ID,
+			UserID:     userID,
+		})
+		if err != nil {
+			return db.Merchant{}, err
+		}
+		if !hasAccess {
+			return db.Merchant{}, db.ErrRecordNotFound
+		}
+
+		return merchant, nil
+	}
+
 	return store.GetMerchantByOwner(ctx, userID)
 }

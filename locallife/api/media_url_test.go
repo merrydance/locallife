@@ -494,7 +494,7 @@ func TestListDishesByMerchantWithImageURLs(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).AnyTimes().Return(merchant, nil)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().ListDishesByMerchant(gomock.Any(), gomock.Any()).Times(1).Return([]db.Dish{dish}, nil)
 	store.EXPECT().CountDishesByMerchant(gomock.Any(), gomock.Any()).Times(1).Return(int64(1), nil)
 	store.EXPECT().
@@ -533,7 +533,7 @@ func TestGetDishWithImageURL(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).AnyTimes().Return(merchant, nil)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().GetDishComplete(gomock.Any(), gomock.Eq(dishID)).Times(1).Return(
 		db.GetDishCompleteRow{
 			ID:                dishID,

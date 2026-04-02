@@ -184,6 +184,9 @@ func (server *Server) getCurrentMerchant(ctx *gin.Context) {
 
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
@@ -212,7 +215,7 @@ func (server *Server) listMyMerchants(ctx *gin.Context) {
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-	merchants, err := server.store.ListMerchantsByOwner(ctx, authPayload.UserID)
+	merchants, err := server.listAccessibleMerchants(ctx, authPayload.UserID)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
@@ -281,6 +284,9 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 	// 获取商户ID
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
 			return
@@ -499,6 +505,9 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
@@ -582,6 +591,9 @@ func (server *Server) getMerchantOpenStatus(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
@@ -724,6 +736,9 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return
@@ -804,6 +819,9 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 	// 获取商户
 	merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 	if err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
 		if isNotFoundError(err) {
 			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("not a merchant")))
 			return

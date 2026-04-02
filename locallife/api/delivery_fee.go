@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -47,21 +48,6 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 	}
 
 	if !manages {
-		// 兼容旧模型：operator.region_id 仍视为可管理区域
-		if operator.RegionID > 0 && operator.RegionID == regionID {
-			return &operator, nil
-		}
-
-		// 兼容更旧模型：user_roles.related_entity_id 记录 region_id
-		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-		operatorRole, roleErr := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-			UserID: authPayload.UserID,
-			Role:   "operator",
-		})
-		if roleErr == nil && operatorRole.RelatedEntityID.Valid && operatorRole.RelatedEntityID.Int64 == regionID {
-			return &operator, nil
-		}
-
 		return nil, errors.New("you do not have permission to manage this region")
 	}
 
@@ -70,57 +56,65 @@ func (server *Server) checkOperatorManagesRegion(ctx *gin.Context, regionID int6
 
 // getOperatorRegionID 获取运营商管理的区域ID
 func (server *Server) getOperatorRegionID(ctx *gin.Context) (int64, error) {
+	if regionIDQuery := ctx.Query("region_id"); regionIDQuery != "" {
+		regionID, err := strconv.ParseInt(regionIDQuery, 10, 64)
+		if err != nil || regionID <= 0 {
+			return 0, errors.New("invalid region_id")
+		}
+		if _, err := server.checkOperatorManagesRegion(ctx, regionID); err != nil {
+			return 0, err
+		}
+		return regionID, nil
+	}
+
 	// 如果中间件已经设置了 operator，直接使用
 	if op, ok := GetOperatorFromContext(ctx); ok {
 		if op.RegionID > 0 {
-			return op.RegionID, nil
+			if _, err := server.checkOperatorManagesRegion(ctx, op.RegionID); err == nil {
+				return op.RegionID, nil
+			}
 		}
 
-		// 新模型：从 operator_regions 表获取活跃区域（多区域场景取排序后的首个）
 		regionRelations, err := server.store.ListOperatorRegions(ctx, op.ID)
-		if err == nil && len(regionRelations) > 0 {
+		if err != nil {
+			return 0, err
+		}
+		if len(regionRelations) == 1 {
 			return regionRelations[0].RegionID, nil
 		}
-
-		// 兼容老模型：回退 user_roles.related_entity_id
-		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-		operatorRole, roleErr := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-			UserID: authPayload.UserID,
-			Role:   "operator",
-		})
-		if roleErr == nil && operatorRole.RelatedEntityID.Valid {
-			return operatorRole.RelatedEntityID.Int64, nil
+		if len(regionRelations) > 1 {
+			return 0, errors.New("region_id is required when managing multiple regions")
 		}
 
 		return 0, errors.New("operator has no assigned region")
 	}
 
-	// 向后兼容：从数据库查询
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-
-	// 查询operator角色记录
-	operatorRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-		UserID: authPayload.UserID,
-		Role:   "operator",
-	})
+	operator, err := server.store.GetOperatorByUser(ctx, authPayload.UserID)
 	if err != nil {
 		if isNotFoundError(err) {
-			return 0, errors.New("operator role not found")
+			return 0, errors.New("operator record not found")
 		}
 		return 0, err
 	}
-
-	// 检查状态
-	if operatorRole.Status != "active" {
-		return 0, errors.New("operator role is not active")
+	if operator.RegionID > 0 {
+		if _, err := server.checkOperatorManagesRegion(ctx, operator.RegionID); err == nil {
+			return operator.RegionID, nil
+		}
 	}
 
-	// related_entity_id存储region_id
-	if !operatorRole.RelatedEntityID.Valid {
-		return 0, errors.New("operator has no assigned region")
+	regionRelations, err := server.store.ListOperatorRegions(ctx, operator.ID)
+	if err != nil {
+		return 0, err
+	}
+	if len(regionRelations) == 1 {
+		return regionRelations[0].RegionID, nil
+	}
+	if len(regionRelations) > 1 {
+		return 0, errors.New("region_id is required when managing multiple regions")
 	}
 
-	return operatorRole.RelatedEntityID.Int64, nil
+	return 0, errors.New("operator has no assigned region")
 }
 
 // ============================================================================

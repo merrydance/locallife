@@ -119,10 +119,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				// 获取商户
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 检查是否有进行中的申请
 				store.EXPECT().
@@ -188,10 +185,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -211,12 +205,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				staffMerchant := merchant
-				staffMerchant.OwnerUserID = user.ID + 100
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(staffMerchant, nil)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -238,10 +227,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
 				invalidMerchant := merchant
 				invalidMerchant.Status = "pending" // 还未审核通过
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(invalidMerchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, invalidMerchant)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -261,10 +247,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 已有进行中的申请
 				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
@@ -292,10 +275,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 已完成
 				existingApplyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
@@ -338,10 +318,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -396,10 +373,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
 				applyment.Status = "pending"
@@ -421,10 +395,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
 				applyment.Status = "to_be_signed"
@@ -448,10 +419,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				applyment := randomEcommerceApplymentForTest("merchant", merchant.ID)
 				applyment.Status = "finish"
@@ -475,10 +443,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
@@ -498,10 +463,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), user.ID).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -603,10 +565,7 @@ func TestMerchantBindBankWithoutEcommerceClient(t *testing.T) {
 	store := mockdb.NewMockStore(ctrl)
 
 	// 获取商户
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), user.ID).
-		Times(1).
-		Return(merchant, nil)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 	// 检查是否有进行中的申请
 	store.EXPECT().
@@ -680,10 +639,7 @@ func TestMerchantBindBankEncryptFailed(t *testing.T) {
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	// 获取商户
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), user.ID).
-		Times(1).
-		Return(merchant, nil)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 	// 检查是否有进行中的申请
 	store.EXPECT().

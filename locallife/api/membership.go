@@ -949,6 +949,21 @@ type membershipSettingsResponse struct {
 func (server *Server) getMerchantMembershipSettings(ctx *gin.Context) {
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID); err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 
 	settings, err := logic.GetMembershipSettingsForOwner(ctx, server.store, authPayload.UserID)
 	if err != nil {
@@ -1000,6 +1015,21 @@ func (server *Server) updateMerchantMembershipSettings(ctx *gin.Context) {
 
 	// 获取认证信息
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID); err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("merchant not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 
 	settings, err := logic.UpdateMembershipSettingsForOwner(ctx, server.store, logic.UpdateMembershipSettingsInput{
 		OwnerUserID:         authPayload.UserID,

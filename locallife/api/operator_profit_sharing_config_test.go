@@ -35,18 +35,8 @@ func TestListOperatorProfitSharingConfigsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 
 				store.EXPECT().
 					ListProfitSharingConfigsForRegion(gomock.Any(), gomock.Any()).
@@ -69,18 +59,8 @@ func TestListOperatorProfitSharingConfigsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), user.ID).
-					Return([]db.UserRole{{
-						UserID:          user.ID,
-						Role:            "operator",
-						Status:          "active",
-						RelatedEntityID: pgtype.Int8{Int64: operator.RegionID, Valid: true},
-					}}, nil)
-
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), user.ID).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, user.ID, operator)
+				expectOperatorManagesRegion(store, operator, operator.RegionID, true)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)

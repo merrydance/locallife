@@ -91,6 +91,7 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
 		if cachedMerchant, ok := GetMerchantFromContext(ctx); ok {
+			bindMerchantContext(ctx, cachedMerchant)
 			if cachedMerchant.Status != "active" && cachedMerchant.Status != "approved" {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant account is not active, please complete WeChat payment registration"),
@@ -101,35 +102,19 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 通过 user_role 的 related_entity_id 获取商户 ID
-		userRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
-			UserID: authPayload.UserID,
-			Role:   RoleMerchantOwner,
-		})
+		merchant, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID)
 		if err != nil {
+			if isMerchantSelectionRequiredError(err) {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
+			if errors.Is(err, errMerchantOwnerRequired) {
+				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(err))
+				return
+			}
 			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("merchant owner role not found"),
-				))
-				return
-			}
-			ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-
-		if !userRole.RelatedEntityID.Valid {
-			ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-				errors.New("merchant not associated with this user"),
-			))
-			return
-		}
-
-		// 加载商户信息
-		merchant, err := server.store.GetMerchant(ctx, userRole.RelatedEntityID.Int64)
-		if err != nil {
-			if isNotFoundError(err) {
-				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-					errors.New("merchant not found"),
 				))
 				return
 			}
@@ -146,8 +131,7 @@ func (server *Server) MerchantOwnerMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		// 缓存到 context
-		ctx.Set(merchantKey, merchant)
+		bindMerchantContext(ctx, merchant)
 		ctx.Next()
 	}
 }
@@ -161,6 +145,10 @@ func (server *Server) MerchantOwnerOnlyMiddleware() gin.HandlerFunc {
 
 		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 		if err != nil {
+			if isMerchantSelectionRequiredError(err) {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
 			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("you are not associated with any merchant"),
@@ -178,7 +166,7 @@ func (server *Server) MerchantOwnerOnlyMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		ctx.Set(merchantKey, merchant)
+		bindMerchantContext(ctx, merchant)
 		ctx.Set(merchantStaffRoleKey, "owner")
 		ctx.Next()
 	}
@@ -194,6 +182,10 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		// 1. 统一通过商户关联解析入口获取当前商户。
 		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
 		if err != nil {
+			if isMerchantSelectionRequiredError(err) {
+				ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
+				return
+			}
 			if isNotFoundError(err) {
 				ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
 					errors.New("you are not associated with any merchant"),
@@ -273,7 +265,7 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		}
 
 		// 4. 缓存到 context
-		ctx.Set(merchantKey, merchant)
+		bindMerchantContext(ctx, merchant)
 		ctx.Set(merchantStaffRoleKey, staffRole)
 		ctx.Next()
 	}

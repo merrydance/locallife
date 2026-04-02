@@ -58,10 +58,7 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -77,10 +74,7 @@ func TestGetCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -146,10 +140,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					UpdateMerchant(gomock.Any(), gomock.Any()).
@@ -184,10 +175,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					MinTimes(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusNotFound, recorder.Code)
@@ -206,10 +194,7 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				merchantWithNewVersion := merchant
 				merchantWithNewVersion.Version = 2 // 数据库中已是版本2
 
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchantWithNewVersion, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchantWithNewVersion)
 
 				// UpdateMerchant不会被调用，因为version检查在之前
 			},
@@ -283,10 +268,7 @@ func TestGetCurrentMerchantAPI_WithLogoURL(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-		MinTimes(1).
-		Return(merchant, nil)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 	store.EXPECT().
 		GetMediaAssetByID(gomock.Any(), assetID).
 		Times(1).

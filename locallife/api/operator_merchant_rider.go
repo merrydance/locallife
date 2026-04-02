@@ -88,8 +88,7 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	}
 
 	// 从中间件获取运营商信息
-	operator, ok := GetOperatorFromContext(ctx)
-	if !ok {
+	if _, ok := GetOperatorFromContext(ctx); !ok {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
 		return
 	}
@@ -97,12 +96,12 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 	// 确定目标区域 ID
 	targetRegionID := req.RegionID
 	if targetRegionID == 0 {
-		// 默认使用主区域
-		if operator.RegionID == 0 {
-			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
+		resolvedRegionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
 			return
 		}
-		targetRegionID = operator.RegionID
+		targetRegionID = resolvedRegionID
 	} else {
 		// 验证是否有权管理该特定区域
 		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -63,6 +64,21 @@ func newPackagingPolicyResponse(result logic.PackagingPolicyResult) packagingPol
 // @Security BearerAuth
 func (server *Server) getMerchantPackagingPolicy(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID); err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 
 	result, err := logic.GetPackagingPolicyForOwner(ctx, server.store, authPayload.UserID)
 	if err != nil {
@@ -99,6 +115,21 @@ func (server *Server) updateMerchantPackagingPolicy(ctx *gin.Context) {
 	}
 
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	if _, err := server.requireOwnedMerchantForUser(ctx, authPayload.UserID); err != nil {
+		if writeMerchantSelectionError(ctx, err) {
+			return
+		}
+		if errors.Is(err, errMerchantOwnerRequired) {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 
 	result, err := logic.UpdatePackagingPolicyForOwner(ctx, server.store, logic.UpdatePackagingPolicyInput{
 		OwnerUserID:          authPayload.UserID,

@@ -57,7 +57,7 @@ func TestListPrinterReconciliationJobsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).Times(1).Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 				store.EXPECT().ListCloudPrinterReconciliationJobsByMerchant(gomock.Any(), gomock.Eq(db.ListCloudPrinterReconciliationJobsByMerchantParams{
 					MerchantID: merchant.ID,
 					Status:     pgtype.Text{String: db.CloudPrinterReconciliationStatusPending, Valid: true},
@@ -83,7 +83,7 @@ func TestListPrinterReconciliationJobsAPI(t *testing.T) {
 				resolvedAt := time.Now()
 				resolvedJob.Status = db.CloudPrinterReconciliationStatusResolved
 				resolvedJob.ResolvedAt = pgtype.Timestamptz{Time: resolvedAt, Valid: true}
-				store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).Times(1).Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 				store.EXPECT().ListCloudPrinterReconciliationJobsByMerchant(gomock.Any(), gomock.Eq(db.ListCloudPrinterReconciliationJobsByMerchantParams{
 					MerchantID: merchant.ID,
 					Status:     pgtype.Text{String: db.CloudPrinterReconciliationStatusResolved, Valid: true},
@@ -145,7 +145,7 @@ func TestRetryPrinterReconciliationJobAPI(t *testing.T) {
 				resolvedJob.Status = db.CloudPrinterReconciliationStatusResolved
 				resolvedJob.RetryCount = job.RetryCount + 1
 				resolvedJob.ResolvedAt = pgtype.Timestamptz{Time: time.Now(), Valid: true}
-				store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).Times(1).Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 				store.EXPECT().GetCloudPrinterReconciliationJob(gomock.Any(), gomock.Eq(job.ID)).Times(1).Return(job, nil)
 				store.EXPECT().ResolveCloudPrinterReconciliationJob(gomock.Any(), gomock.Eq(job.ID)).Times(1).Return(resolvedJob, nil)
 			},
@@ -168,7 +168,7 @@ func TestRetryPrinterReconciliationJobAPI(t *testing.T) {
 				failedJob := job
 				failedJob.RetryCount = job.RetryCount + 1
 				failedJob.LastError = "provider unavailable"
-				store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).Times(1).Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 				store.EXPECT().GetCloudPrinterReconciliationJob(gomock.Any(), gomock.Eq(job.ID)).Times(1).Return(job, nil)
 				store.EXPECT().FailCloudPrinterReconciliationJobRetry(gomock.Any(), gomock.Eq(db.FailCloudPrinterReconciliationJobRetryParams{
 					ID:        job.ID,
@@ -196,7 +196,7 @@ func TestRetryPrinterReconciliationJobAPI(t *testing.T) {
 				return &printerClientStub{}
 			},
 			buildStubs: func(store *mockdb.MockStore, job db.CloudPrinterReconciliationJob) {
-				store.EXPECT().GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).Times(1).Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 				store.EXPECT().GetCloudPrinterReconciliationJob(gomock.Any(), gomock.Eq(job.ID)).Times(1).Return(job, nil)
 				store.EXPECT().ResolveCloudPrinterReconciliationJob(gomock.Any(), gomock.Any()).Times(0)
 			},

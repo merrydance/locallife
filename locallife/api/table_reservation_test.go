@@ -448,10 +448,7 @@ func TestGetReservationAPI(t *testing.T) {
 					Return(merchant, nil)
 
 				// 检查是否为商户 - 不是商户
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID+999)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -617,9 +614,11 @@ func TestConfirmReservationAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -648,10 +647,7 @@ func TestConfirmReservationAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -664,9 +660,11 @@ func TestConfirmReservationAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				pendingReservation := paidReservation
@@ -696,9 +694,11 @@ func TestConfirmReservationAPI(t *testing.T) {
 				staffMerchant := merchant
 				staffMerchant.OwnerUserID = user.ID + 100
 
+				expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(staffMerchant, nil)
 
 				store.EXPECT().
@@ -918,10 +918,7 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListReservationsByMerchant(gomock.Any(), gomock.Any()).
@@ -949,10 +946,7 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -965,10 +959,7 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// 当有status参数时，使用ListReservationsByMerchantAndStatus
 				store.EXPECT().
@@ -992,10 +983,7 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
@@ -1011,10 +999,7 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 				staffMerchant := merchant
 				staffMerchant.OwnerUserID = user.ID + 100
 
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(staffMerchant, nil)
+				expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
 
 				store.EXPECT().
 					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
@@ -1091,9 +1076,11 @@ func TestCompleteReservationAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -1123,10 +1110,7 @@ func TestCompleteReservationAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1139,9 +1123,11 @@ func TestCompleteReservationAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				pendingReservation := confirmedReservation
@@ -1166,9 +1152,11 @@ func TestCompleteReservationAPI(t *testing.T) {
 				differentMerchant := merchant
 				differentMerchant.ID = merchant.ID + 999
 
+				expectResolveSingleOwnedMerchant(store, user.ID, differentMerchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(differentMerchant, nil)
 
 				store.EXPECT().
@@ -1190,9 +1178,11 @@ func TestCompleteReservationAPI(t *testing.T) {
 				staffMerchant := merchant
 				staffMerchant.OwnerUserID = user.ID + 100
 
+				expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(staffMerchant, nil)
 
 				store.EXPECT().
@@ -1275,9 +1265,11 @@ func TestMarkNoShowAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				store.EXPECT().
@@ -1312,10 +1304,7 @@ func TestMarkNoShowAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1328,9 +1317,11 @@ func TestMarkNoShowAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
 				store.EXPECT().
 					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(2).
+					Times(1).
 					Return(merchant, nil)
 
 				pendingReservation := confirmedReservation
@@ -1355,10 +1346,7 @@ func TestMarkNoShowAPI(t *testing.T) {
 				staffMerchant := merchant
 				staffMerchant.OwnerUserID = user.ID + 100
 
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(staffMerchant, nil)
+				expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
 
 				store.EXPECT().
 					GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
@@ -1427,10 +1415,7 @@ func TestGetReservationStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetReservationStatsEnhanced(gomock.Any(), merchant.ID).
@@ -1447,10 +1432,7 @@ func TestGetReservationStatsAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusForbidden, recorder.Code)
@@ -1490,10 +1472,7 @@ func TestMerchantCreateReservationAPICashierAllowed(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-		Times(1).
-		Return(merchant, nil)
+	expectResolveSingleStaffMerchant(store, user.ID, merchant)
 	store.EXPECT().
 		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
 			MerchantID: merchant.ID,
@@ -1538,10 +1517,7 @@ func TestMerchantCreateReservationAPISuccess(t *testing.T) {
 	staffMerchant := merchant
 	staffMerchant.OwnerUserID = user.ID + 100
 
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-		Times(1).
-		Return(staffMerchant, nil)
+	expectResolveSingleStaffMerchant(store, user.ID, staffMerchant)
 
 	store.EXPECT().
 		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
@@ -1621,10 +1597,7 @@ func TestMerchantUpdateReservationAPICashierForbidden(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
-	store.EXPECT().
-		GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-		Times(1).
-		Return(merchant, nil)
+	expectResolveSingleStaffMerchant(store, user.ID, merchant)
 	store.EXPECT().
 		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{
 			MerchantID: merchant.ID,

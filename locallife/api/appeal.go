@@ -1209,20 +1209,20 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	operator, err := server.getOperatorFromUserID(ctx, authPayload.UserID)
-	if err != nil {
-		return
-	}
-
-	// 区域隔离：优先使用请求中传入的 region_id，并验证权限；否则回退 operator.RegionID
-	regionID := operator.RegionID
+	var regionID int64
 	if req.RegionID != nil && *req.RegionID > 0 {
 		if _, err := server.checkOperatorManagesRegion(ctx, *req.RegionID); err != nil {
 			ctx.JSON(http.StatusForbidden, errorResponse(err))
 			return
 		}
 		regionID = *req.RegionID
+	} else {
+		resolvedRegionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		regionID = resolvedRegionID
 	}
 
 	// 设置默认值
@@ -1308,15 +1308,23 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 		return
 	}
 
-	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
-	operator, err := server.getOperatorFromUserID(ctx, authPayload.UserID)
+	appeal, err := server.store.GetAppeal(ctx, appealID)
 	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(errors.New("appeal not found")))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if _, err := server.checkOperatorManagesRegion(ctx, appeal.RegionID); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
 		return
 	}
 
-	appeal, err := server.store.GetOperatorAppealDetail(ctx, db.GetOperatorAppealDetailParams{
+	detail, err := server.store.GetOperatorAppealDetail(ctx, db.GetOperatorAppealDetailParams{
 		ID:       appealID,
-		RegionID: operator.RegionID,
+		RegionID: appeal.RegionID,
 	})
 	if err != nil {
 		if isNotFoundError(err) {
@@ -1328,55 +1336,55 @@ func (server *Server) getOperatorAppealDetail(ctx *gin.Context) {
 	}
 
 	resp := operatorAppealDetailResponse{
-		ID:               appeal.ID,
-		ClaimID:          appeal.ClaimID,
-		ClaimType:        appeal.ClaimType,
-		ClaimAmount:      appeal.ClaimAmount,
-		ClaimDescription: appeal.ClaimDescription,
-		ClaimStatus:      appeal.ClaimStatus,
-		ClaimCreatedAt:   appeal.ClaimCreatedAt,
-		OrderNo:          appeal.OrderNo,
-		OrderAmount:      appeal.OrderAmount,
-		OrderStatus:      appeal.OrderStatus,
-		OrderCreatedAt:   appeal.OrderCreatedAt,
-		MerchantID:       appeal.MerchantID,
-		MerchantName:     appeal.MerchantName,
-		MerchantPhone:    appeal.MerchantPhone,
-		UserPhone:        appeal.UserPhone.String,
-		UserName:         appeal.UserName,
-		AppellantType:    appeal.AppellantType,
-		AppellantID:      appeal.AppellantID,
-		Reason:           appeal.Reason,
-		Status:           appeal.Status,
-		RegionID:         appeal.RegionID,
-		CreatedAt:        appeal.CreatedAt,
+		ID:               detail.ID,
+		ClaimID:          detail.ClaimID,
+		ClaimType:        detail.ClaimType,
+		ClaimAmount:      detail.ClaimAmount,
+		ClaimDescription: detail.ClaimDescription,
+		ClaimStatus:      detail.ClaimStatus,
+		ClaimCreatedAt:   detail.ClaimCreatedAt,
+		OrderNo:          detail.OrderNo,
+		OrderAmount:      detail.OrderAmount,
+		OrderStatus:      detail.OrderStatus,
+		OrderCreatedAt:   detail.OrderCreatedAt,
+		MerchantID:       detail.MerchantID,
+		MerchantName:     detail.MerchantName,
+		MerchantPhone:    detail.MerchantPhone,
+		UserPhone:        detail.UserPhone.String,
+		UserName:         detail.UserName,
+		AppellantType:    detail.AppellantType,
+		AppellantID:      detail.AppellantID,
+		Reason:           detail.Reason,
+		Status:           detail.Status,
+		RegionID:         detail.RegionID,
+		CreatedAt:        detail.CreatedAt,
 	}
-	if appeal.ClaimApprovedAmount.Valid {
-		resp.ClaimApprovedAmount = &appeal.ClaimApprovedAmount.Int64
+	if detail.ClaimApprovedAmount.Valid {
+		resp.ClaimApprovedAmount = &detail.ClaimApprovedAmount.Int64
 	}
-	if appeal.LookbackResult != nil {
-		s := string(appeal.LookbackResult)
+	if detail.LookbackResult != nil {
+		s := string(detail.LookbackResult)
 		resp.LookbackResult = &s
 	}
-	if appeal.RiderID.Valid {
-		resp.RiderID = &appeal.RiderID.Int64
+	if detail.RiderID.Valid {
+		resp.RiderID = &detail.RiderID.Int64
 	}
-	if appeal.ReviewerID.Valid {
-		resp.ReviewerID = &appeal.ReviewerID.Int64
+	if detail.ReviewerID.Valid {
+		resp.ReviewerID = &detail.ReviewerID.Int64
 	}
-	if appeal.ReviewNotes.Valid {
-		s := appeal.ReviewNotes.String
+	if detail.ReviewNotes.Valid {
+		s := detail.ReviewNotes.String
 		resp.ReviewNotes = &s
 	}
-	if appeal.ReviewedAt.Valid {
-		t := appeal.ReviewedAt.Time
+	if detail.ReviewedAt.Valid {
+		t := detail.ReviewedAt.Time
 		resp.ReviewedAt = &t
 	}
-	if appeal.CompensationAmount.Valid {
-		resp.CompensationAmount = &appeal.CompensationAmount.Int64
+	if detail.CompensationAmount.Valid {
+		resp.CompensationAmount = &detail.CompensationAmount.Int64
 	}
-	if appeal.CompensatedAt.Valid {
-		t := appeal.CompensatedAt.Time
+	if detail.CompensatedAt.Valid {
+		t := detail.CompensatedAt.Time
 		resp.CompensatedAt = &t
 	}
 
@@ -1435,7 +1443,7 @@ func (server *Server) reviewAppeal(ctx *gin.Context) {
 		return
 	}
 
-	if appeal.RegionID != operator.RegionID {
+	if _, err := server.checkOperatorManagesRegion(ctx, appeal.RegionID); err != nil {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("this appeal is not in your region")))
 		return
 	}

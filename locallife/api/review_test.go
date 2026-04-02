@@ -396,10 +396,7 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				// Mock GetReview
 				store.EXPECT().
@@ -453,10 +450,7 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(merchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Any()).
@@ -477,10 +471,7 @@ func TestReplyReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(db.Merchant{}, db.ErrRecordNotFound)
+				expectResolveNoAccessibleMerchants(store, user.ID)
 
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Any()).
@@ -502,10 +493,7 @@ func TestReplyReviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				otherMerchant := merchant
 				otherMerchant.ID = merchant.ID + 999
-				store.EXPECT().
-					GetMerchantByOwner(gomock.Any(), gomock.Eq(user.ID)).
-					Times(1).
-					Return(otherMerchant, nil)
+				expectResolveSingleOwnedMerchant(store, user.ID, otherMerchant)
 
 				store.EXPECT().
 					GetReview(gomock.Any(), gomock.Eq(review.ID)).
@@ -594,17 +582,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, operatorUser.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), operatorUser.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: operatorUser.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: regionID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), gomock.Eq(operatorUser.ID)).
-					Times(1).
-					Return(operator, nil)
+				expectActiveOperatorAuth(store, operatorUser.ID, operator)
 
 				// Mock GetReview
 				store.EXPECT().
@@ -618,14 +596,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 					Times(1).
 					Return(merchant, nil)
 
-				// Mock checkOperatorManagesRegion in handler
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: operator.ID,
-						RegionID:   regionID,
-					}).
-					Times(1).
-					Return(true, nil)
+				expectOperatorManagesRegion(store, operator, regionID, true)
 
 				// Mock DeleteReview
 				store.EXPECT().
@@ -676,18 +647,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore) {
 				notManagedOperator := operator
 				notManagedOperator.RegionID = regionID + 999
-
-				// Mock for CasbinRoleMiddleware
-				store.EXPECT().
-					ListUserRoles(gomock.Any(), operatorUser.ID).
-					Times(1).
-					Return([]db.UserRole{{UserID: operatorUser.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: regionID, Valid: true}}}, nil)
-
-				// Mock for LoadOperatorMiddleware
-				store.EXPECT().
-					GetOperatorByUser(gomock.Any(), gomock.Eq(operatorUser.ID)).
-					Times(1).
-					Return(notManagedOperator, nil)
+				expectActiveOperatorAuth(store, operatorUser.ID, notManagedOperator)
 
 				// Mock GetReview
 				store.EXPECT().
@@ -701,22 +661,7 @@ func TestDeleteReviewAPI(t *testing.T) {
 					Times(1).
 					Return(merchant, nil)
 
-				// Mock checkOperatorManagesRegion - operator doesn't manage this region
-				store.EXPECT().
-					CheckOperatorManagesRegion(gomock.Any(), db.CheckOperatorManagesRegionParams{
-						OperatorID: notManagedOperator.ID,
-						RegionID:   regionID,
-					}).
-					Times(1).
-					Return(false, nil)
-
-				store.EXPECT().
-					GetUserRoleByType(gomock.Any(), db.GetUserRoleByTypeParams{
-						UserID: operatorUser.ID,
-						Role:   "operator",
-					}).
-					Times(1).
-					Return(db.UserRole{UserID: operatorUser.ID, Role: "operator", Status: "active", RelatedEntityID: pgtype.Int8{Int64: notManagedOperator.RegionID, Valid: true}}, nil)
+				expectOperatorManagesRegion(store, notManagedOperator, regionID, false)
 
 				store.EXPECT().
 					DeleteReview(gomock.Any(), gomock.Any()).
