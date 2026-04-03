@@ -144,8 +144,8 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 	var paymentClient wechat.PaymentClientInterface
 	var ecommerceClient wechat.EcommerceClientInterface
 	if config.WechatPayMchID != "" && config.WechatPayPrivateKeyPath != "" {
-		if config.WechatEcommerceSpMchID == "" || config.WechatEcommerceSpAppID == "" {
-			return nil, fmt.Errorf("WECHAT_ECOMMERCE_SP_MCHID and WECHAT_ECOMMERCE_SP_APPID are required when wechat pay is enabled")
+		if err := config.ValidateWechatEcommerceConfig(); err != nil {
+			return nil, err
 		}
 
 		// 小程序直连支付客户端（用于押金、充值等）
@@ -171,15 +171,15 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 			PaymentClientConfig: wechat.PaymentClientConfig{
 				MchID:                   config.WechatEcommerceSpMchID,
 				AppID:                   config.WechatEcommerceSpAppID,
-				SerialNumber:            config.WechatPaySerialNumber,
+				SerialNumber:            config.EffectiveWechatEcommerceSerialNumber(),
 				HTTPTimeout:             config.WechatPayHTTPTimeout,
-				PrivateKeyPath:          config.WechatPayPrivateKeyPath,
-				APIV3Key:                config.WechatPayAPIV3Key,
+				PrivateKeyPath:          config.EffectiveWechatEcommercePrivateKeyPath(),
+				APIV3Key:                config.EffectiveWechatEcommerceAPIV3Key(),
 				NotifyURL:               config.WechatPayNotifyURL,
 				RefundNotifyURL:         config.WechatPayRefundNotifyURL,
 				PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
-				PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
-				PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
+				PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
+				PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
 			},
 			SpMchID: config.WechatEcommerceSpMchID,
 			SpAppID: config.WechatEcommerceSpAppID,

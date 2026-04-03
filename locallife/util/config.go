@@ -37,19 +37,24 @@ type Config struct {
 	QweatherAPIHost string `mapstructure:"QWEATHER_API_HOST"`
 
 	// 微信支付配置
-	WechatPayMchID                   string        `mapstructure:"WECHAT_PAY_MCH_ID"`                    // 商户号
-	WechatPaySerialNumber            string        `mapstructure:"WECHAT_PAY_SERIAL_NUMBER"`             // 商户API证书序列号
-	WechatPayPrivateKeyPath          string        `mapstructure:"WECHAT_PAY_PRIVATE_KEY_PATH"`          // 商户API私钥文件路径
-	WechatPayAPIV3Key                string        `mapstructure:"WECHAT_PAY_API_V3_KEY"`                // APIv3密钥
-	WechatPayNotifyURL               string        `mapstructure:"WECHAT_PAY_NOTIFY_URL"`                // 支付回调URL
-	WechatPayRefundNotifyURL         string        `mapstructure:"WECHAT_PAY_REFUND_NOTIFY_URL"`         // 退款回调URL
-	WechatShippingSettleNotifyURL    string        `mapstructure:"WECHAT_SHIPPING_SETTLE_NOTIFY_URL"`    // 发货结算事件回调URL（trade_manage_order_settlement）
-	WechatPayPlatformCertificatePath string        `mapstructure:"WECHAT_PAY_PLATFORM_CERTIFICATE_PATH"` // 微信支付平台证书路径（已弃用，建议使用公钥）
-	WechatPayPlatformPublicKeyPath   string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`  // 微信支付平台公钥路径（推荐）
-	WechatPayPlatformPublicKeyID     string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`    // 微信支付平台公钥ID
-	WechatPayHTTPTimeout             time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`              // HTTP请求超时时间
-	WechatEcommerceSpMchID           string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`            // 收付通服务商商户号
-	WechatEcommerceSpAppID           string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`            // 收付通服务商 AppID
+	WechatPayMchID                         string        `mapstructure:"WECHAT_PAY_MCH_ID"`                            // 商户号
+	WechatPaySerialNumber                  string        `mapstructure:"WECHAT_PAY_SERIAL_NUMBER"`                     // 商户API证书序列号
+	WechatPayPrivateKeyPath                string        `mapstructure:"WECHAT_PAY_PRIVATE_KEY_PATH"`                  // 商户API私钥文件路径
+	WechatPayAPIV3Key                      string        `mapstructure:"WECHAT_PAY_API_V3_KEY"`                        // APIv3密钥
+	WechatPayNotifyURL                     string        `mapstructure:"WECHAT_PAY_NOTIFY_URL"`                        // 支付回调URL
+	WechatPayRefundNotifyURL               string        `mapstructure:"WECHAT_PAY_REFUND_NOTIFY_URL"`                 // 退款回调URL
+	WechatShippingSettleNotifyURL          string        `mapstructure:"WECHAT_SHIPPING_SETTLE_NOTIFY_URL"`            // 发货结算事件回调URL（trade_manage_order_settlement）
+	WechatPayPlatformCertificatePath       string        `mapstructure:"WECHAT_PAY_PLATFORM_CERTIFICATE_PATH"`         // 微信支付平台证书路径（已弃用，建议使用公钥）
+	WechatPayPlatformPublicKeyPath         string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH"`          // 微信支付平台公钥路径（推荐）
+	WechatPayPlatformPublicKeyID           string        `mapstructure:"WECHAT_PAY_PLATFORM_PUBLIC_KEY_ID"`            // 微信支付平台公钥ID
+	WechatPayHTTPTimeout                   time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                      // HTTP请求超时时间
+	WechatEcommerceSpMchID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`                    // 收付通服务商商户号
+	WechatEcommerceSpAppID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`                    // 收付通服务商 AppID
+	WechatEcommerceSpSerialNumber          string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`            // 收付通服务商 API 证书序列号
+	WechatEcommerceSpPrivateKeyPath        string        `mapstructure:"WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH"`         // 收付通服务商 API 私钥文件路径
+	WechatEcommerceSpAPIV3Key              string        `mapstructure:"WECHAT_ECOMMERCE_SP_API_V3_KEY"`               // 收付通服务商 APIv3 密钥
+	WechatEcommerceSpPlatformPublicKeyPath string        `mapstructure:"WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH"` // 收付通服务商平台公钥路径
+	WechatEcommerceSpPlatformPublicKeyID   string        `mapstructure:"WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID"`   // 收付通服务商平台公钥ID
 
 	// 数据加密配置
 	DataEncryptionKey string `mapstructure:"DATA_ENCRYPTION_KEY"` // 本地数据加密密钥（16/24/32字节）
@@ -162,6 +167,63 @@ type Config struct {
 	ImageVariantThumbWidth  int `mapstructure:"IMAGE_VARIANT_THUMB_WIDTH"`  // 列表缩略图，默认 200
 	ImageVariantCardWidth   int `mapstructure:"IMAGE_VARIANT_CARD_WIDTH"`   // 商品卡片，默认 400
 	ImageVariantDetailWidth int `mapstructure:"IMAGE_VARIANT_DETAIL_WIDTH"` // 详情主图，默认 960
+}
+
+func (c Config) EffectiveWechatEcommerceSerialNumber() string {
+	if c.WechatEcommerceSpSerialNumber != "" {
+		return c.WechatEcommerceSpSerialNumber
+	}
+	return c.WechatPaySerialNumber
+}
+
+func (c Config) EffectiveWechatEcommercePrivateKeyPath() string {
+	if c.WechatEcommerceSpPrivateKeyPath != "" {
+		return c.WechatEcommerceSpPrivateKeyPath
+	}
+	return c.WechatPayPrivateKeyPath
+}
+
+func (c Config) EffectiveWechatEcommerceAPIV3Key() string {
+	if c.WechatEcommerceSpAPIV3Key != "" {
+		return c.WechatEcommerceSpAPIV3Key
+	}
+	return c.WechatPayAPIV3Key
+}
+
+func (c Config) EffectiveWechatEcommercePlatformPublicKeyPath() string {
+	if c.WechatEcommerceSpPlatformPublicKeyPath != "" {
+		return c.WechatEcommerceSpPlatformPublicKeyPath
+	}
+	return c.WechatPayPlatformPublicKeyPath
+}
+
+func (c Config) EffectiveWechatEcommercePlatformPublicKeyID() string {
+	if c.WechatEcommerceSpPlatformPublicKeyID != "" {
+		return c.WechatEcommerceSpPlatformPublicKeyID
+	}
+	return c.WechatPayPlatformPublicKeyID
+}
+
+func (c Config) ValidateWechatEcommerceConfig() error {
+	if c.WechatPayMchID == "" || c.WechatPayPrivateKeyPath == "" {
+		return nil
+	}
+
+	if c.WechatEcommerceSpMchID == "" || c.WechatEcommerceSpAppID == "" {
+		return fmt.Errorf("WECHAT_ECOMMERCE_SP_MCHID and WECHAT_ECOMMERCE_SP_APPID are required when wechat pay is enabled")
+	}
+
+	if c.WechatEcommerceSpMchID != c.WechatPayMchID {
+		if c.WechatEcommerceSpSerialNumber == "" || c.WechatEcommerceSpPrivateKeyPath == "" || c.WechatEcommerceSpAPIV3Key == "" {
+			return fmt.Errorf("WECHAT_ECOMMERCE_SP_SERIAL_NUMBER, WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH and WECHAT_ECOMMERCE_SP_API_V3_KEY are required when WECHAT_ECOMMERCE_SP_MCHID differs from WECHAT_PAY_MCH_ID")
+		}
+	}
+
+	if (c.WechatEcommerceSpPlatformPublicKeyPath == "") != (c.WechatEcommerceSpPlatformPublicKeyID == "") {
+		return fmt.Errorf("WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH and WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID must be provided together")
+	}
+
+	return nil
 }
 
 // LoadConfig reads configuration from file or environment variables.
