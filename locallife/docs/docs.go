@@ -20189,6 +20189,244 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/operational-configs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "获取平台运营配置列表",
+                "responses": {
+                    "200": {
+                        "description": "配置列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listPlatformOperatorRulesResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/operational-configs/{key}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新平台维护的运营真实配置项。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "更新平台运营配置项",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新值",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updatePlatformOperatorRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "配置不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/operator-rules": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "[Deprecated] 获取平台运营配置列表（兼容路径）",
+                "responses": {
+                    "200": {
+                        "description": "配置列表",
+                        "schema": {
+                            "$ref": "#/definitions/api.listPlatformOperatorRulesResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/operator-rules/{key}": {
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "更新平台维护的运营真实配置项。请迁移到 /v1/platform/operational-configs/{key}。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "Platform"
+                ],
+                "summary": "[Deprecated] 更新平台运营配置项（兼容路径）",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)",
+                        "name": "key",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "新值",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updatePlatformOperatorRuleRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.MessageResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "403": {
+                        "description": "权限不足",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "404": {
+                        "description": "配置不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/profit-sharing/configs": {
             "get": {
                 "security": [
@@ -33242,6 +33480,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listPlatformOperatorRulesResponse": {
+            "type": "object",
+            "properties": {
+                "rules": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.platformOperatorRuleItem"
+                    }
+                }
+            }
+        },
         "api.listProfitSharingConfigAuditsResponse": {
             "type": "object",
             "properties": {
@@ -35917,6 +36166,35 @@ const docTemplate = `{
                 "total_gmv": {
                     "description": "总GMV(分)",
                     "type": "integer"
+                }
+            }
+        },
+        "api.platformOperatorRuleItem": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string"
+                },
+                "desc": {
+                    "type": "string"
+                },
+                "editable": {
+                    "type": "boolean"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "key": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "unit": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string"
                 }
             }
         },
@@ -39513,6 +39791,17 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "api.updatePlatformOperatorRuleRequest": {
+            "type": "object",
+            "required": [
+                "value"
+            ],
+            "properties": {
+                "value": {
+                    "type": "string"
                 }
             }
         },

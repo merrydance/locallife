@@ -852,61 +852,6 @@ export class RealtimeUtils {
   }
 }
 
-// ==================== 数据适配器 ====================
-
-/**
- * 实时数据适配器
- */
-export class RealtimeDataAdapter {
-  /**
-   * 适配配送追踪信息
-   */
-  static adaptDeliveryTracking(
-    tracking: DeliveryTrackingInfo
-  ): DeliveryTrackingInfo {
-    return {
-      ...tracking,
-      delivery_id: Number(tracking.delivery_id),
-      order_id: Number(tracking.order_id),
-      rider_id: Number(tracking.rider_id),
-      current_location: {
-        ...tracking.current_location,
-        latitude: Number(tracking.current_location.latitude),
-        longitude: Number(tracking.current_location.longitude),
-        accuracy: tracking.current_location.accuracy
-          ? Number(tracking.current_location.accuracy)
-          : undefined,
-        heading: tracking.current_location.heading
-          ? Number(tracking.current_location.heading)
-          : undefined,
-        speed: tracking.current_location.speed
-          ? Number(tracking.current_location.speed)
-          : undefined
-      },
-      route_points: tracking.route_points?.map((point) => ({
-        ...point,
-        latitude: Number(point.latitude),
-        longitude: Number(point.longitude)
-      }))
-    }
-  }
-
-  /**
-   * 适配位置更新数据
-   */
-  static adaptLocationUpdate(update: RiderLocationUpdate): RiderLocationUpdate {
-    return {
-      ...update,
-      delivery_id: Number(update.delivery_id),
-      latitude: Number(update.latitude),
-      longitude: Number(update.longitude),
-      accuracy: update.accuracy ? Number(update.accuracy) : undefined,
-      heading: update.heading ? Number(update.heading) : undefined,
-      speed: update.speed ? Number(update.speed) : undefined
-    }
-  }
-}
-
 export default {
   // 管理器类
   WebSocketManager,
@@ -917,6 +862,4 @@ export default {
   WebSocketUtils,
   RealtimeUtils,
 
-  // 适配器
-  RealtimeDataAdapter
 }

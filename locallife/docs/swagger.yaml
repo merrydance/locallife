@@ -3505,6 +3505,13 @@ definitions:
       total:
         type: integer
     type: object
+  api.listPlatformOperatorRulesResponse:
+    properties:
+      rules:
+        items:
+          $ref: '#/definitions/api.platformOperatorRuleItem'
+        type: array
+    type: object
   api.listProfitSharingConfigAuditsResponse:
     properties:
       items:
@@ -5344,6 +5351,25 @@ definitions:
       total_gmv:
         description: 总GMV(分)
         type: integer
+    type: object
+  api.platformOperatorRuleItem:
+    properties:
+      category:
+        type: string
+      desc:
+        type: string
+      editable:
+        type: boolean
+      id:
+        type: string
+      key:
+        type: string
+      name:
+        type: string
+      unit:
+        type: string
+      value:
+        type: string
     type: object
   api.platformOverviewResponse:
     properties:
@@ -7770,6 +7796,13 @@ definitions:
         items:
           type: integer
         type: array
+    type: object
+  api.updatePlatformOperatorRuleRequest:
+    properties:
+      value:
+        type: string
+    required:
+    - value
     type: object
   api.updatePrinterRequest:
     properties:
@@ -21762,6 +21795,160 @@ paths:
       summary: 获取用户支付账单流水
       tags:
       - 支付管理
+  /v1/platform/operational-configs:
+    get:
+      description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 配置列表
+          schema:
+            $ref: '#/definitions/api.listPlatformOperatorRulesResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 获取平台运营配置列表
+      tags:
+      - Platform
+  /v1/platform/operational-configs/{key}:
+    patch:
+      consumes:
+      - application/json
+      description: 更新平台维护的运营真实配置项。
+      parameters:
+      - description: 配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT,
+          RIDER_DEPOSIT)
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: 新值
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updatePlatformOperatorRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.MessageResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: 配置不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: 更新平台运营配置项
+      tags:
+      - Platform
+  /v1/platform/operator-rules:
+    get:
+      description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 配置列表
+          schema:
+            $ref: '#/definitions/api.listPlatformOperatorRulesResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: '[Deprecated] 获取平台运营配置列表（兼容路径）'
+      tags:
+      - Platform
+  /v1/platform/operator-rules/{key}:
+    patch:
+      consumes:
+      - application/json
+      description: 更新平台维护的运营真实配置项。请迁移到 /v1/platform/operational-configs/{key}。
+      parameters:
+      - description: 配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT,
+          RIDER_DEPOSIT)
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: 新值
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updatePlatformOperatorRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.MessageResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "404":
+          description: 配置不存在
+          schema:
+            $ref: '#/definitions/api.errorRes'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.errorRes'
+      security:
+      - BearerAuth: []
+      summary: '[Deprecated] 更新平台运营配置项（兼容路径）'
+      tags:
+      - Platform
   /v1/platform/profit-sharing/configs:
     get:
       consumes:

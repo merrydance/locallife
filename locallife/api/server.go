@@ -1369,6 +1369,13 @@ func (server *Server) setupRouter() {
 		platformOperatorRulesGroup.PATCH("/:key", server.updatePlatformOperatorRule)
 	}
 
+	platformOperationalConfigsGroup := authGroup.Group("/platform/operational-configs")
+	platformOperationalConfigsGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		platformOperationalConfigsGroup.GET("", server.listPlatformOperationalConfigs)
+		platformOperationalConfigsGroup.PATCH("/:key", server.updatePlatformOperationalConfig)
+	}
+
 	// 用户索赔路由
 	claimsGroup := authGroup.Group("/claims")
 	{

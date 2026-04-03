@@ -67,7 +67,7 @@
         "dashboard/dashboard",
         "operators/index",
         "operators/detail",
-        "rules/index",
+        "operational-configs/index",
         "riders/index",
         "groups/index",
         "groups/detail"

@@ -31,8 +31,9 @@ type updatePlatformOperatorRuleRequest struct {
 }
 
 const (
-	merchantDepositConfigKey = "platform_rule.merchant_deposit_fen"
-	riderDepositConfigKey    = "platform_rule.rider_deposit_fen"
+	merchantDepositConfigKey                = "platform_rule.merchant_deposit_fen"
+	riderDepositConfigKey                   = "platform_rule.rider_deposit_fen"
+	platformOperationalConfigsSuccessorPath = "/v1/platform/operational-configs"
 )
 
 type depositConfigValue struct {
@@ -79,7 +80,44 @@ func (server *Server) upsertGlobalDepositFen(ctx *gin.Context, configKey string,
 	return err
 }
 
+func markPlatformOperatorRulesDeprecated(ctx *gin.Context) {
+	ctx.Header("Deprecation", "true")
+	ctx.Header("Link", "<"+platformOperationalConfigsSuccessorPath+">; rel=\"successor-version\"")
+	ctx.Header("X-Deprecated-Route", "/v1/platform/operator-rules")
+}
+
+// listPlatformOperationalConfigs 获取平台运营配置列表
+// @Summary 获取平台运营配置列表
+// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。
+// @Tags Platform
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} listPlatformOperatorRulesResponse "配置列表"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operational-configs [get]
+func (server *Server) listPlatformOperationalConfigs(ctx *gin.Context) {
+	server.renderPlatformOperationalConfigs(ctx)
+}
+
+// listPlatformOperatorRules 获取平台运营配置列表（兼容旧路径）
+// @Summary [Deprecated] 获取平台运营配置列表（兼容路径）
+// @Description 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。请迁移到 /v1/platform/operational-configs。
+// @Tags Platform
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} listPlatformOperatorRulesResponse "配置列表"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operator-rules [get]
 func (server *Server) listPlatformOperatorRules(ctx *gin.Context) {
+	markPlatformOperatorRulesDeprecated(ctx)
+	server.renderPlatformOperationalConfigs(ctx)
+}
+
+func (server *Server) renderPlatformOperationalConfigs(ctx *gin.Context) {
 	platformRate := int32(2)
 	operatorRate := int32(3)
 	merchantDeposit := int64(500000)
@@ -232,7 +270,48 @@ func (server *Server) upsertGlobalProfitSharingConfig(ctx *gin.Context, platform
 	return err
 }
 
+// updatePlatformOperationalConfig 更新平台运营配置项
+// @Summary 更新平台运营配置项
+// @Description 更新平台维护的运营真实配置项。
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)"
+// @Param request body updatePlatformOperatorRuleRequest true "新值"
+// @Security BearerAuth
+// @Success 200 {object} MessageResponse "更新成功"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 404 {object} errorRes "配置不存在"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operational-configs/{key} [patch]
+func (server *Server) updatePlatformOperationalConfig(ctx *gin.Context) {
+	server.applyPlatformOperationalConfigUpdate(ctx)
+}
+
+// updatePlatformOperatorRule 更新平台运营配置项（兼容旧路径）
+// @Summary [Deprecated] 更新平台运营配置项（兼容路径）
+// @Description 更新平台维护的运营真实配置项。请迁移到 /v1/platform/operational-configs/{key}。
+// @Tags Platform
+// @Accept json
+// @Produce json
+// @Param key path string true "配置Key (PLATFORM_COMMISSION, OPERATOR_COMMISSION, MERCHANT_DEPOSIT, RIDER_DEPOSIT)"
+// @Param request body updatePlatformOperatorRuleRequest true "新值"
+// @Security BearerAuth
+// @Success 200 {object} MessageResponse "更新成功"
+// @Failure 400 {object} errorRes "请求参数错误"
+// @Failure 401 {object} errorRes "未授权"
+// @Failure 403 {object} errorRes "权限不足"
+// @Failure 404 {object} errorRes "配置不存在"
+// @Failure 500 {object} errorRes "服务器内部错误"
+// @Router /v1/platform/operator-rules/{key} [patch]
 func (server *Server) updatePlatformOperatorRule(ctx *gin.Context) {
+	markPlatformOperatorRulesDeprecated(ctx)
+	server.applyPlatformOperationalConfigUpdate(ctx)
+}
+
+func (server *Server) applyPlatformOperationalConfigUpdate(ctx *gin.Context) {
 	key := ctx.Param("key")
 
 	var req updatePlatformOperatorRuleRequest

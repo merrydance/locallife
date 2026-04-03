@@ -13,8 +13,8 @@
        <t-grid border="{{false}}" class="responsive-grid-4">
          <t-grid-item text="活跃商户" description="{{realtimeData.realtime_stats.active_merchants}}" icon="shop" />
          <t-grid-item text="在线骑手" description="{{realtimeData.realtime_stats.online_riders}}" icon="user" />
-         <t-grid-item text="今日订单" description="{{realtimeData.realtime_stats.pending_orders}}" icon="order" />
-         <t-grid-item text="今日GMV" description="¥{{realtimeData.today_stats.today_gmv / 100}}" icon="money-circle" />
+         <t-grid-item text="今日订单" description="{{realtimeData.realtime_stats.pending_orders}}" icon="cart" />
+         <t-grid-item text="今日GMV" description="¥{{realtimeData.today_stats.today_gmv / 100}}" icon="money" />
        </t-grid>
 
        <view style="margin-top: 60px;">

@@ -38,6 +38,8 @@ p, admin, /v1/platform/rules, GET
 p, admin, /v1/platform/rules, POST
 p, admin, /v1/platform/rules/*, GET
 p, admin, /v1/platform/rules/*, POST
+p, admin, /v1/platform/operational-configs, GET
+p, admin, /v1/platform/operational-configs/:key, PATCH
 p, admin, /v1/platform/operator-rules, GET
 p, admin, /v1/platform/operator-rules/:key, PATCH
 

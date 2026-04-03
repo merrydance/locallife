@@ -105,7 +105,7 @@ func TestListOperatorRules_RiderDepositUsesOperatorConfig(t *testing.T) {
 	require.Contains(t, rule.Desc, "当前运营商配置")
 }
 
-func TestUpdateOperatorRule_RiderDepositUpdatesOperatorOnly(t *testing.T) {
+func TestUpdateOperatorRule_RiderDepositUpdatesOperatorOnlyWithoutTouchingPlatformDefault(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -121,6 +121,7 @@ func TestUpdateOperatorRule_RiderDepositUpdatesOperatorOnly(t *testing.T) {
 			require.Equal(t, int64(27000), arg.RiderDeposit.Int64)
 			return operator, nil
 		})
+	// 若此路径错误地回写平台默认配置，gomock 会因未声明 UpsertPlatformConfig 期望而直接失败。
 	store.EXPECT().
 		ListRidersByRegion(gomock.Any(), db.ListRidersByRegionParams{
 			RegionID: pgtype.Int8{Int64: 12, Valid: true},
@@ -172,11 +173,51 @@ func TestListPlatformOperatorRules_RiderDepositUsesPlatformDefaultInsteadOfBasel
 	server.listPlatformOperatorRules(ctx)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "true", recorder.Header().Get("Deprecation"))
+	require.Contains(t, recorder.Header().Get("Link"), "/v1/platform/operational-configs")
 	var resp listPlatformOperatorRulesResponse
 	require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &resp))
 	rule := findPlatformRuleByKey(t, resp.Rules, "RIDER_DEPOSIT")
 	require.Equal(t, "200.00", rule.Value)
 	require.Contains(t, rule.Desc, "平台默认值")
+}
+
+func TestListPlatformOperationalConfigs_DoesNotSetDeprecationHeader(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	server := newTestServer(t, store)
+
+	store.EXPECT().
+		GetActiveProfitSharingConfig(gomock.Any(), gomock.Any()).
+		Return(db.ProfitSharingConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformOperatorRuleBaselineFromRegion(gomock.Any()).
+		Return(db.GetPlatformOperatorRuleBaselineFromRegionRow{MerchantDeposit: 520000, RiderDeposit: 99000}, nil)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: merchantDepositConfigKey,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+	store.EXPECT().
+		GetPlatformConfig(gomock.Any(), db.GetPlatformConfigParams{
+			ConfigKey: riderDepositConfigKey,
+			ScopeType: db.PlatformConfigScopeGlobal,
+			ScopeID:   pgtype.Int8{Valid: false},
+		}).
+		Return(db.PlatformConfig{}, db.ErrRecordNotFound)
+
+	ctx, recorder := newJSONTestContext(http.MethodGet, "/v1/platform/operational-configs", "")
+	ctx.Set(authorizationPayloadKey, &token.Payload{UserID: 1})
+
+	server.listPlatformOperationalConfigs(ctx)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Empty(t, recorder.Header().Get("Deprecation"))
+	require.Empty(t, recorder.Header().Get("X-Deprecated-Route"))
 }
 
 func TestUpdatePlatformOperatorRule_RiderDepositOnlyWritesPlatformDefault(t *testing.T) {
@@ -218,6 +259,8 @@ func TestUpdatePlatformOperatorRule_RiderDepositOnlyWritesPlatformDefault(t *tes
 	server.updatePlatformOperatorRule(ctx)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "true", recorder.Header().Get("Deprecation"))
+	require.Contains(t, recorder.Header().Get("Link"), "/v1/platform/operational-configs")
 }
 
 func TestUpdateOperatorRule_RiderDepositDemotesOnlineRiderWhenThresholdIncreases(t *testing.T) {
@@ -279,7 +322,7 @@ func TestUpdateOperatorRule_RiderDepositDemotesOnlineRiderWhenThresholdIncreases
 	require.Equal(t, http.StatusOK, recorder.Code)
 }
 
-func TestUpdatePlatformOperatorRule_RiderDepositPromotesApprovedRiderUsingPlatformDefault(t *testing.T) {
+func TestUpdatePlatformOperationalConfig_RiderDepositPromotesApprovedRiderUsingPlatformDefault(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -328,11 +371,13 @@ func TestUpdatePlatformOperatorRule_RiderDepositPromotesApprovedRiderUsingPlatfo
 			RegionID:      rider.RegionID,
 		}, nil)
 
-	ctx, recorder := newJSONTestContext(http.MethodPatch, "/v1/platform/operator-rules/RIDER_DEPOSIT", `{"value":"310"}`)
+	ctx, recorder := newJSONTestContext(http.MethodPatch, "/v1/platform/operational-configs/RIDER_DEPOSIT", `{"value":"310"}`)
 	ctx.Params = gin.Params{{Key: "key", Value: "RIDER_DEPOSIT"}}
 	ctx.Set(authorizationPayloadKey, &token.Payload{UserID: 1001})
 
-	server.updatePlatformOperatorRule(ctx)
+	server.updatePlatformOperationalConfig(ctx)
 
 	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Empty(t, recorder.Header().Get("Deprecation"))
+	require.Empty(t, recorder.Header().Get("X-Deprecated-Route"))
 }

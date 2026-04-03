@@ -1,5 +1,5 @@
 {
-  "navigationBarTitleText": "平台规则配置",
+  "navigationBarTitleText": "平台运营配置",
   "navigationBarBackgroundColor": "#1890ff",
   "navigationBarTextStyle": "white",
   "usingComponents": {
@@ -7,8 +7,6 @@
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-button": "tdesign-miniprogram/button/button",
     "t-tag": "tdesign-miniprogram/tag/tag",
-    "t-icon": "tdesign-miniprogram/icon/icon",
-    "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-input": "tdesign-miniprogram/input/input"
   }
 }

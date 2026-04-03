@@ -1,0 +1,122 @@
+<custom-navbar title="平台运营配置" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
+
+<scroll-view scroll-y class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view class="content-inner">
+    <view class="welcome-header">
+      <view class="title">平台运营配置</view>
+      <view class="subtitle">这里维护的是平台运营真实配置。修改后会直接同步到对应业务配置与生效链路，不走规则草稿与发布流程。</view>
+    </view>
+
+    <view class="summary-card">
+      <view>
+        <text class="summary-title">当前可维护配置项</text>
+        <text class="summary-subtitle">页面按两组核心配置提供保存入口，提交路径与后台真实配置 key 对齐。</text>
+      </view>
+      <text class="summary-value">{{total}}</text>
+    </view>
+
+    <view wx:if="{{loading}}" class="section-card">
+      <view wx:for="{{3}}" wx:key="index" class="skeleton-item"></view>
+    </view>
+
+    <view wx:if="{{error}}" class="section-card status-wrap">
+      <t-empty icon="error-circle" description="{{error}}">
+        <t-button slot="action" theme="primary" shape="round" size="small" bind:tap="onRetry">重试</t-button>
+      </t-empty>
+    </view>
+
+    <view wx:if="{{!loading && !error && total === 0}}" class="section-card status-wrap">
+      <t-empty description="暂无可维护规则" />
+    </view>
+
+    <view wx:if="{{!loading && !error && total > 0}}" class="config-stack">
+      <view class="config-card">
+        <view class="card-head">
+          <view class="card-head-copy">
+            <text class="card-title">佣金配置</text>
+            <text class="card-subtitle">统一维护平台与运营商佣金比例，保存时会按平台运营配置接口逐项提交。</text>
+          </view>
+          <t-tag theme="primary" variant="light" size="small">结算</t-tag>
+        </view>
+
+        <view class="field-stack">
+          <t-input
+            value="{{platformRateInput}}"
+            placeholder="请输入 0-100 的整数"
+            label="平台佣金比例"
+            suffix="%"
+            align="right"
+            bind:change="onPlatformRateChange"
+          />
+          <t-input
+            value="{{operatorRateInput}}"
+            placeholder="请输入 0-100 的整数"
+            label="运营商佣金比例"
+            suffix="%"
+            align="right"
+            bind:change="onOperatorRateChange"
+          />
+        </view>
+
+        <view class="meta-block">
+          <view class="meta-row">
+            <text class="meta-label">当前平台比例</text>
+            <text class="meta-value">{{ruleValues.PLATFORM_COMMISSION || '--'}}%</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">当前运营商比例</text>
+            <text class="meta-value">{{ruleValues.OPERATOR_COMMISSION || '--'}}%</text>
+          </view>
+        </view>
+
+        <view class="card-actions">
+          <t-button theme="primary" shape="round" block loading="{{commissionSubmitting}}" bind:tap="onSaveCommissionConfig">保存佣金配置</t-button>
+        </view>
+      </view>
+
+      <view class="config-card">
+        <view class="card-head">
+          <view class="card-head-copy">
+            <text class="card-title">保证金配置</text>
+            <text class="card-subtitle">统一维护商户保证金与骑手押金，保存后同步对应运营配置与业务状态。</text>
+          </view>
+          <t-tag theme="warning" variant="light" size="small">准入</t-tag>
+        </view>
+
+        <view class="field-stack">
+          <t-input
+            value="{{merchantDepositInput}}"
+            placeholder="请输入金额"
+            label="商户入驻保证金"
+            suffix="元"
+            align="right"
+            bind:change="onMerchantDepositChange"
+          />
+          <t-input
+            value="{{riderDepositInput}}"
+            placeholder="请输入金额"
+            label="骑手入驻押金"
+            suffix="元"
+            align="right"
+            bind:change="onRiderDepositChange"
+          />
+        </view>
+
+        <view class="meta-block">
+          <view class="meta-row">
+            <text class="meta-label">当前商户保证金</text>
+            <text class="meta-value">{{ruleValues.MERCHANT_DEPOSIT || '--'}}元</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">当前骑手押金</text>
+            <text class="meta-value">{{ruleValues.RIDER_DEPOSIT || '--'}}元</text>
+          </view>
+        </view>
+
+        <view class="card-actions">
+          <t-button theme="primary" shape="round" block loading="{{depositSubmitting}}" bind:tap="onSaveDepositConfig">保存保证金配置</t-button>
+        </view>
+      </view>
+    </view>
+  </view>
+</scroll-view>

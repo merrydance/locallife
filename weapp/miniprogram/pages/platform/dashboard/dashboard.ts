@@ -71,10 +71,10 @@ Page({
             },
             {
                 id: 'rules',
-                title: '规则中心',
-                desc: '平台规则与命中审计',
+                title: '运营配置',
+                desc: '平台真实运营参数配置',
                 icon: 'setting',
-                url: '/pages/platform/rules/index'
+                url: '/pages/platform/operational-configs/index'
             },
             {
                 id: 'groups',
