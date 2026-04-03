@@ -163,6 +163,13 @@ func (f *DefaultPaymentFacade) CreateEcommerceRefund(ctx context.Context, req *w
 	return f.ecommerceClient.CreateEcommerceRefund(ctx, req)
 }
 
+func (f *DefaultPaymentFacade) ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error) {
+	if f.ecommerceClient == nil {
+		return nil, fmt.Errorf("ecommerce client not configured")
+	}
+	return f.ecommerceClient.ApplyEcommerceAbnormalRefund(ctx, req)
+}
+
 func (f *DefaultPaymentFacade) CreateProfitSharingReturn(ctx context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error) {
 	if f.ecommerceClient == nil {
 		return nil, fmt.Errorf("ecommerce client not configured")

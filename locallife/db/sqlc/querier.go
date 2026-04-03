@@ -201,6 +201,7 @@ type Querier interface {
 	CountPendingOperatorApplications(ctx context.Context) (int64, error)
 	CountPendingPrintLogs(ctx context.Context, printerID int64) (int64, error)
 	CountPendingRegionApplications(ctx context.Context) (int64, error)
+	CountPlatformAlertEvents(ctx context.Context) (int64, error)
 	CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error)
 	CountProfitSharingReturnsByRefundOrderStatus(ctx context.Context, arg CountProfitSharingReturnsByRefundOrderStatusParams) (int32, error)
 	// 统计多个用户最近N天的索赔总数
@@ -412,6 +413,7 @@ type Querier interface {
 	CreateOrderStatusLog(ctx context.Context, arg CreateOrderStatusLogParams) (OrderStatusLog, error)
 	CreatePaymentOrder(ctx context.Context, arg CreatePaymentOrderParams) (PaymentOrder, error)
 	CreatePeakHourConfig(ctx context.Context, arg CreatePeakHourConfigParams) (PeakHourConfig, error)
+	CreatePlatformAlertEvent(ctx context.Context, arg CreatePlatformAlertEventParams) (PlatformAlertEvent, error)
 	// Behavior trace system queries
 	// ==============================
 	// platform_configs
@@ -1326,6 +1328,7 @@ type Querier interface {
 	// 运营商查看所有待处理投诉（按投诉时间倒序）
 	ListPendingWechatComplaints(ctx context.Context, arg ListPendingWechatComplaintsParams) ([]WechatComplaint, error)
 	ListPendingWithdrawalRecordsByChannel(ctx context.Context, arg ListPendingWithdrawalRecordsByChannelParams) ([]WithdrawalRecord, error)
+	ListPlatformAlertEvents(ctx context.Context, arg ListPlatformAlertEventsParams) ([]PlatformAlertEvent, error)
 	ListPlatformConfigsByKey(ctx context.Context, configKey string) ([]PlatformConfig, error)
 	ListPrintLogsByOrder(ctx context.Context, orderID int64) ([]ListPrintLogsByOrderRow, error)
 	ListPrintLogsByPrinter(ctx context.Context, arg ListPrintLogsByPrinterParams) ([]PrintLog, error)

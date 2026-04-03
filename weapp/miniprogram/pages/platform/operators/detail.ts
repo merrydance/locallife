@@ -55,6 +55,7 @@ Page({
     businessLicenseUrl: '',
     idCardFrontUrl: '',
     idCardBackUrl: '',
+    idCardPreviewUnavailable: false,
     statusLabel: '',
     statusTheme: 'primary' as StatusTheme,
     rejectReason: ''
@@ -75,6 +76,18 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight || 0 })
   },
 
+  async resolvePrivateAssetUrl(assetId?: number): Promise<string> {
+    if (!assetId) {
+      return ''
+    }
+
+    try {
+      return await getPrivateMediaUrl(assetId)
+    } catch {
+      return ''
+    }
+  },
+
   async loadDetail() {
     if (this.data.requesting || !this.data.applicationID) {
       return
@@ -84,18 +97,21 @@ Page({
     try {
       const detail = await platformManagementService.getAdminOperatorApplicationDetail(this.data.applicationID)
       const [businessLicenseUrl, idCardFrontUrl, idCardBackUrl] = await Promise.all([
-        detail.business_license_asset_id ? getPrivateMediaUrl(detail.business_license_asset_id) : Promise.resolve(''),
-        detail.id_card_front_asset_id ? getPrivateMediaUrl(detail.id_card_front_asset_id) : Promise.resolve(''),
-        detail.id_card_back_asset_id ? getPrivateMediaUrl(detail.id_card_back_asset_id) : Promise.resolve('')
+        this.resolvePrivateAssetUrl(detail.business_license_asset_id),
+        this.resolvePrivateAssetUrl(detail.id_card_front_asset_id),
+        this.resolvePrivateAssetUrl(detail.id_card_back_asset_id)
       ])
 
       const status = getStatusDisplay(detail.status)
+      const hasIDCardAsset = Boolean(detail.id_card_front_asset_id || detail.id_card_back_asset_id)
+      const idCardPreviewUnavailable = hasIDCardAsset && !idCardFrontUrl && !idCardBackUrl
 
       this.setData({
         application: detail,
         businessLicenseUrl,
         idCardFrontUrl,
         idCardBackUrl,
+        idCardPreviewUnavailable,
         statusLabel: status.label,
         statusTheme: status.theme
       })

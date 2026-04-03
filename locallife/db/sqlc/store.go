@@ -68,6 +68,8 @@ type Store interface {
 	ReleaseWechatNotificationClaim(ctx context.Context, id string) error
 	// Applyment activation transaction (CB-4)
 	ApplymentSubMchActivationTx(ctx context.Context, arg ApplymentSubMchActivationTxParams) error
+	ListEcommerceApplymentsPendingFollowUp(ctx context.Context, arg ListEcommerceApplymentsPendingFollowUpParams) ([]EcommerceApplymentPendingFollowUp, error)
+	MarkEcommerceApplymentResultProcessed(ctx context.Context, arg MarkEcommerceApplymentResultProcessedParams) error
 	// Refund transactions
 	CreateRefundOrderTx(ctx context.Context, arg CreateRefundOrderTxParams) (CreateRefundOrderTxResult, error)
 	// CreateAnomalyRefundRecord 为已关闭/失败状态的支付单创建异常退款记录（跳过 status='paid' 校验）

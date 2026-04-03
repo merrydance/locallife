@@ -287,6 +287,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) AddProfitSharingReceiver(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddProfitSharingReceiver", reflect.TypeOf((*MockEcommerceClientInterface)(nil).AddProfitSharingReceiver), ctx, req)
 }
 
+// ApplyEcommerceAbnormalRefund mocks base method.
+func (m *MockEcommerceClientInterface) ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ApplyEcommerceAbnormalRefund", ctx, req)
+	ret0, _ := ret[0].(*wechat.EcommerceRefundResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ApplyEcommerceAbnormalRefund indicates an expected call of ApplyEcommerceAbnormalRefund.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ApplyEcommerceAbnormalRefund(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ApplyEcommerceAbnormalRefund", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ApplyEcommerceAbnormalRefund), ctx, req)
+}
+
 // CancelSubsidy mocks base method.
 func (m *MockEcommerceClientInterface) CancelSubsidy(ctx context.Context, req wechat.SubsidyCancelRequest) error {
 	m.ctrl.T.Helper()
@@ -640,6 +655,20 @@ func (m *MockEcommerceClientInterface) GetSpMchID() string {
 func (mr *MockEcommerceClientInterfaceMockRecorder) GetSpMchID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpMchID", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GetSpMchID))
+}
+
+// GetSpMchName mocks base method.
+func (m *MockEcommerceClientInterface) GetSpMchName() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSpMchName")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetSpMchName indicates an expected call of GetSpMchName.
+func (mr *MockEcommerceClientInterfaceMockRecorder) GetSpMchName() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpMchName", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GetSpMchName))
 }
 
 // ListComplaints mocks base method.

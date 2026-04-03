@@ -20189,6 +20189,75 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/alerts": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取平台运营告警历史，用于控制台断线后的回看与首屏恢复",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "通知管理"
+                ],
+                "summary": "获取平台告警历史",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "页码",
+                        "name": "page_id",
+                        "in": "query"
+                    },
+                    {
+                        "maximum": 100,
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "每页条数",
+                        "name": "page_size",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.listPlatformAlertsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅平台运营人员可访问",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/operational-configs": {
             "get": {
                 "security": [
@@ -20729,6 +20798,82 @@ const docTemplate = `{
                         "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.errorRes"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/refunds/{id}/apply-abnormal-refund": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "平台管理员对微信返回 ABNORMAL 的收付通退款单发起人工异常退款处理。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台退款管理"
+                ],
+                "summary": "平台人工发起异常退款处理",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "退款订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "异常退款处理参数",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.applyAbnormalRefundBodyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "异常退款处理结果",
+                        "schema": {
+                            "$ref": "#/definitions/api.applyAbnormalRefundResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或退款状态不允许处理",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非平台管理员",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "退款订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -29168,6 +29313,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.abnormalRefundWechatResponse": {
+            "type": "object",
+            "properties": {
+                "refund_id": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                }
+            }
+        },
         "api.addCartItemRequest": {
             "type": "object",
             "required": [
@@ -29458,6 +29614,44 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.applyAbnormalRefundBodyRequest": {
+            "type": "object",
+            "required": [
+                "type"
+            ],
+            "properties": {
+                "bank_account": {
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "bank_type": {
+                    "type": "string",
+                    "maxLength": 32
+                },
+                "real_name": {
+                    "type": "string",
+                    "maxLength": 128
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "USER_BANK_CARD",
+                        "MERCHANT_BANK_CARD"
+                    ]
+                }
+            }
+        },
+        "api.applyAbnormalRefundResponse": {
+            "type": "object",
+            "properties": {
+                "refund_order": {
+                    "$ref": "#/definitions/api.refundOrderResponse"
+                },
+                "wechat": {
+                    "$ref": "#/definitions/api.abnormalRefundWechatResponse"
                 }
             }
         },
@@ -33480,6 +33674,29 @@ const docTemplate = `{
                 }
             }
         },
+        "api.listPlatformAlertsResponse": {
+            "type": "object",
+            "properties": {
+                "alerts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.platformAlertEventResponse"
+                    }
+                },
+                "has_more": {
+                    "type": "boolean"
+                },
+                "page_id": {
+                    "type": "integer"
+                },
+                "page_size": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.listPlatformOperatorRulesResponse": {
             "type": "object",
             "properties": {
@@ -36128,6 +36345,39 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.platformAlertEventResponse": {
+            "type": "object",
+            "properties": {
+                "alert_type": {
+                    "type": "string"
+                },
+                "extra": {
+                    "type": "object",
+                    "additionalProperties": {}
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "level": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "related_id": {
+                    "type": "integer"
+                },
+                "related_type": {
+                    "type": "string"
+                },
+                "timestamp": {
+                    "type": "string"
+                },
+                "title": {
                     "type": "string"
                 }
             }

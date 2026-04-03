@@ -282,6 +282,119 @@ func (s *RefundService) ListProfitSharingReturnsByRefund(ctx context.Context, in
 	return ListProfitSharingReturnsByRefundResult{Returns: returns}, nil
 }
 
+func (s *RefundService) ApplyAbnormalRefund(ctx context.Context, input ApplyAbnormalRefundInput) (ApplyAbnormalRefundResult, error) {
+	if s.paymentFacade == nil {
+		return ApplyAbnormalRefundResult{}, fmt.Errorf("ecommerce client: not configured")
+	}
+
+	refundOrder, err := s.store.GetRefundOrder(ctx, input.RefundID)
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			return ApplyAbnormalRefundResult{}, NewRequestError(http.StatusNotFound, errors.New("refund order not found"))
+		}
+		return ApplyAbnormalRefundResult{}, err
+	}
+
+	if refundOrder.Status != "failed" {
+		return ApplyAbnormalRefundResult{}, NewRequestError(http.StatusBadRequest, errors.New("refund order is not in failed state"))
+	}
+	if !refundOrder.RefundID.Valid || refundOrder.RefundID.String == "" {
+		return ApplyAbnormalRefundResult{}, NewRequestError(http.StatusBadRequest, errors.New("refund order has no wechat refund id"))
+	}
+
+	paymentOrder, err := s.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+	if err != nil {
+		return ApplyAbnormalRefundResult{}, err
+	}
+	if paymentOrder.PaymentType != paymentTypeProfitSharing {
+		return ApplyAbnormalRefundResult{}, NewRequestError(http.StatusBadRequest, errors.New("refund order is not an ecommerce refund"))
+	}
+
+	merchantID, err := s.resolveMerchantIDForRefund(ctx, paymentOrder)
+	if err != nil {
+		return ApplyAbnormalRefundResult{}, err
+	}
+
+	paymentConfig, err := s.store.GetMerchantPaymentConfig(ctx, merchantID)
+	if err != nil {
+		return ApplyAbnormalRefundResult{}, err
+	}
+	if paymentConfig.SubMchID == "" {
+		return ApplyAbnormalRefundResult{}, NewRequestError(http.StatusBadRequest, errors.New("merchant sub mchid not configured"))
+	}
+
+	wxRefund, err := s.paymentFacade.ApplyEcommerceAbnormalRefund(ctx, &wechat.EcommerceAbnormalRefundRequest{
+		RefundID:    refundOrder.RefundID.String,
+		SubMchID:    paymentConfig.SubMchID,
+		OutRefundNo: refundOrder.OutRefundNo,
+		Type:        input.Type,
+		BankType:    input.BankType,
+		BankAccount: input.BankAccount,
+		RealName:    input.RealName,
+	})
+	if err != nil {
+		return ApplyAbnormalRefundResult{}, fmt.Errorf("wechat abnormal refund: %w", err)
+	}
+
+	latestRefundOrder := refundOrder
+	refundID := refundOrder.RefundID.String
+	if wxRefund.RefundID != "" {
+		refundID = wxRefund.RefundID
+	}
+
+	switch wxRefund.Status {
+	case wechat.RefundStatusSuccess:
+		latestRefundOrder, err = s.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		if err != nil {
+			return ApplyAbnormalRefundResult{}, fmt.Errorf("update refund order to success: %w", err)
+		}
+		s.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
+	case wechat.RefundStatusProcessing:
+		latestRefundOrder, err = s.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			ID:       refundOrder.ID,
+			RefundID: pgtype.Text{String: refundID, Valid: refundID != ""},
+		})
+		if err != nil {
+			return ApplyAbnormalRefundResult{}, fmt.Errorf("update refund order to processing: %w", err)
+		}
+	case wechat.RefundStatusClosed:
+		latestRefundOrder, err = s.store.UpdateRefundOrderToClosed(ctx, refundOrder.ID)
+		if err != nil {
+			return ApplyAbnormalRefundResult{}, fmt.Errorf("update refund order to closed: %w", err)
+		}
+	default:
+		latestRefundOrder, err = s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if err != nil {
+			return ApplyAbnormalRefundResult{}, fmt.Errorf("update refund order to failed: %w", err)
+		}
+	}
+
+	return ApplyAbnormalRefundResult{
+		RefundOrder:  latestRefundOrder,
+		WechatRefund: *wxRefund,
+	}, nil
+}
+
+func (s *RefundService) resolveMerchantIDForRefund(ctx context.Context, paymentOrder db.PaymentOrder) (int64, error) {
+	if paymentOrder.OrderID.Valid {
+		order, err := s.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
+		if err != nil {
+			return 0, err
+		}
+		return order.MerchantID, nil
+	}
+
+	if paymentOrder.ReservationID.Valid {
+		reservation, err := s.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
+		if err != nil {
+			return 0, err
+		}
+		return reservation.MerchantID, nil
+	}
+
+	return 0, NewRequestError(http.StatusBadRequest, errors.New("payment order has no associated merchant"))
+}
+
 func (s *RefundService) processProfitSharingRefund(
 	ctx context.Context,
 	paymentOrder db.PaymentOrder,
@@ -415,6 +528,36 @@ func (s *RefundService) processProfitSharingRefund(
 			Description:       description,
 		})
 		if returnErr != nil {
+			if wechat.IsProfitSharingReturnProcessingError(returnErr) {
+				log.Warn().
+					Err(returnErr).
+					Int64("profit_sharing_return_id", returnRecord.ID).
+					Str("out_return_no", returnRecord.OutReturnNo).
+					Msg("profit sharing return request reported ambiguous state, fallback to polling")
+
+				if _, dbErr := s.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+					ID:       returnRecord.ID,
+					ReturnID: pgtype.Text{},
+				}); dbErr != nil {
+					log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+				}
+				if s.taskScheduler != nil {
+					if schedErr := s.taskScheduler.ScheduleProfitSharingReturnResult(ctx, ProfitSharingReturnResultTaskInput{
+						ProfitSharingReturnID: returnRecord.ID,
+						OutReturnNo:           returnRecord.OutReturnNo,
+						OutOrderNo:            returnRecord.OutOrderNo,
+						SubMchID:              returnRecord.SubMchid,
+						RefundOrderID:         returnRecord.RefundOrderID,
+						RetryCount:            0,
+						Delay:                 delay,
+					}); schedErr != nil {
+						log.Error().Err(schedErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
+					}
+				}
+				hasProcessing = true
+				return nil
+			}
+
 			if _, dbErr := s.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
 				ID:         returnRecord.ID,
 				FailReason: pgtype.Text{String: returnErr.Error(), Valid: true},

@@ -41,6 +41,13 @@ func (p *recordingPublisher) snapshot() []recordedPublish {
 	return cloned
 }
 
+func allowPlatformAlertEventPersistence(store *mockdb.MockStore) {
+	store.EXPECT().
+		CreatePlatformAlertEvent(gomock.Any(), gomock.Any()).
+		AnyTimes().
+		Return(db.PlatformAlertEvent{}, nil)
+}
+
 func TestDataCleanupScheduler_RemindExpiringRiderDepositCredits_DistributesNotificationTask(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -97,6 +104,7 @@ func TestDataCleanupScheduler_RemindExpiringRiderDepositCredits_FallbackDirectNo
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	allowPlatformAlertEventPersistence(store)
 	publisher := &recordingPublisher{}
 	s := NewDataCleanupScheduler(store, worker.NewNoopTaskDistributor(), publisher)
 
@@ -153,6 +161,7 @@ func TestDataCleanupScheduler_MarkExpiredRiderDepositCredits(t *testing.T) {
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	allowPlatformAlertEventPersistence(store)
 	publisher := &recordingPublisher{}
 	s := NewDataCleanupScheduler(store, nil, publisher)
 

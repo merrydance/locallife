@@ -59,6 +59,40 @@
 
       <view class="section-card">
         <view class="section-head">
+          <text class="section-title">异常退款人工处理</text>
+          <t-tag theme="danger" variant="dark">实时告警</t-tag>
+        </view>
+
+        <t-empty wx:if="{{alertFeedReady && abnormalRefundAlerts.length === 0}}" description="当前没有待人工介入的异常退款" />
+
+        <view wx:else class="alert-list">
+          <view
+            wx:for="{{abnormalRefundAlerts}}"
+            wx:key="refundOrderId"
+            class="alert-card"
+            bindtap="onAbnormalRefundAlertTap"
+            data-index="{{index}}"
+          >
+            <view class="alert-card__head">
+              <view class="alert-card__title-wrap">
+                <text class="alert-card__title">{{item.title}}</text>
+                <t-tag theme="danger" variant="dark">需平台管理员</t-tag>
+              </view>
+              <text class="alert-card__time">{{item.timeDisplay}}</text>
+            </view>
+            <view class="alert-card__message">{{item.message}}</view>
+            <view class="alert-card__chips">
+              <text class="alert-card__chip">退款单 #{{item.refundOrderId}}</text>
+              <text class="alert-card__chip">微信退款ID {{item.refundId}}</text>
+              <text class="alert-card__chip">默认 {{item.defaultType}}</text>
+            </view>
+            <view class="alert-card__hint">点按查看说明或复制处理参数</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-card">
+        <view class="section-head">
           <text class="section-title">管理入口</text>
           <t-tag theme="warning" variant="dark">按角色开放</t-tag>
         </view>

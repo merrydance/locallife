@@ -778,7 +778,7 @@ func (server *Server) rechargeMembership(ctx *gin.Context) {
 		CombineOutTradeNo: combineOutTradeNo,
 		SubOrders: []wechat.SubOrder{
 			{
-				MchID:       txResult.SubMchID,
+				SubMchID:    txResult.SubMchID,
 				Amount:      req.RechargeAmount,
 				OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
 				Description: description,

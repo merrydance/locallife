@@ -972,7 +972,9 @@ type AlertData struct {
 
 // SendAlert 发送告警给所有在线的平台运营人员
 func (h *Hub) SendAlert(alert AlertData) {
-	alert.Timestamp = time.Now()
+	if alert.Timestamp.IsZero() {
+		alert.Timestamp = time.Now()
+	}
 
 	data, err := json.Marshal(alert)
 	if err != nil {

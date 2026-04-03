@@ -117,7 +117,7 @@ func (p *RedisTaskProcessor) ProcessTaskCombinedPaymentOrderTimeout(ctx context.
 			continue
 		}
 		closeSubs = append(closeSubs, wechat.SubOrderClose{
-			MchID:      sub.SubMchID,
+			SubMchID:   sub.SubMchID,
 			OutTradeNo: sub.OutTradeNo,
 		})
 	}

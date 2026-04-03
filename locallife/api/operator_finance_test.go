@@ -193,7 +193,7 @@ func TestWithdrawOperatorAPI(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+				store := newMockStoreWithAlertSink(ctrl)
 			var ecommerce *mockwechat.MockEcommerceClientInterface
 			if tc.useEcommerce {
 				ecommerce = mockwechat.NewMockEcommerceClientInterface(ctrl)

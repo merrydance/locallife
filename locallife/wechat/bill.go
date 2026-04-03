@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -146,14 +148,46 @@ func (c *PaymentClient) fetchAndParseBill(
 			wxPayBillAPIBase, urlResp.DownloadURL)
 	}
 
-	// 第三步：下载账单文件（带微信支付签名认证，返回 gzip 原始字节）
-	fileBytes, err := c.doRequest(ctx, http.MethodGet, billPath, nil)
+	// 第三步：下载账单文件。文件下载接口不返回响应签名，需跳过响应验签。
+	fileBytes, err := c.doRequestWithoutResponseVerification(ctx, http.MethodGet, billPath, nil)
 	if err != nil {
 		return nil, fmt.Errorf("download bill file: %w", err)
+	}
+	if err := verifyBillHash(fileBytes, urlResp.HashType, urlResp.HashValue); err != nil {
+		return nil, fmt.Errorf("verify bill hash: %w", err)
 	}
 
 	// 第四步：解压并解析 CSV
 	return parseBillGzip(fileBytes, outTradeNoCol, transactionIDCol, amountCol)
+}
+
+func verifyBillHash(fileBytes []byte, hashType, hashValue string) error {
+	hashType = strings.ToUpper(strings.TrimSpace(hashType))
+	hashValue = strings.TrimSpace(hashValue)
+	if hashType == "" {
+		return fmt.Errorf("missing hash_type in bill download response")
+	}
+	if hashValue == "" {
+		return fmt.Errorf("missing hash_value in bill download response")
+	}
+
+	var actual string
+	switch hashType {
+	case "SHA1":
+		sum := sha1.Sum(fileBytes)
+		actual = fmt.Sprintf("%x", sum)
+	case "SHA256":
+		sum := sha256.Sum256(fileBytes)
+		actual = fmt.Sprintf("%x", sum)
+	default:
+		return fmt.Errorf("unsupported bill hash type: %s", hashType)
+	}
+
+	if !strings.EqualFold(actual, hashValue) {
+		return fmt.Errorf("bill hash mismatch: got %s want %s", actual, hashValue)
+	}
+
+	return nil
 }
 
 func normalizeBillDownloadURLError(err error) error {

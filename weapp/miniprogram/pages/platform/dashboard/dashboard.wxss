@@ -124,6 +124,74 @@
   font-weight: 600;
 }
 
+.alert-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.alert-card {
+  padding: var(--spacer-md);
+  border-radius: var(--radius-md);
+  background: linear-gradient(180deg, #FFF5F3 0%, #FFFFFF 100%);
+  border: 1rpx solid rgba(255, 107, 88, 0.18);
+}
+
+.alert-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.alert-card__title-wrap {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  flex-wrap: wrap;
+}
+
+.alert-card__title {
+  font-size: var(--font-size-base);
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.alert-card__time {
+  flex-shrink: 0;
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.alert-card__message {
+  margin-top: var(--spacer-sm);
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.alert-card__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: var(--spacer-sm);
+}
+
+.alert-card__chip {
+  padding: 8rpx 16rpx;
+  border-radius: var(--radius-round);
+  background: rgba(255, 107, 88, 0.1);
+  font-size: var(--font-size-xs);
+  color: #C75042;
+}
+
+.alert-card__hint {
+  margin-top: var(--spacer-sm);
+  font-size: var(--font-size-xs);
+  color: var(--td-brand-color);
+}
+
 .stats-grid,
 .actions-grid {
   margin-top: var(--spacer-xs);

@@ -1415,3 +1415,140 @@ func TestListRefundOrdersByPaymentAPI(t *testing.T) {
 		})
 	}
 }
+
+func TestApplyPlatformAbnormalRefundAPI(t *testing.T) {
+	admin, _ := randomUser(t)
+	user, _ := randomUser(t)
+	order := randomPaymentTestOrder(user.ID, util.RandomInt(1, 1000))
+	paymentOrder := randomPaymentOrder(user.ID, &order.ID)
+	paymentOrder.PaymentType = "profit_sharing"
+	paymentOrder.Status = "paid"
+	refundOrder := randomRefundOrder(paymentOrder.ID, paymentOrder.Amount)
+	refundOrder.Status = "failed"
+	refundOrder.RefundID = pgtype.Text{String: "wx_refund_001", Valid: true}
+	updatedRefund := refundOrder
+	updatedRefund.Status = "processing"
+	merchantConfig := db.MerchantPaymentConfig{
+		ID:         util.RandomInt(1, 1000),
+		MerchantID: order.MerchantID,
+		SubMchID:   "1900000109",
+		Status:     "active",
+	}
+
+	testCases := []struct {
+		name          string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name: "OK_Admin",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, admin.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), admin.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: admin.ID, Role: RoleAdmin, Status: "active"}}, nil)
+
+				store.EXPECT().
+					GetRefundOrder(gomock.Any(), refundOrder.ID).
+					Times(1).
+					Return(refundOrder, nil)
+
+				store.EXPECT().
+					GetPaymentOrder(gomock.Any(), paymentOrder.ID).
+					Times(1).
+					Return(paymentOrder, nil)
+
+				store.EXPECT().
+					GetOrder(gomock.Any(), order.ID).
+					Times(1).
+					Return(order, nil)
+
+				store.EXPECT().
+					GetMerchantPaymentConfig(gomock.Any(), order.MerchantID).
+					Times(1).
+					Return(merchantConfig, nil)
+
+				ecommerceClient.EXPECT().
+					ApplyEcommerceAbnormalRefund(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error) {
+						require.Equal(t, refundOrder.RefundID.String, req.RefundID)
+						require.Equal(t, refundOrder.OutRefundNo, req.OutRefundNo)
+						require.Equal(t, merchantConfig.SubMchID, req.SubMchID)
+						require.Equal(t, wechat.EcommerceAbnormalRefundTypeMerchantBankCard, req.Type)
+						return &wechat.EcommerceRefundResponse{
+							RefundID: refundOrder.RefundID.String,
+							Status:   wechat.RefundStatusProcessing,
+						}, nil
+					})
+
+				store.EXPECT().
+					UpdateRefundOrderToProcessing(gomock.Any(), db.UpdateRefundOrderToProcessingParams{
+						ID:       refundOrder.ID,
+						RefundID: pgtype.Text{String: refundOrder.RefundID.String, Valid: true},
+					}).
+					Times(1).
+					Return(updatedRefund, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response applyAbnormalRefundResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, updatedRefund.ID, response.RefundOrder.ID)
+				require.Equal(t, "processing", response.RefundOrder.Status)
+				require.Equal(t, wechat.RefundStatusProcessing, response.Wechat.Status)
+			},
+		},
+		{
+			name: "Forbidden_NotAdmin",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.UserRole{{UserID: user.ID, Role: RoleCustomer, Status: "active"}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+			tc.buildStubs(store, ecommerceClient)
+
+			server := newTestServer(t, store)
+			server.ecommerceClient = ecommerceClient
+			server.refundOrchestrator = nil
+
+			recorder := httptest.NewRecorder()
+			body := gin.H{"type": wechat.EcommerceAbnormalRefundTypeMerchantBankCard}
+			data, err := json.Marshal(body)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/v1/platform/refunds/%d/apply-abnormal-refund", refundOrder.ID)
+			request, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(data))
+			require.NoError(t, err)
+			request.Header.Set("Content-Type", "application/json")
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}

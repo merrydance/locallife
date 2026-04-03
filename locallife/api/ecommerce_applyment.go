@@ -643,21 +643,17 @@ func mapWechatApplymentStatus(wxStatus string) string {
 	switch wxStatus {
 	case "APPLYMENT_STATE_EDITTING":
 		return "pending"
-	case "APPLYMENT_STATE_AUDITING":
+	case "CHECKING", "ACCOUNT_NEED_VERIFY", "APPLYMENT_STATE_AUDITING", "AUDITING":
 		return "auditing"
-	case "APPLYMENT_STATE_REJECTED":
+	case "APPLYMENT_STATE_REJECTED", "REJECTED", "APPLYMENT_STATE_CANCELED", "CANCELED":
 		return "rejected"
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
-		return "to_be_signed"
-	case "APPLYMENT_STATE_TO_BE_SIGNED":
+	case "APPLYMENT_STATE_TO_BE_CONFIRMED", "APPLYMENT_STATE_TO_BE_SIGNED", "NEED_SIGN":
 		return "to_be_signed"
 	case "APPLYMENT_STATE_SIGNING":
 		return "signing"
-	case "APPLYMENT_STATE_FINISHED":
+	case "APPLYMENT_STATE_FINISHED", "FINISH":
 		return "finish"
-	case "APPLYMENT_STATE_CANCELED":
-		return "rejected"
-	case "APPLYMENT_STATE_FROZEN":
+	case "APPLYMENT_STATE_FROZEN", "FROZEN":
 		return "frozen"
 	default:
 		return "submitted"

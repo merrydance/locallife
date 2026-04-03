@@ -505,6 +505,57 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 	}
 }
 
+func TestMapWechatApplymentStatus(t *testing.T) {
+	testCases := []struct {
+		name     string
+		wxStatus string
+		expected string
+	}{
+		{
+			name:     "LegacyAuditing",
+			wxStatus: "APPLYMENT_STATE_AUDITING",
+			expected: "auditing",
+		},
+		{
+			name:     "LatestChecking",
+			wxStatus: "CHECKING",
+			expected: "auditing",
+		},
+		{
+			name:     "LatestAccountNeedVerify",
+			wxStatus: "ACCOUNT_NEED_VERIFY",
+			expected: "auditing",
+		},
+		{
+			name:     "LatestNeedSign",
+			wxStatus: "NEED_SIGN",
+			expected: "to_be_signed",
+		},
+		{
+			name:     "LatestFinish",
+			wxStatus: "FINISH",
+			expected: "finish",
+		},
+		{
+			name:     "LatestCanceled",
+			wxStatus: "CANCELED",
+			expected: "rejected",
+		},
+		{
+			name:     "LatestFrozen",
+			wxStatus: "FROZEN",
+			expected: "frozen",
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expected, mapWechatApplymentStatus(tc.wxStatus))
+		})
+	}
+}
+
 // ==================== 进件回调测试 ====================
 
 func TestHandleApplymentStateNotifyAPI(t *testing.T) {

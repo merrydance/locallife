@@ -264,7 +264,7 @@ func createReplaceOrderEcommercePayment(
 	combineResp, _, err := ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
 		CombineOutTradeNo: combineOutTradeNo,
 		SubOrders: []wechat.SubOrder{{
-			MchID:       info.PaymentConfig.SubMchID,
+			SubMchID:    info.PaymentConfig.SubMchID,
 			Amount:      amount,
 			OutTradeNo:  info.PaymentOrder.OutTradeNo,
 			Description: description,
@@ -295,7 +295,7 @@ func createReplaceOrderEcommercePayment(
 		_, _ = store.UpdatePaymentOrderToFailed(cleanupCtx, info.PaymentOrder.ID)
 		_, _ = store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
 		if closeErr := ecommerceClient.CloseCombineOrder(cleanupCtx, combineOutTradeNo, []wechat.SubOrderClose{{
-			MchID:      info.PaymentConfig.SubMchID,
+			SubMchID:   info.PaymentConfig.SubMchID,
 			OutTradeNo: info.PaymentOrder.OutTradeNo,
 		}}); closeErr != nil {
 			log.Warn().Err(closeErr).Str("combine_out_trade_no", combineOutTradeNo).Msg("close combine order after prepay update failure")

@@ -40,6 +40,7 @@
         "safety/report/index",
         "safety/detail/index",
         "applyment/index",
+        "applyment/success/index",
         "finance/withdraw/index",
         "appeal/list/index",
         "appeal/detail/index",

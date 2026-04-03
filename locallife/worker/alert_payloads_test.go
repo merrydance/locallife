@@ -60,6 +60,96 @@ func TestRefundOrderAlertExtra_IncludesCommonIdentifiers(t *testing.T) {
 	require.Equal(t, "ABNORMAL", extra["wechat_status"])
 }
 
+func TestAbnormalRefundActionExtra_ForEcommerceRefundIncludesAdminAction(t *testing.T) {
+	paymentOrder := db.PaymentOrder{
+		ID:          11,
+		PaymentType: "profit_sharing",
+	}
+	refundOrder := db.RefundOrder{
+		ID:       44,
+		RefundID: pgtype.Text{String: "WR123", Valid: true},
+	}
+
+	extra := abnormalRefundActionExtra(paymentOrder, refundOrder)
+
+	require.Equal(t, true, extra["abnormal_refund_api_available"])
+	require.Equal(t, "POST", extra["abnormal_refund_api_method"])
+	require.Equal(t, "/v1/platform/refunds/44/apply-abnormal-refund", extra["abnormal_refund_api_path"])
+	require.Equal(t, wechat.EcommerceAbnormalRefundTypeMerchantBankCard, extra["abnormal_refund_default_type"])
+	require.Equal(t, []string{wechat.EcommerceAbnormalRefundTypeMerchantBankCard, wechat.EcommerceAbnormalRefundTypeUserBankCard}, extra["abnormal_refund_supported_types"])
+	require.Equal(t, []string{"bank_type", "bank_account", "real_name"}, extra["abnormal_refund_user_bank_card_required_fields"])
+}
+
+func TestAbnormalRefundActionExtra_SkipsNonEcommerceRefund(t *testing.T) {
+	paymentOrder := db.PaymentOrder{
+		ID:          11,
+		PaymentType: "miniprogram",
+	}
+	refundOrder := db.RefundOrder{
+		ID:       44,
+		RefundID: pgtype.Text{String: "WR123", Valid: true},
+	}
+
+	require.Nil(t, abnormalRefundActionExtra(paymentOrder, refundOrder))
+}
+
+func TestProcessTaskRefundResult_AbnormalPublishesActionableAlertForEcommerceRefund(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	processor := NewTestTaskProcessor(store, nil, nil, nil)
+	publisher := &testPublisher{}
+	processor.pubSubPublisher = publisher
+
+	paymentOrder := db.PaymentOrder{
+		ID:          11,
+		OrderID:     pgtype.Int8{Int64: 22, Valid: true},
+		UserID:      33,
+		PaymentType: "profit_sharing",
+		Amount:      4567,
+		OutTradeNo:  "OT123",
+	}
+	refundOrder := db.RefundOrder{
+		ID:             44,
+		PaymentOrderID: paymentOrder.ID,
+		RefundAmount:   1200,
+		RefundType:     "user_cancel",
+		OutRefundNo:    "RF123",
+		RefundID:       pgtype.Text{String: "WR123", Valid: true},
+		Status:         "processing",
+	}
+
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(refundOrder, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), refundOrder.PaymentOrderID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), int64(22)).Return(db.Order{ID: 22, MerchantID: 55}, nil)
+	store.EXPECT().UpdateRefundOrderToFailed(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "failed"}, nil)
+
+	payloadBytes, err := json.Marshal(RefundResultPayload{
+		OutRefundNo:  refundOrder.OutRefundNo,
+		RefundStatus: "ABNORMAL",
+		RefundID:     refundOrder.RefundID.String,
+	})
+	require.NoError(t, err)
+
+	err = processor.ProcessTaskRefundResult(context.Background(), asynq.NewTask(TaskProcessRefundResult, payloadBytes))
+	require.NoError(t, err)
+	require.Equal(t, AlertChannel, publisher.channel)
+
+	var published map[string]interface{}
+	require.NoError(t, json.Unmarshal(publisher.payload, &published))
+	data := published["data"].(map[string]interface{})
+	extra := data["extra"].(map[string]interface{})
+	require.Equal(t, true, extra["abnormal_refund_api_available"])
+	require.Equal(t, "POST", extra["abnormal_refund_api_method"])
+	require.Equal(t, "/v1/platform/refunds/44/apply-abnormal-refund", extra["abnormal_refund_api_path"])
+	require.Equal(t, wechat.EcommerceAbnormalRefundTypeMerchantBankCard, extra["abnormal_refund_default_type"])
+	require.Equal(t, "WR123", extra["refund_id"])
+
+	fields := extra["abnormal_refund_user_bank_card_required_fields"].([]interface{})
+	require.Equal(t, []interface{}{"bank_type", "bank_account", "real_name"}, fields)
+}
+
 func TestProcessTaskMerchantWithdrawResult_FailedPublishesAlert(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

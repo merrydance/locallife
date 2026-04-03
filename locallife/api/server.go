@@ -181,8 +181,9 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 				PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
 				PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
 			},
-			SpMchID: config.WechatEcommerceSpMchID,
-			SpAppID: config.WechatEcommerceSpAppID,
+			SpMchID:   config.WechatEcommerceSpMchID,
+			SpAppID:   config.WechatEcommerceSpAppID,
+			SpMchName: config.WechatEcommerceSpName,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)
@@ -1151,6 +1152,7 @@ func (server *Server) setupRouter() {
 
 	// M14: 平台运营人员WebSocket路由（接收告警推送）
 	authGroup.GET("/platform/ws", server.handlePlatformWebSocket)
+	authGroup.GET("/platform/alerts", server.listPlatformAlerts)
 
 	// M12: 商户统计BI路由
 	merchantStatsGroup := authGroup.Group("/merchant/stats")
@@ -1374,6 +1376,12 @@ func (server *Server) setupRouter() {
 	{
 		platformOperationalConfigsGroup.GET("", server.listPlatformOperationalConfigs)
 		platformOperationalConfigsGroup.PATCH("/:key", server.updatePlatformOperationalConfig)
+	}
+
+	platformRefundGroup := authGroup.Group("/platform/refunds")
+	platformRefundGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		platformRefundGroup.POST("/:id/apply-abnormal-refund", server.applyPlatformAbnormalRefund)
 	}
 
 	// 用户索赔路由

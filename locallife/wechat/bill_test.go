@@ -1,6 +1,8 @@
 package wechat
 
 import (
+	"crypto/sha1"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"testing"
@@ -27,4 +29,32 @@ func TestNormalizeBillDownloadURLError_Status404(t *testing.T) {
 
 	require.ErrorIs(t, err, ErrBillNotFound)
 	require.Contains(t, err.Error(), "status=404")
+}
+
+func TestVerifyBillHash_SHA256(t *testing.T) {
+	fileBytes := []byte("gzip-bill-content")
+	sum := sha256.Sum256(fileBytes)
+
+	err := verifyBillHash(fileBytes, "SHA256", fmt.Sprintf("%x", sum))
+	require.NoError(t, err)
+}
+
+func TestVerifyBillHash_SHA1(t *testing.T) {
+	fileBytes := []byte("gzip-bill-content")
+	sum := sha1.Sum(fileBytes)
+
+	err := verifyBillHash(fileBytes, "sha1", fmt.Sprintf("%x", sum))
+	require.NoError(t, err)
+}
+
+func TestVerifyBillHash_Mismatch(t *testing.T) {
+	err := verifyBillHash([]byte("gzip-bill-content"), "SHA256", "deadbeef")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "bill hash mismatch")
+}
+
+func TestVerifyBillHash_UnsupportedType(t *testing.T) {
+	err := verifyBillHash([]byte("gzip-bill-content"), "MD5", "deadbeef")
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "unsupported bill hash type")
 }

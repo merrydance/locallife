@@ -228,6 +228,120 @@ func TestGetUnreadCountAPI(t *testing.T) {
 	}
 }
 
+func TestListPlatformAlertsAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	now := time.Now()
+
+	testCases := []struct {
+		name          string
+		query         string
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:  "OK",
+			query: "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.UserRole{{Role: RoleOperator, Status: "active"}}, nil)
+
+				store.EXPECT().
+					ListPlatformAlertEvents(gomock.Any(), gomock.Eq(db.ListPlatformAlertEventsParams{
+						Limit:  10,
+						Offset: 0,
+					})).
+					Times(1).
+					Return([]db.PlatformAlertEvent{{
+						ID:          1,
+						AlertType:   "REFUND_FAILED",
+						Level:       "warning",
+						Title:       "异常退款待处理",
+						Message:     "需要平台人工处理",
+						RelatedID:   99,
+						RelatedType: "refund_order",
+						Extra:       []byte(`{"refund_order_id":99,"abnormal_refund_api_path":"/v1/platform/refunds/abnormal"}`),
+						EmittedAt:   now,
+					}}, nil)
+
+				store.EXPECT().
+					CountPlatformAlertEvents(gomock.Any()).
+					Times(1).
+					Return(int64(1), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response listPlatformAlertsResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, int64(1), response.Total)
+				require.False(t, response.HasMore)
+				require.Len(t, response.Alerts, 1)
+				require.Equal(t, "REFUND_FAILED", response.Alerts[0].AlertType)
+				require.Equal(t, "/v1/platform/refunds/abnormal", response.Alerts[0].Extra["abnormal_refund_api_path"])
+			},
+		},
+		{
+			name:  "Forbidden for non platform role",
+			query: "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.UserRole{{Role: RoleCustomer, Status: "active"}}, nil)
+				store.EXPECT().ListPlatformAlertEvents(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().CountPlatformAlertEvents(gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusForbidden, recorder.Code)
+			},
+		},
+		{
+			name:      "Unauthorized",
+			query:     "?page_id=1&page_size=10",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().ListUserRoles(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().ListPlatformAlertEvents(gomock.Any(), gomock.Any()).Times(0)
+				store.EXPECT().CountPlatformAlertEvents(gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusUnauthorized, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			request, err := http.NewRequest(http.MethodGet, "/v1/platform/alerts"+tc.query, nil)
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
 func TestMarkNotificationAsReadAPI(t *testing.T) {
 	user, _ := randomUser(t)
 

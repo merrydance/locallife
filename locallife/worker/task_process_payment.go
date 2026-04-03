@@ -70,12 +70,26 @@ type AlertData struct {
 
 // publishAlert 通过 Redis Pub/Sub 发布告警
 func (processor *RedisTaskProcessor) publishAlert(ctx context.Context, alert AlertData) {
+	alert.Timestamp = time.Now()
+	if err := SavePlatformAlertEvent(
+		ctx,
+		processor.store,
+		string(alert.AlertType),
+		string(alert.Level),
+		alert.Title,
+		alert.Message,
+		alert.RelatedID,
+		alert.RelatedType,
+		alert.Extra,
+		alert.Timestamp,
+	); err != nil {
+		log.Warn().Err(err).Str("alert_type", string(alert.AlertType)).Msg("persist platform alert event failed before pubsub publish")
+	}
+
 	if processor.pubSubPublisher == nil {
 		log.Warn().Msg("pubsub publisher not configured, cannot publish alert")
 		return
 	}
-
-	alert.Timestamp = time.Now()
 
 	wsMessage := map[string]any{
 		"type":      "alert",
@@ -170,7 +184,7 @@ func isProfitSharingReceiverAlreadyExistsErr(err error) bool {
 	return strings.Contains(msg, "already exists") || strings.Contains(msg, "已存在")
 }
 
-func (processor *RedisTaskProcessor) ensureMerchantProfitSharingReceiver(ctx context.Context, mchID string, relationType string) error {
+func (processor *RedisTaskProcessor) ensureMerchantProfitSharingReceiver(ctx context.Context, mchID, receiverName, relationType string) error {
 	if processor.ecommerceClient == nil || mchID == "" {
 		return nil
 	}
@@ -179,6 +193,7 @@ func (processor *RedisTaskProcessor) ensureMerchantProfitSharingReceiver(ctx con
 		AppID:        processor.ecommerceClient.GetSpAppID(),
 		Type:         wechat.ReceiverTypeMerchant,
 		Account:      mchID,
+		Name:         strings.TrimSpace(receiverName),
 		RelationType: relationType,
 	})
 	if err != nil && !isProfitSharingReceiverAlreadyExistsErr(err) {
@@ -269,12 +284,13 @@ type ProfitSharingPayload struct {
 
 // ApplymentResultPayload 进件结果处理任务载荷
 type ApplymentResultPayload struct {
-	ApplymentID    int64  `json:"applyment_id"`    // 进件记录ID
-	OutRequestNo   string `json:"out_request_no"`  // 业务申请编号
-	ApplymentState string `json:"applyment_state"` // 进件状态
-	SubMchID       string `json:"sub_mch_id"`      // 二级商户号（开户成功时返回）
-	SubjectType    string `json:"subject_type"`    // 主体类型：merchant/operator
-	SubjectID      int64  `json:"subject_id"`      // 主体ID
+	ApplymentID     int64  `json:"applyment_id"`     // 进件记录ID
+	OutRequestNo    string `json:"out_request_no"`   // 业务申请编号
+	ApplymentState  string `json:"applyment_state"`  // 进件状态
+	ApplymentStatus string `json:"applyment_status"` // 本地映射状态
+	SubMchID        string `json:"sub_mch_id"`       // 二级商户号（开户成功时返回）
+	SubjectType     string `json:"subject_type"`     // 主体类型：merchant/operator
+	SubjectID       int64  `json:"subject_id"`       // 主体ID
 }
 
 // ProfitSharingResultPayload 分账结果处理任务载荷
@@ -982,6 +998,11 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 		}
 		log.Warn().Str("out_refund_no", payload.OutRefundNo).Msg("refund abnormal")
 
+		alertExtra := refundOrderAlertExtra(paymentOrder, refundOrder, merchantID, map[string]interface{}{
+			"refund_id": payload.RefundID,
+		})
+		alertExtra = mergeAlertExtra(alertExtra, abnormalRefundActionExtra(paymentOrder, refundOrder))
+
 		// R-07 修复：通过 Redis Pub/Sub + WebSocket 告警运营团队
 		processor.publishAlert(ctx, AlertData{
 			AlertType:   AlertTypeRefundFailed,
@@ -990,9 +1011,7 @@ func (processor *RedisTaskProcessor) ProcessTaskRefundResult(ctx context.Context
 			Message:     fmt.Sprintf("退款单 %s 状态异常(ABNORMAL)，微信退款ID: %s，请及时处理", payload.OutRefundNo, payload.RefundID),
 			RelatedID:   refundOrder.ID,
 			RelatedType: "refund_order",
-			Extra: refundOrderAlertExtra(paymentOrder, refundOrder, merchantID, map[string]interface{}{
-				"refund_id": payload.RefundID,
-			}),
+			Extra:       alertExtra,
 		})
 
 	case "CLOSED":
@@ -1357,6 +1376,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		receivers = append(receivers, wechat.ProfitSharingReceiver{
 			Type:            "MERCHANT_ID",
 			ReceiverAccount: processor.ecommerceClient.GetSpMchID(), // 服务商商户号
+			ReceiverName:    strings.TrimSpace(processor.ecommerceClient.GetSpMchName()),
 			Amount:          platformCommission,
 			Description:     "平台服务费",
 		})
@@ -1367,6 +1387,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		receivers = append(receivers, wechat.ProfitSharingReceiver{
 			Type:            "MERCHANT_ID",
 			ReceiverAccount: operator.WechatMchID.String,
+			ReceiverName:    strings.TrimSpace(operator.Name),
 			Amount:          operatorCommission,
 			Description:     "运营商服务费",
 		})
@@ -1392,7 +1413,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 	}
 
 	if hasOperator && operatorCommission > 0 && operator.WechatMchID.Valid {
-		if err := processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, wechat.RelationPartner); err != nil {
+		if err := processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationPartner); err != nil {
 			log.Error().Err(err).
 				Int64("profit_sharing_order_id", profitSharingOrder.ID).
 				Str("operator_mchid", operator.WechatMchID.String).
@@ -1427,7 +1448,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			Msg("create profit sharing failed, retry once after re-ensuring receivers")
 
 		if hasOperator && operatorCommission > 0 && operator.WechatMchID.Valid {
-			_ = processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, wechat.RelationPartner)
+			_ = processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationPartner)
 		}
 		if hasRider && riderAmount > 0 && riderUserOpenID != "" {
 			_ = processor.ensurePersonalProfitSharingReceiver(ctx, riderUserOpenID, rider.RealName)
@@ -1783,6 +1804,39 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 				Description:       description,
 			})
 			if err != nil {
+				if wechat.IsProfitSharingReturnProcessingError(err) {
+					log.Warn().
+						Err(err).
+						Int64("profit_sharing_return_id", returnRecord.ID).
+						Str("out_return_no", returnRecord.OutReturnNo).
+						Msg("profit sharing return request reported ambiguous state, fallback to polling")
+
+					if _, dbErr := processor.store.UpdateProfitSharingReturnToProcessing(ctx, db.UpdateProfitSharingReturnToProcessingParams{
+						ID:       returnRecord.ID,
+						ReturnID: pgtype.Text{},
+					}); dbErr != nil {
+						log.Error().Err(dbErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to mark profit sharing return as processing")
+					}
+					if processor.distributor != nil {
+						if enqErr := processor.distributor.DistributeTaskProcessProfitSharingReturnResult(
+							ctx,
+							&ProfitSharingReturnResultPayload{
+								ProfitSharingReturnID: returnRecord.ID,
+								OutReturnNo:           returnRecord.OutReturnNo,
+								OutOrderNo:            returnRecord.OutOrderNo,
+								SubMchID:              returnRecord.SubMchid,
+								RefundOrderID:         returnRecord.RefundOrderID,
+								RetryCount:            0,
+							},
+							asynq.ProcessIn(processor.config.ProfitSharingReturnRetryInterval),
+						); enqErr != nil {
+							log.Error().Err(enqErr).Int64("profit_sharing_return_id", returnRecord.ID).Msg("failed to enqueue profit sharing return result task")
+						}
+					}
+					hasProcessing = true
+					return nil
+				}
+
 				if _, dbErr := processor.store.UpdateProfitSharingReturnToFailed(ctx, db.UpdateProfitSharingReturnToFailedParams{
 					ID:         returnRecord.ID,
 					FailReason: pgtype.Text{String: err.Error(), Valid: true},
@@ -2551,6 +2605,7 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 	log.Info().
 		Int64("applyment_id", payload.ApplymentID).
 		Str("applyment_state", payload.ApplymentState).
+		Str("applyment_status", payload.ApplymentStatus).
 		Str("sub_mch_id", payload.SubMchID).
 		Msg("processing applyment result")
 
@@ -2562,38 +2617,68 @@ func (processor *RedisTaskProcessor) ProcessTaskApplymentResult(ctx context.Cont
 		return nil
 	}
 
+	status := resolveApplymentResultStatus(payload)
+
 	// 根据进件状态处理
-	switch payload.ApplymentState {
-	case "APPLYMENT_STATE_FINISHED":
+	switch status {
+	case "finish":
 		// 进件成功，需要：
 		// 1. 发送成功通知
 		// 2. 添加为分账接收方
-		return processor.handleApplymentSuccess(ctx, &payload)
+		if err := processor.handleApplymentSuccess(ctx, &payload); err != nil {
+			return err
+		}
 
-	case "APPLYMENT_STATE_REJECTED":
+	case "rejected":
 		// 进件被驳回，发送通知
-		return processor.handleApplymentRejected(ctx, &payload)
+		if err := processor.handleApplymentRejected(ctx, &payload); err != nil {
+			return err
+		}
 
-	case "APPLYMENT_STATE_TO_BE_CONFIRMED", "APPLYMENT_STATE_TO_BE_SIGNED":
+	case "to_be_confirmed", "to_be_signed":
 		// 待确认/待签约，发送提醒通知
-		return processor.handleApplymentPending(ctx, &payload)
+		if err := processor.handleApplymentPending(ctx, &payload); err != nil {
+			return err
+		}
 
 	default:
 		log.Info().
-			Str("state", payload.ApplymentState).
+			Str("state", status).
 			Msg("applyment state does not require async processing")
 		return nil
 	}
+
+	if processor.store != nil {
+		if err := processor.store.MarkEcommerceApplymentResultProcessed(ctx, db.MarkEcommerceApplymentResultProcessedParams{
+			ID:                       payload.ApplymentID,
+			ResultTaskProcessedState: pgtype.Text{String: status, Valid: status != ""},
+		}); err != nil {
+			return fmt.Errorf("mark applyment result processed: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // handleApplymentSuccess 处理进件成功
 func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context, payload *ApplymentResultPayload) error {
+	var merchant db.Merchant
+	if payload.SubjectType == "merchant" {
+		loadedMerchant, err := processor.store.GetMerchant(ctx, payload.SubjectID)
+		if err != nil {
+			log.Error().Err(err).Int64("merchant_id", payload.SubjectID).Msg("get merchant for applyment success")
+			return nil
+		}
+		merchant = loadedMerchant
+	}
+
 	// 1. 商户进件成功后，添加为分账接收方。
 	if processor.ecommerceClient != nil && payload.SubMchID != "" && payload.SubjectType == "merchant" {
 		_, err := processor.ecommerceClient.AddProfitSharingReceiver(ctx, &wechat.AddReceiverRequest{
 			AppID:        processor.ecommerceClient.GetSpAppID(),
 			Type:         wechat.ReceiverTypeMerchant,
 			Account:      payload.SubMchID,
+			Name:         strings.TrimSpace(merchant.Name),
 			RelationType: wechat.RelationStore, // 门店关系
 		})
 		if err != nil {
@@ -2616,11 +2701,6 @@ func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context,
 
 	switch payload.SubjectType {
 	case "merchant":
-		merchant, err := processor.store.GetMerchant(ctx, payload.SubjectID)
-		if err != nil {
-			log.Error().Err(err).Int64("merchant_id", payload.SubjectID).Msg("get merchant for notification")
-			return nil // 不重试
-		}
 		userID = merchant.OwnerUserID
 		notifyContent = fmt.Sprintf("您的商户「%s」已完成微信支付开户，可以开始接单收款了！", merchant.Name)
 	}
@@ -2696,7 +2776,7 @@ func (processor *RedisTaskProcessor) handleApplymentPending(ctx context.Context,
 			return nil
 		}
 		userID = merchant.OwnerUserID
-		if payload.ApplymentState == "APPLYMENT_STATE_TO_BE_CONFIRMED" {
+		if resolveApplymentResultStatus(*payload) == "to_be_confirmed" {
 			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要确认，请登录微信支付商户平台完成确认", merchant.Name)
 		} else {
 			notifyContent = fmt.Sprintf("您的商户「%s」微信支付开户需要签约，请登录微信支付商户平台完成签约", merchant.Name)

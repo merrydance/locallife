@@ -534,6 +534,13 @@ definitions:
       device_fingerprint:
         type: string
     type: object
+  api.abnormalRefundWechatResponse:
+    properties:
+      refund_id:
+        type: string
+      status:
+        type: string
+    type: object
   api.addCartItemRequest:
     properties:
       combo_id:
@@ -736,6 +743,32 @@ definitions:
         type: integer
       total:
         type: integer
+    type: object
+  api.applyAbnormalRefundBodyRequest:
+    properties:
+      bank_account:
+        maxLength: 128
+        type: string
+      bank_type:
+        maxLength: 32
+        type: string
+      real_name:
+        maxLength: 128
+        type: string
+      type:
+        enum:
+        - USER_BANK_CARD
+        - MERCHANT_BANK_CARD
+        type: string
+    required:
+    - type
+    type: object
+  api.applyAbnormalRefundResponse:
+    properties:
+      refund_order:
+        $ref: '#/definitions/api.refundOrderResponse'
+      wechat:
+        $ref: '#/definitions/api.abnormalRefundWechatResponse'
     type: object
   api.applyRegionExpansionRequest:
     properties:
@@ -3505,6 +3538,21 @@ definitions:
       total:
         type: integer
     type: object
+  api.listPlatformAlertsResponse:
+    properties:
+      alerts:
+        items:
+          $ref: '#/definitions/api.platformAlertEventResponse'
+        type: array
+      has_more:
+        type: boolean
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.listPlatformOperatorRulesResponse:
     properties:
       rules:
@@ -5323,6 +5371,28 @@ definitions:
       start_time:
         type: string
       updated_at:
+        type: string
+    type: object
+  api.platformAlertEventResponse:
+    properties:
+      alert_type:
+        type: string
+      extra:
+        additionalProperties: {}
+        type: object
+      id:
+        type: integer
+      level:
+        type: string
+      message:
+        type: string
+      related_id:
+        type: integer
+      related_type:
+        type: string
+      timestamp:
+        type: string
+      title:
         type: string
     type: object
   api.platformDailyStatRow:
@@ -21795,6 +21865,51 @@ paths:
       summary: 获取用户支付账单流水
       tags:
       - 支付管理
+  /v1/platform/alerts:
+    get:
+      consumes:
+      - application/json
+      description: 获取平台运营告警历史，用于控制台断线后的回看与首屏恢复
+      parameters:
+      - description: 页码
+        in: query
+        minimum: 1
+        name: page_id
+        type: integer
+      - description: 每页条数
+        in: query
+        maximum: 100
+        minimum: 1
+        name: page_size
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listPlatformAlertsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 仅平台运营人员可访问
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取平台告警历史
+      tags:
+      - 通知管理
   /v1/platform/operational-configs:
     get:
       description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。
@@ -22148,6 +22263,55 @@ paths:
       summary: 禁用分账规则配置
       tags:
       - Platform
+  /v1/platform/refunds/{id}/apply-abnormal-refund:
+    post:
+      consumes:
+      - application/json
+      description: 平台管理员对微信返回 ABNORMAL 的收付通退款单发起人工异常退款处理。
+      parameters:
+      - description: 退款订单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 异常退款处理参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.applyAbnormalRefundBodyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 异常退款处理结果
+          schema:
+            $ref: '#/definitions/api.applyAbnormalRefundResponse'
+        "400":
+          description: 请求参数错误或退款状态不允许处理
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非平台管理员
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 退款订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 平台人工发起异常退款处理
+      tags:
+      - 平台退款管理
   /v1/platform/rules:
     get:
       parameters:

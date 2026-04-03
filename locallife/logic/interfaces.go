@@ -45,6 +45,7 @@ type PaymentFacade interface {
 
 	CreateRefund(ctx context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error)
 	CreateEcommerceRefund(ctx context.Context, req *wechat.EcommerceRefundRequest) (*wechat.EcommerceRefundResponse, error)
+	ApplyEcommerceAbnormalRefund(ctx context.Context, req *wechat.EcommerceAbnormalRefundRequest) (*wechat.EcommerceRefundResponse, error)
 	CreateProfitSharingReturn(ctx context.Context, req *wechat.ProfitSharingReturnRequest) (*wechat.ProfitSharingReturnResponse, error)
 	SpMchID() string
 }
@@ -54,6 +55,7 @@ type RefundOrchestrator interface {
 	GetRefundOrder(ctx context.Context, input GetRefundOrderInput) (GetRefundOrderResult, error)
 	ListRefundOrdersByPayment(ctx context.Context, input ListRefundOrdersByPaymentInput) (ListRefundOrdersByPaymentResult, error)
 	ListProfitSharingReturnsByRefund(ctx context.Context, input ListProfitSharingReturnsByRefundInput) (ListProfitSharingReturnsByRefundResult, error)
+	ApplyAbnormalRefund(ctx context.Context, input ApplyAbnormalRefundInput) (ApplyAbnormalRefundResult, error)
 }
 
 type NotificationInput struct {
@@ -239,6 +241,19 @@ type ListProfitSharingReturnsByRefundInput struct {
 
 type ListProfitSharingReturnsByRefundResult struct {
 	Returns []db.ProfitSharingReturn
+}
+
+type ApplyAbnormalRefundInput struct {
+	RefundID    int64
+	Type        string
+	BankType    string
+	BankAccount string
+	RealName    string
+}
+
+type ApplyAbnormalRefundResult struct {
+	RefundOrder  db.RefundOrder
+	WechatRefund wechat.EcommerceRefundResponse
 }
 
 type GetUserOrderQueryInput struct {

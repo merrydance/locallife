@@ -114,6 +114,9 @@ type EcommerceClientInterface interface {
 	// GetSpAppID 获取服务商AppID
 	GetSpAppID() string
 
+	// GetSpMchName 获取服务商名称
+	GetSpMchName() string
+
 	// GetPlatformCertificateSerial 获取微信支付平台证书序列号
 	GetPlatformCertificateSerial() string
 
@@ -176,6 +179,9 @@ type EcommerceClientInterface interface {
 
 	// CreateEcommerceRefund 申请电商退款
 	CreateEcommerceRefund(ctx context.Context, req *EcommerceRefundRequest) (*EcommerceRefundResponse, error)
+
+	// ApplyEcommerceAbnormalRefund 发起电商异常退款处理
+	ApplyEcommerceAbnormalRefund(ctx context.Context, req *EcommerceAbnormalRefundRequest) (*EcommerceRefundResponse, error)
 
 	// QueryEcommerceRefund 查询电商退款
 	QueryEcommerceRefund(ctx context.Context, subMchID, outRefundNo string) (*EcommerceRefundResponse, error)

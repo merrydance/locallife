@@ -92,13 +92,19 @@ function buildSubmitSuccessMessage(message: string, applymentId: string): string
   return content.join('\n')
 }
 
+function buildSubmitFailureMessage(message: string): string {
+  return [
+    message || '提交开户申请失败，请稍后重试',
+    '如已确认资料无误，请稍后重新提交，或联系平台协助排查。'
+  ].join('\n')
+}
+
 Page({
   data: {
     navBarHeight: 88,
     loading: true,
     submitting: false,
     error: '',
-    success: '',
     status: null as OperatorApplymentStatusResponse | null,
     statusView: { ...DEFAULT_STATUS_VIEW },
     form: {
@@ -165,7 +171,7 @@ Page({
       return
     }
 
-    this.setData({ submitting: true, success: '', error: '' })
+    this.setData({ submitting: true, error: '' })
     try {
       const resp = await operatorBindBank({
         ...form,
@@ -175,15 +181,22 @@ Page({
       await this.loadStatus()
 
       const applymentId = resp.applyment_id ? String(resp.applyment_id) : this.data.statusView.applymentId
-      wx.showModal({
-        title: '开户申请已提交',
-        content: buildSubmitSuccessMessage(resp.message || '开户申请已提交', applymentId),
-        showCancel: false,
-        confirmText: '知道了'
+      const message = encodeURIComponent(buildSubmitSuccessMessage(resp.message || '开户申请已提交', applymentId))
+      const query = [`message=${message}`]
+      if (applymentId && applymentId !== '-') {
+        query.push(`applymentId=${encodeURIComponent(applymentId)}`)
+      }
+      wx.redirectTo({
+        url: `/pages/operator/applyment/success/index?${query.join('&')}`
       })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '提交开户申请失败，请稍后重试')
-      this.setData({ error: message })
+      wx.showModal({
+        title: '提交未完成',
+        content: buildSubmitFailureMessage(message),
+        showCancel: false,
+        confirmText: '我知道了'
+      })
     } finally {
       this.setData({ submitting: false })
     }

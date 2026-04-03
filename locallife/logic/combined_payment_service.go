@@ -144,7 +144,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 	for _, info := range txResult.OrderInfos {
 		description := fmt.Sprintf("%s - Order Payment", info.Merchant.Name)
 		wechatSubOrders = append(wechatSubOrders, wechat.SubOrder{
-			MchID:       info.PaymentConfig.SubMchID,
+			SubMchID:    info.PaymentConfig.SubMchID,
 			Amount:      info.PaymentOrder.Amount,
 			OutTradeNo:  info.PaymentOrder.OutTradeNo,
 			Description: description,
@@ -205,7 +205,7 @@ func (svc *CombinedPaymentService) CreateCombinedPaymentOrder(ctx context.Contex
 		if svc.ecommerceClient != nil {
 			closeSubs := make([]wechat.SubOrderClose, 0, len(wechatSubOrders))
 			for _, sub := range wechatSubOrders {
-				closeSubs = append(closeSubs, wechat.SubOrderClose{MchID: sub.MchID, OutTradeNo: sub.OutTradeNo})
+				closeSubs = append(closeSubs, wechat.SubOrderClose{MchID: sub.MchID, SubMchID: sub.SubMchID, SubAppID: sub.SubAppID, OutTradeNo: sub.OutTradeNo})
 			}
 			if closeErr := svc.ecommerceClient.CloseCombineOrder(cleanupCtx, combineOutTradeNo, closeSubs); closeErr != nil {
 				log.Warn().Err(closeErr).Str("combine_out_trade_no", combineOutTradeNo).Msg("close wechat combine order after prepay update failure")
@@ -267,7 +267,7 @@ func (svc *CombinedPaymentService) CloseCombinedPaymentOrder(ctx context.Context
 		if sub.SubMchID == "" || sub.OutTradeNo == "" {
 			continue
 		}
-		closeSubs = append(closeSubs, wechat.SubOrderClose{MchID: sub.SubMchID, OutTradeNo: sub.OutTradeNo})
+		closeSubs = append(closeSubs, wechat.SubOrderClose{SubMchID: sub.SubMchID, OutTradeNo: sub.OutTradeNo})
 	}
 	if len(closeSubs) == 0 {
 		return CloseCombinedPaymentOrderResult{}, NewRequestError(http.StatusBadRequest, errors.New("no sub orders available to close"))

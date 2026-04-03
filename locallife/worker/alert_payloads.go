@@ -2,8 +2,10 @@ package worker
 
 import (
 	"context"
+	"fmt"
 
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/wechat"
 )
 
 func mergeAlertExtra(base map[string]interface{}, extras map[string]interface{}) map[string]interface{} {
@@ -52,6 +54,24 @@ func refundOrderAlertExtra(paymentOrder db.PaymentOrder, refundOrder db.RefundOr
 	}
 
 	return mergeAlertExtra(base, extras)
+}
+
+func abnormalRefundActionExtra(paymentOrder db.PaymentOrder, refundOrder db.RefundOrder) map[string]interface{} {
+	if paymentOrder.PaymentType != "profit_sharing" {
+		return nil
+	}
+	if !refundOrder.RefundID.Valid || refundOrder.RefundID.String == "" {
+		return nil
+	}
+
+	return map[string]interface{}{
+		"abnormal_refund_api_available":                  true,
+		"abnormal_refund_api_method":                     "POST",
+		"abnormal_refund_api_path":                       fmt.Sprintf("/v1/platform/refunds/%d/apply-abnormal-refund", refundOrder.ID),
+		"abnormal_refund_default_type":                   wechat.EcommerceAbnormalRefundTypeMerchantBankCard,
+		"abnormal_refund_supported_types":                []string{wechat.EcommerceAbnormalRefundTypeMerchantBankCard, wechat.EcommerceAbnormalRefundTypeUserBankCard},
+		"abnormal_refund_user_bank_card_required_fields": []string{"bank_type", "bank_account", "real_name"},
+	}
 }
 
 func profitSharingOrderAlertExtra(order db.ProfitSharingOrder, extras map[string]interface{}) map[string]interface{} {

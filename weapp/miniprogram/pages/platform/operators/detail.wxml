@@ -82,6 +82,10 @@
             <text class="meta-label">法人证件号</text>
             <text class="meta-value">{{application.legal_person_id_number || '-'}}</text>
           </view>
+          <view wx:if="{{idCardPreviewUnavailable}}" class="meta-row">
+            <text class="meta-label">身份证原图</text>
+            <text class="meta-value">当前审核页不展示原图，请以识别信息为准</text>
+          </view>
           <view wx:if="{{idCardFrontUrl}}" class="image-row">
             <text class="meta-label">身份证人像面</text>
             <image

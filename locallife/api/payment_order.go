@@ -784,6 +784,27 @@ type profitSharingReturnResponse struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
+type applyAbnormalRefundURIRequest struct {
+	ID int64 `uri:"id" binding:"required,min=1"`
+}
+
+type applyAbnormalRefundBodyRequest struct {
+	Type        string `json:"type" binding:"required,oneof=USER_BANK_CARD MERCHANT_BANK_CARD"`
+	BankType    string `json:"bank_type,omitempty" binding:"omitempty,max=32"`
+	BankAccount string `json:"bank_account,omitempty" binding:"omitempty,max=128"`
+	RealName    string `json:"real_name,omitempty" binding:"omitempty,max=128"`
+}
+
+type abnormalRefundWechatResponse struct {
+	RefundID string `json:"refund_id,omitempty"`
+	Status   string `json:"status"`
+}
+
+type applyAbnormalRefundResponse struct {
+	RefundOrder refundOrderResponse          `json:"refund_order"`
+	Wechat      abnormalRefundWechatResponse `json:"wechat"`
+}
+
 func newProfitSharingReturnResponse(r db.ProfitSharingReturn) profitSharingReturnResponse {
 	resp := profitSharingReturnResponse{
 		ID:            r.ID,
@@ -827,6 +848,64 @@ func newRefundOrderResponse(r db.RefundOrder) refundOrderResponse {
 	}
 
 	return resp
+}
+
+// applyPlatformAbnormalRefund 平台人工发起异常退款处理
+// @Summary 平台人工发起异常退款处理
+// @Description 平台管理员对微信返回 ABNORMAL 的收付通退款单发起人工异常退款处理。
+// @Tags 平台退款管理
+// @Accept json
+// @Produce json
+// @Param id path int true "退款订单ID"
+// @Param request body applyAbnormalRefundBodyRequest true "异常退款处理参数"
+// @Success 200 {object} applyAbnormalRefundResponse "异常退款处理结果"
+// @Failure 400 {object} ErrorResponse "请求参数错误或退款状态不允许处理"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "非平台管理员"
+// @Failure 404 {object} ErrorResponse "退款订单不存在"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/platform/refunds/{id}/apply-abnormal-refund [post]
+// @Security BearerAuth
+func (server *Server) applyPlatformAbnormalRefund(ctx *gin.Context) {
+	var uriReq applyAbnormalRefundURIRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var bodyReq applyAbnormalRefundBodyRequest
+	if err := ctx.ShouldBindJSON(&bodyReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	orchestrator := server.refundOrchestrator
+	if orchestrator == nil {
+		orchestrator = server.buildRefundOrchestrator()
+	}
+
+	result, err := orchestrator.ApplyAbnormalRefund(ctx, logic.ApplyAbnormalRefundInput{
+		RefundID:    uriReq.ID,
+		Type:        bodyReq.Type,
+		BankType:    bodyReq.BankType,
+		BankAccount: bodyReq.BankAccount,
+		RealName:    bodyReq.RealName,
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, applyAbnormalRefundResponse{
+		RefundOrder: newRefundOrderResponse(result.RefundOrder),
+		Wechat: abnormalRefundWechatResponse{
+			RefundID: result.WechatRefund.RefundID,
+			Status:   result.WechatRefund.Status,
+		},
+	})
 }
 
 // createRefundOrder 创建退款订单（商户端）

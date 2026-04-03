@@ -61,6 +61,11 @@ func (server *Server) markNotificationProcessed(ctx context.Context, notificatio
 	}
 }
 
+func writeWechatNotifySuccess(ctx *gin.Context, metricLabel string) {
+	_ = metricLabel
+	ctx.Status(http.StatusNoContent)
+}
+
 func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notificationID, metricLabel string) bool {
 	existing, err := server.store.GetWechatNotification(ctx, notificationID)
 	if err != nil {
@@ -83,11 +88,15 @@ func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notif
 	}
 
 	if existing.ProcessedAt.Valid {
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		writeWechatNotifySuccess(ctx, metricLabel)
 		return false
 	}
 
 	if existing.CreatedAt.Valid && time.Since(existing.CreatedAt.Time) > notificationClaimStaleWindow {
+		log.Warn().
+			Str("notification_id", notificationID).
+			Str("callback_type", metricLabel).
+			Msg("notification claim stale, releasing for retry")
 		server.releaseNotificationWithReason(ctx, notificationID, metricLabel, "stale_claim_retry")
 		paymentCallbackFailuresTotal.WithLabelValues(metricLabel, "stale_claim_retry").Inc()
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "stale claim, please retry"})
@@ -95,6 +104,10 @@ func (server *Server) handleDuplicateClaimedNotification(ctx *gin.Context, notif
 	}
 
 	paymentCallbackFailuresTotal.WithLabelValues(metricLabel, "inflight_claim").Inc()
+	log.Warn().
+		Str("notification_id", notificationID).
+		Str("callback_type", metricLabel).
+		Msg("notification already in processing")
 	ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "notification in processing"})
 	return false
 }
@@ -366,6 +379,7 @@ func (server *Server) releaseNotificationWithReason(ctx context.Context, id, cal
 // 设计原则：快速响应微信，耗时操作放入队列
 func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	if server.paymentClient == nil {
+		log.Error().Msg("payment callback received but payment client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "payment client not configured",
@@ -419,10 +433,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	// 检查通知类型
 	if notification.EventType != "TRANSACTION.SUCCESS" {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-success notification")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "payment")
 		return
 	}
 
@@ -534,10 +545,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		}
 		log.Info().Int64("id", paymentOrder.ID).Msg("payment order already paid")
 		server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "payment")
 		return
 	}
 
@@ -638,7 +646,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		}
 		// 通知占位已在 tryClaimNotification 中写入，此处不 release —— 以永久记录该事件，防止重复告警。
 		server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		writeWechatNotifySuccess(ctx, "payment")
 		return
 	}
 
@@ -755,8 +763,13 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 		if refundEnqueued {
 			mismatchMsg = "amount mismatch, auto-refund triggered"
 		}
+		log.Info().
+			Int64("payment_order_id", paymentOrder.ID).
+			Str("out_trade_no", resource.OutTradeNo).
+			Str("result", mismatchMsg).
+			Msg("payment callback acknowledged after amount mismatch handling")
 		server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: mismatchMsg})
+		writeWechatNotifySuccess(ctx, "payment")
 		return
 	}
 
@@ -825,10 +838,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 	}
 
 	// 快速返回成功
-	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-		Code:    "SUCCESS",
-		Message: "OK",
-	})
+	writeWechatNotifySuccess(ctx, "payment")
 	server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
 }
 
@@ -836,6 +846,7 @@ func (server *Server) handlePaymentNotify(ctx *gin.Context) {
 // POST /v1/webhooks/wechat-pay/refund-notify
 func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	if server.paymentClient == nil {
+		log.Error().Msg("refund callback received but payment client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "payment client not configured",
@@ -890,10 +901,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 	}
 	if !validEventTypes[notification.EventType] {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-refund notification")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "ecommerce_refund")
 		return
 	}
 
@@ -974,15 +982,16 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 			})
 			return
 		}
+	} else {
+		log.Warn().
+			Str("out_refund_no", resource.OutRefundNo).
+			Msg("refund callback acknowledged without task distributor; refund result processing skipped")
 	}
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
 	// 快速返回成功
-	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-		Code:    "SUCCESS",
-		Message: "OK",
-	})
+	writeWechatNotifySuccess(ctx, "ecommerce_refund")
 	server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
 }
 
@@ -990,6 +999,7 @@ func (server *Server) handleRefundNotify(ctx *gin.Context) {
 // POST /v1/webhooks/wechat-ecommerce/refund-notify
 func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
+		log.Error().Msg("ecommerce refund callback received but ecommerce client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ecommerce client not configured",
@@ -1044,10 +1054,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 	}
 	if !validEventTypes[notification.EventType] {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-refund notification")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "ecommerce_refund")
 		return
 	}
 
@@ -1131,15 +1138,16 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 			})
 			return
 		}
+	} else {
+		log.Warn().
+			Str("out_refund_no", resource.OutRefundNo).
+			Msg("ecommerce refund callback acknowledged without task distributor; refund result processing skipped")
 	}
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
 	// 快速返回成功
-	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-		Code:    "SUCCESS",
-		Message: "OK",
-	})
+	writeWechatNotifySuccess(ctx, "ecommerce_refund")
 	server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
 }
 
@@ -1147,6 +1155,7 @@ func (server *Server) handleEcommerceRefundNotify(ctx *gin.Context) {
 // POST /v1/webhooks/wechat-ecommerce/profit-sharing-notify
 func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
+		log.Error().Msg("profit sharing callback received but ecommerce client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ecommerce client not configured",
@@ -1199,10 +1208,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	}
 	if !validEventTypes[notification.EventType] {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-profit-sharing notification")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "profit_sharing")
 		return
 	}
 
@@ -1229,8 +1235,6 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 		Str("sub_mch_id", resource.SubMchID).
 		Str("out_order_no", resource.OutOrderNo).
 		Str("order_id", resource.OrderID).
-		Str("receiver_result", resource.Receiver.Result).
-		Int64("receiver_amount", resource.Receiver.Amount).
 		Msg("received profit sharing notification")
 
 	if err := server.validateProfitSharingOwnership(resource); err != nil {
@@ -1269,10 +1273,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 			log.Error().Str("out_order_no", resource.OutOrderNo).Msg("profit sharing order not found")
 			// 订单不存在，返回成功避免微信重试
 			server.markNotificationProcessed(ctx, notification.ID, "", resource.TransactionID)
-			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-				Code:    "SUCCESS",
-				Message: "order not found, ignored",
-			})
+			writeWechatNotifySuccess(ctx, "profit_sharing")
 			return
 		}
 		log.Error().Err(err).Str("out_order_no", resource.OutOrderNo).Msg("get profit sharing order")
@@ -1288,10 +1289,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	if profitSharingOrder.Status == "finished" || profitSharingOrder.Status == "failed" {
 		log.Info().Int64("id", profitSharingOrder.ID).Str("status", profitSharingOrder.Status).Msg("profit sharing order already processed")
 		server.markNotificationProcessed(ctx, notification.ID, "", resource.TransactionID)
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "profit_sharing")
 		return
 	}
 
@@ -1330,44 +1328,52 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	if queryErr != nil {
 		log.Warn().Err(queryErr).
 			Str("out_order_no", resource.OutOrderNo).
-			Msg("query profit sharing detail failed, fallback to single receiver event")
+			Msg("query profit sharing detail failed")
 	}
 
-	finalResult := strings.ToUpper(resource.Receiver.Result)
-	finalFailReason := resource.Receiver.FailReason
+	if queryErr != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("profit_sharing", "query_profit_sharing").Inc()
+		server.releaseNotification(ctx, notification.ID, "profit_sharing")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "query profit sharing failed",
+		})
+		return
+	}
 
-	if queryErr == nil {
-		allSuccess := strings.ToUpper(queryResp.Status) == "FINISHED"
-		hasFailed := false
-		failedReasons := make([]string, 0)
+	finalResult := "PROCESSING"
+	finalFailReason := ""
 
-		for _, receiver := range queryResp.Receivers {
-			result := strings.ToUpper(receiver.Result)
-			switch result {
-			case "SUCCESS":
-				// pass
-			case "FAILED", "CLOSED":
-				hasFailed = true
-				if receiver.FailReason != "" {
-					failedReasons = append(failedReasons, receiver.FailReason)
-				}
-				allSuccess = false
-			default:
-				allSuccess = false
+	allSuccess := strings.ToUpper(queryResp.Status) == "FINISHED"
+	hasFailed := false
+	failedReasons := make([]string, 0)
+
+	for _, receiver := range queryResp.Receivers {
+		result := strings.ToUpper(receiver.Result)
+		switch result {
+		case "SUCCESS":
+			// pass
+		case "FAILED", "CLOSED":
+			hasFailed = true
+			if receiver.FailReason != "" {
+				failedReasons = append(failedReasons, receiver.FailReason)
 			}
-		}
-
-		switch {
-		case hasFailed:
-			finalResult = "FAILED"
-			if len(failedReasons) > 0 {
-				finalFailReason = strings.Join(failedReasons, ";")
-			}
-		case allSuccess:
-			finalResult = "SUCCESS"
+			allSuccess = false
 		default:
-			finalResult = "PROCESSING"
+			allSuccess = false
 		}
+	}
+
+	switch {
+	case hasFailed:
+		finalResult = "FAILED"
+		if len(failedReasons) > 0 {
+			finalFailReason = strings.Join(failedReasons, ";")
+		}
+	case allSuccess:
+		finalResult = "SUCCESS"
+	default:
+		finalResult = "PROCESSING"
 	}
 
 	switch finalResult {
@@ -1451,13 +1457,15 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 				Extra:       map[string]interface{}{"out_order_no": resource.OutOrderNo, "result": finalResult, "merchant_id": profitSharingOrder.MerchantID, "error": enqErr.Error()},
 			})
 		}
+	} else {
+		log.Warn().
+			Int64("profit_sharing_order_id", profitSharingOrder.ID).
+			Str("out_order_no", resource.OutOrderNo).
+			Msg("profit sharing callback acknowledged without task distributor; follow-up processing skipped")
 	}
 
 	// 快速返回成功
-	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-		Code:    "SUCCESS",
-		Message: "OK",
-	})
+	writeWechatNotifySuccess(ctx, "profit_sharing")
 	server.markNotificationProcessed(ctx, notification.ID, "", resource.TransactionID)
 }
 
@@ -1465,6 +1473,7 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 // POST /v1/webhooks/wechat-ecommerce/notify
 func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
+		log.Error().Msg("combine payment callback received but ecommerce client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ecommerce client not configured",
@@ -1512,10 +1521,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 	// 检查通知类型
 	if notification.EventType != "TRANSACTION.SUCCESS" {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-success notification")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "combine_payment")
 		return
 	}
 
@@ -1801,10 +1807,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 			Int("exceptional_count", exceptionalCount).
 			Str("combine_out_trade_no", resource.CombineOutTradeNo).
 			Msg("combined payment contains exceptional sub orders, skip marking main order paid")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "combine_payment")
 		server.markNotificationProcessed(ctx, notification.ID, resource.CombineOutTradeNo, "")
 		return
 	}
@@ -1861,10 +1864,7 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 
 	// 通知ID已在 tryClaimNotification 中原子写入，无需重复记录
 
-	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-		Code:    "SUCCESS",
-		Message: "OK",
-	})
+	writeWechatNotifySuccess(ctx, "combine_payment")
 	server.markNotificationProcessed(ctx, notification.ID, resource.CombineOutTradeNo, "")
 }
 
@@ -1898,6 +1898,7 @@ type ApplymentStateChangeResource struct {
 // POST /v1/webhooks/wechat-ecommerce/applyment-notify
 func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
+		log.Error().Msg("applyment callback received but ecommerce client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ecommerce client not configured",
@@ -1948,10 +1949,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 	// 检查通知类型
 	if notification.EventType != "APPLYMENT_STATE.CHANGE" {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-applyment notification")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-			Code:    "SUCCESS",
-			Message: "OK",
-		})
+		writeWechatNotifySuccess(ctx, "applyment")
 		return
 	}
 
@@ -2018,10 +2016,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 		if isNotFoundError(err) {
 			log.Warn().Str("out_request_no", resource.OutRequestNo).Msg("applyment record not found")
 			server.markNotificationProcessed(ctx, notification.ID, "", "")
-			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-				Code:    "SUCCESS",
-				Message: "OK",
-			})
+			writeWechatNotifySuccess(ctx, "applyment")
 			return
 		}
 		log.Error().Err(err).Msg("get applyment record")
@@ -2038,7 +2033,7 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 			Str("subject_type", applyment.SubjectType).
 			Msg("ignore unsupported applyment subject type")
 		server.markNotificationProcessed(ctx, notification.ID, "", "")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		writeWechatNotifySuccess(ctx, "applyment")
 		return
 	}
 
@@ -2113,25 +2108,33 @@ func (server *Server) handleApplymentStateNotify(ctx *gin.Context) {
 
 	// 📤 异步处理：发送通知 + 添加分账接收方
 	if server.taskDistributor != nil {
-		_ = server.taskDistributor.DistributeTaskProcessApplymentResult(
+		if err := server.taskDistributor.DistributeTaskProcessApplymentResult(
 			ctx,
 			&worker.ApplymentResultPayload{
-				ApplymentID:    applyment.ID,
-				OutRequestNo:   resource.OutRequestNo,
-				ApplymentState: resource.ApplymentState,
-				SubMchID:       resource.SubMchID,
-				SubjectType:    applyment.SubjectType,
-				SubjectID:      applyment.SubjectID,
+				ApplymentID:     applyment.ID,
+				OutRequestNo:    resource.OutRequestNo,
+				ApplymentState:  resource.ApplymentState,
+				ApplymentStatus: newStatus,
+				SubMchID:        resource.SubMchID,
+				SubjectType:     applyment.SubjectType,
+				SubjectID:       applyment.SubjectID,
 			},
 			asynq.MaxRetry(3),
 			asynq.Queue(worker.QueueDefault),
-		)
+		); err != nil {
+			log.Error().Err(err).
+				Int64("applyment_id", applyment.ID).
+				Str("out_request_no", resource.OutRequestNo).
+				Msg("enqueue applyment follow-up task failed")
+		}
+	} else {
+		log.Warn().
+			Int64("applyment_id", applyment.ID).
+			Str("out_request_no", resource.OutRequestNo).
+			Msg("applyment callback acknowledged without task distributor; follow-up processing skipped")
 	}
 
-	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{
-		Code:    "SUCCESS",
-		Message: "OK",
-	})
+	writeWechatNotifySuccess(ctx, "applyment")
 	server.markNotificationProcessed(ctx, notification.ID, "", "")
 }
 
@@ -2142,17 +2145,29 @@ func mapApplymentStateToDBStatus(wechatState string) string {
 		return "editing"
 	case "APPLYMENT_STATE_AUDITING":
 		return "auditing"
+	case "CHECKING", "ACCOUNT_NEED_VERIFY", "AUDITING":
+		return "auditing"
 	case "APPLYMENT_STATE_REJECTED":
+		return "rejected"
+	case "REJECTED":
 		return "rejected"
 	case "APPLYMENT_STATE_TO_BE_CONFIRMED":
 		return "to_be_confirmed"
 	case "APPLYMENT_STATE_TO_BE_SIGNED":
 		return "to_be_signed"
+	case "NEED_SIGN":
+		return "to_be_signed"
 	case "APPLYMENT_STATE_SIGNING":
 		return "signing"
 	case "APPLYMENT_STATE_FINISHED":
 		return "finish"
+	case "FINISH":
+		return "finish"
+	case "APPLYMENT_STATE_FROZEN", "FROZEN":
+		return "frozen"
 	case "APPLYMENT_STATE_CANCELED":
+		return "canceled"
+	case "CANCELED":
 		return "canceled"
 	default:
 		return wechatState
@@ -2166,6 +2181,7 @@ func mapApplymentStateToDBStatus(wechatState string) string {
 // settlement_time 字段非空代表资金已实际结算，此时触发分账。
 func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
+		log.Error().Msg("settlement callback received but ecommerce client is not configured")
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ecommerce client not configured",
@@ -2217,7 +2233,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 
 	if notification.EventType != "trade_manage_order_settlement" {
 		log.Info().Str("event_type", notification.EventType).Msg("ignore non-settlement notification")
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		writeWechatNotifySuccess(ctx, "settlement")
 		return
 	}
 
@@ -2250,7 +2266,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 	if resource.SettlementTime == "" {
 		log.Info().Str("merchant_trade_no", resource.MerchantTradeNo).Msg("settlement_time empty, no actual settlement yet")
 		server.markNotificationProcessed(ctx, notification.ID, resource.MerchantTradeNo, resource.TransactionID)
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		writeWechatNotifySuccess(ctx, "settlement")
 		return
 	}
 
@@ -2261,7 +2277,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 			// 未知子单，可能是非 profit_sharing 订单或旧数据，忽略
 			log.Warn().Str("merchant_trade_no", resource.MerchantTradeNo).Msg("combined sub order not found, skip settlement")
 			server.markNotificationProcessed(ctx, notification.ID, resource.MerchantTradeNo, resource.TransactionID)
-			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+			writeWechatNotifySuccess(ctx, "settlement")
 			return
 		}
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "query_sub_order").Inc()
@@ -2281,7 +2297,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 		if isNotFoundError(err) {
 			log.Warn().Str("out_trade_no", subOrder.OutTradeNo).Msg("payment order not found for settlement, skip")
 			server.markNotificationProcessed(ctx, notification.ID, subOrder.OutTradeNo, resource.TransactionID)
-			ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+			writeWechatNotifySuccess(ctx, "settlement")
 			return
 		}
 		paymentCallbackFailuresTotal.WithLabelValues("settlement", "query_payment_order").Inc()
@@ -2301,7 +2317,7 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 			Str("type", po.PaymentType).
 			Msg("settlement: payment order not eligible for profit sharing, skip")
 		server.markNotificationProcessed(ctx, notification.ID, subOrder.OutTradeNo, resource.TransactionID)
-		ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+		writeWechatNotifySuccess(ctx, "settlement")
 		return
 	}
 
@@ -2352,8 +2368,13 @@ func (server *Server) handleOrderSettlementNotify(ctx *gin.Context) {
 				}()).
 				Msg("profit sharing task dispatched via settlement event")
 		}
+	} else {
+		log.Warn().
+			Int64("payment_order_id", po.ID).
+			Str("merchant_trade_no", resource.MerchantTradeNo).
+			Msg("settlement callback acknowledged without task distributor; profit sharing dispatch skipped")
 	}
 
 	server.markNotificationProcessed(ctx, notification.ID, subOrder.OutTradeNo, resource.TransactionID)
-	ctx.JSON(http.StatusOK, wechatPaymentNotifyResponse{Code: "SUCCESS", Message: "OK"})
+	writeWechatNotifySuccess(ctx, "settlement")
 }

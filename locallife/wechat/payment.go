@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/rs/zerolog/log"
@@ -820,6 +821,56 @@ func (c *PaymentClient) VerifyNotificationSignature(signature, timestamp, nonce,
 	return nil
 }
 
+func (c *PaymentClient) verifyResponseSignature(signature, timestamp, nonce, serial, body string) error {
+	if signature == "" || timestamp == "" || nonce == "" || serial == "" {
+		return fmt.Errorf("missing response signature headers")
+	}
+
+	expectedSerial := c.GetPlatformCertificateSerial()
+	if expectedSerial == "" {
+		return fmt.Errorf("neither platform public key ID nor platform certificate configured")
+	}
+	if !strings.EqualFold(serial, expectedSerial) {
+		return fmt.Errorf("unexpected response serial: got %q want %q", serial, expectedSerial)
+	}
+
+	var publicKey *rsa.PublicKey
+	if c.platformPublicKey != nil {
+		publicKey = c.platformPublicKey
+	} else if c.platformCertificate != nil {
+		var ok bool
+		publicKey, ok = c.platformCertificate.PublicKey.(*rsa.PublicKey)
+		if !ok {
+			return fmt.Errorf("invalid platform certificate public key type")
+		}
+	} else {
+		return fmt.Errorf("neither platform public key nor platform certificate configured")
+	}
+
+	message := fmt.Sprintf("%s\n%s\n%s\n", timestamp, nonce, body)
+	signatureBytes, err := base64.StdEncoding.DecodeString(signature)
+	if err != nil {
+		return fmt.Errorf("decode signature: %w", err)
+	}
+
+	hashed := sha256.Sum256([]byte(message))
+	if err := rsa.VerifyPKCS1v15(publicKey, crypto.SHA256, hashed[:], signatureBytes); err != nil {
+		return ErrInvalidSignature
+	}
+
+	return nil
+}
+
+func (c *PaymentClient) verifyHTTPResponseSignature(resp *http.Response, body []byte) error {
+	return c.verifyResponseSignature(
+		resp.Header.Get("Wechatpay-Signature"),
+		resp.Header.Get("Wechatpay-Timestamp"),
+		resp.Header.Get("Wechatpay-Nonce"),
+		resp.Header.Get("Wechatpay-Serial"),
+		string(body),
+	)
+}
+
 // decryptAESGCM 使用 AES-GCM 解密（APIv3 回调通知解密）
 func (c *PaymentClient) decryptAESGCM(nonceStr, ciphertext, associatedData string) ([]byte, error) {
 	nonce := []byte(nonceStr)
@@ -864,8 +915,16 @@ func (c *PaymentClient) doRequestWithWechatSerial(ctx context.Context, method, p
 	return c.doRequestWithSerial(ctx, method, path, body, wechatSerial)
 }
 
+func (c *PaymentClient) doRequestWithoutResponseVerification(ctx context.Context, method, path string, body interface{}) ([]byte, error) {
+	return c.doRequestWithOptions(ctx, method, path, body, "", false)
+}
+
 // doRequestWithSerial 发送请求，支持指定微信支付平台证书序列号
 func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path string, body interface{}, wechatSerial string) ([]byte, error) {
+	return c.doRequestWithOptions(ctx, method, path, body, wechatSerial, true)
+}
+
+func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path string, body interface{}, wechatSerial string, verifyResponse bool) ([]byte, error) {
 	var bodyBytes []byte
 	var err error
 
@@ -924,6 +983,11 @@ func (c *PaymentClient) doRequestWithSerial(ctx context.Context, method, path st
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20)) // 4MB上限，防止异常大响应耗尽内存
 	if err != nil {
 		return nil, fmt.Errorf("read response: %w", err)
+	}
+	if verifyResponse {
+		if err := c.verifyHTTPResponseSignature(resp, respBody); err != nil {
+			return nil, fmt.Errorf("verify response signature: %w", err)
+		}
 	}
 
 	// 检查状态码

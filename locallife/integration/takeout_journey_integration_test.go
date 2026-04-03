@@ -2972,12 +2972,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 			OutRefundNo:  outRefundNo,
 			RefundID:     "refund_notify_id_001",
 			RefundStatus: "SUCCESS",
-			Amount: struct {
-				Total       int64 `json:"total"`
-				Refund      int64 `json:"refund"`
-				PayerTotal  int64 `json:"payer_total"`
-				PayerRefund int64 `json:"payer_refund"`
-			}{
+			Amount: wechat.EcommerceRefundAmount{
 				Total:       po.Amount,
 				Refund:      po.Amount,
 				PayerTotal:  po.Amount,

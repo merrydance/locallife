@@ -412,7 +412,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 						require.Equal(t, "openid-ok", req.PayerOpenID)
 						require.Equal(t, "127.0.0.1", req.SceneInfo.PayerClientIP)
 						require.Len(t, req.SubOrders, 2)
-						require.Equal(t, "190001", req.SubOrders[0].MchID)
+						require.Equal(t, "190001", req.SubOrders[0].SubMchID)
 						require.Equal(t, "PO-11", req.SubOrders[0].OutTradeNo)
 						require.Equal(t, int64(3200), req.SubOrders[0].Amount)
 						return &wechat.CombineOrderResponse{PrepayID: "wx-prepay-1"}, &wechat.JSAPIPayParams{TimeStamp: "1", NonceStr: "n", Package: "p", SignType: "RSA", PaySign: "s"}, nil
@@ -711,7 +711,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{MchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(errors.New("wechat close failed"))
 			},
@@ -736,7 +736,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{MchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(nil)
 
@@ -769,7 +769,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{MchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(nil)
 
@@ -807,7 +807,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 					Return(combinedRow, nil)
 
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{MchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
+					CloseCombineOrder(gomock.Any(), "C202001010000000001", []wechat.SubOrderClose{{SubMchID: "1900001111", OutTradeNo: "P202001010000000001"}}).
 					Times(1).
 					Return(nil)
 

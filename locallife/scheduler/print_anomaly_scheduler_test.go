@@ -19,6 +19,7 @@ func TestDataCleanupScheduler_CheckTimedOutPrintAnomalies_PublishesAlert(t *test
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	allowPlatformAlertEventPersistence(store)
 	publisher := &recordingPublisher{}
 	s := NewDataCleanupScheduler(store, nil, publisher)
 
@@ -79,6 +80,7 @@ func TestDataCleanupScheduler_CheckTimedOutPrintAnomalies_DeduplicatesRepeatedAl
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	allowPlatformAlertEventPersistence(store)
 	publisher := &recordingPublisher{}
 	s := NewDataCleanupScheduler(store, nil, publisher)
 
@@ -108,6 +110,7 @@ func TestDataCleanupScheduler_CheckTimedOutPrintAnomalies_DeduplicatesByOrderAnd
 	defer ctrl.Finish()
 
 	store := mockdb.NewMockStore(ctrl)
+	allowPlatformAlertEventPersistence(store)
 	publisher := &recordingPublisher{}
 	s := NewDataCleanupScheduler(store, nil, publisher)
 

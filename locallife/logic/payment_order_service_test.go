@@ -426,7 +426,7 @@ func TestPaymentOrderServiceClosePaymentOrder(t *testing.T) {
 					Times(1).
 					Return([]db.CombinedPaymentSubOrder{{SubMchid: "1900000109", OutTradeNo: "CP202001010000000003"}}, nil)
 				client.EXPECT().
-					CloseCombineOrder(gomock.Any(), "OC123", []wechat.SubOrderClose{{MchID: "1900000109", OutTradeNo: "CP202001010000000003"}}).
+					CloseCombineOrder(gomock.Any(), "OC123", []wechat.SubOrderClose{{SubMchID: "1900000109", OutTradeNo: "CP202001010000000003"}}).
 					Times(1).
 					Return(nil)
 				store.EXPECT().

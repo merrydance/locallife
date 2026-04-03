@@ -2118,6 +2118,21 @@ func (mr *MockStoreMockRecorder) CountPendingRegionApplications(ctx any) *gomock
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPendingRegionApplications", reflect.TypeOf((*MockStore)(nil).CountPendingRegionApplications), ctx)
 }
 
+// CountPlatformAlertEvents mocks base method.
+func (m *MockStore) CountPlatformAlertEvents(ctx context.Context) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountPlatformAlertEvents", ctx)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountPlatformAlertEvents indicates an expected call of CountPlatformAlertEvents.
+func (mr *MockStoreMockRecorder) CountPlatformAlertEvents(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountPlatformAlertEvents", reflect.TypeOf((*MockStore)(nil).CountPlatformAlertEvents), ctx)
+}
+
 // CountProfitSharingReturnsByRefundOrder mocks base method.
 func (m *MockStore) CountProfitSharingReturnsByRefundOrder(ctx context.Context, refundOrderID int64) (int32, error) {
 	m.ctrl.T.Helper()
@@ -3856,6 +3871,21 @@ func (m *MockStore) CreatePeakHourConfig(ctx context.Context, arg db.CreatePeakH
 func (mr *MockStoreMockRecorder) CreatePeakHourConfig(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePeakHourConfig", reflect.TypeOf((*MockStore)(nil).CreatePeakHourConfig), ctx, arg)
+}
+
+// CreatePlatformAlertEvent mocks base method.
+func (m *MockStore) CreatePlatformAlertEvent(ctx context.Context, arg db.CreatePlatformAlertEventParams) (db.PlatformAlertEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePlatformAlertEvent", ctx, arg)
+	ret0, _ := ret[0].(db.PlatformAlertEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePlatformAlertEvent indicates an expected call of CreatePlatformAlertEvent.
+func (mr *MockStoreMockRecorder) CreatePlatformAlertEvent(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePlatformAlertEvent", reflect.TypeOf((*MockStore)(nil).CreatePlatformAlertEvent), ctx, arg)
 }
 
 // CreatePlatformConfig mocks base method.
@@ -13524,6 +13554,21 @@ func (mr *MockStoreMockRecorder) ListPendingEcommerceApplyments(ctx, arg any) *g
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingEcommerceApplyments", reflect.TypeOf((*MockStore)(nil).ListPendingEcommerceApplyments), ctx, arg)
 }
 
+// ListEcommerceApplymentsPendingFollowUp mocks base method.
+func (m *MockStore) ListEcommerceApplymentsPendingFollowUp(ctx context.Context, arg db.ListEcommerceApplymentsPendingFollowUpParams) ([]db.EcommerceApplymentPendingFollowUp, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListEcommerceApplymentsPendingFollowUp", ctx, arg)
+	ret0, _ := ret[0].([]db.EcommerceApplymentPendingFollowUp)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListEcommerceApplymentsPendingFollowUp indicates an expected call of ListEcommerceApplymentsPendingFollowUp.
+func (mr *MockStoreMockRecorder) ListEcommerceApplymentsPendingFollowUp(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListEcommerceApplymentsPendingFollowUp", reflect.TypeOf((*MockStore)(nil).ListEcommerceApplymentsPendingFollowUp), ctx, arg)
+}
+
 // ListPendingOCRJobsByMediaAsset mocks base method.
 func (m *MockStore) ListPendingOCRJobsByMediaAsset(ctx context.Context, mediaAssetID int64) ([]db.OcrJob, error) {
 	m.ctrl.T.Helper()
@@ -13642,6 +13687,21 @@ func (m *MockStore) ListPendingWithdrawalRecordsByChannel(ctx context.Context, a
 func (mr *MockStoreMockRecorder) ListPendingWithdrawalRecordsByChannel(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingWithdrawalRecordsByChannel", reflect.TypeOf((*MockStore)(nil).ListPendingWithdrawalRecordsByChannel), ctx, arg)
+}
+
+// ListPlatformAlertEvents mocks base method.
+func (m *MockStore) ListPlatformAlertEvents(ctx context.Context, arg db.ListPlatformAlertEventsParams) ([]db.PlatformAlertEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPlatformAlertEvents", ctx, arg)
+	ret0, _ := ret[0].([]db.PlatformAlertEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPlatformAlertEvents indicates an expected call of ListPlatformAlertEvents.
+func (mr *MockStoreMockRecorder) ListPlatformAlertEvents(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPlatformAlertEvents", reflect.TypeOf((*MockStore)(nil).ListPlatformAlertEvents), ctx, arg)
 }
 
 // ListPlatformConfigsByKey mocks base method.
@@ -17543,6 +17603,20 @@ func (m *MockStore) UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg
 func (mr *MockStoreMockRecorder) UpdateEcommerceApplymentToSubmitted(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEcommerceApplymentToSubmitted", reflect.TypeOf((*MockStore)(nil).UpdateEcommerceApplymentToSubmitted), ctx, arg)
+}
+
+// MarkEcommerceApplymentResultProcessed mocks base method.
+func (m *MockStore) MarkEcommerceApplymentResultProcessed(ctx context.Context, arg db.MarkEcommerceApplymentResultProcessedParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkEcommerceApplymentResultProcessed", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkEcommerceApplymentResultProcessed indicates an expected call of MarkEcommerceApplymentResultProcessed.
+func (mr *MockStoreMockRecorder) MarkEcommerceApplymentResultProcessed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentResultProcessed", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentResultProcessed), ctx, arg)
 }
 
 // UpdateFoodSafetyIncidentStatus mocks base method.

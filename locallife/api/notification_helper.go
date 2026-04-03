@@ -227,9 +227,26 @@ func (server *Server) sendNotificationInternal(ctx context.Context, params SendN
 	}
 }
 
-// sendAlert 安全地发送运营告警，wsHub 未初始化时静默跳过。
+// sendAlert 安全地发送运营告警，优先持久化，实时推送不可用时仅跳过 websocket。
 // 用于支付链路中需要人工介入的异常场景。
 func (server *Server) sendAlert(data websocket.AlertData) {
+	if data.Timestamp.IsZero() {
+		data.Timestamp = time.Now()
+	}
+	if err := worker.SavePlatformAlertEvent(
+		context.Background(),
+		server.store,
+		string(data.AlertType),
+		string(data.Level),
+		data.Title,
+		data.Message,
+		data.RelatedID,
+		data.RelatedType,
+		data.Extra,
+		data.Timestamp,
+	); err != nil {
+		log.Warn().Err(err).Str("alert_type", string(data.AlertType)).Msg("persist platform alert event failed before websocket push")
+	}
 	if server.wsHub == nil {
 		return
 	}

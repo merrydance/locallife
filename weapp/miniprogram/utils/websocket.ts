@@ -6,6 +6,7 @@ import { EventBus } from './event-bus'
  * WebSocket 消息类型定义
  */
 export enum WSMessageType {
+  ALERT = 'alert',
   NOTIFICATION = 'notification',
   PING = 'ping',
   PONG = 'pong',
@@ -54,7 +55,7 @@ class WebSocketManager {
    * 建立连接
    * @param url WebSocket 地址，若不传则从配置获取
    */
-  connect(url?: string) {
+  connect(urlOrPath?: string) {
     const token = getToken()
     if (!token) {
       logger.warn('WebSocket: No token found, aborting connection', undefined, 'WS')
@@ -72,7 +73,7 @@ class WebSocketManager {
 
     this.isConnecting = true
     this.forcedClose = false
-    const wsUrl = url || this.getDefaultUrl(token, this.lastSequence)
+    const wsUrl = this.resolveWebSocketUrl(token, urlOrPath, this.lastSequence)
 
     logger.info(`WebSocket: Connecting to ${wsUrl.split('?')[0]}...`, undefined, 'WS')
 
@@ -204,16 +205,23 @@ class WebSocketManager {
     }
   }
 
-  private getDefaultUrl(token: string, lastSequence = 0): string {
+  private resolveWebSocketUrl(token: string, urlOrPath?: string, lastSequence = 0): string {
     const { API_CONFIG } = require('../config/index')
     const baseUrl = API_CONFIG.BASE_URL
-    
-    // 将 https:// 转换为 wss://, http:// 转换为 ws://
     const wsBase = baseUrl.replace(/^http/, 'ws')
-    
-    // 若有上次收到的序号，带上让服务端在重连后回放断线期间的消息
     const seq = lastSequence > 0 ? `&last_sequence=${lastSequence}` : ''
-    return `${wsBase}/v1/ws?token=${encodeURIComponent(token)}${seq}`
+
+    if (!urlOrPath) {
+      return `${wsBase}/v1/ws?token=${encodeURIComponent(token)}${seq}`
+    }
+
+    const separator = urlOrPath.includes('?') ? '&' : '?'
+    if (/^wss?:\/\//.test(urlOrPath)) {
+      return `${urlOrPath}${separator}token=${encodeURIComponent(token)}${seq}`
+    }
+
+    const normalizedPath = urlOrPath.startsWith('/') ? urlOrPath : `/${urlOrPath}`
+    return `${wsBase}${normalizedPath}${separator}token=${encodeURIComponent(token)}${seq}`
   }
 }
 

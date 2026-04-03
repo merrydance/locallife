@@ -8,11 +8,13 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"net/url"
 	"path/filepath"
 	"strings"
 	"time"
@@ -37,15 +39,17 @@ const (
 	profitSharingURL            = "/v3/ecommerce/profitsharing/orders"
 	profitSharingFinishURL      = "/v3/ecommerce/profitsharing/finish-order"
 	profitSharingReturnURL      = "/v3/ecommerce/profitsharing/returnorders"
-	profitSharingReturnQueryURL = "/v3/ecommerce/profitsharing/returnorders/%s"
+	profitSharingReturnQueryURL = "/v3/ecommerce/profitsharing/returnorders"
 
 	// 分账接收方
 	profitSharingReceiverAddURL    = "/v3/ecommerce/profitsharing/receivers/add"
 	profitSharingReceiverDeleteURL = "/v3/ecommerce/profitsharing/receivers/delete"
 
 	// 退款（平台收付通）
-	ecommerceRefundURL      = "/v3/ecommerce/refunds/apply"
-	ecommerceRefundQueryURL = "/v3/ecommerce/refunds/out-refund-no/%s"
+	ecommerceRefundURL                 = "/v3/ecommerce/refunds/apply"
+	ecommerceAbnormalRefundURL         = "/v3/ecommerce/refunds/%s/apply-abnormal-refund"
+	ecommerceRefundQueryByIDURL        = "/v3/ecommerce/refunds/id/%s"
+	ecommerceRefundQueryByOutRefundURL = "/v3/ecommerce/refunds/out-refund-no/%s"
 
 	// 账户资金管理（平台收付通）
 	ecommerceFundBalanceURL        = "/v3/ecommerce/fund/balance/%s"
@@ -59,6 +63,7 @@ type EcommerceClient struct {
 	*PaymentClient        // 复用基础支付客户端
 	spMchID        string // 服务商商户号
 	spAppID        string // 服务商 AppID
+	spMchName      string // 服务商名称（可选）
 }
 
 // EcommerceClientConfig 平台收付通客户端配置
@@ -66,6 +71,7 @@ type EcommerceClientConfig struct {
 	PaymentClientConfig        // 嵌入基础配置
 	SpMchID             string // 服务商商户号（如与 MchID 相同可不填）
 	SpAppID             string // 服务商 AppID（如与 AppID 相同可不填）
+	SpMchName           string // 服务商名称（可选）
 }
 
 // NewEcommerceClient 创建平台收付通客户端
@@ -85,10 +91,13 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 		spAppID = cfg.AppID
 	}
 
+	spMchName := strings.TrimSpace(cfg.SpMchName)
+
 	return &EcommerceClient{
 		PaymentClient: baseClient,
 		spMchID:       spMchID,
 		spAppID:       spAppID,
+		spMchName:     spMchName,
 	}, nil
 }
 
@@ -100,6 +109,11 @@ func (c *EcommerceClient) GetSpMchID() string {
 // GetSpAppID 获取服务商AppID
 func (c *EcommerceClient) GetSpAppID() string {
 	return c.spAppID
+}
+
+// GetSpMchName 获取服务商名称
+func (c *EcommerceClient) GetSpMchName() string {
+	return c.spMchName
 }
 
 // ==================== 二级商户进件 ====================
@@ -410,24 +424,30 @@ type CombineOrderRequest struct {
 	Description       string            // 商品描述
 	SubOrders         []SubOrder        // 子订单列表
 	PayerOpenID       string            // 支付者 OpenID
+	PayerSubOpenID    string            // 支付者子商户 OpenID（可选）
 	ExpireTime        time.Time         // 交易结束时间
+	StartTime         *time.Time        // 交易开始时间（可选）
+	NotifyURL         string            // 支付通知地址（可选，默认使用客户端配置）
 	SceneInfo         *CombineSceneInfo // 场景信息（可选）
 }
 
 // SubOrder 子订单
 type SubOrder struct {
-	MchID         string // 子单商户号（二级商户）
+	MchID         string // 商品单商户号；为空时默认使用服务商商户号
+	SubMchID      string // 特约商户号（二级商户号）
+	SubAppID      string // 子商户绑定的 AppID（可选）
 	OutTradeNo    string // 子单商户订单号
 	Description   string // 商品描述
 	Amount        int64  // 订单金额（分）
 	ProfitSharing bool   // 是否分账，true 表示需要分账
-	Attach        string // 附加数据（选填，用于子订单关联信息）
+	Attach        string // 附加数据
+	GoodsTag      string // 订单优惠标记（可选）
 }
 
 // CombineSceneInfo 场景信息
 type CombineSceneInfo struct {
-	PayerClientIP string // 用户终端 IP
-	DeviceID      string // 商户端设备号
+	PayerClientIP string `json:"payer_client_ip,omitempty"` // 用户终端 IP
+	DeviceID      string `json:"device_id,omitempty"`       // 商户端设备号
 }
 
 // CombineOrderResponse 合单下单响应
@@ -441,8 +461,13 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 	// 构建子订单列表
 	subOrders := make([]map[string]interface{}, len(req.SubOrders))
 	for i, sub := range req.SubOrders {
+		mchID := strings.TrimSpace(sub.MchID)
+		if mchID == "" {
+			mchID = c.spMchID
+		}
 		subOrder := map[string]interface{}{
-			"mchid":        sub.MchID,
+			"mchid":        mchID,
+			"attach":       sub.Attach,
 			"out_trade_no": sub.OutTradeNo,
 			"description":  sub.Description,
 			"amount": map[string]interface{}{
@@ -453,11 +478,29 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 				"profit_sharing": sub.ProfitSharing,
 			},
 		}
-		// 添加附加数据（如果提供）
-		if sub.Attach != "" {
-			subOrder["attach"] = sub.Attach
+		if sub.SubMchID != "" {
+			subOrder["sub_mchid"] = sub.SubMchID
+		}
+		if sub.SubAppID != "" {
+			subOrder["sub_appid"] = sub.SubAppID
+		}
+		if sub.GoodsTag != "" {
+			subOrder["goods_tag"] = sub.GoodsTag
 		}
 		subOrders[i] = subOrder
+	}
+
+	combinePayerInfo := map[string]interface{}{}
+	if req.PayerOpenID != "" {
+		combinePayerInfo["openid"] = req.PayerOpenID
+	}
+	if req.PayerSubOpenID != "" {
+		combinePayerInfo["sub_openid"] = req.PayerSubOpenID
+	}
+
+	notifyURL := c.notifyURL
+	if req.NotifyURL != "" {
+		notifyURL = req.NotifyURL
 	}
 
 	body := map[string]interface{}{
@@ -465,11 +508,12 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		"combine_mchid":        c.spMchID,
 		"combine_out_trade_no": req.CombineOutTradeNo,
 		"sub_orders":           subOrders,
-		"combine_payer_info": map[string]interface{}{
-			"openid": req.PayerOpenID,
-		},
-		"notify_url":  c.notifyURL,
-		"time_expire": req.ExpireTime.Format(time.RFC3339),
+		"combine_payer_info":   combinePayerInfo,
+		"notify_url":           notifyURL,
+		"time_expire":          req.ExpireTime.Format(time.RFC3339),
+	}
+	if req.StartTime != nil {
+		body["time_start"] = req.StartTime.Format(time.RFC3339)
 	}
 
 	if req.SceneInfo != nil {
@@ -522,15 +566,22 @@ type CombineQueryResponse struct {
 	CombineOutTradeNo string                  `json:"combine_out_trade_no"`
 	SubOrders         []CombineSubOrderResult `json:"sub_orders"`
 	CombinePayerInfo  *CombinePayerInfo       `json:"combine_payer_info"`
+	SceneInfo         *CombineSceneInfo       `json:"scene_info"`
 }
 
 // CombineSubOrderResult 合单子订单结果
 type CombineSubOrderResult struct {
 	MchID          string `json:"mchid"`
+	SubMchID       string `json:"sub_mchid,omitempty"`
+	SubAppID       string `json:"sub_appid,omitempty"`
+	SubOpenID      string `json:"sub_openid,omitempty"`
 	OutTradeNo     string `json:"out_trade_no"`
 	TransactionID  string `json:"transaction_id"`
+	TradeType      string `json:"trade_type,omitempty"`
 	TradeState     string `json:"trade_state"` // SUCCESS/REFUND/NOTPAY/CLOSED/PAYERROR
 	TradeStateDesc string `json:"trade_state_desc"`
+	BankType       string `json:"bank_type,omitempty"`
+	Attach         string `json:"attach,omitempty"`
 	Amount         struct {
 		TotalAmount int64  `json:"total_amount"`
 		PayerAmount int64  `json:"payer_amount"`
@@ -541,7 +592,8 @@ type CombineSubOrderResult struct {
 
 // CombinePayerInfo 合单支付者信息
 type CombinePayerInfo struct {
-	OpenID string `json:"openid"`
+	OpenID    string `json:"openid"`
+	SubOpenID string `json:"sub_openid,omitempty"`
 }
 
 // CloseCombineOrder 关闭合单订单
@@ -550,10 +602,21 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 
 	subs := make([]map[string]string, len(subOrders))
 	for i, sub := range subOrders {
-		subs[i] = map[string]string{
-			"mchid":        sub.MchID,
+		mchID := strings.TrimSpace(sub.MchID)
+		if mchID == "" {
+			mchID = c.spMchID
+		}
+		subOrder := map[string]string{
+			"mchid":        mchID,
 			"out_trade_no": sub.OutTradeNo,
 		}
+		if sub.SubMchID != "" {
+			subOrder["sub_mchid"] = sub.SubMchID
+		}
+		if sub.SubAppID != "" {
+			subOrder["sub_appid"] = sub.SubAppID
+		}
+		subs[i] = subOrder
 	}
 
 	body := map[string]interface{}{
@@ -572,6 +635,8 @@ func (c *EcommerceClient) CloseCombineOrder(ctx context.Context, combineOutTrade
 // SubOrderClose 关闭子订单参数
 type SubOrderClose struct {
 	MchID      string
+	SubMchID   string
+	SubAppID   string
 	OutTradeNo string
 }
 
@@ -588,10 +653,12 @@ type ProfitSharingRequest struct {
 
 // ProfitSharingReceiver 分账接收方
 type ProfitSharingReceiver struct {
-	Type            string // 分账接收方类型：MERCHANT_ID/PERSONAL_OPENID
-	ReceiverAccount string // 分账接收方账号
-	Amount          int64  // 分账金额（分）
-	Description     string // 分账描述
+	Type                  string // 分账接收方类型：MERCHANT_ID/PERSONAL_OPENID
+	ReceiverAccount       string // 分账接收方账号
+	ReceiverName          string // 分账接收方名称（明文，发送时会加密）
+	EncryptedReceiverName string // 已加密的分账接收方名称
+	Amount                int64  // 分账金额（分）
+	Description           string // 分账描述
 }
 
 // ProfitSharingResponse 分账响应
@@ -613,6 +680,14 @@ func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSh
 			"receiver_account": r.ReceiverAccount,
 			"amount":           r.Amount,
 			"description":      r.Description,
+		}
+
+		receiverName, err := c.resolveEncryptedReceiverName(r.ReceiverName, r.EncryptedReceiverName)
+		if err != nil {
+			return nil, fmt.Errorf("resolve receiver name: %w", err)
+		}
+		if receiverName != "" {
+			receivers[i]["receiver_name"] = receiverName
 		}
 	}
 
@@ -640,10 +715,13 @@ func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSh
 
 // QueryProfitSharing 查询分账结果
 func (c *EcommerceClient) QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*ProfitSharingQueryResponse, error) {
-	url := fmt.Sprintf("%s?sub_mchid=%s&transaction_id=%s&out_order_no=%s",
-		profitSharingURL, subMchID, transactionID, outOrderNo)
+	query := url.Values{}
+	query.Set("sub_mchid", subMchID)
+	query.Set("transaction_id", transactionID)
+	query.Set("out_order_no", outOrderNo)
+	requestURL := profitSharingURL + "?" + query.Encode()
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query profit sharing: %w", err)
 	}
@@ -723,12 +801,12 @@ const (
 
 // AddReceiverRequest 添加分账接收方请求
 type AddReceiverRequest struct {
-	AppID         string `json:"appid"`                    // 应用ID
-	Type          string `json:"type"`                     // 接收方类型：MERCHANT_ID/PERSONAL_OPENID
-	Account       string `json:"account"`                  // 接收方账号（商户号或openid）
-	Name          string `json:"name,omitempty"`           // 接收方名称（需要加密）
-	EncryptedName string `json:"encrypted_name,omitempty"` // 加密后的接收方名称
-	RelationType  string `json:"relation_type"`            // 与分账方的关系类型
+	AppID         string `json:"appid"`          // 应用ID
+	Type          string `json:"type"`           // 接收方类型：MERCHANT_ID/PERSONAL_OPENID
+	Account       string `json:"account"`        // 接收方账号（商户号或openid）
+	Name          string `json:"name,omitempty"` // 接收方名称（明文，发送时会加密）
+	EncryptedName string `json:"-"`              // 已加密的接收方名称
+	RelationType  string `json:"relation_type"`  // 与分账方的关系类型
 }
 
 // AddReceiverResponse 添加分账接收方响应
@@ -748,18 +826,12 @@ func (c *EcommerceClient) AddProfitSharingReceiver(ctx context.Context, req *Add
 		"relation_type": req.RelationType,
 	}
 
-	// 如果有名称（个人类型需要）：
-	// 微信支付要求接收方名称必须使用平台公钥加密后传输，明文禁止出现在请求体中。
-	// 参考：https://pay.weixin.qq.com/doc/v3/partner/4012459165
-	if req.EncryptedName != "" {
-		// 调用方已自行加密，直接使用
-		body["encrypted_name"] = req.EncryptedName
-	} else if req.Name != "" {
-		encryptedName, err := c.EncryptSensitiveData(req.Name)
-		if err != nil {
-			return nil, fmt.Errorf("encrypt receiver name: %w", err)
-		}
-		body["encrypted_name"] = encryptedName
+	receiverName, err := c.resolveEncryptedReceiverName(req.Name, req.EncryptedName)
+	if err != nil {
+		return nil, fmt.Errorf("resolve receiver name: %w", err)
+	}
+	if receiverName != "" {
+		body["name"] = receiverName
 	}
 
 	// 包含敏感加密字段时必须携带 Wechatpay-Serial 头，以告知微信使用哪把公钥/证书解密
@@ -830,16 +902,18 @@ type ProfitSharingReturnRequest struct {
 
 // ProfitSharingReturnResponse 分账回退响应
 type ProfitSharingReturnResponse struct {
-	SubMchID    string `json:"sub_mchid"`
-	OrderID     string `json:"order_id"`
-	OutOrderNo  string `json:"out_order_no"`
-	OutReturnNo string `json:"out_return_no"`
-	ReturnID    string `json:"return_id"`
-	ReturnMchID string `json:"return_mchid"`
-	Amount      int64  `json:"amount"`
-	Result      string `json:"result"` // PROCESSING/SUCCESS/FAILED
-	FinishTime  string `json:"finish_time"`
-	FailReason  string `json:"fail_reason"`
+	SubMchID          string `json:"sub_mchid"`
+	OrderID           string `json:"order_id"`
+	OutOrderNo        string `json:"out_order_no"`
+	OutReturnNo       string `json:"out_return_no"`
+	ReturnID          string `json:"return_id"`
+	ReturnMchID       string `json:"return_mchid"`
+	ReturnAccountType string `json:"return_account_type"`
+	ReturnAccount     string `json:"return_account"`
+	Amount            int64  `json:"amount"`
+	Result            string `json:"result"` // PROCESSING/SUCCESS/FAILED
+	FinishTime        string `json:"finish_time"`
+	FailReason        string `json:"fail_reason"`
 }
 
 // CreateProfitSharingReturn 请求分账回退
@@ -876,10 +950,13 @@ func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *Pr
 
 // QueryProfitSharingReturn 查询分账回退结果
 func (c *EcommerceClient) QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*ProfitSharingReturnResponse, error) {
-	url := fmt.Sprintf("%s?sub_mchid=%s&out_return_no=%s&out_order_no=%s",
-		profitSharingReturnQueryURL, subMchID, outReturnNo, outOrderNo)
+	query := url.Values{}
+	query.Set("sub_mchid", subMchID)
+	query.Set("out_return_no", outReturnNo)
+	query.Set("out_order_no", outOrderNo)
+	requestURL := profitSharingReturnQueryURL + "?" + query.Encode()
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query profit sharing return: %w", err)
 	}
@@ -892,17 +969,88 @@ func (c *EcommerceClient) QueryProfitSharingReturn(ctx context.Context, subMchID
 	return &resp, nil
 }
 
+func (c *EcommerceClient) resolveEncryptedReceiverName(name, encryptedName string) (string, error) {
+	if encryptedName != "" {
+		return encryptedName, nil
+	}
+	if name == "" {
+		return "", nil
+	}
+
+	resolved, err := c.EncryptSensitiveData(name)
+	if err != nil {
+		return "", fmt.Errorf("encrypt receiver name: %w", err)
+	}
+	return resolved, nil
+}
+
+// IsProfitSharingReturnProcessingError 判断分账回退请求错误是否仍需进入结果轮询。
+func IsProfitSharingReturnProcessingError(err error) bool {
+	if err == nil {
+		return false
+	}
+
+	var wxErr *WechatPayError
+	if !errors.As(err, &wxErr) {
+		return false
+	}
+
+	switch strings.ToUpper(strings.TrimSpace(wxErr.Code)) {
+	case "NOT_ENOUGH", "PAYER_ACCOUNT_ABNORMAL":
+		return true
+	default:
+		return false
+	}
+}
+
 // ==================== 电商退款 ====================
+
+const (
+	EcommerceAbnormalRefundTypeUserBankCard     = "USER_BANK_CARD"
+	EcommerceAbnormalRefundTypeMerchantBankCard = "MERCHANT_BANK_CARD"
+)
+
+// EcommerceRefundAmountFrom 指定退款出资账户及金额
+type EcommerceRefundAmountFrom struct {
+	Account string `json:"account"`
+	Amount  int64  `json:"amount"`
+}
+
+// EcommerceRefundPromotionDetail 电商退款营销明细
+type EcommerceRefundPromotionDetail struct {
+	PromotionID  string `json:"promotion_id"`
+	Scope        string `json:"scope"`
+	Type         string `json:"type"`
+	Amount       int64  `json:"amount"`
+	RefundAmount int64  `json:"refund_amount"`
+}
+
+// EcommerceRefundAmount 电商退款金额信息
+type EcommerceRefundAmount struct {
+	Refund         int64                       `json:"refund"`
+	From           []EcommerceRefundAmountFrom `json:"from,omitempty"`
+	PayerRefund    int64                       `json:"payer_refund"`
+	DiscountRefund int64                       `json:"discount_refund,omitempty"`
+	Total          int64                       `json:"total,omitempty"`
+	PayerTotal     int64                       `json:"payer_total,omitempty"`
+	Currency       string                      `json:"currency,omitempty"`
+	Advance        int64                       `json:"advance,omitempty"`
+	RefundAccount  string                      `json:"refund_account,omitempty"`
+}
 
 // EcommerceRefundRequest 电商退款请求
 type EcommerceRefundRequest struct {
-	SubMchID      string // 二级商户号
-	TransactionID string // 微信支付订单号
-	OutTradeNo    string // 商户订单号（二选一）
-	OutRefundNo   string // 商户退款单号
-	Reason        string // 退款原因
-	RefundAmount  int64  // 退款金额（分）
-	TotalAmount   int64  // 原订单金额（分）
+	SubMchID      string                      // 二级商户号
+	SubAppID      string                      // 二级商户 AppID（选填）
+	TransactionID string                      // 微信支付订单号
+	OutTradeNo    string                      // 商户订单号（二选一）
+	OutRefundNo   string                      // 商户退款单号
+	Reason        string                      // 退款原因
+	RefundAmount  int64                       // 退款金额（分）
+	TotalAmount   int64                       // 原订单金额（分）
+	AmountFrom    []EcommerceRefundAmountFrom // 指定退款出资账户及金额
+	NotifyURL     string                      // 本次退款回调地址（选填）
+	RefundAccount string                      // 退款出资商户（选填）
 	// 退款资金来源
 	// AVAILABLE: 可用余额账户（默认）
 	// UNSETTLED: 未结算资金
@@ -911,34 +1059,76 @@ type EcommerceRefundRequest struct {
 
 // EcommerceRefundResponse 电商退款响应
 type EcommerceRefundResponse struct {
-	RefundID    string `json:"refund_id"`
-	OutRefundNo string `json:"out_refund_no"`
-	CreateTime  string `json:"create_time"`
-	Amount      struct {
-		Refund      int64  `json:"refund"`
-		PayerRefund int64  `json:"payer_refund"`
-		Total       int64  `json:"total"`
-		PayerTotal  int64  `json:"payer_total"`
-		Currency    string `json:"currency"`
-	} `json:"amount"`
-	Status      string `json:"status"` // PROCESSING/SUCCESS/CLOSED/ABNORMAL
-	SuccessTime string `json:"success_time"`
+	RefundID            string                           `json:"refund_id"`
+	OutRefundNo         string                           `json:"out_refund_no"`
+	TransactionID       string                           `json:"transaction_id"`
+	OutTradeNo          string                           `json:"out_trade_no"`
+	Channel             string                           `json:"channel"`
+	UserReceivedAccount string                           `json:"user_received_account"`
+	CreateTime          string                           `json:"create_time"`
+	Status              string                           `json:"status"` // PROCESSING/SUCCESS/CLOSED/ABNORMAL
+	SuccessTime         string                           `json:"success_time"`
+	Amount              EcommerceRefundAmount            `json:"amount"`
+	PromotionDetail     []EcommerceRefundPromotionDetail `json:"promotion_detail,omitempty"`
+	RefundAccount       string                           `json:"refund_account"`
+	FundsAccount        string                           `json:"funds_account"`
+}
+
+// EcommerceAbnormalRefundRequest 电商异常退款处理请求
+type EcommerceAbnormalRefundRequest struct {
+	RefundID    string // 微信退款单号
+	SubMchID    string // 二级商户号
+	OutRefundNo string // 商户退款单号
+	Type        string // USER_BANK_CARD 或 MERCHANT_BANK_CARD
+	BankType    string // 用户银行卡开户行，仅 USER_BANK_CARD 必填
+	BankAccount string // 用户银行卡号，仅 USER_BANK_CARD 必填
+	RealName    string // 收款用户姓名，仅 USER_BANK_CARD 必填
 }
 
 // CreateEcommerceRefund 申请电商退款
 // 退款前需要先调用分账回退
 func (c *EcommerceClient) CreateEcommerceRefund(ctx context.Context, req *EcommerceRefundRequest) (*EcommerceRefundResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("create ecommerce refund: request is nil")
+	}
+	if req.SubMchID == "" {
+		return nil, fmt.Errorf("create ecommerce refund: sub_mchid is required")
+	}
+	if req.OutRefundNo == "" {
+		return nil, fmt.Errorf("create ecommerce refund: out_refund_no is required")
+	}
+	if req.TransactionID == "" && req.OutTradeNo == "" {
+		return nil, fmt.Errorf("create ecommerce refund: transaction_id or out_trade_no is required")
+	}
+	if req.RefundAmount <= 0 || req.TotalAmount <= 0 {
+		return nil, fmt.Errorf("create ecommerce refund: refund and total amount must be positive")
+	}
+	if len(req.AmountFrom) > 0 && req.FundsAccount != "" {
+		return nil, fmt.Errorf("create ecommerce refund: amount.from and funds_account are mutually exclusive")
+	}
+
 	body := map[string]interface{}{
 		"sub_mchid":     req.SubMchID,
 		"sp_appid":      c.spAppID,
 		"out_refund_no": req.OutRefundNo,
-		"reason":        req.Reason,
-		"notify_url":    c.refundNotifyURL,
 		"amount": map[string]interface{}{
 			"refund":   req.RefundAmount,
 			"total":    req.TotalAmount,
 			"currency": "CNY",
 		},
+	}
+	if req.SubAppID != "" {
+		body["sub_appid"] = req.SubAppID
+	}
+	if req.Reason != "" {
+		body["reason"] = req.Reason
+	}
+	notifyURL := req.NotifyURL
+	if notifyURL == "" {
+		notifyURL = c.refundNotifyURL
+	}
+	if notifyURL != "" {
+		body["notify_url"] = notifyURL
 	}
 
 	// 微信支付订单号或商户订单号二选一
@@ -946,6 +1136,19 @@ func (c *EcommerceClient) CreateEcommerceRefund(ctx context.Context, req *Ecomme
 		body["transaction_id"] = req.TransactionID
 	} else if req.OutTradeNo != "" {
 		body["out_trade_no"] = req.OutTradeNo
+	}
+	if len(req.AmountFrom) > 0 {
+		from := make([]map[string]interface{}, 0, len(req.AmountFrom))
+		for _, entry := range req.AmountFrom {
+			from = append(from, map[string]interface{}{
+				"account": entry.Account,
+				"amount":  entry.Amount,
+			})
+		}
+		body["amount"].(map[string]interface{})["from"] = from
+	}
+	if req.RefundAccount != "" {
+		body["refund_account"] = req.RefundAccount
 	}
 
 	if req.FundsAccount != "" {
@@ -965,13 +1168,110 @@ func (c *EcommerceClient) CreateEcommerceRefund(ctx context.Context, req *Ecomme
 	return &resp, nil
 }
 
+// ApplyEcommerceAbnormalRefund 发起电商异常退款处理
+func (c *EcommerceClient) ApplyEcommerceAbnormalRefund(ctx context.Context, req *EcommerceAbnormalRefundRequest) (*EcommerceRefundResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("apply ecommerce abnormal refund: request is nil")
+	}
+	if req.RefundID == "" {
+		return nil, fmt.Errorf("apply ecommerce abnormal refund: refund_id is required")
+	}
+	if req.SubMchID == "" {
+		return nil, fmt.Errorf("apply ecommerce abnormal refund: sub_mchid is required")
+	}
+	if req.OutRefundNo == "" {
+		return nil, fmt.Errorf("apply ecommerce abnormal refund: out_refund_no is required")
+	}
+
+	body := map[string]interface{}{
+		"sub_mchid":     req.SubMchID,
+		"out_refund_no": req.OutRefundNo,
+		"type":          req.Type,
+	}
+
+	switch req.Type {
+	case EcommerceAbnormalRefundTypeUserBankCard:
+		if req.BankType == "" {
+			return nil, fmt.Errorf("apply ecommerce abnormal refund: bank_type is required for USER_BANK_CARD")
+		}
+		if req.BankAccount == "" {
+			return nil, fmt.Errorf("apply ecommerce abnormal refund: bank_account is required for USER_BANK_CARD")
+		}
+		if req.RealName == "" {
+			return nil, fmt.Errorf("apply ecommerce abnormal refund: real_name is required for USER_BANK_CARD")
+		}
+		encryptedBankAccount, err := c.EncryptSensitiveData(req.BankAccount)
+		if err != nil {
+			return nil, fmt.Errorf("apply ecommerce abnormal refund: encrypt bank_account: %w", err)
+		}
+		encryptedRealName, err := c.EncryptSensitiveData(req.RealName)
+		if err != nil {
+			return nil, fmt.Errorf("apply ecommerce abnormal refund: encrypt real_name: %w", err)
+		}
+		body["bank_type"] = req.BankType
+		body["bank_account"] = encryptedBankAccount
+		body["real_name"] = encryptedRealName
+	case EcommerceAbnormalRefundTypeMerchantBankCard:
+		// 退款至交易商户银行账户无需额外字段。
+	default:
+		return nil, fmt.Errorf("apply ecommerce abnormal refund: unsupported type %q", req.Type)
+	}
+
+	requestURL := fmt.Sprintf(ecommerceAbnormalRefundURL, url.PathEscape(req.RefundID))
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, requestURL, body)
+	if err != nil {
+		return nil, fmt.Errorf("apply ecommerce abnormal refund: %w", err)
+	}
+
+	var resp EcommerceRefundResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
 // QueryEcommerceRefund 查询电商退款
 func (c *EcommerceClient) QueryEcommerceRefund(ctx context.Context, subMchID, outRefundNo string) (*EcommerceRefundResponse, error) {
-	url := fmt.Sprintf(ecommerceRefundQueryURL+"?sub_mchid=%s", outRefundNo, subMchID)
+	return c.QueryEcommerceRefundByOutRefundNo(ctx, subMchID, outRefundNo)
+}
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+// QueryEcommerceRefundByOutRefundNo 按商户退款单号查询电商退款
+func (c *EcommerceClient) QueryEcommerceRefundByOutRefundNo(ctx context.Context, subMchID, outRefundNo string) (*EcommerceRefundResponse, error) {
+	if subMchID == "" {
+		return nil, fmt.Errorf("query ecommerce refund by out_refund_no: sub_mchid is required")
+	}
+	if outRefundNo == "" {
+		return nil, fmt.Errorf("query ecommerce refund by out_refund_no: out_refund_no is required")
+	}
+	requestURL := fmt.Sprintf(ecommerceRefundQueryByOutRefundURL, url.PathEscape(outRefundNo)) + "?sub_mchid=" + url.QueryEscape(subMchID)
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
-		return nil, fmt.Errorf("query ecommerce refund: %w", err)
+		return nil, fmt.Errorf("query ecommerce refund by out_refund_no: %w", err)
+	}
+
+	var resp EcommerceRefundResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// QueryEcommerceRefundByID 按微信退款单号查询电商退款
+func (c *EcommerceClient) QueryEcommerceRefundByID(ctx context.Context, subMchID, refundID string) (*EcommerceRefundResponse, error) {
+	if subMchID == "" {
+		return nil, fmt.Errorf("query ecommerce refund by refund_id: sub_mchid is required")
+	}
+	if refundID == "" {
+		return nil, fmt.Errorf("query ecommerce refund by refund_id: refund_id is required")
+	}
+	requestURL := fmt.Sprintf(ecommerceRefundQueryByIDURL, url.PathEscape(refundID)) + "?sub_mchid=" + url.QueryEscape(subMchID)
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query ecommerce refund by refund_id: %w", err)
 	}
 
 	var resp EcommerceRefundResponse
@@ -1162,20 +1462,17 @@ func (c *EcommerceClient) DecryptProfitSharingNotification(notification *Payment
 
 // EcommerceRefundNotification 电商退款通知
 type EcommerceRefundNotification struct {
-	SpMchID       string `json:"sp_mchid"`
-	SubMchID      string `json:"sub_mchid"`
-	TransactionID string `json:"transaction_id"`
-	OutTradeNo    string `json:"out_trade_no"`
-	RefundID      string `json:"refund_id"`
-	OutRefundNo   string `json:"out_refund_no"`
-	RefundStatus  string `json:"refund_status"` // SUCCESS/CLOSED/ABNORMAL
-	Amount        struct {
-		Total       int64 `json:"total"`
-		Refund      int64 `json:"refund"`
-		PayerTotal  int64 `json:"payer_total"`
-		PayerRefund int64 `json:"payer_refund"`
-	} `json:"amount"`
-	SuccessTime string `json:"success_time"`
+	SpMchID             string                `json:"sp_mchid"`
+	SubMchID            string                `json:"sub_mchid"`
+	TransactionID       string                `json:"transaction_id"`
+	OutTradeNo          string                `json:"out_trade_no"`
+	RefundID            string                `json:"refund_id"`
+	OutRefundNo         string                `json:"out_refund_no"`
+	RefundStatus        string                `json:"refund_status"` // SUCCESS/CLOSED/ABNORMAL
+	SuccessTime         string                `json:"success_time"`
+	UserReceivedAccount string                `json:"user_received_account"`
+	Amount              EcommerceRefundAmount `json:"amount"`
+	RefundAccount       string                `json:"refund_account"`
 }
 
 // DecryptEcommerceRefundNotification 解密电商退款通知
@@ -1290,6 +1587,9 @@ func (c *EcommerceClient) doRequest(ctx context.Context, method, path string, bo
 	}
 
 	// 检查响应状态码
+	if err := c.verifyHTTPResponseSignature(resp, respBody); err != nil {
+		return nil, fmt.Errorf("verify response signature: %w", err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// 尝试解析微信支付错误响应
 		var wxErr WechatPayError
@@ -1420,6 +1720,9 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 	}
 
 	// 检查响应状态码
+	if err := c.verifyHTTPResponseSignature(resp, respBody); err != nil {
+		return nil, fmt.Errorf("verify response signature: %w", err)
+	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		var wxErr WechatPayError
 		wxErr.StatusCode = resp.StatusCode

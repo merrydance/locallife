@@ -65,6 +65,18 @@ type RedisTaskProcessor struct {
 	roleCacheTTL      time.Duration
 }
 
+type testStoreWithNoopPlatformAlertPersistence struct {
+	db.Store
+}
+
+func (s testStoreWithNoopPlatformAlertPersistence) CreatePlatformAlertEvent(_ context.Context, _ db.CreatePlatformAlertEventParams) (db.PlatformAlertEvent, error) {
+	return db.PlatformAlertEvent{}, nil
+}
+
+func (s testStoreWithNoopPlatformAlertPersistence) MarkEcommerceApplymentResultProcessed(_ context.Context, _ db.MarkEcommerceApplymentResultProcessedParams) error {
+	return nil
+}
+
 type cachedUserRoles struct {
 	roles     []db.UserRole
 	expiresAt time.Time
@@ -148,6 +160,9 @@ func NewTestTaskProcessor(
 	wechatClient wechat.WechatClient,
 	ecommerceClient wechat.EcommerceClientInterface,
 ) *RedisTaskProcessor {
+	if store != nil {
+		store = testStoreWithNoopPlatformAlertPersistence{Store: store}
+	}
 	ocrService, _ := newMerchantApplicationOCRService(store, nil, wechatClient, util.Config{})
 	return &RedisTaskProcessor{
 		store:           store,

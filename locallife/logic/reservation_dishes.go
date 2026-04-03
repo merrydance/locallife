@@ -407,7 +407,7 @@ func createReservationAddonPaymentOrder(
 		CombineOutTradeNo: combineOutTradeNo,
 		SubOrders: []wechat.SubOrder{
 			{
-				MchID:       txResult.SubMchID,
+				SubMchID:    txResult.SubMchID,
 				Amount:      amount,
 				OutTradeNo:  txResult.PaymentOrder.OutTradeNo,
 				Description: "Reservation add-on",

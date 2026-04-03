@@ -87,12 +87,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 		{
@@ -366,7 +361,7 @@ func TestHandlePaymentNotifyIdempotency(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
 			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient)
 
@@ -437,12 +432,7 @@ func TestHandleRefundNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 	}
@@ -454,7 +444,7 @@ func TestHandleRefundNotifyIdempotency(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
 			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
 			tc.buildStubs(store, paymentClient)
 
@@ -474,7 +464,7 @@ func TestHandleRefundNotifyOwnershipMismatch(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
 
 	paymentClient.EXPECT().
@@ -600,12 +590,7 @@ func TestHandleCombinePaymentNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 	}
@@ -617,7 +602,8 @@ func TestHandleCombinePaymentNotifyIdempotency(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
+			store.EXPECT().CreatePlatformAlertEvent(gomock.Any(), gomock.Any()).AnyTimes().Return(db.PlatformAlertEvent{}, nil)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 			tc.buildStubs(store, ecommerceClient)
 
@@ -635,7 +621,7 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 
@@ -700,7 +686,6 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 	request := newCombinePaymentNotifyRequest(t, notificationID)
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
 	assertWechatSuccessResponse(t, recorder, "OK")
 }
 
@@ -708,7 +693,7 @@ func TestHandleCombinePaymentNotify_OwnershipMismatchReturnsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	notificationID := util.RandomString(32)
@@ -754,7 +739,7 @@ func TestHandleCombinePaymentNotify_SubOrderNotFoundReturnsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	notificationID := util.RandomString(32)
@@ -812,7 +797,7 @@ func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 
@@ -887,7 +872,6 @@ func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
 	request := newCombinePaymentNotifyRequest(t, notificationID)
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
 	assertWechatSuccessResponse(t, recorder, "OK")
 }
 
@@ -895,7 +879,7 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 
@@ -973,7 +957,7 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *t
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 
@@ -1054,7 +1038,7 @@ func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSucc
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 
@@ -1107,7 +1091,6 @@ func TestHandleOrderSettlementNotify_ProfitSharingEnqueueFailureStillReturnsSucc
 	request := newSettlementNotifyRequest(t, notificationID)
 	server.router.ServeHTTP(recorder, request)
 
-	require.Equal(t, http.StatusOK, recorder.Code)
 	assertWechatSuccessResponse(t, recorder, "OK")
 }
 
@@ -1115,7 +1098,7 @@ func TestHandleEcommerceRefundNotify_OwnershipMismatchReturnsFail(t *testing.T) 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
-	store := mockdb.NewMockStore(ctrl)
+	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 
 	notificationID := util.RandomString(32)
@@ -1180,6 +1163,86 @@ func TestHandleEcommerceRefundNotify_OwnershipMismatchReturnsFail(t *testing.T) 
 	assertWechatFailResponse(t, recorder, "ownership validation failed")
 }
 
+func TestHandleEcommerceRefundNotify_SuccessReturnsNoContent(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	notificationID := util.RandomString(32)
+
+	ecommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+
+	store.EXPECT().
+		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(true, nil)
+
+	ecommerceClient.EXPECT().
+		DecryptEcommerceRefundNotification(gomock.Any()).
+		Times(1).
+		Return(&wechat.EcommerceRefundNotification{
+			SpMchID:       "sp_expected",
+			SubMchID:      "sub-001",
+			OutTradeNo:    "ORDER_1",
+			TransactionID: "WX_TX_1",
+			OutRefundNo:   "REFUND_1",
+			RefundID:      "WX_REFUND_1",
+			RefundStatus:  wechat.RefundStatusSuccess,
+			Amount: wechat.EcommerceRefundAmount{
+				Refund: 88,
+			},
+		}, nil)
+
+	ecommerceClient.EXPECT().
+		GetSpMchID().
+		Times(1).
+		Return("sp_expected")
+
+	taskDistributor.EXPECT().
+		DistributeTaskProcessRefundResult(gomock.Any(), gomock.AssignableToTypeOf(&worker.RefundResultPayload{}), gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, payload *worker.RefundResultPayload, _ ...asynq.Option) error {
+			require.Equal(t, "REFUND_1", payload.OutRefundNo)
+			require.Equal(t, wechat.RefundStatusSuccess, payload.RefundStatus)
+			require.Equal(t, "WX_REFUND_1", payload.RefundID)
+			return nil
+		})
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+	recorder := httptest.NewRecorder()
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "REFUND.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "refund",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/refund-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	server.router.ServeHTTP(recorder, request)
+
+	assertWechatNoContentResponse(t, recorder)
+}
+
 // TestHandleEcommerceRefundNotifyIdempotency 测试平台收付通退款回调的幂等性检查
 func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 	notificationID := util.RandomString(32)
@@ -1236,12 +1299,7 @@ func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 	}
@@ -1253,7 +1311,7 @@ func TestHandleEcommerceRefundNotifyIdempotency(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 			tc.buildStubs(store, ecommerceClient)
 
@@ -1393,12 +1451,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 			useTaskDistributor: true,
 		},
@@ -1495,13 +1548,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				// 金额不匹配返回SUCCESS避免微信重试，但需要人工审核
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
-				require.Contains(t, response["message"], "amount mismatch")
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 		{
@@ -1802,12 +1849,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 		{
@@ -1849,7 +1891,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 		{
@@ -1888,7 +1930,7 @@ func TestHandlePaymentNotifyFullFlow(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
 			paymentClient := mockwechat.NewMockPaymentClientInterface(ctrl)
 			taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 			tc.buildStubs(store, paymentClient, taskDistributor)
@@ -1970,12 +2012,14 @@ func newSettlementNotifyRequest(t *testing.T, notificationID string) *http.Reque
 
 func assertWechatSuccessResponse(t *testing.T, recorder *httptest.ResponseRecorder, expectedMessage string) {
 	t.Helper()
+	_ = expectedMessage
+	assertWechatNoContentResponse(t, recorder)
+}
 
-	var response map[string]string
-	err := json.NewDecoder(recorder.Body).Decode(&response)
-	require.NoError(t, err)
-	require.Equal(t, "SUCCESS", response["code"])
-	require.Equal(t, expectedMessage, response["message"])
+func assertWechatNoContentResponse(t *testing.T, recorder *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusNoContent, recorder.Code)
+	require.Empty(t, recorder.Body.String())
 }
 
 func assertWechatFailResponse(t *testing.T, recorder *httptest.ResponseRecorder, expectedMessage string) {
@@ -1986,6 +2030,12 @@ func assertWechatFailResponse(t *testing.T, recorder *httptest.ResponseRecorder,
 	require.NoError(t, err)
 	require.Equal(t, "FAIL", response["code"])
 	require.Equal(t, expectedMessage, response["message"])
+}
+
+func newMockStoreWithAlertSink(ctrl *gomock.Controller) *mockdb.MockStore {
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().CreatePlatformAlertEvent(gomock.Any(), gomock.Any()).AnyTimes().Return(db.PlatformAlertEvent{}, nil)
+	return store
 }
 
 // TestHandleApplymentStateNotifyIdempotency 测试进件回调的幂等性检查
@@ -2044,12 +2094,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 		{
@@ -2091,7 +2136,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 	}
@@ -2103,7 +2148,7 @@ func TestHandleApplymentStateNotifyIdempotency(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 			tc.buildStubs(store, ecommerceClient)
 
@@ -2174,12 +2219,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 		{
@@ -2201,24 +2241,11 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					DecryptProfitSharingNotification(gomock.Any()).
 					Times(1).
 					Return(&wechat.ProfitSharingNotification{
-						MchID:      "sp_mch_id",
-						SubMchID:   "sub_mch_id",
-						OutOrderNo: outOrderNo,
-						OrderID:    "wx_order_id",
-						Receiver: struct {
-							Type            string `json:"type"`
-							ReceiverAccount string `json:"receiver_account"`
-							Amount          int64  `json:"amount"`
-							Description     string `json:"description"`
-							Result          string `json:"result"`
-							DetailID        string `json:"detail_id"`
-							FinishTime      string `json:"finish_time"`
-							FailReason      string `json:"fail_reason"`
-						}{
-							Result:     "SUCCESS",
-							FailReason: "",
-							Amount:     1 * fenPerYuan,
-						},
+						MchID:         "sp_mch_id",
+						SubMchID:      "sub_mch_id",
+						OutOrderNo:    outOrderNo,
+						OrderID:       "wx_order_id",
+						TransactionID: "wx_transaction_id",
 					}, nil)
 
 				ecommerceClient.EXPECT().
@@ -2227,7 +2254,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					Return("sp_mch_id")
 
 				ecommerceClient.EXPECT().
-					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Any(), gomock.Eq(outOrderNo)).
+					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Eq("wx_transaction_id"), gomock.Eq(outOrderNo)).
 					Times(1).
 					Return(&wechat.ProfitSharingQueryResponse{
 						Status: "FINISHED",
@@ -2286,12 +2313,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
-
-				var response map[string]string
-				err := json.NewDecoder(recorder.Body).Decode(&response)
-				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				assertWechatNoContentResponse(t, recorder)
 			},
 		},
 		{
@@ -2311,24 +2333,11 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					DecryptProfitSharingNotification(gomock.Any()).
 					Times(1).
 					Return(&wechat.ProfitSharingNotification{
-						MchID:      "sp_mch_id",
-						SubMchID:   "sub_mch_id",
-						OutOrderNo: outOrderNo,
-						OrderID:    "wx_order_id",
-						Receiver: struct {
-							Type            string `json:"type"`
-							ReceiverAccount string `json:"receiver_account"`
-							Amount          int64  `json:"amount"`
-							Description     string `json:"description"`
-							Result          string `json:"result"`
-							DetailID        string `json:"detail_id"`
-							FinishTime      string `json:"finish_time"`
-							FailReason      string `json:"fail_reason"`
-						}{
-							Result:     "CLOSED",
-							FailReason: "NO_RELATION",
-							Amount:     1 * fenPerYuan,
-						},
+						MchID:         "sp_mch_id",
+						SubMchID:      "sub_mch_id",
+						OutOrderNo:    outOrderNo,
+						OrderID:       "wx_order_id",
+						TransactionID: "wx_transaction_id",
 					}, nil)
 
 				ecommerceClient.EXPECT().
@@ -2337,7 +2346,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					Return("sp_mch_id")
 
 				ecommerceClient.EXPECT().
-					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Any(), gomock.Eq(outOrderNo)).
+					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Eq("wx_transaction_id"), gomock.Eq(outOrderNo)).
 					Times(1).
 					Return(&wechat.ProfitSharingQueryResponse{
 						Status: "FINISHED",
@@ -2393,12 +2402,96 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 				return request
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
-				require.Equal(t, http.StatusOK, recorder.Code)
+				assertWechatNoContentResponse(t, recorder)
+			},
+		},
+		{
+			name: "分账查询失败_返回FAIL等待重试",
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				ecommerceClient.EXPECT().
+					VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(nil)
+
+				store.EXPECT().
+					TryClaimWechatNotification(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(true, nil)
+
+				ecommerceClient.EXPECT().
+					DecryptProfitSharingNotification(gomock.Any()).
+					Times(1).
+					Return(&wechat.ProfitSharingNotification{
+						MchID:         "sp_mch_id",
+						SubMchID:      "sub_mch_id",
+						OutOrderNo:    outOrderNo,
+						OrderID:       "wx_order_id",
+						TransactionID: "wx_transaction_id",
+					}, nil)
+
+				ecommerceClient.EXPECT().
+					GetSpMchID().
+					Times(1).
+					Return("sp_mch_id")
+
+				store.EXPECT().
+					GetProfitSharingOrderByOutOrderNo(gomock.Any(), gomock.Eq(outOrderNo)).
+					Times(1).
+					Return(db.ProfitSharingOrder{
+						ID:         3,
+						MerchantID: 23,
+						OutOrderNo: outOrderNo,
+						Status:     "processing",
+					}, nil)
+
+				store.EXPECT().
+					GetMerchantPaymentConfig(gomock.Any(), gomock.Eq(int64(23))).
+					Times(1).
+					Return(db.MerchantPaymentConfig{MerchantID: 23, SubMchID: "sub_mch_id", Status: "active"}, nil)
+
+				ecommerceClient.EXPECT().
+					QueryProfitSharing(gomock.Any(), gomock.Eq("sub_mch_id"), gomock.Eq("wx_transaction_id"), gomock.Eq(outOrderNo)).
+					Times(1).
+					Return(nil, errors.New("query failed"))
+
+				store.EXPECT().
+					ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
+					Times(1).
+					Return(nil)
+			},
+			setupRequest: func(t *testing.T) *http.Request {
+				requestBody := map[string]interface{}{
+					"id":            notificationID,
+					"event_type":    "TRANSACTION.SUCCESS",
+					"resource_type": "encrypt-resource",
+					"resource": map[string]interface{}{
+						"algorithm":       "AEAD_AES_256_GCM",
+						"ciphertext":      "mock_encrypted_data",
+						"nonce":           "mock_nonce",
+						"associated_data": "profit_sharing",
+					},
+				}
+				bodyBytes, err := json.Marshal(requestBody)
+				require.NoError(t, err)
+
+				request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/profit-sharing-notify", bytes.NewReader(bodyBytes))
+				require.NoError(t, err)
+
+				request.Header.Set("Wechatpay-Timestamp", "1234567890")
+				request.Header.Set("Wechatpay-Nonce", "test_nonce")
+				request.Header.Set("Wechatpay-Signature", "test_signature")
+				request.Header.Set("Wechatpay-Serial", "test_serial")
+
+				return request
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusInternalServerError, recorder.Code)
 
 				var response map[string]string
 				err := json.NewDecoder(recorder.Body).Decode(&response)
 				require.NoError(t, err)
-				require.Equal(t, "SUCCESS", response["code"])
+				require.Equal(t, "FAIL", response["code"])
+				require.Equal(t, "query profit sharing failed", response["message"])
 			},
 		},
 		{
@@ -2445,23 +2538,11 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 					DecryptProfitSharingNotification(gomock.Any()).
 					Times(1).
 					Return(&wechat.ProfitSharingNotification{
-						MchID:      "sp_mch_id",
-						SubMchID:   "sub_mch_wrong",
-						OutOrderNo: outOrderNo,
-						OrderID:    "wx_order_id",
-						Receiver: struct {
-							Type            string `json:"type"`
-							ReceiverAccount string `json:"receiver_account"`
-							Amount          int64  `json:"amount"`
-							Description     string `json:"description"`
-							Result          string `json:"result"`
-							DetailID        string `json:"detail_id"`
-							FinishTime      string `json:"finish_time"`
-							FailReason      string `json:"fail_reason"`
-						}{
-							Result: "SUCCESS",
-							Amount: 1 * fenPerYuan,
-						},
+						MchID:         "sp_mch_id",
+						SubMchID:      "sub_mch_wrong",
+						OutOrderNo:    outOrderNo,
+						OrderID:       "wx_order_id",
+						TransactionID: "wx_transaction_id",
 					}, nil)
 
 				ecommerceClient.EXPECT().
@@ -2528,7 +2609,7 @@ func TestHandleProfitSharingNotifyIdempotency(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-			store := mockdb.NewMockStore(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
 			ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 			tc.buildStubs(store, ecommerceClient)
 

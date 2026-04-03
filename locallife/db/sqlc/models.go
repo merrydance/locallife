@@ -1439,6 +1439,20 @@ type PeakHourConfig struct {
 	UpdatedAt  pgtype.Timestamptz `json:"updated_at"`
 }
 
+// 平台运营告警历史，用于离线回看与控制台首屏恢复
+type PlatformAlertEvent struct {
+	ID          int64  `json:"id"`
+	AlertType   string `json:"alert_type"`
+	Level       string `json:"level"`
+	Title       string `json:"title"`
+	Message     string `json:"message"`
+	RelatedID   int64  `json:"related_id"`
+	RelatedType string `json:"related_type"`
+	// 告警扩展字段，前端按需渲染
+	Extra     []byte    `json:"extra"`
+	EmittedAt time.Time `json:"emitted_at"`
+}
+
 type PlatformConfig struct {
 	ID          int64       `json:"id"`
 	ConfigKey   string      `json:"config_key"`

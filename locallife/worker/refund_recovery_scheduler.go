@@ -2,42 +2,62 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"time"
 
+	"github.com/hibiken/asynq"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/wechat"
 	"github.com/robfig/cron/v3"
 	"github.com/rs/zerolog/log"
 )
 
 const (
-	refundRecoveryCron       = "*/5 * * * *" // 每5分钟运行一次
-	refundRecoveryBatchLimit = int32(50)
+	refundRecoveryCron                  = "*/5 * * * *" // 每5分钟运行一次
+	refundRecoveryBatchLimit            = int32(50)
+	refundRecoveryStuckProcessingMinAge = 15 * time.Minute
+)
+
+var (
+	errRefundRecoveryPaymentClientMissing   = errors.New("refund recovery payment client not configured")
+	errRefundRecoveryEcommerceClientMissing = errors.New("refund recovery ecommerce client not configured")
+	errRefundRecoverySubMchIDMissing        = errors.New("refund recovery sub mchid missing")
+	errRefundRecoveryMerchantUnresolved     = errors.New("refund recovery merchant could not be resolved")
 )
 
 // RefundRecoveryScheduler 扫描已取消但未退款的订单并触发退款任务
 type RefundRecoveryScheduler struct {
-	cron        *cron.Cron
-	wg          sync.WaitGroup
-	stopCtx     context.Context
-	stopCancel  context.CancelFunc
-	runMu       sync.Mutex
-	store       db.Store
-	distributor TaskDistributor
+	cron            *cron.Cron
+	wg              sync.WaitGroup
+	stopCtx         context.Context
+	stopCancel      context.CancelFunc
+	runMu           sync.Mutex
+	store           db.Store
+	distributor     TaskDistributor
+	paymentClient   wechat.PaymentClientInterface
+	ecommerceClient wechat.EcommerceClientInterface
 }
 
 // NewRefundRecoveryScheduler 创建新的退款恢复调度器
-func NewRefundRecoveryScheduler(store db.Store, distributor TaskDistributor) *RefundRecoveryScheduler {
+func NewRefundRecoveryScheduler(
+	store db.Store,
+	distributor TaskDistributor,
+	paymentClient wechat.PaymentClientInterface,
+	ecommerceClient wechat.EcommerceClientInterface,
+) *RefundRecoveryScheduler {
 	stopCtx, stopCancel := context.WithCancel(context.Background())
 	return &RefundRecoveryScheduler{
 		cron: cron.New(cron.WithChain(
 			cron.SkipIfStillRunning(cron.DefaultLogger),
 			cron.Recover(cron.DefaultLogger),
 		)),
-		stopCtx:     stopCtx,
-		stopCancel:  stopCancel,
-		store:       store,
-		distributor: distributor,
+		stopCtx:         stopCtx,
+		stopCancel:      stopCancel,
+		store:           store,
+		distributor:     distributor,
+		paymentClient:   paymentClient,
+		ecommerceClient: ecommerceClient,
 	}
 }
 
@@ -69,6 +89,11 @@ func (s *RefundRecoveryScheduler) Stop() {
 	log.Info().Msg("refund recovery scheduler stopped")
 }
 
+// RunOnce 触发一次扫描，便于测试和人工补偿。
+func (s *RefundRecoveryScheduler) RunOnce() {
+	s.runOnce(context.Background())
+}
+
 func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 	if !s.runMu.TryLock() {
 		log.Warn().Msg("refund recovery already running, skipping concurrent execution")
@@ -84,6 +109,14 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
 
+	s.recoverCancelledOrderRefunds(ctx)
+	s.recoverCancelledReservationRefunds(ctx)
+	s.recoverPendingReservationRefunds(ctx)
+	s.recoverStuckProcessingRefunds(ctx)
+}
+
+func (s *RefundRecoveryScheduler) recoverCancelledOrderRefunds(ctx context.Context) {
+
 	// 查找最近7天内，订单已取消但支付状态仍为paid的记录
 	paymentOrders, err := s.store.ListPaidUnrefundedPaymentOrders(ctx, refundRecoveryBatchLimit)
 	if err != nil {
@@ -91,11 +124,9 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 		return
 	}
 
-	if len(paymentOrders) == 0 {
-		return
+	if len(paymentOrders) > 0 {
+		log.Info().Int("count", len(paymentOrders)).Msg("found unrefunded payment orders, triggering recovery")
 	}
-
-	log.Info().Int("count", len(paymentOrders)).Msg("found unrefunded payment orders, triggering recovery")
 
 	for _, po := range paymentOrders {
 		// 再次确认订单状态（防止查询延时导致的脏数据）
@@ -143,6 +174,9 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 				Msg("refund recovery task enqueued")
 		}
 	}
+}
+
+func (s *RefundRecoveryScheduler) recoverCancelledReservationRefunds(ctx context.Context) {
 
 	// ==================== 预定退款恢复 ====================
 	reservationPaymentOrders, err := s.store.ListPaidUnrefundedReservationPaymentOrders(ctx, refundRecoveryBatchLimit)
@@ -189,6 +223,9 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 				Msg("reservation refund recovery task enqueued")
 		}
 	}
+}
+
+func (s *RefundRecoveryScheduler) recoverPendingReservationRefunds(ctx context.Context) {
 
 	// ==================== 预定退款单 pending 恢复 ====================
 	pendingReservationRefundOrders, err := s.store.ListPendingReservationRefundOrdersForRecovery(ctx, db.ListPendingReservationRefundOrdersForRecoveryParams{
@@ -232,4 +269,141 @@ func (s *RefundRecoveryScheduler) runOnce(ctx context.Context) {
 			Str("business_type", refundOrder.BusinessType).
 			Msg("pending reservation refund recovery task enqueued")
 	}
+}
+
+func (s *RefundRecoveryScheduler) recoverStuckProcessingRefunds(ctx context.Context) {
+	stuckOrders, err := s.store.ListStuckProcessingRefundOrders(ctx, db.ListStuckProcessingRefundOrdersParams{
+		CreatedBefore: time.Now().Add(-refundRecoveryStuckProcessingMinAge),
+		Limit:         refundRecoveryBatchLimit,
+	})
+	if err != nil {
+		log.Error().Err(err).Msg("list stuck processing refund orders failed")
+		return
+	}
+
+	for _, row := range stuckOrders {
+		refundOrder, err := s.store.GetRefundOrder(ctx, row.ID)
+		if err != nil {
+			log.Error().Err(err).Int64("refund_order_id", row.ID).Msg("get refund order for recovery failed")
+			continue
+		}
+		if refundOrder.Status != "processing" {
+			continue
+		}
+
+		paymentOrder, err := s.store.GetPaymentOrder(ctx, refundOrder.PaymentOrderID)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Int64("payment_order_id", refundOrder.PaymentOrderID).
+				Msg("get payment order for stuck refund recovery failed")
+			continue
+		}
+
+		refundStatus, refundID, err := s.queryRefundStatus(ctx, paymentOrder, refundOrder)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("payment_type", paymentOrder.PaymentType).
+				Msg("query stuck processing refund status failed")
+			continue
+		}
+
+		if refundStatus == wechat.RefundStatusProcessing {
+			log.Info().
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Msg("stuck refund query still reports processing; keep waiting")
+			continue
+		}
+
+		err = s.distributor.DistributeTaskProcessRefundResult(
+			ctx,
+			&RefundResultPayload{
+				OutRefundNo:  refundOrder.OutRefundNo,
+				RefundStatus: refundStatus,
+				RefundID:     refundID,
+			},
+			asynq.MaxRetry(5),
+			asynq.Queue(QueueCritical),
+		)
+		if err != nil {
+			log.Error().Err(err).
+				Int64("refund_order_id", refundOrder.ID).
+				Str("out_refund_no", refundOrder.OutRefundNo).
+				Str("refund_status", refundStatus).
+				Msg("enqueue stuck refund result recovery task failed")
+			continue
+		}
+
+		log.Info().
+			Int64("refund_order_id", refundOrder.ID).
+			Str("out_refund_no", refundOrder.OutRefundNo).
+			Str("refund_status", refundStatus).
+			Msg("stuck refund result recovery task enqueued")
+	}
+}
+
+func (s *RefundRecoveryScheduler) queryRefundStatus(ctx context.Context, paymentOrder db.PaymentOrder, refundOrder db.RefundOrder) (string, string, error) {
+	if paymentOrder.PaymentType == "profit_sharing" {
+		if s.ecommerceClient == nil {
+			return "", "", errRefundRecoveryEcommerceClientMissing
+		}
+
+		subMchID, err := s.resolveSubMchID(ctx, paymentOrder)
+		if err != nil {
+			return "", "", err
+		}
+
+		resp, err := s.ecommerceClient.QueryEcommerceRefund(ctx, subMchID, refundOrder.OutRefundNo)
+		if err != nil {
+			return "", "", err
+		}
+		return resp.Status, resp.RefundID, nil
+	}
+
+	if s.paymentClient == nil {
+		return "", "", errRefundRecoveryPaymentClientMissing
+	}
+
+	resp, err := s.paymentClient.QueryRefund(ctx, refundOrder.OutRefundNo)
+	if err != nil {
+		return "", "", err
+	}
+	return resp.Status, resp.RefundID, nil
+}
+
+func (s *RefundRecoveryScheduler) resolveSubMchID(ctx context.Context, paymentOrder db.PaymentOrder) (string, error) {
+	if paymentOrder.OrderID.Valid {
+		order, err := s.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
+		if err != nil {
+			return "", err
+		}
+		cfg, err := s.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
+		if err != nil {
+			return "", err
+		}
+		if cfg.SubMchID == "" {
+			return "", errRefundRecoverySubMchIDMissing
+		}
+		return cfg.SubMchID, nil
+	}
+
+	if paymentOrder.ReservationID.Valid {
+		reservation, err := s.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
+		if err != nil {
+			return "", err
+		}
+		cfg, err := s.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
+		if err != nil {
+			return "", err
+		}
+		if cfg.SubMchID == "" {
+			return "", errRefundRecoverySubMchIDMissing
+		}
+		return cfg.SubMchID, nil
+	}
+
+	return "", errRefundRecoveryMerchantUnresolved
 }

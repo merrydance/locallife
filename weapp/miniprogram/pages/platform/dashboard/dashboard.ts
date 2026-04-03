@@ -4,8 +4,16 @@
  */
 
 import { platformDashboardService, type RealtimeDashboardData, type PlatformOverviewResponse } from '@/api/platform-dashboard'
+import { platformAlertsService } from '@/api/platform-alerts'
 import { responsiveBehavior } from '@/utils/responsive'
 import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
+import { wsManager, WSMessageType } from '../../../utils/websocket'
+import {
+    buildAbnormalRefundClipboardText,
+    formatPlatformAlertTime,
+    toActionableAbnormalRefundAlert,
+    type ActionableAbnormalRefundAlert
+} from '../../../utils/platform-alerts'
 
 type ActionTapEvent = WechatMiniprogram.CustomEvent & {
     currentTarget: {
@@ -40,6 +48,10 @@ interface ManagementAction {
     icon: string
     url?: string
     badge?: string
+}
+
+interface AlertFeedItem extends ActionableAbnormalRefundAlert {
+    timeDisplay: string
 }
 
 Page({
@@ -96,6 +108,9 @@ Page({
             { label: '待处理订单', value: '0', theme: 'warning' },
             { label: '待审骑手', value: '0', theme: 'danger' }
         ] as StateCardItem[],
+        abnormalRefundAlerts: [] as AlertFeedItem[],
+        alertFeedReady: false,
+        _alertListeners: [] as Array<() => void>,
         refreshTimer: null as number | null,
         navBarHeight: 0
     },
@@ -103,10 +118,12 @@ Page({
     onLoad() {
         this.loadDashboardData()
         this.startAutoRefresh()
+        this.initAlertFeed()
     },
 
     onUnload() {
         this.stopAutoRefresh()
+        this.stopAlertFeed()
     },
 
     onShow() {
@@ -114,11 +131,15 @@ Page({
         if (!this.data.refreshTimer) {
             this.startAutoRefresh()
         }
+        if (this.data._alertListeners.length === 0) {
+            this.startAlertFeed()
+        }
     },
 
     onHide() {
         // 页面隐藏时停止自动刷新
         this.stopAutoRefresh()
+        this.stopAlertFeed()
     },
 
     /**
@@ -259,6 +280,126 @@ Page({
             clearInterval(this.data.refreshTimer)
             this.setData({ refreshTimer: null })
         }
+    },
+
+    startAlertFeed() {
+        this.stopAlertFeed()
+        wsManager.connect('/v1/platform/ws')
+
+        const alertSub = wsManager.on(WSMessageType.ALERT, (data) => {
+            const nextAlert = toActionableAbnormalRefundAlert(data)
+            if (!nextAlert) {
+                return
+            }
+
+            const nextItems = [
+                {
+                    ...nextAlert,
+                    timeDisplay: formatPlatformAlertTime(nextAlert.timestamp)
+                },
+                ...this.data.abnormalRefundAlerts.filter((item) => item.refundOrderId !== nextAlert.refundOrderId)
+            ].slice(0, 5)
+
+            this.setData({
+                abnormalRefundAlerts: nextItems,
+                alertFeedReady: true
+            })
+        })
+
+        this.data._alertListeners = [alertSub]
+    },
+
+    async initAlertFeed() {
+        try {
+            await this.loadRecentPlatformAlerts()
+        } finally {
+            this.startAlertFeed()
+        }
+    },
+
+    async loadRecentPlatformAlerts() {
+        try {
+            const response = await platformAlertsService.listPlatformAlerts({ page_id: 1, page_size: 10 })
+            const alerts = (response.alerts || [])
+                .map((item) => toActionableAbnormalRefundAlert(item))
+                .filter((item): item is ActionableAbnormalRefundAlert => !!item)
+                .map((item) => ({
+                    ...item,
+                    timeDisplay: formatPlatformAlertTime(item.timestamp)
+                }))
+                .slice(0, 5)
+
+            this.setData({
+                abnormalRefundAlerts: alerts,
+                alertFeedReady: true
+            })
+        } catch (_error) {
+            this.setData({ alertFeedReady: true })
+        }
+    },
+
+    stopAlertFeed() {
+        if (this.data._alertListeners.length > 0) {
+            this.data._alertListeners.forEach((unsubscribe) => unsubscribe())
+            this.data._alertListeners = []
+        }
+        wsManager.disconnect()
+    },
+
+    onAbnormalRefundAlertTap(e: WechatMiniprogram.TouchEvent) {
+        const { index } = e.currentTarget.dataset as { index?: number }
+        const alert = typeof index === 'number' ? this.data.abnormalRefundAlerts[index] : undefined
+        if (!alert) {
+            return
+        }
+
+        wx.showActionSheet({
+            itemList: ['查看处理说明', '复制处理参数'],
+            success: ({ tapIndex }) => {
+                if (tapIndex === 0) {
+                    this.showAbnormalRefundGuide(alert)
+                    return
+                }
+                this.copyAbnormalRefundAlert(alert)
+            }
+        })
+    },
+
+    showAbnormalRefundGuide(alert: AlertFeedItem) {
+        const extraFields = alert.userBankCardRequiredFields.length > 0
+            ? `\n收款到用户银行卡需补充：${alert.userBankCardRequiredFields.join('、')}`
+            : ''
+
+        wx.showModal({
+            title: '异常退款处理说明',
+            content:
+                `该退款已进入微信异常退款人工处理流程。\n\n` +
+                `接口：${alert.method} ${alert.path}\n` +
+                `权限：平台管理员\n` +
+                `退款单ID：${alert.refundOrderId}\n` +
+                `支付单ID：${alert.paymentOrderId || '-'}\n` +
+                `微信退款ID：${alert.refundId}\n` +
+                `默认退款去向：${alert.defaultType}\n` +
+                `支持退款去向：${alert.supportedTypes.join(' / ') || alert.defaultType}` +
+                extraFields +
+                `\n\n${alert.message}`,
+            cancelText: '关闭',
+            confirmText: '复制参数',
+            success: (result) => {
+                if (result.confirm) {
+                    this.copyAbnormalRefundAlert(alert)
+                }
+            }
+        })
+    },
+
+    copyAbnormalRefundAlert(alert: AlertFeedItem) {
+        wx.setClipboardData({
+            data: buildAbnormalRefundClipboardText(alert),
+            success: () => {
+                wx.showToast({ title: '处理参数已复制', icon: 'success' })
+            }
+        })
     },
 
     /**

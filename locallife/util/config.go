@@ -50,6 +50,7 @@ type Config struct {
 	WechatPayHTTPTimeout                   time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                      // HTTP请求超时时间
 	WechatEcommerceSpMchID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`                    // 收付通服务商商户号
 	WechatEcommerceSpAppID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`                    // 收付通服务商 AppID
+	WechatEcommerceSpName                  string        `mapstructure:"WECHAT_ECOMMERCE_SP_NAME"`                     // 收付通服务商主体全称（可选，用于分账接收方姓名）
 	WechatEcommerceSpSerialNumber          string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`            // 收付通服务商 API 证书序列号
 	WechatEcommerceSpPrivateKeyPath        string        `mapstructure:"WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH"`         // 收付通服务商 API 私钥文件路径
 	WechatEcommerceSpAPIV3Key              string        `mapstructure:"WECHAT_ECOMMERCE_SP_API_V3_KEY"`               // 收付通服务商 APIv3 密钥

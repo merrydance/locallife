@@ -256,11 +256,26 @@ func (s *DataCleanupScheduler) sendRiderDepositReminderNotification(
 }
 
 func (s *DataCleanupScheduler) publishPlatformAlert(ctx context.Context, alert worker.AlertData) bool {
+	alert.Timestamp = time.Now()
+	if err := worker.SavePlatformAlertEvent(
+		ctx,
+		s.store,
+		string(alert.AlertType),
+		string(alert.Level),
+		alert.Title,
+		alert.Message,
+		alert.RelatedID,
+		alert.RelatedType,
+		alert.Extra,
+		alert.Timestamp,
+	); err != nil {
+		log.Warn().Err(err).Str("alert_type", string(alert.AlertType)).Msg("persist platform alert event failed before scheduler publish")
+	}
+
 	if s.publisher == nil {
 		return false
 	}
 
-	alert.Timestamp = time.Now()
 	alertMsg := map[string]any{
 		"type":      "alert",
 		"data":      alert,
