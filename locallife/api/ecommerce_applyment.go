@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -113,24 +114,24 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		}
 	}
 
+	var businessLicenseOCR BusinessLicenseOCRData
+	if len(application.BusinessLicenseOcr) > 0 {
+		if err := json.Unmarshal(application.BusinessLicenseOcr, &businessLicenseOCR); err != nil {
+			log.Error().Err(err).Msg("解析营业执照OCR失败")
+		}
+	}
+
 	// 生成业务申请编号
 	outRequestNo := fmt.Sprintf("M%d%d", merchant.ID, time.Now().Unix())
 
-	// 判断主体类型
-	// 如果有营业执照号，认为是个体工商户(2500)或企业(2600)
-	// 否则是小微商户(2401)
-	organizationType := "2401" // 默认小微商户
-	if application.BusinessLicenseNumber != "" {
-		organizationType = "2500" // 个体工商户
-	}
+	organizationType := resolveApplymentOrganizationType(
+		application.BusinessLicenseNumber,
+		businessLicenseOCR.TypeOfEnterprise,
+		application.MerchantName,
+		"4",
+	)
 
-	// 解析身份证有效期
-	idCardValidTime := "长期"
-	if idCardBackOCR.ValidDate != "" {
-		// ValidDate 格式: "2020.01.01-2030.01.01" 或 "2020.01.01-长期"
-		// 需要转换为微信格式: "YYYY-MM-DD" 或 "长期"
-		idCardValidTime = parseIDCardValidTime(idCardBackOCR.ValidDate)
-	}
+	idCardValidTimeBegin, idCardValidTime := parseIDCardValidPeriod(idCardBackOCR.ValidDate)
 
 	// 加密敏感数据（本地存储）
 	encryptedIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, application.LegalPersonIDNumber)
@@ -319,29 +320,29 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	}
 
 	// ==================== 构建微信进件请求 ====================
-	// 构建营业执照信息（如有）
-	var businessLicenseInfo *wechat.BusinessLicenseInfo
-	if businessLicenseMediaID != "" {
-		businessLicenseInfo = &wechat.BusinessLicenseInfo{
-			BusinessLicenseCopy:   businessLicenseMediaID,
-			BusinessLicenseNumber: application.BusinessLicenseNumber,
-			MerchantName:          application.MerchantName,
-			LegalPerson:           application.LegalPersonName,
-		}
-	}
+	businessLicenseInfo := buildApplymentBusinessLicenseInfo(
+		businessLicenseMediaID,
+		application.BusinessLicenseNumber,
+		application.MerchantName,
+		application.LegalPersonName,
+		application.BusinessAddress,
+		&businessLicenseOCR,
+	)
+	storeURL := buildApplymentStoreURL(server.config)
 
 	applymentReq := &wechat.EcommerceApplymentRequest{
-		OutRequestNo:      outRequestNo,
-		OrganizationType:  organizationType,
-		BusinessLicense:   businessLicenseInfo,
-		MerchantShortname: merchant.Name,
-		NeedAccountInfo:   true,
+		OutRequestNo:       outRequestNo,
+		OrganizationType:   organizationType,
+		FinanceInstitution: false,
+		BusinessLicense:    businessLicenseInfo,
+		MerchantShortname:  merchant.Name,
 		IDCardInfo: &wechat.ApplymentIDCardInfo{
-			IDCardCopy:      idCardFrontMediaID,
-			IDCardNational:  idCardBackMediaID,
-			IDCardName:      wxEncryptedIDCardName,
-			IDCardNumber:    wxEncryptedIDCardNumber,
-			IDCardValidTime: idCardValidTime,
+			IDCardCopy:           idCardFrontMediaID,
+			IDCardNational:       idCardBackMediaID,
+			IDCardName:           wxEncryptedIDCardName,
+			IDCardNumber:         wxEncryptedIDCardNumber,
+			IDCardValidTimeBegin: idCardValidTimeBegin,
+			IDCardValidTime:      idCardValidTime,
 		},
 		AccountInfo: &wechat.ApplymentBankAccountInfo{
 			BankAccountType: req.AccountType,
@@ -352,7 +353,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			AccountNumber:   wxEncryptedAccountNumber,
 		},
 		ContactInfo: &wechat.ApplymentContactInfo{
-			ContactType:         "LEGAL",
+			ContactType:         "65",
 			ContactName:         wxEncryptedIDCardName,
 			ContactIDCardNumber: wxEncryptedIDCardNumber,
 			MobilePhone:         wxEncryptedMobilePhone,
@@ -360,6 +361,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		},
 		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
 			StoreName: merchant.Name,
+			StoreURL:  storeURL,
 		},
 	}
 
@@ -517,55 +519,123 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// parseIDCardValidTime 解析身份证有效期
-func parseIDCardValidTime(validDate string) string {
-	// 输入格式: "2020.01.01-2030.01.01" 或 "2020.01.01-长期"
-	// 输出格式: "2030-01-01" 或 "长期"
-	if validDate == "" {
-		return "长期"
+func parseIDCardValidPeriod(validDate string) (string, string) {
+	if strings.TrimSpace(validDate) == "" {
+		return "", "长期"
 	}
 
-	// 分割获取结束日期
-	parts := splitByDash(validDate)
+	parts := strings.SplitN(validDate, "-", 2)
 	if len(parts) != 2 {
-		return "长期"
+		return "", normalizeApplymentDate(validDate)
 	}
 
-	endDate := parts[1]
-	if endDate == "长期" {
-		return "长期"
-	}
-
-	// 转换格式: 2030.01.01 -> 2030-01-01
-	endDate = replaceAll(endDate, ".", "-")
-	return endDate
+	return normalizeApplymentDate(parts[0]), normalizeApplymentDate(parts[1])
 }
 
-// splitByDash 按 "-" 分割字符串
-func splitByDash(s string) []string {
-	var result []string
-	start := 0
-	for i := 0; i < len(s); i++ {
-		if s[i] == '-' {
-			result = append(result, s[start:i])
-			start = i + 1
-		}
+func normalizeApplymentDate(raw string) string {
+	normalized := strings.TrimSpace(raw)
+	if normalized == "" || normalized == "长期" {
+		return normalized
 	}
-	result = append(result, s[start:])
-	return result
+
+	replacer := strings.NewReplacer(
+		"年", "-",
+		"月", "-",
+		"日", "",
+		".", "-",
+		"/", "-",
+	)
+	normalized = replacer.Replace(normalized)
+	return strings.Trim(normalized, " -")
 }
 
-// replaceAll 替换所有匹配的字符
-func replaceAll(s, old, new string) string {
-	result := ""
-	for i := 0; i < len(s); i++ {
-		if string(s[i]) == old {
-			result += new
-		} else {
-			result += string(s[i])
+func buildApplymentBusinessLicenseInfo(copyMediaID, businessLicenseNumber, merchantName, legalPerson, fallbackAddress string, ocr *BusinessLicenseOCRData) *wechat.BusinessLicenseInfo {
+	if copyMediaID == "" {
+		return nil
+	}
+
+	info := &wechat.BusinessLicenseInfo{
+		BusinessLicenseCopy:   copyMediaID,
+		BusinessLicenseNumber: businessLicenseNumber,
+		MerchantName:          merchantName,
+		LegalPerson:           legalPerson,
+	}
+
+	if ocr != nil {
+		if address := strings.TrimSpace(ocr.Address); address != "" {
+			info.CompanyAddress = address
+		}
+		if businessTime := buildApplymentBusinessTime(ocr.ValidPeriod); businessTime != "" {
+			info.BusinessTime = businessTime
 		}
 	}
-	return result
+
+	if info.CompanyAddress == "" {
+		info.CompanyAddress = strings.TrimSpace(fallbackAddress)
+	}
+
+	return info
+}
+
+func buildApplymentBusinessTime(validPeriod string) string {
+	trimmed := strings.TrimSpace(validPeriod)
+	if trimmed == "" || trimmed == "长期" {
+		return ""
+	}
+
+	parts := strings.SplitN(trimmed, "至", 2)
+	if len(parts) != 2 {
+		return ""
+	}
+
+	start := normalizeApplymentDate(parts[0])
+	end := normalizeApplymentDate(parts[1])
+	if start == "" || end == "" {
+		return ""
+	}
+
+	return fmt.Sprintf("[\"%s\",\"%s\"]", start, end)
+}
+
+func buildApplymentStoreURL(config util.Config) string {
+	if base := strings.TrimSpace(config.WebBaseURL); base != "" {
+		return strings.TrimRight(base, "/")
+	}
+	if base := strings.TrimSpace(config.ExternalBaseURL); base != "" {
+		return strings.TrimRight(base, "/")
+	}
+	return ""
+}
+
+func resolveApplymentOrganizationType(businessLicenseNumber, licenseType, subjectName, defaultLicensedType string) string {
+	if strings.TrimSpace(businessLicenseNumber) == "" {
+		return "2401"
+	}
+
+	trimmedType := strings.TrimSpace(licenseType)
+	switch {
+	case strings.Contains(trimmedType, "个体"):
+		return "4"
+	case strings.Contains(trimmedType, "事业单位"):
+		return "3"
+	case strings.Contains(trimmedType, "政府"):
+		return "2502"
+	case strings.Contains(trimmedType, "社会组织"), strings.Contains(trimmedType, "社会团体"), strings.Contains(trimmedType, "基金会"), strings.Contains(trimmedType, "民办非企业"), strings.Contains(trimmedType, "基层群众性自治组织"), strings.Contains(trimmedType, "农村集体经济组织"):
+		return "1708"
+	case strings.Contains(trimmedType, "公司"), strings.Contains(trimmedType, "企业"), strings.Contains(trimmedType, "合伙"), strings.Contains(trimmedType, "股份"):
+		return "2"
+	}
+
+	trimmedName := strings.TrimSpace(subjectName)
+	if strings.Contains(trimmedName, "公司") || strings.Contains(trimmedName, "有限") {
+		return "2"
+	}
+
+	if defaultLicensedType != "" {
+		return defaultLicensedType
+	}
+
+	return "4"
 }
 
 // mapWechatApplymentStatus 映射微信进件状态到本地状态
@@ -738,6 +808,13 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		}
 	}
 
+	var businessLicenseOCR BusinessLicenseOCRData
+	if len(application.BusinessLicenseOcr) > 0 {
+		if err := json.Unmarshal(application.BusinessLicenseOcr, &businessLicenseOCR); err != nil {
+			log.Error().Err(err).Msg("解析运营商营业执照OCR失败")
+		}
+	}
+
 	// 获取身份证信息
 	legalPersonName := ""
 	if application.LegalPersonName.Valid {
@@ -765,20 +842,21 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
-	// 解析身份证有效期
-	idCardValidTime := "长期"
-	if idCardBackOCR.ValidEnd != "" {
-		idCardValidTime = idCardBackOCR.ValidEnd
+	idCardValidTimeBegin := normalizeApplymentDate(idCardBackOCR.ValidStart)
+	idCardValidTime := normalizeApplymentDate(idCardBackOCR.ValidEnd)
+	if idCardValidTime == "" {
+		idCardValidTime = "长期"
 	}
 
 	// 生成业务申请编号
 	outRequestNo := fmt.Sprintf("O%d%d", operator.ID, time.Now().Unix())
 
-	// 判断主体类型：有营业执照号则为个体工商户/企业，否则为小微商户
-	organizationType := "2401" // 默认小微商户
-	if businessLicenseNumber != "" {
-		organizationType = "2500" // 个体工商户
-	}
+	organizationType := resolveApplymentOrganizationType(
+		businessLicenseNumber,
+		businessLicenseOCR.TypeOfEnterprise,
+		operatorName,
+		"2",
+	)
 
 	// 加密敏感数据（本地存储）
 	encryptedIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, legalPersonIDNumber)
@@ -958,29 +1036,29 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	}
 
 	// ==================== 构建微信进件请求 ====================
-	// 构建营业执照信息（如有）
-	var businessLicenseInfo *wechat.BusinessLicenseInfo
-	if businessLicenseMediaID != "" {
-		businessLicenseInfo = &wechat.BusinessLicenseInfo{
-			BusinessLicenseCopy:   businessLicenseMediaID,
-			BusinessLicenseNumber: businessLicenseNumber,
-			MerchantName:          operatorName,
-			LegalPerson:           legalPersonName,
-		}
-	}
+	businessLicenseInfo := buildApplymentBusinessLicenseInfo(
+		businessLicenseMediaID,
+		businessLicenseNumber,
+		operatorName,
+		legalPersonName,
+		"",
+		&businessLicenseOCR,
+	)
+	storeURL := buildApplymentStoreURL(server.config)
 
 	applymentReq := &wechat.EcommerceApplymentRequest{
-		OutRequestNo:      outRequestNo,
-		OrganizationType:  organizationType,
-		BusinessLicense:   businessLicenseInfo,
-		MerchantShortname: operatorName,
-		NeedAccountInfo:   true,
+		OutRequestNo:       outRequestNo,
+		OrganizationType:   organizationType,
+		FinanceInstitution: false,
+		BusinessLicense:    businessLicenseInfo,
+		MerchantShortname:  operatorName,
 		IDCardInfo: &wechat.ApplymentIDCardInfo{
-			IDCardCopy:      idCardFrontMediaID,
-			IDCardNational:  idCardBackMediaID,
-			IDCardName:      wxEncryptedIDCardName,
-			IDCardNumber:    wxEncryptedIDCardNumber,
-			IDCardValidTime: idCardValidTime,
+			IDCardCopy:           idCardFrontMediaID,
+			IDCardNational:       idCardBackMediaID,
+			IDCardName:           wxEncryptedIDCardName,
+			IDCardNumber:         wxEncryptedIDCardNumber,
+			IDCardValidTimeBegin: idCardValidTimeBegin,
+			IDCardValidTime:      idCardValidTime,
 		},
 		AccountInfo: &wechat.ApplymentBankAccountInfo{
 			BankAccountType: req.AccountType,
@@ -991,7 +1069,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 			AccountNumber:   wxEncryptedAccountNumber,
 		},
 		ContactInfo: &wechat.ApplymentContactInfo{
-			ContactType:         "LEGAL",
+			ContactType:         "65",
 			ContactName:         wxEncryptedIDCardName,
 			ContactIDCardNumber: wxEncryptedIDCardNumber,
 			MobilePhone:         wxEncryptedMobilePhone,
@@ -999,6 +1077,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		},
 		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
 			StoreName: operatorName,
+			StoreURL:  storeURL,
 		},
 	}
 

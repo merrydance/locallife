@@ -107,13 +107,14 @@ func (c *EcommerceClient) GetSpAppID() string {
 // EcommerceApplymentRequest 二级商户进件申请请求
 type EcommerceApplymentRequest struct {
 	OutRequestNo         string                    `json:"out_request_no"`                   // 业务申请编号
-	OrganizationType     string                    `json:"organization_type"`                // 主体类型: 2401-小微, 2500-个体户, 2600-企业
+	OrganizationType     string                    `json:"organization_type"`                // 主体类型: 2401-小微, 2500-个人卖家, 4-个体工商户, 2-企业
+	FinanceInstitution   bool                      `json:"finance_institution"`              // 是否金融机构
 	BusinessLicense      *BusinessLicenseInfo      `json:"business_license_info,omitempty"`  // 营业执照信息（个体户/企业必填）
 	IDCardInfo           *ApplymentIDCardInfo      `json:"id_card_info"`                     // 法人身份证信息
-	NeedAccountInfo      bool                      `json:"need_account_info"`                // 是否填写结算账户（true必填）
 	AccountInfo          *ApplymentBankAccountInfo `json:"account_info,omitempty"`           // 结算银行账户
 	ContactInfo          *ApplymentContactInfo     `json:"contact_info"`                     // 联系人信息
 	SalesSceneInfo       *ApplymentSalesSceneInfo  `json:"sales_scene_info"`                 // 经营场景信息
+	SettlementInfo       *ApplymentSettlementInfo  `json:"settlement_info,omitempty"`        // 结算规则
 	MerchantShortname    string                    `json:"merchant_shortname"`               // 商户简称
 	Qualifications       []string                  `json:"qualifications,omitempty"`         // 特殊资质
 	BusinessAdditionPics []string                  `json:"business_addition_pics,omitempty"` // 补充材料
@@ -122,38 +123,48 @@ type EcommerceApplymentRequest struct {
 
 // BusinessLicenseInfo 营业执照信息
 type BusinessLicenseInfo struct {
-	BusinessLicenseCopy   string `json:"business_license_copy"`   // 营业执照照片MediaID
-	BusinessLicenseNumber string `json:"business_license_number"` // 营业执照注册号
-	MerchantName          string `json:"merchant_name"`           // 商户名称
-	LegalPerson           string `json:"legal_person"`            // 法人姓名
+	CertType              string `json:"cert_type,omitempty"`       // 证书类型（政府/事业单位/社会组织）
+	BusinessLicenseCopy   string `json:"business_license_copy"`     // 营业执照照片MediaID
+	BusinessLicenseNumber string `json:"business_license_number"`   // 营业执照注册号
+	MerchantName          string `json:"merchant_name"`             // 商户名称
+	LegalPerson           string `json:"legal_person"`              // 法人姓名
+	CompanyAddress        string `json:"company_address,omitempty"` // 注册地址
+	BusinessTime          string `json:"business_time,omitempty"`   // 营业期限
 }
 
 // ApplymentIDCardInfo 进件身份证信息
 type ApplymentIDCardInfo struct {
-	IDCardCopy      string `json:"id_card_copy"`       // 身份证正面照片MediaID
-	IDCardNational  string `json:"id_card_national"`   // 身份证背面照片MediaID
-	IDCardName      string `json:"id_card_name"`       // 身份证姓名（需加密）
-	IDCardNumber    string `json:"id_card_number"`     // 身份证号码（需加密）
-	IDCardValidTime string `json:"id_card_valid_time"` // 身份证有效期：YYYY-MM-DD 或 长期
+	IDCardCopy           string `json:"id_card_copy"`             // 身份证正面照片MediaID
+	IDCardNational       string `json:"id_card_national"`         // 身份证背面照片MediaID
+	IDCardName           string `json:"id_card_name"`             // 身份证姓名（需加密）
+	IDCardNumber         string `json:"id_card_number"`           // 身份证号码（需加密）
+	IDCardValidTimeBegin string `json:"id_card_valid_time_begin"` // 身份证有效期开始时间
+	IDCardValidTime      string `json:"id_card_valid_time"`       // 身份证有效期结束时间：YYYY-MM-DD 或 长期
 }
 
 // ApplymentBankAccountInfo 进件银行账户信息
 type ApplymentBankAccountInfo struct {
-	BankAccountType string `json:"bank_account_type"`   // ACCOUNT_TYPE_BUSINESS-对公, ACCOUNT_TYPE_PRIVATE-对私
-	AccountBank     string `json:"account_bank"`        // 开户银行
-	AccountName     string `json:"account_name"`        // 开户名称（需加密）
-	BankAddressCode string `json:"bank_address_code"`   // 开户银行省市编码
-	BankName        string `json:"bank_name,omitempty"` // 开户银行全称（支行）
-	AccountNumber   string `json:"account_number"`      // 银行账号（需加密）
+	BankAccountType string `json:"bank_account_type"`           // ACCOUNT_TYPE_BUSINESS-对公, ACCOUNT_TYPE_PRIVATE-对私
+	AccountBank     string `json:"account_bank"`                // 开户银行
+	AccountName     string `json:"account_name"`                // 开户名称（需加密）
+	BankAddressCode string `json:"bank_address_code,omitempty"` // 开户银行省市编码（即将下线）
+	BankBranchID    string `json:"bank_branch_id,omitempty"`    // 开户银行联行号
+	BankName        string `json:"bank_name,omitempty"`         // 开户银行全称（支行）
+	AccountNumber   string `json:"account_number"`              // 银行账号（需加密）
 }
 
 // ApplymentContactInfo 联系人信息
 type ApplymentContactInfo struct {
-	ContactType         string `json:"contact_type,omitempty"`           // 联系人类型: LEGAL-法人
-	ContactName         string `json:"contact_name"`                     // 联系人姓名（需加密）
-	ContactIDCardNumber string `json:"contact_id_card_number,omitempty"` // 联系人身份证号（需加密）
-	MobilePhone         string `json:"mobile_phone"`                     // 联系手机号（需加密）
-	ContactEmail        string `json:"contact_email,omitempty"`          // 联系邮箱（需加密）
+	ContactType             string `json:"contact_type,omitempty"`                // 联系人类型: 65-法人, 66-经办人
+	ContactName             string `json:"contact_name"`                          // 联系人姓名（需加密）
+	ContactIDDocType        string `json:"contact_id_doc_type,omitempty"`         // 联系人证件类型
+	ContactIDCardNumber     string `json:"contact_id_card_number,omitempty"`      // 联系人身份证号（需加密）
+	ContactIDDocCopy        string `json:"contact_id_doc_copy,omitempty"`         // 联系人证件正面照片
+	ContactIDDocCopyBack    string `json:"contact_id_doc_copy_back,omitempty"`    // 联系人证件反面照片
+	ContactIDDocPeriodBegin string `json:"contact_id_doc_period_begin,omitempty"` // 联系人证件有效期开始时间
+	ContactIDDocPeriodEnd   string `json:"contact_id_doc_period_end,omitempty"`   // 联系人证件有效期结束时间
+	MobilePhone             string `json:"mobile_phone"`                          // 联系手机号（需加密）
+	ContactEmail            string `json:"contact_email,omitempty"`               // 联系邮箱（兼容旧调用，当前不主动上送）
 }
 
 // ApplymentSalesSceneInfo 经营场景信息
@@ -162,6 +173,12 @@ type ApplymentSalesSceneInfo struct {
 	StoreURL            string `json:"store_url,omitempty"`              // 店铺链接
 	StoreQRCode         string `json:"store_qr_code,omitempty"`          // 店铺二维码MediaID
 	MiniProgramSubAppID string `json:"mini_program_sub_appid,omitempty"` // 小程序AppID
+}
+
+// ApplymentSettlementInfo 结算规则信息
+type ApplymentSettlementInfo struct {
+	SettlementID      int64  `json:"settlement_id,omitempty"`
+	QualificationType string `json:"qualification_type,omitempty"`
 }
 
 // EcommerceApplymentResponse 二级商户进件响应
@@ -192,39 +209,55 @@ type ApplymentAuditDetail struct {
 // 注意：敏感信息需要使用微信支付平台公钥加密
 func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *EcommerceApplymentRequest) (*EcommerceApplymentResponse, error) {
 	body := map[string]interface{}{
-		"out_request_no":     req.OutRequestNo,
-		"organization_type":  req.OrganizationType,
-		"merchant_shortname": req.MerchantShortname,
-		"need_account_info":  req.NeedAccountInfo,
+		"out_request_no":      req.OutRequestNo,
+		"organization_type":   req.OrganizationType,
+		"finance_institution": req.FinanceInstitution,
+		"merchant_shortname":  req.MerchantShortname,
 	}
 
 	// 营业执照信息（个体户/企业必填）
 	if req.BusinessLicense != nil {
-		body["business_license_info"] = map[string]interface{}{
+		businessLicenseInfo := map[string]interface{}{
 			"business_license_copy":   req.BusinessLicense.BusinessLicenseCopy,
 			"business_license_number": req.BusinessLicense.BusinessLicenseNumber,
 			"merchant_name":           req.BusinessLicense.MerchantName,
 			"legal_person":            req.BusinessLicense.LegalPerson,
 		}
+		if req.BusinessLicense.CertType != "" {
+			businessLicenseInfo["cert_type"] = req.BusinessLicense.CertType
+		}
+		if req.BusinessLicense.CompanyAddress != "" {
+			businessLicenseInfo["company_address"] = req.BusinessLicense.CompanyAddress
+		}
+		if req.BusinessLicense.BusinessTime != "" {
+			businessLicenseInfo["business_time"] = req.BusinessLicense.BusinessTime
+		}
+		body["business_license_info"] = businessLicenseInfo
 	}
 
 	// 身份证信息
 	body["id_card_info"] = map[string]interface{}{
-		"id_card_copy":       req.IDCardInfo.IDCardCopy,
-		"id_card_national":   req.IDCardInfo.IDCardNational,
-		"id_card_name":       req.IDCardInfo.IDCardName,   // 需加密
-		"id_card_number":     req.IDCardInfo.IDCardNumber, // 需加密
-		"id_card_valid_time": req.IDCardInfo.IDCardValidTime,
+		"id_card_copy":             req.IDCardInfo.IDCardCopy,
+		"id_card_national":         req.IDCardInfo.IDCardNational,
+		"id_card_name":             req.IDCardInfo.IDCardName,   // 需加密
+		"id_card_number":           req.IDCardInfo.IDCardNumber, // 需加密
+		"id_card_valid_time_begin": req.IDCardInfo.IDCardValidTimeBegin,
+		"id_card_valid_time":       req.IDCardInfo.IDCardValidTime,
 	}
 
 	// 银行账户信息
 	if req.AccountInfo != nil {
 		accountInfo := map[string]interface{}{
-			"bank_account_type": req.AccountInfo.BankAccountType,
+			"bank_account_type": normalizeEcommerceBankAccountType(req.AccountInfo.BankAccountType),
 			"account_bank":      req.AccountInfo.AccountBank,
-			"account_name":      req.AccountInfo.AccountName, // 需加密
-			"bank_address_code": req.AccountInfo.BankAddressCode,
+			"account_name":      req.AccountInfo.AccountName,   // 需加密
 			"account_number":    req.AccountInfo.AccountNumber, // 需加密
+		}
+		if req.AccountInfo.BankAddressCode != "" {
+			accountInfo["bank_address_code"] = req.AccountInfo.BankAddressCode
+		}
+		if req.AccountInfo.BankBranchID != "" {
+			accountInfo["bank_branch_id"] = req.AccountInfo.BankBranchID
 		}
 		if req.AccountInfo.BankName != "" {
 			accountInfo["bank_name"] = req.AccountInfo.BankName
@@ -234,17 +267,27 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 
 	// 联系人信息
 	contactInfo := map[string]interface{}{
+		"contact_type": normalizeEcommerceContactType(req.ContactInfo.ContactType),
 		"contact_name": req.ContactInfo.ContactName, // 需加密
 		"mobile_phone": req.ContactInfo.MobilePhone, // 需加密
 	}
-	if req.ContactInfo.ContactType != "" {
-		contactInfo["contact_type"] = req.ContactInfo.ContactType
+	if req.ContactInfo.ContactIDDocType != "" {
+		contactInfo["contact_id_doc_type"] = req.ContactInfo.ContactIDDocType
 	}
 	if req.ContactInfo.ContactIDCardNumber != "" {
 		contactInfo["contact_id_card_number"] = req.ContactInfo.ContactIDCardNumber // 需加密
 	}
-	if req.ContactInfo.ContactEmail != "" {
-		contactInfo["contact_email"] = req.ContactInfo.ContactEmail // 需加密
+	if req.ContactInfo.ContactIDDocCopy != "" {
+		contactInfo["contact_id_doc_copy"] = req.ContactInfo.ContactIDDocCopy
+	}
+	if req.ContactInfo.ContactIDDocCopyBack != "" {
+		contactInfo["contact_id_doc_copy_back"] = req.ContactInfo.ContactIDDocCopyBack
+	}
+	if req.ContactInfo.ContactIDDocPeriodBegin != "" {
+		contactInfo["contact_id_doc_period_begin"] = req.ContactInfo.ContactIDDocPeriodBegin
+	}
+	if req.ContactInfo.ContactIDDocPeriodEnd != "" {
+		contactInfo["contact_id_doc_period_end"] = req.ContactInfo.ContactIDDocPeriodEnd
 	}
 	body["contact_info"] = contactInfo
 
@@ -262,6 +305,19 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 		salesScene["mini_program_sub_appid"] = req.SalesSceneInfo.MiniProgramSubAppID
 	}
 	body["sales_scene_info"] = salesScene
+
+	if req.SettlementInfo != nil {
+		settlementInfo := map[string]interface{}{}
+		if req.SettlementInfo.SettlementID != 0 {
+			settlementInfo["settlement_id"] = req.SettlementInfo.SettlementID
+		}
+		if req.SettlementInfo.QualificationType != "" {
+			settlementInfo["qualification_type"] = req.SettlementInfo.QualificationType
+		}
+		if len(settlementInfo) > 0 {
+			body["settlement_info"] = settlementInfo
+		}
+	}
 
 	// 特殊资质
 	if len(req.Qualifications) > 0 {
@@ -288,6 +344,28 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 	}
 
 	return &resp, nil
+}
+
+func normalizeEcommerceBankAccountType(accountType string) string {
+	switch strings.TrimSpace(accountType) {
+	case "ACCOUNT_TYPE_BUSINESS", "74":
+		return "74"
+	case "ACCOUNT_TYPE_PRIVATE", "75":
+		return "75"
+	default:
+		return accountType
+	}
+}
+
+func normalizeEcommerceContactType(contactType string) string {
+	switch strings.TrimSpace(contactType) {
+	case "", "LEGAL", "65":
+		return "65"
+	case "SUPER", "66":
+		return "66"
+	default:
+		return contactType
+	}
 }
 
 // QueryEcommerceApplymentByID 通过申请单号查询进件状态

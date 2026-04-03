@@ -47,11 +47,12 @@ func randomOperatorApplicationForApplyment(userID int64) db.OperatorApplication 
 		ContactPhone:                pgtype.Text{String: "13800138000", Valid: true},
 		BusinessLicenseMediaAssetID: pgtype.Int8{},
 		BusinessLicenseNumber:       pgtype.Text{String: util.RandomString(18), Valid: true},
+		BusinessLicenseOcr:          []byte(`{"type_of_enterprise":"有限责任公司","address":"广州市天河区","valid_period":"2020年01月01日至2040年01月01日"}`),
 		LegalPersonName:             pgtype.Text{String: util.RandomString(6), Valid: true},
 		LegalPersonIDNumber:         pgtype.Text{String: "110101199001011234", Valid: true},
 		IDCardFrontMediaAssetID:     pgtype.Int8{},
 		IDCardBackMediaAssetID:      pgtype.Int8{},
-		IDCardBackOcr:               []byte(`{"valid_date": "2020.01.01-2030.01.01"}`),
+		IDCardBackOcr:               []byte(`{"valid_start": "2020-01-01", "valid_end": "2030-01-01"}`),
 		RequestedContractYears:      3,
 		Status:                      "approved",
 	}
@@ -123,7 +124,15 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
+					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
+						require.Equal(t, "2", req.OrganizationType)
+						require.NotNil(t, req.IDCardInfo)
+						require.Equal(t, "2020-01-01", req.IDCardInfo.IDCardValidTimeBegin)
+						require.Equal(t, "2030-01-01", req.IDCardInfo.IDCardValidTime)
+						require.NotNil(t, req.SalesSceneInfo)
+						require.Equal(t, "https://merchant.example.com", req.SalesSceneInfo.StoreURL)
+						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
+					})
 
 				// 更新进件状态
 				store.EXPECT().

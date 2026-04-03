@@ -28,6 +28,7 @@ func newTestServerWithEcommerce(t *testing.T, store db.Store, ecommerceClient we
 	config := util.Config{
 		TokenSymmetricKey:   util.RandomString(32),
 		AccessTokenDuration: time.Minute,
+		WebBaseURL:          "https://merchant.example.com",
 	}
 
 	tokenMaker, err := token.NewPasetoMaker(config.TokenSymmetricKey)
@@ -69,6 +70,7 @@ func randomMerchantApplicationForApplyment(userID int64) db.MerchantApplication 
 		ContactPhone:          "13800138000",
 		BusinessAddress:       util.RandomString(30),
 		Status:                "approved",
+		BusinessLicenseOcr:    []byte(`{"type_of_enterprise":"个体工商户","address":"深圳市南山区","valid_period":"2020年01月01日至长期"}`),
 		IDCardBackOcr:         []byte(`{"valid_date": "2020.01.01-2030.01.01"}`),
 	}
 }
@@ -149,7 +151,15 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				ecommerceClient.EXPECT().
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil)
+					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
+						require.Equal(t, "4", req.OrganizationType)
+						require.NotNil(t, req.IDCardInfo)
+						require.Equal(t, "2020-01-01", req.IDCardInfo.IDCardValidTimeBegin)
+						require.Equal(t, "2030-01-01", req.IDCardInfo.IDCardValidTime)
+						require.NotNil(t, req.SalesSceneInfo)
+						require.Equal(t, "https://merchant.example.com", req.SalesSceneInfo.StoreURL)
+						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
+					})
 
 				// 更新进件状态
 				store.EXPECT().
