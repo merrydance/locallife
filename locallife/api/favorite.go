@@ -69,6 +69,15 @@ type listFavoriteDishesResponse struct {
 	TotalPage  int                    `json:"total_page"`
 }
 
+type favoritesSummaryResponse struct {
+	MerchantCount int64 `json:"merchant_count"`
+	DishCount     int64 `json:"dish_count"`
+}
+
+type favoriteStatusResponse struct {
+	Exists bool `json:"exists"`
+}
+
 type addFavoriteMerchantRequest struct {
 	MerchantID int64 `json:"merchant_id" binding:"required,min=1"`
 }
@@ -222,6 +231,39 @@ func (server *Server) listFavoriteMerchants(ctx *gin.Context) {
 		TotalPages: totalPages,
 		TotalPage:  totalPages,
 	})
+}
+
+// getFavoriteMerchantStatus godoc
+// @Summary 获取商户收藏状态
+// @Description 返回当前用户是否已收藏指定商户
+// @Tags 收藏管理
+// @Accept json
+// @Produce json
+// @Param id path int64 true "商户ID"
+// @Success 200 {object} favoriteStatusResponse "收藏状态"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/favorites/merchants/{id} [get]
+// @Security BearerAuth
+func (server *Server) getFavoriteMerchantStatus(ctx *gin.Context) {
+	merchantID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid merchant id")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	exists, err := server.store.IsMerchantFavorited(ctx, db.IsMerchantFavoritedParams{
+		UserID:     authPayload.UserID,
+		MerchantID: pgtype.Int8{Int64: merchantID, Valid: true},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, favoriteStatusResponse{Exists: exists})
 }
 
 // deleteFavoriteMerchant godoc
@@ -414,6 +456,69 @@ func (server *Server) listFavoriteDishes(ctx *gin.Context) {
 		PageSize:   req.PageSize,
 		TotalPages: totalPages,
 		TotalPage:  totalPages,
+	})
+}
+
+// getFavoriteDishStatus godoc
+// @Summary 获取菜品收藏状态
+// @Description 返回当前用户是否已收藏指定菜品
+// @Tags 收藏管理
+// @Accept json
+// @Produce json
+// @Param id path int64 true "菜品ID"
+// @Success 200 {object} favoriteStatusResponse "收藏状态"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/favorites/dishes/{id} [get]
+// @Security BearerAuth
+func (server *Server) getFavoriteDishStatus(ctx *gin.Context) {
+	dishID, err := strconv.ParseInt(ctx.Param("id"), 10, 64)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("invalid dish id")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	exists, err := server.store.IsDishFavorited(ctx, db.IsDishFavoritedParams{
+		UserID: authPayload.UserID,
+		DishID: pgtype.Int8{Int64: dishID, Valid: true},
+	})
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, favoriteStatusResponse{Exists: exists})
+}
+
+// getFavoritesSummary godoc
+// @Summary 获取收藏汇总
+// @Description 返回当前用户收藏商户数和收藏菜品数
+// @Tags 收藏管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} favoritesSummaryResponse "收藏汇总"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/favorites/summary [get]
+// @Security BearerAuth
+func (server *Server) getFavoritesSummary(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchantCount, err := server.store.CountFavoriteMerchants(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	dishCount, err := server.store.CountFavoriteDishes(ctx, authPayload.UserID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, favoritesSummaryResponse{
+		MerchantCount: merchantCount,
+		DishCount:     dishCount,
 	})
 }
 

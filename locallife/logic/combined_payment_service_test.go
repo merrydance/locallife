@@ -37,9 +37,7 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
 			},
 			check: func(t *testing.T, _ CreateCombinedPaymentOrderResult, err error) {
-				reqErr := assertRequestError(t, err)
-				require.Equal(t, 500, reqErr.Status)
-				require.Equal(t, "ecommerce client not configured", reqErr.Err.Error())
+				require.EqualError(t, err, "ecommerce client: not configured")
 			},
 		},
 		{
@@ -625,9 +623,7 @@ func TestCloseCombinedPaymentOrder(t *testing.T) {
 			name:       "ClientNotConfigured",
 			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {},
 			check: func(t *testing.T, _ CloseCombinedPaymentOrderResult, err error) {
-				reqErr := assertRequestError(t, err)
-				require.Equal(t, 500, reqErr.Status)
-				require.Equal(t, "ecommerce client not configured", reqErr.Err.Error())
+				require.EqualError(t, err, "ecommerce client: not configured")
 			},
 		},
 		{

@@ -533,8 +533,7 @@
   background: var(--td-bg-color-container);
   border-top-left-radius: 20rpx;
   border-top-right-radius: 20rpx;
-  padding: 32rpx 24rpx calc(32rpx + constant(safe-area-inset-bottom));
-  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 24rpx var(--popup-bottom-padding-md);
 }
 
 .popup-title {

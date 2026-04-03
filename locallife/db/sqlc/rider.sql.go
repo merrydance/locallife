@@ -24,6 +24,19 @@ func (q *Queries) CountOnlineRiders(ctx context.Context) (int64, error) {
 	return count, err
 }
 
+const countOnlineRidersByRegion = `-- name: CountOnlineRidersByRegion :one
+SELECT COUNT(*) FROM riders
+WHERE region_id = $1 AND is_online = true
+`
+
+// 统计区域内当前在线骑手数量
+func (q *Queries) CountOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error) {
+	row := q.db.QueryRow(ctx, countOnlineRidersByRegion, regionID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRidersByRegion = `-- name: CountRidersByRegion :one
 SELECT COUNT(*) FROM riders
 WHERE region_id = $1

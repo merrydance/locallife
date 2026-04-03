@@ -123,8 +123,8 @@
         </view>
 
         <view class="form-actions">
-          <t-button theme="default" shape="round" bind:tap="onCloseForm">取消</t-button>
-          <t-button theme="primary" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
+          <t-button theme="primary" variant="outline" size="medium" shape="round" bind:tap="onCloseForm">取消</t-button>
+          <t-button theme="primary" size="medium" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
         </view>
       </scroll-view>
     </view>

@@ -47,6 +47,13 @@ type complaintResponse struct {
 	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
+type merchantComplaintSummaryResponse struct {
+	Total           int64 `json:"total"`
+	PendingResponse int64 `json:"pending_response"`
+	Processing      int64 `json:"processing"`
+	Processed       int64 `json:"processed"`
+}
+
 func toComplaintResponse(c db.WechatComplaint) complaintResponse {
 	resp := complaintResponse{
 		ID:              c.ID,
@@ -127,6 +134,61 @@ func (server *Server) listMerchantComplaints(ctx *gin.Context) {
 		resp = append(resp, toComplaintResponse(r))
 	}
 	ctx.JSON(http.StatusOK, gin.H{"complaints": resp, "page": page, "limit": limit})
+}
+
+// getMerchantComplaintSummary 商户投诉汇总
+// @Summary 获取商户投诉汇总
+// @Description 返回商户投诉总数及各处理状态汇总，供工作台和筛选条使用
+// @Tags 商户投诉管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} merchantComplaintSummaryResponse "投诉汇总"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchant/complaints/summary [get]
+func (server *Server) getMerchantComplaintSummary(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.getMerchantFromUserID(ctx, authPayload.UserID)
+	if err != nil {
+		return
+	}
+
+	countState := func(state string) (int64, error) {
+		return server.store.CountWechatComplaintsByMerchant(ctx, db.CountWechatComplaintsByMerchantParams{
+			MerchantID: pgtype.Int8{Int64: merchant.ID, Valid: true},
+			Column2:    state,
+		})
+	}
+
+	total, err := countState("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pendingResponse, err := countState("PENDING_RESPONSE")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	processing, err := countState("PROCESSING")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	processed, err := countState("PROCESSED")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, merchantComplaintSummaryResponse{
+		Total:           total,
+		PendingResponse: pendingResponse,
+		Processing:      processing,
+		Processed:       processed,
+	})
 }
 
 // ========================= 商户端：投诉单详情 =================================

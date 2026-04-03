@@ -28,6 +28,14 @@ export interface ListOperatorMerchantsResponse {
     total?: number                               // 总数
 }
 
+export interface OperatorMerchantSummaryResponse {
+    total: number
+    pending: number
+    approved: number
+    rejected: number
+    suspended: number
+}
+
 /** 运营商商户项 - 对齐后端 api.merchantListItem 结构 */
 export interface OperatorMerchantItem {
     id: number
@@ -207,6 +215,14 @@ export class OperatorMerchantManagementService {
             url: '/v1/operator/merchants',
             method: 'GET',
             data: params
+        })
+    }
+
+    async getMerchantSummary(regionId?: number): Promise<OperatorMerchantSummaryResponse> {
+        return request({
+            url: '/v1/operator/merchants/summary',
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 
@@ -653,44 +669,39 @@ export async function getMerchantManagementDashboard(regionId?: number): Promise
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    const [merchantList, merchantRanking] = await Promise.all([
-        operatorMerchantManagementService.getMerchantList({
-            region_id: regionId,
-            limit: 100,
-            sort_by: 'created_at',
-            sort_order: 'desc'
-        }),
+    const [merchantSummaryResult, merchantRanking, merchantSampleResult] = await Promise.all([
+        operatorMerchantManagementService.getMerchantSummary(regionId),
         operatorMerchantManagementService.getMerchantRanking({
             region_id: regionId,
             start_date: startDate,
             end_date: endDate,
             rank_by: 'total_gmv',
             limit: 10
+        }),
+        operatorMerchantManagementService.getMerchantList({
+            region_id: regionId,
+            limit: 100,
+            sort_by: 'created_at',
+            sort_order: 'desc'
         })
     ])
 
-    // 统计商户状态分布
-    const merchants = merchantList.merchants || []
-    const total = merchantList.total ?? merchants.length
     const merchantSummary = {
-        total,
-        active: merchants.filter((m) => m.status === 'approved').length,
-        suspended: merchants.filter((m) => m.status === 'suspended').length,
-        pending: merchants.filter((m) => m.status === 'pending').length
+        total: merchantSummaryResult.total,
+        active: merchantSummaryResult.approved,
+        suspended: merchantSummaryResult.suspended,
+        pending: merchantSummaryResult.pending
     }
 
-    // 分析商户分类
+    const merchants = merchantSampleResult.merchants || []
     const categoryAnalysis = merchantAnalyticsService.analyzeMerchantsByCategory(merchants)
-
-    // 获取最近注册的商户
     const recentMerchants = merchants.slice(0, 10)
 
-    // 模拟绩效分布（实际应该基于详细数据计算）
     const performanceDistribution = {
-        excellent: Math.round(total * 0.15),
-        good: Math.round(total * 0.35),
-        average: Math.round(total * 0.35),
-        poor: Math.round(total * 0.15)
+        excellent: Math.round(merchantSummary.total * 0.15),
+        good: Math.round(merchantSummary.total * 0.35),
+        average: Math.round(merchantSummary.total * 0.35),
+        poor: Math.round(merchantSummary.total * 0.15)
     }
 
     return {

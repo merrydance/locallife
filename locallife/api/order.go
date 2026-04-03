@@ -2203,6 +2203,21 @@ type orderStatsResponse struct {
 	CancelledCount  int64 `json:"cancelled_count"`
 }
 
+type merchantOrderSummaryResponse struct {
+	Total                int64 `json:"total"`
+	PendingCount         int64 `json:"pending_count"`
+	PaidCount            int64 `json:"paid_count"`
+	PreparingCount       int64 `json:"preparing_count"`
+	ReadyCount           int64 `json:"ready_count"`
+	CourierAcceptedCount int64 `json:"courier_accepted_count"`
+	PickedCount          int64 `json:"picked_count"`
+	DeliveringCount      int64 `json:"delivering_count"`
+	RiderDeliveredCount  int64 `json:"rider_delivered_count"`
+	UserDeliveredCount   int64 `json:"user_delivered_count"`
+	CompletedCount       int64 `json:"completed_count"`
+	CancelledCount       int64 `json:"cancelled_count"`
+}
+
 // getOrderStats godoc
 // @Summary 获取订单统计
 // @Description 获取商户在指定日期范围内的订单统计数据
@@ -2283,6 +2298,106 @@ func (server *Server) getOrderStats(ctx *gin.Context) {
 		DeliveringCount: stats.DeliveringCount,
 		CompletedCount:  stats.CompletedCount,
 		CancelledCount:  stats.CancelledCount,
+	})
+}
+
+// getMerchantOrderSummary godoc
+// @Summary 获取商户订单汇总
+// @Description 返回当前商户订单总数及各状态汇总，供工作台和筛选条使用
+// @Tags 商户订单管理
+// @Accept json
+// @Produce json
+// @Success 200 {object} merchantOrderSummaryResponse "订单汇总"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "非商户用户"
+// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Router /v1/merchant/orders/summary [get]
+// @Security BearerAuth
+func (server *Server) getMerchantOrderSummary(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, ok := server.requireMerchantForOrder(ctx, authPayload.UserID)
+	if !ok {
+		return
+	}
+
+	countStatus := func(status string) (int64, error) {
+		return server.store.CountOrdersByMerchantAndStatus(ctx, db.CountOrdersByMerchantAndStatusParams{
+			MerchantID: merchant.ID,
+			Status:     status,
+		})
+	}
+
+	pendingCount, err := countStatus(OrderStatusPending)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	paidCount, err := countStatus(OrderStatusPaid)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	preparingCount, err := countStatus(OrderStatusPreparing)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	readyCount, err := countStatus(OrderStatusReady)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	courierAcceptedCount, err := countStatus(OrderStatusCourierAccepted)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pickedCount, err := countStatus(OrderStatusPicked)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	deliveringCount, err := countStatus(OrderStatusDelivering)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	riderDeliveredCount, err := countStatus(OrderStatusRiderDelivered)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	userDeliveredCount, err := countStatus(OrderStatusUserDelivered)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	completedCount, err := countStatus(OrderStatusCompleted)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	cancelledCount, err := countStatus(OrderStatusCancelled)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	total := pendingCount + paidCount + preparingCount + readyCount + courierAcceptedCount + pickedCount + deliveringCount + riderDeliveredCount + userDeliveredCount + completedCount + cancelledCount
+
+	ctx.JSON(http.StatusOK, merchantOrderSummaryResponse{
+		Total:                total,
+		PendingCount:         pendingCount,
+		PaidCount:            paidCount,
+		PreparingCount:       preparingCount,
+		ReadyCount:           readyCount,
+		CourierAcceptedCount: courierAcceptedCount,
+		PickedCount:          pickedCount,
+		DeliveringCount:      deliveringCount,
+		RiderDeliveredCount:  riderDeliveredCount,
+		UserDeliveredCount:   userDeliveredCount,
+		CompletedCount:       completedCount,
+		CancelledCount:       cancelledCount,
 	})
 }
 

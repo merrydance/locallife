@@ -313,6 +313,21 @@ export interface MerchantReviewsQueryParams extends Record<string, unknown> {
     end_date?: string
 }
 
+export interface ClaimSummaryDTO {
+    total: number
+    pending_action: number
+    appealed: number
+    closed: number
+}
+
+export interface AppealSummaryDTO {
+    total: number
+    pending: number
+    approved: number
+    compensated?: number
+    rejected: number
+}
+
 // ==================== 申诉管理服务类 ====================
 
 /**
@@ -335,6 +350,13 @@ export class AppealManagementService {
             url: '/v1/merchant/appeals',
             method: 'GET',
             data: params
+        })
+    }
+
+    async getMerchantAppealsSummary(): Promise<AppealSummaryDTO> {
+        return request({
+            url: '/v1/merchant/appeals/summary',
+            method: 'GET'
         })
     }
 
@@ -543,6 +565,13 @@ export class ClaimManagementService {
         })
     }
 
+    async getMerchantClaimsSummary(): Promise<ClaimSummaryDTO> {
+        return request({
+            url: '/v1/merchant/claims/summary',
+            method: 'GET'
+        })
+    }
+
     /**
      * 获取商户索赔详情
      * @param claimId 索赔ID
@@ -619,6 +648,13 @@ export class ClaimManagementService {
             url: '/v1/rider/claims',
             method: 'GET',
             data: params
+        })
+    }
+
+    async getRiderClaimsSummary(): Promise<ClaimSummaryDTO> {
+        return request({
+            url: '/v1/rider/claims/summary',
+            method: 'GET'
         })
     }
 
@@ -885,9 +921,11 @@ export async function getMerchantCustomerServiceDashboard(merchantId: number): P
         pendingCount: number
     }
 }> {
-    const [appealsResult, claimsResult, reviewsResult] = await Promise.all([
+    const [appealsSummary, claimsSummary, appealsResult, claimsResult, reviewsResult] = await Promise.all([
+        appealManagementService.getMerchantAppealsSummary(),
+        claimManagementService.getMerchantClaimsSummary(),
         appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 10, status: 'pending' }),
-        claimManagementService.getMerchantClaims({ page_id: 1, page_size: 10, status: 'pending' }),
+        claimManagementService.getMerchantClaims({ page_id: 1, page_size: 10, bucket: 'pending_action' }),
         reviewReplyService.getMerchantReviews(merchantId, { page_id: 1, page_size: 10, has_reply: false })
     ])
 
@@ -898,8 +936,8 @@ export async function getMerchantCustomerServiceDashboard(merchantId: number): P
         pendingClaims: claimsResult.claims,
         unrepliedReviews: reviewsResult.reviews,
         stats: {
-            totalAppeals: appealsResult.total,
-            totalClaims: claimsResult.total,
+            totalAppeals: appealsSummary.total,
+            totalClaims: claimsSummary.total,
             totalReviews: reviewsResult.total,
             pendingCount
         }
@@ -943,30 +981,12 @@ export async function getAppealStatistics(_startDate: string, _endDate: string):
     approvalRate: number
     avgProcessingTime: number
 }> {
-    // 这里需要根据实际的统计接口来实现
-    // 目前swagger中没有专门的统计接口，可能需要通过查询所有数据来计算
-    const appealsResult = await appealManagementService.getMerchantAppeals({
-        page_id: 1,
-        page_size: 1000 // 获取大量数据用于统计
-    })
-
-    const appeals = appealsResult.appeals
-    const totalAppeals = appeals.length
-    const approvedAppeals = appeals.filter((a) => a.status === 'approved').length
-    const rejectedAppeals = appeals.filter((a) => a.status === 'rejected').length
-    const pendingAppeals = appeals.filter((a) => a.status === 'pending').length
+    const summary = await appealManagementService.getMerchantAppealsSummary()
+    const totalAppeals = summary.total
+    const approvedAppeals = summary.approved
+    const rejectedAppeals = summary.rejected
+    const pendingAppeals = summary.pending
     const approvalRate = totalAppeals > 0 ? (approvedAppeals / totalAppeals) * 100 : 0
-
-    // 计算平均处理时间（天）
-    const processedAppeals = appeals.filter((a) => a.reviewed_at)
-    const avgProcessingTime = processedAppeals.length > 0
-        ? processedAppeals.reduce((sum, appeal) => {
-            const created = new Date(appeal.created_at)
-            const reviewed = new Date(appeal.reviewed_at!)
-            const diffDays = (reviewed.getTime() - created.getTime()) / (1000 * 60 * 60 * 24)
-            return sum + diffDays
-        }, 0) / processedAppeals.length
-        : 0
 
     return {
         totalAppeals,
@@ -974,7 +994,7 @@ export async function getAppealStatistics(_startDate: string, _endDate: string):
         rejectedAppeals,
         pendingAppeals,
         approvalRate,
-        avgProcessingTime
+        avgProcessingTime: 0
     }
 }
 

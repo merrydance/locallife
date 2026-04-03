@@ -724,6 +724,19 @@ definitions:
       status:
         type: string
     type: object
+  api.appealSummaryResponse:
+    properties:
+      approved:
+        type: integer
+      compensated:
+        type: integer
+      pending:
+        type: integer
+      rejected:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.applyRegionExpansionRequest:
     properties:
       region_id:
@@ -1272,6 +1285,17 @@ definitions:
         type: string
       updated_at:
         type: string
+    type: object
+  api.claimSummaryResponse:
+    properties:
+      appealed:
+        type: integer
+      closed:
+        type: integer
+      pending_action:
+        type: integer
+      total:
+        type: integer
     type: object
   api.clearCartRequest:
     properties:
@@ -2808,6 +2832,18 @@ definitions:
       total_quantity:
         type: integer
     type: object
+  api.favoriteStatusResponse:
+    properties:
+      exists:
+        type: boolean
+    type: object
+  api.favoritesSummaryResponse:
+    properties:
+      dish_count:
+        type: integer
+      merchant_count:
+        type: integer
+    type: object
   api.financeOverviewResponse:
     properties:
       completed_orders:
@@ -3902,6 +3938,17 @@ definitions:
       decision:
         $ref: '#/definitions/api.merchantClaimDecisionResponse'
     type: object
+  api.merchantComplaintSummaryResponse:
+    properties:
+      pending_response:
+        type: integer
+      processed:
+        type: integer
+      processing:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.merchantCreateReservationRequest:
     properties:
       contact_name:
@@ -4103,6 +4150,33 @@ definitions:
       order_type:
         type: string
       total_sales:
+        type: integer
+    type: object
+  api.merchantOrderSummaryResponse:
+    properties:
+      cancelled_count:
+        type: integer
+      completed_count:
+        type: integer
+      courier_accepted_count:
+        type: integer
+      delivering_count:
+        type: integer
+      paid_count:
+        type: integer
+      pending_count:
+        type: integer
+      picked_count:
+        type: integer
+      preparing_count:
+        type: integer
+      ready_count:
+        type: integer
+      rider_delivered_count:
+        type: integer
+      total:
+        type: integer
+      user_delivered_count:
         type: integer
     type: object
   api.merchantOverviewResponse:
@@ -4723,6 +4797,19 @@ definitions:
       total_sales:
         type: integer
     type: object
+  api.operatorMerchantSummaryResponse:
+    properties:
+      approved:
+        type: integer
+      pending:
+        type: integer
+      rejected:
+        type: integer
+      suspended:
+        type: integer
+      total:
+        type: integer
+    type: object
   api.operatorRealtimeStatsResponse:
     properties:
       active_merchant_count:
@@ -4749,6 +4836,21 @@ definitions:
       rider_name:
         type: string
       total_earnings:
+        type: integer
+    type: object
+  api.operatorRiderSummaryResponse:
+    properties:
+      active:
+        type: integer
+      online:
+        type: integer
+      pending_approval:
+        type: integer
+      rejected:
+        type: integer
+      suspended:
+        type: integer
+      total:
         type: integer
     type: object
   api.orderBadge:
@@ -5109,6 +5211,36 @@ definitions:
       preparing_count:
         type: integer
       ready_count:
+        type: integer
+    type: object
+  api.packagingPolicyCandidateDishResponse:
+    properties:
+      id:
+        type: integer
+      is_available:
+        type: boolean
+      is_online:
+        type: boolean
+      name:
+        type: string
+      price:
+        type: integer
+    type: object
+  api.packagingPolicyResponse:
+    properties:
+      applicable_order_types:
+        items:
+          type: string
+        type: array
+      candidate_dish_ids:
+        items:
+          type: integer
+        type: array
+      candidate_dishes:
+        items:
+          $ref: '#/definitions/api.packagingPolicyCandidateDishResponse'
+        type: array
+      merchant_id:
         type: integer
     type: object
   api.paymentLedgerEntryResponse:
@@ -6845,6 +6977,13 @@ definitions:
           $ref: '#/definitions/db.GetPopularKeywordsRow'
         type: array
     type: object
+  api.searchMerchantCountResponse:
+    properties:
+      available:
+        type: boolean
+      count:
+        type: integer
+    type: object
   api.searchMerchantListResponse:
     properties:
       merchants:
@@ -7620,6 +7759,17 @@ definitions:
         type: integer
     required:
     - region_id
+    type: object
+  api.updatePackagingPolicyRequest:
+    properties:
+      applicable_order_types:
+        items:
+          type: string
+        type: array
+      candidate_dish_ids:
+        items:
+          type: integer
+        type: array
     type: object
   api.updatePrinterRequest:
     properties:
@@ -11913,6 +12063,41 @@ paths:
       summary: 取消收藏菜品
       tags:
       - 收藏管理
+    get:
+      consumes:
+      - application/json
+      description: 返回当前用户是否已收藏指定菜品
+      parameters:
+      - description: 菜品ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 收藏状态
+          schema:
+            $ref: '#/definitions/api.favoriteStatusResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取菜品收藏状态
+      tags:
+      - 收藏管理
   /v1/favorites/merchants:
     get:
       consumes:
@@ -12032,6 +12217,66 @@ paths:
       security:
       - BearerAuth: []
       summary: 取消收藏商户
+      tags:
+      - 收藏管理
+    get:
+      consumes:
+      - application/json
+      description: 返回当前用户是否已收藏指定商户
+      parameters:
+      - description: 商户ID
+        format: int64
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 收藏状态
+          schema:
+            $ref: '#/definitions/api.favoriteStatusResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户收藏状态
+      tags:
+      - 收藏管理
+  /v1/favorites/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回当前用户收藏商户数和收藏菜品数
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 收藏汇总
+          schema:
+            $ref: '#/definitions/api.favoritesSummaryResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取收藏汇总
       tags:
       - 收藏管理
   /v1/food-safety/merchants/{id}/suspend:
@@ -14014,6 +14259,38 @@ paths:
       summary: 获取申诉详情
       tags:
       - 商户申诉管理
+  /v1/merchant/appeals/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回商户申诉总数及各状态汇总，供工作台和筛选条使用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回申诉汇总
+          schema:
+            $ref: '#/definitions/api.appealSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取商户申诉汇总
+      tags:
+      - 商户申诉管理
   /v1/merchant/application:
     get:
       consumes:
@@ -14556,6 +14833,67 @@ paths:
       summary: 商户创建追偿支付单
       tags:
       - 商户索赔管理
+  /v1/merchant/claims/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回商户索赔总数及各 bucket 汇总，供工作台和筛选条使用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回索赔汇总
+          schema:
+            $ref: '#/definitions/api.claimSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非商户用户
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取商户索赔汇总
+      tags:
+      - 商户申诉管理
+  /v1/merchant/complaints/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回商户投诉总数及各处理状态汇总，供工作台和筛选条使用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 投诉汇总
+          schema:
+            $ref: '#/definitions/api.merchantComplaintSummaryResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户投诉汇总
+      tags:
+      - 商户投诉管理
   /v1/merchant/devices:
     get:
       consumes:
@@ -16110,6 +16448,35 @@ paths:
       summary: 获取订单统计
       tags:
       - 商户订单管理
+  /v1/merchant/orders/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回当前商户订单总数及各状态汇总，供工作台和筛选条使用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 订单汇总
+          schema:
+            $ref: '#/definitions/api.merchantOrderSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户订单汇总
+      tags:
+      - 商户订单管理
   /v1/merchant/risk/users/{id}:
     get:
       consumes:
@@ -17632,6 +17999,80 @@ paths:
       summary: 更新商户会员设置
       tags:
       - 会员管理-商户
+  /v1/merchants/me/packaging-policy:
+    get:
+      description: 获取当前商户的订单级包装策略配置
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 包装策略
+          schema:
+            $ref: '#/definitions/api.packagingPolicyResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 仅老板可操作
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 商户不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户包装策略
+      tags:
+      - 商户
+    put:
+      consumes:
+      - application/json
+      description: 覆盖更新当前商户的订单级包装策略配置
+      parameters:
+      - description: 包装策略
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updatePackagingPolicyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新成功
+          schema:
+            $ref: '#/definitions/api.packagingPolicyResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 仅老板可操作
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 商户不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户包装策略
+      tags:
+      - 商户
   /v1/merchants/me/shop-images:
     patch:
       consumes:
@@ -18455,6 +18896,44 @@ paths:
       summary: 审核申诉
       tags:
       - 运营商申诉管理
+  /v1/operator/appeals/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回运营商可管理区域内申诉总数及各状态汇总，供工作台和审批入口使用
+      parameters:
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回申诉汇总
+          schema:
+            $ref: '#/definitions/api.appealSummaryResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 获取区域申诉汇总
+      tags:
+      - 运营商申诉管理
   /v1/operator/application:
     get:
       description: 获取当前用户的运营商申请信息
@@ -19066,6 +19545,44 @@ paths:
       summary: 获取商户排行
       tags:
       - 运营商数据统计
+  /v1/operator/merchants/summary:
+    get:
+      consumes:
+      - application/json
+      description: 运营商获取管辖区域内商户总数及各状态汇总，供工作台和审批入口使用
+      parameters:
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorMerchantSummaryResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 获取区域商户汇总
+      tags:
+      - 运营商-商户骑手管理
   /v1/operator/peak-hours/{id}:
     delete:
       consumes:
@@ -19504,6 +20021,8 @@ paths:
         - approved
         - active
         - suspended
+        - pending_approval
+        - rejected
         in: query
         name: status
         type: string
@@ -19682,6 +20201,44 @@ paths:
       summary: 获取骑手排行
       tags:
       - 运营商数据统计
+  /v1/operator/riders/summary:
+    get:
+      consumes:
+      - application/json
+      description: 运营商获取管辖区域内骑手总数及各状态汇总，供工作台和审批入口使用
+      parameters:
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorRiderSummaryResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 获取区域骑手汇总
+      tags:
+      - 运营商-商户骑手管理
   /v1/operator/rules:
     get:
       consumes:
@@ -21069,8 +21626,8 @@ paths:
           description: 订单不存在
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
+        "503":
+          description: 支付服务不可用
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       security:
@@ -21155,8 +21712,8 @@ paths:
           description: 合单支付订单不存在
           schema:
             $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器内部错误
+        "503":
+          description: 支付服务不可用
           schema:
             $ref: '#/definitions/api.ErrorResponse'
       security:
@@ -24570,6 +25127,38 @@ paths:
       summary: 骑手创建追偿支付单
       tags:
       - 骑手索赔管理
+  /v1/rider/claims/summary:
+    get:
+      consumes:
+      - application/json
+      description: 返回骑手索赔总数及各 bucket 汇总，供工作台和筛选条使用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回索赔汇总
+          schema:
+            $ref: '#/definitions/api.claimSummaryResponse'
+        "401":
+          description: 未授权
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: 非骑手用户
+          schema:
+            additionalProperties: true
+            type: object
+        "500":
+          description: 服务器错误
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - Bearer: []
+      summary: 获取骑手索赔汇总
+      tags:
+      - 骑手申诉管理
   /v1/rider/deposit:
     get:
       consumes:
@@ -25225,6 +25814,50 @@ paths:
       summary: 搜索商户
       tags:
       - Search
+  /v1/search/merchants/count:
+    get:
+      consumes:
+      - application/json
+      description: 按搜索条件返回可用商户数量，供可用性判断和轻量汇总使用
+      parameters:
+      - description: 搜索关键词
+        in: query
+        name: keyword
+        type: string
+      - description: 区域ID
+        in: query
+        name: region_id
+        type: integer
+      - description: 标签ID
+        in: query
+        name: tag_id
+        type: integer
+      - description: 用户纬度
+        in: query
+        name: user_latitude
+        type: number
+      - description: 用户经度
+        in: query
+        name: user_longitude
+        type: number
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 搜索商户数量
+          schema:
+            $ref: '#/definitions/api.searchMerchantCountResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      summary: 获取搜索商户数量
+      tags:
+      - 搜索
   /v1/search/popular:
     get:
       responses:

@@ -61,6 +61,19 @@ type searchMerchantListResponse struct {
 	PageSize  int32                    `json:"page_size"`
 }
 
+type searchMerchantCountRequest struct {
+	Keyword       string   `form:"keyword" binding:"omitempty,max=100"`
+	RegionID      *int64   `form:"region_id" binding:"omitempty,min=1"`
+	TagID         *int64   `form:"tag_id" binding:"omitempty,min=1"`
+	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`
+	UserLongitude *float64 `form:"user_longitude" binding:"omitempty"`
+}
+
+type searchMerchantCountResponse struct {
+	Count     int64 `json:"count"`
+	Available bool  `json:"available"`
+}
+
 type searchComboListResponse struct {
 	Combos   []searchComboResponse `json:"combos"`
 	Total    int64                 `json:"total"`
@@ -504,6 +517,59 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		PageID:    req.PageID,
 		PageSize:  req.PageSize,
 	})
+}
+
+// countSearchMerchants godoc
+// @Summary 获取搜索商户数量
+// @Description 按搜索条件返回可用商户数量，供可用性判断和轻量汇总使用
+// @Tags 搜索
+// @Accept json
+// @Produce json
+// @Param keyword query string false "搜索关键词"
+// @Param region_id query int false "区域ID"
+// @Param tag_id query int false "标签ID"
+// @Param user_latitude query number false "用户纬度"
+// @Param user_longitude query number false "用户经度"
+// @Success 200 {object} searchMerchantCountResponse "搜索商户数量"
+// @Failure 400 {object} ErrorResponse "参数错误"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/search/merchants/count [get]
+func (server *Server) countSearchMerchants(ctx *gin.Context) {
+	var req searchMerchantCountRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	resolvedLat, resolvedLng := resolveUserLocation(ctx, req.UserLatitude, req.UserLongitude)
+	merchantRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
+	if err != nil {
+		if isRegionUnavailableError(err) {
+			ctx.JSON(http.StatusOK, searchMerchantCountResponse{Count: 0, Available: false})
+			return
+		}
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var total int64
+	if req.TagID != nil {
+		total, err = server.store.CountSearchMerchantsByTag(ctx, db.CountSearchMerchantsByTagParams{
+			TagID:    *req.TagID,
+			RegionID: merchantRegionID,
+		})
+	} else {
+		total, err = server.store.CountSearchMerchants(ctx, db.CountSearchMerchantsParams{
+			Column1:  pgtype.Text{String: req.Keyword, Valid: true},
+			RegionID: merchantRegionID,
+		})
+	}
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, searchMerchantCountResponse{Count: total, Available: total > 0})
 }
 
 // searchCombos godoc

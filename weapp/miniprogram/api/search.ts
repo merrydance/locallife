@@ -20,10 +20,19 @@ import { normalizePaginatedResult, type PaginatedListResult, type PaginationEnve
 export interface SearchMerchantsParams extends Record<string, unknown> {
     keyword: string
     region_id?: number
+    tag_id?: number
     user_latitude?: number
     user_longitude?: number
     page_id: number
     page_size: number
+}
+
+export interface CountSearchMerchantsParams extends Record<string, unknown> {
+    keyword?: string
+    region_id?: number
+    tag_id?: number
+    user_latitude?: number
+    user_longitude?: number
 }
 
 /** 推荐商户参数 */
@@ -175,6 +184,17 @@ export async function searchMerchants(params: SearchMerchantsParams): Promise<Me
 
 export async function searchMerchantsWithMeta(params: SearchMerchantsParams): Promise<MerchantSummaryListResult> {
     return searchMerchantsWithMetaFromMerchant(params)
+}
+
+export async function countSearchMerchants(params: CountSearchMerchantsParams): Promise<{ count: number, available: boolean }> {
+    const data = cleanParams(params)
+    if (!data.keyword) data.keyword = ''
+
+    return request({
+        url: '/v1/search/merchants/count',
+        method: 'GET',
+        data
+    })
 }
 
 /**

@@ -142,8 +142,8 @@
       </view>
 
       <view class="popup-actions">
-        <t-button theme="default" shape="round" bindtap="onCloseAdjustPopup">取消</t-button>
-        <t-button theme="primary" shape="round" loading="{{adjustSubmitting}}" bindtap="onSubmitAdjust">提交调整</t-button>
+        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onCloseAdjustPopup">取消</t-button>
+        <t-button theme="primary" size="medium" shape="round" loading="{{adjustSubmitting}}" bindtap="onSubmitAdjust">提交调整</t-button>
       </view>
     </view>
   </t-popup>

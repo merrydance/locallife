@@ -161,3 +161,8 @@ LIMIT $3 OFFSET $4;
 -- 按区域和状态统计骑手数量
 SELECT COUNT(*) FROM riders
 WHERE region_id = $1 AND status = $2;
+
+-- name: CountOnlineRidersByRegion :one
+-- 统计区域内当前在线骑手数量
+SELECT COUNT(*) FROM riders
+WHERE region_id = $1 AND is_online = true;

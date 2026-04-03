@@ -199,6 +199,6 @@
       <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
     </view>
     <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
-    <t-button block variant="text" size="large" bindtap="closeConsentPopup">暂不继续</t-button>
+    <t-button block theme="primary" variant="outline" size="large" bindtap="closeConsentPopup" shape="round">暂不继续</t-button>
   </view>
 </t-popup>

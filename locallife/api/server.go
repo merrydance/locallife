@@ -542,6 +542,7 @@ func (server *Server) setupRouter() {
 	}
 	{
 		searchGroup.GET("/dishes", server.searchDishes)
+		searchGroup.GET("/merchants/count", server.countSearchMerchants)
 		searchGroup.GET("/merchants", server.searchMerchants)
 		searchGroup.GET("/combos", server.searchCombos)                // 套餐搜索
 		searchGroup.GET("/rooms", server.searchRooms)                  // 包间搜索
@@ -685,11 +686,11 @@ func (server *Server) setupRouter() {
 	merchantComplaintsGroup.Use(server.MerchantStaffMiddleware("owner", "manager"))
 	{
 		merchantComplaintsGroup.GET("", server.listMerchantComplaints)
+		merchantComplaintsGroup.GET("/summary", server.getMerchantComplaintSummary)
 		merchantComplaintsGroup.GET("/:id", server.getMerchantComplaintDetail)
 		merchantComplaintsGroup.POST("/:id/response", server.respondToComplaint)
 		merchantComplaintsGroup.POST("/:id/complete", server.completeComplaint)
 	}
-
 	// M3.3: 员工绑定商户（任意登录用户）
 	authGroup.POST("/bind-merchant", server.bindMerchant)
 
@@ -959,6 +960,7 @@ func (server *Server) setupRouter() {
 
 	{
 		merchantOrdersGroup.GET("", server.listMerchantOrders)
+		merchantOrdersGroup.GET("/summary", server.getMerchantOrderSummary)
 		merchantOrdersGroup.GET("/print-anomalies", server.listMerchantPrintAnomalies)
 		merchantOrdersGroup.GET("/:id", server.getMerchantOrder)
 		merchantOrdersGroup.GET("/:id/print-jobs", server.listMerchantOrderPrintJobs)
@@ -987,6 +989,7 @@ func (server *Server) setupRouter() {
 	merchantClaimsGroup := authGroup.Group("/merchant")
 	{
 		merchantClaimsGroup.GET("/claims", server.listMerchantClaims)
+		merchantClaimsGroup.GET("/claims/summary", server.listMerchantClaimsSummary)
 		merchantClaimsGroup.GET("/claims/:id", server.getMerchantClaimDetail)
 		merchantClaimsGroup.GET("/claims/:id/decision", server.getMerchantClaimDecision)
 		merchantClaimsGroup.GET("/claims/behavior-summary", server.getMerchantClaimBehaviorSummary)
@@ -994,6 +997,7 @@ func (server *Server) setupRouter() {
 		merchantClaimsGroup.POST("/claims/:id/recovery/pay", server.payMerchantClaimRecovery)
 		merchantClaimsGroup.POST("/appeals", server.createMerchantAppeal)
 		merchantClaimsGroup.GET("/appeals", server.listMerchantAppeals)
+		merchantClaimsGroup.GET("/appeals/summary", server.listMerchantAppealsSummary)
 		merchantClaimsGroup.GET("/appeals/:id", server.getMerchantAppealDetail)
 	}
 
@@ -1052,6 +1056,7 @@ func (server *Server) setupRouter() {
 
 		// 骑手索赔与申诉
 		riderGroup.GET("/claims", server.listRiderClaims)
+		riderGroup.GET("/claims/summary", server.listRiderClaimsSummary)
 		riderGroup.GET("/claims/:id", server.getRiderClaimDetail)
 		riderGroup.GET("/claims/:id/decision", server.getRiderClaimDecision)
 		riderGroup.GET("/claims/behavior-summary", server.getRiderClaimBehaviorSummary)
@@ -1237,12 +1242,14 @@ func (server *Server) setupRouter() {
 
 		// 商户管理（完整CRUD + 暂停/恢复）
 		operatorStatsGroup.GET("/merchants", server.listOperatorMerchants)
+		operatorStatsGroup.GET("/merchants/summary", server.getOperatorMerchantSummary)
 		operatorStatsGroup.GET("/merchants/:id", server.getOperatorMerchant)
 		operatorStatsGroup.GET("/merchants/:id/stats", server.getOperatorMerchantStats)
 		operatorStatsGroup.POST("/merchants/:id/resume", server.ResumeMerchant)
 
 		// 骑手管理（完整CRUD + 暂停/恢复）
 		operatorStatsGroup.GET("/riders", server.listOperatorRiders)
+		operatorStatsGroup.GET("/riders/summary", server.getOperatorRiderSummary)
 		operatorStatsGroup.GET("/riders/:id", server.getOperatorRider)
 		operatorStatsGroup.GET("/riders/:id/stats", server.getOperatorRiderStats)
 		// 规则驱动：运营商不提供暂停/恢复入口
@@ -1263,6 +1270,7 @@ func (server *Server) setupRouter() {
 		operatorStatsGroup.POST("/reports/safety/:id/resolve", server.resolveSafetyReport)
 
 		operatorStatsGroup.GET("/appeals", server.listOperatorAppeals)
+		operatorStatsGroup.GET("/appeals/summary", server.listOperatorAppealsSummary)
 		operatorStatsGroup.GET("/appeals/:id", server.getOperatorAppealDetail)
 		operatorStatsGroup.POST("/appeals/:id/review", server.reviewAppeal)
 		operatorStatsGroup.GET("/claims/:id/recovery", server.getOperatorClaimRecovery)
@@ -1400,14 +1408,17 @@ func (server *Server) setupRouter() {
 	// 收藏路由
 	favoritesGroup := authGroup.Group("/favorites")
 	{
+		favoritesGroup.GET("/summary", server.getFavoritesSummary)
 		// 商户收藏
 		favoritesGroup.POST("/merchants", server.addFavoriteMerchant)
 		favoritesGroup.GET("/merchants", server.listFavoriteMerchants)
+		favoritesGroup.GET("/merchants/:id", server.getFavoriteMerchantStatus)
 		favoritesGroup.DELETE("/merchants/:id", server.deleteFavoriteMerchant)
 
 		// 菜品收藏
 		favoritesGroup.POST("/dishes", server.addFavoriteDish)
 		favoritesGroup.GET("/dishes", server.listFavoriteDishes)
+		favoritesGroup.GET("/dishes/:id", server.getFavoriteDishStatus)
 		favoritesGroup.DELETE("/dishes/:id", server.deleteFavoriteDish)
 	}
 

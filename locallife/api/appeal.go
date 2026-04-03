@@ -228,6 +228,21 @@ type merchantAppealsListResponse struct {
 	HasMore  bool             `json:"has_more"`
 }
 
+type claimSummaryResponse struct {
+	Total         int64 `json:"total"`
+	PendingAction int64 `json:"pending_action"`
+	Appealed      int64 `json:"appealed"`
+	Closed        int64 `json:"closed"`
+}
+
+type appealSummaryResponse struct {
+	Total       int64 `json:"total"`
+	Pending     int64 `json:"pending"`
+	Approved    int64 `json:"approved"`
+	Compensated int64 `json:"compensated,omitempty"`
+	Rejected    int64 `json:"rejected"`
+}
+
 type operatorAppealsListResponse struct {
 	Appeals []operatorAppealListItem `json:"appeals"`
 	Total   int64                    `json:"total"`
@@ -362,6 +377,61 @@ func (server *Server) listMerchantClaims(ctx *gin.Context) {
 
 	hasMore := int64(offset)+int64(len(response)) < total
 	ctx.JSON(http.StatusOK, merchantClaimsListResponse{Claims: response, Total: total, PageID: req.PageID, PageSize: req.PageSize, HasMore: hasMore})
+}
+
+// listMerchantClaimsSummary 商户索赔汇总
+// @Summary 获取商户索赔汇总
+// @Description 返回商户索赔总数及各 bucket 汇总，供工作台和筛选条使用
+// @Tags 商户申诉管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} claimSummaryResponse "成功返回索赔汇总"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "非商户用户"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /v1/merchant/claims/summary [get]
+func (server *Server) listMerchantClaimsSummary(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.getMerchantFromUserID(ctx, authPayload.UserID)
+	if err != nil {
+		return
+	}
+
+	countBucket := func(bucket string) (int64, error) {
+		return server.store.CountMerchantClaimsForMerchant(ctx, db.CountMerchantClaimsForMerchantParams{
+			MerchantID: merchant.ID,
+			Bucket:     pgtype.Text{String: bucket, Valid: bucket != ""},
+		})
+	}
+
+	total, err := countBucket("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pendingAction, err := countBucket("pending_action")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	appealed, err := countBucket("appealed")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	closed, err := countBucket("closed")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, claimSummaryResponse{
+		Total:         total,
+		PendingAction: pendingAction,
+		Appealed:      appealed,
+		Closed:        closed,
+	})
 }
 
 // getMerchantClaimDetail 商户查看索赔详情
@@ -717,6 +787,67 @@ func (server *Server) listMerchantAppeals(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, merchantAppealsListResponse{Appeals: response, Total: result.Total, PageID: req.PageID, PageSize: req.PageSize, HasMore: hasMore})
 }
 
+// listMerchantAppealsSummary 商户申诉汇总
+// @Summary 获取商户申诉汇总
+// @Description 返回商户申诉总数及各状态汇总，供工作台和筛选条使用
+// @Tags 商户申诉管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} appealSummaryResponse "成功返回申诉汇总"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "非商户用户"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /v1/merchant/appeals/summary [get]
+func (server *Server) listMerchantAppealsSummary(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	merchant, err := server.getMerchantFromUserID(ctx, authPayload.UserID)
+	if err != nil {
+		return
+	}
+
+	countStatus := func(status string) (int64, error) {
+		return server.store.CountMerchantAppealsForMerchant(ctx, db.CountMerchantAppealsForMerchantParams{
+			AppellantID: merchant.ID,
+			Status:      pgtype.Text{String: status, Valid: status != ""},
+		})
+	}
+
+	total, err := countStatus("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pending, err := countStatus("pending")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	approved, err := countStatus("approved")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	compensated, err := countStatus("compensated")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	rejected, err := countStatus("rejected")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, appealSummaryResponse{
+		Total:       total,
+		Pending:     pending,
+		Approved:    approved,
+		Compensated: compensated,
+		Rejected:    rejected,
+	})
+}
+
 // getMerchantAppealDetail 商户查看申诉详情
 // @Summary 获取申诉详情
 // @Description 商户查看自己提交的申诉详细信息
@@ -886,6 +1017,61 @@ func (server *Server) listRiderClaims(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, merchantClaimsListResponse{Claims: response, Total: total, PageID: req.PageID, PageSize: req.PageSize})
+}
+
+// listRiderClaimsSummary 骑手索赔汇总
+// @Summary 获取骑手索赔汇总
+// @Description 返回骑手索赔总数及各 bucket 汇总，供工作台和筛选条使用
+// @Tags 骑手申诉管理
+// @Accept json
+// @Produce json
+// @Security Bearer
+// @Success 200 {object} claimSummaryResponse "成功返回索赔汇总"
+// @Failure 401 {object} map[string]interface{} "未授权"
+// @Failure 403 {object} map[string]interface{} "非骑手用户"
+// @Failure 500 {object} map[string]interface{} "服务器错误"
+// @Router /v1/rider/claims/summary [get]
+func (server *Server) listRiderClaimsSummary(ctx *gin.Context) {
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	rider, err := server.getRiderFromUserID(ctx, authPayload.UserID)
+	if err != nil {
+		return
+	}
+
+	countBucket := func(bucket string) (int64, error) {
+		return server.store.CountRiderClaimsForRider(ctx, db.CountRiderClaimsForRiderParams{
+			RiderID: pgtype.Int8{Int64: rider.ID, Valid: true},
+			Bucket:  pgtype.Text{String: bucket, Valid: bucket != ""},
+		})
+	}
+
+	total, err := countBucket("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pendingAction, err := countBucket("pending_action")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	appealed, err := countBucket("appealed")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	closed, err := countBucket("closed")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, claimSummaryResponse{
+		Total:         total,
+		PendingAction: pendingAction,
+		Appealed:      appealed,
+		Closed:        closed,
+	})
 }
 
 // getRiderClaimDetail 骑手查看索赔详情
@@ -1284,6 +1470,79 @@ func (server *Server) listOperatorAppeals(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, operatorAppealsListResponse{Appeals: response, Total: total, Page: req.Page, Limit: req.Limit})
+}
+
+// listOperatorAppealsSummary 运营商申诉汇总
+// @Summary 获取区域申诉汇总
+// @Description 返回运营商可管理区域内申诉总数及各状态汇总，供工作台和审批入口使用
+// @Tags 运营商申诉管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param region_id query int false "区域ID"
+// @Success 200 {object} appealSummaryResponse "成功返回申诉汇总"
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Router /v1/operator/appeals/summary [get]
+func (server *Server) listOperatorAppealsSummary(ctx *gin.Context) {
+	var req listOperatorAppealsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	var regionID int64
+	if req.RegionID != nil && *req.RegionID > 0 {
+		if _, err := server.checkOperatorManagesRegion(ctx, *req.RegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		regionID = *req.RegionID
+	} else {
+		resolvedRegionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		regionID = resolvedRegionID
+	}
+
+	countStatus := func(status string) (int64, error) {
+		return server.store.CountOperatorAppeals(ctx, db.CountOperatorAppealsParams{
+			RegionID: regionID,
+			Column2:  status,
+		})
+	}
+
+	total, err := countStatus("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pending, err := countStatus("pending")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	approved, err := countStatus("approved")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	rejected, err := countStatus("rejected")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, appealSummaryResponse{
+		Total:    total,
+		Pending:  pending,
+		Approved: approved,
+		Rejected: rejected,
+	})
 }
 
 // getOperatorAppealDetail 运营商查看申诉详情

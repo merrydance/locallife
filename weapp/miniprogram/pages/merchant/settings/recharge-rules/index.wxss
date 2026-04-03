@@ -105,8 +105,7 @@
 
 .form-scroll {
   max-height: 82vh;
-  padding: 32rpx 24rpx calc(40rpx + constant(safe-area-inset-bottom));
-  padding: 32rpx 24rpx calc(40rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 24rpx var(--popup-bottom-padding-md);
   box-sizing: border-box;
 }
 

@@ -109,7 +109,7 @@
   max-height: 80vh;
   box-sizing: border-box;
   padding: var(--spacer-lg);
-  padding-bottom: calc(var(--spacer-lg) + env(safe-area-inset-bottom));
+  padding-bottom: var(--popup-bottom-padding-md);
 }
 
 .form-title {

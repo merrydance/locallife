@@ -5330,6 +5330,60 @@ const docTemplate = `{
             }
         },
         "/v1/favorites/dishes/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前用户是否已收藏指定菜品",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "收藏管理"
+                ],
+                "summary": "获取菜品收藏状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "菜品ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "收藏状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.favoriteStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "delete": {
                 "security": [
                     {
@@ -5515,6 +5569,60 @@ const docTemplate = `{
             }
         },
         "/v1/favorites/merchants/{id}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前用户是否已收藏指定商户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "收藏管理"
+                ],
+                "summary": "获取商户收藏状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "format": "int64",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "收藏状态",
+                        "schema": {
+                            "$ref": "#/definitions/api.favoriteStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
             "delete": {
                 "security": [
                     {
@@ -5554,6 +5662,46 @@ const docTemplate = `{
                         "description": "参数错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/favorites/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前用户收藏商户数和收藏菜品数",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "收藏管理"
+                ],
+                "summary": "获取收藏汇总",
+                "responses": {
+                    "200": {
+                        "description": "收藏汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.favoritesSummaryResponse"
                         }
                     },
                     "401": {
@@ -8561,6 +8709,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/appeals/summary": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "返回商户申诉总数及各状态汇总，供工作台和筛选条使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户申诉管理"
+                ],
+                "summary": "获取商户申诉汇总",
+                "responses": {
+                    "200": {
+                        "description": "成功返回申诉汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.appealSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/appeals/{id}": {
             "get": {
                 "security": [
@@ -9170,6 +9367,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/claims/summary": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "返回商户索赔总数及各 bucket 汇总，供工作台和筛选条使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户申诉管理"
+                ],
+                "summary": "获取商户索赔汇总",
+                "responses": {
+                    "200": {
+                        "description": "成功返回索赔汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/claims/{id}": {
             "get": {
                 "security": [
@@ -9455,6 +9701,52 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/complaints/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回商户投诉总数及各处理状态汇总，供工作台和筛选条使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户投诉管理"
+                ],
+                "summary": "获取商户投诉汇总",
+                "responses": {
+                    "200": {
+                        "description": "投诉汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantComplaintSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     }
                 }
@@ -11105,6 +11397,52 @@ const docTemplate = `{
                         "description": "日期格式错误/范围超限",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/orders/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前商户订单总数及各状态汇总，供工作台和筛选条使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户订单管理"
+                ],
+                "summary": "获取商户订单汇总",
+                "responses": {
+                    "200": {
+                        "description": "订单汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantOrderSummaryResponse"
                         }
                     },
                     "401": {
@@ -13038,6 +13376,122 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchants/me/packaging-policy": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "获取当前商户的订单级包装策略配置",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "获取商户包装策略",
+                "responses": {
+                    "200": {
+                        "description": "包装策略",
+                        "schema": {
+                            "$ref": "#/definitions/api.packagingPolicyResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅老板可操作",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "覆盖更新当前商户的订单级包装策略配置",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户"
+                ],
+                "summary": "更新商户包装策略",
+                "parameters": [
+                    {
+                        "description": "包装策略",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updatePackagingPolicyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "更新成功",
+                        "schema": {
+                            "$ref": "#/definitions/api.packagingPolicyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "仅老板可操作",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -15243,6 +15697,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/operator/appeals/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回运营商可管理区域内申诉总数及各状态汇总，供工作台和审批入口使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商申诉管理"
+                ],
+                "summary": "获取区域申诉汇总",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "成功返回申诉汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.appealSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/appeals/{id}": {
             "get": {
                 "security": [
@@ -16205,6 +16719,66 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/operator/merchants/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商获取管辖区域内商户总数及各状态汇总，供工作台和审批入口使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商-商户骑手管理"
+                ],
+                "summary": "获取区域商户汇总",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorMerchantSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/merchants/{id}": {
             "get": {
                 "security": [
@@ -17029,7 +17603,9 @@ const docTemplate = `{
                         "enum": [
                             "approved",
                             "active",
-                            "suspended"
+                            "suspended",
+                            "pending_approval",
+                            "rejected"
                         ],
                         "type": "string",
                         "description": "骑手状态",
@@ -17158,6 +17734,66 @@ const docTemplate = `{
                         "description": "服务器内部错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/riders/summary": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商获取管辖区域内骑手总数及各状态汇总，供工作台和审批入口使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商-商户骑手管理"
+                ],
+                "summary": "获取区域骑手汇总",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorRiderSummaryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
                         }
                     }
                 }
@@ -19146,8 +19782,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "服务器内部错误",
+                    "503": {
+                        "description": "支付服务不可用",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -19280,8 +19916,8 @@ const docTemplate = `{
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
-                    "500": {
-                        "description": "服务器内部错误",
+                    "503": {
+                        "description": "支付服务不可用",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -24430,6 +25066,55 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/rider/claims/summary": {
+            "get": {
+                "security": [
+                    {
+                        "Bearer": []
+                    }
+                ],
+                "description": "返回骑手索赔总数及各 bucket 汇总，供工作台和筛选条使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "骑手申诉管理"
+                ],
+                "summary": "获取骑手索赔汇总",
+                "responses": {
+                    "200": {
+                        "description": "成功返回索赔汇总",
+                        "schema": {
+                            "$ref": "#/definitions/api.claimSummaryResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "403": {
+                        "description": "非骑手用户",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/v1/rider/claims/{id}": {
             "get": {
                 "security": [
@@ -25731,6 +26416,73 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/search/merchants/count": {
+            "get": {
+                "description": "按搜索条件返回可用商户数量，供可用性判断和轻量汇总使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "搜索"
+                ],
+                "summary": "获取搜索商户数量",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "搜索关键词",
+                        "name": "keyword",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "区域ID",
+                        "name": "region_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "标签ID",
+                        "name": "tag_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "number",
+                        "description": "用户纬度",
+                        "name": "user_latitude",
+                        "in": "query"
+                    },
+                    {
+                        "type": "number",
+                        "description": "用户经度",
+                        "name": "user_longitude",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "搜索商户数量",
+                        "schema": {
+                            "$ref": "#/definitions/api.searchMerchantCountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -28451,6 +29203,26 @@ const docTemplate = `{
                 }
             }
         },
+        "api.appealSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "approved": {
+                    "type": "integer"
+                },
+                "compensated": {
+                    "type": "integer"
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "rejected": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.applyRegionExpansionRequest": {
             "type": "object",
             "required": [
@@ -29246,6 +30018,23 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "api.claimSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "appealed": {
+                    "type": "integer"
+                },
+                "closed": {
+                    "type": "integer"
+                },
+                "pending_action": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -31443,6 +32232,25 @@ const docTemplate = `{
                 }
             }
         },
+        "api.favoriteStatusResponse": {
+            "type": "object",
+            "properties": {
+                "exists": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.favoritesSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "dish_count": {
+                    "type": "integer"
+                },
+                "merchant_count": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.financeOverviewResponse": {
             "type": "object",
             "properties": {
@@ -33071,6 +33879,23 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantComplaintSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "pending_response": {
+                    "type": "integer"
+                },
+                "processed": {
+                    "type": "integer"
+                },
+                "processing": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.merchantCreateReservationRequest": {
             "type": "object",
             "required": [
@@ -33368,6 +34193,47 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "total_sales": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantOrderSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "cancelled_count": {
+                    "type": "integer"
+                },
+                "completed_count": {
+                    "type": "integer"
+                },
+                "courier_accepted_count": {
+                    "type": "integer"
+                },
+                "delivering_count": {
+                    "type": "integer"
+                },
+                "paid_count": {
+                    "type": "integer"
+                },
+                "pending_count": {
+                    "type": "integer"
+                },
+                "picked_count": {
+                    "type": "integer"
+                },
+                "preparing_count": {
+                    "type": "integer"
+                },
+                "ready_count": {
+                    "type": "integer"
+                },
+                "rider_delivered_count": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "user_delivered_count": {
                     "type": "integer"
                 }
             }
@@ -34283,6 +35149,26 @@ const docTemplate = `{
                 }
             }
         },
+        "api.operatorMerchantSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "approved": {
+                    "type": "integer"
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "rejected": {
+                    "type": "integer"
+                },
+                "suspended": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.operatorRealtimeStatsResponse": {
             "type": "object",
             "properties": {
@@ -34322,6 +35208,29 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "total_earnings": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.operatorRiderSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "active": {
+                    "type": "integer"
+                },
+                "online": {
+                    "type": "integer"
+                },
+                "pending_approval": {
+                    "type": "integer"
+                },
+                "rejected": {
+                    "type": "integer"
+                },
+                "suspended": {
+                    "type": "integer"
+                },
+                "total": {
                     "type": "integer"
                 }
             }
@@ -34808,6 +35717,52 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "ready_count": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.packagingPolicyCandidateDishResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "integer"
+                },
+                "is_available": {
+                    "type": "boolean"
+                },
+                "is_online": {
+                    "type": "boolean"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "price": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.packagingPolicyResponse": {
+            "type": "object",
+            "properties": {
+                "applicable_order_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "candidate_dish_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "candidate_dishes": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.packagingPolicyCandidateDishResponse"
+                    }
+                },
+                "merchant_id": {
                     "type": "integer"
                 }
             }
@@ -37402,6 +38357,17 @@ const docTemplate = `{
                 }
             }
         },
+        "api.searchMerchantCountResponse": {
+            "type": "object",
+            "properties": {
+                "available": {
+                    "type": "boolean"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
         "api.searchMerchantListResponse": {
             "type": "object",
             "properties": {
@@ -38530,6 +39496,23 @@ const docTemplate = `{
             "properties": {
                 "region_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.updatePackagingPolicyRequest": {
+            "type": "object",
+            "properties": {
+                "applicable_order_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "candidate_dish_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 }
             }
         },

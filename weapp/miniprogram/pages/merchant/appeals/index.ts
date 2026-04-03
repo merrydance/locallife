@@ -114,20 +114,14 @@ function mapAppealRecord(appeal: AppealResponse): AppealRecordView {
 }
 
 async function fetchAppealSummary(): Promise<AppealSummary> {
-  const [allResult, pendingResult, approvedResult, compensatedResult, rejectedResult] = await Promise.all([
-    appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 1 }),
-    appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 1, status: 'pending' }),
-    appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 1, status: 'approved' }),
-    appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 1, status: 'compensated' }),
-    appealManagementService.getMerchantAppeals({ page_id: 1, page_size: 1, status: 'rejected' })
-  ])
+  const summary = await appealManagementService.getMerchantAppealsSummary()
 
   return {
-    total: allResult.total || 0,
-    pending: pendingResult.total || 0,
-    approved: approvedResult.total || 0,
-    compensated: compensatedResult.total || 0,
-    rejected: rejectedResult.total || 0
+    total: summary.total || 0,
+    pending: summary.pending || 0,
+    approved: summary.approved || 0,
+    compensated: summary.compensated || 0,
+    rejected: summary.rejected || 0
   }
 }
 

@@ -182,6 +182,8 @@ type Querier interface {
 	// 统计区域内指定状态的商户数量
 	CountMerchantsByRegionWithStatus(ctx context.Context, arg CountMerchantsByRegionWithStatusParams) (int64, error)
 	CountOnlineRiders(ctx context.Context) (int64, error)
+	// 统计区域内当前在线骑手数量
+	CountOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error)
 	// 运营商申诉计数
 	CountOperatorAppeals(ctx context.Context, arg CountOperatorAppealsParams) (int64, error)
 	// 统计运营商管理的区域数量

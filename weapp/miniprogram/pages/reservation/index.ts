@@ -1,6 +1,6 @@
 import { logger } from '../../utils/logger'
 import ConsumerDiscoveryAdapter from '../../adapters/consumer-discovery'
-import { searchRoomsWithMeta, getRecommendedMerchantsWithMeta, searchMerchantsWithMeta, RoomSearchResult } from '../../api/search'
+import { searchRoomsWithMeta, getRecommendedMerchantsWithMeta, searchMerchantsWithMeta, countSearchMerchants, RoomSearchResult } from '../../api/search'
 import { MerchantSummary } from '../../api/merchant'
 import { globalStore } from '../../utils/global-store'
 
@@ -269,14 +269,12 @@ Page({
 
   async checkRestaurantAvailability(latitude?: number, longitude?: number): Promise<boolean> {
     try {
-      const result = await searchMerchantsWithMeta({
+      const result = await countSearchMerchants({
         keyword: '',
-        page_id: 1,
-        page_size: 1,
         user_latitude: latitude,
         user_longitude: longitude
       })
-      return result.merchants.length > 0
+      return result.available || result.count > 0
     } catch (error) {
       logger.warn('检查区域餐厅供给失败，默认按有餐厅处理', error, 'Reservation.checkRestaurantAvailability')
       return true

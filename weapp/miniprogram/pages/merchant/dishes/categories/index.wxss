@@ -43,8 +43,7 @@
 
 .add-popup {
   background: var(--td-bg-color-container);
-  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + constant(safe-area-inset-bottom));
-  padding: var(--spacer-md) var(--spacer-md) calc(var(--spacer-md) + env(safe-area-inset-bottom));
+  padding: var(--spacer-md) var(--spacer-md) var(--popup-bottom-padding-md);
   border-top-left-radius: var(--radius-lg);
   border-top-right-radius: var(--radius-lg);
 }

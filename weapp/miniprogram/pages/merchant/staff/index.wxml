@@ -103,8 +103,8 @@
         </label>
       </radio-group>
       <view class="popup-actions">
-        <t-button theme="default" shape="round" bindtap="onCloseRolePopup">取消</t-button>
-        <t-button theme="primary" shape="round" loading="{{roleSubmitting}}" bindtap="onSubmitRole">保存角色</t-button>
+        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onCloseRolePopup">取消</t-button>
+        <t-button theme="primary" size="medium" shape="round" loading="{{roleSubmitting}}" bindtap="onSubmitRole">保存角色</t-button>
       </view>
     </view>
   </t-popup>

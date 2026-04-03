@@ -143,7 +143,11 @@ page {
   --transition-fade: 0.3s ease-in-out;
 
   /* ========== 安全区域 (Safe Area) ========== */
+  --safe-area-bottom: constant(safe-area-inset-bottom);
   --safe-area-bottom: env(safe-area-inset-bottom);
+  --popup-bottom-padding-sm: calc(24rpx + var(--safe-area-bottom));
+  --popup-bottom-padding-md: calc(32rpx + var(--safe-area-bottom));
+  --popup-bottom-padding-lg: calc(40rpx + var(--safe-area-bottom));
 }
 
 /* ========== 深色模式 ========== */

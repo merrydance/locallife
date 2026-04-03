@@ -172,8 +172,7 @@
 }
 
 .popup-sheet {
-  padding: 32rpx 24rpx calc(40rpx + constant(safe-area-inset-bottom));
-  padding: 32rpx 24rpx calc(40rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 24rpx var(--popup-bottom-padding-md);
 }
 
 .popup-subtitle {
@@ -188,5 +187,6 @@
 .popup-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
   margin-top: 28rpx;
 }

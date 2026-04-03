@@ -318,6 +318,14 @@ func writeLogicRequestError(ctx *gin.Context, err error) bool {
 	return true
 }
 
+func isEcommerceClientNotConfigured(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "ecommerce client") && strings.Contains(msg, "not configured")
+}
+
 // createCombinedPaymentOrder 创建平台收付通合单支付订单
 // @Summary 创建合单支付订单
 // @Description 为多个订单创建合单支付订单（平台收付通）
@@ -330,7 +338,7 @@ func writeLogicRequestError(ctx *gin.Context, err error) bool {
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前用户"
 // @Failure 404 {object} ErrorResponse "订单不存在"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Failure 503 {object} ErrorResponse "支付服务不可用"
 // @Router /v1/payments/combined [post]
 // @Security BearerAuth
 func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
@@ -353,6 +361,10 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 		ClientIP: ctx.ClientIP(),
 	})
 	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "combined payment ecommerce client not configured"))
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}
@@ -498,7 +510,7 @@ type closeCombinedPaymentOrderRequest struct {
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
 // @Failure 404 {object} ErrorResponse "合单支付订单不存在"
-// @Failure 500 {object} ErrorResponse "服务器内部错误"
+// @Failure 503 {object} ErrorResponse "支付服务不可用"
 // @Router /v1/payments/combined/{id}/close [post]
 // @Security BearerAuth
 func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
@@ -519,6 +531,10 @@ func (server *Server) closeCombinedPaymentOrder(ctx *gin.Context) {
 		CombinedPaymentID: req.ID,
 	})
 	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "close combined payment ecommerce client not configured"))
+			return
+		}
 		if writeLogicRequestError(ctx, err) {
 			return
 		}

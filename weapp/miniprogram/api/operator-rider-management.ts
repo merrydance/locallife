@@ -28,6 +28,15 @@ export interface ListOperatorRidersResponse {
     total?: number                               // 总数
 }
 
+export interface OperatorRiderSummaryResponse {
+    total: number
+    pending_approval: number
+    active: number
+    rejected: number
+    suspended: number
+    online: number
+}
+
 /** 运营商骑手项 - 基于swagger api.operatorRiderItem */
 export interface OperatorRiderItem {
     id: number
@@ -244,6 +253,14 @@ export class OperatorRiderManagementService {
             url: '/v1/operator/riders',
             method: 'GET',
             data: params
+        })
+    }
+
+    async getRiderSummary(regionId?: number): Promise<OperatorRiderSummaryResponse> {
+        return request({
+            url: '/v1/operator/riders/summary',
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 
@@ -753,40 +770,34 @@ export async function getRiderManagementDashboard(regionId?: number): Promise<{
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    const [riderList, riderRanking] = await Promise.all([
-        operatorRiderManagementService.getRiderList({
-            region_id: regionId,
-            limit: 100,
-            sort_by: 'created_at',
-            sort_order: 'desc'
-        }),
+    const [riderSummaryResult, riderRanking, riderSampleResult] = await Promise.all([
+        operatorRiderManagementService.getRiderSummary(regionId),
         operatorRiderManagementService.getRiderRanking({
             region_id: regionId,
             start_date: startDate,
             end_date: endDate,
             rank_by: 'efficiency_score',
             limit: 10
+        }),
+        operatorRiderManagementService.getRiderList({
+            region_id: regionId,
+            limit: 100,
+            sort_by: 'created_at',
+            sort_order: 'desc'
         })
     ])
 
-    // 统计骑手状态分布
-    const riders = riderList.riders || []
-    const total = riderList.total ?? riders.length
     const riderSummary = {
-        total,
-        active: riders.filter((r) => r.status === 'active').length,
-        online: riders.filter((r) => r.online_status === 'online').length,
-        suspended: riders.filter((r) => r.status === 'suspended').length,
-        pending: riders.filter((r) => r.status === 'pending_approval').length
+        total: riderSummaryResult.total,
+        active: riderSummaryResult.active,
+        online: riderSummaryResult.online,
+        suspended: riderSummaryResult.suspended,
+        pending: riderSummaryResult.pending_approval
     }
 
-    // 分析骑手分布
+    const riders = riderSampleResult.riders || []
     const distribution = riderAnalyticsService.analyzeRiderDistribution(riders)
-
-    // 获取最近注册的骑手
     const recentRiders = riders.slice(0, 10)
-
-    // 获取在线骑手
     const onlineRiders = riders.filter((r) => r.online_status === 'online').slice(0, 20)
 
     return {

@@ -41,8 +41,8 @@
       </view>
 
       <view class="popup-actions">
-        <t-button size="small" theme="default" shape="round" bind:tap="onCloseAddPopup">取消</t-button>
-        <t-button size="small" theme="primary" shape="round" loading="{{submitting}}" bind:tap="onConfirmLinkCategory">关联分类</t-button>
+        <t-button size="medium" theme="primary" variant="outline" shape="round" bind:tap="onCloseAddPopup">取消</t-button>
+        <t-button size="medium" theme="primary" shape="round" loading="{{submitting}}" bind:tap="onConfirmLinkCategory">关联分类</t-button>
       </view>
     </view>
   </t-popup>

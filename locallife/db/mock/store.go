@@ -1908,6 +1908,21 @@ func (mr *MockStoreMockRecorder) CountOnlineRiders(ctx any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOnlineRiders", reflect.TypeOf((*MockStore)(nil).CountOnlineRiders), ctx)
 }
 
+// CountOnlineRidersByRegion mocks base method.
+func (m *MockStore) CountOnlineRidersByRegion(ctx context.Context, regionID pgtype.Int8) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountOnlineRidersByRegion", ctx, regionID)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountOnlineRidersByRegion indicates an expected call of CountOnlineRidersByRegion.
+func (mr *MockStoreMockRecorder) CountOnlineRidersByRegion(ctx, regionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountOnlineRidersByRegion", reflect.TypeOf((*MockStore)(nil).CountOnlineRidersByRegion), ctx, regionID)
+}
+
 // CountOperatorAppeals mocks base method.
 func (m *MockStore) CountOperatorAppeals(ctx context.Context, arg db.CountOperatorAppealsParams) (int64, error) {
 	m.ctrl.T.Helper()

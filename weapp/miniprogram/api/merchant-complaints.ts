@@ -42,11 +42,25 @@ export interface MerchantComplaintActionAck {
   message: string
 }
 
+export interface MerchantComplaintSummaryResponse {
+  total: number
+  pending_response: number
+  processing: number
+  processed: number
+}
+
 export function listMerchantComplaints(params: ListMerchantComplaintsParams = {}) {
   return request<MerchantComplaintListResponse>({
     url: '/v1/merchant/complaints',
     method: 'GET',
     data: params
+  })
+}
+
+export function getMerchantComplaintSummary() {
+  return request<MerchantComplaintSummaryResponse>({
+    url: '/v1/merchant/complaints/summary',
+    method: 'GET'
   })
 }
 

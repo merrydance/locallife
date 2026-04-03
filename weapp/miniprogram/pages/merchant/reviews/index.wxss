@@ -222,8 +222,7 @@
 .popup-sheet {
   border-bottom-left-radius: 0;
   border-bottom-right-radius: 0;
-  padding: 32rpx 24rpx calc(32rpx + constant(safe-area-inset-bottom));
-  padding: 32rpx 24rpx calc(32rpx + env(safe-area-inset-bottom));
+  padding: 32rpx 24rpx var(--popup-bottom-padding-md);
 }
 
 .popup-title {

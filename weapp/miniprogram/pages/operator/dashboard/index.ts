@@ -168,6 +168,9 @@ Page({
       const [
         financeOverview,
         realtimeStats,
+        merchantSummary,
+        riderSummary,
+        appealSummary,
         merchantsPending,
         ridersPending,
         merchantRanking,
@@ -177,9 +180,15 @@ Page({
       ] = await Promise.all([
         operatorBasicManagementService.getFinanceOverview(undefined, undefined, regionId).catch(() => null),
         operatorAnalyticsService.getRealtimeStats(regionId),
-        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
+        operatorMerchantManagementService.getMerchantSummary(regionId)
+          .catch(() => ({ total: 0, pending: 0, approved: 0, rejected: 0, suspended: 0 })),
+        operatorRiderManagementService.getRiderSummary(regionId)
+          .catch(() => ({ total: 0, pending_approval: 0, active: 0, rejected: 0, suspended: 0, online: 0 })),
+        appealService.getAppealSummary(regionId)
+          .catch(() => ({ total: 0, pending: 0, approved: 0, rejected: 0 })),
+        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
           .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
-        operatorRiderManagementService.getRiderList({ page: 1, limit: 10, status: 'pending', region_id: regionId })
+        operatorRiderManagementService.getRiderList({ page: 1, limit: 5, status: 'pending_approval', region_id: regionId })
           .catch(() => ({ riders: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
         operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
           .catch(() => ({ rankings: [] })),
@@ -204,9 +213,9 @@ Page({
       }))
 
       const pendingSummary: PendingSummary = {
-        merchants: Number(merchantsPending.total || merchantsPending.merchants?.length || 0),
-        riders: Number(ridersPending.total || ridersPending.riders?.length || 0),
-        appeals: Number(appeals.total || appeals.appeals?.length || 0)
+        merchants: Number(merchantSummary.pending || 0),
+        riders: Number(riderSummary.pending_approval || 0),
+        appeals: Number(appealSummary.pending || 0)
       }
 
       // 待办事项组合

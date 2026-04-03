@@ -359,6 +359,15 @@ export interface FavoritesParams extends PaginationParams {
     // 可以添加筛选参数
 }
 
+export interface FavoritesSummaryResponse {
+    merchant_count: number
+    dish_count: number
+}
+
+export interface FavoriteStatusResponse {
+    exists: boolean
+}
+
 export interface HistoryParams extends PaginationParams {
     target_type?: 'dish' | 'merchant'  // 对齐swagger字段名
 }
@@ -444,6 +453,27 @@ export function removeMerchantFromFavorites(merchantId: number): Promise<void> {
     return request({
         url: `/v1/favorites/merchants/${merchantId}`,
         method: 'DELETE'
+    })
+}
+
+export function getFavoritesSummary(): Promise<FavoritesSummaryResponse> {
+    return request({
+        url: '/v1/favorites/summary',
+        method: 'GET'
+    })
+}
+
+export function getFavoriteDishStatus(dishId: number): Promise<FavoriteStatusResponse> {
+    return request({
+        url: `/v1/favorites/dishes/${dishId}`,
+        method: 'GET'
+    })
+}
+
+export function getFavoriteMerchantStatus(merchantId: number): Promise<FavoriteStatusResponse> {
+    return request({
+        url: `/v1/favorites/merchants/${merchantId}`,
+        method: 'GET'
     })
 }
 
@@ -810,8 +840,8 @@ export function claimVoucher(voucherId: number): Promise<void> {
  */
 export async function isDishFavorited(dishId: number): Promise<boolean> {
     try {
-        const response = await getFavoriteDishes({ page: 1, page_size: 1000 })
-        return response.dishes.some((dish) => dish.dish_id === dishId)
+        const response = await getFavoriteDishStatus(dishId)
+        return !!response.exists
     } catch (error) {
         console.error('检查菜品收藏状态失败:', error)
         return false
@@ -823,8 +853,8 @@ export async function isDishFavorited(dishId: number): Promise<boolean> {
  */
 export async function isMerchantFavorited(merchantId: number): Promise<boolean> {
     try {
-        const response = await getFavoriteMerchants({ page: 1, page_size: 1000 })
-        return response.merchants.some((merchant) => merchant.merchant_id === merchantId)
+        const response = await getFavoriteMerchantStatus(merchantId)
+        return !!response.exists
     } catch (error) {
         console.error('检查商户收藏状态失败:', error)
         return false
@@ -865,14 +895,12 @@ export async function toggleMerchantFavorite(merchantId: number): Promise<boolea
 export async function getPersonalCenterOverview() {
     try {
         const [
-            favoriteDishes,
-            favoriteMerchants,
+            favoriteSummary,
             unreadCount,
             availableVouchers,
             memberships
         ] = await Promise.all([
-            getFavoriteDishes({ page: 1, page_size: 1 }),
-            getFavoriteMerchants({ page: 1, page_size: 1 }),
+            getFavoritesSummary(),
             getUnreadNotificationCount(),
             getMyAvailableVouchers(),
             getMyMemberships()
@@ -880,8 +908,8 @@ export async function getPersonalCenterOverview() {
 
         return {
             favoriteCount: {
-                dishes: favoriteDishes.total,
-                merchants: favoriteMerchants.total
+                dishes: favoriteSummary.dish_count,
+                merchants: favoriteSummary.merchant_count
             },
             unreadNotifications: unreadCount.count,
             availableVouchers: availableVouchers.total,

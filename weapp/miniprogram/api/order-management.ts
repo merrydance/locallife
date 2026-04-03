@@ -114,6 +114,21 @@ export interface MerchantOrderListResult {
     page_size: number
 }
 
+export interface MerchantOrderSummaryResponse {
+    total: number
+    pending_count: number
+    paid_count: number
+    preparing_count: number
+    ready_count: number
+    courier_accepted_count: number
+    picked_count: number
+    delivering_count: number
+    rider_delivered_count: number
+    user_delivered_count: number
+    completed_count: number
+    cancelled_count: number
+}
+
 export interface MerchantOrderPrintJobResponse {
     id: number
     order_id: number
@@ -301,6 +316,13 @@ export class MerchantOrderManagementService {
             url: '/v1/merchant/orders/stats',
             method: 'GET',
             data: params
+        })
+    }
+
+    static async getOrderSummary(): Promise<MerchantOrderSummaryResponse> {
+        return await request({
+            url: '/v1/merchant/orders/summary',
+            method: 'GET'
         })
     }
 

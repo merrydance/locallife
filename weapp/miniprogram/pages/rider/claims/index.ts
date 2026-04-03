@@ -202,18 +202,13 @@ function toBucket(tab: ClaimBucketTab): 'pending_action' | 'appealed' | 'closed'
 }
 
 async function fetchClaimSummary(): Promise<ClaimSummary> {
-  const [allResult, pendingResult, appealedResult, closedResult] = await Promise.all([
-    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1 }),
-    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1, bucket: 'pending_action' }),
-    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1, bucket: 'appealed' }),
-    claimManagementService.getRiderClaims({ page_id: 1, page_size: 1, bucket: 'closed' })
-  ])
+  const summary = await claimManagementService.getRiderClaimsSummary()
 
   return {
-    total: allResult.total || 0,
-    pendingAction: pendingResult.total || 0,
-    appealed: appealedResult.total || 0,
-    closed: closedResult.total || 0
+    total: summary.total || 0,
+    pendingAction: summary.pending_action || 0,
+    appealed: summary.appealed || 0,
+    closed: summary.closed || 0
   }
 }
 

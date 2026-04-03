@@ -288,7 +288,7 @@
 .consent-popup {
   background: var(--td-bg-color-container);
   border-radius: 24rpx 24rpx 0 0;
-  padding: 32rpx;
+  padding: 32rpx 32rpx var(--popup-bottom-padding-lg);
 }
 
 .consent-popup-title {

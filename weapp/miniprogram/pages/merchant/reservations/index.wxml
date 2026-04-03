@@ -257,8 +257,8 @@
       <t-textarea value="{{createForm.notes}}" data-field="notes" placeholder="备注顾客偏好、到店说明或包间要求" maxlength="500" indicator bindchange="onCreateFieldChange" />
 
       <view class="popup-actions">
-        <t-button theme="default" shape="round" bindtap="onCloseCreatePopup">取消</t-button>
-        <t-button theme="primary" shape="round" loading="{{createSubmitting}}" bindtap="onSubmitCreateReservation">{{formMode === 'edit' ? '保存修改' : '创建预订'}}</t-button>
+        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onCloseCreatePopup">取消</t-button>
+        <t-button theme="primary" size="medium" shape="round" loading="{{createSubmitting}}" bindtap="onSubmitCreateReservation">{{formMode === 'edit' ? '保存修改' : '创建预订'}}</t-button>
       </view>
     </view>
   </t-popup>

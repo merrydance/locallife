@@ -6,7 +6,7 @@ import {
   MerchantRepurchaseRateResponse,
   MerchantStatsService
 } from '../../../api/merchant-stats'
-import { listMerchantComplaints } from '../../../api/merchant-complaints'
+import { getMerchantComplaintSummary } from '../../../api/merchant-complaints'
 import { ReservationService } from '../../../api/reservation'
 import { getUserInfo } from '../../../api/auth'
 import { getMyMerchantOpenStatus, getMyMerchantProfile, updateMyMerchantOpenStatus } from '../../../api/merchant'
@@ -161,6 +161,7 @@ function buildRefreshErrorMessage(messages: string[]) {
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
@@ -198,14 +199,17 @@ Page({
 
     const hasAccess = await this.ensureMerchantAccess()
     if (!hasAccess) {
-      this.setData({ accessDenied: true, initialLoading: false })
+      this.setData({ accessReady: true, accessDenied: true, initialLoading: false })
       return
     }
+
+    this.setData({ accessReady: true, accessDenied: false })
+    this.refreshData().catch((err) => logger.error('Merchant dashboard initial refresh failed', err))
   },
 
   onShow() {
-    if (this.data.accessDenied) return
-    this.refreshData()
+    if (this.data.accessDenied || !this.data.accessReady) return
+    this.refreshData().catch((err) => logger.error('Merchant dashboard onShow refresh failed', err))
   },
 
   onHide() {
@@ -364,7 +368,7 @@ Page({
           end_date: today
         }),
         ReservationService.getReservationStats(),
-        listMerchantComplaints({ state: 'PENDING_RESPONSE', page: 1, limit: 100 }),
+        getMerchantComplaintSummary(),
         MerchantStatsService.getHourlyStats({ start_date: today, end_date: today }),
         MerchantStatsService.getOrderSources({ start_date: today, end_date: today }),
         MerchantStatsService.getRepurchaseRate({ start_date: recentThirtyDays, end_date: today })
@@ -375,7 +379,7 @@ Page({
         ? reservationStats.value.paid_count || 0
         : getTodoCount(currentTodoItems, 'reservations')
       const pendingComplaints = complaintResult.status === 'fulfilled'
-        ? complaintResult.value.complaints.length
+        ? complaintResult.value.pending_response || 0
         : getTodoCount(currentTodoItems, 'complaints')
       const printAnomalies = overview.status === 'fulfilled'
         ? overview.value.print_anomalies_count || 0
@@ -429,12 +433,8 @@ Page({
       let pendingPaidOrders = getTodoCount(currentTodoItems, 'paidOrders')
 
       try {
-        const paidOrderResult = await MerchantOrderManagementService.getOrderList({
-          page_id: 1,
-          page_size: 1,
-          status: 'paid'
-        })
-        pendingPaidOrders = paidOrderResult.total || 0
+        const paidOrderSummary = await MerchantOrderManagementService.getOrderSummary()
+        pendingPaidOrders = paidOrderSummary.paid_count || 0
 
         const todayTodos = buildTodoItems({
           pendingPaidOrders,

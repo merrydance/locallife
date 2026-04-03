@@ -56,6 +56,14 @@ type listOperatorMerchantsResponse struct {
 	Limit     int32              `json:"limit"`
 }
 
+type operatorMerchantSummaryResponse struct {
+	Total     int64 `json:"total"`
+	Pending   int64 `json:"pending"`
+	Approved  int64 `json:"approved"`
+	Rejected  int64 `json:"rejected"`
+	Suspended int64 `json:"suspended"`
+}
+
 // listOperatorMerchants 获取运营商管辖区域内的商户列表
 // @Summary 获取区域商户列表
 // @Description 运营商获取其管辖区域内的所有商户，支持按状态筛选
@@ -177,6 +185,87 @@ func (server *Server) listOperatorMerchants(ctx *gin.Context) {
 		PageSize:  req.Limit,
 		Page:      req.Page,
 		Limit:     req.Limit,
+	})
+}
+
+// getOperatorMerchantSummary 获取区域商户汇总
+// @Summary 获取区域商户汇总
+// @Description 运营商获取管辖区域内商户总数及各状态汇总，供工作台和审批入口使用
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param region_id query int false "区域ID"
+// @Success 200 {object} operatorMerchantSummaryResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/merchants/summary [get]
+func (server *Server) getOperatorMerchantSummary(ctx *gin.Context) {
+	var req listOperatorMerchantsRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		resolvedRegionID, err := server.getOperatorRegionID(ctx)
+		if err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+		targetRegionID = resolvedRegionID
+	} else {
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+	}
+
+	countStatus := func(status string) (int64, error) {
+		if status == "" {
+			return server.store.CountMerchantsByRegion(ctx, targetRegionID)
+		}
+		return server.store.CountMerchantsByRegionWithStatus(ctx, db.CountMerchantsByRegionWithStatusParams{
+			RegionID: targetRegionID,
+			Column2:  status,
+		})
+	}
+
+	total, err := countStatus("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pending, err := countStatus("pending")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	approved, err := countStatus("approved")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	rejected, err := countStatus("rejected")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	suspended, err := countStatus("suspended")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, operatorMerchantSummaryResponse{
+		Total:     total,
+		Pending:   pending,
+		Approved:  approved,
+		Rejected:  rejected,
+		Suspended: suspended,
 	})
 }
 
@@ -401,7 +490,7 @@ func (server *Server) getOperatorMerchantStats(ctx *gin.Context) {
 // ==================== 骑手列表查询 ====================
 
 type listOperatorRidersRequest struct {
-	Status   string `form:"status" binding:"omitempty,oneof=approved active suspended"`
+	Status   string `form:"status" binding:"omitempty,oneof=approved active suspended pending_approval rejected"`
 	RegionID int64  `form:"region_id" binding:"omitempty,min=1"`
 	Page     int32  `form:"page" binding:"omitempty,min=1"`
 	Limit    int32  `form:"limit" binding:"omitempty,min=1,max=100"`
@@ -430,13 +519,22 @@ type listOperatorRidersResponse struct {
 	Limit    int32           `json:"limit"`
 }
 
+type operatorRiderSummaryResponse struct {
+	Total           int64 `json:"total"`
+	PendingApproval int64 `json:"pending_approval"`
+	Active          int64 `json:"active"`
+	Rejected        int64 `json:"rejected"`
+	Suspended       int64 `json:"suspended"`
+	Online          int64 `json:"online"`
+}
+
 // listOperatorRiders 获取运营商管辖区域内的骑手列表
 // @Summary 获取区域骑手列表
 // @Description 运营商获取其管辖区域内的所有骑手，支持按状态筛选
 // @Tags 运营商-商户骑手管理
 // @Accept json
 // @Produce json
-// @Param status query string false "骑手状态" Enums(approved, active, suspended)
+// @Param status query string false "骑手状态" Enums(approved, active, suspended, pending_approval, rejected)
 // @Param page query int false "页码" default(1)
 // @Param limit query int false "每页数量" default(20) maximum(100)
 // @Success 200 {object} listOperatorRidersResponse
@@ -558,6 +656,99 @@ func (server *Server) listOperatorRiders(ctx *gin.Context) {
 		PageSize: req.Limit,
 		Page:     req.Page,
 		Limit:    req.Limit,
+	})
+}
+
+// getOperatorRiderSummary 获取区域骑手汇总
+// @Summary 获取区域骑手汇总
+// @Description 运营商获取管辖区域内骑手总数及各状态汇总，供工作台和审批入口使用
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param region_id query int false "区域ID"
+// @Success 200 {object} operatorRiderSummaryResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/riders/summary [get]
+func (server *Server) getOperatorRiderSummary(ctx *gin.Context) {
+	var req listOperatorRidersRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	operator, ok := GetOperatorFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator not found in context")))
+		return
+	}
+
+	targetRegionID := req.RegionID
+	if targetRegionID == 0 {
+		if operator.RegionID == 0 {
+			ctx.JSON(http.StatusForbidden, errorResponse(errors.New("operator has no assigned region")))
+			return
+		}
+		targetRegionID = operator.RegionID
+	} else {
+		if _, err := server.checkOperatorManagesRegion(ctx, targetRegionID); err != nil {
+			ctx.JSON(http.StatusForbidden, errorResponse(err))
+			return
+		}
+	}
+
+	regionID := pgtype.Int8{Int64: targetRegionID, Valid: true}
+	countStatus := func(status string) (int64, error) {
+		if status == "" {
+			return server.store.CountRidersByRegion(ctx, regionID)
+		}
+		return server.store.CountRidersByRegionWithStatus(ctx, db.CountRidersByRegionWithStatusParams{
+			RegionID: regionID,
+			Status:   status,
+		})
+	}
+
+	total, err := countStatus("")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	pendingApproval, err := countStatus("pending_approval")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	active, err := countStatus("active")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	rejected, err := countStatus("rejected")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	suspended, err := countStatus("suspended")
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	online, err := server.store.CountOnlineRidersByRegion(ctx, regionID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, operatorRiderSummaryResponse{
+		Total:           total,
+		PendingApproval: pendingApproval,
+		Active:          active,
+		Rejected:        rejected,
+		Suspended:       suspended,
+		Online:          online,
 	})
 }
 

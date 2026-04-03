@@ -122,6 +122,13 @@ export interface ListOperatorAppealsResponse {
     }
 }
 
+export interface OperatorAppealSummaryResponse {
+    total: number
+    pending: number
+    approved: number
+    rejected: number
+}
+
 /** 运营商申诉项 - 基于swagger api.operatorAppealItem */
 export interface OperatorAppealItem {
     id: number
@@ -307,6 +314,14 @@ export class OperatorAppealService {
             url: '/v1/operator/appeals',
             method: 'GET',
             data: params
+        })
+    }
+
+    async getAppealSummary(regionId?: number): Promise<OperatorAppealSummaryResponse> {
+        return request({
+            url: '/v1/operator/appeals/summary',
+            method: 'GET',
+            data: regionId ? { region_id: regionId } : undefined
         })
     }
 
@@ -939,9 +954,10 @@ export async function getOperatorAnalyticsDashboard(regionId?: number): Promise<
     const endDate = new Date().toISOString().split('T')[0]
     const startDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
 
-    const [regionStats, trendAnalysis, appealList] = await Promise.all([
+    const [regionStats, trendAnalysis, appealSummary, appealList] = await Promise.all([
         operatorAnalyticsService.getRegionStats(regionId || 1, startDate, endDate),
         operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate),
+        operatorAppealService.getAppealSummary(regionId),
         operatorAppealService.getAppealList({
             region_id: regionId,
             limit: 20,
@@ -954,9 +970,9 @@ export async function getOperatorAnalyticsDashboard(regionId?: number): Promise<
     const performanceAnalysis = dataAnalysisService.analyzeRegionPerformanceTrend(regionStats)
 
     // 申诉摘要
-    const appealSummary = {
-        totalAppeals: appealList.total,
-        pendingAppeals: appealList.stats.pending_count,
+    const appealSummaryView = {
+        totalAppeals: appealSummary.total,
+        pendingAppeals: appealSummary.pending,
         avgResolutionTime: appealList.stats.avg_resolution_time,
         satisfactionRate: 4.2 // 模拟数据，实际应该从API获取
     }
@@ -965,7 +981,7 @@ export async function getOperatorAnalyticsDashboard(regionId?: number): Promise<
         regionStats,
         trendAnalysis,
         performanceAnalysis,
-        appealSummary,
+        appealSummary: appealSummaryView,
         recentAppeals: appealList.appeals.slice(0, 10)
     }
 }

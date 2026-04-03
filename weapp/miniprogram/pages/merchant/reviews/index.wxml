@@ -98,8 +98,8 @@
         bindchange="onReplyInput"
       />
       <view class="popup-actions">
-        <t-button theme="default" shape="round" disabled="{{replySubmitting}}" bindtap="onCloseReplyPopup">取消</t-button>
-        <t-button theme="primary" shape="round" loading="{{replySubmitting}}" bindtap="onSubmitReply">提交回复</t-button>
+        <t-button theme="primary" variant="outline" size="medium" shape="round" disabled="{{replySubmitting}}" bindtap="onCloseReplyPopup">取消</t-button>
+        <t-button theme="primary" size="medium" shape="round" loading="{{replySubmitting}}" bindtap="onSubmitReply">提交回复</t-button>
       </view>
     </view>
   </t-popup>
