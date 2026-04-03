@@ -860,6 +860,5 @@ export default {
 
   // 便捷函数
   WebSocketUtils,
-  RealtimeUtils,
-
+  RealtimeUtils
 }

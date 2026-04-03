@@ -171,9 +171,12 @@ RETURNING *;
 -- 列出申请（平台管理员用，包含 submitted/approved/rejected）
 SELECT 
   oa.*,
+  u.full_name as applicant_name,
+  u.phone as applicant_phone,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
+LEFT JOIN users u ON u.id = oa.user_id
 JOIN regions r ON r.id = oa.region_id
 WHERE oa.status IN ('submitted', 'approved', 'rejected')
 ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC

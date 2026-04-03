@@ -501,9 +501,12 @@ func (q *Queries) ListOperatorApplications(ctx context.Context, arg ListOperator
 const listPendingOperatorApplications = `-- name: ListPendingOperatorApplications :many
 SELECT 
   oa.id, oa.user_id, oa.region_id, oa.name, oa.contact_name, oa.contact_phone, oa.business_license_number, oa.business_license_ocr, oa.legal_person_name, oa.legal_person_id_number, oa.id_card_front_ocr, oa.id_card_back_ocr, oa.requested_contract_years, oa.status, oa.reject_reason, oa.reviewed_by, oa.reviewed_at, oa.created_at, oa.updated_at, oa.submitted_at, oa.business_license_media_asset_id, oa.id_card_front_media_asset_id, oa.id_card_back_media_asset_id,
+  u.full_name as applicant_name,
+  u.phone as applicant_phone,
   r.name as region_name,
   r.code as region_code
 FROM operator_applications oa
+LEFT JOIN users u ON u.id = oa.user_id
 JOIN regions r ON r.id = oa.region_id
 WHERE oa.status IN ('submitted', 'approved', 'rejected')
 ORDER BY COALESCE(oa.submitted_at, oa.updated_at, oa.created_at) DESC
@@ -539,6 +542,8 @@ type ListPendingOperatorApplicationsRow struct {
 	BusinessLicenseMediaAssetID pgtype.Int8        `json:"business_license_media_asset_id"`
 	IDCardFrontMediaAssetID     pgtype.Int8        `json:"id_card_front_media_asset_id"`
 	IDCardBackMediaAssetID      pgtype.Int8        `json:"id_card_back_media_asset_id"`
+	ApplicantName               pgtype.Text        `json:"applicant_name"`
+	ApplicantPhone              pgtype.Text        `json:"applicant_phone"`
 	RegionName                  string             `json:"region_name"`
 	RegionCode                  string             `json:"region_code"`
 }
@@ -577,6 +582,8 @@ func (q *Queries) ListPendingOperatorApplications(ctx context.Context, arg ListP
 			&i.BusinessLicenseMediaAssetID,
 			&i.IDCardFrontMediaAssetID,
 			&i.IDCardBackMediaAssetID,
+			&i.ApplicantName,
+			&i.ApplicantPhone,
 			&i.RegionName,
 			&i.RegionCode,
 		); err != nil {

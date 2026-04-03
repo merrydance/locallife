@@ -32,6 +32,14 @@
             <text class="meta-value">{{application.region_name || '-'}} ({{application.region_id}})</text>
           </view>
           <view class="meta-row">
+            <text class="meta-label">提交人</text>
+            <text class="meta-value">{{application.applicant_name || application.contact_name || ('用户#' + application.user_id)}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">提交手机号</text>
+            <text class="meta-value">{{application.applicant_phone || application.contact_phone || '-'}}</text>
+          </view>
+          <view class="meta-row">
             <text class="meta-label">联系人</text>
             <text class="meta-value">{{application.contact_name || '-'}}</text>
           </view>

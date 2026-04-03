@@ -20,6 +20,8 @@ type listPendingOperatorApplicationsRequest struct {
 type adminOperatorApplicationItem struct {
 	ID                          int64      `json:"id"`
 	UserID                      int64      `json:"user_id"`
+	ApplicantName               string     `json:"applicant_name,omitempty"`
+	ApplicantPhone              string     `json:"applicant_phone,omitempty"`
 	RegionID                    int64      `json:"region_id"`
 	RegionName                  string     `json:"region_name"`
 	RegionCode                  string     `json:"region_code"`
@@ -83,6 +85,21 @@ func operatorNameFromApprovedApplication(app db.OperatorApplication) string {
 	return ""
 }
 
+func (server *Server) loadOperatorApplicationApplicant(ctx *gin.Context, userID int64) (string, string) {
+	user, err := server.store.GetUser(ctx, userID)
+	if err != nil {
+		return "", ""
+	}
+
+	applicantName := strings.TrimSpace(user.FullName)
+	applicantPhone := ""
+	if user.Phone.Valid {
+		applicantPhone = strings.TrimSpace(user.Phone.String)
+	}
+
+	return applicantName, applicantPhone
+}
+
 func (server *Server) listPendingOperatorApplicationsAdmin(ctx *gin.Context) {
 	var req listPendingOperatorApplicationsRequest
 	if err := ctx.ShouldBindQuery(&req); err != nil {
@@ -114,9 +131,16 @@ func (server *Server) listPendingOperatorApplicationsAdmin(ctx *gin.Context) {
 
 	applications := make([]adminOperatorApplicationItem, 0, len(rows))
 	for _, row := range rows {
+		applicantName := strings.TrimSpace(row.ApplicantName.String)
+		applicantPhone := ""
+		if row.ApplicantPhone.Valid {
+			applicantPhone = strings.TrimSpace(row.ApplicantPhone.String)
+		}
 		item := adminOperatorApplicationItem{
 			ID:                          row.ID,
 			UserID:                      row.UserID,
+			ApplicantName:               applicantName,
+			ApplicantPhone:              applicantPhone,
 			RegionID:                    row.RegionID,
 			RegionName:                  row.RegionName,
 			RegionCode:                  row.RegionCode,
@@ -168,23 +192,31 @@ func (server *Server) getOperatorApplicationDetailAdmin(ctx *gin.Context) {
 
 	regionName := server.getRegionName(ctx, app.RegionID)
 	resp := newOperatorApplicationResponse(app, regionName)
+	applicantName, applicantPhone := server.loadOperatorApplicationApplicant(ctx, app.UserID)
+
+	type adminOperatorApplicationDetailResponse struct {
+		operatorApplicationResponse
+		ApplicantName    string `json:"applicant_name,omitempty"`
+		ApplicantPhone   string `json:"applicant_phone,omitempty"`
+		OperatorEntityID int64  `json:"operator_id,omitempty"`
+	}
+
+	detailResp := adminOperatorApplicationDetailResponse{
+		operatorApplicationResponse: resp,
+		ApplicantName:               applicantName,
+		ApplicantPhone:              applicantPhone,
+	}
 
 	// 若申请已通过，附带运营商实体 ID 以便前端查询多区域
 	if app.Status == "approved" {
 		if op, opErr := server.store.GetOperatorByUser(ctx, app.UserID); opErr == nil {
-			type detailWithOperatorID struct {
-				operatorApplicationResponse
-				OperatorEntityID int64 `json:"operator_id,omitempty"`
-			}
-			ctx.JSON(http.StatusOK, detailWithOperatorID{
-				operatorApplicationResponse: resp,
-				OperatorEntityID:            op.ID,
-			})
+			detailResp.OperatorEntityID = op.ID
+			ctx.JSON(http.StatusOK, detailResp)
 			return
 		}
 	}
 
-	ctx.JSON(http.StatusOK, resp)
+	ctx.JSON(http.StatusOK, detailResp)
 }
 
 // getOperatorRegionsAdmin godoc

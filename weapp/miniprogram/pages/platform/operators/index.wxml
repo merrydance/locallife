@@ -70,6 +70,14 @@
             <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
           </view>
           <view class="meta-row">
+            <text class="meta-label">提交人</text>
+            <text class="meta-value">{{item.applicant_name || item.contact_name || ('用户#' + item.user_id)}}</text>
+          </view>
+          <view class="meta-row">
+            <text class="meta-label">提交手机号</text>
+            <text class="meta-value">{{item.applicant_phone || item.contact_phone || '-'}}</text>
+          </view>
+          <view class="meta-row">
             <text class="meta-label">联系人</text>
             <text class="meta-value">{{item.contact_name || '-'}}</text>
           </view>

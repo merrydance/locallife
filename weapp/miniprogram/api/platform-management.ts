@@ -115,6 +115,8 @@ export interface RejectRiderRequest extends Record<string, unknown> {
 export interface AdminOperatorApplicationItem {
     id: number
     user_id: number
+    applicant_name?: string
+    applicant_phone?: string
     region_id: number
     region_name: string
     region_code: string
