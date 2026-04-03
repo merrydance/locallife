@@ -42,8 +42,11 @@ const RIDER_STATUS_LABEL: Record<string, string> = {
 }
 
 function parseRiderStatus(status?: string): RiderStatus | '' {
+  if (status === 'pending') {
+    return 'pending_approval'
+  }
+
   if (
-    status === 'pending' ||
     status === 'active' ||
     status === 'suspended' ||
     status === 'pending_approval' ||

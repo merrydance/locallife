@@ -152,6 +152,21 @@ export interface RiderQueryParams extends Record<string, unknown> {
     limit?: number
 }
 
+function normalizeRiderStatus(status?: RiderStatus): RiderStatus | undefined {
+    if (!status) {
+        return undefined
+    }
+
+    return status === 'pending' ? 'pending_approval' : status
+}
+
+function normalizeRiderQueryParams(params: RiderQueryParams): RiderQueryParams {
+    return {
+        ...params,
+        status: normalizeRiderStatus(params.status)
+    }
+}
+
 /** 骑手排行查询参数 */
 export interface RiderRankingParams extends Record<string, unknown> {
     region_id?: number
@@ -252,7 +267,7 @@ export class OperatorRiderManagementService {
         return request({
             url: '/v1/operator/riders',
             method: 'GET',
-            data: params
+            data: normalizeRiderQueryParams(params)
         })
     }
 

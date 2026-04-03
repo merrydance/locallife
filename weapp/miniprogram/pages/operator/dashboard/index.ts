@@ -345,7 +345,7 @@ Page({
       {
         label: `骑手待审 (${this.data.pendingSummary.riders})`,
         enabled: this.data.pendingSummary.riders > 0,
-        url: `/pages/operator/riders/index?${query}${query ? '&' : ''}status=pending`
+        url: `/pages/operator/riders/index?${query}${query ? '&' : ''}status=pending_approval`
       },
       {
         label: `待处理申诉 (${this.data.pendingSummary.appeals})`,

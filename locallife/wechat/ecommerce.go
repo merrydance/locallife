@@ -276,7 +276,8 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 		body["business_addition_desc"] = req.BusinessAdditionDesc
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodPost, ecommerceApplymentsURL, body)
+	// 包含敏感加密字段时必须携带 Wechatpay-Serial 头，以告知微信使用哪把公钥/证书解密。
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodPost, ecommerceApplymentsURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("create ecommerce applyment: %w", err)
 	}
