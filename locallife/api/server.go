@@ -169,8 +169,8 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		// 平台收付通客户端（用于订单支付分账）
 		ecommerceClient, err = wechat.NewEcommerceClient(wechat.EcommerceClientConfig{
 			PaymentClientConfig: wechat.PaymentClientConfig{
-				MchID:                   config.WechatPayMchID,
-				AppID:                   config.WechatMiniAppID,
+				MchID:                   config.WechatEcommerceSpMchID,
+				AppID:                   config.WechatEcommerceSpAppID,
 				SerialNumber:            config.WechatPaySerialNumber,
 				HTTPTimeout:             config.WechatPayHTTPTimeout,
 				PrivateKeyPath:          config.WechatPayPrivateKeyPath,

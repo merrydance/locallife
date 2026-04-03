@@ -278,8 +278,8 @@ func runTaskProcessor(
 	if config.WechatPayMchID != "" && config.WechatPayPrivateKeyPath != "" {
 		client, err := wechat.NewEcommerceClient(wechat.EcommerceClientConfig{
 			PaymentClientConfig: wechat.PaymentClientConfig{
-				MchID:                   config.WechatPayMchID,
-				AppID:                   config.WechatMiniAppID,
+				MchID:                   config.WechatEcommerceSpMchID,
+				AppID:                   config.WechatEcommerceSpAppID,
 				SerialNumber:            config.WechatPaySerialNumber,
 				HTTPTimeout:             config.WechatPayHTTPTimeout,
 				PrivateKeyPath:          config.WechatPayPrivateKeyPath,
@@ -290,6 +290,8 @@ func runTaskProcessor(
 				PlatformPublicKeyPath:   config.WechatPayPlatformPublicKeyPath,
 				PlatformPublicKeyID:     config.WechatPayPlatformPublicKeyID,
 			},
+			SpMchID: config.WechatEcommerceSpMchID,
+			SpAppID: config.WechatEcommerceSpAppID,
 		})
 		if err != nil {
 			log.Warn().Err(err).Msg("failed to create ecommerce client, profit sharing disabled")

@@ -81,6 +81,17 @@ function buildStatusView(status: OperatorApplymentStatusResponse | null): Status
   }
 }
 
+function buildSubmitSuccessMessage(message: string, applymentId: string): string {
+  const content = [message || '开户申请已提交']
+
+  if (applymentId && applymentId !== '-') {
+    content.push(`申请单号：${applymentId}`)
+  }
+
+  content.push('接下来：微信支付通常会在1-3个工作日内完成审核，审核中无需重复提交。')
+  return content.join('\n')
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -161,8 +172,15 @@ Page({
         bank_name: form.bank_name || undefined,
         contact_email: form.contact_email || undefined
       })
-      this.setData({ success: resp.message || '开户申请已提交' })
       await this.loadStatus()
+
+      const applymentId = resp.applyment_id ? String(resp.applyment_id) : this.data.statusView.applymentId
+      wx.showModal({
+        title: '开户申请已提交',
+        content: buildSubmitSuccessMessage(resp.message || '开户申请已提交', applymentId),
+        showCancel: false,
+        confirmText: '知道了'
+      })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '提交开户申请失败，请稍后重试')
       this.setData({ error: message })

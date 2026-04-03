@@ -33,12 +33,16 @@
 
     <view wx:if="{{statusView.isInReview && !statusView.isOpened}}" class="card">
       <view class="card-title">开户审核中</view>
+      <view class="result-note result-note--primary">微信已受理开户申请，请等待审核结果同步。</view>
       <view class="status-item">{{statusView.guideText}}</view>
+      <view wx:if="{{statusView.applymentId !== '-'}}" class="status-item">申请单号：{{statusView.applymentId}}</view>
       <view class="status-item">审核期间无需重复填写开户信息。</view>
+      <view class="status-item">后续结果会更新到本页，建议稍后下拉刷新查看。</view>
     </view>
 
     <view wx:if="{{statusView.needsSign && !statusView.isOpened}}" class="card">
       <view class="card-title">待签约处理</view>
+      <view class="result-note result-note--warning">开户审核已进入签约阶段，请尽快完成微信签约。</view>
       <view class="status-item">{{statusView.guideText}}</view>
       <view class="status-item">如已复制签约链接，请在微信支付侧尽快完成签约。</view>
     </view>
