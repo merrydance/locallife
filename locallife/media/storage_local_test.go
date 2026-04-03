@@ -162,6 +162,18 @@ func TestLocalStorage_DevUploadHandler(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, rec.Code)
 	})
+
+	t.Run("oversized upload returns 413", func(t *testing.T) {
+		objectKey := "merchant/dish/1/20260318/up_too_large.jpg"
+		body, contentType := buildMultipartBody(t, objectKey, "local-public", bytes.Repeat([]byte("a"), int(localDevUploadMaxBytes)+1))
+
+		req := httptest.NewRequest(http.MethodPost, "/v1/media/_devupload", body)
+		req.Header.Set("Content-Type", contentType)
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+
+		require.Equal(t, http.StatusRequestEntityTooLarge, rec.Code)
+	})
 }
 
 // buildMultipartBody constructs a multipart/form-data body with key, _dev_bucket, and file fields.

@@ -1,0 +1,68 @@
+name: backend-test
+
+on:
+  pull_request:
+    paths:
+      - 'locallife/**'
+      - '.github/workflows/backend-test.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'locallife/**'
+      - '.github/workflows/backend-test.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Backend Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: locallife
+    env:
+      DB_URL: postgresql://root:secret@localhost:5432/locallife_test?sslmode=disable
+
+    services:
+      postgres:
+        image: postgres:14-alpine
+        env:
+          POSTGRES_USER: root
+          POSTGRES_PASSWORD: secret
+          POSTGRES_DB: locallife_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U root -d locallife_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: locallife/go.mod
+          cache-dependency-path: locallife/go.sum
+
+      - name: Install golang-migrate
+        run: |
+          curl -L https://github.com/golang-migrate/migrate/releases/download/v4.18.3/migrate.linux-amd64.tar.gz | tar xvz
+          sudo mv migrate /usr/local/bin/migrate
+          migrate -version
+
+      - name: Run migrations
+        run: make migrateup
+
+      - name: Unit tests
+        run: make test-unit
+
+      - name: Integration tests
+        run: make test-integration

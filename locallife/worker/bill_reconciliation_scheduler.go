@@ -3,6 +3,9 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"math"
 	"strconv"
 	"time"
 
@@ -14,12 +17,18 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// billReconciliationCron 每天上午 10:00 运行
-// 微信账单在 T+1 日 9:00 后才可用，10:00 拉取的是昨天（T-1）的账单
-const billReconciliationCron = "0 10 * * *"
+// billReconciliationCron 每天上午 10:10 运行
+// 微信账单在 T+1 日 9:00 后才可用，10:10 拉取昨天（T-1）账单，给微信留出额外生成缓冲
+const billReconciliationCron = "10 10 * * *"
 
 // reconciliationTimeout 单次对账超时（下载+解析+DB操作）
 const reconciliationTimeout = 10 * time.Minute
+
+const (
+	billDownloadBaseRetryDelay = 15 * time.Second
+	billDownloadMaxRetryDelay  = 2 * time.Minute
+	billDownloadMaxAttempts    = 4
+)
 
 // missingRecord 微信有 / 本地无（或反之）时记录的差异条目
 type missingRecord struct {
@@ -42,6 +51,7 @@ type BillReconciliationScheduler struct {
 	store      db.Store
 	billClient wechat.BillClientInterface // nil 时调度器注册但不执行
 	publisher  websocket.PubSubPublisher  // nil 时降级为只写日志
+	retryWait  func(context.Context, time.Duration) error
 }
 
 // NewBillReconciliationScheduler 创建每日对账调度器
@@ -59,6 +69,7 @@ func NewBillReconciliationScheduler(
 		store:      store,
 		billClient: billClient,
 		publisher:  publisher,
+		retryWait:  waitForBillRetry,
 	}
 }
 
@@ -74,7 +85,7 @@ func (s *BillReconciliationScheduler) Start() error {
 		return err
 	}
 	s.cron.Start()
-	log.Info().Msg("bill reconciliation scheduler started (daily 10:00)")
+	log.Info().Msg("bill reconciliation scheduler started (daily 10:10)")
 	return nil
 }
 
@@ -93,7 +104,7 @@ func (s *BillReconciliationScheduler) runAll() {
 	if s.billClient == nil {
 		return
 	}
-	// 微信账单 T+1 9:00 后可用，10:00 跑时拉取昨天（T-1）账单
+	// 微信账单 T+1 9:00 后可用，10:10 跑时拉取昨天（T-1）账单
 	// 使用 time.Local 构造本地时区的昨日零点，与项目其他调度器保持一致（参见 data_cleanup.go）
 	yesterdayLocal := time.Now().AddDate(0, 0, -1)
 	billDate := time.Date(yesterdayLocal.Year(), yesterdayLocal.Month(), yesterdayLocal.Day(), 0, 0, 0, 0, time.Local)
@@ -120,7 +131,7 @@ func (s *BillReconciliationScheduler) reconcileTrade(billDate time.Time) {
 		return
 	}
 
-	wxRecords, err := s.billClient.DownloadTradeBill(ctx, billDate)
+	wxRecords, err := s.fetchBillRecords(ctx, billType, billDate, s.billClient.DownloadTradeBill)
 	if err != nil {
 		s.failReport(ctx, reportID, "download trade bill: "+err.Error())
 		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: download bill failed")
@@ -158,7 +169,7 @@ func (s *BillReconciliationScheduler) reconcileEcommerceTrade(billDate time.Time
 		return
 	}
 
-	wxRecords, err := s.billClient.DownloadEcommerceTradeBill(ctx, billDate)
+	wxRecords, err := s.fetchBillRecords(ctx, billType, billDate, s.billClient.DownloadEcommerceTradeBill)
 	if err != nil {
 		s.failReport(ctx, reportID, "download ecommerce trade bill: "+err.Error())
 		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: download bill failed")
@@ -196,7 +207,7 @@ func (s *BillReconciliationScheduler) reconcileRefund(billDate time.Time) {
 		return
 	}
 
-	wxRecords, err := s.billClient.DownloadRefundBill(ctx, billDate)
+	wxRecords, err := s.fetchBillRecords(ctx, billType, billDate, s.billClient.DownloadRefundBill)
 	if err != nil {
 		s.failReport(ctx, reportID, "download refund bill: "+err.Error())
 		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: download bill failed")
@@ -235,7 +246,7 @@ func (s *BillReconciliationScheduler) reconcileEcommerceRefund(billDate time.Tim
 		return
 	}
 
-	wxRecords, err := s.billClient.DownloadEcommerceRefundBill(ctx, billDate)
+	wxRecords, err := s.fetchBillRecords(ctx, billType, billDate, s.billClient.DownloadEcommerceRefundBill)
 	if err != nil {
 		s.failReport(ctx, reportID, "download ecommerce refund bill: "+err.Error())
 		log.Error().Err(err).Str("bill_type", billType).Msg("reconciliation: download bill failed")
@@ -286,6 +297,82 @@ func compareRecords(
 	return
 }
 
+func (s *BillReconciliationScheduler) fetchBillRecords(
+	ctx context.Context,
+	billType string,
+	billDate time.Time,
+	fetch func(context.Context, time.Time) (map[string]wechat.BillRecord, error),
+) (map[string]wechat.BillRecord, error) {
+	retryWait := s.retryWait
+	if retryWait == nil {
+		retryWait = waitForBillRetry
+	}
+
+	for attempt := 1; attempt <= billDownloadMaxAttempts; attempt++ {
+		records, err := fetch(ctx, billDate)
+		if err == nil {
+			return records, nil
+		}
+
+		if errors.Is(err, wechat.ErrBillNotFound) {
+			log.Info().
+				Str("bill_type", billType).
+				Str("bill_date", billDate.Format("2006-01-02")).
+				Msg("bill reconciliation: wechat bill not found, treating as empty statement")
+			return map[string]wechat.BillRecord{}, nil
+		}
+
+		if !errors.Is(err, wechat.ErrBillNotReady) {
+			return nil, err
+		}
+
+		if attempt == billDownloadMaxAttempts {
+			return nil, fmt.Errorf("wechat bill still generating after %d attempts: %w", attempt, err)
+		}
+
+		delay := nextBillRetryDelay(attempt)
+
+		log.Warn().
+			Err(err).
+			Str("bill_type", billType).
+			Str("bill_date", billDate.Format("2006-01-02")).
+			Int("attempt", attempt).
+			Dur("retry_after", delay).
+			Msg("bill reconciliation: wechat bill still generating, retrying")
+
+		if err := retryWait(ctx, delay); err != nil {
+			return nil, fmt.Errorf("wait for wechat bill retry: %w", err)
+		}
+	}
+
+	return nil, fmt.Errorf("unreachable bill fetch state for bill_type=%s", billType)
+}
+
+func nextBillRetryDelay(attempt int) time.Duration {
+	if attempt <= 0 {
+		return billDownloadBaseRetryDelay
+	}
+
+	delay := billDownloadBaseRetryDelay << (attempt - 1)
+	if delay > billDownloadMaxRetryDelay {
+		return billDownloadMaxRetryDelay
+	}
+
+	return delay
+}
+
+func waitForBillRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
 // createReport 在数据库创建或重置对账报告（ON CONFLICT 重新跑时覆盖）
 func (s *BillReconciliationScheduler) createReport(ctx context.Context, billDate time.Time, billType string) (int64, error) {
 	report, err := s.store.CreateReconciliationReport(ctx, db.CreateReconciliationReportParams{
@@ -317,6 +404,16 @@ func (s *BillReconciliationScheduler) failReport(ctx context.Context, reportID i
 	}
 }
 
+func safeReconciliationCount(value int) (int32, error) {
+	if value < 0 {
+		return 0, fmt.Errorf("count must be non-negative: %d", value)
+	}
+	if value > math.MaxInt32 {
+		return 0, fmt.Errorf("count exceeds int32 max: %d", value)
+	}
+	return int32(value), nil
+}
+
 // saveReport 保存对账结果，有差异时额外通过 Redis Pub/Sub 推送告警
 func (s *BillReconciliationScheduler) saveReport(
 	ctx context.Context,
@@ -328,6 +425,27 @@ func (s *BillReconciliationScheduler) saveReport(
 	amountMismatch []amountMismatchRecord,
 ) {
 	mismatchCount := len(missingLocal) + len(missingWxpay) + len(amountMismatch)
+	wxpayCount32, err := safeReconciliationCount(wxCount)
+	if err != nil {
+		errMsg := fmt.Sprintf("reconciliation report wxpay count overflow for %s on %s: %v", billType, billDate.Format("2006-01-02"), err)
+		log.Error().Str("bill_type", billType).Err(err).Msg("reconciliation: invalid wxpay count")
+		s.failReport(ctx, reportID, errMsg)
+		return
+	}
+	localCount32, err := safeReconciliationCount(localCount)
+	if err != nil {
+		errMsg := fmt.Sprintf("reconciliation report local count overflow for %s on %s: %v", billType, billDate.Format("2006-01-02"), err)
+		log.Error().Str("bill_type", billType).Err(err).Msg("reconciliation: invalid local count")
+		s.failReport(ctx, reportID, errMsg)
+		return
+	}
+	mismatchCount32, err := safeReconciliationCount(mismatchCount)
+	if err != nil {
+		errMsg := fmt.Sprintf("reconciliation report mismatch count overflow for %s on %s: %v", billType, billDate.Format("2006-01-02"), err)
+		log.Error().Str("bill_type", billType).Err(err).Msg("reconciliation: invalid mismatch count")
+		s.failReport(ctx, reportID, errMsg)
+		return
+	}
 
 	// 确保 nil slice 序列化为 "[]" 而非 "null"，防止 JSONB 列存储 null 导致前端操作失败
 	if missingLocal == nil {
@@ -343,12 +461,12 @@ func (s *BillReconciliationScheduler) saveReport(
 	missingWxpayJSON, _ := json.Marshal(missingWxpay)
 	amountMismatchJSON, _ := json.Marshal(amountMismatch)
 
-	_, err := s.store.UpdateReconciliationReport(ctx, db.UpdateReconciliationReportParams{
+	_, err = s.store.UpdateReconciliationReport(ctx, db.UpdateReconciliationReportParams{
 		ID:             reportID,
 		Status:         "completed",
-		WxpayCount:     int32(wxCount),
-		LocalCount:     int32(localCount),
-		MismatchCount:  int32(mismatchCount),
+		WxpayCount:     wxpayCount32,
+		LocalCount:     localCount32,
+		MismatchCount:  mismatchCount32,
 		MissingLocal:   missingLocalJSON,
 		MissingWxpay:   missingWxpayJSON,
 		AmountMismatch: amountMismatchJSON,

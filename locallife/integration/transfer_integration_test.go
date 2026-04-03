@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -27,6 +28,7 @@ import (
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
 	"github.com/stretchr/testify/require"
 )
 
@@ -70,6 +72,84 @@ var (
 	integrationPool       *pgxpool.Pool
 	integrationTokenMaker token.Maker
 )
+
+type integrationTestPaymentClient struct{}
+
+func (c *integrationTestPaymentClient) GetMchID() string { return "integration-mch" }
+
+func (c *integrationTestPaymentClient) GetAppID() string { return "integration-app" }
+
+func (c *integrationTestPaymentClient) CreateJSAPIOrder(ctx context.Context, req *wechat.JSAPIOrderRequest) (*wechat.JSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+	prepayID := "prepay_" + util.RandomString(12)
+	return &wechat.JSAPIOrderResponse{PrepayID: prepayID}, &wechat.JSAPIPayParams{
+		TimeStamp: strconv.FormatInt(time.Now().Unix(), 10),
+		NonceStr:  util.RandomString(12),
+		Package:   "prepay_id=" + prepayID,
+		SignType:  "RSA",
+		PaySign:   "integration_sign",
+	}, nil
+}
+
+func (c *integrationTestPaymentClient) QueryOrderByOutTradeNo(ctx context.Context, outTradeNo string) (*wechat.OrderQueryResponse, error) {
+	return &wechat.OrderQueryResponse{OutTradeNo: outTradeNo, TradeState: "SUCCESS"}, nil
+}
+
+func (c *integrationTestPaymentClient) CloseOrder(ctx context.Context, outTradeNo string) error {
+	return nil
+}
+
+func (c *integrationTestPaymentClient) CreateRefund(ctx context.Context, req *wechat.RefundRequest) (*wechat.RefundResponse, error) {
+	return &wechat.RefundResponse{RefundID: "refund_" + util.RandomString(10), Status: wechat.RefundStatusSuccess}, nil
+}
+
+func (c *integrationTestPaymentClient) QueryRefund(ctx context.Context, outRefundNo string) (*wechat.RefundResponse, error) {
+	return &wechat.RefundResponse{RefundID: outRefundNo, Status: wechat.RefundStatusSuccess}, nil
+}
+
+func (c *integrationTestPaymentClient) CreateTransfer(ctx context.Context, req *wechat.TransferRequest) (*wechat.TransferResponse, error) {
+	return &wechat.TransferResponse{
+		OutBatchNo:  req.OutBatchNo,
+		BatchID:     "batch_" + util.RandomString(10),
+		BatchStatus: "ACCEPTED",
+		CreateTime:  time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+func (c *integrationTestPaymentClient) QueryTransfer(ctx context.Context, outBatchNo string) (*wechat.TransferQueryResponse, error) {
+	return &wechat.TransferQueryResponse{
+		OutBatchNo:  outBatchNo,
+		BatchID:     "batch_" + util.RandomString(10),
+		BatchStatus: "FINISHED",
+		CreateTime:  time.Now().Add(-time.Minute).Format(time.RFC3339),
+		UpdateTime:  time.Now().Format(time.RFC3339),
+	}, nil
+}
+
+func (c *integrationTestPaymentClient) DecryptPaymentNotification(notification *wechat.PaymentNotification) (*wechat.PaymentNotificationResource, error) {
+	return nil, errors.New("integration test payment client does not decrypt notifications")
+}
+
+func (c *integrationTestPaymentClient) DecryptRefundNotification(notification *wechat.PaymentNotification) (*wechat.RefundNotificationResource, error) {
+	return nil, errors.New("integration test payment client does not decrypt notifications")
+}
+
+func (c *integrationTestPaymentClient) DecryptNotificationRaw(notification *wechat.PaymentNotification) ([]byte, error) {
+	return nil, errors.New("integration test payment client does not decrypt notifications")
+}
+
+func (c *integrationTestPaymentClient) VerifyNotificationSignature(signature, timestamp, nonce, body string) error {
+	return nil
+}
+
+func (c *integrationTestPaymentClient) GenerateJSAPIPayParams(prepayID string) (*wechat.JSAPIPayParams, error) {
+	return &wechat.JSAPIPayParams{
+		TimeStamp: strconv.FormatInt(time.Now().Unix(), 10),
+		NonceStr:  util.RandomString(12),
+		Package:   "prepay_id=" + prepayID,
+		SignType:  "RSA",
+		PaySign:   "integration_sign",
+	}, nil
+}
 
 func TestTransferDiningSessionTableIntegration(t *testing.T) {
 	server, store := initIntegrationServer(t)
@@ -171,6 +251,8 @@ func initIntegrationServer(t *testing.T) (*api.Server, *db.SQLStore) {
 		require.NoError(t, err)
 		integrationServer = server
 	})
+
+	integrationServer.SetPaymentClientForTest(&integrationTestPaymentClient{})
 
 	return integrationServer, integrationStore
 }

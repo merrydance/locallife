@@ -18,6 +18,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -160,9 +161,34 @@ func (c *PaymentClient) GetAppID() string {
 	return c.appID
 }
 
+func readBoundedConfigFile(path string) ([]byte, error) {
+	cleanedPath := filepath.Clean(path)
+	rootDir := filepath.Dir(cleanedPath)
+	fileName := filepath.Base(cleanedPath)
+
+	root, err := os.OpenRoot(rootDir)
+	if err != nil {
+		return nil, fmt.Errorf("open config root: %w", err)
+	}
+	defer root.Close()
+
+	file, err := root.Open(fileName)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+	defer file.Close()
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return nil, fmt.Errorf("read config file: %w", err)
+	}
+
+	return data, nil
+}
+
 // loadPublicKey 从 PEM 文件加载 RSA 公钥
 func loadPublicKey(path string) (*rsa.PublicKey, error) {
-	data, err := os.ReadFile(path)
+	data, err := readBoundedConfigFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read public key file: %w", err)
 	}
@@ -188,7 +214,7 @@ func loadPublicKey(path string) (*rsa.PublicKey, error) {
 
 // loadPrivateKey 从 PEM 文件加载 RSA 私钥
 func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
-	data, err := os.ReadFile(path)
+	data, err := readBoundedConfigFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read private key file: %w", err)
 	}
@@ -213,7 +239,7 @@ func loadPrivateKey(path string) (*rsa.PrivateKey, error) {
 
 // loadCertificate 从 PEM 文件加载证书
 func loadCertificate(path string) (*x509.Certificate, error) {
-	data, err := os.ReadFile(path)
+	data, err := readBoundedConfigFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("read certificate file: %w", err)
 	}

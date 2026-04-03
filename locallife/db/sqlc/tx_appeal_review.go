@@ -44,6 +44,17 @@ func (store *SQLStore) ReviewAppealWithCompensationTx(ctx context.Context, arg R
 		}
 		result.PostProcess = postProcess
 
+		if arg.Status == "rejected" {
+			recovery, recoveryErr := q.GetClaimRecoveryByClaimID(ctx, postProcess.ClaimID)
+			if recoveryErr == nil {
+				if _, err := q.ResumeClaimRecoveryAfterAppeal(ctx, recovery.ID); err != nil && err != ErrRecordNotFound {
+					return fmt.Errorf("resume claim recovery after rejected appeal: %w", err)
+				}
+			} else if recoveryErr != ErrRecordNotFound {
+				return fmt.Errorf("get claim recovery for rejected appeal: %w", recoveryErr)
+			}
+		}
+
 		if arg.Status != "approved" || !arg.CompensationAmount.Valid || arg.CompensationAmount.Int64 <= 0 {
 			return nil
 		}

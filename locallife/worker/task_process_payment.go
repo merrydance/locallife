@@ -120,6 +120,21 @@ func (processor *RedisTaskProcessor) maybeMarkPaymentOrderRefunded(ctx context.C
 	}
 }
 
+func (processor *RedisTaskProcessor) markRefundOrderFailed(ctx context.Context, refundOrderID int64) error {
+	_, err := processor.store.UpdateRefundOrderToFailed(ctx, refundOrderID)
+	return err
+}
+
+func (processor *RedisTaskProcessor) markRefundOrderSuccess(ctx context.Context, refundOrderID int64) error {
+	_, err := processor.store.UpdateRefundOrderToSuccess(ctx, refundOrderID)
+	return err
+}
+
+func (processor *RedisTaskProcessor) markRefundOrderProcessing(ctx context.Context, params db.UpdateRefundOrderToProcessingParams) error {
+	_, err := processor.store.UpdateRefundOrderToProcessing(ctx, params)
+	return err
+}
+
 func refundRequestTotalAmount(paymentAmount, refundAmount int64) int64 {
 	if refundAmount > paymentAmount {
 		return refundAmount
@@ -1646,7 +1661,9 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 	if paymentOrder.PaymentType == "profit_sharing" {
 		profitSharingOrder, err := processor.store.GetProfitSharingOrderByPaymentOrder(ctx, paymentOrder.ID)
 		if err != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("profit sharing order not found"), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("profit sharing order not found")
 		}
 		if profitSharingOrder.RiderAmount > 0 {
@@ -1669,23 +1686,31 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			})
 		}
 		if !profitSharingOrder.SharingOrderID.Valid || profitSharingOrder.SharingOrderID.String == "" {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as failed: %w", dbErr)
+			}
 			return fmt.Errorf("profit sharing order id missing")
 		}
 
 		var operator db.Operator
 		if profitSharingOrder.OperatorCommission > 0 {
 			if !profitSharingOrder.OperatorID.Valid {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return fmt.Errorf("mark refund order as failed: %w", dbErr)
+				}
 				return fmt.Errorf("operator not found for profit sharing")
 			}
 			op, err := processor.store.GetOperator(ctx, profitSharingOrder.OperatorID.Int64)
 			if err != nil {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("get operator: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
 				return fmt.Errorf("get operator: %w", err)
 			}
 			if !op.WechatMchID.Valid || op.WechatMchID.String == "" {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return fmt.Errorf("mark refund order as failed: %w", dbErr)
+				}
 				return fmt.Errorf("operator wechat mchid not configured")
 			}
 			operator = op
@@ -1695,16 +1720,22 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		if profitSharingOrder.RiderAmount > 0 && profitSharingOrder.RiderID.Valid {
 			rider, getRiderErr := processor.store.GetRider(ctx, profitSharingOrder.RiderID.Int64)
 			if getRiderErr != nil {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("get rider: %w", getRiderErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
 				return fmt.Errorf("get rider: %w", getRiderErr)
 			}
 			user, getUserErr := processor.store.GetUser(ctx, rider.UserID)
 			if getUserErr != nil {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("get rider user: %w", getUserErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
 				return fmt.Errorf("get rider user: %w", getUserErr)
 			}
 			if user.WechatOpenid == "" {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return fmt.Errorf("mark refund order as failed: %w", dbErr)
+				}
 				return fmt.Errorf("rider wechat openid not configured")
 			}
 			riderOpenID = user.WechatOpenid
@@ -1822,21 +1853,27 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 		if profitSharingOrder.PlatformCommission > 0 {
 			outReturnNo := fmt.Sprintf("PR%dPL", refundOrder.ID)
 			if err := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, processor.ecommerceClient.GetSpMchID(), "平台分账回退", profitSharingOrder.PlatformCommission); err != nil {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("profit sharing return failed"), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
 				return fmt.Errorf("profit sharing return failed")
 			}
 		}
 		if profitSharingOrder.OperatorCommission > 0 {
 			outReturnNo := fmt.Sprintf("PR%dOP", refundOrder.ID)
 			if err := processReturn(outReturnNo, wechat.ReceiverTypeMerchant, operator.WechatMchID.String, "运营商分账回退", profitSharingOrder.OperatorCommission); err != nil {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("profit sharing return failed"), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
 				return fmt.Errorf("profit sharing return failed")
 			}
 		}
 		if profitSharingOrder.RiderAmount > 0 {
 			outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
 			if err := processReturn(outReturnNo, wechat.ReceiverTypePersonal, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount); err != nil {
-				processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+				if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+					return errors.Join(fmt.Errorf("profit sharing return failed"), fmt.Errorf("mark refund order as failed: %w", dbErr))
+				}
 				return fmt.Errorf("profit sharing return failed")
 			}
 		}
@@ -1858,20 +1895,28 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
 		})
 		if err != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("call wechat ecommerce refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("call wechat ecommerce refund API: %w", err)
 		}
 		switch refundResp.Status {
 		case wechat.RefundStatusSuccess:
-			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderSuccess(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as success: %w", dbErr)
+			}
 			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 		case wechat.RefundStatusProcessing:
-			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 				ID:       refundOrder.ID,
 				RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
-			})
+			}); dbErr != nil {
+				return fmt.Errorf("mark refund order as processing: %w", dbErr)
+			}
 		default:
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as failed: %w", dbErr)
+			}
 		}
 		log.Info().
 			Int64("refund_order_id", refundOrder.ID).
@@ -1888,20 +1933,28 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
 		})
 		if err != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("call wechat refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("call wechat refund API: %w", err)
 		}
 		switch wxRefund.Status {
 		case wechat.RefundStatusSuccess:
-			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderSuccess(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as success: %w", dbErr)
+			}
 			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 		case wechat.RefundStatusProcessing:
-			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 				ID:       refundOrder.ID,
 				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-			})
+			}); dbErr != nil {
+				return fmt.Errorf("mark refund order as processing: %w", dbErr)
+			}
 		default:
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as failed: %w", dbErr)
+			}
 		}
 		log.Info().
 			Int64("refund_order_id", refundOrder.ID).
@@ -1991,21 +2044,29 @@ func (processor *RedisTaskProcessor) processMembershipRechargeRefund(ctx context
 		TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
 	})
 	if err != nil {
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(fmt.Errorf("call wechat membership recharge refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
 		return fmt.Errorf("call wechat membership recharge refund API: %w", err)
 	}
 
 	switch refundResp.Status {
 	case wechat.RefundStatusSuccess:
-		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderSuccess(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("mark refund order as success: %w", dbErr)
+		}
 		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 	case wechat.RefundStatusProcessing:
-		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
 			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: refundResp.RefundID != ""},
-		})
+		}); dbErr != nil {
+			return fmt.Errorf("mark refund order as processing: %w", dbErr)
+		}
 	default:
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("mark refund order as failed: %w", dbErr)
+		}
 	}
 
 	return nil
@@ -2069,21 +2130,29 @@ func (processor *RedisTaskProcessor) processRiderDepositMismatchRefund(ctx conte
 		TotalAmount:  refundRequestTotalAmount(paymentOrder.Amount, payload.RefundAmount),
 	})
 	if err != nil {
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(fmt.Errorf("call wechat rider deposit refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
 		return fmt.Errorf("call wechat rider deposit refund API: %w", err)
 	}
 
 	switch wxRefund.Status {
 	case wechat.RefundStatusSuccess:
-		processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderSuccess(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("mark refund order as success: %w", dbErr)
+		}
 		processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 	case wechat.RefundStatusProcessing:
-		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
 			RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: wxRefund.RefundID != ""},
-		})
+		}); dbErr != nil {
+			return fmt.Errorf("mark refund order as processing: %w", dbErr)
+		}
 	default:
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("mark refund order as failed: %w", dbErr)
+		}
 	}
 
 	return nil
@@ -2188,12 +2257,16 @@ func (processor *RedisTaskProcessor) processReservationRefund(ctx context.Contex
 			return fmt.Errorf("mark reservation refund success: %w", err)
 		}
 	case wechat.RefundStatusProcessing:
-		processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+		if err := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 			ID:       refundOrder.ID,
 			RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
-		})
+		}); err != nil {
+			return fmt.Errorf("mark reservation refund as processing: %w", err)
+		}
 	default:
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if err := processor.markRefundOrderFailed(ctx, refundOrder.ID); err != nil {
+			return fmt.Errorf("mark reservation refund as failed: %w", err)
+		}
 	}
 
 	log.Info().
@@ -2289,32 +2362,42 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 	if paymentOrder.OrderID.Valid {
 		order, orderErr := processor.store.GetOrder(ctx, paymentOrder.OrderID.Int64)
 		if orderErr != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("get order for merchant lookup: %w", orderErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("get order for merchant lookup: %w", orderErr)
 		}
 		merchantID = order.MerchantID
 		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, order.MerchantID)
 		if cfgErr != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("get merchant payment config: %w", cfgErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("get merchant payment config: %w", cfgErr)
 		}
 		subMchID = cfg.SubMchID
 	} else if paymentOrder.ReservationID.Valid {
 		reservation, resErr := processor.store.GetTableReservation(ctx, paymentOrder.ReservationID.Int64)
 		if resErr != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("get reservation for merchant lookup: %w", resErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("get reservation for merchant lookup: %w", resErr)
 		}
 		merchantID = reservation.MerchantID
 		cfg, cfgErr := processor.store.GetMerchantPaymentConfig(ctx, reservation.MerchantID)
 		if cfgErr != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("get merchant payment config: %w", cfgErr), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("get merchant payment config: %w", cfgErr)
 		}
 		subMchID = cfg.SubMchID
 	} else {
 		// 无法确定商户，标记失败并告警（不重试）
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return fmt.Errorf("mark refund order as failed: %w", dbErr)
+		}
 		processor.publishAlert(ctx, AlertData{
 			AlertType:   AlertTypeRefundFailed,
 			Level:       AlertLevelCritical,
@@ -2333,7 +2416,9 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 	}
 
 	if processor.ecommerceClient == nil {
-		processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+		if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+			return errors.Join(fmt.Errorf("ecommerce client not configured"), fmt.Errorf("mark refund order as failed: %w", dbErr))
+		}
 		return fmt.Errorf("ecommerce client not configured")
 	}
 
@@ -2350,28 +2435,36 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 			TotalAmount:   paymentOrder.Amount,
 		})
 		if err != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("call wechat ecommerce refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("call wechat ecommerce refund API: %w", err)
 		}
 		switch refundResp.Status {
 		case wechat.RefundStatusSuccess:
-			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderSuccess(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as success: %w", dbErr)
+			}
 			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", payload.OutRefundNo).
 				Msg("anomaly ecommerce refund completed successfully")
 		case wechat.RefundStatusProcessing:
-			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 				ID:       refundOrder.ID,
 				RefundID: pgtype.Text{String: refundResp.RefundID, Valid: true},
-			})
+			}); dbErr != nil {
+				return fmt.Errorf("mark refund order as processing: %w", dbErr)
+			}
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("refund_id", refundResp.RefundID).
 				Msg("anomaly ecommerce refund in processing, will be updated via refund callback")
 		default:
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as failed: %w", dbErr)
+			}
 			processor.publishAlert(ctx, AlertData{
 				AlertType:   AlertTypeRefundFailed,
 				Level:       AlertLevelCritical,
@@ -2396,28 +2489,36 @@ func (processor *RedisTaskProcessor) ProcessTaskAnomalyRefund(ctx context.Contex
 			TotalAmount:  paymentOrder.Amount,
 		})
 		if err != nil {
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(fmt.Errorf("call wechat refund API: %w", err), fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			return fmt.Errorf("call wechat refund API: %w", err)
 		}
 		switch wxRefund.Status {
 		case wechat.RefundStatusSuccess:
-			processor.store.UpdateRefundOrderToSuccess(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderSuccess(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as success: %w", dbErr)
+			}
 			processor.maybeMarkPaymentOrderRefunded(ctx, paymentOrder.ID, paymentOrder.Amount)
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("out_refund_no", payload.OutRefundNo).
 				Msg("anomaly direct refund completed successfully")
 		case wechat.RefundStatusProcessing:
-			processor.store.UpdateRefundOrderToProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
+			if dbErr := processor.markRefundOrderProcessing(ctx, db.UpdateRefundOrderToProcessingParams{
 				ID:       refundOrder.ID,
 				RefundID: pgtype.Text{String: wxRefund.RefundID, Valid: true},
-			})
+			}); dbErr != nil {
+				return fmt.Errorf("mark refund order as processing: %w", dbErr)
+			}
 			log.Info().
 				Int64("refund_order_id", refundOrder.ID).
 				Str("refund_id", wxRefund.RefundID).
 				Msg("anomaly direct refund in processing, will be updated via refund callback")
 		default:
-			processor.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID)
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return fmt.Errorf("mark refund order as failed: %w", dbErr)
+			}
 			processor.publishAlert(ctx, AlertData{
 				AlertType:   AlertTypeRefundFailed,
 				Level:       AlertLevelCritical,

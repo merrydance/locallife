@@ -1280,7 +1280,9 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 	if err != nil {
 		return nil, fmt.Errorf("create meta part: %w", err)
 	}
-	metaPart.Write(metaBytes)
+	if _, err := metaPart.Write(metaBytes); err != nil {
+		return nil, fmt.Errorf("write meta part: %w", err)
+	}
 
 	// 添加 file 字段
 	contentType := getImageContentType(filename)
@@ -1291,9 +1293,13 @@ func (c *EcommerceClient) UploadImage(ctx context.Context, filename string, file
 	if err != nil {
 		return nil, fmt.Errorf("create file part: %w", err)
 	}
-	filePart.Write(fileData)
+	if _, err := filePart.Write(fileData); err != nil {
+		return nil, fmt.Errorf("write file part: %w", err)
+	}
 
-	writer.Close()
+	if err := writer.Close(); err != nil {
+		return nil, fmt.Errorf("close multipart writer: %w", err)
+	}
 
 	// 发送请求
 	url := wxPayBaseURL + merchantMediaUploadURL

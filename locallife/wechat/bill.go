@@ -5,6 +5,7 @@ import (
 	"compress/gzip"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -15,12 +16,40 @@ import (
 )
 
 const (
-	tradeBillAPIPath              = "/v3/bill/tradebill"
-	refundBillAPIPath             = "/v3/bill/refundbill"
-	ecommerceTradeBillAPIPath     = "/v3/ecommerce/bill/tradebill"
-	ecommerceRefundBillAPIPath    = "/v3/ecommerce/bill/refundbill"
-	wxPayBillAPIBase              = "https://api.mch.weixin.qq.com"
+	tradeBillAPIPath           = "/v3/bill/tradebill"
+	refundBillAPIPath          = "/v3/bill/refundbill"
+	ecommerceTradeBillAPIPath  = "/v3/ecommerce/bill/tradebill"
+	ecommerceRefundBillAPIPath = "/v3/ecommerce/bill/refundbill"
+	wxPayBillAPIBase           = "https://api.mch.weixin.qq.com"
 )
+
+var (
+	ErrBillNotReady = errors.New("wechat bill not ready")
+	ErrBillNotFound = errors.New("wechat bill not found")
+)
+
+type billDownloadStateError struct {
+	Kind  error
+	Cause error
+}
+
+func (e *billDownloadStateError) Error() string {
+	if e.Cause != nil {
+		return e.Cause.Error()
+	}
+	if e.Kind != nil {
+		return e.Kind.Error()
+	}
+	return "wechat bill unavailable"
+}
+
+func (e *billDownloadStateError) Unwrap() []error {
+	if e.Cause == nil {
+		return []error{e.Kind}
+	}
+
+	return []error{e.Kind, e.Cause}
+}
 
 // BillDownloadURLResponse 微信支付账单下载地址响应
 type BillDownloadURLResponse struct {
@@ -100,7 +129,7 @@ func (c *PaymentClient) fetchAndParseBill(
 	// 第一步：获取账单下载 URL
 	respBytes, err := c.doRequest(ctx, http.MethodGet, apiPath, nil)
 	if err != nil {
-		return nil, fmt.Errorf("get bill download url: %w", err)
+		return nil, fmt.Errorf("get bill download url: %w", normalizeBillDownloadURLError(err))
 	}
 	var urlResp BillDownloadURLResponse
 	if err := json.Unmarshal(respBytes, &urlResp); err != nil {
@@ -125,6 +154,28 @@ func (c *PaymentClient) fetchAndParseBill(
 
 	// 第四步：解压并解析 CSV
 	return parseBillGzip(fileBytes, outTradeNoCol, transactionIDCol, amountCol)
+}
+
+func normalizeBillDownloadURLError(err error) error {
+	if err == nil {
+		return nil
+	}
+
+	var wxErr *WechatPayError
+	if errors.As(err, &wxErr) {
+		switch {
+		case wxErr.Code == "STATEMENT_CREATING":
+			return &billDownloadStateError{Kind: ErrBillNotReady, Cause: err}
+		case wxErr.StatusCode == http.StatusNotFound:
+			return &billDownloadStateError{Kind: ErrBillNotFound, Cause: err}
+		}
+	}
+
+	if strings.Contains(err.Error(), "wechat pay api error: status=404") {
+		return &billDownloadStateError{Kind: ErrBillNotFound, Cause: err}
+	}
+
+	return err
 }
 
 // parseBillGzip 解压 gzip 后调用 CSV 解析器

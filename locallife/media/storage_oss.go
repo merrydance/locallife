@@ -3,7 +3,7 @@ package media
 import (
 	"context"
 	"crypto/hmac"
-	"crypto/sha1" //nolint:gosec // OSS POST Policy 规范要求使用 SHA1，无替代选项
+	"crypto/sha1" // #nosec G505 -- OSS POST Policy requires SHA1 by protocol and offers no stronger alternative.
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -83,7 +83,7 @@ func (s *OSSStorage) CreateDirectUpload(_ context.Context, req DirectUploadReque
 	policyB64 := base64.StdEncoding.EncodeToString(policyJSON)
 
 	// HMAC-SHA1 签名（OSS POST Policy 规范固定要求 SHA1）
-	h := hmac.New(sha1.New, []byte(s.accessKeySecret)) //nolint:gosec
+	h := hmac.New(sha1.New, []byte(s.accessKeySecret)) // #nosec G401,G505 -- OSS POST Policy requires HMAC-SHA1 by protocol.
 	h.Write([]byte(policyB64))
 	sig := base64.StdEncoding.EncodeToString(h.Sum(nil))
 

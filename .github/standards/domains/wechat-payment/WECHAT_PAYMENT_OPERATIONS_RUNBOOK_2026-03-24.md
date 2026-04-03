@@ -53,7 +53,7 @@
 
 ### 2.6 每日对账
 
-- 每天 10:00 自动执行 T-1 微信账单对账
+- 每天 10:10 自动执行 T-1 微信账单对账，给微信账单生成留出额外缓冲
 - 覆盖 bill type：`trade`、`ecommerce_trade`、`refund`、`ecommerce_refund`
 - 差异会写入 reconciliation reports，并发布 `BILL_MISMATCH` 平台告警
 
