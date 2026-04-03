@@ -3,7 +3,7 @@ package wechat
 import (
 	"crypto/rand"
 	"crypto/rsa"
-	"crypto/sha256"
+	"crypto/sha1"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/base64"
@@ -361,7 +361,7 @@ func decryptWithPrivateKey(t *testing.T, privateKey *rsa.PrivateKey, ciphertextB
 	ciphertext, err := base64.StdEncoding.DecodeString(ciphertextBase64)
 	require.NoError(t, err)
 
-	plaintext, err := rsa.DecryptOAEP(sha256.New(), rand.Reader, privateKey, ciphertext, nil)
+	plaintext, err := rsa.DecryptOAEP(sha1.New(), rand.Reader, privateKey, ciphertext, nil)
 	require.NoError(t, err)
 
 	return string(plaintext)

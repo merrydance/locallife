@@ -8,6 +8,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
+	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/x509"
 	"encoding/base64"
@@ -632,7 +633,8 @@ func (c *PaymentClient) EncryptSensitiveData(plaintext string) (string, error) {
 		return "", fmt.Errorf("neither platform public key nor platform certificate loaded")
 	}
 
-	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, publicKey, []byte(plaintext), nil)
+	// 微信支付敏感字段加密要求使用 RSAES-OAEP with SHA-1。
+	ciphertext, err := rsa.EncryptOAEP(sha1.New(), rand.Reader, publicKey, []byte(plaintext), nil)
 	if err != nil {
 		return "", fmt.Errorf("encrypt: %w", err)
 	}
