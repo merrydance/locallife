@@ -1,6 +1,6 @@
 .page-container {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: 0 24rpx var(--popup-bottom-padding-md);
   box-sizing: border-box;
   background: var(--td-bg-color-page);
 }
@@ -12,14 +12,6 @@
   justify-content: center;
   gap: 24rpx;
   padding: 140rpx 24rpx;
-}
-
-.retry-button {
-  padding: 18rpx 36rpx;
-  border-radius: 999rpx;
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 26rpx;
 }
 
 .inline-banner {
@@ -34,6 +26,10 @@
 
 .inline-banner-danger {
   background: var(--td-error-color-1);
+}
+
+.inline-banner-success {
+  background: var(--td-success-color-1);
 }
 
 .inline-banner-text {
@@ -134,5 +130,5 @@
 }
 
 .save-wrap {
-  padding-bottom: 32rpx;
+  padding-bottom: var(--popup-bottom-padding-sm);
 }

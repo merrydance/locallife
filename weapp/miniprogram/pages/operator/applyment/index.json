@@ -3,7 +3,6 @@
   "usingComponents": {
     "applyment-bank-form": "/components/applyment-bank-form/index",
     "custom-navbar": "/components/custom-navbar/index",
-    "t-button": "tdesign-miniprogram/button/button",
-    "t-tag": "tdesign-miniprogram/tag/tag"
+    "t-button": "tdesign-miniprogram/button/button"
   }
 }

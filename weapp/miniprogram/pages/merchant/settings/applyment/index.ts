@@ -21,6 +21,17 @@ function canEditApplyment(status?: string) {
   return !status || status === 'not_applied' || status === 'pending' || status === 'rejected' || status === 'rejected_sign'
 }
 
+function resolveCanSubmitApplyment(data: ApplymentStatusResponse) {
+  if (typeof data.can_submit === 'boolean') {
+    return data.can_submit
+  }
+  return canEditApplyment(data.status)
+}
+
+function isCompletedApplyment(status?: string) {
+  return status === 'finish' || status === 'active'
+}
+
 function getApplymentActionLabel(status?: string) {
   if (!hasExistingApplyment(status)) {
     return '填写进件资料'
@@ -47,6 +58,30 @@ function getApplymentActionHint(status?: string) {
   return '当前状态暂不支持重新提交资料，请先刷新状态。'
 }
 
+function getApplymentActionHintFromResponse(data: ApplymentStatusResponse) {
+  if (data.block_reason) {
+    return data.block_reason
+  }
+  return getApplymentActionHint(data.status)
+}
+
+function getApplymentNoticeTheme(status?: string) {
+  if (status === 'rejected' || status === 'rejected_sign') {
+    return 'hint-card-error'
+  }
+  if (status === 'to_be_signed' || status === 'signing') {
+    return 'hint-card-warn'
+  }
+  return 'hint-card-info'
+}
+
+function getApplymentNoticeThemeFromResponse(data: ApplymentStatusResponse) {
+  if (data.block_reason && data.can_submit === false && data.status !== 'to_be_signed' && data.status !== 'signing') {
+    return 'hint-card-warn'
+  }
+  return getApplymentNoticeTheme(data.status)
+}
+
 const getErrorMessage = getErrorUserMessage
 
 Page({
@@ -62,6 +97,8 @@ Page({
     canEditCurrentApplyment: true,
     applymentActionLabel: '填写进件资料',
     applymentActionHint: '',
+    pageNoticeThemeClass: 'hint-card-info',
+    bindBankDraft: null as ApplymentBindBankPayload | null,
     showBindForm: false,
     submittingBind: false,
     refreshingStatus: false
@@ -92,8 +129,13 @@ Page({
     try {
       const data = await getMerchantApplymentStatus()
       const status = data.status || ''
+      if (isCompletedApplyment(status)) {
+        wx.redirectTo({ url: '/pages/merchant/settings/applyment/completed/index' })
+        return
+      }
+
       const exists = hasExistingApplyment(status)
-      const canEdit = canEditApplyment(status)
+      const canEdit = resolveCanSubmitApplyment(data)
 
       this.setData({
         applymentStatus: data,
@@ -103,7 +145,9 @@ Page({
         loadingApplyment: false,
         canEditCurrentApplyment: canEdit,
         applymentActionLabel: getApplymentActionLabel(status),
-        applymentActionHint: getApplymentActionHint(status),
+        applymentActionHint: getApplymentActionHintFromResponse(data),
+        pageNoticeThemeClass: getApplymentNoticeThemeFromResponse(data),
+        bindBankDraft: canEdit ? this.data.bindBankDraft : null,
         showBindForm: canEdit ? this.data.showBindForm : false,
         initialError: false,
         initialErrorMessage: ''
@@ -140,6 +184,10 @@ Page({
     this.setData({ showBindForm: false })
   },
 
+  onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
+    this.setData({ bindBankDraft: e.detail })
+  },
+
   async onSubmitBindBank(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
     if (this.data.submittingBind) return
 
@@ -150,6 +198,7 @@ Page({
       await merchantBindBank(e.detail)
 
       this.setData({
+        bindBankDraft: null,
         showBindForm: false
       })
       await this.loadApplyment(true)
@@ -191,43 +240,5 @@ Page({
 
   onRetry() {
     this.loadApplyment()
-  },
-
-  getApplymentStatusText(status: string): string {
-    const map: Record<string, string> = {
-      submitted: '已提交',
-      bindbank_submitted: '进件审核中',
-      auditing: '审核中',
-      to_be_signed: '待签约',
-      signing: '签约中',
-      finish: '已开通',
-      active: '已开通',
-      rejected: '已拒绝'
-    }
-    return map[status] || status || '未开始'
-  },
-
-  getApplymentStatusTheme(status: string): string {
-    switch (status) {
-      case 'finish':
-      case 'active':
-        return 'success'
-      case 'rejected':
-        return 'danger'
-      case 'to_be_signed':
-      case 'signing':
-        return 'primary'
-      default:
-        return 'warning'
-    }
-  },
-
-  getProgressCurrent(status?: string) {
-    if (!status) return 0
-    if (status === 'submitted' || status === 'bindbank_submitted' || status === 'auditing') return 1
-    if (status === 'to_be_signed' || status === 'signing') return 2
-    if (status === 'finish' || status === 'active') return 3
-    if (status === 'rejected') return 2
-    return 0
   }
 })

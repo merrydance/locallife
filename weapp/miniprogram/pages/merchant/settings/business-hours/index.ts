@@ -158,6 +158,7 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     saving: false,
@@ -215,6 +216,7 @@ Page({
         weeklyHours,
         initialWeeklyHours: cloneWeeklyHours(normalized.weekly),
         specialHours: normalized.special,
+        actionNoticeMessage: '',
         hasChanges: false,
         initialLoading: false,
         initialError: false,
@@ -254,6 +256,7 @@ Page({
     }
 
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
@@ -277,6 +280,7 @@ Page({
     }
 
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
@@ -297,6 +301,7 @@ Page({
     target.slots.push(createSlot())
     target.slots = sortSlots(target.slots)
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
@@ -311,6 +316,7 @@ Page({
 
     target.slots.splice(slotIndex, 1)
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
@@ -359,6 +365,7 @@ Page({
         weeklyHours,
         initialWeeklyHours: cloneWeeklyHours(normalized.weekly),
         specialHours: normalized.special,
+        actionNoticeMessage: '营业时间已保存并同步到门店设置。',
         hasChanges: false
       })
     } catch (err: unknown) {

@@ -1,11 +1,11 @@
 .page-container {
   background-color: var(--td-bg-color-page);
   min-height: 100vh;
-  padding-bottom: 120rpx;
+  padding-bottom: calc(160rpx + var(--safe-area-bottom));
 }
 
 .page-content {
-  padding: var(--spacer-md);
+  padding: 0 var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
   display: flex;
   flex-direction: column;
   gap: var(--spacer-md);

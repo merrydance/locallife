@@ -4,9 +4,8 @@
 }
 
 .content {
-  height: calc(100vh - 88rpx);
   box-sizing: border-box;
-  padding: var(--spacer-md);
+  padding: 0 var(--spacer-md) calc(160rpx + var(--safe-area-bottom));
 }
 
 .state-block {

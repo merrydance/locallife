@@ -485,6 +485,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				var response merchantApplymentStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "pending", response.Status)
+				require.True(t, response.CanSubmit)
 			},
 		},
 		{
@@ -509,6 +510,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "to_be_signed", response.Status)
 				require.NotNil(t, response.SignURL)
+				require.False(t, response.CanSubmit)
 			},
 		},
 		{
@@ -533,6 +535,7 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "finish", response.Status)
 				require.NotNil(t, response.SubMchID)
+				require.False(t, response.CanSubmit)
 			},
 		},
 		{
@@ -553,6 +556,31 @@ func TestGetMerchantApplymentStatusAPI(t *testing.T) {
 				var response merchantApplymentStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "not_applied", response.Status)
+				require.True(t, response.CanSubmit)
+			},
+		},
+		{
+			name: "NoApplyment_SuspendedMerchant",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				testMerchant := merchant
+				testMerchant.Status = "suspended"
+				expectResolveSingleOwnedMerchant(store, user.ID, testMerchant)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response merchantApplymentStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "not_applied", response.Status)
+				require.False(t, response.CanSubmit)
+				require.Equal(t, "当前商户状态不可用，暂不支持提交收付通进件。", response.BlockReason)
 			},
 		},
 		{

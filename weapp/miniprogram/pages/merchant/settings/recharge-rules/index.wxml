@@ -1,15 +1,12 @@
 <custom-navbar title="充值规则管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view class="page-toolbar">
-    <t-button theme="primary" shape="round" size="small" bind:tap="onAddRule">新建规则</t-button>
-  </view>
+<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
 
   <view wx:if="{{loading && !rules.length}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载充值规则中..." vertical />
   </view>
 
-  <t-empty wx:elif="{{!loading && !rules.length}}" description="当前还没有充值规则，点击“新建规则”开始创建" />
+  <t-empty wx:elif="{{!loading && !rules.length}}" description="当前还没有充值规则，点击右下角按钮开始创建" />
 
   <view wx:else class="rule-list">
     <view wx:for="{{rules}}" wx:key="id" class="rule-card">
@@ -30,6 +27,8 @@
       </view>
     </view>
   </view>
+
+  <t-fab icon="add" bind:click="onAddRule" />
 
   <t-popup visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
     <view class="form-popup">
@@ -68,8 +67,8 @@
         </view>
 
         <view class="form-actions">
-          <t-button theme="primary" variant="outline" size="medium" shape="round" bind:tap="onCloseForm">取消</t-button>
-          <t-button theme="primary" size="medium" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
+          <t-button theme="primary" variant="outline" size="large" shape="round" bind:tap="onCloseForm">取消</t-button>
+          <t-button theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
         </view>
       </scroll-view>
     </view>

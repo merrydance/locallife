@@ -1,6 +1,6 @@
 <custom-navbar title="打印机管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
 
   <view wx:if="{{initialLoading}}" class="loading-state">
     <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
@@ -20,96 +20,9 @@
     <view class="section-card">
       <view class="section-header">
         <view>
-          <view class="section-title">异常对账任务</view>
-          <view class="section-desc">云端补偿未完成时，商户可在这里查看并重试同步。</view>
-        </view>
-      </view>
-
-      <t-tabs value="{{currentReconciliationStatus}}" bind:change="onReconciliationTabChange" t-class="reconciliation-tabs">
-        <t-tab-panel label="待处理" value="pending"><view /></t-tab-panel>
-        <t-tab-panel label="已解决" value="resolved"><view /></t-tab-panel>
-      </t-tabs>
-
-      <view wx:if="{{loading && initialLoading}}" class="section-loading">
-        <t-loading theme="circular" size="32rpx" text="同步对账任务中..." />
-      </view>
-
-      <view wx:elif="{{reconciliationError && !reconciliationJobs.length}}" class="section-state-block">
-        <t-empty icon="error-circle" description="{{reconciliationErrorMessage || '对账任务加载失败，请稍后重试'}}" />
-        <t-button theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新加载</t-button>
-      </view>
-
-      <view wx:elif="{{reconciliationJobs.length}}" class="reconciliation-list">
-        <view class="reconciliation-card" wx:for="{{reconciliationJobs}}" wx:key="id">
-          <view class="reconciliation-header">
-            <view class="reconciliation-header-main">
-              <text class="reconciliation-title">{{item.title}}</text>
-              <text class="reconciliation-meta">{{item.printer_name}} · {{item.created_at_label}}</text>
-            </view>
-            <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
-          </view>
-
-          <view class="reconciliation-summary">{{item.summary}}</view>
-
-          <view class="reconciliation-info-row">
-            <text class="reconciliation-label">触发来源</text>
-            <text class="reconciliation-value">{{item.source_action_label}}</text>
-          </view>
-          <view class="reconciliation-info-row">
-            <text class="reconciliation-label">打印机类型</text>
-            <text class="reconciliation-value">{{item.printer_type === 'feieyun' ? '飞鹅云' : item.printer_type === 'yilianyun' ? '易联云' : '其他'}}</text>
-          </view>
-          <view class="reconciliation-info-row">
-            <text class="reconciliation-label">序列号</text>
-            <text class="reconciliation-value reconciliation-sn">{{item.printer_sn}}</text>
-          </view>
-          <view class="reconciliation-info-row">
-            <text class="reconciliation-label">重试次数</text>
-            <text class="reconciliation-value">{{item.retry_count}}</text>
-          </view>
-          <view class="reconciliation-info-row" wx:if="{{item.failure_reason_label}}">
-            <text class="reconciliation-label">异常原因</text>
-            <text class="reconciliation-value reconciliation-multiline">{{item.failure_reason_label}}</text>
-          </view>
-          <view class="reconciliation-info-row" wx:if="{{item.last_error_label}}">
-            <text class="reconciliation-label">最近错误</text>
-            <text class="reconciliation-value reconciliation-multiline">{{item.last_error_label}}</text>
-          </view>
-          <view class="reconciliation-info-row" wx:if="{{item.resolved_at_label}}">
-            <text class="reconciliation-label">解决时间</text>
-            <text class="reconciliation-value">{{item.resolved_at_label}}</text>
-          </view>
-          <view class="reconciliation-info-row">
-            <text class="reconciliation-label">最近更新</text>
-            <text class="reconciliation-value">{{item.updated_at_label}}</text>
-          </view>
-
-          <view wx:if="{{item.can_retry}}" class="reconciliation-actions">
-            <t-button
-              size="small"
-              theme="primary"
-              shape="round"
-              loading="{{retryingReconciliationId === item.id}}"
-              disabled="{{retryingReconciliationId === item.id || !item.can_retry}}"
-              catchtap="onRetryReconciliationJob"
-              data-id="{{item.id}}"
-              data-name="{{item.printer_name}}"
-            >{{item.action_label}}</t-button>
-          </view>
-          <view wx:else class="reconciliation-resolved-hint">任务已完成，无需再次重试</view>
-        </view>
-      </view>
-
-      <view wx:else class="section-empty-hint">{{reconciliationEmptyMessage}}</view>
-    </view>
-
-    <view class="section-card">
-      <view class="section-header">
-        <view>
           <view class="section-title">已接入打印机</view>
           <view class="section-desc">维护打印机基础配置、打印场景与测试动作。</view>
         </view>
-        <t-button size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoPrintAnomalies">打印异常</t-button>
       </view>
 
       <view wx:if="{{printersError && !printers.length}}" class="section-state-block">
@@ -229,8 +142,8 @@
         </view>
 
         <view class="form-actions">
-          <t-button theme="primary" variant="outline" size="medium" bind:tap="onCloseForm" shape="round">取消</t-button>
-          <t-button theme="primary" size="medium" loading="{{formSubmitting}}" bind:tap="onSubmitForm" shape="round">保存</t-button>
+          <t-button theme="primary" variant="outline" size="large" bind:tap="onCloseForm" shape="round">取消</t-button>
+          <t-button theme="primary" size="large" loading="{{formSubmitting}}" bind:tap="onSubmitForm" shape="round">保存</t-button>
         </view>
       </scroll-view>
     </view>
@@ -285,8 +198,8 @@
       </view>
 
       <view class="status-popup-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bind:tap="onCloseStatusPopup">关闭</t-button>
-        <t-button theme="primary" size="medium" shape="round" loading="{{statusLoading}}" bind:tap="onRefreshPrinterStatus">重新查询</t-button>
+        <t-button theme="primary" variant="outline" size="large" shape="round" bind:tap="onCloseStatusPopup">关闭</t-button>
+        <t-button theme="primary" size="large" shape="round" loading="{{statusLoading}}" bind:tap="onRefreshPrinterStatus">重新查询</t-button>
       </view>
     </view>
   </t-popup>

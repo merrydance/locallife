@@ -1,12 +1,10 @@
 <custom-navbar
   title="资金账户"
-  back="{{true}}"
-  home="{{false}}"
-  color="#1f2937"
-  background="#ffffff"
+  showBack="{{true}}"
+  showLocation="{{false}}"
 ></custom-navbar>
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view class="page" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
   <view wx:if="{{loading && !balanceLoaded && !applymentLoaded}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载财务数据中..." vertical />
   </view>
@@ -14,6 +12,7 @@
   <scroll-view
     wx:else
     class="content"
+    style="height: calc(100vh - {{navBarHeight}}px);"
     scroll-y
     refresher-enabled
     bindrefresherrefresh="onPullDownRefresh"

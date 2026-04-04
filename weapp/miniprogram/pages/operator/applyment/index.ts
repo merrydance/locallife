@@ -8,6 +8,7 @@ interface StatusViewModel {
   applymentId: string
   subMchId: string
   rejectReason: string
+  blockReason: string
   signURL: string
   isOpened: boolean
   canSubmitOpenInfo: boolean
@@ -22,6 +23,7 @@ const DEFAULT_STATUS_VIEW: StatusViewModel = {
   applymentId: '-',
   subMchId: '-',
   rejectReason: '-',
+  blockReason: '',
   signURL: '',
   isOpened: false,
   canSubmitOpenInfo: true,
@@ -45,14 +47,18 @@ function buildStatusView(status: OperatorApplymentStatusResponse | null): Status
     to_be_signed: '待签约确认',
     signing: '签约处理中',
     finish: '开户完成',
+    frozen: '已冻结',
     rejected: '开户被拒绝',
     rejected_sign: '签约失败'
   }
   const statusDesc = status.status_desc || statusDescMap[statusCode] || statusCode
-  const isOpened = statusCode === 'finish' && Boolean(status.sub_mch_id)
+  const isOpened = statusCode === 'finish'
   const needsSign = statusCode === 'to_be_signed' || statusCode === 'signing'
   const isInReview = statusCode === 'bindbank_submitted' || statusCode === 'submitted' || statusCode === 'auditing' || needsSign
-  const canSubmitOpenInfo = statusCode === 'pending' || statusCode === 'active' || statusCode === 'rejected' || statusCode === 'rejected_sign'
+  const canSubmitOpenInfo = typeof status.can_submit === 'boolean'
+    ? status.can_submit
+    : (statusCode === 'pending' || statusCode === 'active' || statusCode === 'rejected' || statusCode === 'rejected_sign')
+  const blockReason = status.block_reason || ''
 
   let guideText = '当前尚未开通微信支付商户，请提交必要信息完成开户。'
   if (statusCode === 'rejected' || statusCode === 'rejected_sign') {
@@ -61,8 +67,12 @@ function buildStatusView(status: OperatorApplymentStatusResponse | null): Status
     guideText = '微信支付正在审核开户信息，审核期间无需重复提交。'
   } else if (needsSign) {
     guideText = '微信支付已进入签约阶段，请尽快完成签约确认。'
+  } else if (statusCode === 'frozen') {
+    guideText = blockReason || statusDesc || '当前账号状态不可用，暂不支持提交微信支付开户。'
   } else if (isOpened) {
     guideText = '微信支付商户已开通，可正常经营与提现。'
+  } else if (!canSubmitOpenInfo && blockReason) {
+    guideText = blockReason
   }
 
   return {
@@ -71,6 +81,7 @@ function buildStatusView(status: OperatorApplymentStatusResponse | null): Status
     applymentId: status.applyment_id ? String(status.applyment_id) : '-',
     subMchId: status.sub_mch_id || '-',
     rejectReason: status.reject_reason || '-',
+    blockReason,
     signURL: status.sign_url || '',
     isOpened,
     canSubmitOpenInfo,
@@ -103,7 +114,9 @@ Page({
     navBarHeight: 88,
     loading: true,
     submitting: false,
+    refreshingStatus: false,
     error: '',
+    bindBankDraft: null as ApplymentBindBankPayload | null,
     status: null as OperatorApplymentStatusResponse | null,
     statusView: { ...DEFAULT_STATUS_VIEW }
   },
@@ -125,9 +138,15 @@ Page({
     this.setData({ loading: true, error: '' })
     try {
       const status = await getOperatorApplymentStatus()
+      const statusView = buildStatusView(status)
+      if (statusView.isOpened) {
+        wx.redirectTo({ url: '/pages/operator/applyment/completed/index' })
+        return
+      }
+
       this.setData({
         status,
-        statusView: buildStatusView(status)
+        statusView
       })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '获取开户状态失败，请稍后重试')
@@ -141,8 +160,25 @@ Page({
     }
   },
 
+  async onRefreshStatus() {
+    if (this.data.refreshingStatus || this.data.loading) {
+      return
+    }
+
+    this.setData({ refreshingStatus: true })
+    try {
+      await this.loadStatus()
+    } finally {
+      this.setData({ refreshingStatus: false })
+    }
+  },
+
   onCancelForm() {
     this.setData({ error: '' })
+  },
+
+  onBindDraftChange(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
+    this.setData({ bindBankDraft: e.detail })
   },
 
   async onSubmit(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
@@ -151,6 +187,7 @@ Page({
     this.setData({ submitting: true, error: '' })
     try {
       const resp = await operatorBindBank(e.detail)
+      this.setData({ bindBankDraft: null })
       await this.loadStatus()
 
       const applymentId = resp.applyment_id ? String(resp.applyment_id) : this.data.statusView.applymentId

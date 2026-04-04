@@ -293,6 +293,8 @@ export async function listMerchantSettlementTimeline(
 export interface ApplymentStatusResponse {
   status: string
   status_desc: string
+  can_submit?: boolean
+  block_reason?: string
   sign_url?: string
   sub_mch_id?: string
   reject_reason?: string

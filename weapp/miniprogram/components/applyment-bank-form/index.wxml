@@ -1,7 +1,6 @@
 <view class="bank-form">
   <view class="intro-card">
     <view class="intro-title">填写结算账户</view>
-    <view class="intro-desc">优先输入银行卡号自动识别开户银行；识别不到时，再从本地备选里搜索并按需选择省市支行。</view>
   </view>
 
   <view class="field-group">
@@ -16,23 +15,19 @@
 
   <view class="account-number-row">
     <view class="account-number-main">
-      <t-input label="银行账号" placeholder="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '输入银行卡号后系统会尝试识别开户银行' : '请输入对公银行账户号码'}}" value="{{form.account_number}}" data-field="account_number" bindchange="onTextFieldChange" bindblur="onAccountNumberBlur" />
+      <t-input label="银行账号" placeholder="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '输入完成后自动识别开户银行' : '请输入对公银行账户号码'}}" value="{{form.account_number}}" data-field="account_number" bindchange="onTextFieldChange" bindblur="onAccountNumberBlur" />
     </view>
-    <t-button wx:if="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE'}}" theme="default" variant="outline" shape="round" size="small" loading="{{recognizingBank}}" disabled="{{recognizingBank || form.account_number.length < 8}}" bindtap="onRecognizeBank">识别开户行</t-button>
   </view>
 
   <view class="section-card">
     <view class="section-head">
       <view>
         <view class="section-title">开户银行</view>
-        <view class="section-desc">微信优先识别，对公或识别失败时可手动搜索银行。</view>
       </view>
       <view wx:if="{{loadingBanks}}" class="section-meta">加载中...</view>
     </view>
 
-    <view wx:if="{{recognitionHint}}" class="hint-card hint-card-info">{{recognitionHint}}</view>
-
-    <view wx:if="{{form.bank_alias}}" class="selected-card">
+    <view wx:if="{{form.bank_alias && (form.account_bank !== form.bank_alias || form.need_bank_branch)}}" class="selected-card">
       <view class="selected-row">
         <t-tag theme="primary" variant="light">已选银行</t-tag>
         <view class="selected-name">{{buildSelectedBankLabel(form)}}</view>
@@ -41,83 +36,96 @@
       <view wx:if="{{form.need_bank_branch}}" class="selected-desc">这家银行还需要继续选择开户地址和支行。</view>
     </view>
 
-    <view wx:if="{{recognizedBanks.length > 1}}" class="candidate-block">
-      <view class="candidate-title">识别候选</view>
-      <view class="candidate-list">
-        <block wx:for="{{recognizedBanks}}" wx:key="bank_alias_code">
-          <t-button theme="default" variant="outline" shape="round" size="small" data-index="{{index}}" bindtap="onSelectRecognizedBank">{{buildBankDisplayLabel(item)}}</t-button>
-        </block>
-      </view>
+    <view class="picker-group">
+      <view class="field-label">开户行列表</view>
+      <view class="picker-trigger {{form.bank_alias ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenBankPicker">{{form.bank_alias ? buildSelectedBankLabel(form) : (loadingBanks ? '银行列表加载中...' : '请选择开户行')}}</view>
+      <view wx:if="{{!loadingBanks && !filteredBanks.length}}" class="empty-text">当前暂无可选开户行，请稍后重试。</view>
     </view>
-
-    <t-input label="搜索银行" placeholder="输入银行名称，如招商、工商、微众" value="{{bankKeyword}}" bindchange="onBankKeywordChange" />
-
-    <scroll-view scroll-y class="result-list">
-      <block wx:for="{{filteredBanks}}" wx:key="bank_alias_code">
-        <view class="result-item {{isBankSelected(item) ? 'result-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectBank">
-          <view class="result-main">
-            <view class="result-title">{{buildBankDisplayLabel(item)}}</view>
-            <view class="result-desc">{{item.need_bank_branch ? '还需继续选择开户地址和支行' : '选中后可直接继续填写并提交'}}</view>
-          </view>
-          <view class="result-side">
-            <t-tag wx:if="{{item.need_bank_branch}}" theme="warning" variant="light">需选支行</t-tag>
-            <view wx:if="{{isBankSelected(item)}}" class="result-check">已选</view>
-          </view>
-        </view>
-      </block>
-      <view wx:if="{{!loadingBanks && !filteredBanks.length}}" class="empty-text">没有匹配到银行，请换个关键词再试。</view>
-    </scroll-view>
   </view>
 
   <view wx:if="{{form.need_bank_branch}}" class="section-card">
     <view class="section-head">
       <view>
         <view class="section-title">开户地址和支行</view>
-        <view class="section-desc">仅微信要求时才需要补充此步骤。</view>
       </view>
     </view>
 
     <view class="picker-group">
       <view class="field-label">开户省份</view>
-      <picker mode="selector" range="{{provinces}}" range-key="province_name" value="{{selectedProvinceIndex}}" disabled="{{loadingProvinces || !provinces.length}}" bindchange="onProvinceChange">
-        <view class="picker-trigger {{selectedProvinceCode ? '' : 'picker-trigger--placeholder'}}">{{selectedProvinceCode ? provinces[selectedProvinceIndex].province_name : (loadingProvinces ? '省份加载中...' : '请选择开户省份')}}</view>
-      </picker>
+      <view class="picker-trigger {{selectedProvinceCode ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenProvincePicker">{{selectedProvinceCode ? provinces[selectedProvinceIndex].province_name : (loadingProvinces ? '省份加载中...' : '请选择开户省份')}}</view>
     </view>
 
     <view class="picker-group">
       <view class="field-label">开户城市</view>
-      <picker mode="selector" range="{{cities}}" range-key="city_name" value="{{selectedCityIndex}}" disabled="{{loadingCities || !cities.length}}" bindchange="onCityChange">
-        <view class="picker-trigger {{selectedCityCode ? '' : 'picker-trigger--placeholder'}}">{{selectedCityCode ? cities[selectedCityIndex].city_name : (selectedProvinceCode ? (loadingCities ? '城市加载中...' : '请选择开户城市') : '请先选择省份')}}</view>
-      </picker>
+      <view class="picker-trigger {{selectedCityCode ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenCityPicker">{{selectedCityCode ? cities[selectedCityIndex].city_name : (selectedProvinceCode ? (loadingCities ? '城市加载中...' : '请选择开户城市') : '请先选择省份')}}</view>
     </view>
 
-    <t-input label="搜索支行" placeholder="{{selectedCityCode ? '输入支行名称或联行号' : '请先选择开户城市'}}" value="{{branchKeyword}}" disabled="{{!selectedCityCode}}" bindchange="onBranchKeywordChange" />
-
-    <scroll-view scroll-y class="result-list branch-list">
-      <block wx:for="{{filteredBranches}}" wx:key="bank_branch_id">
-        <view class="result-item {{isBranchSelected(item) ? 'result-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectBranch">
-          <view class="result-main">
-            <view class="result-title">{{item.bank_branch_name}}</view>
-            <view class="result-desc">请选择与你开户资料一致的支行名称</view>
-          </view>
-          <view wx:if="{{isBranchSelected(item)}}" class="result-check">已选</view>
-        </view>
-      </block>
+    <view class="picker-group">
+      <view class="field-label">支行列表</view>
+      <view class="picker-trigger {{form.bank_name ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenBranchPicker">{{form.bank_name ? form.bank_name : (selectedCityCode ? (loadingBranches ? '支行列表加载中...' : '请选择开户支行') : '请先选择开户城市')}}</view>
       <view wx:if="{{loadingBranches}}" class="empty-text">正在加载支行列表...</view>
-      <view wx:if="{{!loadingBranches && selectedCityCode && !filteredBranches.length}}" class="empty-text">当前城市下没有匹配到支行，请换个关键词再试。</view>
-    </scroll-view>
-
-    <view wx:if="{{selectedProvinceCode || selectedCityCode}}" class="selected-card selected-card-plain">
-      <view class="selected-row">
-        <t-tag theme="default" variant="light">开户地区</t-tag>
-        <view class="selected-name">{{selectedProvinceCode ? provinces[selectedProvinceIndex].province_name : ''}}{{selectedCityCode ? ' / ' + cities[selectedCityIndex].city_name : ''}}</view>
-      </view>
+      <view wx:if="{{!loadingBranches && selectedCityCode && !filteredBranches.length}}" class="empty-text">当前城市下暂无可选支行，请确认开户城市后重试。</view>
     </view>
-
-    <view wx:if="{{form.bank_name}}" class="hint-card hint-card-warn">已选择支行：{{form.bank_name}}</view>
   </view>
   <view class="form-actions">
     <t-button theme="primary" size="large" shape="round" block loading="{{submitting}}" disabled="{{submitting || !canSubmit}}" bindtap="onSubmit">{{submitLabel}}</t-button>
     <t-button theme="default" variant="outline" size="large" shape="round" block disabled="{{submitting}}" bindtap="onCancel">取消</t-button>
   </view>
+
+  <t-popup visible="{{showBankPicker}}" placement="bottom" bind:visible-change="onCloseBankPicker">
+    <view class="selector-sheet">
+      <view class="selector-head">
+        <view class="selector-title">选择开户行</view>
+        <t-icon name="close" size="44rpx" bindtap="onCloseBankPicker" />
+      </view>
+      <scroll-view class="selector-list selector-list--bank" scroll-y>
+        <view wx:for="{{filteredBanks}}" wx:key="bank_alias_code" class="selector-item {{form.bank_alias_code === item.bank_alias_code && form.account_bank_code === item.account_bank_code ? 'selector-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectBankOption">
+          <view class="selector-item-title">{{item.bank_alias}}</view>
+          <view wx:if="{{item.account_bank !== item.bank_alias}}" class="selector-item-desc">微信开户银行填写为 {{item.account_bank}}</view>
+        </view>
+      </scroll-view>
+    </view>
+  </t-popup>
+
+  <t-popup visible="{{showProvincePicker}}" placement="bottom" bind:visible-change="onCloseProvincePicker">
+    <view class="selector-sheet">
+      <view class="selector-head">
+        <view class="selector-title">选择开户省份</view>
+        <t-icon name="close" size="44rpx" bindtap="onCloseProvincePicker" />
+      </view>
+      <scroll-view class="selector-list" scroll-y>
+        <view wx:for="{{provinces}}" wx:key="province_code" class="selector-item {{selectedProvinceCode === item.province_code ? 'selector-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectProvinceOption">
+          <view class="selector-item-title">{{item.province_name}}</view>
+        </view>
+      </scroll-view>
+    </view>
+  </t-popup>
+
+  <t-popup visible="{{showCityPicker}}" placement="bottom" bind:visible-change="onCloseCityPicker">
+    <view class="selector-sheet">
+      <view class="selector-head">
+        <view class="selector-title">选择开户城市</view>
+        <t-icon name="close" size="44rpx" bindtap="onCloseCityPicker" />
+      </view>
+      <scroll-view class="selector-list" scroll-y>
+        <view wx:for="{{cities}}" wx:key="city_code" class="selector-item {{selectedCityCode === item.city_code ? 'selector-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectCityOption">
+          <view class="selector-item-title">{{item.city_name}}</view>
+        </view>
+      </scroll-view>
+    </view>
+  </t-popup>
+
+  <t-popup visible="{{showBranchPicker}}" placement="bottom" bind:visible-change="onCloseBranchPicker">
+    <view class="selector-sheet">
+      <view class="selector-head">
+        <view class="selector-title">选择开户支行</view>
+        <t-icon name="close" size="44rpx" bindtap="onCloseBranchPicker" />
+      </view>
+      <scroll-view class="selector-list selector-list--branch" scroll-y>
+        <view wx:for="{{filteredBranches}}" wx:key="bank_branch_id" class="selector-item {{form.bank_branch_id === item.bank_branch_id ? 'selector-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectBranchOption">
+          <view class="selector-item-title">{{item.bank_branch_name}}</view>
+        </view>
+      </scroll-view>
+    </view>
+  </t-popup>
 </view>

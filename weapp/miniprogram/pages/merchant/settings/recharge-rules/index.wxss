@@ -2,7 +2,7 @@
   background: var(--td-bg-color-page);
   min-height: 100vh;
   padding: 24rpx;
-  padding-bottom: 120rpx;
+  padding-bottom: calc(160rpx + var(--safe-area-bottom));
   box-sizing: border-box;
 }
 
@@ -23,12 +23,6 @@
   font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
-}
-
-.page-toolbar {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: var(--spacer-md);
 }
 
 .state-block {

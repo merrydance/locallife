@@ -27,6 +27,18 @@ interface ApplymentBindBankDraft {
   account_name: string
 }
 
+type PartialApplymentBindBankDraft = Partial<ApplymentBindBankDraft>
+
+interface ApplymentBankFormProperties {
+  apiBasePath: string
+  initialDraft?: PartialApplymentBindBankDraft
+  defaultAccountType: ApplymentAccountType
+}
+
+type ApplymentBankViewOption = ApplymentBankOption & {
+  display_label: string
+}
+
 function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankDraft {
   return {
     account_type: accountType,
@@ -41,6 +53,42 @@ function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankD
     account_number: '',
     account_name: ''
   }
+}
+
+function normalizeDraft(
+  accountType: ApplymentAccountType,
+  draft?: PartialApplymentBindBankDraft | null
+): ApplymentBindBankDraft {
+  const base = createEmptyDraft(accountType)
+  if (!draft) {
+    return base
+  }
+
+  const nextAccountType = draft.account_type === 'ACCOUNT_TYPE_PRIVATE' || draft.account_type === 'ACCOUNT_TYPE_BUSINESS'
+    ? draft.account_type
+    : accountType
+
+  return {
+    account_type: nextAccountType,
+    account_bank: typeof draft.account_bank === 'string' ? draft.account_bank : '',
+    account_bank_code: typeof draft.account_bank_code === 'number' ? draft.account_bank_code : 0,
+    bank_alias: typeof draft.bank_alias === 'string' ? draft.bank_alias : '',
+    bank_alias_code: typeof draft.bank_alias_code === 'string' ? draft.bank_alias_code : '',
+    need_bank_branch: Boolean(draft.need_bank_branch),
+    bank_address_code: typeof draft.bank_address_code === 'string' ? draft.bank_address_code : '',
+    bank_branch_id: typeof draft.bank_branch_id === 'string' ? draft.bank_branch_id : '',
+    bank_name: typeof draft.bank_name === 'string' ? draft.bank_name : '',
+    account_number: typeof draft.account_number === 'string' ? draft.account_number : '',
+    account_name: typeof draft.account_name === 'string' ? draft.account_name : ''
+  }
+}
+
+function inferProvinceCode(bankAddressCode: string): number {
+  const cityCode = Number(bankAddressCode)
+  if (!Number.isFinite(cityCode) || cityCode <= 0) {
+    return 0
+  }
+  return Math.floor(cityCode / 10000) * 10000
 }
 
 function normalizeKeyword(value: string): string {
@@ -72,8 +120,39 @@ function buildBankDisplayLabel(bank: ApplymentBankOption): string {
   return `${bank.bank_alias} · 微信开户银行填写为${bank.account_bank}`
 }
 
+function decorateBankOption(bank: ApplymentBankOption): ApplymentBankViewOption {
+  return {
+    ...bank,
+    display_label: buildBankDisplayLabel(bank)
+  }
+}
+
+function decorateBankOptions(banks: ApplymentBankOption[]): ApplymentBankViewOption[] {
+  return banks.map((bank) => decorateBankOption(bank))
+}
+
 function buildSelectedBankLabel(form: ApplymentBindBankDraft): string {
   return form.bank_alias || form.account_bank
+}
+
+function findSelectedBankIndex(banks: ApplymentBankOption[], form: ApplymentBindBankDraft): number {
+  if (!banks.length || !form.bank_alias_code) {
+    return 0
+  }
+
+  const index = banks.findIndex(
+    (bank) => bank.bank_alias_code === form.bank_alias_code && bank.account_bank_code === form.account_bank_code
+  )
+  return index >= 0 ? index : 0
+}
+
+function findSelectedBranchIndex(branches: ApplymentBranchOption[], form: ApplymentBindBankDraft): number {
+  if (!branches.length || !form.bank_branch_id) {
+    return 0
+  }
+
+  const index = branches.findIndex((branch) => branch.bank_branch_id === form.bank_branch_id)
+  return index >= 0 ? index : 0
 }
 
 function canSubmitForm(form: ApplymentBindBankDraft): boolean {
@@ -105,6 +184,10 @@ Component({
       type: String,
       value: ''
     },
+    initialDraft: {
+      type: Object,
+      value: {}
+    },
     defaultAccountType: {
       type: String,
       value: 'ACCOUNT_TYPE_BUSINESS'
@@ -121,13 +204,11 @@ Component({
 
   data: {
     form: createEmptyDraft('ACCOUNT_TYPE_BUSINESS' as ApplymentAccountType),
-    privateBanks: [] as ApplymentBankOption[],
-    businessBanks: [] as ApplymentBankOption[],
-    filteredBanks: [] as ApplymentBankOption[],
+    privateBanks: [] as ApplymentBankViewOption[],
+    businessBanks: [] as ApplymentBankViewOption[],
+    filteredBanks: [] as ApplymentBankViewOption[],
     loadingBanks: false,
     recognizingBank: false,
-    recognizedBanks: [] as ApplymentBankOption[],
-    recognitionHint: '',
     bankKeyword: '',
     provinces: [] as ApplymentProvinceOption[],
     cities: [] as ApplymentCityOption[],
@@ -136,8 +217,14 @@ Component({
     loadingProvinces: false,
     loadingCities: false,
     loadingBranches: false,
+    showBankPicker: false,
+    showProvincePicker: false,
+    showCityPicker: false,
+    showBranchPicker: false,
+    selectedBankIndex: 0,
     selectedProvinceIndex: 0,
     selectedCityIndex: 0,
+    selectedBranchIndex: 0,
     selectedProvinceCode: 0,
     selectedCityCode: 0,
     branchKeyword: '',
@@ -146,20 +233,40 @@ Component({
 
   lifetimes: {
     attached() {
-      const accountType = this.properties.defaultAccountType as ApplymentAccountType
-      this.setData({
-        form: createEmptyDraft(accountType),
-        canSubmit: false
-      })
-      void this.loadBanks(accountType)
+      void this.initializeForm()
     }
   },
 
   methods: {
-    getBanksForType(accountType: ApplymentAccountType): ApplymentBankOption[] {
+    async initializeForm() {
+      const properties = this.properties as unknown as ApplymentBankFormProperties
+      const accountType = properties.defaultAccountType
+      const initialDraft = normalizeDraft(accountType, properties.initialDraft)
+
+      this.setData({
+        form: initialDraft,
+        canSubmit: canSubmitForm(initialDraft)
+      })
+
+      await this.loadBanks(initialDraft.account_type)
+      await this.restoreDraftSelection(initialDraft)
+      this.emitDraftChange(initialDraft)
+    },
+
+    getBanksForType(accountType: ApplymentAccountType): ApplymentBankViewOption[] {
       return accountType === 'ACCOUNT_TYPE_PRIVATE'
-        ? (this.data.privateBanks as ApplymentBankOption[])
-        : (this.data.businessBanks as ApplymentBankOption[])
+        ? (this.data.privateBanks as ApplymentBankViewOption[])
+        : (this.data.businessBanks as ApplymentBankViewOption[])
+    },
+
+    emitDraftChange(nextForm?: ApplymentBindBankDraft) {
+      const form = nextForm || (this.data.form as ApplymentBindBankDraft)
+      this.triggerEvent('draftchange', { ...form })
+    },
+
+    getApiBasePath() {
+      const properties = this.properties as unknown as ApplymentBankFormProperties
+      return properties.apiBasePath
     },
 
     syncCanSubmit(nextForm?: ApplymentBindBankDraft) {
@@ -167,14 +274,72 @@ Component({
       this.setData({ canSubmit: canSubmitForm(form) })
     },
 
+    async restoreDraftSelection(draft: ApplymentBindBankDraft) {
+      if (!draft.need_bank_branch || !draft.bank_alias_code || !draft.bank_address_code) {
+        return
+      }
+
+      await this.ensureProvincesLoaded()
+
+      const provinceCode = inferProvinceCode(draft.bank_address_code)
+      const cityCode = Number(draft.bank_address_code)
+      const provinces = this.data.provinces as ApplymentProvinceOption[]
+      const selectedProvinceIndex = provinces.findIndex((province) => province.province_code === provinceCode)
+
+      if (provinceCode > 0 && selectedProvinceIndex >= 0) {
+        this.setData({
+          selectedProvinceCode: provinceCode,
+          selectedProvinceIndex
+        })
+        await this.loadCities(provinceCode)
+      }
+
+      const cities = this.data.cities as ApplymentCityOption[]
+      const selectedCityIndex = cities.findIndex((city) => city.city_code === cityCode)
+
+      if (cityCode > 0 && selectedCityIndex >= 0) {
+        this.setData({
+          selectedCityCode: cityCode,
+          selectedCityIndex
+        })
+        await this.loadBranches(draft.bank_alias_code, cityCode)
+      }
+
+      if (!draft.bank_branch_id) {
+        return
+      }
+
+      const branches = this.data.branches as ApplymentBranchOption[]
+      const selectedBranchIndex = branches.findIndex((branch) => branch.bank_branch_id === draft.bank_branch_id)
+
+      if (selectedBranchIndex < 0) {
+        return
+      }
+
+      const nextForm: ApplymentBindBankDraft = {
+        ...(this.data.form as ApplymentBindBankDraft),
+        bank_address_code: draft.bank_address_code,
+        bank_branch_id: draft.bank_branch_id,
+        bank_name: draft.bank_name
+      }
+
+      this.setData({
+        form: nextForm,
+        selectedBranchIndex
+      })
+      this.syncCanSubmit(nextForm)
+    },
+
     updateBankFilter(keyword?: string) {
       const nextKeyword = keyword ?? this.data.bankKeyword
       const filteredBanks = this.getBanksForType(this.data.form.account_type)
-        .filter((bank) => bankMatchesKeyword(bank, nextKeyword))
+        .filter((bank: ApplymentBankViewOption) => bankMatchesKeyword(bank, nextKeyword))
+      const selectedBankIndex = findSelectedBankIndex(filteredBanks, this.data.form as ApplymentBindBankDraft)
 
       this.setData({
         bankKeyword: nextKeyword,
-        filteredBanks
+        filteredBanks,
+        selectedBankIndex
       })
     },
 
@@ -182,14 +347,16 @@ Component({
       const nextKeyword = keyword ?? this.data.branchKeyword
       const filteredBranches = (this.data.branches as ApplymentBranchOption[])
         .filter((branch) => branchMatchesKeyword(branch, nextKeyword))
+      const selectedBranchIndex = findSelectedBranchIndex(filteredBranches, this.data.form as ApplymentBindBankDraft)
 
       this.setData({
         branchKeyword: nextKeyword,
-        filteredBranches
+        filteredBranches,
+        selectedBranchIndex
       })
     },
 
-    clearResolvedBankSelection(options?: { keepRecognitionHint?: boolean }) {
+    clearResolvedBankSelection() {
       const currentForm = this.data.form as ApplymentBindBankDraft
       const nextForm: ApplymentBindBankDraft = {
         ...currentForm,
@@ -205,10 +372,14 @@ Component({
 
       this.setData({
         form: nextForm,
-        recognizedBanks: [],
-        recognitionHint: options?.keepRecognitionHint ? this.data.recognitionHint : '',
+        showBankPicker: false,
+        showProvincePicker: false,
+        showCityPicker: false,
+        showBranchPicker: false,
+        selectedBankIndex: 0,
         selectedProvinceIndex: 0,
         selectedCityIndex: 0,
+        selectedBranchIndex: 0,
         selectedProvinceCode: 0,
         selectedCityCode: 0,
         cities: [],
@@ -217,6 +388,7 @@ Component({
         branchKeyword: ''
       })
       this.syncCanSubmit(nextForm)
+      this.emitDraftChange(nextForm)
     },
 
     async loadBanks(accountType: ApplymentAccountType) {
@@ -228,11 +400,12 @@ Component({
 
       this.setData({ loadingBanks: true })
       try {
-        const response = await listApplymentBanks(this.properties.apiBasePath, accountType)
+        const response = await listApplymentBanks(this.getApiBasePath(), accountType)
+        const banks = decorateBankOptions(response.banks)
         if (accountType === 'ACCOUNT_TYPE_PRIVATE') {
-          this.setData({ privateBanks: response.banks })
+          this.setData({ privateBanks: banks })
         } else {
-          this.setData({ businessBanks: response.banks })
+          this.setData({ businessBanks: banks })
         }
         this.updateBankFilter('')
       } catch (error: unknown) {
@@ -252,7 +425,7 @@ Component({
 
       this.setData({ loadingProvinces: true })
       try {
-        const response = await listApplymentProvinces(this.properties.apiBasePath)
+        const response = await listApplymentProvinces(this.getApiBasePath())
         this.setData({ provinces: response.provinces })
       } catch (error: unknown) {
         wx.showToast({
@@ -267,13 +440,14 @@ Component({
     async loadCities(provinceCode: number) {
       this.setData({ loadingCities: true })
       try {
-        const response = await listApplymentCities(this.properties.apiBasePath, provinceCode)
+        const response = await listApplymentCities(this.getApiBasePath(), provinceCode)
         this.setData({
           cities: response.cities,
           selectedCityIndex: 0,
           selectedCityCode: 0,
           branches: [],
           filteredBranches: [],
+          selectedBranchIndex: 0,
           branchKeyword: ''
         })
       } catch (error: unknown) {
@@ -289,7 +463,7 @@ Component({
     async loadBranches(bankAliasCode: string, cityCode: number) {
       this.setData({ loadingBranches: true })
       try {
-        const response = await listApplymentBankBranches(this.properties.apiBasePath, bankAliasCode, cityCode)
+        const response = await listApplymentBankBranches(this.getApiBasePath(), bankAliasCode, cityCode)
         const nextForm: ApplymentBindBankDraft = {
           ...(this.data.form as ApplymentBindBankDraft),
           account_bank: response.account_bank || this.data.form.account_bank,
@@ -305,9 +479,11 @@ Component({
           form: nextForm,
           branches: response.branches,
           filteredBranches: response.branches,
+          selectedBranchIndex: 0,
           branchKeyword: ''
         })
         this.syncCanSubmit(nextForm)
+        this.emitDraftChange(nextForm)
       } catch (error: unknown) {
         wx.showToast({
           title: getErrorUserMessage(error, '加载支行失败，请稍后重试'),
@@ -335,14 +511,18 @@ Component({
 
       this.setData({
         form: nextForm,
-        recognizedBanks: [],
-        recognitionHint: '',
         bankKeyword: '',
         filteredBanks: this.getBanksForType(accountType),
+        showBankPicker: false,
+        showProvincePicker: false,
+        showCityPicker: false,
+        showBranchPicker: false,
+        selectedBankIndex: 0,
         provinces: [],
         cities: [],
         branches: [],
         filteredBranches: [],
+        selectedBranchIndex: 0,
         selectedProvinceIndex: 0,
         selectedCityIndex: 0,
         selectedProvinceCode: 0,
@@ -350,9 +530,10 @@ Component({
         branchKeyword: ''
       })
       this.syncCanSubmit(nextForm)
+      this.emitDraftChange(nextForm)
     },
 
-    async applySelectedBank(bank: ApplymentBankOption, hint?: string) {
+    async applySelectedBank(bank: ApplymentBankViewOption) {
       const currentForm = this.data.form as ApplymentBindBankDraft
       const nextForm: ApplymentBindBankDraft = {
         ...currentForm,
@@ -365,19 +546,28 @@ Component({
         bank_branch_id: bank.need_bank_branch ? currentForm.bank_branch_id : '',
         bank_name: bank.need_bank_branch ? currentForm.bank_name : ''
       }
+      const nextBankKeyword = bankMatchesKeyword(bank, this.data.bankKeyword) ? this.data.bankKeyword : ''
+      const filteredBanks = this.getBanksForType(nextForm.account_type)
+        .filter((item: ApplymentBankViewOption) => bankMatchesKeyword(item, nextBankKeyword))
+      const selectedBankIndex = findSelectedBankIndex(filteredBanks, nextForm)
 
       this.setData({
         form: nextForm,
-        recognitionHint: hint || (bank.need_bank_branch ? '这家银行还需要继续选择开户地址和支行。' : '开户银行已确定，可直接继续填写并提交。')
+        bankKeyword: nextBankKeyword,
+        filteredBanks,
+        selectedBankIndex
       })
       this.syncCanSubmit(nextForm)
+      this.emitDraftChange(nextForm)
 
       if (bank.need_bank_branch) {
         await this.ensureProvincesLoaded()
       } else {
         this.setData({
+          selectedBankIndex: 0,
           selectedProvinceIndex: 0,
           selectedCityIndex: 0,
+          selectedBranchIndex: 0,
           selectedProvinceCode: 0,
           selectedCityCode: 0,
           cities: [],
@@ -415,10 +605,14 @@ Component({
 
         this.setData({
           form: nextForm,
-          recognizedBanks: [],
-          recognitionHint: '',
+          showBankPicker: false,
+          showProvincePicker: false,
+          showCityPicker: false,
+          showBranchPicker: false,
+          selectedBankIndex: 0,
           selectedProvinceIndex: 0,
           selectedCityIndex: 0,
+          selectedBranchIndex: 0,
           selectedProvinceCode: 0,
           selectedCityCode: 0,
           cities: [],
@@ -427,19 +621,19 @@ Component({
           branchKeyword: ''
         })
         this.syncCanSubmit(nextForm)
+        this.emitDraftChange(nextForm)
+        this.updateBankFilter('')
         return
       }
 
       this.setData({ form: nextForm })
       this.syncCanSubmit(nextForm)
+      this.emitDraftChange(nextForm)
     },
 
     async onAccountTypeChange(e: WechatMiniprogram.CustomEvent<{ value: ApplymentAccountType }>) {
       const accountType = e.detail.value as ApplymentAccountType
       this.resetBankSelection(accountType)
-      if (accountType === 'ACCOUNT_TYPE_BUSINESS') {
-        this.setData({ recognitionHint: '对公账户暂不支持卡号自动识别，请直接在下方选择开户银行。' })
-      }
       await this.loadBanks(accountType)
     },
 
@@ -466,32 +660,34 @@ Component({
       const form = this.data.form as ApplymentBindBankDraft
       const accountNumber = form.account_number.trim()
       if (form.account_type !== 'ACCOUNT_TYPE_PRIVATE' || accountNumber.length < 8) {
-        wx.showToast({ title: '请输入至少 8 位银行卡号后再识别', icon: 'none' })
         return
       }
 
       this.clearResolvedBankSelection()
       this.setData({
         recognizingBank: true,
-        recognizedBanks: [],
-        recognitionHint: ''
+        selectedBankIndex: 0
       })
 
       try {
-        const response = await searchApplymentBanksByAccount(this.properties.apiBasePath, form.account_type, accountNumber)
-        this.setData({ recognizedBanks: response.matches })
+        const response = await searchApplymentBanksByAccount(this.getApiBasePath(), form.account_type, accountNumber)
+        const matches = decorateBankOptions(response.matches)
 
-        if (response.matches.length === 1) {
-          await this.applySelectedBank(response.matches[0], '已根据银行卡号自动识别并回填开户银行，请核对后继续。')
+        if (matches.length === 1) {
+          await this.applySelectedBank(matches[0])
           return
         }
 
-        if (response.matches.length > 1) {
-          this.setData({ recognitionHint: `系统没法仅靠卡号精确定位开户银行，已帮你缩小到 ${response.matches.length} 家候选，请手动确认具体银行。` })
+        if (matches.length > 1) {
+          this.setData({
+            filteredBanks: matches,
+            showBankPicker: true,
+            selectedBankIndex: 0
+          })
           return
         }
 
-        this.setData({ recognitionHint: '暂时无法自动识别开户银行，请在下方银行列表中手动选择。' })
+        this.updateBankFilter('')
       } catch (error: unknown) {
         wx.showToast({
           title: getErrorUserMessage(error, '识别开户银行失败，请稍后重试'),
@@ -502,28 +698,48 @@ Component({
       }
     },
 
-    async onSelectRecognizedBank(e: WechatMiniprogram.BaseEvent) {
+    async onOpenBankPicker() {
+      if (this.data.loadingBanks || !(this.data.filteredBanks as ApplymentBankViewOption[]).length) {
+        return
+      }
+      this.setData({ showBankPicker: true })
+    },
+
+    onCloseBankPicker() {
+      this.setData({ showBankPicker: false })
+    },
+
+    async onSelectBankOption(e: WechatMiniprogram.BaseEvent) {
       const index = Number(e.currentTarget.dataset.index)
-      const bank = (this.data.recognizedBanks as ApplymentBankOption[])[index]
+      const bank = (this.data.filteredBanks as ApplymentBankViewOption[])[index]
       if (!bank) {
+        this.onCloseBankPicker()
         return
       }
       await this.applySelectedBank(bank)
+      this.onCloseBankPicker()
     },
 
-    async onSelectBank(e: WechatMiniprogram.BaseEvent) {
-      const index = Number(e.currentTarget.dataset.index)
-      const bank = (this.data.filteredBanks as ApplymentBankOption[])[index]
-      if (!bank) {
+    async onOpenProvincePicker() {
+      if (!this.data.form.need_bank_branch) {
         return
       }
-      await this.applySelectedBank(bank)
+      await this.ensureProvincesLoaded()
+      if (!(this.data.provinces as ApplymentProvinceOption[]).length) {
+        return
+      }
+      this.setData({ showProvincePicker: true })
     },
 
-    async onProvinceChange(e: WechatMiniprogram.PickerChange) {
-      const selectedIndex = Number(e.detail.value)
+    onCloseProvincePicker() {
+      this.setData({ showProvincePicker: false })
+    },
+
+    async onSelectProvinceOption(e: WechatMiniprogram.BaseEvent) {
+      const selectedIndex = Number(e.currentTarget.dataset.index)
       const province = (this.data.provinces as ApplymentProvinceOption[])[selectedIndex]
       if (!province) {
+        this.onCloseProvincePicker()
         return
       }
 
@@ -540,19 +756,34 @@ Component({
         form: nextForm,
         selectedCityIndex: 0,
         selectedCityCode: 0,
+        selectedBranchIndex: 0,
         cities: [],
         branches: [],
         filteredBranches: [],
         branchKeyword: ''
       })
       this.syncCanSubmit(nextForm)
+      this.emitDraftChange(nextForm)
       await this.loadCities(province.province_code)
+      this.onCloseProvincePicker()
     },
 
-    async onCityChange(e: WechatMiniprogram.PickerChange) {
-      const selectedIndex = Number(e.detail.value)
+    onOpenCityPicker() {
+      if (!this.data.selectedProvinceCode || !(this.data.cities as ApplymentCityOption[]).length) {
+        return
+      }
+      this.setData({ showCityPicker: true })
+    },
+
+    onCloseCityPicker() {
+      this.setData({ showCityPicker: false })
+    },
+
+    async onSelectCityOption(e: WechatMiniprogram.BaseEvent) {
+      const selectedIndex = Number(e.currentTarget.dataset.index)
       const city = (this.data.cities as ApplymentCityOption[])[selectedIndex]
       if (!city) {
+        this.onCloseCityPicker()
         return
       }
 
@@ -569,19 +800,34 @@ Component({
         form: nextForm,
         branches: [],
         filteredBranches: [],
+        selectedBranchIndex: 0,
         branchKeyword: ''
       })
       this.syncCanSubmit(nextForm)
+      this.emitDraftChange(nextForm)
 
       if (nextForm.bank_alias_code) {
         await this.loadBranches(nextForm.bank_alias_code, city.city_code)
       }
+      this.onCloseCityPicker()
     },
 
-    onSelectBranch(e: WechatMiniprogram.BaseEvent) {
+    onOpenBranchPicker() {
+      if (!this.data.selectedCityCode || !(this.data.filteredBranches as ApplymentBranchOption[]).length) {
+        return
+      }
+      this.setData({ showBranchPicker: true })
+    },
+
+    onCloseBranchPicker() {
+      this.setData({ showBranchPicker: false })
+    },
+
+    onSelectBranchOption(e: WechatMiniprogram.BaseEvent) {
       const index = Number(e.currentTarget.dataset.index)
       const branch = (this.data.filteredBranches as ApplymentBranchOption[])[index]
       if (!branch) {
+        this.onCloseBranchPicker()
         return
       }
 
@@ -592,8 +838,13 @@ Component({
         bank_name: branch.bank_branch_name
       }
 
-      this.setData({ form: nextForm })
+      this.setData({
+        form: nextForm,
+        selectedBranchIndex: index
+      })
       this.syncCanSubmit(nextForm)
+      this.emitDraftChange(nextForm)
+      this.onCloseBranchPicker()
     },
 
     onCancel() {
@@ -626,15 +877,6 @@ Component({
 
     buildBankDisplayLabel,
 
-    buildSelectedBankLabel,
-
-    isBankSelected(bank: ApplymentBankOption): boolean {
-      const form = this.data.form as ApplymentBindBankDraft
-      return form.bank_alias_code === bank.bank_alias_code && form.account_bank_code === bank.account_bank_code
-    },
-
-    isBranchSelected(branch: ApplymentBranchOption): boolean {
-      return this.data.form.bank_branch_id === branch.bank_branch_id
-    }
+    buildSelectedBankLabel
   }
 })

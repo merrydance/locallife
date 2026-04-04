@@ -34885,6 +34885,14 @@ const docTemplate = `{
         "api.merchantApplymentStatusResponse": {
             "type": "object",
             "properties": {
+                "block_reason": {
+                    "description": "不允许提交时的阻塞原因",
+                    "type": "string"
+                },
+                "can_submit": {
+                    "description": "是否允许提交或重新提交进件",
+                    "type": "boolean"
+                },
                 "reject_reason": {
                     "description": "拒绝原因",
                     "type": "string"
@@ -36081,6 +36089,14 @@ const docTemplate = `{
                 "applyment_id": {
                     "description": "微信进件ID",
                     "type": "integer"
+                },
+                "block_reason": {
+                    "description": "不允许提交时的阻塞原因",
+                    "type": "string"
+                },
+                "can_submit": {
+                    "description": "是否允许提交或重新提交进件",
+                    "type": "boolean"
                 },
                 "created_at": {
                     "type": "string"

@@ -1,7 +1,7 @@
 .page-container {
   background-color: var(--td-bg-color-page);
   min-height: 100vh;
-  padding-bottom: 120rpx;
+  padding-bottom: calc(160rpx + var(--safe-area-bottom));
 }
 
 .tabs-container {
@@ -10,7 +10,7 @@
 }
 
 .content-section {
-  padding: 32rpx 24rpx;
+  padding: 0 24rpx calc(var(--spacer-lg) + var(--safe-area-bottom));
 }
 
 .table-grid {

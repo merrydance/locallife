@@ -473,6 +473,8 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 type merchantApplymentStatusResponse struct {
 	Status       string  `json:"status"`                  // 状态
 	StatusDesc   string  `json:"status_desc"`             // 状态描述
+	CanSubmit    bool    `json:"can_submit"`              // 是否允许提交或重新提交进件
+	BlockReason  string  `json:"block_reason,omitempty"`  // 不允许提交时的阻塞原因
 	SignURL      *string `json:"sign_url,omitempty"`      // 签约链接
 	SubMchID     *string `json:"sub_mch_id,omitempty"`    // 二级商户号
 	RejectReason *string `json:"reject_reason,omitempty"` // 拒绝原因
@@ -512,9 +514,12 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	if err != nil {
 		if isNotFoundError(err) {
 			status := mapMerchantStatusToApplymentStatus(merchant.Status)
+			canSubmit, blockReason := getMerchantApplymentSubmitCapability(merchant.Status, status)
 			ctx.JSON(http.StatusOK, merchantApplymentStatusResponse{
-				Status:     status,
-				StatusDesc: getApplymentStatusDesc(status),
+				Status:      status,
+				StatusDesc:  getApplymentStatusDesc(status),
+				CanSubmit:   canSubmit,
+				BlockReason: blockReason,
 			})
 			return
 		}
@@ -572,9 +577,12 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 	}
 
 	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
+	canSubmit, blockReason := getMerchantApplymentSubmitCapability(merchant.Status, normalizedStatus)
 	resp := merchantApplymentStatusResponse{
-		Status:     normalizedStatus,
-		StatusDesc: getApplymentStatusDesc(normalizedStatus),
+		Status:      normalizedStatus,
+		StatusDesc:  getApplymentStatusDesc(normalizedStatus),
+		CanSubmit:   canSubmit,
+		BlockReason: blockReason,
 	}
 
 	if applyment.SignUrl.Valid && applyment.SignUrl.String != "" {
@@ -1286,12 +1294,24 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 type operatorApplymentStatusResponse struct {
 	Status       string    `json:"status"`                  // 状态
 	StatusDesc   string    `json:"status_desc"`             // 状态描述
+	CanSubmit    bool      `json:"can_submit"`              // 是否允许提交或重新提交进件
+	BlockReason  string    `json:"block_reason,omitempty"`  // 不允许提交时的阻塞原因
 	ApplymentID  *int64    `json:"applyment_id,omitempty"`  // 微信进件ID
 	SubMchID     string    `json:"sub_mch_id,omitempty"`    // 二级商户号（开户成功后返回）
 	SignURL      *string   `json:"sign_url,omitempty"`      // 签约链接
 	RejectReason string    `json:"reject_reason,omitempty"` // 拒绝原因
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+}
+
+func getOperatorApplymentStatusDesc(status string, canSubmit bool) string {
+	if status == "active" && canSubmit {
+		return "可提交开户信息"
+	}
+	if status == "frozen" && !canSubmit {
+		return "当前账号状态不可用"
+	}
+	return getApplymentStatusDesc(status)
 }
 
 // getOperatorApplymentStatus godoc
@@ -1329,16 +1349,20 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	if err != nil {
 		if isNotFoundError(err) {
 			status := mapOperatorStatusToApplymentStatus(operator.Status)
+			canSubmit, blockReason := getOperatorApplymentSubmitCapability(operator.Status, status)
+			statusDesc := getOperatorApplymentStatusDesc(status, canSubmit)
 			updatedAt := operator.CreatedAt
 			if operator.UpdatedAt.Valid {
 				updatedAt = operator.UpdatedAt.Time
 			}
 
 			ctx.JSON(http.StatusOK, operatorApplymentStatusResponse{
-				Status:     status,
-				StatusDesc: getApplymentStatusDesc(status),
-				CreatedAt:  operator.CreatedAt,
-				UpdatedAt:  updatedAt,
+				Status:      status,
+				StatusDesc:  statusDesc,
+				CanSubmit:   canSubmit,
+				BlockReason: blockReason,
+				CreatedAt:   operator.CreatedAt,
+				UpdatedAt:   updatedAt,
 			})
 			return
 		}
@@ -1394,11 +1418,16 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 		}
 	}
 
+	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
+	canSubmit, blockReason := getOperatorApplymentSubmitCapability(operator.Status, normalizedStatus)
+	statusDesc := getOperatorApplymentStatusDesc(normalizedStatus, canSubmit)
 	resp := operatorApplymentStatusResponse{
-		Status:     normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != ""),
-		StatusDesc: getApplymentStatusDesc(normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")),
-		CreatedAt:  applyment.CreatedAt,
-		UpdatedAt:  applyment.UpdatedAt,
+		Status:      normalizedStatus,
+		StatusDesc:  statusDesc,
+		CanSubmit:   canSubmit,
+		BlockReason: blockReason,
+		CreatedAt:   applyment.CreatedAt,
+		UpdatedAt:   applyment.UpdatedAt,
 	}
 
 	if applyment.ApplymentID.Valid {
@@ -1424,6 +1453,55 @@ func normalizeApplymentStatus(status string, hasSubMchID bool) string {
 	return status
 }
 
+func getMerchantApplymentSubmitCapability(merchantStatus, applymentStatus string) (bool, string) {
+	switch applymentStatus {
+	case "not_applied", "pending", "rejected", "rejected_sign":
+		if merchantStatus == "approved" || merchantStatus == "pending_bindbank" {
+			return true, ""
+		}
+		if merchantStatus == "active" {
+			return false, "当前账户已开通，无需重复提交进件资料。"
+		}
+		if merchantStatus == "suspended" || merchantStatus == "expired" {
+			return false, "当前商户状态不可用，暂不支持提交收付通进件。"
+		}
+		return false, "当前商户状态暂不支持提交收付通进件。"
+	case "submitted", "auditing", "bindbank_submitted":
+		return false, "当前资料正在审核中，暂不支持重复提交。"
+	case "to_be_signed", "signing":
+		return false, "当前已进入微信签约环节，请先完成签约。"
+	case "finish", "active":
+		return false, "当前账户已开通，无需重复提交进件资料。"
+	case "frozen":
+		return false, "当前进件状态不可用，暂不支持提交收付通进件。"
+	default:
+		return false, "当前状态暂不支持提交收付通进件。"
+	}
+}
+
+func getOperatorApplymentSubmitCapability(operatorStatus, applymentStatus string) (bool, string) {
+	switch applymentStatus {
+	case "pending", "active", "rejected", "rejected_sign":
+		if operatorStatus == "active" || operatorStatus == "bindbank_submitted" {
+			return true, ""
+		}
+		if operatorStatus == "suspended" || operatorStatus == "expired" {
+			return false, "当前运营商状态不可用，暂不支持提交微信支付开户。"
+		}
+		return false, "当前运营商状态暂不支持提交微信支付开户。"
+	case "submitted", "auditing", "bindbank_submitted":
+		return false, "微信支付正在审核开户信息，审核期间无需重复提交。"
+	case "to_be_signed", "signing":
+		return false, "微信支付已进入签约阶段，请先完成签约确认。"
+	case "finish":
+		return false, "微信支付商户已开通，无需重复提交开户信息。"
+	case "frozen":
+		return false, "当前运营商状态不可用，暂不支持提交微信支付开户。"
+	default:
+		return false, "当前状态暂不支持提交微信支付开户。"
+	}
+}
+
 func mapMerchantStatusToApplymentStatus(merchantStatus string) string {
 	switch merchantStatus {
 	case "bindbank_submitted":
@@ -1439,8 +1517,12 @@ func mapOperatorStatusToApplymentStatus(operatorStatus string) string {
 	switch operatorStatus {
 	case "bindbank_submitted":
 		return "submitted"
+	case "active":
+		return "active"
+	case "suspended", "expired":
+		return "frozen"
 	default:
-		// active / suspended / expired: 尚未发起或不再需要绑卡
+		// 其他状态视为尚未进入进件流程
 		return "pending"
 	}
 }

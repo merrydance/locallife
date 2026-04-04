@@ -1,6 +1,6 @@
 .page-container {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: 0 24rpx var(--popup-bottom-padding-md);
   box-sizing: border-box;
   background: var(--td-bg-color-page);
 }
@@ -235,9 +235,11 @@
 }
 
 .invite-code {
-  font-size: 48rpx;
+  font-size: 40rpx;
   font-weight: 700;
   letter-spacing: 2rpx;
+  text-align: center;
+  word-break: break-all;
 }
 
 .invite-expire,

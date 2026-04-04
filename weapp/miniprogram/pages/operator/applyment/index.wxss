@@ -68,6 +68,22 @@
   color: var(--td-warning-color-7);
 }
 
+.sign-url {
+  margin-bottom: var(--spacer-sm);
+  padding: 16rpx 20rpx;
+  border-radius: var(--radius-md);
+  background: rgba(0, 0, 0, 0.04);
+  word-break: break-all;
+  font-family: monospace;
+  color: var(--td-brand-color-9);
+}
+
+.action-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
+}
+
 .field-label {
   margin-bottom: var(--spacer-xs);
   font-size: var(--font-size-sm);

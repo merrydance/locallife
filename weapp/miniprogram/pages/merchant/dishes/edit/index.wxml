@@ -87,7 +87,7 @@
 
     <view class="card">
       <view class="section-title">规格与加价</view>
-      <view class="helper-text">用于配置用户端可选规格、必选项和附加价格。</view>
+      <view class="helper-text">先添加规格组，再在组内添加规格项，层级会更清晰。</view>
 
       <view wx:if="{{customizationGroups.length === 0}}" class="spec-empty">
         当前还没有规格组，适合用于份量、辣度、加料等经营选项。
@@ -100,6 +100,22 @@
         wx:for-index="groupIndex"
         class="spec-group"
       >
+        <view class="spec-group-top">
+          <view class="spec-group-summary">
+            <text class="spec-group-badge">规格组 {{groupIndex + 1}}</text>
+            <text class="spec-group-meta">{{group.options.length}} 个规格项</text>
+          </view>
+          <view class="spec-required-toggle">
+            <text class="spec-required-label">必选</text>
+            <t-switch
+              size="small"
+              value="{{group.is_required}}"
+              data-group-index="{{groupIndex}}"
+              bind:change="onCustomizationGroupRequiredChange"
+            />
+          </view>
+        </view>
+
         <view class="spec-group-header">
           <input
             class="spec-group-name"
@@ -108,72 +124,83 @@
             data-group-index="{{groupIndex}}"
             bindinput="onCustomizationGroupNameInput"
           />
-          <view class="spec-group-tools">
-            <view class="spec-required-toggle">
-              <text class="spec-required-label">必选</text>
-              <t-switch
-                size="small"
-                value="{{group.is_required}}"
-                data-group-index="{{groupIndex}}"
-                bind:change="onCustomizationGroupRequiredChange"
-              />
-            </view>
-            <t-button
-              size="small"
-              theme="danger"
-              variant="text"
-              data-group-index="{{groupIndex}}"
-              bindtap="onRemoveCustomizationGroup"
-            >删除分组</t-button>
-          </view>
+        </view>
+
+        <view class="spec-option-header">
+          <text class="spec-option-header-title">规格项</text>
+          <text class="spec-option-header-desc">每个规格项可单独设置加价</text>
         </view>
 
         <view class="spec-options">
+          <view wx:if="{{group.options.length === 0}}" class="spec-option-empty">
+            <text>当前组还没有规格项，请先添加一个选项。</text>
+            <text class="spec-submit-hint">至少添加一个规格项后才能提交。</text>
+          </view>
+
           <view
             wx:for="{{group.options}}"
             wx:key="key"
             wx:for-item="option"
             wx:for-index="optionIndex"
-            class="spec-option-row"
+            class="spec-option-card"
           >
-            <input
-              class="spec-option-name"
-              placeholder="规格选项，例如：大份 / 微辣"
-              value="{{option.name}}"
-              data-group-index="{{groupIndex}}"
-              data-option-index="{{optionIndex}}"
-              bindinput="onCustomizationOptionNameInput"
-            />
-            <input
-              class="spec-option-price"
-              type="digit"
-              placeholder="加价(元)"
-              value="{{option.extraPriceYuan}}"
-              data-group-index="{{groupIndex}}"
-              data-option-index="{{optionIndex}}"
-              bindinput="onCustomizationOptionPriceInput"
-            />
-            <t-button
-              size="small"
-              theme="danger"
-              variant="text"
-              data-group-index="{{groupIndex}}"
-              data-option-index="{{optionIndex}}"
-              bindtap="onRemoveCustomizationOption"
-            >删除</t-button>
+            <view class="spec-option-card-header">
+              <text class="spec-option-index">规格项 {{optionIndex + 1}}</text>
+              <t-button
+                size="small"
+                theme="danger"
+                variant="text"
+                data-group-index="{{groupIndex}}"
+                data-option-index="{{optionIndex}}"
+                bindtap="onRemoveCustomizationOption"
+              >删除规格项</t-button>
+            </view>
+
+            <view class="spec-option-fields">
+              <input
+                class="spec-option-name"
+                placeholder="规格选项，例如：大份 / 微辣"
+                value="{{option.name}}"
+                data-group-index="{{groupIndex}}"
+                data-option-index="{{optionIndex}}"
+                bindinput="onCustomizationOptionNameInput"
+              />
+              <input
+                class="spec-option-price"
+                type="digit"
+                placeholder="加价(元)"
+                value="{{option.extraPriceYuan}}"
+                data-group-index="{{groupIndex}}"
+                data-option-index="{{optionIndex}}"
+                bindinput="onCustomizationOptionPriceInput"
+              />
+            </view>
           </view>
         </view>
 
-        <t-button
-          size="small"
-          theme="primary"
-          variant="outline"
-          data-group-index="{{groupIndex}}"
-          bindtap="onAddCustomizationOption"
-        >添加规格选项</t-button>
+        <view class="spec-group-actions">
+          <t-button
+            size="small"
+            theme="primary"
+            variant="outline"
+            data-group-index="{{groupIndex}}"
+            bindtap="onAddCustomizationOption"
+          >添加规格项</t-button>
+          <t-button
+            size="small"
+            theme="danger"
+            variant="outline"
+            data-group-index="{{groupIndex}}"
+            bindtap="onRemoveCustomizationGroup"
+          >删除整个规格组</t-button>
+        </view>
+
+        <view wx:if="{{group.options.length === 0}}" class="spec-group-note">
+          先补充规格项，再提交菜品。
+        </view>
       </view>
 
-      <t-button theme="primary" variant="outline" bindtap="onAddCustomizationGroup">
+      <t-button theme="primary" variant="outline" block bindtap="onAddCustomizationGroup">
         添加规格组
       </t-button>
     </view>

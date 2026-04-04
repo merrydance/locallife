@@ -529,6 +529,7 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "pending", response.Status)
 				require.Equal(t, "待提交", response.StatusDesc)
+				require.True(t, response.CanSubmit)
 			},
 		},
 		{
@@ -556,6 +557,7 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "finish", response.Status)
 				require.NotNil(t, response.SubMchID)
+				require.False(t, response.CanSubmit)
 			},
 		},
 		{
@@ -583,6 +585,7 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, "submitted", response.Status)
 				require.Empty(t, response.SubMchID)
+				require.False(t, response.CanSubmit)
 			},
 		},
 		{
@@ -605,7 +608,38 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 				require.Equal(t, http.StatusOK, recorder.Code)
 				var response operatorApplymentStatusResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, "pending", response.Status)
+				require.Equal(t, "active", response.Status)
+				require.Equal(t, "可提交开户信息", response.StatusDesc)
+				require.True(t, response.CanSubmit)
+			},
+		},
+		{
+			name: "NoApplyment_SuspendedOperator",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				testOperator := operator
+				testOperator.Status = "suspended"
+
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(testOperator, nil)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response operatorApplymentStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "frozen", response.Status)
+				require.Equal(t, "当前账号状态不可用", response.StatusDesc)
+				require.False(t, response.CanSubmit)
+				require.Equal(t, "当前运营商状态不可用，暂不支持提交微信支付开户。", response.BlockReason)
 			},
 		},
 		{

@@ -3,6 +3,38 @@
 这份文档旨在为 LocalLife 小程序建立统一、现代化且高度用户友好的 UI
 设计规范。所有界面开发应严格遵循本指南，以确保用户体验的一致性和高品质视觉呈现。
 
+本规范已根据当前小程序内已验证的页面实现同步更新，尤其补齐以下过去缺失或过时的部分：
+
+- 页面布局骨架
+- 组件嵌套层级
+- 顶部导航与首屏内容间距
+- 页面底部与弹层底部安全区
+- 底部操作按钮样式与尺寸
+- 列表页新增入口形态
+
+---
+
+## 0. 规范优先级与同步来源
+
+### 0.1 规范优先级
+
+- 已验证并稳定运行的页面实现，是设计规范的直接来源，不允许长期出现“页面已经有成熟做法，但规范仍停留在旧写法”的状态。
+- 当规范与线上成熟页面冲突时，应优先参考已验证页面，并在同一任务中回写规范。
+- 不允许继续以旧规范为依据，重复产出已经被页面实践证明不可用的按钮、边距和弹层样式。
+
+### 0.2 当前应优先参考的页面实现
+
+- 用户中心页面：顶部内容与自定义导航的间距、滚动容器、页面底部安全区。
+- 餐厅入驻页面：固定底部操作栏、大按钮、双按钮布局。
+- 配送优惠管理：底部弹层内容区与底部安全距离。
+- `app.wxss`：全局 spacing、radius、z-index、安全区 token。
+
+### 0.3 当前文件的职责
+
+- 定义“小程序页面应该怎么搭”。
+- 定义“哪些样式必须抽为公共规则或公共组件”。
+- 给出可以直接复用的页面结构和样式基线，而不是只给抽象原则。
+
 ---
 
 ## 1. 设计原则 (Principles)
@@ -57,6 +89,23 @@
 | `--spacer-md` | `24`     | **标准卡片内边距**、卡片间距 |
 | `--spacer-lg` | `32`     | 区块与区块间距               |
 
+### 🛟 安全区系统 (Safe Area)
+
+以下变量已经在 `app.wxss` 中定义，应优先复用，避免每个页面重复手写：
+
+| 变量名                     | 值                                   | 用途                     |
+| :------------------------- | :----------------------------------- | :----------------------- |
+| `--safe-area-bottom`       | `env(safe-area-inset-bottom)`        | 页面底部安全区基础值     |
+| `--popup-bottom-padding-sm`| `calc(24rpx + var(--safe-area-bottom))` | 小型弹层底部留白      |
+| `--popup-bottom-padding-md`| `calc(32rpx + var(--safe-area-bottom))` | 标准弹层底部留白      |
+| `--popup-bottom-padding-lg`| `calc(40rpx + var(--safe-area-bottom))` | 重操作弹层底部留白    |
+
+规则：
+
+- 页面内容区、固定底栏、底部弹层必须显式处理安全区。
+- 已有 token 能表达的场景，不要重复手写 `env(safe-area-inset-bottom)`。
+- 只有在“需要为固定栏高度预留页面滚动空间”时，才允许在页面容器上写 `calc(120rpx + env(...))` 这类表达。
+
 ### ⭕ 圆角系统 (Radius)
 
 | 变量名           | 值 (rpx) | 场景示例                   |
@@ -101,11 +150,213 @@
 
 ### 3.3 按钮 (Button)
 
-- **主操作**: `theme="primary" variant="base"` (实心)
-- **次操作**: `theme="primary" variant="outline"` (描边)
-- **圆角**: 统一使用 `shape="round"` (全圆角) 或 `shape="square"`
-  (小圆角)，避免混用。建议列表操作用 `shape="circle"` (圆形图标) 或
-  `shape="round"` (文字按钮)。
+- **页面主操作**: 统一使用 `t-button` + `theme="primary"` + `size="large"` + `shape="round"` + `block`
+- **页面次操作**: 统一使用 `theme="default"` 或 `theme="primary" variant="outline"`，尺寸与主操作保持一致，不允许主次按钮高度不一致。
+- **底部弹层主操作**: 不允许再使用 `size="medium"` 或视觉尺寸偏小的按钮，统一使用大按钮规范。
+- **圆角**: 底部主操作、双按钮操作统一使用 `shape="round"`。页面内的小型次要操作可使用 `shape="round"`，不要混入风格不一致的直角按钮。
+- **点击面积**: 底部主操作必须满足明显可点、可盲点，不允许出现“视觉上像辅助按钮，实际上承担主流程提交”的情况。
+
+#### 页面底部主按钮
+
+适用场景：表单提交、保存设置、进入下一步、发起核心操作。
+
+标准：
+
+- 单按钮时使用全宽 `block` 大按钮。
+- 双按钮时使用等宽双列布局，左右按钮高度一致。
+- 主操作放右侧，返回或取消放左侧。
+- 提交中使用按钮自身 `loading` 和 `disabled` 状态，不额外叠加第二套加载提示。
+
+推荐示例：
+
+```xml
+<t-button block theme="primary" size="large" shape="round">保存</t-button>
+
+<view class="btn-row">
+  <t-button block theme="default" size="large" shape="round">取消</t-button>
+  <t-button block theme="primary" size="large" shape="round">确认</t-button>
+</view>
+```
+
+#### 底部弹层动作按钮
+
+规则：
+
+- 弹层底部动作区延续页面底部主按钮规范，不允许因为放进弹层就缩成小按钮。
+- “取消 / 确认”“上一步 / 下一步”“关闭 / 保存”都应使用统一的大按钮样式。
+- 弹层中若存在表单滚动区域，动作按钮区要与滚动内容一起保留足够底部安全距离。
+
+#### 列表新增按钮
+
+适用场景：规则管理、优惠管理、券管理、桌台管理等列表型页面。
+
+规则：
+
+- 有持续“新增”动作的列表页，统一优先使用右下角悬浮新增按钮。
+- 空状态和非空状态的新增入口形态应保持一致，不要出现“空状态是居中按钮，非空状态变成悬浮按钮”的双规范。
+- 若空状态需要强化说明，可以保留说明文案，但主要新增入口仍应与列表态一致。
+
+推荐实现：
+
+```xml
+<t-fab icon="add" bind:click="onCreate" />
+```
+
+### 3.4 页面布局骨架 (Page Shell)
+
+过去规范对“页面该怎么搭”定义不足，导致各页面在顶部间距、容器结构、滚动方式上各自实现。后续统一采用以下骨架。
+
+#### 类型 A：普通滚动页面
+
+适用场景：用户中心、列表页、详情页、资料页。
+
+标准结构：
+
+```xml
+<custom-navbar title="标题" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<scroll-view
+  scroll-y
+  class="page-scroll"
+  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
+>
+  <view class="content-section">
+    <!-- 页面内容 -->
+  </view>
+</scroll-view>
+```
+
+规则：
+
+- 顶部首个内容块与自定义导航之间的留白，统一通过内容容器的顶部 padding 控制。
+- 推荐基线为 `content-section` 使用 `padding-top: var(--spacer-sm)`。
+- 不要在每个首屏卡片上单独叠加额外 `margin-top` 来“碰运气”调间距。
+
+#### 类型 B：带固定底部操作栏的页面
+
+适用场景：入驻、设置保存、编辑提交流程。
+
+标准结构：
+
+```xml
+<custom-navbar title="标题" showBack="{{true}}" bind:navheight="onNavHeight" />
+
+<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(140rpx + env(safe-area-inset-bottom));">
+  <view class="page-content">
+    <!-- 页面内容 -->
+  </view>
+
+  <view class="submit-bar">
+    <t-button block theme="primary" size="large" shape="round">提交</t-button>
+  </view>
+</view>
+```
+
+规则：
+
+- 页面内容区必须为固定底栏预留滚动空间，否则最后一个表单项和底部按钮会互相遮挡。
+- 页面底栏高度、内边距、安全区处理必须统一，不允许页面各自定义一套底栏高度。
+
+### 3.5 组件嵌套层级 (Component Nesting)
+
+过去多个页面存在容器层级过深、卡片套卡片、区块职责不清的问题。统一按以下层级组织：
+
+- 页面层：`page-container` / `page-scroll`
+- 内容层：`content-section` / `list-section`
+- 区块层：`card-section`
+- 实体容器层：`card-body` / `form-card` / `promo-card`
+- 组件层：`t-cell`、`t-input`、`t-image`、`t-tag`、`t-button`
+
+约束：
+
+- 不要无意义地出现三层以上视觉卡片嵌套。
+- 列表项本身已经是卡片时，不要再在卡片内部套另一层白底卡片作为主要容器。
+- 页面负责业务编排，通用上传、图片预览、底部动作条、状态卡片应优先复用组件，不要每页手写。
+
+### 3.6 页面底部安全区规范
+
+#### 普通页面内容区
+
+推荐：
+
+```css
+.content-section {
+  padding: var(--spacer-sm) var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
+}
+```
+
+适用：无固定底栏，但页面需要保证最后一个内容块不贴底。
+
+#### 固定底栏页面
+
+推荐：
+
+```css
+.submit-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 24rpx;
+  padding-bottom: calc(24rpx + env(safe-area-inset-bottom));
+  background: #fff;
+}
+```
+
+适用：设置页、编辑页、入驻页、需要持续显示主操作的页面。
+
+#### 底部弹层
+
+推荐：
+
+```css
+.form-scroll {
+  padding: var(--spacer-lg);
+  padding-bottom: var(--popup-bottom-padding-md);
+}
+```
+
+规则：
+
+- 弹层安全区统一以 `--popup-bottom-padding-md` 作为默认值。
+- 弹层若承载更重的操作区或更长按钮，可使用 `--popup-bottom-padding-lg`。
+- 不允许弹层底部按钮紧贴 Home Indicator 或被截断。
+
+### 3.7 底部弹层标准结构 (Bottom Popup)
+
+底部弹层过去最大的问题不是有没有弹层，而是内容区、动作区、安全区和按钮尺寸都没有统一。后续统一使用以下结构：
+
+```xml
+<t-popup visible="{{visible}}" placement="bottom">
+  <view class="form-popup">
+    <scroll-view scroll-y class="form-scroll">
+      <view class="form-title">标题</view>
+      <view class="form-body">
+        <!-- 表单内容 -->
+      </view>
+      <view class="form-actions">
+        <t-button theme="default" size="large" shape="round">取消</t-button>
+        <t-button theme="primary" size="large" shape="round">保存</t-button>
+      </view>
+    </scroll-view>
+  </view>
+</t-popup>
+```
+
+规则：
+
+- `form-popup` 负责弹层容器和顶部圆角。
+- `form-scroll` 负责滚动和底部安全距离。
+- `form-actions` 负责统一按钮布局，不要散落在内容末尾临时写两个按钮。
+
+### 3.8 标题与副标题层级
+
+配置类页面当前常见问题是标题和副标题几乎同色，导致重点不清。统一如下：
+
+- 页面主标题：使用 `--td-text-color-primary`，字号不低于 `Heading`。
+- 页面副标题、说明文案：使用 `--td-text-color-secondary`。
+- 区块眉题、辅助标签：使用 `--td-text-color-placeholder` 或更弱层级。
+- 状态必须同时使用文案和颜色，不允许仅靠一个灰色块或状态色表达。
 
 ---
 
@@ -138,11 +389,13 @@
 
 ## 5. 开发最佳实践
 
-1. **避免硬编码**: 尽量不要在 wxss 中写死 `color: #FF6B58` 或
-   `padding: 24rpx`，请使用 `color: var(--td-brand-color)` 和
-   `padding: var(--customer-card-padding)`。
-2. **暗黑模式兼容**: 使用 CSS 变量可以自动适配暗黑模式（如果未来开启）。
-3. **保持简洁**: 减少不必要的装饰线条，利用**间距**（Spacing）来分隔内容。
+1. **避免硬编码**：颜色、间距、圆角、安全区优先使用 `app.wxss` 中已有 token。
+2. **布局先统一再开发业务**：页面动手前先选定页面骨架类型，而不是边写边补边距。
+3. **底部主操作不降级**：页面底栏和底部弹层里的主操作统一使用大按钮，不因空间紧张改成小按钮。
+4. **安全区统一处理**：普通页面、固定底栏、底部弹层分别使用对应安全区方案，不要混写。
+5. **优先复用成熟实现**：上传预览、底部按钮区、列表新增入口、状态卡片优先复用已有组件或结构，不要每页重写。
+6. **暗黑模式兼容**：优先使用 CSS 变量，以便后续统一适配主题。
+7. **保持简洁**：减少装饰性线条，更多依赖间距、层级和留白组织信息。
 
 ---
 
@@ -217,6 +470,11 @@
 - 只补了页面 WXML/WXSS，未补 service、事件或状态，导致按钮可点但行为空转。
 - 数据未返回时整页 `wx:if` 消失，只剩白屏或全屏 loading。
 - 将页面业务颜色、尺寸、边距直接硬编码，而不是使用 `app.wxss` 中的 token。
+- 顶部首屏内容与自定义导航的间距靠页面内某个卡片的 `margin-top` 临时补齐，而不是通过统一内容容器控制。
+- 底部弹层继续使用小按钮、细按钮或不带安全区的按钮区，导致主操作弱化或显示不全。
+- 固定底部按钮栏没有给页面内容预留滚动空间，导致最后一个表单项被遮挡。
+- 同一个“新增”动作在空状态、非空状态、不同页面使用完全不同的入口形态。
+- 已有成熟上传预览组件或图片展示能力，页面仍重新手写一套且不支持预览。
 - 为调试保留临时文案、占位按钮、短路返回、mock 数据或未删除的日志分支。
 - 共享组件中混入商家页、骑手页、运营页特定业务样式或术语。
 
@@ -228,4 +486,4 @@
 
 ---
 
-_LocalLife Design System v1.1_
+_LocalLife Design System v1.2_

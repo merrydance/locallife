@@ -12,63 +12,7 @@
 
   <block wx:else>
     <view class="section-block">
-      <view class="section-title">当前进度</view>
-
-      <view wx:if="{{!hasApplyment}}" class="hint-card hint-card-info">
-        <text>当前还没有提交收付通进件资料。先填写银行结算账户，平台才会创建进件并进入审核流程。</text>
-      </view>
-
-      <view wx:else>
-        <view class="status-card">
-          <view class="status-head">
-            <view>
-              <text class="status-title">{{getApplymentStatusText(applymentStatus.status)}}</text>
-              <text class="status-desc">{{applymentStatus.status_desc || '状态说明暂未返回'}}</text>
-            </view>
-            <t-tag theme="{{getApplymentStatusTheme(applymentStatus.status)}}" variant="dark">{{getApplymentStatusText(applymentStatus.status)}}</t-tag>
-          </view>
-          <view class="meta-row" wx:if="{{applymentStatus.sub_mch_id}}">
-            <text class="meta-label">子商户号</text>
-            <text class="meta-value">{{applymentStatus.sub_mch_id}}</text>
-          </view>
-        </view>
-
-        <view class="steps-wrap">
-          <t-steps layout="vertical" current="{{getProgressCurrent(applymentStatus.status)}}" theme="dot">
-            <t-step-item title="提交银行账户资料" content="平台创建收付通进件" />
-            <t-step-item title="平台审核" content="审核银行账户和主体资料" />
-            <t-step-item title="微信签约" content="如需签约，按链接完成授权" />
-            <t-step-item title="开通完成" content="开通后即可在资金账户页查看余额与提现" />
-          </t-steps>
-        </view>
-
-        <view class="action-row action-row-start action-row-tight">
-          <t-button theme="default" variant="outline" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">刷新状态</t-button>
-        </view>
-      </view>
-    </view>
-
-    <view wx:if="{{applymentStatus.sign_url}}" class="section-block">
-      <view class="section-title">签约链接</view>
-      <view class="hint-card hint-card-warn">
-        <text>当前状态需要前往微信完成签约。复制后在浏览器中打开，完成授权后再返回刷新页面。</text>
-      </view>
-      <view class="sign-url">{{applymentStatus.sign_url}}</view>
-      <view class="action-row">
-        <t-button theme="primary" shape="round" bindtap="onCopySignUrl">复制签约链接</t-button>
-        <t-button theme="default" variant="outline" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">已签约，刷新状态</t-button>
-      </view>
-    </view>
-
-    <view wx:if="{{applymentStatus.reject_reason}}" class="section-block">
-      <view class="section-title">驳回原因</view>
-      <view class="hint-card hint-card-error">
-        <text>{{applymentStatus.reject_reason}}</text>
-      </view>
-    </view>
-
-    <view class="section-block">
-      <view class="section-title">银行结算账户</view>
+      <view class="section-title">收付通进件</view>
       <view wx:if="{{!showBindForm}}" class="action-row action-row-start">
         <t-button wx:if="{{canEditCurrentApplyment}}" theme="primary" shape="round" bindtap="onShowBindForm">{{applymentActionLabel}}</t-button>
         <t-button theme="default" variant="outline" shape="round" bindtap="onGoFinance">查看资金账户</t-button>
@@ -78,8 +22,24 @@
         <text>{{applymentActionHint}}</text>
       </view>
 
+      <view wx:if="{{canEditCurrentApplyment && applymentStatus.reject_reason}}" class="hint-card hint-card-error hint-card-spaced">
+        <text>{{applymentStatus.reject_reason}}</text>
+      </view>
+
+      <block wx:if="{{!canEditCurrentApplyment && applymentStatus.sign_url}}">
+        <view class="sign-url">{{applymentStatus.sign_url}}</view>
+        <view class="action-row">
+          <t-button theme="primary" shape="round" bindtap="onCopySignUrl">复制签约链接</t-button>
+          <t-button theme="default" variant="outline" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">已签约，刷新状态</t-button>
+        </view>
+      </block>
+
+      <view wx:elif="{{!canEditCurrentApplyment}}" class="action-row action-row-start action-row-tight">
+        <t-button theme="default" variant="outline" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">刷新状态</t-button>
+      </view>
+
       <view wx:if="{{showBindForm}}" class="bind-form">
-        <applyment-bank-form apiBasePath="/v1/merchant/applyment" defaultAccountType="ACCOUNT_TYPE_BUSINESS" submitLabel="提交银行账户信息" submitting="{{submittingBind}}" bind:submit="onSubmitBindBank" bind:cancel="onHideBindForm" />
+        <applyment-bank-form apiBasePath="/v1/merchant/applyment" initialDraft="{{bindBankDraft}}" defaultAccountType="ACCOUNT_TYPE_BUSINESS" submitLabel="提交银行账户信息" submitting="{{submittingBind}}" bind:submit="onSubmitBindBank" bind:cancel="onHideBindForm" bind:draftchange="onBindDraftChange" />
       </view>
     </view>
   </block>

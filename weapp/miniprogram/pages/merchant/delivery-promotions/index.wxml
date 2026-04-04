@@ -1,6 +1,6 @@
 <custom-navbar title="配送优惠管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
 
   <!-- 加载中 -->
   <view wx:if="{{loading && !promotions.length}}" class="center-state">
@@ -10,7 +10,6 @@
   <!-- 空状态 -->
   <view wx:elif="{{!loading && !promotions.length}}" class="center-state">
     <t-empty icon="discount" description="暂无配送优惠活动" />
-    <t-button theme="primary" shape="round" size="medium" bind:tap="onAddPromotion" style="margin-top: 32rpx;">新建优惠</t-button>
   </view>
 
   <!-- 优惠列表 -->
@@ -46,7 +45,7 @@
   </view>
 
   <!-- 悬浮添加按钮（列表非空时显示） -->
-  <t-fab wx:if="{{promotions.length}}" icon="add" bind:click="onAddPromotion" />
+  <t-fab icon="add" bind:click="onAddPromotion" />
 </view>
 
 <!-- 新建/编辑弹窗 -->
@@ -117,8 +116,8 @@
       </view>
 
       <view class="form-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bind:tap="onCloseForm">取消</t-button>
-        <t-button theme="primary" size="medium" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
+        <t-button theme="primary" variant="outline" size="large" shape="round" bind:tap="onCloseForm">取消</t-button>
+        <t-button theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
       </view>
     </scroll-view>
   </view>

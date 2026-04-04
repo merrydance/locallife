@@ -58,6 +58,7 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     saving: false,
@@ -128,6 +129,7 @@ Page({
         merchantId: settings.merchant_id,
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
+        actionNoticeMessage: '',
         hasChanges: false,
         initialLoading: false,
         initialError: false,
@@ -161,7 +163,7 @@ Page({
       ...this.data.form,
       [field]: e.detail.value
     }
-    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ actionNoticeMessage: '', refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   onPercentChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -169,7 +171,7 @@ Page({
       ...this.data.form,
       max_deduction_percent: e.detail.value
     }
-    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ actionNoticeMessage: '', refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   onToggleScene(e: WechatMiniprogram.TouchEvent) {
@@ -186,7 +188,7 @@ Page({
       ...this.data.form,
       [group]: nextGroup
     }
-    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ actionNoticeMessage: '', refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   validateForm() {
@@ -218,6 +220,7 @@ Page({
         merchantId: updated.merchant_id,
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
+        actionNoticeMessage: '会员设置已保存并同步到门店权益配置。',
         hasChanges: false
       })
     } catch (err: unknown) {

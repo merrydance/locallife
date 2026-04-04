@@ -1,6 +1,6 @@
 <custom-navbar title="桌台管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
   <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="tabs-container" sticky offsetTop="{{navBarHeight}}">
     <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
     <t-tab-panel label="普通桌台" value="table"><view /></t-tab-panel>
@@ -152,12 +152,12 @@
 
         <view class="form-item" wx:if="{{isEdit}}">
           <view class="form-label">二维码</view>
-          <t-button size="small" bindtap="onGenerateQRCode" shape="round">生成并预览</t-button>
+          <t-button size="medium" theme="primary" variant="outline" bindtap="onGenerateQRCode" shape="round">生成并预览</t-button>
         </view>
 
         <view class="form-actions">
-          <t-button theme="primary" variant="outline" size="medium" bind:tap="onCloseForm" shape="round">取消</t-button>
-          <t-button theme="primary" size="medium" loading="{{formSubmitting}}" bind:tap="onSubmitForm" shape="round">保存</t-button>
+          <t-button theme="primary" variant="outline" size="large" bind:tap="onCloseForm" shape="round">取消</t-button>
+          <t-button theme="primary" size="large" loading="{{formSubmitting}}" bind:tap="onSubmitForm" shape="round">保存</t-button>
         </view>
       </scroll-view>
     </view>

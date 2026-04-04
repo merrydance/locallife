@@ -5,51 +5,24 @@
     <view wx:if="{{error}}" class="error-banner">{{error}}</view>
 
     <view class="card">
-      <view class="card-title">开户状态</view>
+      <view class="card-title">提交开户信息</view>
       <view wx:if="{{loading}}" class="status-item">加载中...</view>
       <block wx:else>
-        <view class="status-badge-row">
-          <text class="status-item">状态：{{statusView.statusDesc}}</text>
-          <t-tag theme="{{statusView.isOpened ? 'success' : (statusView.needsSign ? 'warning' : (statusView.isInReview ? 'primary' : (statusView.statusCode === 'rejected' || statusView.statusCode === 'rejected_sign' ? 'danger' : 'default')))}}" variant="dark" size="small">
-            {{statusView.statusCode}}
-          </t-tag>
+        <view wx:if="{{statusView.guideText}}" class="guide-text">{{statusView.guideText}}</view>
+        <view wx:if="{{statusView.canSubmitOpenInfo && statusView.rejectReason !== '-'}}" class="result-note result-note--warning">{{statusView.rejectReason}}</view>
+
+        <view wx:if="{{statusView.canSubmitOpenInfo}}">
+          <applyment-bank-form apiBasePath="/v1/operator/applyment" initialDraft="{{bindBankDraft}}" defaultAccountType="ACCOUNT_TYPE_PRIVATE" submitLabel="提交微信支付开户" submitting="{{submitting}}" bind:submit="onSubmit" bind:cancel="onCancelForm" bind:draftchange="onBindDraftChange" />
         </view>
-        <view class="status-item">申请单号：{{statusView.applymentId}}</view>
-        <view class="status-item">子商户号：{{statusView.subMchId}}</view>
-        <view class="status-item">驳回原因：{{statusView.rejectReason}}</view>
-        <view wx:if="{{statusView.signURL}}" class="status-item">
-          <t-button theme="primary" size="small" bindtap="onOpenSignUrl" shape="round">复制签约链接</t-button>
+
+        <view wx:else class="result-note {{statusView.needsSign ? 'result-note--warning' : 'result-note--primary'}}">{{statusView.guideText}}</view>
+        <view wx:if="{{statusView.applymentId !== '-'}}" class="status-item">申请单号：{{statusView.applymentId}}</view>
+        <view wx:if="{{statusView.signURL}}" class="sign-url">{{statusView.signURL}}</view>
+        <view wx:if="{{!statusView.canSubmitOpenInfo}}" class="action-row">
+          <t-button wx:if="{{statusView.signURL}}" theme="primary" shape="round" bindtap="onOpenSignUrl">复制签约链接</t-button>
+          <t-button theme="default" variant="outline" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">刷新状态</t-button>
         </view>
       </block>
-    </view>
-
-    <view wx:if="{{statusView.isOpened}}" class="card">
-      <view class="card-title">已开通微信支付商户</view>
-      <view class="status-item">当前状态：开户成功，可正常经营与提现。</view>
-      <view class="status-item">微信二级商户号：{{statusView.subMchId}}</view>
-      <view class="status-item">微信申请单号：{{statusView.applymentId}}</view>
-    </view>
-
-    <view wx:if="{{statusView.isInReview && !statusView.isOpened}}" class="card">
-      <view class="card-title">开户审核中</view>
-      <view class="result-note result-note--primary">微信已受理开户申请，请等待审核结果同步。</view>
-      <view class="status-item">{{statusView.guideText}}</view>
-      <view wx:if="{{statusView.applymentId !== '-'}}" class="status-item">申请单号：{{statusView.applymentId}}</view>
-      <view class="status-item">审核期间无需重复填写开户信息。</view>
-      <view class="status-item">后续结果会更新到本页，建议稍后下拉刷新查看。</view>
-    </view>
-
-    <view wx:if="{{statusView.needsSign && !statusView.isOpened}}" class="card">
-      <view class="card-title">待签约处理</view>
-      <view class="result-note result-note--warning">开户审核已进入签约阶段，请尽快完成微信签约。</view>
-      <view class="status-item">{{statusView.guideText}}</view>
-      <view class="status-item">如已复制签约链接，请在微信支付侧尽快完成签约。</view>
-    </view>
-
-    <view wx:if="{{statusView.canSubmitOpenInfo && !statusView.isOpened}}" class="card">
-      <view class="card-title">提交开户信息</view>
-      <view class="guide-text">{{statusView.guideText}}</view>
-      <applyment-bank-form apiBasePath="/v1/operator/applyment" defaultAccountType="ACCOUNT_TYPE_PRIVATE" submitLabel="提交微信支付开户" submitting="{{submitting}}" bind:submit="onSubmit" bind:cancel="onCancelForm" />
     </view>
 
     <view class="safe-bottom"></view>

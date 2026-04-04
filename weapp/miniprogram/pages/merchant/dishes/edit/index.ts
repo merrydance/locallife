@@ -11,6 +11,7 @@ import {
 } from '../../../../api/dish'
 import { getPublicImageUrl } from '../../../../utils/image'
 import { logger } from '../../../../utils/logger'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 interface UploadFileItem {
   url: string
@@ -64,7 +65,7 @@ function createEmptyGroupDraft(): CustomizationGroupDraft {
     key: buildDraftKey('group'),
     name: '',
     is_required: false,
-    options: [createEmptyOptionDraft()]
+    options: []
   }
 }
 
@@ -83,7 +84,7 @@ function mapCustomizationGroupsToDrafts(groups?: CustomizationGroup[]): Customiz
         name: option.tag_name || '',
         extraPriceYuan: option.extra_price ? (option.extra_price / 100).toFixed(2) : ''
       }))
-      : [createEmptyOptionDraft()]
+      : []
   }))
 }
 
@@ -490,9 +491,24 @@ Page({
     const { groupIndex } = e.currentTarget.dataset as { groupIndex?: number }
     if (typeof groupIndex !== 'number') return
 
-    const customizationGroups = [...this.data.customizationGroups]
-    customizationGroups.splice(groupIndex, 1)
-    this.setData({ customizationGroups })
+    const targetGroup = this.data.customizationGroups[groupIndex]
+    const groupName = targetGroup?.name?.trim()
+
+    wx.showModal({
+      title: '删除规格组',
+      content: groupName
+        ? `删除“${groupName}”后，组内规格项会一起移除。`
+        : '删除后，组内规格项会一起移除。',
+      success: (res) => {
+        if (!res.confirm) {
+          return
+        }
+
+        const customizationGroups = [...this.data.customizationGroups]
+        customizationGroups.splice(groupIndex, 1)
+        this.setData({ customizationGroups })
+      }
+    })
   },
 
   onCustomizationGroupNameInput(
@@ -542,14 +558,30 @@ Page({
 
     const customizationGroups = [...this.data.customizationGroups]
     const group = customizationGroups[groupIndex]
+    const targetOption = group?.options?.[optionIndex]
+    const optionName = targetOption?.name?.trim()
     const nextOptions = [...group.options]
     nextOptions.splice(optionIndex, 1)
 
-    customizationGroups[groupIndex] = {
-      ...group,
-      options: nextOptions.length > 0 ? nextOptions : [createEmptyOptionDraft()]
-    }
-    this.setData({ customizationGroups })
+    wx.showModal({
+      title: '删除规格项',
+      content: nextOptions.length === 0
+        ? (optionName
+          ? `删除“${optionName}”后，该规格组会变成空组，提交前需要重新添加规格项。`
+          : '删除后，该规格组会变成空组，提交前需要重新添加规格项。')
+        : (optionName ? `确认删除“${optionName}”吗？` : '确认删除当前规格项吗？'),
+      success: (res) => {
+        if (!res.confirm) {
+          return
+        }
+
+        customizationGroups[groupIndex] = {
+          ...group,
+          options: nextOptions
+        }
+        this.setData({ customizationGroups })
+      }
+    })
   },
 
   onCustomizationOptionNameInput(
@@ -609,7 +641,7 @@ Page({
         throw new Error('请填写规格组名称')
       }
       if (!group.options.length) {
-        throw new Error(`规格组「${group.name}」至少需要一个选项`)
+        throw new Error(`规格组“${group.name}”至少需要一个规格项`)
       }
 
       for (const option of group.options) {
@@ -785,11 +817,10 @@ Page({
       wx.navigateBack()
     } catch (err) {
       logger.error('Submit dish failed', err)
-      if (baseDishSaved && currentDishId > 0) {
-        wx.showToast({ title: '基础信息已保存，规格或标签同步失败，请重试', icon: 'none' })
-      } else {
-        wx.showToast({ title: '提交失败，请重试', icon: 'none' })
-      }
+      const message = baseDishSaved && currentDishId > 0
+        ? '基础信息已保存，规格或标签同步失败，请重试'
+        : getErrorUserMessage(err, '提交失败，请重试')
+      wx.showToast({ title: message, icon: 'none' })
     } finally {
       this.setData({ submitting: false })
     }
