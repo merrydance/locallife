@@ -1,7 +1,7 @@
 <custom-navbar title="微信支付开户" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page" style="padding-top: {{navBarHeight}}px;">
-  <scroll-view class="content" scroll-y refresher-enabled bindrefresherrefresh="onPullDownRefresh">
+  <view class="content">
     <view wx:if="{{error}}" class="error-banner">{{error}}</view>
 
     <view class="card">
@@ -12,7 +12,7 @@
         <view wx:if="{{statusView.canSubmitOpenInfo && statusView.rejectReason !== '-'}}" class="result-note result-note--warning">{{statusView.rejectReason}}</view>
 
         <view wx:if="{{statusView.canSubmitOpenInfo}}">
-          <applyment-bank-form apiBasePath="/v1/operator/applyment" initialDraft="{{bindBankDraft}}" defaultAccountType="ACCOUNT_TYPE_PRIVATE" submitLabel="提交微信支付开户" submitting="{{submitting}}" bind:submit="onSubmit" bind:cancel="onCancelForm" bind:draftchange="onBindDraftChange" />
+          <applyment-bank-form apiBasePath="/v1/operator/applyment" initialDraft="{{bindBankDraft}}" defaultAccountType="ACCOUNT_TYPE_PRIVATE" preloadCatalogs="{{statusView.canSubmitOpenInfo}}" submitLabel="提交微信支付开户" submitting="{{submitting}}" bind:submit="onSubmit" bind:cancel="onCancelForm" bind:draftchange="onBindDraftChange" />
         </view>
 
         <view wx:else class="result-note {{statusView.needsSign ? 'result-note--warning' : 'result-note--primary'}}">{{statusView.guideText}}</view>
@@ -26,5 +26,5 @@
     </view>
 
     <view class="safe-bottom"></view>
-  </scroll-view>
+  </view>
 </view>

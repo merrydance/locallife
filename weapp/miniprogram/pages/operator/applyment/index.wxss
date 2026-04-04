@@ -4,7 +4,7 @@
 }
 
 .content {
-  height: calc(100vh - 88rpx);
+  min-height: calc(100vh - 88rpx);
   box-sizing: border-box;
   padding: var(--spacer-md);
 }

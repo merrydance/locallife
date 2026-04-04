@@ -33,10 +33,20 @@ interface ApplymentBankFormProperties {
   apiBasePath: string
   initialDraft?: PartialApplymentBindBankDraft
   defaultAccountType: ApplymentAccountType
+  preloadCatalogs?: boolean
 }
 
 type ApplymentBankViewOption = ApplymentBankOption & {
   display_label: string
+}
+
+type ApplymentPickerVisibleChangeEvent = WechatMiniprogram.CustomEvent<{ visible?: boolean }>
+type ApplymentBankFormInstance = WechatMiniprogram.Component.TrivialInstance & {
+  draftForm?: ApplymentBindBankDraft
+}
+type ApplymentFormStateOptions = {
+  emitDraft?: boolean
+  syncSubmit?: boolean
 }
 
 function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankDraft {
@@ -114,10 +124,7 @@ function branchMatchesKeyword(branch: ApplymentBranchOption, keyword: string): b
 }
 
 function buildBankDisplayLabel(bank: ApplymentBankOption): string {
-  if (bank.account_bank === bank.bank_alias) {
-    return bank.bank_alias
-  }
-  return `${bank.bank_alias} · 微信开户银行填写为${bank.account_bank}`
+  return bank.bank_alias
 }
 
 function decorateBankOption(bank: ApplymentBankOption): ApplymentBankViewOption {
@@ -133,6 +140,14 @@ function decorateBankOptions(banks: ApplymentBankOption[]): ApplymentBankViewOpt
 
 function buildSelectedBankLabel(form: ApplymentBindBankDraft): string {
   return form.bank_alias || form.account_bank
+}
+
+function hasSelectedBank(form: ApplymentBindBankDraft): boolean {
+  return Boolean(form.bank_alias || form.account_bank)
+}
+
+function shouldShowSelectedBankCard(form: ApplymentBindBankDraft): boolean {
+  return hasSelectedBank(form) && (form.account_bank !== form.bank_alias || form.need_bank_branch)
 }
 
 function findSelectedBankIndex(banks: ApplymentBankOption[], form: ApplymentBindBankDraft): number {
@@ -192,6 +207,15 @@ Component({
       type: String,
       value: 'ACCOUNT_TYPE_BUSINESS'
     },
+    preloadCatalogs: {
+      type: Boolean,
+      value: false,
+      observer(preloadCatalogs: boolean) {
+        if (preloadCatalogs) {
+          void this.preloadSelectableCatalogs()
+        }
+      }
+    },
     submitLabel: {
       type: String,
       value: '提交银行账户信息'
@@ -228,7 +252,10 @@ Component({
     selectedProvinceCode: 0,
     selectedCityCode: 0,
     branchKeyword: '',
-    canSubmit: false
+    canSubmit: false,
+    selectedBankLabel: '',
+    hasSelectedBank: false,
+    showSelectedBankCard: false
   },
 
   lifetimes: {
@@ -238,19 +265,53 @@ Component({
   },
 
   methods: {
+    readForm() {
+      const instance = this as unknown as ApplymentBankFormInstance
+      return instance.draftForm || (this.data.form as ApplymentBindBankDraft)
+    },
+
+    setFormState(
+      nextForm: ApplymentBindBankDraft,
+      extraData: Record<string, unknown> = {},
+      options?: ApplymentFormStateOptions
+    ) {
+      const instance = this as unknown as ApplymentBankFormInstance
+      instance.draftForm = nextForm
+      this.setData(Object.assign({
+        form: nextForm,
+        selectedBankLabel: buildSelectedBankLabel(nextForm),
+        hasSelectedBank: hasSelectedBank(nextForm),
+        showSelectedBankCard: shouldShowSelectedBankCard(nextForm)
+      }, extraData))
+
+      if (options?.syncSubmit !== false) {
+        this.syncCanSubmit(nextForm)
+      }
+      if (options?.emitDraft !== false) {
+        this.emitDraftChange(nextForm)
+      }
+    },
+
     async initializeForm() {
       const properties = this.properties as unknown as ApplymentBankFormProperties
       const accountType = properties.defaultAccountType
       const initialDraft = normalizeDraft(accountType, properties.initialDraft)
 
-      this.setData({
-        form: initialDraft,
-        canSubmit: canSubmitForm(initialDraft)
-      })
+      this.setFormState(initialDraft, { canSubmit: canSubmitForm(initialDraft) }, { emitDraft: false, syncSubmit: false })
 
-      await this.loadBanks(initialDraft.account_type)
       await this.restoreDraftSelection(initialDraft)
+      if (properties.preloadCatalogs) {
+        void this.preloadSelectableCatalogs()
+      }
       this.emitDraftChange(initialDraft)
+    },
+
+    async preloadSelectableCatalogs() {
+      const form = this.readForm()
+      await Promise.all([
+        this.ensureBanksLoaded(form.account_type),
+        this.ensureProvincesLoaded()
+      ])
     },
 
     getBanksForType(accountType: ApplymentAccountType): ApplymentBankViewOption[] {
@@ -267,6 +328,15 @@ Component({
     getApiBasePath() {
       const properties = this.properties as unknown as ApplymentBankFormProperties
       return properties.apiBasePath
+    },
+
+    async ensureBanksLoaded(accountType: ApplymentAccountType) {
+      if (this.getBanksForType(accountType).length > 0) {
+        this.updateBankFilter('')
+        return
+      }
+
+      await this.loadBanks(accountType)
     },
 
     syncCanSubmit(nextForm?: ApplymentBindBankDraft) {
@@ -317,17 +387,13 @@ Component({
       }
 
       const nextForm: ApplymentBindBankDraft = {
-        ...(this.data.form as ApplymentBindBankDraft),
+        ...this.readForm(),
         bank_address_code: draft.bank_address_code,
         bank_branch_id: draft.bank_branch_id,
         bank_name: draft.bank_name
       }
 
-      this.setData({
-        form: nextForm,
-        selectedBranchIndex
-      })
-      this.syncCanSubmit(nextForm)
+      this.setFormState(nextForm, { selectedBranchIndex }, { emitDraft: false })
     },
 
     updateBankFilter(keyword?: string) {
@@ -357,7 +423,7 @@ Component({
     },
 
     clearResolvedBankSelection() {
-      const currentForm = this.data.form as ApplymentBindBankDraft
+      const currentForm = this.readForm()
       const nextForm: ApplymentBindBankDraft = {
         ...currentForm,
         account_bank: '',
@@ -370,8 +436,7 @@ Component({
         bank_name: ''
       }
 
-      this.setData({
-        form: nextForm,
+      this.setFormState(nextForm, {
         showBankPicker: false,
         showProvincePicker: false,
         showCityPicker: false,
@@ -387,8 +452,6 @@ Component({
         filteredBranches: [],
         branchKeyword: ''
       })
-      this.syncCanSubmit(nextForm)
-      this.emitDraftChange(nextForm)
     },
 
     async loadBanks(accountType: ApplymentAccountType) {
@@ -464,26 +527,25 @@ Component({
       this.setData({ loadingBranches: true })
       try {
         const response = await listApplymentBankBranches(this.getApiBasePath(), bankAliasCode, cityCode)
+        const currentForm = this.readForm()
         const nextForm: ApplymentBindBankDraft = {
-          ...(this.data.form as ApplymentBindBankDraft),
-          account_bank: response.account_bank || this.data.form.account_bank,
-          account_bank_code: response.account_bank_code || this.data.form.account_bank_code,
-          bank_alias: response.bank_alias || this.data.form.bank_alias,
-          bank_alias_code: response.bank_alias_code || this.data.form.bank_alias_code,
+          ...currentForm,
+          account_bank: response.account_bank || currentForm.account_bank,
+          account_bank_code: response.account_bank_code || currentForm.account_bank_code,
+          bank_alias: response.bank_alias || currentForm.bank_alias,
+          bank_alias_code: response.bank_alias_code || currentForm.bank_alias_code,
+          need_bank_branch: true,
           bank_address_code: String(cityCode),
           bank_branch_id: '',
           bank_name: ''
         }
 
-        this.setData({
-          form: nextForm,
+        this.setFormState(nextForm, {
           branches: response.branches,
           filteredBranches: response.branches,
           selectedBranchIndex: 0,
           branchKeyword: ''
         })
-        this.syncCanSubmit(nextForm)
-        this.emitDraftChange(nextForm)
       } catch (error: unknown) {
         wx.showToast({
           title: getErrorUserMessage(error, '加载支行失败，请稍后重试'),
@@ -495,7 +557,7 @@ Component({
     },
 
     resetBankSelection(accountType: ApplymentAccountType) {
-      const currentForm = this.data.form as ApplymentBindBankDraft
+      const currentForm = this.readForm()
       const nextForm: ApplymentBindBankDraft = {
         ...currentForm,
         account_type: accountType,
@@ -509,8 +571,7 @@ Component({
         bank_name: ''
       }
 
-      this.setData({
-        form: nextForm,
+      this.setFormState(nextForm, {
         bankKeyword: '',
         filteredBanks: this.getBanksForType(accountType),
         showBankPicker: false,
@@ -529,12 +590,10 @@ Component({
         selectedCityCode: 0,
         branchKeyword: ''
       })
-      this.syncCanSubmit(nextForm)
-      this.emitDraftChange(nextForm)
     },
 
     async applySelectedBank(bank: ApplymentBankViewOption) {
-      const currentForm = this.data.form as ApplymentBindBankDraft
+      const currentForm = this.readForm()
       const nextForm: ApplymentBindBankDraft = {
         ...currentForm,
         account_bank: bank.account_bank,
@@ -547,18 +606,18 @@ Component({
         bank_name: bank.need_bank_branch ? currentForm.bank_name : ''
       }
       const nextBankKeyword = bankMatchesKeyword(bank, this.data.bankKeyword) ? this.data.bankKeyword : ''
-      const filteredBanks = this.getBanksForType(nextForm.account_type)
+      let filteredBanks = this.getBanksForType(nextForm.account_type)
         .filter((item: ApplymentBankViewOption) => bankMatchesKeyword(item, nextBankKeyword))
+      if (!filteredBanks.length) {
+        filteredBanks = [bank]
+      }
       const selectedBankIndex = findSelectedBankIndex(filteredBanks, nextForm)
 
-      this.setData({
-        form: nextForm,
+      this.setFormState(nextForm, {
         bankKeyword: nextBankKeyword,
         filteredBanks,
         selectedBankIndex
       })
-      this.syncCanSubmit(nextForm)
-      this.emitDraftChange(nextForm)
 
       if (bank.need_bank_branch) {
         await this.ensureProvincesLoaded()
@@ -586,7 +645,7 @@ Component({
 
       const value = e.detail.value || ''
       let nextForm: ApplymentBindBankDraft = {
-        ...(this.data.form as ApplymentBindBankDraft),
+        ...this.readForm(),
         [field]: value
       }
 
@@ -603,8 +662,7 @@ Component({
           bank_name: ''
         }
 
-        this.setData({
-          form: nextForm,
+        this.setFormState(nextForm, {
           showBankPicker: false,
           showProvincePicker: false,
           showCityPicker: false,
@@ -620,25 +678,24 @@ Component({
           filteredBranches: [],
           branchKeyword: ''
         })
-        this.syncCanSubmit(nextForm)
-        this.emitDraftChange(nextForm)
         this.updateBankFilter('')
         return
       }
 
-      this.setData({ form: nextForm })
-      this.syncCanSubmit(nextForm)
-      this.emitDraftChange(nextForm)
+      this.setFormState(nextForm)
     },
 
     async onAccountTypeChange(e: WechatMiniprogram.CustomEvent<{ value: ApplymentAccountType }>) {
       const accountType = e.detail.value as ApplymentAccountType
       this.resetBankSelection(accountType)
-      await this.loadBanks(accountType)
+      const properties = this.properties as unknown as ApplymentBankFormProperties
+      if (properties.preloadCatalogs) {
+        await this.preloadSelectableCatalogs()
+      }
     },
 
     onAccountNumberBlur() {
-      const form = this.data.form as ApplymentBindBankDraft
+      const form = this.readForm()
       if (form.account_type !== 'ACCOUNT_TYPE_PRIVATE') {
         return
       }
@@ -657,7 +714,7 @@ Component({
     },
 
     async onRecognizeBank() {
-      const form = this.data.form as ApplymentBindBankDraft
+      const form = this.readForm()
       const accountNumber = form.account_number.trim()
       if (form.account_type !== 'ACCOUNT_TYPE_PRIVATE' || accountNumber.length < 8) {
         return
@@ -687,6 +744,7 @@ Component({
           return
         }
 
+        await this.ensureBanksLoaded(form.account_type)
         this.updateBankFilter('')
       } catch (error: unknown) {
         wx.showToast({
@@ -699,6 +757,8 @@ Component({
     },
 
     async onOpenBankPicker() {
+      const form = this.readForm()
+      await this.ensureBanksLoaded(form.account_type)
       if (this.data.loadingBanks || !(this.data.filteredBanks as ApplymentBankViewOption[]).length) {
         return
       }
@@ -707,6 +767,12 @@ Component({
 
     onCloseBankPicker() {
       this.setData({ showBankPicker: false })
+    },
+
+    onBankPickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
+      if (e.detail?.visible === false) {
+        this.onCloseBankPicker()
+      }
     },
 
     async onSelectBankOption(e: WechatMiniprogram.BaseEvent) {
@@ -721,9 +787,6 @@ Component({
     },
 
     async onOpenProvincePicker() {
-      if (!this.data.form.need_bank_branch) {
-        return
-      }
       await this.ensureProvincesLoaded()
       if (!(this.data.provinces as ApplymentProvinceOption[]).length) {
         return
@@ -744,16 +807,15 @@ Component({
       }
 
       const nextForm: ApplymentBindBankDraft = {
-        ...(this.data.form as ApplymentBindBankDraft),
+        ...this.readForm(),
         bank_address_code: '',
         bank_branch_id: '',
         bank_name: ''
       }
 
-      this.setData({
+      this.setFormState(nextForm, {
         selectedProvinceIndex: selectedIndex,
         selectedProvinceCode: province.province_code,
-        form: nextForm,
         selectedCityIndex: 0,
         selectedCityCode: 0,
         selectedBranchIndex: 0,
@@ -762,10 +824,14 @@ Component({
         filteredBranches: [],
         branchKeyword: ''
       })
-      this.syncCanSubmit(nextForm)
-      this.emitDraftChange(nextForm)
       await this.loadCities(province.province_code)
       this.onCloseProvincePicker()
+    },
+
+    onProvincePickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
+      if (e.detail?.visible === false) {
+        this.onCloseProvincePicker()
+      }
     },
 
     onOpenCityPicker() {
@@ -788,28 +854,31 @@ Component({
       }
 
       const nextForm: ApplymentBindBankDraft = {
-        ...(this.data.form as ApplymentBindBankDraft),
+        ...this.readForm(),
         bank_address_code: String(city.city_code),
         bank_branch_id: '',
         bank_name: ''
       }
 
-      this.setData({
+      this.setFormState(nextForm, {
         selectedCityIndex: selectedIndex,
         selectedCityCode: city.city_code,
-        form: nextForm,
         branches: [],
         filteredBranches: [],
         selectedBranchIndex: 0,
         branchKeyword: ''
       })
-      this.syncCanSubmit(nextForm)
-      this.emitDraftChange(nextForm)
 
       if (nextForm.bank_alias_code) {
         await this.loadBranches(nextForm.bank_alias_code, city.city_code)
       }
       this.onCloseCityPicker()
+    },
+
+    onCityPickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
+      if (e.detail?.visible === false) {
+        this.onCloseCityPicker()
+      }
     },
 
     onOpenBranchPicker() {
@@ -832,19 +901,22 @@ Component({
       }
 
       const nextForm: ApplymentBindBankDraft = {
-        ...(this.data.form as ApplymentBindBankDraft),
+        ...this.readForm(),
         bank_address_code: String(this.data.selectedCityCode || ''),
         bank_branch_id: branch.bank_branch_id,
         bank_name: branch.bank_branch_name
       }
 
-      this.setData({
-        form: nextForm,
+      this.setFormState(nextForm, {
         selectedBranchIndex: index
       })
-      this.syncCanSubmit(nextForm)
-      this.emitDraftChange(nextForm)
       this.onCloseBranchPicker()
+    },
+
+    onBranchPickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
+      if (e.detail?.visible === false) {
+        this.onCloseBranchPicker()
+      }
     },
 
     onCancel() {

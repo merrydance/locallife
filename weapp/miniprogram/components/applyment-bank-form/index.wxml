@@ -27,23 +27,22 @@
       <view wx:if="{{loadingBanks}}" class="section-meta">加载中...</view>
     </view>
 
-    <view wx:if="{{form.bank_alias && (form.account_bank !== form.bank_alias || form.need_bank_branch)}}" class="selected-card">
+    <view wx:if="{{showSelectedBankCard}}" class="selected-card">
       <view class="selected-row">
         <t-tag theme="primary" variant="light">已选银行</t-tag>
-        <view class="selected-name">{{buildSelectedBankLabel(form)}}</view>
+        <view class="selected-name">{{selectedBankLabel}}</view>
       </view>
-      <view wx:if="{{form.account_bank !== form.bank_alias}}" class="selected-desc">微信开户银行字段将填写为：{{form.account_bank}}</view>
-      <view wx:if="{{form.need_bank_branch}}" class="selected-desc">这家银行还需要继续选择开户地址和支行。</view>
     </view>
 
     <view class="picker-group">
-      <view class="field-label">开户行列表</view>
-      <view class="picker-trigger {{form.bank_alias ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenBankPicker">{{form.bank_alias ? buildSelectedBankLabel(form) : (loadingBanks ? '银行列表加载中...' : '请选择开户行')}}</view>
-      <view wx:if="{{!loadingBanks && !filteredBanks.length}}" class="empty-text">当前暂无可选开户行，请稍后重试。</view>
+      <view class="picker-trigger {{hasSelectedBank ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenBankPicker">
+        <view class="picker-trigger-content">{{hasSelectedBank ? selectedBankLabel : (loadingBanks ? '银行列表加载中...' : '请选择开户银行')}}</view>
+        <t-icon class="picker-trigger-arrow" name="chevron-right" size="36rpx" />
+      </view>
     </view>
   </view>
 
-  <view wx:if="{{form.need_bank_branch}}" class="section-card">
+  <view class="section-card">
     <view class="section-head">
       <view>
         <view class="section-title">开户地址和支行</view>
@@ -51,18 +50,24 @@
     </view>
 
     <view class="picker-group">
-      <view class="field-label">开户省份</view>
-      <view class="picker-trigger {{selectedProvinceCode ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenProvincePicker">{{selectedProvinceCode ? provinces[selectedProvinceIndex].province_name : (loadingProvinces ? '省份加载中...' : '请选择开户省份')}}</view>
+      <view class="picker-trigger {{selectedProvinceCode ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenProvincePicker">
+        <view class="picker-trigger-content">{{selectedProvinceCode ? provinces[selectedProvinceIndex].province_name : (loadingProvinces ? '省份加载中...' : '请选择开户省份')}}</view>
+        <t-icon class="picker-trigger-arrow" name="chevron-right" size="36rpx" />
+      </view>
     </view>
 
     <view class="picker-group">
-      <view class="field-label">开户城市</view>
-      <view class="picker-trigger {{selectedCityCode ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenCityPicker">{{selectedCityCode ? cities[selectedCityIndex].city_name : (selectedProvinceCode ? (loadingCities ? '城市加载中...' : '请选择开户城市') : '请先选择省份')}}</view>
+      <view class="picker-trigger {{selectedCityCode ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenCityPicker">
+        <view class="picker-trigger-content">{{selectedCityCode ? cities[selectedCityIndex].city_name : (selectedProvinceCode ? (loadingCities ? '城市加载中...' : '请选择开户城市') : '请先选择省份')}}</view>
+        <t-icon class="picker-trigger-arrow" name="chevron-right" size="36rpx" />
+      </view>
     </view>
 
     <view class="picker-group">
-      <view class="field-label">支行列表</view>
-      <view class="picker-trigger {{form.bank_name ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenBranchPicker">{{form.bank_name ? form.bank_name : (selectedCityCode ? (loadingBranches ? '支行列表加载中...' : '请选择开户支行') : '请先选择开户城市')}}</view>
+      <view class="picker-trigger {{form.bank_name ? '' : 'picker-trigger--placeholder'}}" bindtap="onOpenBranchPicker">
+        <view class="picker-trigger-content">{{form.bank_name ? form.bank_name : (selectedCityCode ? (loadingBranches ? '支行列表加载中...' : '请选择开户支行') : '请先选择开户城市')}}</view>
+        <t-icon class="picker-trigger-arrow" name="chevron-right" size="36rpx" />
+      </view>
       <view wx:if="{{loadingBranches}}" class="empty-text">正在加载支行列表...</view>
       <view wx:if="{{!loadingBranches && selectedCityCode && !filteredBranches.length}}" class="empty-text">当前城市下暂无可选支行，请确认开户城市后重试。</view>
     </view>
@@ -72,7 +77,7 @@
     <t-button theme="default" variant="outline" size="large" shape="round" block disabled="{{submitting}}" bindtap="onCancel">取消</t-button>
   </view>
 
-  <t-popup visible="{{showBankPicker}}" placement="bottom" bind:visible-change="onCloseBankPicker">
+  <t-popup wx:if="{{showBankPicker}}" visible="{{showBankPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onBankPickerVisibleChange">
     <view class="selector-sheet">
       <view class="selector-head">
         <view class="selector-title">选择开户行</view>
@@ -81,13 +86,12 @@
       <scroll-view class="selector-list selector-list--bank" scroll-y>
         <view wx:for="{{filteredBanks}}" wx:key="bank_alias_code" class="selector-item {{form.bank_alias_code === item.bank_alias_code && form.account_bank_code === item.account_bank_code ? 'selector-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectBankOption">
           <view class="selector-item-title">{{item.bank_alias}}</view>
-          <view wx:if="{{item.account_bank !== item.bank_alias}}" class="selector-item-desc">微信开户银行填写为 {{item.account_bank}}</view>
         </view>
       </scroll-view>
     </view>
   </t-popup>
 
-  <t-popup visible="{{showProvincePicker}}" placement="bottom" bind:visible-change="onCloseProvincePicker">
+  <t-popup wx:if="{{showProvincePicker}}" visible="{{showProvincePicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onProvincePickerVisibleChange">
     <view class="selector-sheet">
       <view class="selector-head">
         <view class="selector-title">选择开户省份</view>
@@ -101,7 +105,7 @@
     </view>
   </t-popup>
 
-  <t-popup visible="{{showCityPicker}}" placement="bottom" bind:visible-change="onCloseCityPicker">
+  <t-popup wx:if="{{showCityPicker}}" visible="{{showCityPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onCityPickerVisibleChange">
     <view class="selector-sheet">
       <view class="selector-head">
         <view class="selector-title">选择开户城市</view>
@@ -115,7 +119,7 @@
     </view>
   </t-popup>
 
-  <t-popup visible="{{showBranchPicker}}" placement="bottom" bind:visible-change="onCloseBranchPicker">
+  <t-popup wx:if="{{showBranchPicker}}" visible="{{showBranchPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onBranchPickerVisibleChange">
     <view class="selector-sheet">
       <view class="selector-head">
         <view class="selector-title">选择开户支行</view>

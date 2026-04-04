@@ -39,6 +39,7 @@
 
 ## 1. 设计原则 (Principles)
 
+- **组件优先复用 (Component First)**：能直接满足需求时，优先使用 TDesign 原生组件；不要为了局部偏好重做或重写近似组件。
 - **对比度优先 (Contrast
   First)**：确保内容清晰可见。背景与文字应有足够的对比度，避免顺色。
   - _Bad_: 浅红背景 + 深红文字 (对比度低)
@@ -149,6 +150,8 @@
 ```
 
 ### 3.3 按钮 (Button)
+
+组件约束：优先直接使用 TDesign 原生按钮能力；允许做主题色、间距、安全区和页面布局适配，不允许无必要地修改 TDesign 内部状态行为、图标语义或默认交互反馈。
 
 - **页面主操作**: 统一使用 `t-button` + `theme="primary"` + `size="large"` + `shape="round"` + `block`
 - **页面次操作**: 统一使用 `theme="default"` 或 `theme="primary" variant="outline"`，尺寸与主操作保持一致，不允许主次按钮高度不一致。

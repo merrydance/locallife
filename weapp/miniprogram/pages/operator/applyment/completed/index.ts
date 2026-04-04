@@ -1,4 +1,5 @@
 import { getOperatorApplymentStatus } from '../../../../api/operator-applyment'
+import { getOperatorAccountBalance } from '../../../../api/operator-finance'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 function isCompletedStatus(status?: string) {
@@ -28,10 +29,21 @@ Page({
     this.setData({ loading: true, error: '' })
     try {
       const status = await getOperatorApplymentStatus()
+      let subMchId = status.sub_mch_id || ''
+
+      if (isCompletedStatus(status.status) && !subMchId) {
+        try {
+          const balance = await getOperatorAccountBalance()
+          subMchId = balance.sub_mch_id || ''
+        } catch {
+          // 资金账户接口只做兜底，不阻断完成页主流程。
+        }
+      }
+
       this.setData({
         completed: isCompletedStatus(status.status),
         applymentId: status.applyment_id ? String(status.applyment_id) : '',
-        subMchId: status.sub_mch_id || '',
+        subMchId,
         statusDesc: status.status_desc || '微信支付商户已开通'
       })
     } catch (error: unknown) {

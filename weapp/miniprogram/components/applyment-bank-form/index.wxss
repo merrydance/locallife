@@ -183,9 +183,27 @@
 }
 
 .picker-trigger {
+  min-height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
   padding: 24rpx;
+  box-sizing: border-box;
   background: var(--td-bg-color-secondarycontainer);
   color: var(--td-text-color-primary);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.picker-trigger-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.picker-trigger-arrow {
+  color: var(--td-text-color-placeholder);
+  flex-shrink: 0;
 }
 
 .picker-trigger--placeholder {

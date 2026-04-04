@@ -17,7 +17,7 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 
 ## Working Style
 
-- Prefer existing TDesign-based patterns and local components before introducing new UI structure.
+- Prefer TDesign Miniprogram native components first; only add a custom component when TDesign does not provide the required capability. Do not modify TDesign internal styles, default interaction, or state behavior unless there is a confirmed platform limitation or missing capability. Theme tokens, spacing, safe-area handling, and page-level layout adaptation are allowed.
 - Keep business-specific styles out of global app styles unless they are truly shared.
 - Treat user-facing copy as product copy, not developer terminology.
 - Check adjacent pages or components before creating a new pattern.
@@ -25,7 +25,7 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 ## UI Rules To Apply Directly
 
 - Use the CSS tokens already defined in `app.wxss` instead of hardcoded color, spacing, or radius values.
-- Prefer TDesign Miniprogram components for buttons, tags, images, inputs, dialogs, loading, and icons before building custom equivalents.
+- Prefer TDesign Miniprogram components for buttons, tags, images, inputs, dialogs, loading, and icons before building local wrappers or custom equivalents.
 - Ensure each data-driven surface has explicit loading, success, empty, and error states.
 - Avoid full-screen spinner-only loading patterns when a skeleton or structural placeholder is more appropriate.
 - Keep business styles out of shared global styles and keep developer-facing wording out of user-visible copy.
@@ -52,6 +52,7 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 - Raw server leakage: exposing untranslated backend, SQL, provider, or internal diagnostic strings directly to users.
 - Cold-start realtime gaps: websocket or event listeners that only work after a second entry, manual refresh, or status toggle.
 - First-screen request explosions: page boot logic that multiplies network requests per item and makes weak-network behavior unstable.
+- TDesign drift: replacing a suitable TDesign component with custom UI, or changing TDesign internals for non-essential visual preference.
 
 ## Validation Defaults
 

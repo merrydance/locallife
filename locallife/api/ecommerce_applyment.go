@@ -1386,7 +1386,8 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 						Status: "active",
 					})
 				}
-				if newStatus != applyment.Status {
+				needsSubMchBackfill := wxResp.SubMchID != "" && (!applyment.SubMchID.Valid || applyment.SubMchID.String == "")
+				if newStatus != applyment.Status || needsSubMchBackfill {
 					// 状态有变化，更新数据库
 					updateParams := db.UpdateEcommerceApplymentStatusParams{
 						ID:           applyment.ID,
@@ -1406,6 +1407,7 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 							SubMchID: pgtype.Text{String: wxResp.SubMchID, Valid: true},
 						})
 						applyment.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
+						operator.SubMchID = pgtype.Text{String: wxResp.SubMchID, Valid: true}
 					} else {
 						_, _ = server.store.UpdateEcommerceApplymentStatus(ctx, updateParams)
 					}
@@ -1418,7 +1420,8 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 		}
 	}
 
-	normalizedStatus := normalizeApplymentStatus(applyment.Status, applyment.SubMchID.Valid && applyment.SubMchID.String != "")
+	effectiveSubMchID := resolveApplymentSubMchID(applyment.SubMchID, operator.SubMchID)
+	normalizedStatus := normalizeApplymentStatus(applyment.Status, effectiveSubMchID != "")
 	canSubmit, blockReason := getOperatorApplymentSubmitCapability(operator.Status, normalizedStatus)
 	statusDesc := getOperatorApplymentStatusDesc(normalizedStatus, canSubmit)
 	resp := operatorApplymentStatusResponse{
@@ -1433,8 +1436,8 @@ func (server *Server) getOperatorApplymentStatus(ctx *gin.Context) {
 	if applyment.ApplymentID.Valid {
 		resp.ApplymentID = &applyment.ApplymentID.Int64
 	}
-	if applyment.SubMchID.Valid {
-		resp.SubMchID = applyment.SubMchID.String
+	if effectiveSubMchID != "" {
+		resp.SubMchID = effectiveSubMchID
 	}
 	if applyment.SignUrl.Valid {
 		resp.SignURL = &applyment.SignUrl.String
@@ -1451,6 +1454,16 @@ func normalizeApplymentStatus(status string, hasSubMchID bool) string {
 		return "submitted"
 	}
 	return status
+}
+
+func resolveApplymentSubMchID(applymentSubMchID, operatorSubMchID pgtype.Text) string {
+	if applymentSubMchID.Valid && applymentSubMchID.String != "" {
+		return applymentSubMchID.String
+	}
+	if operatorSubMchID.Valid && operatorSubMchID.String != "" {
+		return operatorSubMchID.String
+	}
+	return ""
 }
 
 func getMerchantApplymentSubmitCapability(merchantStatus, applymentStatus string) (bool, string) {

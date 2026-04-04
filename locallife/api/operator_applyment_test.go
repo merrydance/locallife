@@ -589,6 +589,37 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "FinishWithoutApplymentSubMch_UsesOperatorSubMch",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				testOperator := operator
+				testOperator.SubMchID = pgtype.Text{String: "1900001234", Valid: true}
+
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(testOperator, nil)
+
+				applyment := randomEcommerceApplymentForTest("operator", operator.ID)
+				applyment.Status = "finish"
+				applyment.SubMchID = pgtype.Text{Valid: false}
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(applyment, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response operatorApplymentStatusResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "finish", response.Status)
+				require.Equal(t, "1900001234", response.SubMchID)
+				require.False(t, response.CanSubmit)
+			},
+		},
+		{
 			name: "NoApplyment",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -691,4 +722,70 @@ func TestGetOperatorApplymentStatusAPI(t *testing.T) {
 			tc.checkResponse(recorder)
 		})
 	}
+}
+
+func TestGetOperatorApplymentStatusAPI_QueryBackfillsSubMchIDWhenStatusUnchanged(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperatorForApplyment(user.ID)
+	applyment := randomEcommerceApplymentForTest("operator", operator.ID)
+	applyment.Status = "auditing"
+	applyment.ApplymentID = pgtype.Int8{Int64: 123456789, Valid: true}
+	applyment.SubMchID = pgtype.Text{}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(1).
+		Return(operator, nil)
+
+	store.EXPECT().
+		GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(applyment, nil)
+
+	ecommerceClient.EXPECT().
+		QueryEcommerceApplymentByID(gomock.Any(), applyment.ApplymentID.Int64).
+		Times(1).
+		Return(&wechat.EcommerceApplymentQueryResponse{
+			ApplymentID:    applyment.ApplymentID.Int64,
+			ApplymentState: "AUDITING",
+			SubMchID:       "1900005678",
+		}, nil)
+
+	store.EXPECT().
+		UpdateEcommerceApplymentSubMchID(gomock.Any(), db.UpdateEcommerceApplymentSubMchIDParams{
+			ID:       applyment.ID,
+			SubMchID: pgtype.Text{String: "1900005678", Valid: true},
+		}).
+		Times(1).
+		Return(applyment, nil)
+
+	store.EXPECT().
+		UpdateOperatorSubMchID(gomock.Any(), db.UpdateOperatorSubMchIDParams{
+			ID:       operator.ID,
+			SubMchID: pgtype.Text{String: "1900005678", Valid: true},
+		}).
+		Times(1).
+		Return(operator, nil)
+
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/operator/applyment/status", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response operatorApplymentStatusResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Equal(t, "auditing", response.Status)
+	require.Equal(t, "1900005678", response.SubMchID)
+	require.False(t, response.CanSubmit)
 }
