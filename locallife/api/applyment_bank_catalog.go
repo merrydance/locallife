@@ -81,6 +81,7 @@ type applymentBankQuery struct {
 }
 
 type applymentBankSearchQuery struct {
+	AccountType   string `form:"account_type" binding:"required,oneof=ACCOUNT_TYPE_BUSINESS ACCOUNT_TYPE_PRIVATE"`
 	AccountNumber string `form:"account_number" binding:"required"`
 }
 
@@ -188,6 +189,7 @@ func (server *Server) listApplymentBanks(ctx *gin.Context) {
 // @Tags 开户
 // @Accept json
 // @Produce json
+// @Param account_type query string true "账户类型" Enums(ACCOUNT_TYPE_BUSINESS,ACCOUNT_TYPE_PRIVATE)
 // @Param account_number query string true "银行卡号"
 // @Success 200 {object} applymentBankSearchResponse
 // @Failure 400 {object} ErrorResponse
@@ -211,6 +213,15 @@ func (server *Server) searchApplymentBanksByAccount(ctx *gin.Context) {
 	accountNumber := strings.TrimSpace(req.AccountNumber)
 	if accountNumber == "" {
 		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("account_number is required")))
+		return
+	}
+
+	if req.AccountType != "ACCOUNT_TYPE_PRIVATE" {
+		ctx.JSON(http.StatusOK, applymentBankSearchResponse{
+			Matches:     []applymentBankOption{},
+			Total:       0,
+			RefreshedAt: time.Now(),
+		})
 		return
 	}
 

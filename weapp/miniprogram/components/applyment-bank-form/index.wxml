@@ -16,13 +16,10 @@
 
   <view class="account-number-row">
     <view class="account-number-main">
-      <t-input label="银行账号" placeholder="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '输入银行卡号后可尝试自动识别' : '请输入对公银行账户号码'}}" value="{{form.account_number}}" data-field="account_number" bindchange="onTextFieldChange" />
+      <t-input label="银行账号" placeholder="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE' ? '输入银行卡号后系统会尝试识别开户银行' : '请输入对公银行账户号码'}}" value="{{form.account_number}}" data-field="account_number" bindchange="onTextFieldChange" bindblur="onAccountNumberBlur" />
     </view>
     <t-button wx:if="{{form.account_type === 'ACCOUNT_TYPE_PRIVATE'}}" theme="default" variant="outline" shape="round" size="small" loading="{{recognizingBank}}" disabled="{{recognizingBank || form.account_number.length < 8}}" bindtap="onRecognizeBank">识别开户行</t-button>
   </view>
-
-  <t-input label="联系手机" type="number" placeholder="请输入用于微信审核联系的手机号" value="{{form.contact_phone}}" data-field="contact_phone" bindchange="onTextFieldChange" />
-  <t-input label="联系邮箱" placeholder="可选，用于补充联系" value="{{form.contact_email}}" data-field="contact_email" bindchange="onTextFieldChange" />
 
   <view class="section-card">
     <view class="section-head">
@@ -38,7 +35,7 @@
     <view wx:if="{{form.bank_alias}}" class="selected-card">
       <view class="selected-row">
         <t-tag theme="primary" variant="light">已选银行</t-tag>
-        <view class="selected-name">{{form.bank_alias}}</view>
+        <view class="selected-name">{{buildSelectedBankLabel(form)}}</view>
       </view>
       <view wx:if="{{form.account_bank !== form.bank_alias}}" class="selected-desc">微信开户银行字段将填写为：{{form.account_bank}}</view>
       <view wx:if="{{form.need_bank_branch}}" class="selected-desc">这家银行还需要继续选择开户地址和支行。</view>
@@ -48,7 +45,7 @@
       <view class="candidate-title">识别候选</view>
       <view class="candidate-list">
         <block wx:for="{{recognizedBanks}}" wx:key="bank_alias_code">
-          <t-button theme="default" variant="outline" shape="round" size="small" data-index="{{index}}" bindtap="onSelectRecognizedBank">{{item.bank_alias}}</t-button>
+          <t-button theme="default" variant="outline" shape="round" size="small" data-index="{{index}}" bindtap="onSelectRecognizedBank">{{buildBankDisplayLabel(item)}}</t-button>
         </block>
       </view>
     </view>
@@ -60,7 +57,7 @@
         <view class="result-item {{isBankSelected(item) ? 'result-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectBank">
           <view class="result-main">
             <view class="result-title">{{buildBankDisplayLabel(item)}}</view>
-            <view class="result-desc">开户银行编码 {{item.account_bank_code}}</view>
+            <view class="result-desc">{{item.need_bank_branch ? '还需继续选择开户地址和支行' : '选中后可直接继续填写并提交'}}</view>
           </view>
           <view class="result-side">
             <t-tag wx:if="{{item.need_bank_branch}}" theme="warning" variant="light">需选支行</t-tag>
@@ -101,7 +98,7 @@
         <view class="result-item {{isBranchSelected(item) ? 'result-item--active' : ''}}" data-index="{{index}}" bindtap="onSelectBranch">
           <view class="result-main">
             <view class="result-title">{{item.bank_branch_name}}</view>
-            <view class="result-desc">联行号 {{item.bank_branch_id}}</view>
+            <view class="result-desc">请选择与你开户资料一致的支行名称</view>
           </view>
           <view wx:if="{{isBranchSelected(item)}}" class="result-check">已选</view>
         </view>
@@ -110,9 +107,15 @@
       <view wx:if="{{!loadingBranches && selectedCityCode && !filteredBranches.length}}" class="empty-text">当前城市下没有匹配到支行，请换个关键词再试。</view>
     </scroll-view>
 
+    <view wx:if="{{selectedProvinceCode || selectedCityCode}}" class="selected-card selected-card-plain">
+      <view class="selected-row">
+        <t-tag theme="default" variant="light">开户地区</t-tag>
+        <view class="selected-name">{{selectedProvinceCode ? provinces[selectedProvinceIndex].province_name : ''}}{{selectedCityCode ? ' / ' + cities[selectedCityIndex].city_name : ''}}</view>
+      </view>
+    </view>
+
     <view wx:if="{{form.bank_name}}" class="hint-card hint-card-warn">已选择支行：{{form.bank_name}}</view>
   </view>
-
   <view class="form-actions">
     <t-button theme="primary" size="large" shape="round" block loading="{{submitting}}" disabled="{{submitting || !canSubmit}}" bindtap="onSubmit">{{submitLabel}}</t-button>
     <t-button theme="default" variant="outline" size="large" shape="round" block disabled="{{submitting}}" bindtap="onCancel">取消</t-button>

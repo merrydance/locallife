@@ -25,8 +25,6 @@ interface ApplymentBindBankDraft {
   bank_name: string
   account_number: string
   account_name: string
-  contact_phone: string
-  contact_email: string
 }
 
 function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankDraft {
@@ -41,9 +39,7 @@ function createEmptyDraft(accountType: ApplymentAccountType): ApplymentBindBankD
     bank_branch_id: '',
     bank_name: '',
     account_number: '',
-    account_name: '',
-    contact_phone: '',
-    contact_email: ''
+    account_name: ''
   }
 }
 
@@ -76,12 +72,15 @@ function buildBankDisplayLabel(bank: ApplymentBankOption): string {
   return `${bank.bank_alias} · 微信开户银行填写为${bank.account_bank}`
 }
 
+function buildSelectedBankLabel(form: ApplymentBindBankDraft): string {
+  return form.bank_alias || form.account_bank
+}
+
 function canSubmitForm(form: ApplymentBindBankDraft): boolean {
   const baseValid = Boolean(
     form.account_bank.trim() &&
     form.account_number.trim() &&
-    form.account_name.trim() &&
-    form.contact_phone.trim()
+    form.account_name.trim()
   )
 
   if (!baseValid) {
@@ -188,6 +187,36 @@ Component({
         branchKeyword: nextKeyword,
         filteredBranches
       })
+    },
+
+    clearResolvedBankSelection(options?: { keepRecognitionHint?: boolean }) {
+      const currentForm = this.data.form as ApplymentBindBankDraft
+      const nextForm: ApplymentBindBankDraft = {
+        ...currentForm,
+        account_bank: '',
+        account_bank_code: 0,
+        bank_alias: '',
+        bank_alias_code: '',
+        need_bank_branch: false,
+        bank_address_code: '',
+        bank_branch_id: '',
+        bank_name: ''
+      }
+
+      this.setData({
+        form: nextForm,
+        recognizedBanks: [],
+        recognitionHint: options?.keepRecognitionHint ? this.data.recognitionHint : '',
+        selectedProvinceIndex: 0,
+        selectedCityIndex: 0,
+        selectedProvinceCode: 0,
+        selectedCityCode: 0,
+        cities: [],
+        branches: [],
+        filteredBranches: [],
+        branchKeyword: ''
+      })
+      this.syncCanSubmit(nextForm)
     },
 
     async loadBanks(accountType: ApplymentAccountType) {
@@ -366,9 +395,39 @@ Component({
       }
 
       const value = e.detail.value || ''
-      const nextForm: ApplymentBindBankDraft = {
+      let nextForm: ApplymentBindBankDraft = {
         ...(this.data.form as ApplymentBindBankDraft),
         [field]: value
+      }
+
+      if (field === 'account_number' && nextForm.account_type === 'ACCOUNT_TYPE_PRIVATE') {
+        nextForm = {
+          ...nextForm,
+          account_bank: '',
+          account_bank_code: 0,
+          bank_alias: '',
+          bank_alias_code: '',
+          need_bank_branch: false,
+          bank_address_code: '',
+          bank_branch_id: '',
+          bank_name: ''
+        }
+
+        this.setData({
+          form: nextForm,
+          recognizedBanks: [],
+          recognitionHint: '',
+          selectedProvinceIndex: 0,
+          selectedCityIndex: 0,
+          selectedProvinceCode: 0,
+          selectedCityCode: 0,
+          cities: [],
+          branches: [],
+          filteredBranches: [],
+          branchKeyword: ''
+        })
+        this.syncCanSubmit(nextForm)
+        return
       }
 
       this.setData({ form: nextForm })
@@ -378,7 +437,21 @@ Component({
     async onAccountTypeChange(e: WechatMiniprogram.CustomEvent<{ value: ApplymentAccountType }>) {
       const accountType = e.detail.value as ApplymentAccountType
       this.resetBankSelection(accountType)
+      if (accountType === 'ACCOUNT_TYPE_BUSINESS') {
+        this.setData({ recognitionHint: '对公账户暂不支持卡号自动识别，请直接在下方选择开户银行。' })
+      }
       await this.loadBanks(accountType)
+    },
+
+    onAccountNumberBlur() {
+      const form = this.data.form as ApplymentBindBankDraft
+      if (form.account_type !== 'ACCOUNT_TYPE_PRIVATE') {
+        return
+      }
+      if (this.data.recognizingBank || form.account_number.trim().length < 8 || form.bank_alias) {
+        return
+      }
+      void this.onRecognizeBank()
     },
 
     onBankKeywordChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -397,6 +470,7 @@ Component({
         return
       }
 
+      this.clearResolvedBankSelection()
       this.setData({
         recognizingBank: true,
         recognizedBanks: [],
@@ -404,20 +478,20 @@ Component({
       })
 
       try {
-        const response = await searchApplymentBanksByAccount(this.properties.apiBasePath, accountNumber)
+        const response = await searchApplymentBanksByAccount(this.properties.apiBasePath, form.account_type, accountNumber)
         this.setData({ recognizedBanks: response.matches })
 
         if (response.matches.length === 1) {
-          await this.applySelectedBank(response.matches[0], '已根据银行卡号自动识别开户银行。')
+          await this.applySelectedBank(response.matches[0], '已根据银行卡号自动识别并回填开户银行，请核对后继续。')
           return
         }
 
         if (response.matches.length > 1) {
-          this.setData({ recognitionHint: `识别到 ${response.matches.length} 家候选银行，请确认具体一家。` })
+          this.setData({ recognitionHint: `系统没法仅靠卡号精确定位开户银行，已帮你缩小到 ${response.matches.length} 家候选，请手动确认具体银行。` })
           return
         }
 
-        this.setData({ recognitionHint: '暂时无法自动识别，请在下方银行列表里手动搜索选择。' })
+        this.setData({ recognitionHint: '暂时无法自动识别开户银行，请在下方银行列表中手动选择。' })
       } catch (error: unknown) {
         wx.showToast({
           title: getErrorUserMessage(error, '识别开户银行失败，请稍后重试'),
@@ -544,15 +618,15 @@ Component({
         bank_branch_id: form.bank_branch_id.trim() || undefined,
         bank_name: form.bank_name.trim() || undefined,
         account_number: form.account_number.trim(),
-        account_name: form.account_name.trim(),
-        contact_phone: form.contact_phone.trim(),
-        contact_email: form.contact_email.trim() || undefined
+        account_name: form.account_name.trim()
       }
 
       this.triggerEvent('submit', payload)
     },
 
     buildBankDisplayLabel,
+
+    buildSelectedBankLabel,
 
     isBankSelected(bank: ApplymentBankOption): boolean {
       const form = this.data.form as ApplymentBindBankDraft

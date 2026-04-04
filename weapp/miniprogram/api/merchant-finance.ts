@@ -310,8 +310,6 @@ export interface MerchantBindBankRequest {
   bank_name?: string
   account_number: string
   account_name: string
-  contact_phone: string
-  contact_email?: string
 }
 
 export interface MerchantBindBankResponse {

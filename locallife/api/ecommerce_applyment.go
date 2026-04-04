@@ -34,8 +34,6 @@ type applymentBindBankFields struct {
 	BankName        string `json:"bank_name"`
 	AccountNumber   string `json:"account_number" binding:"required"`
 	AccountName     string `json:"account_name" binding:"required,max=128"`
-	ContactPhone    string `json:"contact_phone" binding:"required"`
-	ContactEmail    string `json:"contact_email" binding:"omitempty,email"`
 }
 
 func (f *applymentBindBankFields) normalize() {
@@ -48,8 +46,6 @@ func (f *applymentBindBankFields) normalize() {
 	f.BankName = strings.TrimSpace(f.BankName)
 	f.AccountNumber = strings.TrimSpace(f.AccountNumber)
 	f.AccountName = strings.TrimSpace(f.AccountName)
-	f.ContactPhone = strings.TrimSpace(f.ContactPhone)
-	f.ContactEmail = strings.TrimSpace(f.ContactEmail)
 	if f.AccountBank == "" && f.BankAlias != "" {
 		f.AccountBank = f.BankAlias
 	}
@@ -64,9 +60,6 @@ func (f applymentBindBankFields) validateSelection() error {
 	}
 	if f.AccountName == "" {
 		return fmt.Errorf("account_name is required")
-	}
-	if f.ContactPhone == "" {
-		return fmt.Errorf("contact_phone is required")
 	}
 	if f.NeedBankBranch {
 		if f.BankAliasCode == "" {
@@ -180,6 +173,12 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		return
 	}
 
+	contactPhone, err := server.resolveApplymentContactPhone(ctx, authPayload.UserID, application.ContactPhone, merchant.Phone)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	// 解析身份证OCR信息
 	var idCardBackOCR MerchantIDCardOCRData
 	if len(application.IDCardBackOcr) > 0 {
@@ -269,8 +268,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		AccountName:           req.AccountName,
 		ContactName:           application.LegalPersonName,
 		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true}, // AES 加密存储
-		MobilePhone:           req.ContactPhone,
-		ContactEmail:          pgtype.Text{String: req.ContactEmail, Valid: req.ContactEmail != ""},
+		MobilePhone:           contactPhone,
 		MerchantShortname:     merchant.Name,
 		Qualifications:        []byte("[]"),
 		BusinessAdditionPics:  []string{},
@@ -389,22 +387,11 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 	}
 
 	// 加密联系手机号
-	wxEncryptedMobilePhone, err := server.ecommerceClient.EncryptSensitiveData(req.ContactPhone)
+	wxEncryptedMobilePhone, err := server.ecommerceClient.EncryptSensitiveData(contactPhone)
 	if err != nil {
 		log.Error().Err(err).Msg("加密联系手机号失败")
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
 		return
-	}
-
-	// 加密联系邮箱（如有）
-	var wxEncryptedContactEmail string
-	if req.ContactEmail != "" {
-		wxEncryptedContactEmail, err = server.ecommerceClient.EncryptSensitiveData(req.ContactEmail)
-		if err != nil {
-			log.Error().Err(err).Msg("加密联系邮箱失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-			return
-		}
 	}
 
 	// ==================== 构建微信进件请求 ====================
@@ -417,6 +404,10 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		&businessLicenseOCR,
 	)
 	storeURL := buildApplymentStoreURL(server.config)
+	storeName := strings.TrimSpace(application.MerchantName)
+	if storeName == "" {
+		storeName = merchant.Name
+	}
 
 	applymentReq := &wechat.EcommerceApplymentRequest{
 		OutRequestNo:       outRequestNo,
@@ -438,10 +429,9 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			ContactName:         wxEncryptedIDCardName,
 			ContactIDCardNumber: wxEncryptedIDCardNumber,
 			MobilePhone:         wxEncryptedMobilePhone,
-			ContactEmail:        wxEncryptedContactEmail,
 		},
 		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
-			StoreName: merchant.Name,
+			StoreName: storeName,
 			StoreURL:  storeURL,
 		},
 	}
@@ -983,6 +973,12 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
+	contactPhone, err := server.resolveApplymentContactPhone(ctx, authPayload.UserID, pgTextValue(application.ContactPhone), operator.ContactPhone)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
 	// 解析身份证背面OCR信息（获取有效期）
 	var idCardBackOCR OperatorIDCardBackOCR
 	if len(application.IDCardBackOcr) > 0 {
@@ -1096,8 +1092,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		AccountName:           req.AccountName,
 		ContactName:           legalPersonName,
 		ContactIDCardNumber:   pgtype.Text{String: encryptedContactIDCardNumber, Valid: true}, // AES 加密存储
-		MobilePhone:           req.ContactPhone,
-		ContactEmail:          pgtype.Text{String: req.ContactEmail, Valid: req.ContactEmail != ""},
+		MobilePhone:           contactPhone,
 		MerchantShortname:     operatorName,
 		Qualifications:        []byte("[]"),
 		BusinessAdditionPics:  []string{},
@@ -1212,22 +1207,11 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	}
 
 	// 加密联系手机号
-	wxEncryptedMobilePhone, err := server.ecommerceClient.EncryptSensitiveData(req.ContactPhone)
+	wxEncryptedMobilePhone, err := server.ecommerceClient.EncryptSensitiveData(contactPhone)
 	if err != nil {
 		log.Error().Err(err).Msg("加密运营商联系手机号失败")
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
 		return
-	}
-
-	// 加密联系邮箱（如有）
-	var wxEncryptedContactEmail string
-	if req.ContactEmail != "" {
-		wxEncryptedContactEmail, err = server.ecommerceClient.EncryptSensitiveData(req.ContactEmail)
-		if err != nil {
-			log.Error().Err(err).Msg("加密运营商联系邮箱失败")
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("加密敏感信息失败")))
-			return
-		}
 	}
 
 	// ==================== 构建微信进件请求 ====================
@@ -1261,7 +1245,6 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 			ContactName:         wxEncryptedIDCardName,
 			ContactIDCardNumber: wxEncryptedIDCardNumber,
 			MobilePhone:         wxEncryptedMobilePhone,
-			ContactEmail:        wxEncryptedContactEmail,
 		},
 		SalesSceneInfo: &wechat.ApplymentSalesSceneInfo{
 			StoreName: operatorName,

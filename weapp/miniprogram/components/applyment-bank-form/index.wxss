@@ -113,6 +113,12 @@
   background: var(--td-bg-color-secondarycontainer);
 }
 
+.selected-card-plain {
+  background: var(--td-bg-color-container);
+  box-shadow: none;
+  border: 1rpx solid var(--td-component-border);
+}
+
 .candidate-list {
   display: flex;
   flex-wrap: wrap;
@@ -143,6 +149,11 @@
 .result-main {
   flex: 1;
   min-width: 0;
+}
+
+.result-title,
+.selected-name {
+  line-height: 1.5;
 }
 
 .result-check {

@@ -71,8 +71,6 @@ export interface ApplymentBindBankPayload {
   bank_name?: string
   account_number: string
   account_name: string
-  contact_phone: string
-  contact_email?: string
 }
 
 export function listApplymentBanks(apiBasePath: string, accountType: ApplymentAccountType) {
@@ -85,11 +83,12 @@ export function listApplymentBanks(apiBasePath: string, accountType: ApplymentAc
   })
 }
 
-export function searchApplymentBanksByAccount(apiBasePath: string, accountNumber: string) {
+export function searchApplymentBanksByAccount(apiBasePath: string, accountType: ApplymentAccountType, accountNumber: string) {
   return request<ApplymentBankSearchResponse>({
     url: `${apiBasePath}/banks/search-by-bank-account`,
     method: 'GET',
     data: {
+      account_type: accountType,
       account_number: accountNumber
     }
   })

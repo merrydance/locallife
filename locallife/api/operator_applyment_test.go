@@ -88,8 +88,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_name":         "深圳前海微众银行深圳南山支行",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
-				"contact_email":     "test@example.com",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -127,13 +125,15 @@ func TestOperatorBindBankAPI(t *testing.T) {
 						require.Equal(t, "1000009561", arg.BankAliasCode.String)
 						require.True(t, arg.BankBranchID.Valid)
 						require.Equal(t, "402584040001", arg.BankBranchID.String)
+						require.Equal(t, applicationWithTestURL.ContactPhone.String, arg.MobilePhone)
+						require.False(t, arg.ContactEmail.Valid)
 						return randomEcommerceApplymentForTest("operator", operator.ID), nil
 					})
 
 				// Mock 加密
 				ecommerceClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
-					Times(6).
+					Times(5).
 					Return("encrypted_data", nil)
 
 				// Mock 提交进件
@@ -149,6 +149,9 @@ func TestOperatorBindBankAPI(t *testing.T) {
 						require.NotNil(t, req.IDCardInfo)
 						require.Equal(t, "2020-01-01", req.IDCardInfo.IDCardValidTimeBegin)
 						require.Equal(t, "2030-01-01", req.IDCardInfo.IDCardValidTime)
+						require.NotNil(t, req.ContactInfo)
+						require.Equal(t, "encrypted_data", req.ContactInfo.MobilePhone)
+						require.Empty(t, req.ContactInfo.ContactEmail)
 						require.NotNil(t, req.SalesSceneInfo)
 						require.Equal(t, "https://merchant.example.com", req.SalesSceneInfo.StoreURL)
 						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
@@ -183,8 +186,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_name":         "招商银行深圳分行",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
-				"contact_email":     "test@example.com",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -214,7 +215,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 
 				ecommerceClient.EXPECT().
 					EncryptSensitiveData(gomock.Any()).
-					Times(6).
+					Times(5).
 					Return("encrypted_data", nil)
 
 				ecommerceClient.EXPECT().
@@ -223,6 +224,9 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
 						require.Equal(t, "2008-09-29", req.IDCardInfo.IDCardValidTimeBegin)
 						require.Equal(t, "2028-09-29", req.IDCardInfo.IDCardValidTime)
+						require.NotNil(t, req.ContactInfo)
+						require.Equal(t, "encrypted_data", req.ContactInfo.MobilePhone)
+						require.Empty(t, req.ContactInfo.ContactEmail)
 						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
 					})
 
@@ -252,7 +256,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -275,7 +278,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -300,7 +302,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -330,7 +331,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -360,7 +360,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -399,7 +398,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
@@ -438,7 +436,6 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				"bank_address_code": "440300",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
-				"contact_phone":     "13800138000",
 			},
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 			},

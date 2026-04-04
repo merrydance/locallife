@@ -9345,6 +9345,17 @@ const docTemplate = `{
                 "summary": "识别对私银行卡开户银行",
                 "parameters": [
                     {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
                         "type": "string",
                         "description": "银行卡号",
                         "name": "account_number",
@@ -16752,6 +16763,17 @@ const docTemplate = `{
                 ],
                 "summary": "识别对私银行卡开户银行",
                 "parameters": [
+                    {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    },
                     {
                         "type": "string",
                         "description": "银行卡号",
@@ -34891,8 +34913,7 @@ const docTemplate = `{
                 "account_bank",
                 "account_name",
                 "account_number",
-                "account_type",
-                "contact_phone"
+                "account_type"
             ],
             "properties": {
                 "account_bank": {
@@ -34929,12 +34950,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "bank_name": {
-                    "type": "string"
-                },
-                "contact_email": {
-                    "type": "string"
-                },
-                "contact_phone": {
                     "type": "string"
                 },
                 "need_bank_branch": {
@@ -36101,8 +36116,7 @@ const docTemplate = `{
                 "account_bank",
                 "account_name",
                 "account_number",
-                "account_type",
-                "contact_phone"
+                "account_type"
             ],
             "properties": {
                 "account_bank": {
@@ -36139,12 +36153,6 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "bank_name": {
-                    "type": "string"
-                },
-                "contact_email": {
-                    "type": "string"
-                },
-                "contact_phone": {
                     "type": "string"
                 },
                 "need_bank_branch": {
