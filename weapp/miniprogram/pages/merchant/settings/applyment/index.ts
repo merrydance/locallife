@@ -3,13 +3,10 @@ import {
   getMerchantApplymentStatus,
   merchantBindBank
 } from '../../../../api/merchant-finance'
+import type { ApplymentBindBankPayload } from '../../../../api/applyment-bank'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
-
-type InputChangeDetail = {
-  value: string
-}
 
 const EMPTY_APPLYMENT: ApplymentStatusResponse = {
   status: '',
@@ -67,15 +64,7 @@ Page({
     applymentActionHint: '',
     showBindForm: false,
     submittingBind: false,
-    refreshingStatus: false,
-    bindAccountType: 'ACCOUNT_TYPE_BUSINESS',
-    bindAccountBank: '',
-    bindBankAddressCode: '',
-    bindBankName: '',
-    bindAccountNumber: '',
-    bindAccountName: '',
-    bindContactPhone: '',
-    bindContactEmail: ''
+    refreshingStatus: false
   },
 
   onLoad() {
@@ -151,69 +140,17 @@ Page({
     this.setData({ showBindForm: false })
   },
 
-  onBindAccountTypeChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ bindAccountType: e.detail.value })
-  },
-
-  onBindFieldChange(
-    e: WechatMiniprogram.CustomEvent<InputChangeDetail> & {
-      currentTarget: { dataset: { field: string } }
-    }
-  ) {
-    const field = e.currentTarget.dataset.field as
-      | 'bindAccountBank'
-      | 'bindBankAddressCode'
-      | 'bindBankName'
-      | 'bindAccountNumber'
-      | 'bindAccountName'
-      | 'bindContactPhone'
-      | 'bindContactEmail'
-    this.setData({ [field]: e.detail.value })
-  },
-
-  async onSubmitBindBank() {
+  async onSubmitBindBank(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
     if (this.data.submittingBind) return
-
-    const {
-      bindAccountType,
-      bindAccountBank,
-      bindBankAddressCode,
-      bindAccountNumber,
-      bindAccountName,
-      bindContactPhone,
-      bindBankName,
-      bindContactEmail
-    } = this.data
-
-    if (!bindAccountBank.trim() || !bindBankAddressCode.trim() || !bindAccountNumber.trim() || !bindAccountName.trim() || !bindContactPhone.trim()) {
-      wx.showToast({ title: '请填写必填项', icon: 'none' })
-      return
-    }
 
     this.setData({ submittingBind: true })
     wx.showLoading({ title: '提交中...' })
 
     try {
-      await merchantBindBank({
-        account_type: bindAccountType as 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE',
-        account_bank: bindAccountBank.trim(),
-        bank_address_code: bindBankAddressCode.trim(),
-        bank_name: bindBankName.trim() || undefined,
-        account_number: bindAccountNumber.trim(),
-        account_name: bindAccountName.trim(),
-        contact_phone: bindContactPhone.trim(),
-        contact_email: bindContactEmail.trim() || undefined
-      })
+      await merchantBindBank(e.detail)
 
       this.setData({
-        showBindForm: false,
-        bindAccountBank: '',
-        bindBankAddressCode: '',
-        bindBankName: '',
-        bindAccountNumber: '',
-        bindAccountName: '',
-        bindContactPhone: '',
-        bindContactEmail: ''
+        showBindForm: false
       })
       await this.loadApplyment(true)
     } catch (error) {

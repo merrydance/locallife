@@ -78,9 +78,14 @@ func TestOperatorBindBankAPI(t *testing.T) {
 			name: "OK_WithEcommerceClient",
 			body: gin.H{
 				"account_type":      "ACCOUNT_TYPE_PRIVATE",
-				"account_bank":      "招商银行",
+				"account_bank":      "其他银行",
+				"account_bank_code": 1099,
+				"bank_alias":        "深圳前海微众银行",
+				"bank_alias_code":   "1000009561",
+				"need_bank_branch":  true,
 				"bank_address_code": "440300",
-				"bank_name":         "招商银行深圳分行",
+				"bank_branch_id":    "402584040001",
+				"bank_name":         "深圳前海微众银行深圳南山支行",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
 				"contact_phone":     "13800138000",
@@ -112,7 +117,18 @@ func TestOperatorBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(randomEcommerceApplymentForTest("operator", operator.ID), nil)
+					DoAndReturn(func(_ any, arg db.CreateEcommerceApplymentParams) (db.EcommerceApplyment, error) {
+						require.Equal(t, "其他银行", arg.AccountBank)
+						require.True(t, arg.AccountBankCode.Valid)
+						require.Equal(t, int64(1099), arg.AccountBankCode.Int64)
+						require.True(t, arg.BankAlias.Valid)
+						require.Equal(t, "深圳前海微众银行", arg.BankAlias.String)
+						require.True(t, arg.BankAliasCode.Valid)
+						require.Equal(t, "1000009561", arg.BankAliasCode.String)
+						require.True(t, arg.BankBranchID.Valid)
+						require.Equal(t, "402584040001", arg.BankBranchID.String)
+						return randomEcommerceApplymentForTest("operator", operator.ID), nil
+					})
 
 				// Mock 加密
 				ecommerceClient.EXPECT().
@@ -126,6 +142,10 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					Times(1).
 					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
 						require.Equal(t, "2", req.OrganizationType)
+						require.NotNil(t, req.AccountInfo)
+						require.Equal(t, "其他银行", req.AccountInfo.AccountBank)
+						require.Equal(t, int64(1099), req.AccountInfo.AccountBankCode)
+						require.Equal(t, "402584040001", req.AccountInfo.BankBranchID)
 						require.NotNil(t, req.IDCardInfo)
 						require.Equal(t, "2020-01-01", req.IDCardInfo.IDCardValidTimeBegin)
 						require.Equal(t, "2030-01-01", req.IDCardInfo.IDCardValidTime)

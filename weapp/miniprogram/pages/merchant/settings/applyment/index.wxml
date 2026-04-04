@@ -79,27 +79,7 @@
       </view>
 
       <view wx:if="{{showBindForm}}" class="bind-form">
-        <t-cell-group theme="card">
-          <view class="form-radio-row">
-            <text class="form-label">账户类型</text>
-            <t-radio-group value="{{bindAccountType}}" bindchange="onBindAccountTypeChange">
-              <t-radio value="ACCOUNT_TYPE_BUSINESS" label="对公账户" />
-              <t-radio value="ACCOUNT_TYPE_PRIVATE" label="对私（个人）" />
-            </t-radio-group>
-          </view>
-          <t-input label="开户名称" placeholder="{{bindAccountType === 'ACCOUNT_TYPE_BUSINESS' ? '企业/机构全称' : '持卡人姓名'}}" value="{{bindAccountName}}" data-field="bindAccountName" bindchange="onBindFieldChange" />
-          <t-input label="银行账号" placeholder="银行账户号码" value="{{bindAccountNumber}}" data-field="bindAccountNumber" bindchange="onBindFieldChange" />
-          <t-input label="开户银行" placeholder="如：中国工商银行" value="{{bindAccountBank}}" data-field="bindAccountBank" bindchange="onBindFieldChange" />
-          <t-input label="省市编码" placeholder="如：110000（北京市）" value="{{bindBankAddressCode}}" data-field="bindBankAddressCode" bindchange="onBindFieldChange" />
-          <t-input label="开户支行" placeholder="开户支行全称（选填）" value="{{bindBankName}}" data-field="bindBankName" bindchange="onBindFieldChange" />
-          <t-input label="联系手机" type="number" placeholder="11位手机号" value="{{bindContactPhone}}" data-field="bindContactPhone" bindchange="onBindFieldChange" />
-          <t-input label="联系邮箱" placeholder="选填" value="{{bindContactEmail}}" data-field="bindContactEmail" bindchange="onBindFieldChange" />
-        </t-cell-group>
-
-        <view class="form-actions">
-          <t-button theme="primary" size="large" shape="round" block loading="{{submittingBind}}" disabled="{{submittingBind}}" bindtap="onSubmitBindBank">提交银行账户信息</t-button>
-          <t-button theme="default" variant="outline" size="large" shape="round" block disabled="{{submittingBind}}" bindtap="onHideBindForm">取消</t-button>
-        </view>
+        <applyment-bank-form apiBasePath="/v1/merchant/applyment" defaultAccountType="ACCOUNT_TYPE_BUSINESS" submitLabel="提交银行账户信息" submitting="{{submittingBind}}" bind:submit="onSubmitBindBank" bind:cancel="onHideBindForm" />
       </view>
     </view>
   </block>

@@ -38,7 +38,11 @@ func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string,
 		IDCardBackCopy:        "https://example.com/id_back.jpg",
 		AccountType:           "ACCOUNT_TYPE_PRIVATE",
 		AccountBank:           "招商银行",
+		AccountBankCode:       pgtype.Int8{Int64: 1099, Valid: true},
+		BankAlias:             pgtype.Text{String: "深圳前海微众银行", Valid: true},
+		BankAliasCode:         pgtype.Text{String: "1000009561", Valid: true},
 		BankAddressCode:       "440300",
+		BankBranchID:          pgtype.Text{String: "402584040001", Valid: true},
 		BankName:              pgtype.Text{String: "招商银行深圳分行", Valid: true},
 		AccountNumber:         "6214830012345678",
 		AccountName:           util.RandomString(6),
@@ -59,6 +63,14 @@ func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string,
 	require.Equal(t, arg.SubjectType, applyment.SubjectType)
 	require.Equal(t, arg.SubjectID, applyment.SubjectID)
 	require.Equal(t, arg.OutRequestNo, applyment.OutRequestNo)
+	require.True(t, applyment.AccountBankCode.Valid)
+	require.Equal(t, arg.AccountBankCode.Int64, applyment.AccountBankCode.Int64)
+	require.True(t, applyment.BankAlias.Valid)
+	require.Equal(t, arg.BankAlias.String, applyment.BankAlias.String)
+	require.True(t, applyment.BankAliasCode.Valid)
+	require.Equal(t, arg.BankAliasCode.String, applyment.BankAliasCode.String)
+	require.True(t, applyment.BankBranchID.Valid)
+	require.Equal(t, arg.BankBranchID.String, applyment.BankBranchID.String)
 	require.Equal(t, "pending", applyment.Status)
 	require.NotZero(t, applyment.ID)
 	require.NotZero(t, applyment.CreatedAt)

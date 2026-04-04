@@ -49,26 +49,7 @@
     <view wx:if="{{statusView.canSubmitOpenInfo && !statusView.isOpened}}" class="card">
       <view class="card-title">提交开户信息</view>
       <view class="guide-text">{{statusView.guideText}}</view>
-
-      <view class="field-group">
-        <view class="field-label">账户类型</view>
-        <t-radio-group value="{{form.account_type}}" bindchange="onAccountTypeChange">
-          <t-radio value="ACCOUNT_TYPE_PRIVATE" label="对私账户" />
-          <t-radio value="ACCOUNT_TYPE_BUSINESS" label="对公账户" />
-        </t-radio-group>
-      </view>
-
-      <t-input label="开户银行" placeholder="例如：中国工商银行" value="{{form.account_bank}}" data-field="account_bank" bindchange="onInputChange" />
-      <t-input label="开户银行地区编码" placeholder="例如：440300" value="{{form.bank_address_code}}" data-field="bank_address_code" bindchange="onInputChange" />
-      <t-input label="开户支行全称" placeholder="可选" value="{{form.bank_name}}" data-field="bank_name" bindchange="onInputChange" />
-      <t-input label="银行账号" placeholder="请输入银行卡号" value="{{form.account_number}}" data-field="account_number" bindchange="onInputChange" />
-      <t-input label="开户名称" placeholder="对私填姓名；对公填公司名" value="{{form.account_name}}" data-field="account_name" bindchange="onInputChange" />
-      <t-input label="联系手机号" placeholder="用于微信审核联系" value="{{form.contact_phone}}" data-field="contact_phone" bindchange="onInputChange" />
-      <t-input label="联系邮箱" placeholder="可选" value="{{form.contact_email}}" data-field="contact_email" bindchange="onInputChange" />
-
-      <view class="submit-wrap">
-        <t-button theme="primary" block size="large" loading="{{submitting}}" bindtap="onSubmit" shape="round">提交微信支付开户</t-button>
-      </view>
+      <applyment-bank-form apiBasePath="/v1/operator/applyment" defaultAccountType="ACCOUNT_TYPE_PRIVATE" submitLabel="提交微信支付开户" submitting="{{submitting}}" bind:submit="onSubmit" bind:cancel="onCancelForm" />
     </view>
 
     <view class="safe-bottom"></view>

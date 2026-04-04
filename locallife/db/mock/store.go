@@ -12159,6 +12159,21 @@ func (mr *MockStoreMockRecorder) ListEcommerceApplymentsBySubject(ctx, arg any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListEcommerceApplymentsBySubject", reflect.TypeOf((*MockStore)(nil).ListEcommerceApplymentsBySubject), ctx, arg)
 }
 
+// ListEcommerceApplymentsPendingFollowUp mocks base method.
+func (m *MockStore) ListEcommerceApplymentsPendingFollowUp(ctx context.Context, arg db.ListEcommerceApplymentsPendingFollowUpParams) ([]db.EcommerceApplymentPendingFollowUp, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListEcommerceApplymentsPendingFollowUp", ctx, arg)
+	ret0, _ := ret[0].([]db.EcommerceApplymentPendingFollowUp)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListEcommerceApplymentsPendingFollowUp indicates an expected call of ListEcommerceApplymentsPendingFollowUp.
+func (mr *MockStoreMockRecorder) ListEcommerceApplymentsPendingFollowUp(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListEcommerceApplymentsPendingFollowUp", reflect.TypeOf((*MockStore)(nil).ListEcommerceApplymentsPendingFollowUp), ctx, arg)
+}
+
 // ListEcommerceRefundOrdersForReconciliation mocks base method.
 func (m *MockStore) ListEcommerceRefundOrdersForReconciliation(ctx context.Context, arg db.ListEcommerceRefundOrdersForReconciliationParams) ([]db.ListEcommerceRefundOrdersForReconciliationRow, error) {
 	m.ctrl.T.Helper()
@@ -13552,21 +13567,6 @@ func (m *MockStore) ListPendingEcommerceApplyments(ctx context.Context, arg db.L
 func (mr *MockStoreMockRecorder) ListPendingEcommerceApplyments(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPendingEcommerceApplyments", reflect.TypeOf((*MockStore)(nil).ListPendingEcommerceApplyments), ctx, arg)
-}
-
-// ListEcommerceApplymentsPendingFollowUp mocks base method.
-func (m *MockStore) ListEcommerceApplymentsPendingFollowUp(ctx context.Context, arg db.ListEcommerceApplymentsPendingFollowUpParams) ([]db.EcommerceApplymentPendingFollowUp, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListEcommerceApplymentsPendingFollowUp", ctx, arg)
-	ret0, _ := ret[0].([]db.EcommerceApplymentPendingFollowUp)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListEcommerceApplymentsPendingFollowUp indicates an expected call of ListEcommerceApplymentsPendingFollowUp.
-func (mr *MockStoreMockRecorder) ListEcommerceApplymentsPendingFollowUp(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListEcommerceApplymentsPendingFollowUp", reflect.TypeOf((*MockStore)(nil).ListEcommerceApplymentsPendingFollowUp), ctx, arg)
 }
 
 // ListPendingOCRJobsByMediaAsset mocks base method.
@@ -15139,6 +15139,20 @@ func (m *MockStore) MarkClaimRecoveryWaived(ctx context.Context, id int64) (db.C
 func (mr *MockStoreMockRecorder) MarkClaimRecoveryWaived(ctx, id any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkClaimRecoveryWaived", reflect.TypeOf((*MockStore)(nil).MarkClaimRecoveryWaived), ctx, id)
+}
+
+// MarkEcommerceApplymentResultProcessed mocks base method.
+func (m *MockStore) MarkEcommerceApplymentResultProcessed(ctx context.Context, arg db.MarkEcommerceApplymentResultProcessedParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "MarkEcommerceApplymentResultProcessed", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// MarkEcommerceApplymentResultProcessed indicates an expected call of MarkEcommerceApplymentResultProcessed.
+func (mr *MockStoreMockRecorder) MarkEcommerceApplymentResultProcessed(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentResultProcessed", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentResultProcessed), ctx, arg)
 }
 
 // MarkNoShowTx mocks base method.
@@ -17603,20 +17617,6 @@ func (m *MockStore) UpdateEcommerceApplymentToSubmitted(ctx context.Context, arg
 func (mr *MockStoreMockRecorder) UpdateEcommerceApplymentToSubmitted(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateEcommerceApplymentToSubmitted", reflect.TypeOf((*MockStore)(nil).UpdateEcommerceApplymentToSubmitted), ctx, arg)
-}
-
-// MarkEcommerceApplymentResultProcessed mocks base method.
-func (m *MockStore) MarkEcommerceApplymentResultProcessed(ctx context.Context, arg db.MarkEcommerceApplymentResultProcessedParams) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "MarkEcommerceApplymentResultProcessed", ctx, arg)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// MarkEcommerceApplymentResultProcessed indicates an expected call of MarkEcommerceApplymentResultProcessed.
-func (mr *MockStoreMockRecorder) MarkEcommerceApplymentResultProcessed(ctx, arg any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "MarkEcommerceApplymentResultProcessed", reflect.TypeOf((*MockStore)(nil).MarkEcommerceApplymentResultProcessed), ctx, arg)
 }
 
 // UpdateFoodSafetyIncidentStatus mocks base method.

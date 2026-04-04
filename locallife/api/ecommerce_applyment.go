@@ -22,19 +22,85 @@ var applymentDateTokenPattern = regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日
 
 // ==================== 商户开户 ====================
 
+type applymentBindBankFields struct {
+	AccountType     string `json:"account_type" binding:"required,oneof=ACCOUNT_TYPE_BUSINESS ACCOUNT_TYPE_PRIVATE"`
+	AccountBank     string `json:"account_bank" binding:"required,max=128"`
+	AccountBankCode int64  `json:"account_bank_code"`
+	BankAlias       string `json:"bank_alias"`
+	BankAliasCode   string `json:"bank_alias_code"`
+	NeedBankBranch  bool   `json:"need_bank_branch"`
+	BankAddressCode string `json:"bank_address_code"`
+	BankBranchID    string `json:"bank_branch_id"`
+	BankName        string `json:"bank_name"`
+	AccountNumber   string `json:"account_number" binding:"required"`
+	AccountName     string `json:"account_name" binding:"required,max=128"`
+	ContactPhone    string `json:"contact_phone" binding:"required"`
+	ContactEmail    string `json:"contact_email" binding:"omitempty,email"`
+}
+
+func (f *applymentBindBankFields) normalize() {
+	f.AccountType = strings.TrimSpace(f.AccountType)
+	f.AccountBank = strings.TrimSpace(f.AccountBank)
+	f.BankAlias = strings.TrimSpace(f.BankAlias)
+	f.BankAliasCode = strings.TrimSpace(f.BankAliasCode)
+	f.BankAddressCode = strings.TrimSpace(f.BankAddressCode)
+	f.BankBranchID = strings.TrimSpace(f.BankBranchID)
+	f.BankName = strings.TrimSpace(f.BankName)
+	f.AccountNumber = strings.TrimSpace(f.AccountNumber)
+	f.AccountName = strings.TrimSpace(f.AccountName)
+	f.ContactPhone = strings.TrimSpace(f.ContactPhone)
+	f.ContactEmail = strings.TrimSpace(f.ContactEmail)
+	if f.AccountBank == "" && f.BankAlias != "" {
+		f.AccountBank = f.BankAlias
+	}
+}
+
+func (f applymentBindBankFields) validateSelection() error {
+	if f.AccountBank == "" {
+		return fmt.Errorf("account_bank is required")
+	}
+	if f.AccountNumber == "" {
+		return fmt.Errorf("account_number is required")
+	}
+	if f.AccountName == "" {
+		return fmt.Errorf("account_name is required")
+	}
+	if f.ContactPhone == "" {
+		return fmt.Errorf("contact_phone is required")
+	}
+	if f.NeedBankBranch {
+		if f.BankAliasCode == "" {
+			return fmt.Errorf("bank_alias_code is required when bank branch selection is needed")
+		}
+		if f.BankAddressCode == "" {
+			return fmt.Errorf("bank_address_code is required when bank branch selection is needed")
+		}
+		if f.BankBranchID == "" {
+			return fmt.Errorf("bank_branch_id is required when bank branch selection is needed")
+		}
+		if f.BankName == "" {
+			return fmt.Errorf("bank_name is required when bank branch selection is needed")
+		}
+	}
+	return nil
+}
+
+func (f applymentBindBankFields) toWechatAccountInfo(encryptedAccountName, encryptedAccountNumber string) *wechat.ApplymentBankAccountInfo {
+	return &wechat.ApplymentBankAccountInfo{
+		BankAccountType: f.AccountType,
+		AccountBank:     f.AccountBank,
+		AccountBankCode: f.AccountBankCode,
+		AccountName:     encryptedAccountName,
+		BankAddressCode: f.BankAddressCode,
+		BankBranchID:    f.BankBranchID,
+		BankName:        f.BankName,
+		AccountNumber:   encryptedAccountNumber,
+	}
+}
+
 // merchantBindBankRequest 商户绑定银行卡请求
 type merchantBindBankRequest struct {
-	// 银行账户信息
-	AccountType     string `json:"account_type" binding:"required,oneof=ACCOUNT_TYPE_BUSINESS ACCOUNT_TYPE_PRIVATE"` // 对公/对私
-	AccountBank     string `json:"account_bank" binding:"required,max=128"`                                          // 开户银行
-	BankAddressCode string `json:"bank_address_code" binding:"required"`                                             // 开户银行省市编码
-	BankName        string `json:"bank_name"`                                                                        // 开户银行全称（支行）
-	AccountNumber   string `json:"account_number" binding:"required"`                                                // 银行账号
-	AccountName     string `json:"account_name" binding:"required,max=128"`                                          // 开户名称
-
-	// 联系信息
-	ContactPhone string `json:"contact_phone" binding:"required"`        // 联系手机号
-	ContactEmail string `json:"contact_email" binding:"omitempty,email"` // 联系邮箱（可选）
+	applymentBindBankFields
 }
 
 // merchantBindBankResponse 商户绑定银行卡响应
@@ -60,6 +126,11 @@ type merchantBindBankResponse struct {
 func (server *Server) merchantBindBank(ctx *gin.Context) {
 	var req merchantBindBankRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	req.normalize()
+	if err := req.validateSelection(); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -188,7 +259,11 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		IDCardBackCopy:        idCardBackURL,
 		AccountType:           req.AccountType,
 		AccountBank:           req.AccountBank,
+		AccountBankCode:       pgtype.Int8{Int64: req.AccountBankCode, Valid: req.AccountBankCode > 0},
+		BankAlias:             pgtype.Text{String: req.BankAlias, Valid: req.BankAlias != ""},
+		BankAliasCode:         pgtype.Text{String: req.BankAliasCode, Valid: req.BankAliasCode != ""},
 		BankAddressCode:       req.BankAddressCode,
+		BankBranchID:          pgtype.Text{String: req.BankBranchID, Valid: req.BankBranchID != ""},
 		BankName:              pgtype.Text{String: req.BankName, Valid: req.BankName != ""},
 		AccountNumber:         encryptedAccountNumber, // AES 加密存储
 		AccountName:           req.AccountName,
@@ -357,14 +432,7 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 			IDCardValidTimeBegin: idCardValidTimeBegin,
 			IDCardValidTime:      idCardValidTime,
 		},
-		AccountInfo: &wechat.ApplymentBankAccountInfo{
-			BankAccountType: req.AccountType,
-			AccountBank:     req.AccountBank,
-			AccountName:     wxEncryptedAccountName,
-			BankAddressCode: req.BankAddressCode,
-			BankName:        req.BankName,
-			AccountNumber:   wxEncryptedAccountNumber,
-		},
+		AccountInfo: req.toWechatAccountInfo(wxEncryptedAccountName, wxEncryptedAccountNumber),
 		ContactInfo: &wechat.ApplymentContactInfo{
 			ContactType:         "65",
 			ContactName:         wxEncryptedIDCardName,
@@ -834,17 +902,7 @@ func getRejectReasonFromAuditDetail(details []wechat.ApplymentAuditDetail) pgtyp
 
 // operatorBindBankRequest 运营商绑定银行卡请求
 type operatorBindBankRequest struct {
-	// 银行账户信息
-	AccountType     string `json:"account_type" binding:"required,oneof=ACCOUNT_TYPE_BUSINESS ACCOUNT_TYPE_PRIVATE"` // 对公/对私
-	AccountBank     string `json:"account_bank" binding:"required,max=128"`                                          // 开户银行
-	BankAddressCode string `json:"bank_address_code" binding:"required"`                                             // 开户银行省市编码
-	BankName        string `json:"bank_name"`                                                                        // 开户银行全称（支行）
-	AccountNumber   string `json:"account_number" binding:"required"`                                                // 银行账号
-	AccountName     string `json:"account_name" binding:"required,max=128"`                                          // 开户名称
-
-	// 联系信息
-	ContactPhone string `json:"contact_phone" binding:"required"`        // 联系手机号
-	ContactEmail string `json:"contact_email" binding:"omitempty,email"` // 联系邮箱（可选）
+	applymentBindBankFields
 }
 
 // operatorBindBankResponse 运营商绑定银行卡响应
@@ -871,6 +929,11 @@ type operatorBindBankResponse struct {
 func (server *Server) operatorBindBank(ctx *gin.Context) {
 	var req operatorBindBankRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	req.normalize()
+	if err := req.validateSelection(); err != nil {
 		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
@@ -1023,7 +1086,11 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		IDCardBackCopy:        idCardBackURL,
 		AccountType:           req.AccountType,
 		AccountBank:           req.AccountBank,
+		AccountBankCode:       pgtype.Int8{Int64: req.AccountBankCode, Valid: req.AccountBankCode > 0},
+		BankAlias:             pgtype.Text{String: req.BankAlias, Valid: req.BankAlias != ""},
+		BankAliasCode:         pgtype.Text{String: req.BankAliasCode, Valid: req.BankAliasCode != ""},
 		BankAddressCode:       req.BankAddressCode,
+		BankBranchID:          pgtype.Text{String: req.BankBranchID, Valid: req.BankBranchID != ""},
 		BankName:              pgtype.Text{String: req.BankName, Valid: req.BankName != ""},
 		AccountNumber:         encryptedAccountNumber, // AES 加密存储
 		AccountName:           req.AccountName,
@@ -1188,14 +1255,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 			IDCardValidTimeBegin: idCardValidTimeBegin,
 			IDCardValidTime:      idCardValidTime,
 		},
-		AccountInfo: &wechat.ApplymentBankAccountInfo{
-			BankAccountType: req.AccountType,
-			AccountBank:     req.AccountBank,
-			AccountName:     wxEncryptedAccountName,
-			BankAddressCode: req.BankAddressCode,
-			BankName:        req.BankName,
-			AccountNumber:   wxEncryptedAccountNumber,
-		},
+		AccountInfo: req.toWechatAccountInfo(wxEncryptedAccountName, wxEncryptedAccountNumber),
 		ContactInfo: &wechat.ApplymentContactInfo{
 			ContactType:         "65",
 			ContactName:         wxEncryptedIDCardName,

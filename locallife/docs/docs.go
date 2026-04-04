@@ -9171,6 +9171,277 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/applyment/areas/provinces": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信收付通支行检索所需的省份列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户省份列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentProvinceListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/applyment/areas/provinces/{province_code}/cities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据省份编码查询微信收付通支行检索所需的城市列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户城市列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "省份编码",
+                        "name": "province_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentCityListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/applyment/banks": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询进件银行列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/applyment/banks/search-by-bank-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据个人银行卡号识别开户银行候选，仅适用于对私账户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "识别对私银行卡开户银行",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行卡号",
+                        "name": "account_number",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankSearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/applyment/banks/{bank_alias_code}/branches": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据银行别名编码和城市编码查询微信收付通支行列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户支行列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行别名编码",
+                        "name": "bank_alias_code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "城市编码",
+                        "name": "city_code",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBranchListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/applyment/bindbank": {
             "post": {
                 "security": [
@@ -16301,6 +16572,277 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/applyment/areas/provinces": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信收付通支行检索所需的省份列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户省份列表",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentProvinceListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/applyment/areas/provinces/{province_code}/cities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据省份编码查询微信收付通支行检索所需的城市列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户城市列表",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "省份编码",
+                        "name": "province_code",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentCityListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/applyment/banks": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询进件银行列表",
+                "parameters": [
+                    {
+                        "enum": [
+                            "ACCOUNT_TYPE_BUSINESS",
+                            "ACCOUNT_TYPE_PRIVATE"
+                        ],
+                        "type": "string",
+                        "description": "账户类型",
+                        "name": "account_type",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/applyment/banks/search-by-bank-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据个人银行卡号识别开户银行候选，仅适用于对私账户",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "识别对私银行卡开户银行",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行卡号",
+                        "name": "account_number",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBankSearchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operator/applyment/banks/{bank_alias_code}/branches": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "根据银行别名编码和城市编码查询微信收付通支行列表",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "开户"
+                ],
+                "summary": "查询开户支行列表",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "银行别名编码",
+                        "name": "bank_alias_code",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "城市编码",
+                        "name": "city_code",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.applymentBranchListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -29666,6 +30208,156 @@ const docTemplate = `{
                 }
             }
         },
+        "api.applymentBankListResponse": {
+            "type": "object",
+            "properties": {
+                "banks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.applymentBankOption"
+                    }
+                },
+                "refreshed_at": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.applymentBankOption": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_bank_code": {
+                    "type": "integer"
+                },
+                "bank_alias": {
+                    "type": "string"
+                },
+                "bank_alias_code": {
+                    "type": "string"
+                },
+                "need_bank_branch": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.applymentBankSearchResponse": {
+            "type": "object",
+            "properties": {
+                "matches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.applymentBankOption"
+                    }
+                },
+                "refreshed_at": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.applymentBranchListResponse": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_bank_code": {
+                    "type": "integer"
+                },
+                "bank_alias": {
+                    "type": "string"
+                },
+                "bank_alias_code": {
+                    "type": "string"
+                },
+                "branches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.applymentBranchOption"
+                    }
+                },
+                "refreshed_at": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.applymentBranchOption": {
+            "type": "object",
+            "properties": {
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_branch_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.applymentCityListResponse": {
+            "type": "object",
+            "properties": {
+                "cities": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.applymentCityOption"
+                    }
+                },
+                "refreshed_at": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.applymentCityOption": {
+            "type": "object",
+            "properties": {
+                "city_code": {
+                    "type": "integer"
+                },
+                "city_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.applymentProvinceListResponse": {
+            "type": "object",
+            "properties": {
+                "provinces": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.applymentProvinceOption"
+                    }
+                },
+                "refreshed_at": {
+                    "type": "string"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.applymentProvinceOption": {
+            "type": "object",
+            "properties": {
+                "province_code": {
+                    "type": "integer"
+                },
+                "province_name": {
+                    "type": "string"
+                }
+            }
+        },
         "api.approveGroupJoinRequestRequest": {
             "type": "object",
             "properties": {
@@ -34200,26 +34892,24 @@ const docTemplate = `{
                 "account_name",
                 "account_number",
                 "account_type",
-                "bank_address_code",
                 "contact_phone"
             ],
             "properties": {
                 "account_bank": {
-                    "description": "开户银行",
                     "type": "string",
                     "maxLength": 128
                 },
+                "account_bank_code": {
+                    "type": "integer"
+                },
                 "account_name": {
-                    "description": "开户名称",
                     "type": "string",
                     "maxLength": 128
                 },
                 "account_number": {
-                    "description": "银行账号",
                     "type": "string"
                 },
                 "account_type": {
-                    "description": "银行账户信息",
                     "type": "string",
                     "enum": [
                         "ACCOUNT_TYPE_BUSINESS",
@@ -34227,20 +34917,28 @@ const docTemplate = `{
                     ]
                 },
                 "bank_address_code": {
-                    "description": "开户银行省市编码",
+                    "type": "string"
+                },
+                "bank_alias": {
+                    "type": "string"
+                },
+                "bank_alias_code": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
                     "type": "string"
                 },
                 "bank_name": {
-                    "description": "开户银行全称（支行）",
                     "type": "string"
                 },
                 "contact_email": {
-                    "description": "联系邮箱（可选）",
                     "type": "string"
                 },
                 "contact_phone": {
-                    "description": "联系信息",
                     "type": "string"
+                },
+                "need_bank_branch": {
+                    "type": "boolean"
                 }
             }
         },
@@ -35404,26 +36102,24 @@ const docTemplate = `{
                 "account_name",
                 "account_number",
                 "account_type",
-                "bank_address_code",
                 "contact_phone"
             ],
             "properties": {
                 "account_bank": {
-                    "description": "开户银行",
                     "type": "string",
                     "maxLength": 128
                 },
+                "account_bank_code": {
+                    "type": "integer"
+                },
                 "account_name": {
-                    "description": "开户名称",
                     "type": "string",
                     "maxLength": 128
                 },
                 "account_number": {
-                    "description": "银行账号",
                     "type": "string"
                 },
                 "account_type": {
-                    "description": "银行账户信息",
                     "type": "string",
                     "enum": [
                         "ACCOUNT_TYPE_BUSINESS",
@@ -35431,20 +36127,28 @@ const docTemplate = `{
                     ]
                 },
                 "bank_address_code": {
-                    "description": "开户银行省市编码",
+                    "type": "string"
+                },
+                "bank_alias": {
+                    "type": "string"
+                },
+                "bank_alias_code": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
                     "type": "string"
                 },
                 "bank_name": {
-                    "description": "开户银行全称（支行）",
                     "type": "string"
                 },
                 "contact_email": {
-                    "description": "联系邮箱（可选）",
                     "type": "string"
                 },
                 "contact_phone": {
-                    "description": "联系信息",
                     "type": "string"
+                },
+                "need_bank_branch": {
+                    "type": "boolean"
                 }
             }
         },

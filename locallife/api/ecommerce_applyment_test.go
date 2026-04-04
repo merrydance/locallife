@@ -108,9 +108,14 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			name: "OK_WithEcommerceClient",
 			body: gin.H{
 				"account_type":      "ACCOUNT_TYPE_PRIVATE",
-				"account_bank":      "招商银行",
+				"account_bank":      "其他银行",
+				"account_bank_code": 1099,
+				"bank_alias":        "深圳前海微众银行",
+				"bank_alias_code":   "1000009561",
+				"need_bank_branch":  true,
 				"bank_address_code": "440300",
-				"bank_name":         "招商银行深圳分行",
+				"bank_branch_id":    "402584040001",
+				"bank_name":         "深圳前海微众银行深圳南山支行",
 				"account_number":    "6214830012345678",
 				"account_name":      "张三",
 				"contact_phone":     "13800138000",
@@ -139,7 +144,18 @@ func TestMerchantBindBankAPI(t *testing.T) {
 				store.EXPECT().
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(randomEcommerceApplymentForTest("merchant", merchant.ID), nil)
+					DoAndReturn(func(_ any, arg db.CreateEcommerceApplymentParams) (db.EcommerceApplyment, error) {
+						require.Equal(t, "其他银行", arg.AccountBank)
+						require.True(t, arg.AccountBankCode.Valid)
+						require.Equal(t, int64(1099), arg.AccountBankCode.Int64)
+						require.True(t, arg.BankAlias.Valid)
+						require.Equal(t, "深圳前海微众银行", arg.BankAlias.String)
+						require.True(t, arg.BankAliasCode.Valid)
+						require.Equal(t, "1000009561", arg.BankAliasCode.String)
+						require.True(t, arg.BankBranchID.Valid)
+						require.Equal(t, "402584040001", arg.BankBranchID.String)
+						return randomEcommerceApplymentForTest("merchant", merchant.ID), nil
+					})
 
 				// Mock 加密
 				ecommerceClient.EXPECT().
@@ -153,6 +169,10 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Times(1).
 					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
 						require.Equal(t, "4", req.OrganizationType)
+						require.NotNil(t, req.AccountInfo)
+						require.Equal(t, "其他银行", req.AccountInfo.AccountBank)
+						require.Equal(t, int64(1099), req.AccountInfo.AccountBankCode)
+						require.Equal(t, "402584040001", req.AccountInfo.BankBranchID)
 						require.NotNil(t, req.IDCardInfo)
 						require.Equal(t, "2020-01-01", req.IDCardInfo.IDCardValidTimeBegin)
 						require.Equal(t, "2030-01-01", req.IDCardInfo.IDCardValidTime)
@@ -683,6 +703,48 @@ func TestHandleApplymentStateNotifyAPI(t *testing.T) {
 			tc.checkResponse(recorder)
 		})
 	}
+}
+
+func TestListMerchantApplymentBanksAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchantForApplyment(user.ID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	ecommerceClient.EXPECT().
+		ListPersonalBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
+		Times(1).
+		Return(&wechat.CapitalBankListResponse{
+			TotalCount: 1,
+			Count:      1,
+			Data: []wechat.CapitalBank{{
+				BankAlias:       "招商银行",
+				BankAliasCode:   "1000009561",
+				AccountBank:     "招商银行",
+				AccountBankCode: 1001,
+				NeedBankBranch:  false,
+			}},
+		}, nil)
+
+	server := newTestServerWithEcommerce(t, store, ecommerceClient)
+	request, err := http.NewRequest(http.MethodGet, "/v1/merchant/applyment/banks?account_type=ACCOUNT_TYPE_PRIVATE", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	recorder := httptest.NewRecorder()
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+	var response applymentBankListResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.Len(t, response.Banks, 1)
+	require.Equal(t, "招商银行", response.Banks[0].BankAlias)
+	require.Equal(t, int64(1001), response.Banks[0].AccountBankCode)
 }
 
 // ==================== 无 ecommerceClient 时的降级测试 ====================

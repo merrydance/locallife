@@ -1,5 +1,6 @@
 {
   "usingComponents": {
+    "applyment-bank-form": "/components/applyment-bank-form/index",
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
     "t-empty": "tdesign-miniprogram/empty/empty",
@@ -7,10 +8,7 @@
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-steps": "tdesign-miniprogram/steps/steps",
     "t-step-item": "tdesign-miniprogram/step-item/step-item",
-    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
-    "t-input": "tdesign-miniprogram/input/input",
-    "t-radio": "tdesign-miniprogram/radio/radio",
-    "t-radio-group": "tdesign-miniprogram/radio-group/radio-group"
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group"
   },
   "navigationStyle": "custom",
   "enablePullDownRefresh": true

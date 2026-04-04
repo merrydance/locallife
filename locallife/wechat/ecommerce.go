@@ -30,6 +30,14 @@ const (
 	ecommerceApplymentQueryURL  = "/v3/ecommerce/applyments/%d"
 	ecommerceApplymentQueryByNo = "/v3/ecommerce/applyments/out-request-no/%s"
 
+	// 收付通进件辅助资料
+	capitalPersonalBanksURL        = "/v3/capital/capitallhh/banks/personal-banking"
+	capitalCorporateBanksURL       = "/v3/capital/capitallhh/banks/corporate-banking"
+	capitalSearchBanksByAccountURL = "/v3/capital/capitallhh/banks/search-banks-by-bank-account"
+	capitalProvincesURL            = "/v3/capital/capitallhh/areas/provinces"
+	capitalProvinceCitiesURL       = "/v3/capital/capitallhh/areas/provinces/%d/cities"
+	capitalBankBranchesURL         = "/v3/capital/capitallhh/banks/%s/branches"
+
 	// 合单支付（收付通）
 	ecommerceCombineOrderURL = "/v3/combine-transactions/jsapi"
 	ecommerceQueryCombineURL = "/v3/combine-transactions/out-trade-no/%s"
@@ -160,11 +168,86 @@ type ApplymentIDCardInfo struct {
 type ApplymentBankAccountInfo struct {
 	BankAccountType string `json:"bank_account_type"`           // ACCOUNT_TYPE_BUSINESS-对公, ACCOUNT_TYPE_PRIVATE-对私
 	AccountBank     string `json:"account_bank"`                // 开户银行
+	AccountBankCode int64  `json:"account_bank_code,omitempty"` // 开户银行编码
 	AccountName     string `json:"account_name"`                // 开户名称（需加密）
-	BankAddressCode string `json:"bank_address_code,omitempty"` // 开户银行省市编码（即将下线）
+	BankAddressCode string `json:"bank_address_code,omitempty"` // 开户银行省市编码（兼容旧接口）
 	BankBranchID    string `json:"bank_branch_id,omitempty"`    // 开户银行联行号
 	BankName        string `json:"bank_name,omitempty"`         // 开户银行全称（支行）
 	AccountNumber   string `json:"account_number"`              // 银行账号（需加密）
+}
+
+// CapitalBank 开户银行选项
+type CapitalBank struct {
+	BankAlias       string `json:"bank_alias"`
+	BankAliasCode   string `json:"bank_alias_code"`
+	AccountBank     string `json:"account_bank"`
+	AccountBankCode int64  `json:"account_bank_code"`
+	NeedBankBranch  bool   `json:"need_bank_branch"`
+}
+
+// CapitalBankListLinks 分页链接
+type CapitalBankListLinks struct {
+	Next string `json:"next,omitempty"`
+	Prev string `json:"prev,omitempty"`
+	Self string `json:"self,omitempty"`
+}
+
+// CapitalBankListResponse 银行列表响应
+type CapitalBankListResponse struct {
+	TotalCount int                  `json:"total_count"`
+	Count      int                  `json:"count"`
+	Data       []CapitalBank        `json:"data,omitempty"`
+	Offset     int                  `json:"offset"`
+	Links      CapitalBankListLinks `json:"links"`
+}
+
+// CapitalBankAccountSearchResponse 银行卡开户银行识别响应
+type CapitalBankAccountSearchResponse struct {
+	TotalCount int           `json:"total_count"`
+	Data       []CapitalBank `json:"data,omitempty"`
+}
+
+// CapitalProvince 省份选项
+type CapitalProvince struct {
+	ProvinceName string `json:"province_name"`
+	ProvinceCode int    `json:"province_code"`
+}
+
+// CapitalProvinceListResponse 省份列表响应
+type CapitalProvinceListResponse struct {
+	Data       []CapitalProvince `json:"data,omitempty"`
+	TotalCount int               `json:"total_count"`
+}
+
+// CapitalCity 城市选项
+type CapitalCity struct {
+	CityName string `json:"city_name"`
+	CityCode int    `json:"city_code"`
+}
+
+// CapitalCityListResponse 城市列表响应
+type CapitalCityListResponse struct {
+	Data       []CapitalCity `json:"data,omitempty"`
+	TotalCount int           `json:"total_count"`
+}
+
+// CapitalBranch 开户支行选项
+type CapitalBranch struct {
+	BankBranchName string `json:"bank_branch_name"`
+	BankBranchID   string `json:"bank_branch_id"`
+}
+
+// CapitalBranchListResponse 支行列表响应
+type CapitalBranchListResponse struct {
+	TotalCount      int                  `json:"total_count"`
+	Count           int                  `json:"count"`
+	Data            []CapitalBranch      `json:"data,omitempty"`
+	Offset          int                  `json:"offset"`
+	Links           CapitalBankListLinks `json:"links"`
+	AccountBank     string               `json:"account_bank"`
+	AccountBankCode int64                `json:"account_bank_code"`
+	BankAlias       string               `json:"bank_alias"`
+	BankAliasCode   string               `json:"bank_alias_code"`
 }
 
 // ApplymentContactInfo 联系人信息
@@ -266,6 +349,9 @@ func (c *EcommerceClient) CreateEcommerceApplyment(ctx context.Context, req *Eco
 			"account_bank":      req.AccountInfo.AccountBank,
 			"account_name":      req.AccountInfo.AccountName,   // 需加密
 			"account_number":    req.AccountInfo.AccountNumber, // 需加密
+		}
+		if req.AccountInfo.AccountBankCode > 0 {
+			accountInfo["account_bank_code"] = req.AccountInfo.AccountBankCode
 		}
 		if req.AccountInfo.BankAddressCode != "" {
 			accountInfo["bank_address_code"] = req.AccountInfo.BankAddressCode
@@ -411,6 +497,106 @@ func (c *EcommerceClient) QueryEcommerceApplymentByOutRequestNo(ctx context.Cont
 	var resp EcommerceApplymentQueryResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ListPersonalBankingBanks 查询支持个人业务的银行列表
+func (c *EcommerceClient) ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error) {
+	requestURL := fmt.Sprintf("%s?offset=%d&limit=%d", capitalPersonalBanksURL, offset, limit)
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list personal banking banks: %w", err)
+	}
+
+	var resp CapitalBankListResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal personal banking banks: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ListCorporateBankingBanks 查询支持对公业务的银行列表
+func (c *EcommerceClient) ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error) {
+	requestURL := fmt.Sprintf("%s?offset=%d&limit=%d", capitalCorporateBanksURL, offset, limit)
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list corporate banking banks: %w", err)
+	}
+
+	var resp CapitalBankListResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal corporate banking banks: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// SearchBanksByBankAccount 根据个人银行卡号识别开户银行候选
+func (c *EcommerceClient) SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*CapitalBankAccountSearchResponse, error) {
+	encryptedAccountNumber, err := c.EncryptSensitiveData(accountNumber)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt account number: %w", err)
+	}
+
+	requestURL := fmt.Sprintf("%s?account_number=%s", capitalSearchBanksByAccountURL, url.QueryEscape(encryptedAccountNumber))
+	respBody, err := c.doRequestWithWechatSerial(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("search banks by account number: %w", err)
+	}
+
+	var resp CapitalBankAccountSearchResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal banks by account number: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ListProvinceAreas 查询省份列表
+func (c *EcommerceClient) ListProvinceAreas(ctx context.Context) (*CapitalProvinceListResponse, error) {
+	respBody, err := c.doRequest(ctx, http.MethodGet, capitalProvincesURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list province areas: %w", err)
+	}
+
+	var resp CapitalProvinceListResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal province areas: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ListCityAreas 查询省份下城市列表
+func (c *EcommerceClient) ListCityAreas(ctx context.Context, provinceCode int) (*CapitalCityListResponse, error) {
+	requestURL := fmt.Sprintf(capitalProvinceCitiesURL, provinceCode)
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list city areas: %w", err)
+	}
+
+	var resp CapitalCityListResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal city areas: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ListBankBranches 查询支行列表
+func (c *EcommerceClient) ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*CapitalBranchListResponse, error) {
+	requestURL := fmt.Sprintf("%s?city_code=%d&offset=%d&limit=%d", fmt.Sprintf(capitalBankBranchesURL, bankAliasCode), cityCode, offset, limit)
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("list bank branches: %w", err)
+	}
+
+	var resp CapitalBranchListResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal bank branches: %w", err)
 	}
 
 	return &resp, nil

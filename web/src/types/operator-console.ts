@@ -281,7 +281,12 @@ export interface OperatorApplicationStatusResponse {
 export interface OperatorBindBankRequest {
   account_type: "ACCOUNT_TYPE_BUSINESS" | "ACCOUNT_TYPE_PRIVATE";
   account_bank: string;
-  bank_address_code: string;
+  account_bank_code?: number;
+  bank_alias?: string;
+  bank_alias_code?: string;
+  need_bank_branch?: boolean;
+  bank_address_code?: string;
+  bank_branch_id?: string;
   bank_name?: string;
   account_number: string;
   account_name: string;

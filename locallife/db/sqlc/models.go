@@ -642,15 +642,25 @@ type EcommerceApplyment struct {
 	BusinessAdditionPics  []string    `json:"business_addition_pics"`
 	BusinessAdditionDesc  pgtype.Text `json:"business_addition_desc"`
 	// 进件状态: pending-待提交, submitted-已提交, auditing-审核中, rejected-已驳回, frozen-冻结, to_be_signed-待签约, signing-签约中, rejected_sign-签约失败, finish-完成
-	Status       string             `json:"status"`
-	SignUrl      pgtype.Text        `json:"sign_url"`
-	SignState    pgtype.Text        `json:"sign_state"`
-	RejectReason pgtype.Text        `json:"reject_reason"`
-	SubMchID     pgtype.Text        `json:"sub_mch_id"`
-	CreatedAt    time.Time          `json:"created_at"`
-	SubmittedAt  pgtype.Timestamptz `json:"submitted_at"`
-	AuditedAt    pgtype.Timestamptz `json:"audited_at"`
-	UpdatedAt    time.Time          `json:"updated_at"`
+	Status                   string             `json:"status"`
+	SignUrl                  pgtype.Text        `json:"sign_url"`
+	SignState                pgtype.Text        `json:"sign_state"`
+	RejectReason             pgtype.Text        `json:"reject_reason"`
+	SubMchID                 pgtype.Text        `json:"sub_mch_id"`
+	CreatedAt                time.Time          `json:"created_at"`
+	SubmittedAt              pgtype.Timestamptz `json:"submitted_at"`
+	AuditedAt                pgtype.Timestamptz `json:"audited_at"`
+	UpdatedAt                time.Time          `json:"updated_at"`
+	ResultTaskProcessedState pgtype.Text        `json:"result_task_processed_state"`
+	ResultTaskProcessedAt    pgtype.Timestamptz `json:"result_task_processed_at"`
+	// 微信收付通开户银行编码
+	AccountBankCode pgtype.Int8 `json:"account_bank_code"`
+	// 微信收付通银行别名名称
+	BankAlias pgtype.Text `json:"bank_alias"`
+	// 微信收付通银行别名编码
+	BankAliasCode pgtype.Text `json:"bank_alias_code"`
+	// 微信收付通支行联行号
+	BankBranchID pgtype.Text `json:"bank_branch_id"`
 }
 
 // 用户收藏表

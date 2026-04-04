@@ -32,13 +32,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   Table,
   TableBody,
   TableCell,
@@ -47,7 +40,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Separator } from "@/components/ui/separator";
+import { ApplymentBankForm } from "@/components/applyment/applyment-bank-form";
+import type { ApplymentBindBankPayload } from "@/types/applyment-bank";
 
 /* ─────────────────────────── Interfaces ─────────────────────────── */
 
@@ -86,17 +80,6 @@ interface ApplymentStatusResponse {
   sign_url?: string;
   sub_mch_id?: string;
   reject_reason?: string;
-}
-
-interface BindBankFormData {
-  account_type: "ACCOUNT_TYPE_BUSINESS" | "ACCOUNT_TYPE_PRIVATE";
-  account_bank: string;
-  bank_address_code: string;
-  bank_name: string;
-  account_number: string;
-  account_name: string;
-  contact_phone: string;
-  contact_email: string;
 }
 
 /* ─────────────────────────── Helpers ─────────────────────────── */
@@ -155,17 +138,6 @@ const applymentStatusMeta: Record<
   },
 };
 
-const emptyForm: BindBankFormData = {
-  account_type: "ACCOUNT_TYPE_BUSINESS",
-  account_bank: "",
-  bank_address_code: "",
-  bank_name: "",
-  account_number: "",
-  account_name: "",
-  contact_phone: "",
-  contact_email: "",
-};
-
 /* ─────────────────────────── Main component ─────────────────────────── */
 
 export function FinanceAccountPageClient() {
@@ -188,7 +160,6 @@ export function FinanceAccountPageClient() {
   /* Bind bank form */
   const [showBindForm, setShowBindForm] = useState(false);
   const [submittingBind, setSubmittingBind] = useState(false);
-  const [bindForm, setBindForm] = useState<BindBankFormData>(emptyForm);
 
   const pageSize = 20;
 
@@ -295,29 +266,13 @@ export function FinanceAccountPageClient() {
 
   /* ── Bind bank ── */
 
-  const bindFormValid =
-    bindForm.account_bank.trim() &&
-    bindForm.bank_address_code.trim() &&
-    bindForm.account_number.trim() &&
-    bindForm.account_name.trim() &&
-    bindForm.contact_phone.trim();
-
-  const handleSubmitBindBank = async () => {
-    if (!bindFormValid || submittingBind) return;
+  const handleSubmitBindBank = async (payload: ApplymentBindBankPayload) => {
+    if (submittingBind) return;
     setSubmittingBind(true);
     try {
-      await apiPost("/merchant/applyment/bindbank", {
-        account_type: bindForm.account_type,
-        account_bank: bindForm.account_bank.trim(),
-        bank_address_code: bindForm.bank_address_code.trim(),
-        bank_name: bindForm.bank_name.trim() || undefined,
-        account_number: bindForm.account_number.trim(),
-        account_name: bindForm.account_name.trim(),
-        contact_phone: bindForm.contact_phone.trim(),
-        contact_email: bindForm.contact_email.trim() || undefined,
-      });
+      await apiPost("/merchant/applyment/bindbank", payload);
       toast.success("银行账户信息已提交，请等待微信审核");
-      setBindForm(emptyForm);
+      setShowBindForm(false);
       await loadApplymentStatus();
     } catch (error: unknown) {
       toast.error(
@@ -326,10 +281,6 @@ export function FinanceAccountPageClient() {
     } finally {
       setSubmittingBind(false);
     }
-  };
-
-  const updateBindForm = (field: keyof BindBankFormData, value: string) => {
-    setBindForm((prev) => ({ ...prev, [field]: value }));
   };
 
   /* ─────────────────────────── Render ─────────────────────────── */
@@ -375,11 +326,11 @@ export function FinanceAccountPageClient() {
                     填写银行账户信息
                   </Button>
                 ) : (
-                  <BindBankForm
-                    form={bindForm}
-                    valid={!!bindFormValid}
+                  <ApplymentBankForm
+                    apiBasePath="/merchant/applyment"
+                    defaultAccountType="ACCOUNT_TYPE_BUSINESS"
                     submitting={submittingBind}
-                    onChange={updateBindForm}
+                    submitLabel="提交银行账户信息"
                     onSubmit={handleSubmitBindBank}
                     onCancel={() => setShowBindForm(false)}
                   />
@@ -446,17 +397,14 @@ export function FinanceAccountPageClient() {
                 )}
 
                 {showBindForm && (
-                  <div className="pt-2">
-                    <Separator className="mb-4" />
-                    <BindBankForm
-                      form={bindForm}
-                      valid={!!bindFormValid}
-                      submitting={submittingBind}
-                      onChange={updateBindForm}
-                      onSubmit={handleSubmitBindBank}
-                      onCancel={() => setShowBindForm(false)}
-                    />
-                  </div>
+                  <ApplymentBankForm
+                    apiBasePath="/merchant/applyment"
+                    defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+                    submitting={submittingBind}
+                    submitLabel="重新提交银行账户信息"
+                    onSubmit={handleSubmitBindBank}
+                    onCancel={() => setShowBindForm(false)}
+                  />
                 )}
               </div>
             )}
@@ -658,156 +606,5 @@ export function FinanceAccountPageClient() {
         )}
       </PageContent>
     </PageShell>
-  );
-}
-
-/* ─────────────────────────── BindBankForm ─────────────────────────── */
-
-interface BindBankFormProps {
-  form: BindBankFormData;
-  valid: boolean;
-  submitting: boolean;
-  onChange: (field: keyof BindBankFormData, value: string) => void;
-  onSubmit: () => void;
-  onCancel: () => void;
-}
-
-function BindBankForm({
-  form,
-  valid,
-  submitting,
-  onChange,
-  onSubmit,
-  onCancel,
-}: BindBankFormProps) {
-  return (
-    <div className="space-y-5 rounded-lg border bg-muted/30 p-5">
-      <div className="text-sm font-medium">填写银行结算账户</div>
-
-      <div className="space-y-2">
-        <Label>账户类型</Label>
-        <Select
-          value={form.account_type}
-          onValueChange={(val) =>
-            onChange(
-              "account_type",
-              val as "ACCOUNT_TYPE_BUSINESS" | "ACCOUNT_TYPE_PRIVATE"
-            )
-          }
-        >
-          <SelectTrigger>
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="ACCOUNT_TYPE_BUSINESS">
-              对公账户（企业银行账户）
-            </SelectItem>
-            <SelectItem value="ACCOUNT_TYPE_PRIVATE">
-              对私账户（个人银行卡）
-            </SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor="bb-account-name">
-            开户名称 <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="bb-account-name"
-            placeholder={
-              form.account_type === "ACCOUNT_TYPE_BUSINESS"
-                ? "企业/机构全称"
-                : "持卡人姓名"
-            }
-            value={form.account_name}
-            onChange={(e) => onChange("account_name", e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="bb-account-number">
-            银行账号 <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="bb-account-number"
-            placeholder="银行账户号码"
-            value={form.account_number}
-            onChange={(e) => onChange("account_number", e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="bb-account-bank">
-            开户银行 <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="bb-account-bank"
-            placeholder="如：中国工商银行"
-            value={form.account_bank}
-            onChange={(e) => onChange("account_bank", e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="bb-bank-addr">
-            开户行省市编码 <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="bb-bank-addr"
-            placeholder="如：110000（北京市）"
-            value={form.bank_address_code}
-            onChange={(e) => onChange("bank_address_code", e.target.value)}
-          />
-          <p className="text-xs text-muted-foreground">
-            参考微信支付省市编码表
-          </p>
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="bb-bank-name">开户支行全称</Label>
-          <Input
-            id="bb-bank-name"
-            placeholder="如：工商银行北京朝阳支行（选填）"
-            value={form.bank_name}
-            onChange={(e) => onChange("bank_name", e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="bb-phone">
-            联系手机 <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="bb-phone"
-            type="tel"
-            placeholder="11位手机号"
-            value={form.contact_phone}
-            onChange={(e) => onChange("contact_phone", e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor="bb-email">联系邮箱</Label>
-          <Input
-            id="bb-email"
-            type="email"
-            placeholder="选填"
-            value={form.contact_email}
-            onChange={(e) => onChange("contact_email", e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="flex gap-2 pt-1">
-        <Button onClick={onSubmit} disabled={!valid || submitting}>
-          {submitting ? "提交中..." : "提交银行账户信息"}
-        </Button>
-        <Button variant="outline" onClick={onCancel} disabled={submitting}>
-          取消
-        </Button>
-      </div>
-    </div>
   );
 }

@@ -59,6 +59,8 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 			accountInfo, ok := body["account_info"].(map[string]any)
 			require.True(t, ok)
 			require.Equal(t, "75", accountInfo["bank_account_type"])
+			require.Equal(t, float64(1099), accountInfo["account_bank_code"])
+			require.Equal(t, "402584040001", accountInfo["bank_branch_id"])
 
 			contactInfo, ok := body["contact_info"].(map[string]any)
 			require.True(t, ok)
@@ -83,7 +85,7 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 		FinanceInstitution: false,
 		MerchantShortname:  "测试运营商",
 		IDCardInfo:         &ApplymentIDCardInfo{IDCardCopy: "copy_media_id", IDCardNational: "national_media_id", IDCardName: "encrypted_name", IDCardNumber: "encrypted_id_no", IDCardValidTimeBegin: "2020-01-01", IDCardValidTime: "长期"},
-		AccountInfo:        &ApplymentBankAccountInfo{BankAccountType: "ACCOUNT_TYPE_PRIVATE", AccountBank: "工商银行", AccountName: "encrypted_account_name", BankAddressCode: "440300", AccountNumber: "encrypted_account_no"},
+		AccountInfo:        &ApplymentBankAccountInfo{BankAccountType: "ACCOUNT_TYPE_PRIVATE", AccountBank: "其他银行", AccountBankCode: 1099, AccountName: "encrypted_account_name", BankAddressCode: "440300", BankBranchID: "402584040001", BankName: "深圳前海微众银行深圳南山支行", AccountNumber: "encrypted_account_no"},
 		ContactInfo:        &ApplymentContactInfo{ContactType: "LEGAL", ContactName: "encrypted_contact_name", MobilePhone: "encrypted_mobile", ContactEmail: "encrypted_email@example.com"},
 		SalesSceneInfo:     &ApplymentSalesSceneInfo{StoreName: "测试门店", StoreURL: "https://example.com/store"},
 	})

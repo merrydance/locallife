@@ -777,6 +777,103 @@ definitions:
     required:
     - region_id
     type: object
+  api.applymentBankListResponse:
+    properties:
+      banks:
+        items:
+          $ref: '#/definitions/api.applymentBankOption'
+        type: array
+      refreshed_at:
+        type: string
+      total:
+        type: integer
+    type: object
+  api.applymentBankOption:
+    properties:
+      account_bank:
+        type: string
+      account_bank_code:
+        type: integer
+      bank_alias:
+        type: string
+      bank_alias_code:
+        type: string
+      need_bank_branch:
+        type: boolean
+    type: object
+  api.applymentBankSearchResponse:
+    properties:
+      matches:
+        items:
+          $ref: '#/definitions/api.applymentBankOption'
+        type: array
+      refreshed_at:
+        type: string
+      total:
+        type: integer
+    type: object
+  api.applymentBranchListResponse:
+    properties:
+      account_bank:
+        type: string
+      account_bank_code:
+        type: integer
+      bank_alias:
+        type: string
+      bank_alias_code:
+        type: string
+      branches:
+        items:
+          $ref: '#/definitions/api.applymentBranchOption'
+        type: array
+      refreshed_at:
+        type: string
+      total:
+        type: integer
+    type: object
+  api.applymentBranchOption:
+    properties:
+      bank_branch_id:
+        type: string
+      bank_branch_name:
+        type: string
+    type: object
+  api.applymentCityListResponse:
+    properties:
+      cities:
+        items:
+          $ref: '#/definitions/api.applymentCityOption'
+        type: array
+      refreshed_at:
+        type: string
+      total:
+        type: integer
+    type: object
+  api.applymentCityOption:
+    properties:
+      city_code:
+        type: integer
+      city_name:
+        type: string
+    type: object
+  api.applymentProvinceListResponse:
+    properties:
+      provinces:
+        items:
+          $ref: '#/definitions/api.applymentProvinceOption'
+        type: array
+      refreshed_at:
+        type: string
+      total:
+        type: integer
+    type: object
+  api.applymentProvinceOption:
+    properties:
+      province_code:
+        type: integer
+      province_name:
+        type: string
+    type: object
   api.approveGroupJoinRequestRequest:
     properties:
       brand_id:
@@ -3887,40 +3984,41 @@ definitions:
   api.merchantBindBankRequest:
     properties:
       account_bank:
-        description: 开户银行
         maxLength: 128
         type: string
+      account_bank_code:
+        type: integer
       account_name:
-        description: 开户名称
         maxLength: 128
         type: string
       account_number:
-        description: 银行账号
         type: string
       account_type:
-        description: 银行账户信息
         enum:
         - ACCOUNT_TYPE_BUSINESS
         - ACCOUNT_TYPE_PRIVATE
         type: string
       bank_address_code:
-        description: 开户银行省市编码
+        type: string
+      bank_alias:
+        type: string
+      bank_alias_code:
+        type: string
+      bank_branch_id:
         type: string
       bank_name:
-        description: 开户银行全称（支行）
         type: string
       contact_email:
-        description: 联系邮箱（可选）
         type: string
       contact_phone:
-        description: 联系信息
         type: string
+      need_bank_branch:
+        type: boolean
     required:
     - account_bank
     - account_name
     - account_number
     - account_type
-    - bank_address_code
     - contact_phone
     type: object
   api.merchantBindBankResponse:
@@ -4701,40 +4799,41 @@ definitions:
   api.operatorBindBankRequest:
     properties:
       account_bank:
-        description: 开户银行
         maxLength: 128
         type: string
+      account_bank_code:
+        type: integer
       account_name:
-        description: 开户名称
         maxLength: 128
         type: string
       account_number:
-        description: 银行账号
         type: string
       account_type:
-        description: 银行账户信息
         enum:
         - ACCOUNT_TYPE_BUSINESS
         - ACCOUNT_TYPE_PRIVATE
         type: string
       bank_address_code:
-        description: 开户银行省市编码
+        type: string
+      bank_alias:
+        type: string
+      bank_alias_code:
+        type: string
+      bank_branch_id:
         type: string
       bank_name:
-        description: 开户银行全称（支行）
         type: string
       contact_email:
-        description: 联系邮箱（可选）
         type: string
       contact_phone:
-        description: 联系信息
         type: string
+      need_bank_branch:
+        type: boolean
     required:
     - account_bank
     - account_name
     - account_number
     - account_type
-    - bank_address_code
     - contact_phone
     type: object
   api.operatorBindBankResponse:
@@ -14613,6 +14712,179 @@ paths:
       summary: 提交商户入驻申请
       tags:
       - 商户申请
+  /v1/merchant/applyment/areas/provinces:
+    get:
+      consumes:
+      - application/json
+      description: 查询微信收付通支行检索所需的省份列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentProvinceListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询开户省份列表
+      tags:
+      - 开户
+  /v1/merchant/applyment/areas/provinces/{province_code}/cities:
+    get:
+      consumes:
+      - application/json
+      description: 根据省份编码查询微信收付通支行检索所需的城市列表
+      parameters:
+      - description: 省份编码
+        in: path
+        name: province_code
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentCityListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询开户城市列表
+      tags:
+      - 开户
+  /v1/merchant/applyment/banks:
+    get:
+      consumes:
+      - application/json
+      description: 查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照
+      parameters:
+      - description: 账户类型
+        enum:
+        - ACCOUNT_TYPE_BUSINESS
+        - ACCOUNT_TYPE_PRIVATE
+        in: query
+        name: account_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentBankListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询进件银行列表
+      tags:
+      - 开户
+  /v1/merchant/applyment/banks/{bank_alias_code}/branches:
+    get:
+      consumes:
+      - application/json
+      description: 根据银行别名编码和城市编码查询微信收付通支行列表
+      parameters:
+      - description: 银行别名编码
+        in: path
+        name: bank_alias_code
+        required: true
+        type: string
+      - description: 城市编码
+        in: query
+        name: city_code
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentBranchListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询开户支行列表
+      tags:
+      - 开户
+  /v1/merchant/applyment/banks/search-by-bank-account:
+    get:
+      consumes:
+      - application/json
+      description: 根据个人银行卡号识别开户银行候选，仅适用于对私账户
+      parameters:
+      - description: 银行卡号
+        in: query
+        name: account_number
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentBankSearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 识别对私银行卡开户银行
+      tags:
+      - 开户
   /v1/merchant/applyment/bindbank:
     post:
       consumes:
@@ -19289,6 +19561,179 @@ paths:
       summary: 提交运营商入驻申请
       tags:
       - 运营商申请
+  /v1/operator/applyment/areas/provinces:
+    get:
+      consumes:
+      - application/json
+      description: 查询微信收付通支行检索所需的省份列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentProvinceListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询开户省份列表
+      tags:
+      - 开户
+  /v1/operator/applyment/areas/provinces/{province_code}/cities:
+    get:
+      consumes:
+      - application/json
+      description: 根据省份编码查询微信收付通支行检索所需的城市列表
+      parameters:
+      - description: 省份编码
+        in: path
+        name: province_code
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentCityListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询开户城市列表
+      tags:
+      - 开户
+  /v1/operator/applyment/banks:
+    get:
+      consumes:
+      - application/json
+      description: 查询微信收付通支持的对公或对私开户银行列表，返回后端缓存快照
+      parameters:
+      - description: 账户类型
+        enum:
+        - ACCOUNT_TYPE_BUSINESS
+        - ACCOUNT_TYPE_PRIVATE
+        in: query
+        name: account_type
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentBankListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询进件银行列表
+      tags:
+      - 开户
+  /v1/operator/applyment/banks/{bank_alias_code}/branches:
+    get:
+      consumes:
+      - application/json
+      description: 根据银行别名编码和城市编码查询微信收付通支行列表
+      parameters:
+      - description: 银行别名编码
+        in: path
+        name: bank_alias_code
+        required: true
+        type: string
+      - description: 城市编码
+        in: query
+        name: city_code
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentBranchListResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询开户支行列表
+      tags:
+      - 开户
+  /v1/operator/applyment/banks/search-by-bank-account:
+    get:
+      consumes:
+      - application/json
+      description: 根据个人银行卡号识别开户银行候选，仅适用于对私账户
+      parameters:
+      - description: 银行卡号
+        in: query
+        name: account_number
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.applymentBankSearchResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 识别对私银行卡开户银行
+      tags:
+      - 开户
   /v1/operator/applyment/bindbank:
     post:
       consumes:

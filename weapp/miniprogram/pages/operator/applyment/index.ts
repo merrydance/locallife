@@ -1,7 +1,6 @@
 import { getOperatorApplymentStatus, operatorBindBank, type OperatorApplymentStatusResponse } from '../../../api/operator-applyment'
+import type { ApplymentBindBankPayload } from '../../../api/applyment-bank'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-type AccountType = 'ACCOUNT_TYPE_PRIVATE' | 'ACCOUNT_TYPE_BUSINESS'
 
 interface StatusViewModel {
   statusCode: string
@@ -106,17 +105,7 @@ Page({
     submitting: false,
     error: '',
     status: null as OperatorApplymentStatusResponse | null,
-    statusView: { ...DEFAULT_STATUS_VIEW },
-    form: {
-      account_type: 'ACCOUNT_TYPE_PRIVATE' as AccountType,
-      account_bank: '',
-      bank_address_code: '',
-      bank_name: '',
-      account_number: '',
-      account_name: '',
-      contact_phone: '',
-      contact_email: ''
-    }
+    statusView: { ...DEFAULT_STATUS_VIEW }
   },
 
   onLoad() {
@@ -152,32 +141,16 @@ Page({
     }
   },
 
-  onInputChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const field = (e.currentTarget.dataset.field || '') as keyof typeof this.data.form
-    if (!field) return
-    this.setData({ [`form.${field}`]: e.detail.value })
+  onCancelForm() {
+    this.setData({ error: '' })
   },
 
-  onAccountTypeChange(e: WechatMiniprogram.CustomEvent<{ value: AccountType }>) {
-    this.setData({ 'form.account_type': e.detail.value })
-  },
-
-  async onSubmit() {
+  async onSubmit(e: WechatMiniprogram.CustomEvent<ApplymentBindBankPayload>) {
     if (this.data.submitting) return
-
-    const form = this.data.form
-    if (!form.account_bank || !form.bank_address_code || !form.account_number || !form.account_name || !form.contact_phone) {
-      wx.showToast({ title: '请填写完整必填字段', icon: 'none' })
-      return
-    }
 
     this.setData({ submitting: true, error: '' })
     try {
-      const resp = await operatorBindBank({
-        ...form,
-        bank_name: form.bank_name || undefined,
-        contact_email: form.contact_email || undefined
-      })
+      const resp = await operatorBindBank(e.detail)
       await this.loadStatus()
 
       const applymentId = resp.applyment_id ? String(resp.applyment_id) : this.data.statusView.applymentId

@@ -7,6 +7,7 @@ import (
 	"hash/fnv"
 	"net/http"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -57,34 +58,36 @@ type successMessageResponse struct {
 
 // Server serves HTTP requests for our banking service.
 type Server struct {
-	config             util.Config
-	store              db.Store
-	tokenMaker         token.Maker
-	auditWriter        AuditWriter
-	wechatClient       wechat.WechatClient
-	paymentClient      wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
-	ecommerceClient    wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
-	dataEncryptor      util.DataEncryptor              // 敏感数据加密器（本地存储加密）
-	mapClient          maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
-	weatherCache       weather.WeatherCache
-	taskDistributor    worker.TaskDistributor
-	wsHub              *websocket.Hub           // WebSocket连接管理（骑手和商户）
-	wsPubSub           *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
-	deliveryBroadcast  *logic.DeliveryBroadcastLogic
-	rateLimiter        *RateLimiter
-	mediaRegistry      *media.Registry
-	mediaResolver      *media.URLResolver
-	imageDeleter       *imageDeleteWorker   // 有界异步图片删除 worker pool
-	keywordWorker      *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
-	rulesEngine        rules.Engine
-	routeService       *logic.RouteService
-	orderCommandSvc    logic.OrderCommandService
-	orderQuerySvc      logic.OrderQueryService
-	paymentFacade      logic.PaymentFacade
-	refundOrchestrator logic.RefundOrchestrator
-	mediaStorage       media.ObjectStorage
-	printerClient      cloudprint.Client
-	router             *gin.Engine
+	config                  util.Config
+	store                   db.Store
+	tokenMaker              token.Maker
+	auditWriter             AuditWriter
+	wechatClient            wechat.WechatClient
+	paymentClient           wechat.PaymentClientInterface   // 小程序直连支付（押金、充值）
+	ecommerceClient         wechat.EcommerceClientInterface // 平台收付通（订单支付分账）
+	dataEncryptor           util.DataEncryptor              // 敏感数据加密器（本地存储加密）
+	mapClient               maps.TencentMapClientInterface  // 地图客户端（自建 OSM）
+	weatherCache            weather.WeatherCache
+	taskDistributor         worker.TaskDistributor
+	wsHub                   *websocket.Hub           // WebSocket连接管理（骑手和商户）
+	wsPubSub                *websocket.PubSubManager // Redis Pub/Sub管理（跨进程推送）
+	deliveryBroadcast       *logic.DeliveryBroadcastLogic
+	rateLimiter             *RateLimiter
+	mediaRegistry           *media.Registry
+	mediaResolver           *media.URLResolver
+	imageDeleter            *imageDeleteWorker   // 有界异步图片删除 worker pool
+	keywordWorker           *searchKeywordWorker // 有界异步搜索关键词记录 worker pool
+	rulesEngine             rules.Engine
+	routeService            *logic.RouteService
+	orderCommandSvc         logic.OrderCommandService
+	orderQuerySvc           logic.OrderQueryService
+	paymentFacade           logic.PaymentFacade
+	refundOrchestrator      logic.RefundOrchestrator
+	mediaStorage            media.ObjectStorage
+	printerClient           cloudprint.Client
+	router                  *gin.Engine
+	applymentCatalogCache   *applymentCatalogCache
+	applymentCatalogCacheMu sync.Mutex
 }
 
 // SetPaymentClientForTest injects a payment client in tests.
@@ -599,6 +602,11 @@ func (server *Server) setupRouter() {
 	// M5.2: 运营商开户（微信支付二级商户进件）
 	operatorApplymentGroup := authGroup.Group("/operator/applyment")
 	{
+		operatorApplymentGroup.GET("/banks", server.listApplymentBanks)
+		operatorApplymentGroup.GET("/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
+		operatorApplymentGroup.GET("/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
+		operatorApplymentGroup.GET("/areas/provinces", server.listApplymentProvinces)
+		operatorApplymentGroup.GET("/areas/provinces/:province_code/cities", server.listApplymentCities)
 		operatorApplymentGroup.POST("/bindbank", server.operatorBindBank)        // 绑定银行卡开户
 		operatorApplymentGroup.GET("/status", server.getOperatorApplymentStatus) // 获取开户状态
 	}
@@ -678,6 +686,11 @@ func (server *Server) setupRouter() {
 	merchantApplymentGroup := authGroup.Group("/merchant/applyment")
 	merchantApplymentGroup.Use(server.MerchantOwnerOnlyMiddleware())
 	{
+		merchantApplymentGroup.GET("/banks", server.listApplymentBanks)
+		merchantApplymentGroup.GET("/banks/search-by-bank-account", server.searchApplymentBanksByAccount)
+		merchantApplymentGroup.GET("/banks/:bank_alias_code/branches", server.listApplymentBankBranches)
+		merchantApplymentGroup.GET("/areas/provinces", server.listApplymentProvinces)
+		merchantApplymentGroup.GET("/areas/provinces/:province_code/cities", server.listApplymentCities)
 		merchantApplymentGroup.POST("/bindbank", server.merchantBindBank)        // 绑定银行卡开户
 		merchantApplymentGroup.GET("/status", server.getMerchantApplymentStatus) // 获取开户状态
 	}

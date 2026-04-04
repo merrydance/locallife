@@ -139,6 +139,24 @@ type EcommerceClientInterface interface {
 	// QueryEcommerceApplymentByOutRequestNo 通过业务申请编号查询进件状态
 	QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceApplymentQueryResponse, error)
 
+	// ListPersonalBankingBanks 查询支持个人业务的银行列表
+	ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error)
+
+	// ListCorporateBankingBanks 查询支持对公业务的银行列表
+	ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error)
+
+	// SearchBanksByBankAccount 根据个人银行卡号识别开户银行候选
+	SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*CapitalBankAccountSearchResponse, error)
+
+	// ListProvinceAreas 查询省份列表
+	ListProvinceAreas(ctx context.Context) (*CapitalProvinceListResponse, error)
+
+	// ListCityAreas 查询省份下城市列表
+	ListCityAreas(ctx context.Context, provinceCode int) (*CapitalCityListResponse, error)
+
+	// ListBankBranches 查询支行列表
+	ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*CapitalBranchListResponse, error)
+
 	// ==================== 合单支付 ====================
 	// CreateCombineOrder 创建合单订单（平台收付通）
 	CreateCombineOrder(ctx context.Context, req *CombineOrderRequest) (*CombineOrderResponse, *JSAPIPayParams, error)

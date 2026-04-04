@@ -1,0 +1,186 @@
+.bank-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.intro-card,
+.section-card,
+.selected-card,
+.hint-card,
+.picker-trigger,
+.result-item {
+  border-radius: var(--radius-md);
+}
+
+.intro-card,
+.section-card,
+.selected-card {
+  background: var(--td-bg-color-container);
+  box-shadow: var(--shadow-sm);
+}
+
+.intro-card,
+.section-card {
+  padding: var(--spacer-md);
+}
+
+.intro-title,
+.section-title,
+.field-label,
+.selected-name,
+.result-title,
+.result-check {
+  color: var(--td-text-color-primary);
+}
+
+.intro-title,
+.section-title,
+.result-title {
+  font-weight: 600;
+}
+
+.intro-title,
+.section-title {
+  font-size: var(--font-size-base);
+}
+
+.intro-desc,
+.section-desc,
+.selected-desc,
+.result-desc,
+.empty-text,
+.section-meta,
+.candidate-title {
+  color: var(--td-text-color-secondary);
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+}
+
+.field-group,
+.candidate-block,
+.picker-group,
+.form-actions {
+  display: flex;
+  flex-direction: column;
+}
+
+.field-group,
+.candidate-block,
+.picker-group {
+  gap: var(--spacer-xs);
+}
+
+.account-number-row {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-xs);
+}
+
+.account-number-main {
+  flex: 1;
+}
+
+.section-head,
+.selected-row,
+.result-item,
+.result-side {
+  display: flex;
+  gap: var(--spacer-sm);
+}
+
+.section-head,
+.selected-row,
+.result-item {
+  justify-content: space-between;
+}
+
+.selected-row,
+.result-item,
+.result-side {
+  align-items: center;
+}
+
+.selected-card,
+.hint-card {
+  padding: 20rpx 24rpx;
+}
+
+.selected-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.candidate-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-xs);
+}
+
+.result-list {
+  max-height: 420rpx;
+  margin-top: var(--spacer-xs);
+}
+
+.branch-list {
+  max-height: 360rpx;
+}
+
+.result-item {
+  padding: 22rpx 24rpx;
+  margin-bottom: 12rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  border: 2rpx solid transparent;
+}
+
+.result-item--active {
+  border-color: var(--td-brand-color);
+  background: var(--td-brand-color-light);
+}
+
+.result-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-check {
+  font-size: var(--font-size-xs);
+  color: var(--td-brand-color);
+}
+
+.empty-text {
+  padding: 40rpx 0;
+  text-align: center;
+}
+
+.hint-card-info {
+  background: var(--td-brand-color-light);
+}
+
+.hint-card-warn {
+  background: var(--td-warning-color-1);
+}
+
+.picker-trigger {
+  padding: 24rpx;
+  background: var(--td-bg-color-secondarycontainer);
+  color: var(--td-text-color-primary);
+}
+
+.picker-trigger--placeholder {
+  color: var(--td-text-color-placeholder);
+}
+
+.form-actions {
+  gap: var(--spacer-xs);
+  margin-top: var(--spacer-xs);
+}
+
+@media (min-width: 720rpx) {
+  .account-number-row {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+}

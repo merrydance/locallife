@@ -671,6 +671,36 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) GetSpMchName() *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSpMchName", reflect.TypeOf((*MockEcommerceClientInterface)(nil).GetSpMchName))
 }
 
+// ListBankBranches mocks base method.
+func (m *MockEcommerceClientInterface) ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*wechat.CapitalBranchListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListBankBranches", ctx, bankAliasCode, cityCode, offset, limit)
+	ret0, _ := ret[0].(*wechat.CapitalBranchListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListBankBranches indicates an expected call of ListBankBranches.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ListBankBranches(ctx, bankAliasCode, cityCode, offset, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListBankBranches", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ListBankBranches), ctx, bankAliasCode, cityCode, offset, limit)
+}
+
+// ListCityAreas mocks base method.
+func (m *MockEcommerceClientInterface) ListCityAreas(ctx context.Context, provinceCode int) (*wechat.CapitalCityListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCityAreas", ctx, provinceCode)
+	ret0, _ := ret[0].(*wechat.CapitalCityListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCityAreas indicates an expected call of ListCityAreas.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ListCityAreas(ctx, provinceCode any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCityAreas", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ListCityAreas), ctx, provinceCode)
+}
+
 // ListComplaints mocks base method.
 func (m *MockEcommerceClientInterface) ListComplaints(ctx context.Context, req wechat.ListComplaintsRequest) (*wechat.ListComplaintsResponse, error) {
 	m.ctrl.T.Helper()
@@ -684,6 +714,51 @@ func (m *MockEcommerceClientInterface) ListComplaints(ctx context.Context, req w
 func (mr *MockEcommerceClientInterfaceMockRecorder) ListComplaints(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListComplaints", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ListComplaints), ctx, req)
+}
+
+// ListCorporateBankingBanks mocks base method.
+func (m *MockEcommerceClientInterface) ListCorporateBankingBanks(ctx context.Context, offset, limit int) (*wechat.CapitalBankListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListCorporateBankingBanks", ctx, offset, limit)
+	ret0, _ := ret[0].(*wechat.CapitalBankListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListCorporateBankingBanks indicates an expected call of ListCorporateBankingBanks.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ListCorporateBankingBanks(ctx, offset, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListCorporateBankingBanks", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ListCorporateBankingBanks), ctx, offset, limit)
+}
+
+// ListPersonalBankingBanks mocks base method.
+func (m *MockEcommerceClientInterface) ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*wechat.CapitalBankListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListPersonalBankingBanks", ctx, offset, limit)
+	ret0, _ := ret[0].(*wechat.CapitalBankListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListPersonalBankingBanks indicates an expected call of ListPersonalBankingBanks.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ListPersonalBankingBanks(ctx, offset, limit any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListPersonalBankingBanks", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ListPersonalBankingBanks), ctx, offset, limit)
+}
+
+// ListProvinceAreas mocks base method.
+func (m *MockEcommerceClientInterface) ListProvinceAreas(ctx context.Context) (*wechat.CapitalProvinceListResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListProvinceAreas", ctx)
+	ret0, _ := ret[0].(*wechat.CapitalProvinceListResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListProvinceAreas indicates an expected call of ListProvinceAreas.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ListProvinceAreas(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProvinceAreas", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ListProvinceAreas), ctx)
 }
 
 // QueryCombineOrder mocks base method.
@@ -833,6 +908,21 @@ func (m *MockEcommerceClientInterface) ReturnSubsidy(ctx context.Context, req we
 func (mr *MockEcommerceClientInterfaceMockRecorder) ReturnSubsidy(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReturnSubsidy", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ReturnSubsidy), ctx, req)
+}
+
+// SearchBanksByBankAccount mocks base method.
+func (m *MockEcommerceClientInterface) SearchBanksByBankAccount(ctx context.Context, accountNumber string) (*wechat.CapitalBankAccountSearchResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SearchBanksByBankAccount", ctx, accountNumber)
+	ret0, _ := ret[0].(*wechat.CapitalBankAccountSearchResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SearchBanksByBankAccount indicates an expected call of SearchBanksByBankAccount.
+func (mr *MockEcommerceClientInterfaceMockRecorder) SearchBanksByBankAccount(ctx, accountNumber any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchBanksByBankAccount", reflect.TypeOf((*MockEcommerceClientInterface)(nil).SearchBanksByBankAccount), ctx, accountNumber)
 }
 
 // UploadImage mocks base method.
