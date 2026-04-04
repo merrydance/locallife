@@ -71,7 +71,7 @@ func randomMerchantApplicationForApplyment(userID int64) db.MerchantApplication 
 		BusinessAddress:       util.RandomString(30),
 		Status:                "approved",
 		BusinessLicenseOcr:    []byte(`{"type_of_enterprise":"个体工商户","address":"深圳市南山区","valid_period":"2020年01月01日至长期"}`),
-		IDCardBackOcr:         []byte(`{"valid_date": "2020.01.01-2030.01.01"}`),
+		IDCardBackOcr:         []byte(`{"valid_date": "2020-01-01-2030-01-01"}`),
 	}
 }
 
@@ -269,6 +269,78 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+		{
+			name: "InvalidIDCardValidityPeriod",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+				"contact_phone":     "13800138000",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				invalidApplication := applicationWithTestURL
+				invalidApplication.IDCardBackOcr = []byte(`{"valid_date": "长期"}`)
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(invalidApplication, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrApplymentIDCardValidityInvalid.Code, response.Code)
+				require.Equal(t, ErrApplymentIDCardValidityInvalid.Message, response.Error)
+			},
+		},
+		{
+			name: "InvalidBusinessLicenseValidityPeriod",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+				"contact_phone":     "13800138000",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				invalidApplication := applicationWithTestURL
+				invalidApplication.BusinessLicenseOcr = []byte(`{"type_of_enterprise":"个体工商户","address":"深圳市南山区","valid_period":"长期"}`)
+				store.EXPECT().
+					GetUserMerchantApplication(gomock.Any(), user.ID).
+					Times(1).
+					Return(invalidApplication, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrApplymentBusinessLicenseValidityInvalid.Code, response.Code)
+				require.Equal(t, ErrApplymentBusinessLicenseValidityInvalid.Message, response.Error)
 			},
 		},
 		{

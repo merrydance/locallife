@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -16,6 +17,8 @@ import (
 	"github.com/merrydance/locallife/wechat"
 	"github.com/rs/zerolog/log"
 )
+
+var applymentDateTokenPattern = regexp.MustCompile(`\d{4}年\d{1,2}月\d{1,2}日|\d{4}[./-]\d{1,2}[./-]\d{1,2}|\d{8}|长期|永久`)
 
 // ==================== 商户开户 ====================
 
@@ -130,8 +133,18 @@ func (server *Server) merchantBindBank(ctx *gin.Context) {
 		application.MerchantName,
 		"4",
 	)
+	if err := validateApplymentBusinessLicenseValidity(businessLicenseOCR.ValidPeriod); err != nil {
+		log.Warn().Int64("merchant_id", merchant.ID).Str("valid_period", businessLicenseOCR.ValidPeriod).Msg("商户营业期限无效，拒绝提交微信进件")
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 
 	idCardValidTimeBegin, idCardValidTime := parseIDCardValidPeriod(idCardBackOCR.ValidDate)
+	if err := validateApplymentIDCardValidity(idCardValidTimeBegin, idCardValidTime); err != nil {
+		log.Warn().Int64("merchant_id", merchant.ID).Str("valid_date", idCardBackOCR.ValidDate).Msg("商户身份证有效期无效，拒绝提交微信进件")
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 
 	// 加密敏感数据（本地存储）
 	encryptedIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, application.LegalPersonIDNumber)
@@ -520,22 +533,113 @@ func (server *Server) getMerchantApplymentStatus(ctx *gin.Context) {
 }
 
 func parseIDCardValidPeriod(validDate string) (string, string) {
-	if strings.TrimSpace(validDate) == "" {
+	begin, end := parseApplymentDateRange(validDate)
+	if begin == "" && end == "" {
 		return "", "长期"
 	}
+	return begin, end
+}
 
-	parts := strings.SplitN(validDate, "-", 2)
-	if len(parts) != 2 {
-		return "", normalizeApplymentDate(validDate)
+func parseApplymentDateRange(raw string) (string, string) {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
+		return "", ""
 	}
 
-	return normalizeApplymentDate(parts[0]), normalizeApplymentDate(parts[1])
+	if strings.Contains(trimmed, "至") {
+		parts := strings.SplitN(trimmed, "至", 2)
+		return normalizeApplymentDate(parts[0]), normalizeApplymentDate(parts[1])
+	}
+
+	tokens := applymentDateTokenPattern.FindAllString(trimmed, -1)
+	if len(tokens) >= 2 {
+		return normalizeApplymentDate(tokens[0]), normalizeApplymentDate(tokens[len(tokens)-1])
+	}
+
+	if len(tokens) == 1 {
+		normalized := normalizeApplymentDate(tokens[0])
+		if normalized == "长期" {
+			return "", normalized
+		}
+		if strings.Contains(trimmed, "长期") || strings.Contains(trimmed, "永久") {
+			return normalized, "长期"
+		}
+		return "", normalized
+	}
+
+	normalized := normalizeApplymentDate(trimmed)
+	if normalized == "长期" {
+		return "", normalized
+	}
+
+	return "", normalized
+}
+
+func validateApplymentIDCardValidity(begin, end string) error {
+	if begin == "" && end == "" {
+		return ErrApplymentIDCardValidityInvalid
+	}
+	return validateApplymentDateWindow(begin, end, ErrApplymentIDCardValidityInvalid)
+}
+
+func validateApplymentBusinessLicenseValidity(validPeriod string) error {
+	if strings.TrimSpace(validPeriod) == "" {
+		return nil
+	}
+	begin, end := parseApplymentDateRange(validPeriod)
+	return validateApplymentDateWindow(begin, end, ErrApplymentBusinessLicenseValidityInvalid)
+}
+
+func validateApplymentDateWindow(begin, end string, invalidErr error) error {
+	begin = strings.TrimSpace(begin)
+	end = strings.TrimSpace(end)
+	if begin == "" || end == "" {
+		return invalidErr
+	}
+
+	parsedBegin, err := time.Parse("2006-01-02", begin)
+	if err != nil {
+		return invalidErr
+	}
+
+	minDate := time.Date(1900, 1, 1, 0, 0, 0, 0, time.UTC)
+	if parsedBegin.Before(minDate) {
+		return invalidErr
+	}
+
+	today, err := time.Parse("2006-01-02", time.Now().Format("2006-01-02"))
+	if err != nil {
+		return invalidErr
+	}
+	if !parsedBegin.Before(today) {
+		return invalidErr
+	}
+
+	if end == "长期" {
+		return nil
+	}
+
+	parsedEnd, err := time.Parse("2006-01-02", end)
+	if err != nil {
+		return invalidErr
+	}
+	if !parsedEnd.After(parsedBegin) {
+		return invalidErr
+	}
+
+	return nil
 }
 
 func normalizeApplymentDate(raw string) string {
 	normalized := strings.TrimSpace(raw)
-	if normalized == "" || normalized == "长期" {
+	if normalized == "" {
 		return normalized
+	}
+	if strings.Contains(normalized, "长期") || strings.Contains(normalized, "永久") {
+		return "长期"
+	}
+	if parsed, ok := parseFlexibleDate(normalized); ok {
+		return parsed.Format("2006-01-02")
 	}
 
 	replacer := strings.NewReplacer(
@@ -546,7 +650,15 @@ func normalizeApplymentDate(raw string) string {
 		"/", "-",
 	)
 	normalized = replacer.Replace(normalized)
-	return strings.Trim(normalized, " -")
+	normalized = strings.Trim(normalized, " -")
+
+	for _, layout := range []string{"2006-01-02", "2006-1-2"} {
+		if parsed, err := time.Parse(layout, normalized); err == nil {
+			return parsed.Format("2006-01-02")
+		}
+	}
+
+	return normalized
 }
 
 func buildApplymentBusinessLicenseInfo(copyMediaID, businessLicenseNumber, merchantName, legalPerson, fallbackAddress string, ocr *BusinessLicenseOCRData) *wechat.BusinessLicenseInfo {
@@ -583,13 +695,7 @@ func buildApplymentBusinessTime(validPeriod string) string {
 		return ""
 	}
 
-	parts := strings.SplitN(trimmed, "至", 2)
-	if len(parts) != 2 {
-		return ""
-	}
-
-	start := normalizeApplymentDate(parts[0])
-	end := normalizeApplymentDate(parts[1])
+	start, end := parseApplymentDateRange(trimmed)
 	if start == "" || end == "" {
 		return ""
 	}
@@ -843,16 +949,25 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 	if idCardValidTime == "" {
 		idCardValidTime = "长期"
 	}
+	if err := validateApplymentIDCardValidity(idCardValidTimeBegin, idCardValidTime); err != nil {
+		log.Warn().Int64("operator_id", operator.ID).Str("valid_start", idCardBackOCR.ValidStart).Str("valid_end", idCardBackOCR.ValidEnd).Msg("运营商身份证有效期无效，拒绝提交微信进件")
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 
 	// 生成业务申请编号
 	outRequestNo := fmt.Sprintf("O%d%d", operator.ID, time.Now().Unix())
-
 	organizationType := resolveApplymentOrganizationType(
 		businessLicenseNumber,
 		businessLicenseOCR.TypeOfEnterprise,
 		operatorName,
 		"2",
 	)
+	if err := validateApplymentBusinessLicenseValidity(businessLicenseOCR.ValidPeriod); err != nil {
+		log.Warn().Int64("operator_id", operator.ID).Str("valid_period", businessLicenseOCR.ValidPeriod).Msg("运营商营业期限无效，拒绝提交微信进件")
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
 
 	// 加密敏感数据（本地存储）
 	encryptedIDCardNumber, err := util.EncryptSensitiveField(server.dataEncryptor, legalPersonIDNumber)

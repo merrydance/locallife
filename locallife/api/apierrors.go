@@ -235,14 +235,16 @@ var (
 // ==================== 文件/图片路径 (File / Image Path) ====================
 
 var (
-	ErrInvalidFilePath        = apierr(40066, "path must be a relative path under the uploads directory")
-	ErrInvalidTableImageURL   = apierr(40067, "invalid table image URL: must use URL from the table image upload API")
-	ErrInvalidReviewImageURL  = apierr(40068, "invalid review image URL: must use URL from the review image upload API")
-	ErrInvalidTypeParam       = apierr(40070, "type must be merchant or dish")
-	ErrInvalidTableID         = apierr(40072, "invalid table ID")
-	ErrInvalidAddress         = apierr(40073, "invalid address")
-	ErrInvalidLatitudeFormat  = apierr(40074, "invalid latitude format")
-	ErrInvalidLongitudeFormat = apierr(40075, "invalid longitude format")
+	ErrInvalidFilePath                         = apierr(40066, "path must be a relative path under the uploads directory")
+	ErrInvalidTableImageURL                    = apierr(40067, "invalid table image URL: must use URL from the table image upload API")
+	ErrInvalidReviewImageURL                   = apierr(40068, "invalid review image URL: must use URL from the review image upload API")
+	ErrApplymentIDCardValidityInvalid          = apierr(40069, "ID card validity period is incomplete or invalid: please re-upload the ID card back image")
+	ErrApplymentBusinessLicenseValidityInvalid = apierr(40071, "business license validity period is invalid: please re-upload the business license image")
+	ErrInvalidTypeParam                        = apierr(40070, "type must be merchant or dish")
+	ErrInvalidTableID                          = apierr(40072, "invalid table ID")
+	ErrInvalidAddress                          = apierr(40073, "invalid address")
+	ErrInvalidLatitudeFormat                   = apierr(40074, "invalid latitude format")
+	ErrInvalidLongitudeFormat                  = apierr(40075, "invalid longitude format")
 )
 
 // ==================== 必填字段/文件上传校验 (Required Fields / Document Upload) ====================
