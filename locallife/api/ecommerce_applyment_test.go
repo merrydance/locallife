@@ -744,9 +744,15 @@ func TestListMerchantApplymentBanksAPI(t *testing.T) {
 		ListPersonalBankingBanks(gomock.Any(), 0, applymentCatalogPageSize).
 		Times(1).
 		Return(&wechat.CapitalBankListResponse{
-			TotalCount: 1,
-			Count:      1,
+			TotalCount: 2,
+			Count:      2,
 			Data: []wechat.CapitalBank{{
+				BankAlias:       "其他银行",
+				BankAliasCode:   "1099",
+				AccountBank:     "其他银行",
+				AccountBankCode: 1099,
+				NeedBankBranch:  true,
+			}, {
 				BankAlias:       "招商银行",
 				BankAliasCode:   "1000009561",
 				AccountBank:     "招商银行",
@@ -768,6 +774,7 @@ func TestListMerchantApplymentBanksAPI(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 	require.Len(t, response.Banks, 1)
 	require.Equal(t, "招商银行", response.Banks[0].BankAlias)
+	require.Equal(t, "招商银行", response.Banks[0].AccountBank)
 	require.Equal(t, int64(1001), response.Banks[0].AccountBankCode)
 }
 

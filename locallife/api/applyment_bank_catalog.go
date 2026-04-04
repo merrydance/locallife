@@ -17,6 +17,7 @@ import (
 const (
 	applymentCatalogPageSize = 200
 	applymentCatalogTTL      = 24 * time.Hour
+	applymentOtherBankName   = "其他银行"
 )
 
 type applymentBankOption struct {
@@ -383,7 +384,11 @@ func (server *Server) loadApplymentBanks(ctx context.Context, accountType string
 			return nil, time.Time{}, fmt.Errorf("load applyment banks: %w", err)
 		}
 		for _, bank := range resp.Data {
-			items = append(items, mapCapitalBankOption(bank))
+			option := mapCapitalBankOption(bank)
+			if shouldExcludeApplymentBankOption(option) {
+				continue
+			}
+			items = append(items, option)
 		}
 		if len(resp.Data) == 0 || offset+resp.Count >= resp.TotalCount {
 			break
@@ -570,4 +575,8 @@ func mapCapitalBankOption(bank wechat.CapitalBank) applymentBankOption {
 		AccountBankCode: bank.AccountBankCode,
 		NeedBankBranch:  bank.NeedBankBranch,
 	}
+}
+
+func shouldExcludeApplymentBankOption(bank applymentBankOption) bool {
+	return strings.TrimSpace(bank.AccountBank) == applymentOtherBankName
 }
