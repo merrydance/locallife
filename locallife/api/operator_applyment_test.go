@@ -155,6 +155,76 @@ func TestOperatorBindBankAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "OK_WithRangeStoredInValidEnd",
+			body: gin.H{
+				"account_type":      "ACCOUNT_TYPE_PRIVATE",
+				"account_bank":      "招商银行",
+				"bank_address_code": "440300",
+				"bank_name":         "招商银行深圳分行",
+				"account_number":    "6214830012345678",
+				"account_name":      "张三",
+				"contact_phone":     "13800138000",
+				"contact_email":     "test@example.com",
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, ecommerceClient *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetOperatorByUser(gomock.Any(), user.ID).
+					Times(1).
+					Return(operator, nil)
+
+				store.EXPECT().
+					GetLatestEcommerceApplymentBySubject(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
+
+				rangeInEndApplication := applicationWithTestURL
+				rangeInEndApplication.IDCardBackOcr = []byte(`{"valid_start":"","valid_end":"2008.09.29-2028.09.29"}`)
+				store.EXPECT().
+					GetApprovedOperatorApplicationByUserID(gomock.Any(), user.ID).
+					Times(1).
+					Return(rangeInEndApplication, nil)
+
+				store.EXPECT().
+					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(randomEcommerceApplymentForTest("operator", operator.ID), nil)
+
+				ecommerceClient.EXPECT().
+					EncryptSensitiveData(gomock.Any()).
+					Times(6).
+					Return("encrypted_data", nil)
+
+				ecommerceClient.EXPECT().
+					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ any, req *wechat.EcommerceApplymentRequest) (*wechat.EcommerceApplymentResponse, error) {
+						require.Equal(t, "2008-09-29", req.IDCardInfo.IDCardValidTimeBegin)
+						require.Equal(t, "2028-09-29", req.IDCardInfo.IDCardValidTime)
+						return &wechat.EcommerceApplymentResponse{ApplymentID: 123456789}, nil
+					})
+
+				store.EXPECT().
+					UpdateEcommerceApplymentToSubmitted(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.EcommerceApplyment{}, nil)
+
+				store.EXPECT().
+					UpdateOperatorStatus(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Operator{}, nil)
+			},
+			checkResponse: func(recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response operatorBindBankResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, int64(123456789), response.ApplymentID)
+				require.Equal(t, "submitted", response.Status)
+			},
+		},
+		{
 			name: "OperatorNotFound",
 			body: gin.H{
 				"account_type":      "ACCOUNT_TYPE_PRIVATE",

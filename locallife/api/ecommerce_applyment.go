@@ -540,6 +540,24 @@ func parseIDCardValidPeriod(validDate string) (string, string) {
 	return begin, end
 }
 
+func parseOperatorIDCardValidPeriod(ocr OperatorIDCardBackOCR) (string, string) {
+	start := normalizeApplymentDate(ocr.ValidStart)
+	end := normalizeApplymentDate(ocr.ValidEnd)
+	if start != "" && end != "" {
+		return start, end
+	}
+
+	if begin, rangedEnd := parseApplymentDateRange(ocr.ValidEnd); begin != "" || rangedEnd != "" {
+		return begin, rangedEnd
+	}
+
+	if begin, rangedEnd := parseApplymentDateRange(ocr.ValidStart); begin != "" || rangedEnd != "" {
+		return begin, rangedEnd
+	}
+
+	return start, end
+}
+
 func parseApplymentDateRange(raw string) (string, string) {
 	trimmed := strings.TrimSpace(raw)
 	if trimmed == "" {
@@ -944,8 +962,7 @@ func (server *Server) operatorBindBank(ctx *gin.Context) {
 		return
 	}
 
-	idCardValidTimeBegin := normalizeApplymentDate(idCardBackOCR.ValidStart)
-	idCardValidTime := normalizeApplymentDate(idCardBackOCR.ValidEnd)
+	idCardValidTimeBegin, idCardValidTime := parseOperatorIDCardValidPeriod(idCardBackOCR)
 	if idCardValidTime == "" {
 		idCardValidTime = "长期"
 	}
