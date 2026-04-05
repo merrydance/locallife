@@ -1,27 +1,53 @@
 <custom-navbar title="配送优惠管理" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
-
-  <!-- 加载中 -->
-  <view wx:if="{{loading && !promotions.length}}" class="center-state">
-    <t-loading theme="circular" size="48rpx" text="加载中..." vertical />
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
-  <!-- 空状态 -->
-  <view wx:elif="{{!loading && !promotions.length}}" class="center-state">
-    <t-empty icon="discount" description="暂无配送优惠活动" />
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
   </view>
 
-  <!-- 优惠列表 -->
-  <view wx:else class="list-section">
-    <t-swipe-cell wx:for="{{promotions}}" wx:key="id">
-      <view class="promo-card">
+  <block wx:else>
+    <view class="hero-card">
+      <view class="hero-copy">
+        <text class="hero-title">配送优惠规则</text>
+        <text class="hero-subtitle">维护配送场景下的满减活动，统一控制优惠门槛、生效周期和启用状态。</text>
+      </view>
+    </view>
+
+    <view wx:if="{{initialLoading}}" class="state-block">
+      <t-loading theme="circular" size="48rpx" text="加载中..." vertical />
+    </view>
+
+    <view wx:elif="{{initialError}}" class="state-block">
+      <t-empty icon="discount" description="{{initialErrorMessage || '配送优惠加载失败，请重试'}}" />
+      <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+    </view>
+
+    <block wx:else>
+    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
+      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
+      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view wx:if="{{!promotions.length}}" class="state-block">
+      <t-empty icon="discount" description="暂无配送优惠活动，点击右下角按钮开始创建" />
+    </view>
+
+    <view wx:else class="list-section">
+      <view wx:for="{{promotions}}" wx:key="id" class="promo-card">
         <view class="promo-header">
           <view class="promo-name-row">
             <text class="promo-name">{{item.name}}</text>
-            <t-tag size="extra-small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
+            <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
           </view>
-          <t-switch size="small" value="{{item.is_active}}" catchtap="onTogglePromoStatus" data-id="{{item.id}}" data-active="{{item.is_active}}" />
         </view>
 
         <view class="promo-body">
@@ -36,16 +62,19 @@
         </view>
 
         <view class="promo-footer">
-          <t-button size="extra-small" theme="primary" variant="outline" shape="round" catchtap="onEditPromotion" data-id="{{item.id}}">编辑</t-button>
+          <text wx:if="{{actingPromotionId === item.id}}" class="promo-action-hint">{{actingPromotionAction === 'toggle' ? '状态更新中...' : '删除处理中...'}}</text>
+          <view class="promo-actions">
+            <t-button block size="small" theme="default" shape="round" disabled="{{submitting || !!actingPromotionId}}" catchtap="onEditPromotion" data-id="{{item.id}}">编辑</t-button>
+            <t-button block size="small" theme="primary" shape="round" data-id="{{item.id}}" data-active="{{item.is_active}}" loading="{{actingPromotionId === item.id && actingPromotionAction === 'toggle'}}" disabled="{{submitting || !!actingPromotionId}}" catchtap="onTogglePromoStatus">{{item.is_active ? '停用' : '启用'}}</t-button>
+            <t-button block size="small" theme="danger" shape="round" data-id="{{item.id}}" data-name="{{item.name}}" loading="{{actingPromotionId === item.id && actingPromotionAction === 'delete'}}" disabled="{{submitting || !!actingPromotionId}}" catchtap="onDeletePromotion">删除</t-button>
+          </view>
         </view>
       </view>
+    </view>
 
-      <view slot="right" class="swipe-delete" catchtap="onDeletePromotion" data-id="{{item.id}}" data-name="{{item.name}}">删除</view>
-    </t-swipe-cell>
-  </view>
-
-  <!-- 悬浮添加按钮（列表非空时显示） -->
-  <t-fab icon="add" bind:click="onAddPromotion" />
+    <t-fab icon="add" bind:click="onAddPromotion" />
+    </block>
+  </block>
 </view>
 
 <!-- 新建/编辑弹窗 -->
@@ -55,7 +84,7 @@
       <view class="form-title">{{isEdit ? '编辑配送优惠' : '新建配送优惠'}}</view>
 
       <view class="form-item">
-        <text class="form-label required">优惠名称</text>
+        <text class="form-label">优惠名称 <text class="required">*</text></text>
         <input
           class="form-input"
           value="{{form.name}}"
@@ -68,7 +97,7 @@
 
       <view class="form-row">
         <view class="form-item half">
-          <text class="form-label required">最低订单金额（元）</text>
+          <text class="form-label">最低订单金额（元） <text class="required">*</text></text>
           <input
             class="form-input"
             type="digit"
@@ -79,7 +108,7 @@
           />
         </view>
         <view class="form-item half">
-          <text class="form-label required">优惠金额（元）</text>
+          <text class="form-label">优惠金额（元） <text class="required">*</text></text>
           <input
             class="form-input"
             type="digit"
@@ -93,7 +122,7 @@
 
       <view class="form-row">
         <view class="form-item half">
-          <text class="form-label required">开始日期</text>
+          <text class="form-label">开始日期 <text class="required">*</text></text>
           <picker mode="date" value="{{form.valid_from}}" bindchange="onFormInput" data-field="valid_from">
             <view class="form-picker {{form.valid_from ? '' : 'placeholder'}}">
               {{form.valid_from || '请选择'}}
@@ -101,7 +130,7 @@
           </picker>
         </view>
         <view class="form-item half">
-          <text class="form-label required">结束日期</text>
+          <text class="form-label">结束日期 <text class="required">*</text></text>
           <picker mode="date" value="{{form.valid_until}}" bindchange="onFormInput" data-field="valid_until">
             <view class="form-picker {{form.valid_until ? '' : 'placeholder'}}">
               {{form.valid_until || '请选择'}}
@@ -115,10 +144,10 @@
         <t-switch value="{{form.is_active}}" bind:change="onToggleActive" />
       </view>
 
-      <view class="form-actions">
-        <t-button theme="primary" variant="outline" size="large" shape="round" bind:tap="onCloseForm">取消</t-button>
-        <t-button theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
-      </view>
     </scroll-view>
+    <view class="form-actions">
+      <t-button block theme="default" size="large" shape="round" bind:tap="onCloseForm">取消</t-button>
+      <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
+    </view>
   </view>
 </t-popup>

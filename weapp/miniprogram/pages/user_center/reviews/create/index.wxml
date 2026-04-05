@@ -58,7 +58,7 @@
         <t-upload
           mediaType="{{['image']}}"
           files="{{fileList}}"
-          gridConfig="{{ { column: 3 } }}"
+          gridConfig="{{ { column: 3, width: 180, height: 180 } }}"
           max="{{maxImages}}"
           bind:add="onAddImage"
           bind:remove="onRemoveImage"

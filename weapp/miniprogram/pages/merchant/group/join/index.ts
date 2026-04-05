@@ -1,6 +1,7 @@
 import { applyToJoinGroup, searchGroups } from '../../../../api/group-application'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 type NavHeightEvent = {
   detail: {
@@ -26,10 +27,15 @@ type ApplyEvent = {
 type GroupItem = Record<string, unknown>
 
 const getErrorMessage = getErrorUserMessage
+const CONFIG_PAGE_ROUTE = 'pages/merchant/config/index'
 
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    searchErrorMessage: '',
     keyword: '',
     groups: [] as GroupItem[],
     searched: false,
@@ -38,6 +44,20 @@ Page({
     selectedGroupId: 0,
     selectedGroupName: '',
     applyReason: ''
+  },
+
+  async onLoad() {
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+  },
+
+  onRetryAccess() {
+    this.setData({ accessReady: false, accessDenied: false, accessErrorMessage: '' })
+    this.onLoad()
   },
 
   onNavHeight(e: NavHeightEvent) {
@@ -49,23 +69,30 @@ Page({
   },
 
   async onSearchSubmit() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     if (!this.data.keyword.trim()) return
-    this.setData({ loading: true, searched: false, groups: [] })
+    this.setData({ loading: true, searched: false, groups: [], searchErrorMessage: '' })
     try {
       const res = await searchGroups(this.data.keyword)
       this.setData({
         groups: res || [],
         searched: true,
+        searchErrorMessage: '',
         loading: false
       })
     } catch (e) {
-      this.setData({ loading: false })
+      this.setData({
+        loading: false,
+        searched: true,
+        searchErrorMessage: getErrorMessage(e, '搜索失败，请稍后重试')
+      })
       logger.error('Search groups failed', e)
-      wx.showToast({ title: getErrorMessage(e, '搜索失败，请稍后重试'), icon: 'none' })
     }
   },
 
   onApply(e: ApplyEvent) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
     const { id, name } = e.currentTarget.dataset
     if (typeof id !== 'number') {
       wx.showToast({ title: '集团信息异常', icon: 'none' })
@@ -88,6 +115,8 @@ Page({
   },
 
   async confirmApply() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
     wx.showLoading({ title: '提交申请...' })
     try {
       await applyToJoinGroup(this.data.selectedGroupId, {
@@ -100,7 +129,15 @@ Page({
         content: `加入 ${this.data.selectedGroupName} 的申请已发送，请联系集团管理员审核。`,
         showCancel: false,
         success: () => {
-          wx.navigateBack()
+          const pages = getCurrentPages()
+          const previousPage = pages[pages.length - 2]
+
+          if (previousPage?.route === CONFIG_PAGE_ROUTE) {
+            wx.navigateBack()
+            return
+          }
+
+          wx.redirectTo({ url: '/pages/merchant/config/index' })
         }
       })
     } catch (e: unknown) {

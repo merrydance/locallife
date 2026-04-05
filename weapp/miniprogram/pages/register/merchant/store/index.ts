@@ -57,11 +57,92 @@ type ImageFieldItem = {
   url: string
   rawUrl?: string
   assetId?: number
+  localFileUrl?: string
+  pendingSync?: boolean
+  status?: 'loading' | 'done' | 'failed' | 'reload'
 }
+
+function normalizeImageRawUrl(rawUrl?: string | null): string {
+  return typeof rawUrl === 'string' ? rawUrl.trim() : ''
+}
+
 function toPersistedImageUrls(images: ImageFieldItem[]): string[] {
-  return images
-    .map((image) => image.rawUrl)
-    .filter((url): url is string => typeof url === 'string' && url.trim().length > 0)
+  return Array.from(new Set(
+    images
+      .map((image) => normalizeImageRawUrl(image.rawUrl))
+      .filter((url) => url.length > 0)
+  ))
+}
+
+function isImagePendingPersistence(image: ImageFieldItem | null | undefined): boolean {
+  if (!image) {
+    return false
+  }
+
+  return !!image.pendingSync || !!image.localFileUrl || !normalizeImageRawUrl(image.rawUrl)
+}
+
+function isSameImageIdentity(left: ImageFieldItem | null | undefined, right: ImageFieldItem | null | undefined): boolean {
+  if (!left || !right) {
+    return false
+  }
+
+  if (left.assetId && right.assetId && left.assetId === right.assetId) {
+    return true
+  }
+
+  const leftRawUrl = normalizeImageRawUrl(left.rawUrl)
+  const rightRawUrl = normalizeImageRawUrl(right.rawUrl)
+  if (leftRawUrl && rightRawUrl && leftRawUrl === rightRawUrl) {
+    return true
+  }
+
+  return !!left.url && left.url === right.url
+}
+
+function buildUploadRenderImages(images: ImageFieldItem[], previousFiles: ImageFieldItem[] = []): ImageFieldItem[] {
+  const nextFiles: ImageFieldItem[] = []
+
+  images.forEach((image) => {
+    const matchedPreviousFile = previousFiles.find((previousFile) => isSameImageIdentity(previousFile, image))
+    const visibleUrl = matchedPreviousFile?.url || image.localFileUrl || image.url
+    const status: ImageFieldItem['status'] = isImagePendingPersistence(image) ? 'loading' : 'done'
+
+    if (!visibleUrl) {
+      return
+    }
+
+    if (matchedPreviousFile && matchedPreviousFile.url === visibleUrl && matchedPreviousFile.status === status) {
+      nextFiles.push(matchedPreviousFile)
+      return
+    }
+
+    nextFiles.push({
+      url: visibleUrl,
+      status,
+      assetId: image.assetId,
+      rawUrl: image.rawUrl,
+      localFileUrl: image.localFileUrl,
+      pendingSync: image.pendingSync
+    })
+  })
+
+  return nextFiles
+}
+
+function markImagesPersisted(images: ImageFieldItem[]): ImageFieldItem[] {
+  return images.map((image) => {
+    if (!normalizeImageRawUrl(image.rawUrl)) {
+      return image
+    }
+
+    return {
+      ...image,
+      localFileUrl: undefined,
+      pendingSync: false,
+      status: 'done'
+    }
+  })
 }
 
 function toSafeNumber(value: unknown): number {
@@ -326,7 +407,11 @@ Page({
     idCardBackImages: [] as ImageFieldItem[],
     accountPermitImages: [] as ImageFieldItem[],
     storefrontImages: [] as ImageFieldItem[],  // 门头照，最多3张
+    storefrontFiles: [] as ImageFieldItem[],
+    storefrontSaving: false,
     environmentImages: [] as ImageFieldItem[], // 环境照，最多5张
+    environmentFiles: [] as ImageFieldItem[],
+    environmentSaving: false,
 
     // OCR原始结果 (用于一致性校验)
     ocrResults: {
@@ -492,7 +577,9 @@ Page({
         idCardBackImages,
         accountPermitImages,
         storefrontImages,
-        environmentImages
+        storefrontFiles: buildUploadRenderImages(storefrontImages),
+        environmentImages,
+        environmentFiles: buildUploadRenderImages(environmentImages)
       })
 
       logger.debug('[MerchantRegister] initApplication 完成', formData, 'initApplication')
@@ -520,6 +607,24 @@ Page({
 
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
     this.setData({ navBarHeight: e.detail.navBarHeight })
+  },
+
+  setShopImages(kind: 'storefront' | 'environment', images: ImageFieldItem[]) {
+    const imagesFieldName = kind === 'storefront' ? 'storefrontImages' : 'environmentImages'
+    const filesFieldName = kind === 'storefront' ? 'storefrontFiles' : 'environmentFiles'
+    const currentFiles = [...this.data[filesFieldName]] as ImageFieldItem[]
+
+    this.setData({
+      [imagesFieldName]: images,
+      [filesFieldName]: buildUploadRenderImages(images, currentFiles)
+    } as Record<string, unknown>)
+  },
+
+  buildShopImagesPayload(kind: 'storefront' | 'environment', images: ImageFieldItem[]) {
+    return {
+      storefront_images: kind === 'storefront' ? toPersistedImageUrls(images) : toPersistedImageUrls(this.data.storefrontImages),
+      environment_images: kind === 'environment' ? toPersistedImageUrls(images) : toPersistedImageUrls(this.data.environmentImages)
+    }
   },
 
   applyLatestOcrDraft(data: MerchantDraftExt) {
@@ -852,8 +957,8 @@ Page({
       const environmentImages = this.data.environmentImages || []
       if (storefrontImages.length > 0 || environmentImages.length > 0) {
         await updateMerchantImages({
-          storefront_images: storefrontImages.map((i) => i.rawUrl || i.url),
-          environment_images: environmentImages.map((i) => i.rawUrl || i.url)
+          storefront_images: toPersistedImageUrls(storefrontImages),
+          environment_images: toPersistedImageUrls(environmentImages)
         })
       }
 
@@ -969,6 +1074,10 @@ Page({
         idCardFrontImages: draft.idCardFrontImages || [],
         idCardBackImages: draft.idCardBackImages || [],
         accountPermitImages: draft.accountPermitImages || [],
+        storefrontImages: draft.storefrontImages || [],
+        storefrontFiles: buildUploadRenderImages(draft.storefrontImages || []),
+        environmentImages: draft.environmentImages || [],
+        environmentFiles: buildUploadRenderImages(draft.environmentImages || []),
         shopImages: draft.shopImages || [],
         ocrResults: draft.ocrResults || { license: null, idCard: null }
       })
@@ -1484,7 +1593,12 @@ Page({
       }
     }
 
-    this.setData({ storefrontImages, environmentImages })
+    this.setData({
+      storefrontImages,
+      storefrontFiles: buildUploadRenderImages(storefrontImages, this.data.storefrontFiles),
+      environmentImages,
+      environmentFiles: buildUploadRenderImages(environmentImages, this.data.environmentFiles)
+    })
     console.log('[MerchantRegister] 已刷新门头照/环境照签名')
   },
 
@@ -1505,6 +1619,10 @@ Page({
   // ==================== 门头照/环境照上传 ====================
 
   async onStorefrontImageUpload(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.storefrontSaving) {
+      return
+    }
+
     // t-upload bind:add 传递的是 files 数组
     const files = e.detail.files as Array<{ url: string }>
     if (!files || files.length === 0) {
@@ -1519,11 +1637,21 @@ Page({
       return
     }
 
-    const currentImages = [...this.data.storefrontImages]
-    if (currentImages.length >= 3) {
+    const previousImages = [...this.data.storefrontImages]
+    if (previousImages.length >= 3) {
       wx.showToast({ title: '最多上传3张门头照', icon: 'none' })
       return
     }
+
+    const currentImages: ImageFieldItem[] = [...previousImages, {
+      url: newFile.url,
+      localFileUrl: newFile.url,
+      pendingSync: true,
+      status: 'loading' as const
+    }]
+
+    this.setData({ storefrontSaving: true })
+    this.setShopImages('storefront', currentImages)
 
     console.log('[MerchantRegister] 门头照上传开始:', newFile.url)
     wx.showLoading({ title: '上传中...' })
@@ -1534,45 +1662,54 @@ Page({
       const displayUrl = result.displayUrl || newFile.url
       console.log('[MerchantRegister] 门头照显示 URL:', displayUrl)
 
-      currentImages.push({
+      currentImages[currentImages.length - 1] = {
         url: displayUrl,
         rawUrl: result.displayUrl || undefined,
-        assetId: result.mediaId
-      })
-      this.setData({ storefrontImages: currentImages })
+        assetId: result.mediaId,
+        localFileUrl: newFile.url,
+        pendingSync: true,
+        status: 'loading'
+      }
+      this.setShopImages('storefront', currentImages)
 
       if (result.displayUrl) {
-        await updateMerchantImages({
-          storefront_images: toPersistedImageUrls(currentImages)
-        })
+        const persistedImages = markImagesPersisted(currentImages)
+        await updateMerchantImages(this.buildShopImagesPayload('storefront', persistedImages))
+        this.setShopImages('storefront', persistedImages)
+        this.saveDraft()
       } else {
         void this.finalizePendingShopImage('storefront', currentImages.length - 1, result.mediaId)
       }
 
-      wx.hideLoading()
-      wx.showToast({
-        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
-        icon: 'success'
-      })
-      this.saveDraft()
     } catch (error) {
+      this.setShopImages('storefront', previousImages)
       wx.hideLoading()
       logger.error('[MerchantRegister] 门头照上传失败', error)
       wx.showToast({ title: '上传失败', icon: 'none' })
+      this.setData({ storefrontSaving: false })
+      return
     }
+
+    wx.hideLoading()
+    this.setData({ storefrontSaving: false })
   },
 
   async onStorefrontImageRemove(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.storefrontSaving) {
+      return
+    }
+
     const { index } = e.detail
     const removedImage = this.data.storefrontImages[index]
-    const images = [...this.data.storefrontImages]
-    images.splice(index, 1)
-    this.setData({ storefrontImages: images })
+    const nextImages = [...this.data.storefrontImages]
+    nextImages.splice(index, 1)
+
+    this.setData({ storefrontSaving: true })
+    wx.showLoading({ title: '删除中...' })
 
     try {
-      await updateMerchantImages({
-        storefront_images: toPersistedImageUrls(images)
-      })
+      await updateMerchantImages(this.buildShopImagesPayload('storefront', nextImages))
+      this.setShopImages('storefront', nextImages)
 
       if (removedImage?.assetId) {
         try {
@@ -1585,10 +1722,18 @@ Page({
       this.saveDraft()
     } catch (error) {
       logger.error('[MerchantRegister] 删除门头照失败', error)
+      wx.showToast({ title: getErrorMessage(error, '删除失败，请重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ storefrontSaving: false })
     }
   },
 
   async onEnvironmentImageUpload(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.environmentSaving) {
+      return
+    }
+
     // t-upload bind:add 传递的是 files 数组
     const files = e.detail.files as Array<{ url: string }>
     if (!files || files.length === 0) {
@@ -1603,11 +1748,21 @@ Page({
       return
     }
 
-    const currentImages = [...this.data.environmentImages]
-    if (currentImages.length >= 5) {
+    const previousImages = [...this.data.environmentImages]
+    if (previousImages.length >= 5) {
       wx.showToast({ title: '最多上传5张环境照', icon: 'none' })
       return
     }
+
+    const currentImages: ImageFieldItem[] = [...previousImages, {
+      url: newFile.url,
+      localFileUrl: newFile.url,
+      pendingSync: true,
+      status: 'loading' as const
+    }]
+
+    this.setData({ environmentSaving: true })
+    this.setShopImages('environment', currentImages)
 
     console.log('[MerchantRegister] 环境照上传开始:', newFile.url)
     wx.showLoading({ title: '上传中...' })
@@ -1618,45 +1773,54 @@ Page({
       const displayUrl = result.displayUrl || newFile.url
       console.log('[MerchantRegister] 环境照显示 URL:', displayUrl)
 
-      currentImages.push({
+      currentImages[currentImages.length - 1] = {
         url: displayUrl,
         rawUrl: result.displayUrl || undefined,
-        assetId: result.mediaId
-      })
-      this.setData({ environmentImages: currentImages })
+        assetId: result.mediaId,
+        localFileUrl: newFile.url,
+        pendingSync: true,
+        status: 'loading'
+      }
+      this.setShopImages('environment', currentImages)
 
       if (result.displayUrl) {
-        await updateMerchantImages({
-          environment_images: toPersistedImageUrls(currentImages)
-        })
+        const persistedImages = markImagesPersisted(currentImages)
+        await updateMerchantImages(this.buildShopImagesPayload('environment', persistedImages))
+        this.setShopImages('environment', persistedImages)
+        this.saveDraft()
       } else {
         void this.finalizePendingShopImage('environment', currentImages.length - 1, result.mediaId)
       }
 
-      wx.hideLoading()
-      wx.showToast({
-        title: result.displayUrl ? '上传成功' : '上传成功，预览已显示',
-        icon: 'success'
-      })
-      this.saveDraft()
     } catch (error) {
+      this.setShopImages('environment', previousImages)
       wx.hideLoading()
       logger.error('[MerchantRegister] 环境照上传失败', error)
       wx.showToast({ title: '上传失败', icon: 'none' })
+      this.setData({ environmentSaving: false })
+      return
     }
+
+    wx.hideLoading()
+    this.setData({ environmentSaving: false })
   },
 
   async onEnvironmentImageRemove(e: WechatMiniprogram.CustomEvent) {
+    if (this.data.environmentSaving) {
+      return
+    }
+
     const { index } = e.detail
     const removedImage = this.data.environmentImages[index]
-    const images = [...this.data.environmentImages]
-    images.splice(index, 1)
-    this.setData({ environmentImages: images })
+    const nextImages = [...this.data.environmentImages]
+    nextImages.splice(index, 1)
+
+    this.setData({ environmentSaving: true })
+    wx.showLoading({ title: '删除中...' })
 
     try {
-      await updateMerchantImages({
-        environment_images: toPersistedImageUrls(images)
-      })
+      await updateMerchantImages(this.buildShopImagesPayload('environment', nextImages))
+      this.setShopImages('environment', nextImages)
 
       if (removedImage?.assetId) {
         try {
@@ -1669,6 +1833,10 @@ Page({
       this.saveDraft()
     } catch (error) {
       logger.error('[MerchantRegister] 删除环境照失败', error)
+      wx.showToast({ title: getErrorMessage(error, '删除失败，请重试'), icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ environmentSaving: false })
     }
   },
 
@@ -1694,15 +1862,18 @@ Page({
         ...target,
         url: remoteUrl,
         rawUrl: remoteUrl,
-        assetId: mediaId
+        assetId: mediaId,
+        localFileUrl: target.localFileUrl,
+        pendingSync: true,
+        status: 'loading'
       }
 
-      this.setData({ [fieldName]: currentImages } as Record<string, unknown>)
+      this.setShopImages(kind, currentImages)
 
-      await updateMerchantImages({
-        storefront_images: kind === 'storefront' ? toPersistedImageUrls(currentImages) : toPersistedImageUrls(this.data.storefrontImages),
-        environment_images: kind === 'environment' ? toPersistedImageUrls(currentImages) : toPersistedImageUrls(this.data.environmentImages)
-      })
+      const persistedImages = markImagesPersisted(currentImages)
+
+      await updateMerchantImages(this.buildShopImagesPayload(kind, persistedImages))
+      this.setShopImages(kind, persistedImages)
 
       this.saveDraft()
     } catch (error) {

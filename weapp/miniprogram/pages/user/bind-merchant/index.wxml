@@ -9,7 +9,7 @@
       description="您已成功加入 {{result.merchant_name}}"
     >
       <view slot="description" class="role-desc">
-        您的角色：{{result.role === 'cashier' ? '收银员' : result.role}}
+        您的角色：{{result.role === 'manager' ? '店长' : result.role === 'chef' ? '后厨' : result.role === 'cashier' ? '收银员' : result.role === 'owner' ? '老板' : result.role === 'pending' ? '待分配' : '员工'}}
       </view>
     </t-result>
     

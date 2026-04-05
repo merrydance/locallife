@@ -17,6 +17,7 @@ import { logger } from '../../../../utils/logger'
 import { getMediaDisplayUrl } from '../../../../utils/media'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 type ApplicationForm = {
   merchantName: string
@@ -34,7 +35,6 @@ type UploadFileItem = {
 }
 
 type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
-type OcrFieldKey = 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr'
 
 type OcrStatus = 'pending' | 'processing' | 'done' | 'failed' | ''
 
@@ -47,6 +47,8 @@ const EMPTY_FORM: ApplicationForm = {
   legalPersonName: '',
   legalPersonIdNumber: ''
 }
+
+const APPLICATION_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 function extractErrorMessage(error: unknown, fallback: string) {
   return getErrorUserMessage(error, fallback)
@@ -110,13 +112,13 @@ function getStatusTheme(status: string) {
 function getStatusGuide(status: string) {
   switch (status) {
     case 'submitted':
-      return '申请已提交审核。当前页仍可查看资料和审核状态，审核通过后继续前往收付通进件完成收款配置。'
+      return '申请已提交，审核通过后继续完成收付通进件。'
     case 'approved':
-      return '主体申请已经通过。若主体资料有变化，可直接修改并重新提交；如无需调整，请继续完成收付通进件、签约和银行账户配置。'
+      return '主体已通过，可继续完成收付通进件和签约。'
     case 'rejected':
-      return '申请被驳回。根据驳回原因修正资料后，可重置为草稿并重新提交。'
+      return '申请已驳回，请按驳回原因修改后重新提交。'
     default:
-      return '这里维护商户主体申请资料。先保存草稿，再上传证照并提交审核，审核通过后再进入收付通进件。'
+      return '填写主体资料并上传证照，确认定位后提交审核。'
   }
 }
 
@@ -153,12 +155,12 @@ function buildLocationLabel(address: string, latitude?: string | null, longitude
 
 function buildLocationHint(regionId?: number | null, latitude?: string | null, longitude?: string | null) {
   if (regionId) {
-    return '位置已保存，后端已完成经营区域匹配。'
+    return '位置已保存，已匹配经营区域。'
   }
   if (latitude && longitude) {
-    return '位置已保存，但当前还未匹配到经营区域；提交前请重新选择更准确的位置。'
+    return '位置已保存，暂未匹配经营区域，请重新选择更准确的位置。'
   }
-  return '提交审核前必须完成定位，后端会据此匹配经营区域。'
+  return '提交前请完成定位，系统会自动匹配经营区域。'
 }
 
 function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSuccessCallbackResult) {
@@ -187,12 +189,20 @@ function buildOcrNoticeMessage(statuses: OcrStatus[]) {
   return '部分证照仍在识别中，请等待本次识别完成后再提交审核。'
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     saving: false,
     submitting: false,
@@ -226,31 +236,61 @@ Page({
     licenseUploading: false,
     foodPermitUploading: false,
     idCardFrontUploading: false,
-    idCardBackUploading: false
+    idCardBackUploading: false,
+    lastLoadedAt: 0
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.loadApplication()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadApplication(true, true)
   },
 
   onShow() {
-    if (!this.data.initialLoading && !this.data.saving && !this.data.submitting && !this.data.resetting) {
-      this.loadApplication(false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    if (!this.data.initialLoading && !this.data.saving && !this.data.submitting && !this.data.resetting && !this.data.hasChanges) {
+      if (shouldAutoRefresh(this.data.lastLoadedAt, APPLICATION_AUTO_REFRESH_WINDOW_MS)) {
+        this.loadApplication(false)
+      }
     }
   },
 
   onPullDownRefresh() {
-    this.loadApplication(false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+    this.loadApplication(false, true)
   },
 
-  async loadApplication(showLoading = true) {
+  async loadApplication(showLoading = true, force = false) {
     if (this.data.loading) return
+
+    const hasExistingData = !this.data.initialLoading
+    if (!force && hasExistingData && !shouldAutoRefresh(this.data.lastLoadedAt, APPLICATION_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData({
       loading: true,
-      ...(showLoading ? { initialError: false, initialErrorMessage: '', actionNoticeMessage: '' } : {})
+      ...(showLoading
+        ? { initialError: false, initialErrorMessage: '', actionNoticeMessage: '', refreshErrorMessage: '' }
+        : hasExistingData
+          ? { refreshErrorMessage: '' }
+          : {})
     })
 
     try {
@@ -259,19 +299,21 @@ Page({
       this.setData({
         initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (error) {
       logger.error('Load merchant application settings failed', error, 'merchant-application-page')
       const message = extractErrorMessage(error, '商户申请资料加载失败，请稍后重试')
-      if (this.data.initialLoading || showLoading) {
+      if (this.data.initialLoading) {
         this.setData({
           initialLoading: false,
           initialError: true,
           initialErrorMessage: message
         })
       } else {
-        wx.showToast({ title: message, icon: 'none' })
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       }
     } finally {
       this.setData({ loading: false })
@@ -353,6 +395,10 @@ Page({
     }
   ) {
     const field = e.currentTarget.dataset.field
+    if (field === 'businessAddress') {
+      return
+    }
+
     const nextForm = {
       ...this.data.form,
       [field]: e.detail.value
@@ -433,7 +479,7 @@ Page({
       const updated = await updateMerchantBasicInfo(this.buildBasicPayload())
       await this.applyDraftToPage(updated, false)
       if (showSuccessToast) {
-        this.setData({ actionNoticeMessage: '草稿已保存，可继续补充证照或直接提交审核。' })
+        this.setData({ actionNoticeMessage: '草稿已保存。' })
       }
       return true
     } catch (error) {
@@ -475,11 +521,7 @@ Page({
 
       const result = await submitMerchantApplication(consentPayload)
       await this.applyDraftToPage(result, false)
-      this.setData({
-        actionNoticeMessage: result.status === 'approved'
-          ? '主体申请已通过，可继续完成收付通进件和签约配置。'
-          : '主体申请已提交审核，请留意当前状态更新。'
-      })
+      this.setData({ actionNoticeMessage: '' })
     } catch (error) {
       logger.error('Submit merchant application failed', error, 'merchant-application-page')
       wx.showToast({ title: extractErrorMessage(error, '申请提交失败，请稍后重试'), icon: 'none' })
@@ -507,7 +549,7 @@ Page({
     try {
       const result = await resetMerchantApplication()
       await this.applyDraftToPage(result, false)
-      this.setData({ actionNoticeMessage: '申请已重置为草稿，可修改资料后重新提交。' })
+      this.setData({ actionNoticeMessage: '已重置为草稿。' })
     } catch (error) {
       logger.error('Reset merchant application failed', error, 'merchant-application-page')
       wx.showToast({ title: extractErrorMessage(error, '申请重置失败，请稍后重试'), icon: 'none' })
@@ -562,6 +604,7 @@ Page({
       idCardBack: 'id_card_back'
     }
 
+  this.setData({ actionNoticeMessage: '' })
     wx.showLoading({ title: '删除中...' })
     try {
       const updated = await deleteMerchantApplicationDocument(documentMap[field])
@@ -582,7 +625,10 @@ Page({
     }
 
     const uploadingKey = this.getUploadingKey(field)
-    this.setData({ [uploadingKey]: true })
+    this.setData({
+      [uploadingKey]: true,
+      actionNoticeMessage: ''
+    })
     wx.showLoading({ title: '证照识别中' })
 
     try {
@@ -602,7 +648,6 @@ Page({
       }
 
       await this.mergeOcrDraft(field, submissionResult.draft, path)
-      wx.showToast({ title: '识别完成，请确认回填信息', icon: 'success' })
     } catch (error) {
       logger.error('Upload merchant application document failed', error, 'merchant-application-page')
       wx.showToast({ title: extractErrorMessage(error, '证照上传或识别失败，请稍后重试'), icon: 'none' })
@@ -622,19 +667,6 @@ Page({
         return 'idCardFrontUploading'
       default:
         return 'idCardBackUploading'
-    }
-  },
-
-  getOcrFieldKey(field: UploadField): OcrFieldKey {
-    switch (field) {
-      case 'license':
-        return 'business_license_ocr'
-      case 'foodPermit':
-        return 'food_permit_ocr'
-      case 'idCardFront':
-        return 'id_card_front_ocr'
-      default:
-        return 'id_card_back_ocr'
     }
   },
 
@@ -744,15 +776,18 @@ Page({
 
     wx.chooseLocation({
       success: async (result) => {
+        const previousForm = this.data.form
+        const previousHasChanges = this.data.hasChanges
         const fullAddress = buildChosenLocationAddress(result)
         const nextForm = {
-          ...this.data.form,
-          businessAddress: fullAddress || this.data.form.businessAddress
+          ...previousForm,
+          businessAddress: fullAddress || previousForm.businessAddress
         }
 
         this.setData({
           form: nextForm,
-          hasChanges: hasFormChanged(nextForm, this.data.initialForm)
+          hasChanges: hasFormChanged(nextForm, this.data.initialForm),
+          actionNoticeMessage: ''
         })
 
         wx.showLoading({ title: '保存位置中...' })
@@ -763,11 +798,11 @@ Page({
             longitude: String(result.longitude)
           })
           await this.applyDraftToPage(updated, true)
-          wx.showToast({
-            title: updated.region_id ? '位置已更新' : '位置已保存，请确认区域匹配',
-            icon: 'success'
-          })
         } catch (error) {
+          this.setData({
+            form: previousForm,
+            hasChanges: previousHasChanges
+          })
           logger.error('Update merchant application location failed', error, 'merchant-application-page')
           wx.showToast({ title: extractErrorMessage(error, '位置保存失败，请稍后重试'), icon: 'none' })
         } finally {
@@ -805,7 +840,31 @@ Page({
   },
 
   onRetry() {
-    this.loadApplication()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadApplication(true, true)
+  },
+
+  onRetryRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadApplication(false, true)
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: ''
+    })
+    this.onLoad()
   },
 
   getStatusText(status: string) {

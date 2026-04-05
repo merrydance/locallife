@@ -1,13 +1,22 @@
 <custom-navbar title="评价管理" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view wx:if="{{initialLoading}}" class="state-block">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载评价列表中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '评价列表加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -76,12 +85,12 @@
         </view>
 
         <view class="action-row">
-          <t-button size="small" theme="primary" variant="outline" shape="round" data-id="{{item.id}}" bindtap="onOpenReplyPopup">{{item.replyActionLabel}}</t-button>
+          <t-button size="small" theme="default" shape="round" data-id="{{item.id}}" bindtap="onOpenReplyPopup">{{item.replyActionLabel}}</t-button>
         </view>
       </view>
 
       <view wx:if="{{hasMore}}" class="more-wrap">
-        <t-button size="small" theme="primary" variant="outline" shape="round" loading="{{loadingMore}}" bindtap="onLoadMore">加载更多</t-button>
+        <t-button size="large" theme="default" shape="round" loading="{{loadingMore}}" bindtap="onLoadMore">加载更多</t-button>
       </view>
     </view>
   </block>
@@ -98,8 +107,8 @@
         bindchange="onReplyInput"
       />
       <view class="popup-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" disabled="{{replySubmitting}}" bindtap="onCloseReplyPopup">取消</t-button>
-        <t-button theme="primary" size="medium" shape="round" loading="{{replySubmitting}}" bindtap="onSubmitReply">提交回复</t-button>
+        <t-button block theme="default" size="large" shape="round" disabled="{{replySubmitting}}" bindtap="onCloseReplyPopup">取消</t-button>
+        <t-button block theme="primary" size="large" shape="round" loading="{{replySubmitting}}" bindtap="onSubmitReply">提交回复</t-button>
       </view>
     </view>
   </t-popup>

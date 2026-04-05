@@ -136,12 +136,12 @@
         
         <view class="section-header">门头照 (最多3张)</view>
         <view class="upload-container">
-            <t-upload mediaType="{{['image']}}" max="{{3}}" files="{{storefrontImages || []}}" bind:add="onStorefrontImageUpload" bind:remove="onStorefrontImageRemove" />
+            <t-upload mediaType="{{['image']}}" max="{{3}}" gridConfig="{{ { column: 3, width: 200, height: 200 } }}" files="{{storefrontFiles || []}}" disabled="{{storefrontSaving}}" bind:add="onStorefrontImageUpload" bind:remove="onStorefrontImageRemove" />
             <view class="upload-tip">请上传店铺门头清晰照片</view>
         </view>
         <view class="section-header">环境照 (最多5张)</view>
         <view class="upload-container">
-            <t-upload mediaType="{{['image']}}" max="{{5}}" files="{{environmentImages || []}}" bind:add="onEnvironmentImageUpload" bind:remove="onEnvironmentImageRemove" />
+            <t-upload mediaType="{{['image']}}" max="{{5}}" gridConfig="{{ { column: 3, width: 200, height: 200 } }}" files="{{environmentFiles || []}}" disabled="{{environmentSaving}}" bind:add="onEnvironmentImageUpload" bind:remove="onEnvironmentImageRemove" />
             <view class="upload-tip">请上传店内环境照片</view>
         </view>
     </view>

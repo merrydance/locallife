@@ -1,65 +1,84 @@
 <custom-navbar title="申请加入集团" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px;">
-  <view class="search-section">
-    <t-search
-      placeholder="搜索集团或品牌名称"
-      bind:change="onSearchChange"
-      bind:submit="onSearchSubmit"
-      focus
-    />
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
-  <view class="content">
-    <block wx:if="{{loading}}">
-      <view class="skeleton-container animate-fade-in">
-        <list-skeleton row="3" />
-      </view>
-    </block>
-
-    <block wx:else>
-      <view class="result-list animate-fade-in" wx:if="{{groups.length > 0}}">
-        <view class="group-card" wx:for="{{groups}}" wx:key="id">
-          <view class="group-info">
-            <view class="group-name">{{item.name}}</view>
-            <view class="group-addr">地址: {{item.address || '暂无地址'}}</view>
-          </view>
-          <t-button
-            theme="primary"
-            size="small"
-            bindtap="onApply"
-            data-id="{{item.id}}"
-            data-name="{{item.name}}"
-            shape="round"
-          >申请加入</t-button>
-        </view>
-      </view>
-      <view class="empty-state" wx:elif="{{searched && groups.length === 0}}">
-        <t-empty icon="search" description="未搜索到相关集团或品牌" />
-      </view>
-      <view class="search-tip" wx:elif="{{!searched}}">
-        <t-icon name="info-circle" size="32rpx" />
-        <text>请输入集团或品牌名称全称、简称或关键字进行搜索</text>
-      </view>
-    </block>
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
-  <t-dialog
-    visible="{{dialogVisible}}"
-    title="申请加入 {{selectedGroupName}}"
-    confirm-btn="{{ { content: '确认申请', variant: 'base' } }}"
-    cancel-btn="取消"
-    bind:confirm="confirmApply"
-    bind:cancel="closeDialog"
-  >
-    <view slot="content" class="dialog-content">
-      <view class="input-label">申请备注 (可选)</view>
-      <t-textarea
-        placeholder="请输入申请理由，例如：我是 XX 分店的店主"
-        bordered
-        value="{{applyReason}}"
-        bindchange="onReasonChange"
+  <block wx:elif="{{accessReady}}">
+    <view class="search-section" style="top: {{navBarHeight}}px;">
+      <t-search
+        placeholder="搜索集团或品牌名称"
+        bind:change="onSearchChange"
+        bind:submit="onSearchSubmit"
+        focus
       />
     </view>
-  </t-dialog>
+
+    <view class="content">
+      <block wx:if="{{loading}}">
+        <view class="skeleton-container animate-fade-in">
+          <list-skeleton row="3" />
+        </view>
+      </block>
+
+      <block wx:else>
+        <view class="result-list animate-fade-in" wx:if="{{groups.length > 0}}">
+          <view class="group-card" wx:for="{{groups}}" wx:key="id">
+            <view class="group-info">
+              <view class="group-name">{{item.name}}</view>
+              <view class="group-addr">地址: {{item.address || '暂无地址'}}</view>
+            </view>
+            <t-button
+              theme="primary"
+              size="small"
+              bindtap="onApply"
+              data-id="{{item.id}}"
+              data-name="{{item.name}}"
+              shape="round"
+            >申请加入</t-button>
+          </view>
+        </view>
+        <view class="empty-state" wx:elif="{{searchErrorMessage}}">
+          <t-empty icon="error-circle" description="{{searchErrorMessage}}" />
+          <t-button theme="primary" size="small" shape="round" bind:tap="onSearchSubmit">重新搜索</t-button>
+        </view>
+        <view class="empty-state" wx:elif="{{searched && groups.length === 0}}">
+          <t-empty icon="search" description="未搜索到相关集团或品牌" />
+        </view>
+        <view class="search-tip" wx:elif="{{!searched}}">
+          <t-icon name="info-circle" size="32rpx" />
+          <text>请输入集团或品牌名称全称、简称或关键字进行搜索</text>
+        </view>
+      </block>
+    </view>
+
+    <t-dialog
+      visible="{{dialogVisible}}"
+      title="申请加入 {{selectedGroupName}}"
+      confirm-btn="{{ { content: '确认申请', variant: 'base' } }}"
+      cancel-btn="取消"
+      bind:confirm="confirmApply"
+      bind:cancel="closeDialog"
+    >
+      <view slot="content" class="dialog-content">
+        <view class="input-label">申请备注 (可选)</view>
+        <t-textarea
+          placeholder="请输入申请理由，例如：我是 XX 分店的店主"
+          bordered
+          value="{{applyReason}}"
+          bindchange="onReasonChange"
+        />
+      </view>
+    </t-dialog>
+  </block>
+
+  <view wx:else class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
 </view>

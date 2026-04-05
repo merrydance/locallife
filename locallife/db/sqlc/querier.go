@@ -101,6 +101,7 @@ type Querier interface {
 	ClearMerchantApplicationIDCardBack(ctx context.Context, id int64) (MerchantApplication, error)
 	// 清空身份证正面关联和 OCR 结果
 	ClearMerchantApplicationIDCardFront(ctx context.Context, id int64) (MerchantApplication, error)
+	ClearMerchantLogo(ctx context.Context, arg ClearMerchantLogoParams) (Merchant, error)
 	ClearMerchantTags(ctx context.Context, merchantID int64) error
 	// 批量清空购物车（合单支付成功后）
 	ClearMultipleCarts(ctx context.Context, dollar_1 []int64) error

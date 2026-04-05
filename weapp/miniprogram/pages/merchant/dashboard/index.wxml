@@ -1,7 +1,16 @@
 <custom-navbar title="商户工作台" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <t-empty wx:if="{{accessDenied}}" icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  <t-empty wx:if="{{accessReady && accessDenied}}" icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
 
   <block wx:else>
   <view wx:if="{{initialError || refreshErrorMessage}}" class="console-error-banner">
@@ -89,7 +98,7 @@
       <view class="insight-section__head">
         <view>
           <view class="insight-section__title">经营洞察</view>
-          <text class="insight-section__desc">只展示首页需要快速判断的统计信息</text>
+          <text class="insight-section__desc">{{insightErrorMessage || (insightLoading ? '经营洞察同步中，不影响待办与营业状态刷新' : '只展示首页需要快速判断的统计信息')}}</text>
         </view>
         <t-button size="small" variant="text" theme="primary" bind:tap="onGoStats">查看详情</t-button>
       </view>
@@ -103,5 +112,21 @@
       </view>
     </view>
   </t-skeleton>
+
+  <view wx:if="{{accessReady}}" class="collaboration-section">
+    <view class="collaboration-section__head">
+      <view>
+        <view class="collaboration-section__title">顾客反馈</view>
+        <text class="collaboration-section__desc">集中查看顾客评价，作为日常经营跟进的一部分。</text>
+      </view>
+    </view>
+
+    <view class="collaboration-grid">
+      <view class="collaboration-card" wx:for="{{collaborationItems}}" wx:key="id" data-path="{{item.path}}" bindtap="onGoShortcut">
+        <view class="collaboration-card__title">{{item.title}}</view>
+        <text class="collaboration-card__desc">{{item.desc}}</text>
+      </view>
+    </view>
+  </view>
   </block>
 </view>

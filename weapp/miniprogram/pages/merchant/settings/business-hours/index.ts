@@ -6,6 +6,7 @@ import {
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 interface BusinessHourSlot {
   key: string
@@ -31,6 +32,7 @@ interface SpecialBusinessHour {
 }
 
 const DAY_LABELS = ['周日', '周一', '周二', '周三', '周四', '周五', '周六']
+const BUSINESS_HOURS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 function createSlot(openTime = '09:00', closeTime = '21:00', key?: string): BusinessHourSlot {
   return {
@@ -112,6 +114,10 @@ function hasWeeklyHoursChanged(current: WeeklyBusinessHour[], initial: WeeklyBus
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 function buildPayload(weekly: WeeklyBusinessHour[], special: SpecialBusinessHour[]) {
   const hours = weekly.reduce<Array<Pick<MerchantBusinessHour, 'day_of_week' | 'open_time' | 'close_time' | 'is_closed'>>>((accumulator, day) => {
     if (day.is_closed) {
@@ -155,6 +161,9 @@ const getErrorMessage = getErrorUserMessage
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
@@ -162,42 +171,80 @@ Page({
     refreshErrorMessage: '',
     loading: false,
     saving: false,
+    lastLoadedAt: 0,
     weeklyHours: createDefaultWeek() as WeeklyBusinessHour[],
     initialWeeklyHours: createDefaultWeek() as WeeklyBusinessHour[],
     specialHours: [] as SpecialBusinessHour[],
     hasChanges: false
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.loadBusinessHours()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadBusinessHours(true, true)
   },
 
   onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
-      this.loadBusinessHours(false)
+      if (shouldAutoRefresh(this.data.lastLoadedAt, BUSINESS_HOURS_AUTO_REFRESH_WINDOW_MS)) {
+        this.loadBusinessHours(false)
+      }
     }
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
       wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
       return
     }
-    this.loadBusinessHours(false)
+    this.loadBusinessHours(false, true)
   },
 
   onRetryRefresh() {
-    this.loadBusinessHours(false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadBusinessHours(false, true)
   },
 
-  async loadBusinessHours(showLoading = true) {
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
+  },
+
+  async loadBusinessHours(showLoading = true, force = false) {
     if (this.data.loading) return
 
     const hasExistingData = !this.data.initialLoading
     const isSilentRefresh = !showLoading && hasExistingData
+
+    if (!force && hasExistingData && !shouldAutoRefresh(this.data.lastLoadedAt, BUSINESS_HOURS_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData({
       loading: true,
@@ -221,7 +268,8 @@ Page({
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: ''
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (err: unknown) {
       logger.error('Load merchant business hours failed', err)
@@ -365,7 +413,7 @@ Page({
         weeklyHours,
         initialWeeklyHours: cloneWeeklyHours(normalized.weekly),
         specialHours: normalized.special,
-        actionNoticeMessage: '营业时间已保存并同步到门店设置。',
+        actionNoticeMessage: '营业时间已保存。',
         hasChanges: false
       })
     } catch (err: unknown) {
@@ -379,6 +427,12 @@ Page({
   },
 
   onRetry() {
-    this.loadBusinessHours()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadBusinessHours(true, true)
   }
 })

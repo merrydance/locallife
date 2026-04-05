@@ -982,6 +982,21 @@ func (mr *MockStoreMockRecorder) ClearMerchantApplicationIDCardFront(ctx, id any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantApplicationIDCardFront", reflect.TypeOf((*MockStore)(nil).ClearMerchantApplicationIDCardFront), ctx, id)
 }
 
+// ClearMerchantLogo mocks base method.
+func (m *MockStore) ClearMerchantLogo(ctx context.Context, arg db.ClearMerchantLogoParams) (db.Merchant, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearMerchantLogo", ctx, arg)
+	ret0, _ := ret[0].(db.Merchant)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ClearMerchantLogo indicates an expected call of ClearMerchantLogo.
+func (mr *MockStoreMockRecorder) ClearMerchantLogo(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearMerchantLogo", reflect.TypeOf((*MockStore)(nil).ClearMerchantLogo), ctx, arg)
+}
+
 // ClearMerchantTags mocks base method.
 func (m *MockStore) ClearMerchantTags(ctx context.Context, merchantID int64) error {
 	m.ctrl.T.Helper()

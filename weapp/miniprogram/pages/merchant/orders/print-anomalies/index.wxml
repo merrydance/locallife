@@ -1,19 +1,32 @@
 <custom-navbar title="打印异常列表" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view wx:if="{{initialLoading}}" class="state-block">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载打印异常中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '打印异常加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
     <view class="hero-card">
       <text class="hero-title">打印异常聚合视图</text>
       <text class="hero-subtitle">集中查看当前仍未恢复的异常打印任务，并直接进入订单详情或补打。</text>
+    </view>
+
+    <view wx:if="{{syncMessage}}" class="inline-banner inline-banner-info">
+      <text class="inline-banner-text">{{syncMessage}}</text>
     </view>
 
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
@@ -63,13 +76,13 @@
         </view>
 
         <view class="anomaly-actions">
-          <t-button size="small" variant="outline" theme="primary" shape="round" bindtap="onViewOrder" data-order-id="{{item.order_id}}">查看订单</t-button>
+          <t-button size="small" theme="default" shape="round" bindtap="onViewOrder" data-order-id="{{item.order_id}}">查看订单</t-button>
           <t-button wx:if="{{item.can_retry}}" size="small" theme="primary" shape="round" loading="{{retryingPrintLogId === item.print_log_id}}" disabled="{{retryingPrintLogId === item.print_log_id}}" bindtap="onRetryPrint" data-order-id="{{item.order_id}}" data-print-log-id="{{item.print_log_id}}" data-printer-name="{{item.printer_name}}">重试打印</t-button>
         </view>
       </view>
 
       <view wx:if="{{hasMore}}" class="load-more-wrap">
-        <t-button theme="primary" variant="outline" shape="round" size="small" bindtap="onReachBottom" loading="{{loading}}">加载更多</t-button>
+        <t-button theme="default" shape="round" size="large" bindtap="onReachBottom" loading="{{loading}}">加载更多</t-button>
       </view>
     </view>
   </block>

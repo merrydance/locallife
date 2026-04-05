@@ -10,6 +10,7 @@ import { logger } from '../../../../utils/logger'
 import { settleAll } from '../../../../utils/promise'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 type PackagingOrderTypeState = Record<PackagingPolicyOrderType, boolean>
 
@@ -28,6 +29,8 @@ interface PackagingDishOption {
 }
 
 type PackagingDishSource = Pick<DishResponse, 'id' | 'name' | 'price' | 'is_online' | 'is_available'>
+
+const PACKAGING_POLICY_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 const ORDER_TYPE_OPTIONS: Array<{ key: PackagingPolicyOrderType, label: string, desc: string }> = [
   { key: 'takeout', label: '外卖订单', desc: '顾客选择配送到家时，订单必须命中 1 个包装菜品。' },
@@ -107,6 +110,20 @@ function hasFormChanged(current: PackagingPolicyFormState, initial: PackagingPol
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
+function toDishSources(dishes: Array<PackagingDishOption | PackagingPolicyCandidateDish>): PackagingDishSource[] {
+  return dishes.map((dish) => ({
+    id: dish.id,
+    name: dish.name,
+    price: dish.price,
+    is_online: dish.is_online,
+    is_available: dish.is_available
+  }))
+}
+
 async function loadAllMerchantDishes() {
   const dishes: DishResponse[] = []
   let pageId = 1
@@ -142,14 +159,20 @@ Page({
   data: {
     navBarHeight: 88,
     orderTypeOptions: ORDER_TYPE_OPTIONS,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     saving: false,
     merchantId: 0,
+    lastPolicyLoadedAt: 0,
     dishesLoaded: false,
+    dishesLoading: false,
     dishesError: false,
     dishesErrorMessage: '',
     form: buildForm({
@@ -168,36 +191,84 @@ Page({
     hasChanges: false
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.loadPolicy()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadPolicy({ force: true, refreshDishes: true })
   },
 
   onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
-      this.loadPolicy(false)
+      if (shouldAutoRefresh(this.data.lastPolicyLoadedAt, PACKAGING_POLICY_AUTO_REFRESH_WINDOW_MS)) {
+        this.loadPolicy({ showLoading: false })
+        return
+      }
+
+      if (!this.data.dishesLoaded) {
+        this.loadDishOptions().catch((err) => logger.error('Load merchant packaging dishes onShow failed', err))
+      }
     }
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
       wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
       return
     }
-    this.loadPolicy(false)
+    this.loadPolicy({ showLoading: false, force: true, refreshDishes: true })
   },
 
   onRetryRefresh() {
-    this.loadPolicy(false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadPolicy({ showLoading: false, force: true, refreshDishes: true })
   },
 
-  async loadPolicy(showLoading = true) {
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
+  },
+
+  async loadPolicy(options: { showLoading?: boolean, force?: boolean, refreshDishes?: boolean } = {}) {
     if (this.data.loading) return
 
+    const showLoading = options.showLoading ?? true
+    const force = options.force === true
+    const refreshDishes = options.refreshDishes === true
     const hasExistingData = !this.data.initialLoading
     const isSilentRefresh = !showLoading && hasExistingData
+
+    if (!force && hasExistingData && !shouldAutoRefresh(this.data.lastPolicyLoadedAt, PACKAGING_POLICY_AUTO_REFRESH_WINDOW_MS)) {
+      if (!this.data.dishesLoaded) {
+        this.loadDishOptions().catch((err) => logger.error('Load merchant packaging dishes after skipped refresh failed', err))
+      }
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData({
       loading: true,
@@ -208,50 +279,31 @@ Page({
           : {})
     })
 
+    let shouldLoadDishes = false
+
     try {
-      const [policyResult, dishesResult] = await settleAll([
-        getMyMerchantPackagingPolicy(),
-        loadAllMerchantDishes()
-      ] as const)
-
-      if (policyResult.status === 'rejected') {
-        throw policyResult.reason
-      }
-
-      const policy = policyResult.value
+      const policy = await getMyMerchantPackagingPolicy()
       const form = buildForm(policy)
       const nextState: Record<string, unknown> = {
         merchantId: policy.merchant_id,
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
+        actionNoticeMessage: '',
         hasChanges: false,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: ''
-      }
-
-      if (dishesResult.status === 'fulfilled') {
-        nextState.dishOptions = mergePackagingDishOptions(
+        refreshErrorMessage: '',
+        lastPolicyLoadedAt: Date.now(),
+        dishOptions: mergePackagingDishOptions(
           form.selectedDishIds,
-          dishesResult.value,
+          toDishSources(this.data.dishOptions),
           policy.candidate_dishes || []
         )
-        nextState.dishesLoaded = true
-        nextState.dishesError = false
-        nextState.dishesErrorMessage = ''
-      } else {
-        nextState.dishOptions = mergePackagingDishOptions(
-          form.selectedDishIds,
-          [],
-          policy.candidate_dishes || []
-        )
-        nextState.dishesLoaded = true
-        nextState.dishesError = true
-        nextState.dishesErrorMessage = getErrorMessage(dishesResult.reason, '包装菜品列表加载失败，请稍后重试')
       }
 
       this.setData(nextState)
+      shouldLoadDishes = refreshDishes || !this.data.dishesLoaded
     } catch (err: unknown) {
       logger.error('Load merchant packaging policy failed', err)
       const message = getErrorMessage(err, '包装费策略加载失败，请稍后重试')
@@ -271,6 +323,46 @@ Page({
       this.setData({ loading: false })
       wx.stopPullDownRefresh()
     }
+
+    if (shouldLoadDishes) {
+      this.loadDishOptions({ force: refreshDishes }).catch((err) => logger.error('Load merchant packaging dishes failed', err))
+    }
+  },
+
+  async loadDishOptions(options: { force?: boolean } = {}) {
+    if (this.data.dishesLoading) return
+
+    const force = options.force === true
+    if (!force && this.data.dishesLoaded) return
+
+    this.setData({
+      dishesLoading: true,
+      dishesError: false,
+      dishesErrorMessage: ''
+    })
+
+    try {
+      const dishes = await loadAllMerchantDishes()
+      this.setData({
+        dishOptions: mergePackagingDishOptions(
+          this.data.form.selectedDishIds,
+          dishes,
+          toDishSources(this.data.dishOptions)
+        ),
+        dishesLoaded: true,
+        dishesError: false,
+        dishesErrorMessage: ''
+      })
+    } catch (err: unknown) {
+      logger.error('Load merchant packaging dishes failed', err)
+      this.setData({
+        dishesLoaded: false,
+        dishesError: true,
+        dishesErrorMessage: getErrorMessage(err, '包装菜品列表加载失败，请稍后重试')
+      })
+    } finally {
+      this.setData({ dishesLoading: false })
+    }
   },
 
   onToggleOrderType(e: WechatMiniprogram.TouchEvent) {
@@ -282,7 +374,12 @@ Page({
         [key]: !this.data.form.orderTypes[key]
       }
     }
-    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({
+      actionNoticeMessage: '',
+      refreshErrorMessage: '',
+      form,
+      hasChanges: hasFormChanged(form, this.data.initialForm)
+    })
   },
 
   onToggleDish(e: WechatMiniprogram.TouchEvent) {
@@ -303,6 +400,7 @@ Page({
     }
 
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       form,
       dishOptions: this.data.dishOptions.map((item) => item.id === id ? { ...item, selected: !item.selected } : item),
@@ -345,6 +443,7 @@ Page({
         merchantId: updated.merchant_id,
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
+        actionNoticeMessage: '包装费策略已保存。',
         dishOptions: mergePackagingDishOptions(
           form.selectedDishIds,
           this.data.dishOptions.map((item) => ({
@@ -368,7 +467,17 @@ Page({
     }
   },
 
+  onRetryDishes() {
+    this.loadDishOptions({ force: true })
+  },
+
   onRetry() {
-    this.loadPolicy()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadPolicy({ force: true, refreshDishes: true })
   }
 })

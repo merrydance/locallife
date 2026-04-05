@@ -106,6 +106,54 @@ func (q *Queries) CheckLegalPersonIDExists(ctx context.Context, arg CheckLegalPe
 	return count, err
 }
 
+const clearMerchantLogo = `-- name: ClearMerchantLogo :one
+UPDATE merchants
+SET
+  logo_media_asset_id = NULL,
+  version = version + 1,
+  updated_at = now()
+WHERE id = $1
+  AND version = $2
+  AND deleted_at IS NULL
+RETURNING id, owner_user_id, name, description, phone, address, latitude, longitude, status, application_data, created_at, updated_at, version, region_id, is_open, auto_close_at, deleted_at, pending_owner_bind, bind_code, bind_code_expires_at, group_id, brand_id, logo_media_asset_id
+`
+
+type ClearMerchantLogoParams struct {
+	ID      int64 `json:"id"`
+	Version int32 `json:"version"`
+}
+
+func (q *Queries) ClearMerchantLogo(ctx context.Context, arg ClearMerchantLogoParams) (Merchant, error) {
+	row := q.db.QueryRow(ctx, clearMerchantLogo, arg.ID, arg.Version)
+	var i Merchant
+	err := row.Scan(
+		&i.ID,
+		&i.OwnerUserID,
+		&i.Name,
+		&i.Description,
+		&i.Phone,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Status,
+		&i.ApplicationData,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.Version,
+		&i.RegionID,
+		&i.IsOpen,
+		&i.AutoCloseAt,
+		&i.DeletedAt,
+		&i.PendingOwnerBind,
+		&i.BindCode,
+		&i.BindCodeExpiresAt,
+		&i.GroupID,
+		&i.BrandID,
+		&i.LogoMediaAssetID,
+	)
+	return i, err
+}
+
 const clearMerchantTags = `-- name: ClearMerchantTags :exec
 DELETE FROM merchant_tags
 WHERE merchant_id = $1

@@ -14,14 +14,6 @@
   padding: 140rpx 24rpx;
 }
 
-.retry-button {
-  padding: 18rpx 36rpx;
-  border-radius: 999rpx;
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 26rpx;
-}
-
 .hero-card {
   display: flex;
   flex-direction: column;
@@ -57,6 +49,10 @@
 
 .inline-banner-danger {
   background: var(--td-error-color-1);
+}
+
+.inline-banner-info {
+  background: var(--td-brand-color-1);
 }
 
 .inline-banner-text {

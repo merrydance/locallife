@@ -1,6 +1,26 @@
 <custom-navbar title="集团 / 品牌入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <block wx:elif="{{accessReady}}">
+  <view wx:if="{{draftLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载入驻草稿中..." vertical />
+  </view>
+
+  <view wx:elif="{{draftErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{draftErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryDraft">重新加载草稿</t-button>
+  </view>
+
+  <block wx:else>
   <view class="steps-container" wx:if="{{currentStep > 0 && currentStep < 4}}">
     <t-steps current="{{currentStep - 1}}">
       <t-step-item title="证照" />
@@ -150,10 +170,10 @@
           color="{{applicationStatus === 'approved' ? 'var(--td-success-color)' : '#FF9800'}}"
         />
         <view class="status-text">{{applicationStatus === 'approved' ? '申请已通过' : '申请已提交，审核中'}}</view>
-        <view class="status-hint" wx:if="{{applicationStatus === 'approved'}}">平台已完成审核，请返回配置中心继续后续集团管理配置。</view>
-        <view class="status-hint" wx:else>平台将在 24 小时内完成审核，请留意站内消息与电话联系。</view>
+        <view class="status-hint" wx:if="{{applicationStatus === 'approved'}}">平台已完成审核，可返回配置中心继续查看人员与协作相关设置。</view>
+        <view class="status-hint" wx:else>平台将在 24 小时内完成审核，请留意站内消息；后续可返回配置中心继续查看申请进度。</view>
       </view>
-      <t-button theme="primary" block size="large" bindtap="onBackToMerchantCenter" shape="round">返回配置中心</t-button>
+      <t-button theme="primary" block size="large" bindtap="onBackToConfig" shape="round">返回配置中心</t-button>
     </view>
   </view>
 
@@ -188,6 +208,12 @@
       </view>
     </block>
   </view>
+  </block>
+  </block>
+
+  <view wx:else class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
 </view>
 
 <t-popup visible="{{consentPopupVisible}}" placement="bottom" bind:visible-change="closeConsentPopup">
@@ -199,6 +225,6 @@
       <text class="consent-link" data-type="PRIVACY_POLICY" data-title="隐私政策" catchtap="onViewAgreement">《隐私政策》</text>
     </view>
     <t-button block theme="primary" size="large" bindtap="onConfirmConsent" shape="round">我已阅读并同意，继续</t-button>
-    <t-button block theme="primary" variant="outline" size="large" bindtap="closeConsentPopup" shape="round">暂不继续</t-button>
+    <t-button block theme="default" size="large" bindtap="closeConsentPopup" shape="round">暂不继续</t-button>
   </view>
 </t-popup>

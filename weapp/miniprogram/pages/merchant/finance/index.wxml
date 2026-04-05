@@ -5,7 +5,16 @@
 ></custom-navbar>
 
 <view class="page" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
-  <view wx:if="{{loading && !balanceLoaded && !applymentLoaded}}" class="state-block">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{loading && !balanceLoaded && !applymentLoaded}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载财务数据中..." vertical />
   </view>
 
@@ -37,20 +46,25 @@
       <text class="updated-at">更新于 {{financeUpdatedAtLabel}}</text>
     </view>
 
+    <view wx:if="{{financeRefreshErrorMessage}}" class="section-error-hint">
+      <text class="section-error-text">{{financeRefreshErrorMessage}}</text>
+      <text class="section-error-action" bindtap="onRetryFinanceInsights">重新同步</text>
+    </view>
+
     <view class="section">
       <view class="section-head">
         <text class="section-title">财务概览</text>
         <text class="section-subtitle">统计口径 {{financeDateRangeLabel}}</text>
       </view>
 
-      <view wx:if="{{financeLoading && !financeLoaded}}" class="applyment-placeholder">
+      <view wx:if="{{financeLoading && !financeSectionStates.overview.loaded}}" class="applyment-placeholder">
         <text class="placeholder-text">财务概览加载中...</text>
       </view>
 
-      <view wx:elif="{{financeError}}" class="applyment-hint applyment-error">
-        <text>{{financeErrorMessage}}</text>
+      <view wx:elif="{{!financeSectionStates.overview.loaded && financeSectionStates.overview.error}}" class="applyment-hint applyment-error">
+        <text>{{financeSectionStates.overview.errorMessage || financeErrorMessage}}</text>
         <view class="submit-wrap">
-          <t-button theme="primary" size="medium" shape="round" bindtap="onRetrySection">
+          <t-button theme="primary" size="medium" shape="round" bindtap="onRetryFinanceInsights">
             重新加载
           </t-button>
         </view>
@@ -233,27 +247,36 @@
           <text class="section-title">订单收入明细</text>
           <text class="section-subtitle">最近 5 笔</text>
         </view>
-        <t-cell-group theme="card">
-          <block wx:if="{{financeOrders.length > 0}}">
-            <view wx:for="{{financeOrders}}" wx:key="id" class="finance-record-item">
-              <view class="record-row">
-                <view>
-                  <text class="record-amount">{{formatAmountText(item.merchant_amount)}}</text>
-                  <view class="record-meta">{{getOrderSourceText(item.order_source)}} · 订单 #{{item.order_id || item.payment_order_id}}</view>
+        <view wx:if="{{financeLoading && !financeSectionStates.orders.loaded}}" class="applyment-placeholder">
+          <text class="placeholder-text">订单收入明细加载中...</text>
+        </view>
+        <t-cell-group wx:elif="{{financeSectionStates.orders.loaded}}" theme="card">
+            <block wx:if="{{financeOrders.length > 0}}">
+              <view wx:for="{{financeOrders}}" wx:key="id" class="finance-record-item">
+                <view class="record-row">
+                  <view>
+                    <text class="record-amount">{{formatAmountText(item.merchant_amount)}}</text>
+                    <view class="record-meta">{{getOrderSourceText(item.order_source)}} · 订单 #{{item.order_id || item.payment_order_id}}</view>
+                  </view>
+                  <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
                 </view>
-                <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
+                <view class="finance-fee-row">
+                  <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
+                  <text>平台费 {{formatAmountText(item.platform_commission)}}</text>
+                  <text>运营费 {{formatAmountText(item.operator_commission)}}</text>
+                </view>
+                <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+                <view class="record-meta" wx:if="{{item.finished_at}}">完成时间：{{formatDateTime(item.finished_at)}}</view>
               </view>
-              <view class="finance-fee-row">
-                <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
-                <text>平台费 {{formatAmountText(item.platform_commission)}}</text>
-                <text>运营费 {{formatAmountText(item.operator_commission)}}</text>
-              </view>
-              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
-              <view class="record-meta" wx:if="{{item.finished_at}}">完成时间：{{formatDateTime(item.finished_at)}}</view>
-            </view>
-          </block>
-          <t-empty wx:else description="当前区间暂无订单收入记录" />
-        </t-cell-group>
+            </block>
+            <t-empty wx:else description="当前区间暂无订单收入记录" />
+      </t-cell-group>
+      <view wx:else class="section-state-block">
+        <text class="section-error-text">{{financeSectionStates.orders.errorMessage || '订单收入明细加载失败，请稍后重试'}}</text>
+        <view class="submit-wrap">
+          <t-button theme="primary" size="small" shape="round" bindtap="onRetryFinanceInsights">重新加载</t-button>
+        </view>
+      </view>
       </view>
 
       <view class="section">
@@ -262,40 +285,51 @@
           <text class="section-subtitle">按日期与订单来源聚合</text>
         </view>
 
-        <view class="fee-summary-grid">
-          <view class="fee-summary-card">
-            <text class="stats-label">平台服务费</text>
-            <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_platform_fee)}}</text>
+        <view wx:if="{{financeLoading && !financeSectionStates.serviceFees.loaded}}" class="applyment-placeholder">
+          <text class="placeholder-text">服务费明细加载中...</text>
+        </view>
+        <block wx:elif="{{financeSectionStates.serviceFees.loaded}}">
+          <view class="fee-summary-grid">
+            <view class="fee-summary-card">
+              <text class="stats-label">平台服务费</text>
+              <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_platform_fee)}}</text>
+            </view>
+            <view class="fee-summary-card">
+              <text class="stats-label">运营服务费</text>
+              <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_operator_fee)}}</text>
+            </view>
+            <view class="fee-summary-card fee-summary-card-span">
+              <text class="stats-label">总服务费</text>
+              <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_service_fee)}}</text>
+            </view>
           </view>
-          <view class="fee-summary-card">
-            <text class="stats-label">运营服务费</text>
-            <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_operator_fee)}}</text>
-          </view>
-          <view class="fee-summary-card fee-summary-card-span">
-            <text class="stats-label">总服务费</text>
-            <text class="stats-value fee-value">{{formatAmountText(serviceFeeSummary.total_service_fee)}}</text>
+
+          <t-cell-group theme="card">
+            <block wx:if="{{serviceFeeDetails.length > 0}}">
+              <view wx:for="{{serviceFeeDetails}}" wx:key="date" class="finance-record-item">
+                <view class="record-row">
+                  <view>
+                    <text class="record-amount">{{formatAmountText(item.total_fee)}}</text>
+                    <view class="record-meta">{{item.date}} · {{getOrderSourceText(item.order_source)}}</view>
+                  </view>
+                  <text class="record-meta">{{item.order_count}} 单</text>
+                </view>
+                <view class="finance-fee-row">
+                  <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
+                  <text>平台费 {{formatAmountText(item.platform_fee)}}</text>
+                  <text>运营费 {{formatAmountText(item.operator_fee)}}</text>
+                </view>
+              </view>
+            </block>
+            <t-empty wx:else description="当前区间暂无服务费记录" />
+          </t-cell-group>
+        </block>
+        <view wx:else class="applyment-hint applyment-error">
+          <text>{{financeSectionStates.serviceFees.errorMessage || '服务费明细加载失败，请稍后重试'}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="small" shape="round" bindtap="onRetryFinanceInsights">重新加载</t-button>
           </view>
         </view>
-
-        <t-cell-group theme="card">
-          <block wx:if="{{serviceFeeDetails.length > 0}}">
-            <view wx:for="{{serviceFeeDetails}}" wx:key="date" class="finance-record-item">
-              <view class="record-row">
-                <view>
-                  <text class="record-amount">{{formatAmountText(item.total_fee)}}</text>
-                  <view class="record-meta">{{item.date}} · {{getOrderSourceText(item.order_source)}}</view>
-                </view>
-                <text class="record-meta">{{item.order_count}} 单</text>
-              </view>
-              <view class="finance-fee-row">
-                <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
-                <text>平台费 {{formatAmountText(item.platform_fee)}}</text>
-                <text>运营费 {{formatAmountText(item.operator_fee)}}</text>
-              </view>
-            </view>
-          </block>
-          <t-empty wx:else description="当前区间暂无服务费记录" />
-        </t-cell-group>
       </view>
 
       <view class="section">
@@ -304,37 +338,48 @@
           <text class="section-subtitle">满返与配送优惠支出</text>
         </view>
 
-        <view class="fee-summary-grid">
-          <view class="fee-summary-card">
-            <text class="stats-label">优惠订单数</text>
-            <text class="stats-value fee-value">{{promotionSummary.total_promo_orders}}</text>
+        <view wx:if="{{financeLoading && !financeSectionStates.promotions.loaded}}" class="applyment-placeholder">
+          <text class="placeholder-text">营销支出加载中...</text>
+        </view>
+        <block wx:elif="{{financeSectionStates.promotions.loaded}}">
+          <view class="fee-summary-grid">
+            <view class="fee-summary-card">
+              <text class="stats-label">优惠订单数</text>
+              <text class="stats-value fee-value">{{promotionSummary.total_promo_orders}}</text>
+            </view>
+            <view class="fee-summary-card fee-summary-card-span">
+              <text class="stats-label">优惠支出总额</text>
+              <text class="stats-value fee-value">{{formatAmountText(promotionSummary.total_promo_amount)}}</text>
+            </view>
           </view>
-          <view class="fee-summary-card fee-summary-card-span">
-            <text class="stats-label">优惠支出总额</text>
-            <text class="stats-value fee-value">{{formatAmountText(promotionSummary.total_promo_amount)}}</text>
+
+          <t-cell-group theme="card">
+            <block wx:if="{{promotionOrders.length > 0}}">
+              <view wx:for="{{promotionOrders}}" wx:key="id" class="finance-record-item">
+                <view class="record-row">
+                  <view>
+                    <text class="record-amount">{{formatAmountText(item.delivery_fee_discount)}}</text>
+                    <view class="record-meta">{{getOrderSourceText(item.order_type)}} · {{item.order_no}}</view>
+                  </view>
+                  <text class="record-meta">优惠单</text>
+                </view>
+                <view class="finance-fee-row">
+                  <text>商品小计 {{formatAmountText(item.subtotal)}}</text>
+                  <text>配送费 {{formatAmountText(item.delivery_fee)}}</text>
+                  <text>优惠减免 {{formatAmountText(item.delivery_fee_discount)}}</text>
+                </view>
+                <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+              </view>
+            </block>
+            <t-empty wx:else description="当前区间暂无营销支出记录" />
+          </t-cell-group>
+        </block>
+        <view wx:else class="applyment-hint applyment-error">
+          <text>{{financeSectionStates.promotions.errorMessage || '营销支出加载失败，请稍后重试'}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="small" shape="round" bindtap="onRetryFinanceInsights">重新加载</t-button>
           </view>
         </view>
-
-        <t-cell-group theme="card">
-          <block wx:if="{{promotionOrders.length > 0}}">
-            <view wx:for="{{promotionOrders}}" wx:key="id" class="finance-record-item">
-              <view class="record-row">
-                <view>
-                  <text class="record-amount">{{formatAmountText(item.delivery_fee_discount)}}</text>
-                  <view class="record-meta">{{getOrderSourceText(item.order_type)}} · {{item.order_no}}</view>
-                </view>
-                <text class="record-meta">优惠单</text>
-              </view>
-              <view class="finance-fee-row">
-                <text>商品小计 {{formatAmountText(item.subtotal)}}</text>
-                <text>配送费 {{formatAmountText(item.delivery_fee)}}</text>
-                <text>优惠减免 {{formatAmountText(item.delivery_fee_discount)}}</text>
-              </view>
-              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
-            </view>
-          </block>
-          <t-empty wx:else description="当前区间暂无营销支出记录" />
-        </t-cell-group>
       </view>
 
       <view class="section">
@@ -343,24 +388,33 @@
           <text class="section-subtitle">最近 7 个统计日</text>
         </view>
 
-        <t-cell-group theme="card">
-          <block wx:if="{{dailyFinanceRows.length > 0}}">
-            <view wx:for="{{dailyFinanceRows}}" wx:key="date" class="finance-record-item">
-              <view class="record-row">
-                <view>
-                  <text class="record-amount">{{formatAmountText(item.merchant_income)}}</text>
-                  <view class="record-meta">{{item.date}}</view>
+        <view wx:if="{{financeLoading && !financeSectionStates.daily.loaded}}" class="applyment-placeholder">
+          <text class="placeholder-text">财务日报加载中...</text>
+        </view>
+        <t-cell-group wx:elif="{{financeSectionStates.daily.loaded}}" theme="card">
+            <block wx:if="{{dailyFinanceRows.length > 0}}">
+              <view wx:for="{{dailyFinanceRows}}" wx:key="date" class="finance-record-item">
+                <view class="record-row">
+                  <view>
+                    <text class="record-amount">{{formatAmountText(item.merchant_income)}}</text>
+                    <view class="record-meta">{{item.date}}</view>
+                  </view>
+                  <text class="record-meta">{{item.order_count}} 单</text>
                 </view>
-                <text class="record-meta">{{item.order_count}} 单</text>
+                <view class="finance-fee-row">
+                  <text>交易额 {{formatAmountText(item.total_gmv)}}</text>
+                  <text>服务费 {{formatAmountText(item.total_fee)}}</text>
+                </view>
               </view>
-              <view class="finance-fee-row">
-                <text>交易额 {{formatAmountText(item.total_gmv)}}</text>
-                <text>服务费 {{formatAmountText(item.total_fee)}}</text>
-              </view>
-            </view>
-          </block>
-          <t-empty wx:else description="当前区间暂无日报数据" />
+            </block>
+            <t-empty wx:else description="当前区间暂无日报数据" />
         </t-cell-group>
+        <view wx:else class="section-state-block">
+          <text class="section-error-text">{{financeSectionStates.daily.errorMessage || '财务日报加载失败，请稍后重试'}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="small" shape="round" bindtap="onRetryFinanceInsights">重新加载</t-button>
+          </view>
+        </view>
       </view>
 
       <view class="section">
@@ -381,42 +435,53 @@
           </view>
         </view>
 
-        <view class="fee-summary-grid">
-          <view class="fee-summary-card">
-            <text class="stats-label">结算总额</text>
-            <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_amount)}}</text>
+        <view wx:if="{{financeLoading && !financeSectionStates.settlements.loaded}}" class="applyment-placeholder">
+          <text class="placeholder-text">结算记录加载中...</text>
+        </view>
+        <block wx:elif="{{financeSectionStates.settlements.loaded}}">
+          <view class="fee-summary-grid">
+            <view class="fee-summary-card">
+              <text class="stats-label">结算总额</text>
+              <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_amount)}}</text>
+            </view>
+            <view class="fee-summary-card">
+              <text class="stats-label">商户入账</text>
+              <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_merchant_amount)}}</text>
+            </view>
+            <view class="fee-summary-card fee-summary-card-span">
+              <text class="stats-label">服务费合计</text>
+              <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_platform_fee + settlementsSummary.total_operator_fee)}}</text>
+            </view>
           </view>
-          <view class="fee-summary-card">
-            <text class="stats-label">商户入账</text>
-            <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_merchant_amount)}}</text>
-          </view>
-          <view class="fee-summary-card fee-summary-card-span">
-            <text class="stats-label">服务费合计</text>
-            <text class="stats-value fee-value">{{formatAmountText(settlementsSummary.total_platform_fee + settlementsSummary.total_operator_fee)}}</text>
+
+          <t-cell-group theme="card">
+            <block wx:if="{{settlements.length > 0}}">
+              <view wx:for="{{settlements}}" wx:key="id" class="finance-record-item">
+                <view class="record-row">
+                  <view>
+                    <text class="record-amount">{{formatAmountText(item.merchant_amount)}}</text>
+                    <view class="record-meta">{{getOrderSourceText(item.order_source)}} · {{item.out_order_no || ('#' + item.payment_order_id)}}</view>
+                  </view>
+                  <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
+                </view>
+                <view class="finance-fee-row">
+                  <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
+                  <text>平台费 {{formatAmountText(item.platform_commission)}}</text>
+                  <text>运营费 {{formatAmountText(item.operator_commission)}}</text>
+                </view>
+                <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
+                <view class="record-meta" wx:if="{{item.finished_at}}">完成时间：{{formatDateTime(item.finished_at)}}</view>
+              </view>
+            </block>
+            <t-empty wx:else description="当前区间暂无结算记录" />
+          </t-cell-group>
+        </block>
+        <view wx:else class="applyment-hint applyment-error">
+          <text>{{financeSectionStates.settlements.errorMessage || '结算记录加载失败，请稍后重试'}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="small" shape="round" bindtap="onRetryFinanceInsights">重新加载</t-button>
           </view>
         </view>
-
-        <t-cell-group theme="card">
-          <block wx:if="{{settlements.length > 0}}">
-            <view wx:for="{{settlements}}" wx:key="id" class="finance-record-item">
-              <view class="record-row">
-                <view>
-                  <text class="record-amount">{{formatAmountText(item.merchant_amount)}}</text>
-                  <view class="record-meta">{{getOrderSourceText(item.order_source)}} · {{item.out_order_no || ('#' + item.payment_order_id)}}</view>
-                </view>
-                <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
-              </view>
-              <view class="finance-fee-row">
-                <text>订单金额 {{formatAmountText(item.total_amount)}}</text>
-                <text>平台费 {{formatAmountText(item.platform_commission)}}</text>
-                <text>运营费 {{formatAmountText(item.operator_commission)}}</text>
-              </view>
-              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
-              <view class="record-meta" wx:if="{{item.finished_at}}">完成时间：{{formatDateTime(item.finished_at)}}</view>
-            </view>
-          </block>
-          <t-empty wx:else description="当前区间暂无结算记录" />
-        </t-cell-group>
       </view>
 
       <view class="section">
@@ -425,26 +490,35 @@
           <text class="section-subtitle">分账与调整统一时间线</text>
         </view>
 
-        <t-cell-group theme="card">
-          <block wx:if="{{settlementTimeline.length > 0}}">
-            <view wx:for="{{settlementTimeline}}" wx:key="id" class="finance-record-item">
-              <view class="record-row">
-                <view>
-                  <text class="record-amount">{{getTimelineAmountText(item)}}</text>
-                  <view class="record-meta">{{getTimelineRecordTypeText(item.record_type)}} · {{item.out_order_no || ('#' + item.payment_order_id)}}</view>
+        <view wx:if="{{financeLoading && !financeSectionStates.timeline.loaded}}" class="applyment-placeholder">
+          <text class="placeholder-text">结算流水加载中...</text>
+        </view>
+        <t-cell-group wx:elif="{{financeSectionStates.timeline.loaded}}" theme="card">
+            <block wx:if="{{settlementTimeline.length > 0}}">
+              <view wx:for="{{settlementTimeline}}" wx:key="id" class="finance-record-item">
+                <view class="record-row">
+                  <view>
+                    <text class="record-amount">{{getTimelineAmountText(item)}}</text>
+                    <view class="record-meta">{{getTimelineRecordTypeText(item.record_type)}} · {{item.out_order_no || ('#' + item.payment_order_id)}}</view>
+                  </view>
+                  <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
                 </view>
-                <t-tag theme="{{getFinanceOrderStatusTheme(item.status)}}" variant="dark">{{getFinanceOrderStatusText(item.status)}}</t-tag>
+                <view class="finance-fee-row">
+                  <text wx:if="{{item.record_type === 'adjustment'}}">{{getAdjustmentTypeText(item.adjustment_type)}}</text>
+                  <text wx:elif="{{item.record_type === 'profit_sharing'}}">商户入账 {{formatAmountText(item.merchant_amount)}}</text>
+                  <text wx:if="{{item.related_type}}">关联 {{item.related_type}} #{{item.related_id}}</text>
+                </view>
+                <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
               </view>
-              <view class="finance-fee-row">
-                <text wx:if="{{item.record_type === 'adjustment'}}">{{getAdjustmentTypeText(item.adjustment_type)}}</text>
-                <text wx:elif="{{item.record_type === 'profit_sharing'}}">商户入账 {{formatAmountText(item.merchant_amount)}}</text>
-                <text wx:if="{{item.related_type}}">关联 {{item.related_type}} #{{item.related_id}}</text>
-              </view>
-              <view class="record-meta">创建时间：{{formatDateTime(item.created_at)}}</view>
-            </view>
-          </block>
-          <t-empty wx:else description="当前区间暂无结算流水" />
+            </block>
+            <t-empty wx:else description="当前区间暂无结算流水" />
         </t-cell-group>
+        <view wx:else class="section-state-block">
+          <text class="section-error-text">{{financeSectionStates.timeline.errorMessage || '结算流水加载失败，请稍后重试'}}</text>
+          <view class="submit-wrap">
+            <t-button theme="primary" size="small" shape="round" bindtap="onRetryFinanceInsights">重新加载</t-button>
+          </view>
+        </view>
       </view>
 
       <view class="section">
@@ -498,8 +572,7 @@
               <view class="action-row">
                 <t-button
                   size="small"
-                  theme="primary"
-                  variant="outline"
+                  theme="default"
                   shape="round"
                   data-id="{{item.id}}"
                   bindtap="onRefreshWithdrawal"

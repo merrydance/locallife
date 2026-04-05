@@ -12,6 +12,7 @@ import { logger } from '../../../../utils/logger'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 type NavHeightEvent = {
   detail: {
@@ -82,6 +83,8 @@ const DEFAULT_GROUP_UPLOAD_FEEDBACK: GroupUploadFeedback = {
   idBack: { ...EMPTY_UPLOAD_FEEDBACK }
 }
 
+const CONFIG_PAGE_ROUTE = 'pages/merchant/config/index'
+
 const getErrorMessage = getErrorUserMessage
 
 const createUploadFeedback = (state: UploadFeedbackState, title = '', description = ''): UploadFeedback => ({
@@ -111,6 +114,11 @@ const hasGroupIdentityBackResult = (res?: GroupApplicationResponse): boolean => 
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    draftLoading: false,
+    draftErrorMessage: '',
     currentStep: 0,
     submitting: false,
     applicationStatus: 'draft' as GroupApplicationResponse['status'],
@@ -135,7 +143,25 @@ Page({
   previewRefreshVersion: 0,
 
   async onLoad() {
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') return
+
     await this.fetchDraft()
+  },
+
+  onRetryAccess() {
+    this.setData({ accessReady: false, accessDenied: false, accessErrorMessage: '' })
+    this.onLoad()
+  },
+
+  onRetryDraft() {
+    this.setData({ draftErrorMessage: '', draftLoading: true })
+    this.fetchDraft()
   },
 
   onNavHeight(e: NavHeightEvent) {
@@ -296,6 +322,7 @@ Page({
   },
 
   async fetchDraft() {
+    this.setData({ draftErrorMessage: '', draftLoading: true })
     try {
       const res = await getOrCreateGroupApplication()
       if (res) {
@@ -304,6 +331,9 @@ Page({
       }
     } catch (e) {
       logger.error('Fetch group draft failed', e)
+      this.setData({ draftErrorMessage: getErrorMessage(e, '入驻草稿加载失败，请稍后重试') })
+    } finally {
+      this.setData({ draftLoading: false })
     }
   },
 
@@ -552,7 +582,15 @@ Page({
     }
   },
 
-  onBackToMerchantCenter() {
+  onBackToConfig() {
+    const pages = getCurrentPages()
+    const previousPage = pages[pages.length - 2]
+
+    if (previousPage?.route === CONFIG_PAGE_ROUTE) {
+      wx.navigateBack()
+      return
+    }
+
     wx.redirectTo({ url: '/pages/merchant/config/index' })
   }
 })

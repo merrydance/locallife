@@ -4,8 +4,11 @@ import { TagService } from '../../../api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 
 type TableTab = 'all' | 'table' | 'room'
+
+type TableLoadSource = 'initial' | 'retry' | 'refresh' | 'tab'
 
 interface TableView extends TableResponse {
   statusLabel: string
@@ -17,13 +20,20 @@ interface TableTagOption {
   name: string
 }
 
+interface TableUploadFile {
+  url: string
+  status?: 'loading' | 'done' | 'failed'
+  mediaId?: number
+  localPath?: string
+}
+
 interface TableFormData {
   table_no: string
   table_type: 'table' | 'room'
   capacity: number
   description: string
   minimum_spend_yuan: string
-  status: 'available' | 'occupied' | 'disabled'
+  status: 'available' | 'occupied' | 'reserved' | 'disabled'
   access_code: string
   tag_ids: number[]
 }
@@ -41,6 +51,12 @@ function createDefaultFormData(): TableFormData {
     access_code: '',
     tag_ids: []
   }
+}
+
+function buildTableTabLabel(tab: TableTab): string {
+  if (tab === 'table') return '普通'
+  if (tab === 'room') return '包间'
+  return '全部'
 }
 
 function normalizeQRCodeUrl(path?: string): string {
@@ -84,19 +100,68 @@ function toSafeTableImages(value: unknown): TableImageResponse[] {
   return result
 }
 
+function toSafeUploadFiles(value: unknown): TableUploadFile[] {
+  if (!Array.isArray(value)) return []
+  const result: TableUploadFile[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') continue
+    const candidate = item as TableUploadFile
+    if (typeof candidate.url !== 'string' || !candidate.url) continue
+    result.push({
+      url: candidate.url,
+      status: candidate.status,
+      mediaId: typeof candidate.mediaId === 'number' ? candidate.mediaId : undefined,
+      localPath: typeof candidate.localPath === 'string' ? candidate.localPath : undefined
+    })
+  }
+  return result
+}
+
+function findUploadFileIndex(files: TableUploadFile[], localPath: string): number {
+  return files.findIndex((file) => file.localPath === localPath)
+}
+
+function replaceUploadFileAt(files: TableUploadFile[], index: number, file: TableUploadFile): TableUploadFile[] {
+  if (index < 0 || index >= files.length) {
+    return files
+  }
+
+  const next = [...files]
+  next[index] = file
+  return next
+}
+
+function removeUploadFileAt(files: TableUploadFile[], index: number): TableUploadFile[] {
+  if (index < 0 || index >= files.length) {
+    return files
+  }
+
+  const next = [...files]
+  next.splice(index, 1)
+  return next
+}
+
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    initialLoading: true,
     loading: false,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
+    syncMessage: '',
     listLoaded: false,
     formSubmitting: false,
     currentTab: 'all' as TableTab,
+    loadedTab: 'all' as TableTab,
     tables: [] as TableView[],
     rawTables: [] as TableResponse[],
     availableTags: [] as TableTagOption[],
     tableImages: [] as TableImageResponse[],
+    uploadFiles: [] as TableUploadFile[],
     pendingMediaIds: [] as number[],
     pendingImagePreviews: [] as string[],
     imageUploading: false,
@@ -109,12 +174,36 @@ Page({
     formData: createDefaultFormData()
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     this.normalizeListState()
-    this.loadTables()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadTables({ source: 'initial' })
     this.loadAvailableTags()
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
   },
 
   onShow() {
@@ -127,6 +216,7 @@ Page({
       rawTables: ensureArray(this.data.rawTables),
       availableTags: ensureArray(this.data.availableTags),
       tableImages: ensureArray(this.data.tableImages),
+      uploadFiles: toSafeUploadFiles(this.data.uploadFiles),
       pendingMediaIds: ensureArray(this.data.pendingMediaIds),
       pendingImagePreviews: ensureArray(this.data.pendingImagePreviews),
       'formData.tag_ids': ensureArray(this.data.formData?.tag_ids)
@@ -145,17 +235,35 @@ Page({
     }
   },
 
-  async loadTables() {
+  async loadTables(options: { requestedTab?: TableTab, source?: TableLoadSource } = {}) {
     if (this.data.loading) return
+
+    const requestedTab = options.requestedTab || this.data.currentTab
+    const source = options.source || 'refresh'
+    const hasTrustedList = this.data.listLoaded
+    const fallbackTab = this.data.loadedTab || this.data.currentTab || 'all'
+    const isTabSwitch = source === 'tab' && requestedTab !== fallbackTab
+
     this.setData({
       loading: true,
-      initialError: false,
-      initialErrorMessage: ''
+      ...(hasTrustedList
+        ? {
+            refreshErrorMessage: '',
+            syncMessage: isTabSwitch
+              ? `正在同步${buildTableTabLabel(requestedTab)}桌台...`
+              : '正在同步桌台列表...'
+          }
+        : {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: '',
+            syncMessage: ''
+          })
     })
     
     try {
-      // API 支持 table_type 过滤，但这里我们先拉取全部在前端切也行，或者根据 tab 传参
-      const type = this.data.currentTab === 'all' ? undefined : this.data.currentTab
+      const type = requestedTab === 'all' ? undefined : requestedTab
       const res = await tableManagementService.listTables(type)
       
       const rawTables = Array.isArray(res?.tables)
@@ -164,31 +272,56 @@ Page({
 
       const formatted = rawTables.map((t) => this.formatTable(t))
       this.setData({ 
+        currentTab: requestedTab,
+        loadedTab: requestedTab,
         tables: formatted,
         rawTables,
         listLoaded: true,
+        initialLoading: false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        syncMessage: ''
       })
     } catch (err) {
       logger.error('Load tables failed', err)
       const message = getErrorMessage(err, '加载桌台失败，请稍后重试')
-      if (!this.data.listLoaded) {
+      if (!hasTrustedList) {
         this.setData({
+          initialLoading: false,
           initialError: true,
-          initialErrorMessage: message
+          initialErrorMessage: message,
+          refreshErrorMessage: '',
+          syncMessage: ''
         })
       } else {
-        wx.showToast({ title: message, icon: 'none' })
+        this.setData({
+          currentTab: fallbackTab,
+          refreshErrorMessage: isTabSwitch
+            ? `${message}，当前仍显示${buildTableTabLabel(fallbackTab)}桌台`
+            : `${message}，当前已保留上次同步结果`,
+          syncMessage: ''
+        })
       }
     } finally {
-      this.setData({ loading: false })
+      this.setData({ loading: false, initialLoading: false, syncMessage: '' })
       wx.stopPullDownRefresh()
     }
   },
 
   onRetry() {
-    this.loadTables()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadTables({ source: 'retry' })
+  },
+
+  onRetryRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadTables({ source: 'refresh' })
   },
 
   formatTable(t: TableResponse) {
@@ -208,13 +341,21 @@ Page({
   },
 
   onTabChange(e: WechatMiniprogram.CustomEvent<{ value: TableTab }>) {
-    this.setData({ currentTab: e.detail.value || 'all' }, () => {
-      this.loadTables()
-    })
+    const nextTab = e.detail.value || 'all'
+    const activeTab = this.data.loadedTab || this.data.currentTab || 'all'
+    if (!nextTab || nextTab === activeTab) return
+
+    if (this.data.loading) {
+      wx.showToast({ title: '正在同步列表，请稍后再试', icon: 'none' })
+      return
+    }
+
+    this.loadTables({ requestedTab: nextTab, source: 'tab' })
   },
 
   onPullDownRefresh() {
-    this.loadTables()
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadTables({ source: 'refresh' })
   },
 
   async onReleaseTable(e: WechatMiniprogram.TouchEvent) {
@@ -289,6 +430,7 @@ Page({
       isEdit: false,
       editingTableId: 0,
       tableImages: [],
+      uploadFiles: [],
       pendingMediaIds: [],
       pendingImagePreviews: [],
       formData: createDefaultFormData()
@@ -306,6 +448,7 @@ Page({
       formVisible: true,
       isEdit: true,
       editingTableId: id,
+      uploadFiles: [],
       pendingMediaIds: [],
       pendingImagePreviews: [],
       formData: {
@@ -314,7 +457,13 @@ Page({
         capacity: table.capacity,
         description: table.description || '',
         minimum_spend_yuan: typeof table.minimum_spend === 'number' ? (table.minimum_spend / 100).toFixed(2) : '',
-        status: table.status === 'occupied' ? 'occupied' : table.status === 'disabled' ? 'disabled' : 'available',
+        status: table.status === 'occupied'
+          ? 'occupied'
+          : table.status === 'reserved'
+            ? 'reserved'
+            : table.status === 'disabled'
+              ? 'disabled'
+              : 'available',
         access_code: '',
         tag_ids: Array.isArray(table.tags) ? table.tags.map((tag) => tag.id) : []
       }
@@ -338,39 +487,71 @@ Page({
     }
   },
 
-  async onChooseImage() {
+  async onImageAdd(e: WechatMiniprogram.CustomEvent<{ files?: Array<{ url?: string }> }>) {
     if (this.data.imageUploading || this.data.imageMutating) return
 
+    const selectedFiles = Array.isArray(e.detail?.files)
+      ? e.detail.files.filter((file): file is { url: string } => typeof file?.url === 'string' && !!file.url)
+      : []
+    if (!selectedFiles.length) {
+      return
+    }
+
+    let uploadFiles = [...this.data.uploadFiles]
+    uploadFiles.push(...selectedFiles.map((file) => ({
+      url: file.url,
+      localPath: file.url,
+      status: 'loading' as const
+    })))
+    this.setData({ imageUploading: true, uploadFiles })
+
     try {
-      const chooseRes = await wx.chooseMedia({
-        count: 1,
-        mediaType: ['image'],
-        sourceType: ['album', 'camera']
-      })
-
-      const filePath = chooseRes.tempFiles?.[0]?.tempFilePath
-      if (!filePath) return
-
-      this.setData({ imageUploading: true })
       wx.showLoading({ title: '添加图片中...' })
 
-      const uploaded = await tableManagementService.uploadTableImageFile(filePath)
-      const { mediaId, displayUrl } = uploaded
-      if (!mediaId) {
-        wx.showToast({ title: '上传失败', icon: 'none' })
-        return
-      }
+      for (const file of selectedFiles) {
+        const pendingIndex = findUploadFileIndex(uploadFiles, file.url)
+        if (pendingIndex < 0) {
+          continue
+        }
 
-      if (this.data.isEdit && this.data.editingTableId > 0) {
-        await tableManagementService.uploadTableImage(this.data.editingTableId, { media_asset_id: mediaId })
-        await this.loadTableImages(this.data.editingTableId)
-      } else {
-        const pendingMediaIds = ensureArray(this.data.pendingMediaIds)
-        const pendingImagePreviews = ensureArray(this.data.pendingImagePreviews)
-        this.setData({
-          pendingMediaIds: [...pendingMediaIds, mediaId],
-          pendingImagePreviews: [...pendingImagePreviews, displayUrl]
-        })
+        try {
+          const uploaded = await tableManagementService.uploadTableImageFile(file.url)
+          const { mediaId, displayUrl } = uploaded
+          if (!mediaId) {
+            throw new Error('missing media id')
+          }
+
+          const previewUrl = displayUrl || file.url
+          uploadFiles = replaceUploadFileAt(uploadFiles, pendingIndex, {
+            url: previewUrl,
+            localPath: file.url,
+            mediaId,
+            status: this.data.isEdit ? 'loading' : 'done'
+          })
+          this.setData({ uploadFiles })
+
+          if (this.data.isEdit && this.data.editingTableId > 0) {
+            await tableManagementService.uploadTableImage(this.data.editingTableId, { media_asset_id: mediaId })
+            await this.loadTableImages(this.data.editingTableId)
+            uploadFiles = removeUploadFileAt(uploadFiles, pendingIndex)
+            this.setData({ uploadFiles })
+          } else {
+            const pendingMediaIds = ensureArray(this.data.pendingMediaIds)
+            this.setData({
+              pendingMediaIds: [...pendingMediaIds, mediaId],
+              pendingImagePreviews: uploadFiles.map((item) => item.url)
+            })
+          }
+        } catch (uploadErr) {
+          logger.error('Choose/upload table image failed', uploadErr)
+          uploadFiles = replaceUploadFileAt(uploadFiles, pendingIndex, {
+            url: file.url,
+            localPath: file.url,
+            status: 'failed'
+          })
+          this.setData({ uploadFiles })
+          wx.showToast({ title: getErrorMessage(uploadErr, '图片上传失败，请稍后重试'), icon: 'none' })
+        }
       }
     } catch (err) {
       logger.error('Choose/upload table image failed', err)
@@ -378,6 +559,25 @@ Page({
     } finally {
       wx.hideLoading()
       this.setData({ imageUploading: false })
+    }
+  },
+
+  onUploadFileRemove(e: WechatMiniprogram.CustomEvent<{ index?: number }>) {
+    const index = Number(e.detail?.index)
+    if (!Number.isInteger(index) || index < 0) {
+      return
+    }
+
+    const uploadFiles = removeUploadFileAt(this.data.uploadFiles, index)
+    this.setData({ uploadFiles })
+
+    if (!this.data.isEdit) {
+      const nextMediaIds = [...ensureArray(this.data.pendingMediaIds)]
+      nextMediaIds.splice(index, 1)
+      this.setData({
+        pendingMediaIds: nextMediaIds,
+        pendingImagePreviews: uploadFiles.map((item) => item.url)
+      })
     }
   },
 
@@ -403,11 +603,7 @@ Page({
     }
 
     if (!this.data.isEdit && typeof index === 'number') {
-      const next = [...ensureArray(this.data.pendingMediaIds)]
-      const nextPreviews = [...ensureArray(this.data.pendingImagePreviews)]
-      next.splice(index, 1)
-      nextPreviews.splice(index, 1)
-      this.setData({ pendingMediaIds: next, pendingImagePreviews: nextPreviews })
+      return
     }
   },
 
@@ -435,6 +631,7 @@ Page({
       isEdit: false,
       editingTableId: 0,
       tableImages: [],
+      uploadFiles: [],
       pendingMediaIds: [],
       pendingImagePreviews: [],
       formData: createDefaultFormData()
@@ -488,7 +685,7 @@ Page({
     this.setData({ 'formData.table_type': value })
   },
 
-  onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: 'available' | 'occupied' | 'disabled' }>) {
+  onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: 'available' | 'occupied' | 'reserved' | 'disabled' }>) {
     const value = e.detail?.value
     if (!value) return
     this.setData({ 'formData.status': value })

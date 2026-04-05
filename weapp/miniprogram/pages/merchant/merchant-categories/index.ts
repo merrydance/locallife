@@ -6,6 +6,7 @@ import {
   setMyMerchantTags,
   MerchantCategoryTag
 } from '../../../api/merchant'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TagItem extends MerchantCategoryTag {
@@ -44,6 +45,9 @@ function hasSelectionChanged(currentTags: TagItem[], persistedTagIds: number[]) 
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     loading: false,
     initialError: false,
     initialErrorMessage: '',
@@ -57,14 +61,35 @@ Page({
   async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      return
+    }
+
     await this.loadData()
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
     this.loadData()
   },
 
   async loadData() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
     if (this.data.loading) {
       return
     }
@@ -177,5 +202,16 @@ Page({
 
   onRetry() {
     this.loadData()
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
   }
 })

@@ -29,7 +29,7 @@
 
     <view wx:if="{{showSelectedBankCard}}" class="selected-card">
       <view class="selected-row">
-        <t-tag theme="primary" variant="light">已选银行</t-tag>
+        <t-tag theme="primary" variant="dark">已选银行</t-tag>
         <view class="selected-name">{{selectedBankLabel}}</view>
       </view>
     </view>
@@ -74,7 +74,7 @@
   </view>
   <view class="form-actions">
     <t-button theme="primary" size="large" shape="round" block loading="{{submitting}}" disabled="{{submitting || !canSubmit}}" bindtap="onSubmit">{{submitLabel}}</t-button>
-    <t-button theme="default" variant="outline" size="large" shape="round" block disabled="{{submitting}}" bindtap="onCancel">取消</t-button>
+    <t-button theme="default" size="large" shape="round" block disabled="{{submitting}}" bindtap="onCancel">取消</t-button>
   </view>
 
   <t-popup wx:if="{{showBankPicker}}" visible="{{showBankPicker}}" placement="bottom" using-custom-navbar="{{true}}" bind:visible-change="onBankPickerVisibleChange">

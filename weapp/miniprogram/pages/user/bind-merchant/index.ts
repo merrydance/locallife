@@ -6,9 +6,35 @@
 import { bindMerchant, BindMerchantResponse } from '../../../api/personal'
 import { getWebLoginSessionStatus, confirmWebLoginSession } from '../../../api/auth'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
+import { invalidateConsoleAccessUserInfoCache } from '../../../utils/console-access'
+
+const USER_CENTER_FORCE_REFRESH_FLAG = 'user_center_force_refresh_after_bind_merchant'
+
+interface WebLoginSessionLookupResult {
+    code?: string
+    status?: string
+}
 
 const isBindMerchantError = (error: unknown): error is { statusCode?: number, message?: string } => {
     return !!error && typeof error === 'object'
+}
+
+const getErrorStatusCode = (error: unknown): number => {
+    if (!error || typeof error !== 'object') return 0
+    const knownError = error as { statusCode?: number | string, code?: number | string }
+    const candidates = [knownError.statusCode, knownError.code]
+    for (const candidate of candidates) {
+        const numericStatusCode = typeof candidate === 'number' ? candidate : Number(candidate)
+        if (Number.isFinite(numericStatusCode)) {
+            return numericStatusCode
+        }
+    }
+    return 0
+}
+
+const isUsableWebLoginSession = (session?: WebLoginSessionLookupResult | null): boolean => {
+    if (!session?.code) return false
+    return session.status !== 'expired' && session.status !== 'consumed'
 }
 
 const getErrorMessage = getErrorUserMessage
@@ -54,7 +80,8 @@ Page({
     async handleScanResult(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
         const payload = this.extractRawPayload(res)
         const raw = payload.raw
-        const code = this.extractCode(payload.codeCandidate)
+        const webLoginMeta = this.extractWebLoginMeta(raw)
+        const code = webLoginMeta.code || this.extractCode(payload.codeCandidate)
 
         if (!code) {
             const system = wx.getSystemInfoSync()
@@ -72,24 +99,38 @@ Page({
             return
         }
 
-        await this.handleCodeCandidate(raw, code)
+        await this.handleCodeCandidate(raw, code, webLoginMeta)
     },
 
-    async handleCodeCandidate(raw: string, code: string) {
-        if (raw.includes('bind-merchant') || raw.includes('code=')) {
-            this.setData({ inviteCode: code })
-            this.bindMerchant()
+    async handleCodeCandidate(raw: string, code: string, webLoginMeta?: { code?: string, sig?: string, ts?: number }) {
+        const isWebLoginHint = raw.includes('web-login') || raw.includes('/merchant/login') || raw.includes('sig=') || raw.includes('ts=')
+        const isInviteHint = raw.includes('invite-merchant') || raw.includes('bind-merchant')
+
+        if (isWebLoginHint) {
+            const loginCode = webLoginMeta?.code || code
+            try {
+                const session = await getWebLoginSessionStatus(loginCode)
+                if (isUsableWebLoginSession(session)) {
+                    this.confirmWebLogin(loginCode, webLoginMeta?.sig, webLoginMeta?.ts)
+                    return
+                }
+            } catch (error) {
+                if (getErrorStatusCode(error) === 404) {
+                    this.showInvalidWebLoginCode()
+                } else {
+                    this.showWebLoginStatusCheckFailed()
+                }
+                return
+            }
+
+            this.showInvalidWebLoginCode()
             return
         }
 
-        try {
-            const session = await getWebLoginSessionStatus(code)
-            if (session?.code) {
-                this.confirmWebLogin(code)
-                return
-            }
-        } catch (error) {
-            void error
+        if (isInviteHint || (!isWebLoginHint && raw.includes('code='))) {
+            this.setData({ inviteCode: code })
+            this.bindMerchant()
+            return
         }
 
         this.setData({ inviteCode: code })
@@ -107,6 +148,22 @@ Page({
         const hexMatch = decoded.match(/[0-9a-fA-F]{32}/)
         if (hexMatch) return hexMatch[0]
         return decoded
+    },
+
+    extractWebLoginMeta(raw: string) {
+        if (!raw) return { code: '', sig: '', ts: undefined }
+        const decoded = decodeURIComponent(raw)
+        const queryCodeMatch = decoded.match(/code=([^&]+)/)
+        const webLoginMatch = decoded.match(/web-login:([0-9a-fA-F]{32})/)
+        const code = queryCodeMatch ? queryCodeMatch[1] : webLoginMatch ? webLoginMatch[1] : ''
+        if (!code) return { code: '', sig: '', ts: undefined }
+        const sigMatch = decoded.match(/sig=([0-9a-fA-F]+)/)
+        const tsMatch = decoded.match(/ts=(\d+)/)
+        return {
+            code,
+            sig: sigMatch ? sigMatch[1] : '',
+            ts: tsMatch ? Number(tsMatch[1]) : undefined
+        }
     },
 
     extractRawPayload(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
@@ -140,17 +197,36 @@ Page({
             success: async (res) => {
                 if (!res.confirm || !res.content) return
                 const raw = String(res.content)
-                const code = this.extractCode(raw)
+                const webLoginMeta = this.extractWebLoginMeta(raw)
+                const code = webLoginMeta.code || this.extractCode(raw)
                 if (!code) {
                     wx.showToast({ title: '内容无效', icon: 'none' })
                     return
                 }
-                await this.handleCodeCandidate(raw, code)
+                await this.handleCodeCandidate(raw, code, webLoginMeta)
             }
         })
     },
 
-    confirmWebLogin(code: string) {
+    showInvalidWebLoginCode() {
+        wx.showModal({
+            title: '网页登录码无效',
+            content: '当前网页登录码无效或已失效，请返回网页刷新二维码后重试。',
+            showCancel: false,
+            confirmText: '我知道了'
+        })
+    },
+
+    showWebLoginStatusCheckFailed() {
+        wx.showModal({
+            title: '状态校验失败',
+            content: '网页登录状态校验失败，请稍后重试。',
+            showCancel: false,
+            confirmText: '我知道了'
+        })
+    },
+
+    confirmWebLogin(code: string, sig?: string, ts?: number) {
         wx.showModal({
             title: 'Web 登录确认',
             content: '检测到 Web 登录码，是否确认登录网页端？',
@@ -158,9 +234,18 @@ Page({
             cancelText: '取消',
             success: async (modal) => {
                 if (!modal.confirm) return
+                if (!sig || !ts) {
+                    wx.showModal({
+                        title: '二维码无效',
+                        content: '当前二维码缺少校验信息，请在网页端刷新二维码后重试。',
+                        showCancel: false,
+                        confirmText: '我知道了'
+                    })
+                    return
+                }
                 wx.showLoading({ title: '确认中...' })
                 try {
-                    await confirmWebLoginSession(code)
+                    await confirmWebLoginSession(code, sig, ts)
                     wx.showToast({ title: '已确认登录', icon: 'success' })
                 } catch (error: unknown) {
                     wx.showToast({ title: getErrorMessage(error, '确认失败'), icon: 'none' })
@@ -182,6 +267,8 @@ Page({
         this.setData({ loading: true })
         try {
             const result = await bindMerchant(inviteCode.trim())
+            invalidateConsoleAccessUserInfoCache()
+            wx.setStorageSync(USER_CENTER_FORCE_REFRESH_FLAG, '1')
 
             this.setData({
                 success: true,

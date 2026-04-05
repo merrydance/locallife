@@ -27,6 +27,12 @@
   padding: 0 var(--spacer-lg);
 }
 
+.state-block-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-sm);
+}
+
 .section-error-hint {
   display: flex;
   align-items: center;
@@ -102,98 +108,6 @@
   background: var(--td-bg-color-secondarycontainer);
   font-size: var(--font-size-sm);
   color: var(--td-text-color-secondary);
-}
-
-.reconciliation-tabs {
-  --td-tabs-bg-color: transparent;
-}
-
-.reconciliation-list {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-sm);
-}
-
-.reconciliation-card {
-  border-radius: var(--radius-md);
-  background: var(--td-bg-color-secondarycontainer);
-  padding: var(--spacer-md);
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-sm);
-}
-
-.reconciliation-header {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-}
-
-.reconciliation-header-main {
-  display: flex;
-  flex-direction: column;
-  gap: var(--spacer-xs);
-}
-
-.reconciliation-title {
-  font-size: var(--font-size-base);
-  font-weight: 600;
-  color: var(--td-text-color-primary);
-}
-
-.reconciliation-meta {
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
-}
-
-.reconciliation-summary {
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--td-text-color-secondary);
-}
-
-.reconciliation-info-row {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-sm);
-}
-
-.reconciliation-label {
-  width: 128rpx;
-  flex-shrink: 0;
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
-}
-
-.reconciliation-value {
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-primary);
-  flex: 1;
-  word-break: break-all;
-}
-
-.reconciliation-sn {
-  font-family: 'Courier New', monospace;
-  letter-spacing: 1px;
-}
-
-.reconciliation-multiline {
-  white-space: pre-wrap;
-  line-height: 1.6;
-}
-
-.reconciliation-actions {
-  display: flex;
-  justify-content: flex-end;
-  padding-top: var(--spacer-xs);
-}
-
-.reconciliation-resolved-hint {
-  padding-top: var(--spacer-xs);
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
-  text-align: right;
 }
 
 /* ==================== 打印机列表 ==================== */
@@ -281,19 +195,102 @@
   border-top: 1rpx solid var(--td-component-stroke);
 }
 
+.recovery-job-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.recovery-job-card {
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.recovery-job-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.recovery-job-heading {
+  flex: 1;
+  min-width: 0;
+}
+
+.recovery-job-title {
+  font-size: 28rpx;
+  font-weight: 700;
+  line-height: 1.5;
+  color: var(--td-text-color-primary);
+}
+
+.recovery-job-meta-line {
+  margin-top: 6rpx;
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.recovery-job-summary {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.recovery-job-details {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.recovery-job-detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+}
+
+.recovery-job-detail-label {
+  width: 120rpx;
+  flex-shrink: 0;
+  font-size: 22rpx;
+  color: var(--td-text-color-placeholder);
+}
+
+.recovery-job-detail-value {
+  flex: 1;
+  min-width: 0;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.recovery-job-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 /* ==================== 表单弹窗 ==================== */
 
 .form-popup {
   background: var(--td-bg-color-container);
   border-top-left-radius: 20rpx;
   border-top-right-radius: 20rpx;
+  height: 85vh;
   max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .form-scroll {
-  max-height: 85vh;
+  flex: 1;
+  min-height: 0;
   box-sizing: border-box;
-  padding: 32rpx 24rpx var(--popup-bottom-padding-md);
+  padding: 32rpx 24rpx 24rpx;
 }
 
 .form-title {
@@ -363,7 +360,10 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16rpx;
-  margin-top: 36rpx;
+  flex-shrink: 0;
+  padding: 24rpx 24rpx calc(var(--popup-bottom-padding-md) + 8rpx);
+  border-top: 1rpx solid var(--td-component-stroke);
+  background: var(--td-bg-color-container);
 }
 
 .status-popup {
@@ -433,9 +433,9 @@
 }
 
 .form-actions t-button {
-  flex: 1;
+  width: 100%;
 }
 
 .status-popup-actions t-button {
-  flex: 1;
+  width: 100%;
 }

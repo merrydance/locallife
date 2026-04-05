@@ -2,6 +2,7 @@ import { getMyMerchantOpenStatus, getMyMerchantProfile, MerchantOperatorResponse
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 interface MerchantProfileForm {
   name: string
@@ -19,6 +20,38 @@ const EMPTY_FORM: MerchantProfileForm = {
   description: '',
   latitude: '',
   longitude: ''
+}
+
+const PROFILE_AUTO_REFRESH_WINDOW_MS = 60 * 1000
+
+function buildLocationLabel(address: string, latitude?: string | null, longitude?: string | null) {
+  if (address.trim()) return address.trim()
+  if (latitude && longitude) return `坐标 ${latitude}, ${longitude}`
+  return '未选择经营位置'
+}
+
+function buildLocationHint(address: string, latitude?: string | null, longitude?: string | null) {
+  const hasAddress = address.trim().length > 0
+  const hasCoordinates = !!latitude && !!longitude
+
+  if (hasAddress && hasCoordinates) {
+    return '地址与坐标会在保存时一并提交。'
+  }
+
+  if (hasAddress || hasCoordinates) {
+    return '当前位置信息不完整，请重新选择经营位置。'
+  }
+
+  return '请选择经营位置，系统会同步更新地址与坐标。'
+}
+
+function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSuccessCallbackResult) {
+  const address = result.address || ''
+  const name = result.name || ''
+  if (address && name) {
+    return address.includes(name) ? address : `${address} ${name}`
+  }
+  return address || name || ''
 }
 
 function buildForm(profile: MerchantOperatorResponse): MerchantProfileForm {
@@ -41,9 +74,21 @@ function hasFormChanged(current: MerchantProfileForm, initial: MerchantProfileFo
     || current.longitude !== initial.longitude
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 function isCoordinateInRange(value: string, min: number, max: number): boolean {
   const parsed = Number.parseFloat(value)
   return Number.isFinite(parsed) && parsed >= min && parsed <= max
+}
+
+function hasCompleteLocation(form: MerchantProfileForm) {
+  return !!form.address.trim() && !!form.latitude.trim() && !!form.longitude.trim()
+}
+
+function hasPartialLocation(form: MerchantProfileForm) {
+  return !!form.address.trim() || !!form.latitude.trim() || !!form.longitude.trim()
 }
 
 const getErrorMessage = getErrorUserMessage
@@ -51,51 +96,95 @@ const getErrorMessage = getErrorUserMessage
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     saving: false,
+    lastLoadedAt: 0,
     isOpen: false,
     merchantId: 0,
     version: 0,
     updatedAtLabel: '--',
+    locationLabel: '未选择经营位置',
+    locationHint: '请选择经营位置，系统会同步更新地址与坐标。',
     form: { ...EMPTY_FORM } as MerchantProfileForm,
     initialForm: { ...EMPTY_FORM } as MerchantProfileForm,
     hasChanges: false
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.loadProfile()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadProfile(true, true)
   },
 
   onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
-      this.loadProfile(false)
+      if (shouldAutoRefresh(this.data.lastLoadedAt, PROFILE_AUTO_REFRESH_WINDOW_MS)) {
+        this.loadProfile(false)
+      }
     }
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
       wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
       return
     }
-    this.loadProfile(false)
+    this.loadProfile(false, true)
   },
 
   onRetryRefresh() {
-    this.loadProfile(false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadProfile(false, true)
   },
 
-  async loadProfile(showLoading = true) {
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
+  },
+
+  async loadProfile(showLoading = true, force = false) {
     if (this.data.loading) return
 
     const hasExistingData = !this.data.initialLoading
     const isSilentRefresh = !showLoading && hasExistingData
+
+    if (!force && hasExistingData && !shouldAutoRefresh(this.data.lastLoadedAt, PROFILE_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData({
       loading: true,
@@ -117,13 +206,16 @@ Page({
         version: profile.version,
         updatedAtLabel: profile.updated_at ? profile.updated_at.replace('T', ' ').slice(0, 16) : '--',
         isOpen: status?.is_open ?? profile.is_open,
+        locationLabel: buildLocationLabel(form.address, form.latitude, form.longitude),
+        locationHint: buildLocationHint(form.address, form.latitude, form.longitude),
         form,
         initialForm: { ...form },
         hasChanges: false,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: ''
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (err: unknown) {
       logger.error('Load merchant profile settings failed', err)
@@ -155,6 +247,7 @@ Page({
       [field]: e.detail.value
     }
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       form: nextForm,
       hasChanges: hasFormChanged(nextForm, this.data.initialForm)
@@ -171,10 +264,6 @@ Page({
       wx.showToast({ title: '联系电话需为 11 位手机号', icon: 'none' })
       return false
     }
-    if (address.trim() && address.trim().length < 5) {
-      wx.showToast({ title: '店铺地址至少 5 个字', icon: 'none' })
-      return false
-    }
     if (description.trim().length > 500) {
       wx.showToast({ title: '店铺介绍最多 500 字', icon: 'none' })
       return false
@@ -182,16 +271,14 @@ Page({
 
     const latitudeValue = latitude.trim()
     const longitudeValue = longitude.trim()
-    const initialLatitudeValue = this.data.initialForm.latitude.trim()
-    const initialLongitudeValue = this.data.initialForm.longitude.trim()
 
-    if (!latitudeValue && initialLatitudeValue) {
-      wx.showToast({ title: '当前暂不支持清空纬度，请填写有效值', icon: 'none' })
+    if (hasPartialLocation(this.data.form) && !hasCompleteLocation(this.data.form)) {
+      wx.showToast({ title: '请通过“选择经营位置”更新完整位置', icon: 'none' })
       return false
     }
 
-    if (!longitudeValue && initialLongitudeValue) {
-      wx.showToast({ title: '当前暂不支持清空经度，请填写有效值', icon: 'none' })
+    if (address.trim() && address.trim().length < 5) {
+      wx.showToast({ title: '请选择更准确的经营位置', icon: 'none' })
       return false
     }
 
@@ -206,6 +293,54 @@ Page({
     }
 
     return true
+  },
+
+  onChooseLocation() {
+    if (this.data.loading || this.data.saving) {
+      return
+    }
+
+    wx.chooseLocation({
+      success: (result) => {
+        const fullAddress = buildChosenLocationAddress(result)
+        const nextForm = {
+          ...this.data.form,
+          address: fullAddress || this.data.form.address,
+          latitude: String(result.latitude),
+          longitude: String(result.longitude)
+        }
+
+        this.setData({
+          actionNoticeMessage: '',
+          refreshErrorMessage: '',
+          form: nextForm,
+          locationLabel: buildLocationLabel(nextForm.address, nextForm.latitude, nextForm.longitude),
+          locationHint: buildLocationHint(nextForm.address, nextForm.latitude, nextForm.longitude),
+          hasChanges: hasFormChanged(nextForm, this.data.initialForm)
+        })
+      },
+      fail: (error) => {
+        if (typeof error?.errMsg === 'string' && error.errMsg.includes('auth deny')) {
+          wx.showModal({
+            title: '需要位置权限',
+            content: '请在设置中开启位置权限后再选择经营位置。',
+            confirmText: '去设置',
+            success: (result) => {
+              if (result.confirm) {
+                wx.openSetting()
+              }
+            }
+          })
+          return
+        }
+
+        if (typeof error?.errMsg === 'string' && error.errMsg.includes('cancel')) {
+          return
+        }
+
+        wx.showToast({ title: '位置选择失败，请稍后重试', icon: 'none' })
+      }
+    })
   },
 
   async onSave() {
@@ -232,9 +367,13 @@ Page({
       this.setData({
         version: updated.version,
         updatedAtLabel: updated.updated_at ? updated.updated_at.replace('T', ' ').slice(0, 16) : '--',
+        actionNoticeMessage: '店铺资料已保存。',
+        locationLabel: buildLocationLabel(form.address, form.latitude, form.longitude),
+        locationHint: buildLocationHint(form.address, form.latitude, form.longitude),
         form,
         initialForm: { ...form },
-        hasChanges: false
+        hasChanges: false,
+        lastLoadedAt: Date.now()
       })
 
       try {
@@ -283,6 +422,12 @@ Page({
   },
 
   onRetry() {
-    this.loadProfile()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadProfile(true, true)
   }
 })

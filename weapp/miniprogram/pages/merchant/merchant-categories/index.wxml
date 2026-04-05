@@ -2,12 +2,27 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
 
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
+
+  <block wx:elif="{{accessReady}}">
+
   <!-- 重要性提示 -->
   <view class="notice-card">
     <view class="notice-icon">⚡</view>
     <view class="notice-text">
-      <view class="notice-title">类目影响您的曝光排名</view>
-      <view class="notice-desc">类目标签决定店铺出现在首页哪些分类筛选下，直接影响顾客发现您的概率。建议选择 1-3 个最能代表您店铺的类目。</view>
+      <view class="notice-title">类目影响店铺的分类展示</view>
+      <view class="notice-desc">平台会根据类目决定店铺出现在什么分类和筛选中。建议选择 1-3 个最能代表实际经营范围的类目。</view>
     </view>
   </view>
 
@@ -24,7 +39,7 @@
   <!-- 类目选择 -->
   <view wx:elif="{{tags.length === 0}}" class="empty-wrap">
     <t-empty description="暂无可选类目，请联系平台配置" />
-    <t-button theme="primary" variant="outline" shape="round" size="small" bind:tap="onRetry">重新加载</t-button>
+    <t-button theme="default" shape="round" size="small" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <view wx:else class="tags-section">
@@ -63,5 +78,7 @@
       >{{saving ? '保存中...' : (hasChanges ? '保存经营类目' : '当前无变更')}}</t-button>
     </view>
   </view>
+
+  </block>
 
 </view>

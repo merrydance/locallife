@@ -1,25 +1,19 @@
 .page-container {
   min-height: 100vh;
-  padding: 24rpx;
+  padding: 0 24rpx var(--popup-bottom-padding-md);
   box-sizing: border-box;
   background: var(--td-bg-color-page);
 }
 
 .state-block {
+  min-height: 40vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 24rpx;
-  padding: 140rpx 24rpx;
-}
-
-.retry-button {
-  padding: 18rpx 36rpx;
-  border-radius: 999rpx;
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 26rpx;
+  gap: var(--spacer-md);
+  padding: 120rpx 24rpx;
+  box-sizing: border-box;
 }
 
 .hero-card,
@@ -33,19 +27,25 @@
   display: flex;
   flex-direction: column;
   gap: 10rpx;
-  padding: 28rpx;
-  margin-bottom: 24rpx;
+  padding: var(--spacer-md);
+  margin-bottom: var(--spacer-md);
+}
+
+.hero-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
 }
 
 .hero-title {
-  font-size: 32rpx;
+  font-size: var(--font-size-heading);
   font-weight: 700;
   color: var(--td-text-color-primary);
 }
 
 .hero-subtitle,
 .hero-meta {
-  font-size: 24rpx;
+  font-size: var(--font-size-sm);
   line-height: 1.6;
   color: var(--td-text-color-secondary);
 }
@@ -64,8 +64,16 @@
   background: var(--td-error-color-1);
 }
 
+.inline-banner-success {
+  background: var(--td-success-color-1);
+}
+
 .inline-banner-warning {
   background: var(--td-warning-color-1, #fff7e8);
+}
+
+.dish-loading {
+  padding: 32rpx 0;
 }
 
 .inline-banner-text {
@@ -164,5 +172,5 @@
 }
 
 .save-wrap {
-  padding-bottom: 32rpx;
+  padding-bottom: var(--popup-bottom-padding-sm);
 }

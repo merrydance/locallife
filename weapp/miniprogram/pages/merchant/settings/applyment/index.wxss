@@ -14,14 +14,6 @@
   padding: 140rpx var(--spacer-md);
 }
 
-.retry-button {
-  padding: var(--spacer-sm) var(--spacer-lg);
-  border-radius: var(--radius-round);
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: var(--font-size-sm);
-}
-
 .hero-card,
 .section-block,
 .status-card {

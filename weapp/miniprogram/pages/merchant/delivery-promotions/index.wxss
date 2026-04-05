@@ -1,30 +1,62 @@
+@import '../../../styles/merchant-config-shared.wxss';
+
 .page-container {
   background-color: var(--td-bg-color-page);
   min-height: 100vh;
   padding-bottom: calc(140rpx + var(--safe-area-bottom));
 }
 
-/* ==================== 状态 ==================== */
-
-.center-state {
+.inline-banner {
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 120rpx 40rpx;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
+  margin: 0 var(--spacer-lg) var(--spacer-md);
+  padding: 20rpx 24rpx;
+  border-radius: 18rpx;
+}
+
+.inline-banner-danger {
+  background: var(--td-error-color-1);
+}
+
+.inline-banner-success {
+  background: var(--td-success-color-1);
+}
+
+.inline-banner-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.inline-banner-action {
+  flex-shrink: 0;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-brand-color);
+  font-weight: 600;
+}
+
+.hero-card {
+  margin: var(--spacer-sm) var(--spacer-lg) var(--spacer-md);
 }
 
 /* ==================== 列表 ==================== */
 
 .list-section {
-  padding: var(--spacer-sm) 0 120rpx;
+  padding: 0 var(--spacer-lg) calc(160rpx + var(--safe-area-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
 }
 
 .promo-card {
   background-color: var(--td-bg-color-container);
-  margin: var(--spacer-sm) var(--spacer-lg);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-lg);
   padding: var(--spacer-md);
-  border: 1rpx solid var(--td-component-stroke);
+  box-shadow: var(--shadow-sm);
 }
 
 .promo-header {
@@ -84,45 +116,26 @@
 
 .promo-footer {
   display: flex;
-  justify-content: flex-end;
+  flex-direction: column;
+  margin-top: 12rpx;
+  gap: 16rpx;
 }
 
-.swipe-delete {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: var(--td-error-color);
-  color: #fff;
-  font-size: var(--font-size-sm);
-  width: 140rpx;
-  height: 100%;
-  border-radius: 0 var(--radius-md) var(--radius-md) 0;
+.promo-action-hint {
+  font-size: var(--font-size-xs);
+  line-height: 1.6;
+  color: var(--td-text-color-placeholder);
+}
+
+.promo-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16rpx;
 }
 
 /* ==================== 弹窗表单 ==================== */
 
-.form-popup {
-  background-color: var(--td-bg-color-container);
-  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
-}
-
-.form-scroll {
-  max-height: 80vh;
-  box-sizing: border-box;
-  padding: var(--spacer-lg);
-  padding-bottom: var(--popup-bottom-padding-md);
-}
-
-.form-title {
-  font-size: var(--font-size-title);
-  font-weight: 700;
-  color: var(--td-text-color-primary);
-  text-align: center;
-  margin-bottom: var(--spacer-lg);
-}
-
 .form-row {
-  display: flex;
   gap: var(--spacer-md);
 }
 
@@ -130,60 +143,8 @@
   margin-bottom: var(--spacer-md);
 }
 
-.form-item.half {
-  flex: 1;
-}
-
 .form-item-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.form-label {
-  display: block;
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-secondary);
-  margin-bottom: 8rpx;
-}
-
-.form-label.required::before {
-  content: '*';
-  color: var(--td-error-color);
-  margin-right: 4rpx;
-}
-
-.form-input {
-  width: 100%;
-  height: 72rpx;
-  border: 1rpx solid var(--td-component-stroke);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--spacer-sm);
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-primary);
-  box-sizing: border-box;
-  background-color: var(--td-bg-color-page);
-}
-
-.form-picker {
-  height: 72rpx;
-  border: 1rpx solid var(--td-component-stroke);
-  border-radius: var(--radius-sm);
-  padding: 0 var(--spacer-sm);
-  font-size: var(--font-size-sm);
-  color: var(--td-text-color-primary);
-  background-color: var(--td-bg-color-page);
-  display: flex;
-  align-items: center;
-}
-
-.form-picker.placeholder {
-  color: var(--td-text-color-placeholder);
-}
-
-.form-actions {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: var(--spacer-md);
-  margin-top: var(--spacer-lg);
 }

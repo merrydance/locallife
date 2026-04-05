@@ -130,6 +130,17 @@ WHERE id = sqlc.arg('id')
   AND deleted_at IS NULL
 RETURNING *;
 
+-- name: ClearMerchantLogo :one
+UPDATE merchants
+SET
+  logo_media_asset_id = NULL,
+  version = version + 1,
+  updated_at = now()
+WHERE id = sqlc.arg('id')
+  AND version = sqlc.arg('version')
+  AND deleted_at IS NULL
+RETURNING *;
+
 -- name: UpdateMerchantStatus :one
 UPDATE merchants
 SET

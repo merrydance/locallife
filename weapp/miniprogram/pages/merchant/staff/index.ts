@@ -1,4 +1,4 @@
-import { getUserInfo } from '../../../api/auth'
+import { getUserInfo, type UserResponse } from '../../../api/auth'
 import {
   generateMerchantStaffInviteCode,
   listMerchantStaff,
@@ -7,6 +7,7 @@ import {
   removeMerchantStaff,
   updateMerchantStaffRole
 } from '../../../api/merchant-staff'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
@@ -25,10 +26,14 @@ interface StaffView extends MerchantStaffItem {
 }
 
 const ROLE_OPTIONS: Array<{ value: EditableMerchantStaffRole, label: string, desc: string }> = [
-  { value: 'manager', label: '店长', desc: '可查看员工列表并生成邀请码' },
+  { value: 'manager', label: '店长', desc: '可查看员工列表并邀请店员加入' },
   { value: 'chef', label: '后厨', desc: '用于厨房和出餐相关协作' },
   { value: 'cashier', label: '收银', desc: '用于前台和核销相关协作' }
 ]
+
+function buildInviteQRCodeValue(inviteCode: string) {
+  return inviteCode ? `invite-merchant:${inviteCode}` : ''
+}
 
 function getRoleMeta(role: MerchantStaffRole) {
   switch (role) {
@@ -118,16 +123,21 @@ const getErrorMessage = getErrorUserMessage
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     roleOptions: ROLE_OPTIONS,
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
     refreshErrorMessage: '',
+    hasLoadedOnce: false,
     loading: false,
     staff: [] as StaffView[],
     staffCount: 0,
     pendingCount: 0,
     currentUserId: 0,
+    currentUserRoles: [] as string[],
     currentUserRoleLabel: '--',
     canGenerateInvite: false,
     canManageRoles: false,
@@ -136,6 +146,7 @@ Page({
     inviteError: false,
     inviteErrorMessage: '',
     inviteCode: '',
+    inviteQRCodeValue: '',
     inviteExpiresAtLabel: '--',
     rolePopupVisible: false,
     roleSubmitting: false,
@@ -145,21 +156,41 @@ Page({
     removingStaffId: 0
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.loadStaff()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : '',
+      currentUserId: accessResult.status === 'granted' ? accessResult.user?.id || 0 : 0,
+      currentUserRoles: accessResult.status === 'granted' ? accessResult.user?.roles || [] : []
+    })
+    if (accessResult.status !== 'granted') return
+
+    this.loadStaff(true, accessResult.user || null)
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
     this.loadStaff(false)
   },
 
-  async loadStaff(showLoading = true) {
+  async loadStaff(showLoading = true, currentUser: UserResponse | null = null) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
     if (this.data.loading) return
 
-    const hasExistingStaff = this.data.staff.length > 0
-    const isSilentRefresh = !showLoading && hasExistingStaff
+    const hasLoadedOnce = this.data.hasLoadedOnce
+    const isSilentRefresh = !showLoading && hasLoadedOnce
 
     this.setData({
       loading: true,
@@ -171,21 +202,26 @@ Page({
     })
 
     try {
-      const [response, user] = await Promise.all([
-        listMerchantStaff(),
-        getUserInfo().catch(() => null)
-      ])
+      const response = await listMerchantStaff()
+      const hasCachedUser = this.data.currentUserId > 0 || this.data.currentUserRoles.length > 0
+      const user = currentUser
+        || (hasCachedUser
+          ? { id: this.data.currentUserId, roles: [...this.data.currentUserRoles] } as UserResponse
+          : await getUserInfo().catch(() => null))
       const currentUserId = user?.id || 0
-      const roleState = normalizeUserRole(response.staff || [], currentUserId, user?.roles || [])
+      const currentUserRoles = user?.roles || []
+      const roleState = normalizeUserRole(response.staff || [], currentUserId, currentUserRoles)
       const staff = buildStaffView(response.staff || [], roleState.canManageRoles)
       this.setData({
         staff,
         staffCount: response.count || staff.length,
         pendingCount: staff.filter((item) => item.role === 'pending' && item.status === 'active').length,
         currentUserId,
+        currentUserRoles,
         currentUserRoleLabel: roleState.currentUserRoleLabel,
         canGenerateInvite: roleState.canGenerateInvite,
         canManageRoles: roleState.canManageRoles,
+        hasLoadedOnce: true,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
@@ -201,7 +237,7 @@ Page({
           initialError: true,
           initialErrorMessage: message
         })
-      } else if (hasExistingStaff) {
+      } else if (hasLoadedOnce) {
         this.setData({
           refreshErrorMessage: `${message}，当前已保留上次同步结果`
         })
@@ -221,13 +257,17 @@ Page({
       inviteVisible: true,
       inviteLoading: true,
       inviteError: false,
-      inviteErrorMessage: ''
+      inviteErrorMessage: '',
+      inviteCode: '',
+      inviteQRCodeValue: '',
+      inviteExpiresAtLabel: '--'
     })
 
     try {
       const response = await generateMerchantStaffInviteCode()
       this.setData({
         inviteCode: response.invite_code,
+        inviteQRCodeValue: buildInviteQRCodeValue(response.invite_code),
         inviteExpiresAtLabel: response.expires_at ? response.expires_at.replace('T', ' ').slice(0, 16) : '--'
       })
     } catch (err: unknown) {
@@ -237,6 +277,7 @@ Page({
         inviteError: true,
         inviteErrorMessage: message,
         inviteCode: '',
+        inviteQRCodeValue: '',
         inviteExpiresAtLabel: '--'
       })
     } finally {
@@ -253,7 +294,7 @@ Page({
     wx.setClipboardData({
       data: this.data.inviteCode,
       success: () => {
-        wx.showToast({ title: '邀请码已复制', icon: 'success' })
+        wx.showToast({ title: '备用邀请码已复制', icon: 'success' })
       }
     })
   },
@@ -350,6 +391,22 @@ Page({
 
   onRetry() {
     this.loadStaff()
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      currentUserId: 0,
+      currentUserRoles: [],
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: '',
+      hasLoadedOnce: false
+    })
+    this.onLoad()
   },
 
   onRetryRefresh() {

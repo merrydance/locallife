@@ -202,6 +202,47 @@ func TestUpdateCurrentMerchantAPI(t *testing.T) {
 				require.Equal(t, http.StatusConflict, recorder.Code)
 			},
 		},
+		{
+			name: "ClearLogo",
+			body: gin.H{
+				"clear_logo": true,
+				"version":    1,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				merchantWithLogo := merchant
+				merchantWithLogo.LogoMediaAssetID = pgtype.Int8{Int64: 88, Valid: true}
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchantWithLogo)
+
+				store.EXPECT().
+					ClearMerchantLogo(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Merchant{
+						ID:               merchant.ID,
+						OwnerUserID:      merchant.OwnerUserID,
+						Name:             merchant.Name,
+						Description:      merchant.Description,
+						Phone:            merchant.Phone,
+						Address:          merchant.Address,
+						Status:           merchant.Status,
+						Version:          2,
+						LogoMediaAssetID: pgtype.Int8{Valid: false},
+						CreatedAt:        merchant.CreatedAt,
+						UpdatedAt:        time.Now(),
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response merchantResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Nil(t, response.LogoAssetID)
+				require.Empty(t, response.LogoURL)
+				require.Equal(t, int32(2), response.Version)
+			},
+		},
 	}
 
 	for i := range testCases {

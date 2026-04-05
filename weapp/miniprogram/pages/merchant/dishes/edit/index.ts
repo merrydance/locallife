@@ -9,6 +9,7 @@ import {
   CustomizationGroup,
   CustomizationGroupInput
 } from '../../../../api/dish'
+import { waitForPublicMediaDisplayUrl } from '../../../../api/onboarding'
 import { getPublicImageUrl } from '../../../../utils/image'
 import { logger } from '../../../../utils/logger'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -376,6 +377,28 @@ Page({
     })
   },
 
+  async finalizePendingDishImage(mediaId: number, fallbackPreviewUrl: string) {
+    try {
+      const remoteUrl = await waitForPublicMediaDisplayUrl(mediaId)
+      if (!remoteUrl || this.data.formData.image_asset_id !== mediaId) {
+        return
+      }
+
+      this.setData({
+        fileList: buildDishFileList(remoteUrl),
+        'formData.image_preview_url': remoteUrl
+      })
+    } catch (err) {
+      logger.warn('Finalize dish image preview failed', err)
+      if (!this.data.fileList.length && fallbackPreviewUrl && this.data.formData.image_asset_id === mediaId) {
+        this.setData({
+          fileList: buildDishFileList(fallbackPreviewUrl),
+          'formData.image_preview_url': fallbackPreviewUrl
+        })
+      }
+    }
+  },
+
   async onImageAdd(e: WechatMiniprogram.CustomEvent<{ files: Array<{ url: string }> }>) {
     const files = Array.isArray(e.detail?.files) ? e.detail.files : []
     const localPath = files[0]?.url
@@ -391,11 +414,17 @@ Page({
 
     try {
       const { mediaId, displayUrl } = await DishManagementService.uploadDishImage(localPath)
+      const previewUrl = displayUrl || localPath
+
       this.setData({
-        fileList: buildDishFileList(displayUrl),
+        fileList: buildDishFileList(previewUrl),
         'formData.image_asset_id': mediaId,
-        'formData.image_preview_url': displayUrl
+        'formData.image_preview_url': previewUrl
       })
+
+      if (!displayUrl) {
+        void this.finalizePendingDishImage(mediaId, localPath)
+      }
     } catch (err) {
       logger.error('Upload image failed', err)
       this.setData({ fileList: [] })

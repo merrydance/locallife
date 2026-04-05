@@ -1,13 +1,23 @@
 <custom-navbar title="主体申请" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <block wx:else>
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载申请资料中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '申请资料加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
@@ -32,7 +42,12 @@
       <text class="action-notice-text">{{actionNoticeMessage}}</text>
     </view>
 
-    <view wx:if="{{status && getStatusGuide(status)}}" class="section-block hint-card hint-card-info">
+    <view wx:if="{{refreshErrorMessage}}" class="section-block hint-card hint-card-error action-notice-card">
+      <text class="action-notice-text">{{refreshErrorMessage}}</text>
+      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+    </view>
+
+    <view wx:if="{{status && getStatusGuide(status)}}" class="section-block hint-card hint-card-warning">
       <text>{{getStatusGuide(status)}}</text>
     </view>
 
@@ -49,7 +64,7 @@
       <t-cell-group theme="card">
         <t-input label="店铺名称" value="{{form.merchantName}}" data-field="merchantName" placeholder="请输入店铺名称" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
         <t-input label="联系电话" type="number" value="{{form.contactPhone}}" data-field="contactPhone" placeholder="11 位手机号" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
-        <t-input label="经营地址" value="{{form.businessAddress}}" data-field="businessAddress" placeholder="请输入门店经营地址" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
+        <t-input label="经营地址" value="{{form.businessAddress}}" placeholder="请通过下方选择经营位置维护" disabled="{{true}}" />
         <t-input label="统一信用代码" value="{{form.businessLicenseNumber}}" data-field="businessLicenseNumber" placeholder="上传营业执照后自动回填，可手动修正" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
         <t-input label="法人姓名" value="{{form.legalPersonName}}" data-field="legalPersonName" placeholder="上传身份证后自动回填，可手动修正" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
         <t-input label="法人身份证号" value="{{form.legalPersonIdNumber}}" data-field="legalPersonIdNumber" placeholder="上传身份证后自动回填，可手动修正" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
@@ -60,7 +75,7 @@
     <view class="section-block">
       <view class="section-head">
         <view class="section-title">经营位置</view>
-        <text class="section-tip">提交审核前必须完成定位，后端会自动匹配经营区域</text>
+        <text class="section-tip">经营地址以下方选择经营位置为准，提交前需完成定位，系统会自动匹配经营区域</text>
       </view>
       <view class="location-card">
         <view class="location-head">
@@ -69,14 +84,14 @@
         </view>
         <view class="location-value">{{locationLabel}}</view>
         <view class="location-hint">{{locationHint}}</view>
-        <t-button theme="primary" variant="outline" size="small" shape="round" disabled="{{!canEditCurrent(status) || saving || submitting || resetting}}" bindtap="onChooseLocation">选择经营位置</t-button>
+        <t-button theme="default" size="small" shape="round" disabled="{{!canEditCurrent(status) || saving || submitting || resetting}}" bindtap="onChooseLocation">选择经营位置</t-button>
       </view>
     </view>
 
     <view class="section-block">
       <view class="section-head">
         <view class="section-title">必要证照</view>
-        <text class="section-tip">上传即触发 OCR 回填，证照删除暂不开放，支持重新上传替换</text>
+        <text class="section-tip">上传即触发 OCR 回填，支持删除后重新上传，也可直接重新选择新文件替换</text>
       </view>
 
       <view wx:if="{{ocrNoticeMessage}}" class="hint-card hint-card-warning ocr-notice-card">
@@ -129,9 +144,10 @@
     </view>
 
     <view class="actions-wrap">
-      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || submitting || resetting || !hasChanges || !canEditCurrent(status)}}" bindtap="onSaveDraft">保存草稿</t-button>
-      <t-button wx:if="{{canSubmitCurrent(status)}}" theme="primary" variant="outline" size="large" shape="round" block loading="{{submitting}}" disabled="{{saving || submitting || resetting}}" bindtap="onSubmitApplication">提交审核</t-button>
-      <t-button wx:if="{{canResetCurrent(status)}}" theme="danger" variant="outline" size="large" shape="round" block loading="{{resetting}}" disabled="{{saving || submitting || resetting}}" bindtap="onResetApplication">重置为草稿</t-button>
+      <t-button theme="default" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || submitting || resetting || !hasChanges || !canEditCurrent(status)}}" bindtap="onSaveDraft">保存草稿</t-button>
+      <t-button wx:if="{{canSubmitCurrent(status)}}" theme="primary" size="large" shape="round" block loading="{{submitting}}" disabled="{{saving || submitting || resetting}}" bindtap="onSubmitApplication">提交审核</t-button>
+      <t-button wx:if="{{canResetCurrent(status)}}" theme="danger" size="large" shape="round" block loading="{{resetting}}" disabled="{{saving || submitting || resetting}}" bindtap="onResetApplication">重置为草稿</t-button>
     </view>
+  </block>
   </block>
 </view>

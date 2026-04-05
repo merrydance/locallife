@@ -3,6 +3,16 @@
   background-color: var(--td-bg-color-page);
 }
 
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  padding: 0 var(--spacer-lg);
+}
+
 .steps-container {
   background: #FFFFFF;
   padding: 24rpx 0;

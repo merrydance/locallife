@@ -5,10 +5,14 @@ import {
   CreateDeliveryPromotionRequest,
   DeliveryFeeAdapter
 } from '../../../api/delivery-fee'
+import { getMyMerchantProfile } from '../../../api/merchant'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 
 // ==================== 类型定义 ====================
+
+type PromotionStatusTheme = 'success' | 'warning' | 'danger' | 'default'
 
 interface PromotionView extends DeliveryPromotionResponse {
   min_order_yuan: string   // 展示用：元
@@ -16,7 +20,7 @@ interface PromotionView extends DeliveryPromotionResponse {
   valid_from_date: string  // 展示用：YYYY-MM-DD
   valid_until_date: string // 展示用：YYYY-MM-DD
   status_label: string
-  status_theme: string
+  status_theme: PromotionStatusTheme
 }
 
 interface PromotionFormData {
@@ -39,6 +43,8 @@ function defaultFormData(): PromotionFormData {
   }
 }
 
+const PROMOTIONS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
+
 // 将 YYYY-MM-DD 转换为 RFC3339 当天开始/结束时间
 function toRFC3339Start(date: string): string {
   return `${date}T00:00:00+08:00`
@@ -52,7 +58,7 @@ function buildPromotionView(p: DeliveryPromotionResponse): PromotionView {
   const until = new Date(p.valid_until)
   const from = new Date(p.valid_from)
   let status_label = ''
-  let status_theme = ''
+  let status_theme: PromotionStatusTheme = 'default'
 
   if (!p.is_active) {
     status_label = '已停用'
@@ -79,15 +85,47 @@ function buildPromotionView(p: DeliveryPromotionResponse): PromotionView {
   }
 }
 
+function upsertPromotionView(promotions: PromotionView[], promotion: DeliveryPromotionResponse) {
+  const nextPromotion = buildPromotionView(promotion)
+  const index = promotions.findIndex((item) => item.id === nextPromotion.id)
+
+  if (index === -1) {
+    return [nextPromotion, ...promotions]
+  }
+
+  const nextPromotions = [...promotions]
+  nextPromotions[index] = nextPromotion
+  return nextPromotions
+}
+
+function removePromotionView(promotions: PromotionView[], promotionId: number) {
+  return promotions.filter((item) => item.id !== promotionId)
+}
+
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 // ==================== 页面 ====================
 
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    initialLoading: true,
+    initialError: false,
+    initialErrorMessage: '',
+    actionNoticeMessage: '',
+    refreshErrorMessage: '',
     loading: false,
     submitting: false,
+    actingPromotionId: 0,
+    actingPromotionAction: '',
     promotions: [] as PromotionView[],
     merchantId: 0,
+    lastLoadedAt: 0,
 
     // 表单弹窗
     formVisible: false,
@@ -96,50 +134,172 @@ Page({
     form: defaultFormData()
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.initMerchantId()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadPageData(true, true)
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
   },
 
   onShow() {
-    if (this.data.merchantId > 0) {
-      this.loadPromotions()
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    if (
+      this.data.merchantId > 0
+      && !this.data.initialLoading
+      && !this.data.submitting
+      && !this.data.actingPromotionId
+      && shouldAutoRefresh(this.data.lastLoadedAt, PROMOTIONS_AUTO_REFRESH_WINDOW_MS)
+    ) {
+      void this.loadPromotions(false)
     }
   },
 
   onPullDownRefresh() {
-    this.loadPromotions()
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadPageData(false, true)
+  },
+
+  onRetry() {
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadPageData(true, true)
+  },
+
+  onRetryRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadPageData(false, true)
   },
 
   // ==================== 初始化 ====================
 
-  async initMerchantId() {
-    // 从全局缓存读取当前商户 ID（与其它商户页面保持一致）
+  async ensureMerchantId() {
+    if (this.data.merchantId > 0) {
+      return this.data.merchantId
+    }
+
     try {
-      const { request } = require('../../../utils/request')
-      const merchant = await request({ url: '/v1/merchants/me', method: 'GET' })
-      const id: number = merchant?.id || 0
-      this.setData({ merchantId: id })
-      if (id > 0) this.loadPromotions()
+      const cached = wx.getStorageSync('current_merchant') as { id?: number, merchant_id?: number } | null
+      const cachedMerchantId = Number(cached?.id || cached?.merchant_id || 0)
+      if (cachedMerchantId > 0) {
+        this.setData({ merchantId: cachedMerchantId })
+        return cachedMerchantId
+      }
+
+      const profile = await getMyMerchantProfile()
+      const merchantId = Number(profile.id || 0)
+      if (merchantId > 0) {
+        this.setData({ merchantId })
+        return merchantId
+      }
+
+      throw new Error('invalid merchant id')
     } catch (err) {
       logger.error('Failed to get merchant info', err)
-      wx.showToast({ title: '获取商户信息失败', icon: 'none' })
+      this.setData({
+        initialLoading: false,
+        initialError: true,
+        initialErrorMessage: getErrorUserMessage(err, '获取商户信息失败，请重试'),
+        refreshErrorMessage: ''
+      })
+      return 0
     }
+  },
+
+  async loadPageData(showLoading = true, force = false) {
+    const merchantId = await this.ensureMerchantId()
+    if (!merchantId) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    await this.loadPromotions(showLoading, force)
   },
 
   // ==================== 数据加载 ====================
 
-  async loadPromotions() {
+  async loadPromotions(showLoading = true, force = false) {
     if (this.data.loading) return
-    this.setData({ loading: true })
+
+    const hasConfirmedData = this.data.promotions.length > 0 || this.data.lastLoadedAt > 0
+    if (!force && hasConfirmedData && !shouldAutoRefresh(this.data.lastLoadedAt, PROMOTIONS_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    this.setData({
+      loading: true,
+      ...(showLoading && !hasConfirmedData
+        ? {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          }
+        : hasConfirmedData
+          ? {
+              initialError: false,
+              initialErrorMessage: '',
+              refreshErrorMessage: ''
+            }
+          : {})
+    })
+
     try {
       const list = await deliveryFeeService.getMerchantPromotions(this.data.merchantId)
       const promotions = (Array.isArray(list) ? list : []).map(buildPromotionView)
-      this.setData({ promotions })
+      this.setData({
+        promotions,
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
     } catch (err) {
       logger.error('Failed to load delivery promotions', err)
-      wx.showToast({ title: '加载失败', icon: 'none' })
+      const message = getErrorUserMessage(err, '加载配送优惠失败，请稍后重试')
+
+      if (this.data.initialLoading || !hasConfirmedData) {
+        this.setData({
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message,
+          refreshErrorMessage: ''
+        })
+      } else {
+        this.setData({
+          refreshErrorMessage: this.data.actionNoticeMessage
+            ? `${message}，当前仍显示本页已更新结果`
+            : `${message}，当前已保留上次同步结果`
+        })
+      }
     } finally {
       this.setData({ loading: false })
       wx.stopPullDownRefresh()
@@ -149,7 +309,11 @@ Page({
   // ==================== 表单弹窗 ====================
 
   onAddPromotion() {
+    if (this.data.actingPromotionId) return
+
     this.setData({
+      actionNoticeMessage: '',
+      refreshErrorMessage: '',
       formVisible: true,
       isEdit: false,
       editId: 0,
@@ -158,6 +322,8 @@ Page({
   },
 
   onEditPromotion(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.actingPromotionId) return
+
     const { id } = e.currentTarget.dataset as { id: number }
     const promo = this.data.promotions.find((p) => p.id === id)
     if (!promo) return
@@ -170,7 +336,14 @@ Page({
       valid_until: promo.valid_until_date,
       is_active: promo.is_active
     }
-    this.setData({ formVisible: true, isEdit: true, editId: id, form })
+    this.setData({
+      actionNoticeMessage: '',
+      refreshErrorMessage: '',
+      formVisible: true,
+      isEdit: true,
+      editId: id,
+      form
+    })
   },
 
   onCloseForm() {
@@ -179,16 +352,26 @@ Page({
 
   onFormInput(e: WechatMiniprogram.Input) {
     const field = (e.currentTarget.dataset as { field: string }).field
-    this.setData({ [`form.${field}`]: e.detail.value })
+    this.setData({
+      actionNoticeMessage: '',
+      refreshErrorMessage: '',
+      [`form.${field}`]: e.detail.value
+    })
   },
 
   onToggleActive(e: WechatMiniprogram.SwitchChange) {
-    this.setData({ 'form.is_active': e.detail.value })
+    this.setData({
+      actionNoticeMessage: '',
+      refreshErrorMessage: '',
+      'form.is_active': e.detail.value
+    })
   },
 
   // ==================== 提交表单 ====================
 
   async onSubmitForm() {
+    if (this.data.submitting) return
+
     const { form, isEdit, editId, merchantId } = this.data
 
     // 基础校验
@@ -226,8 +409,10 @@ Page({
     this.setData({ submitting: true })
     wx.showLoading({ title: '保存中...' })
     try {
+      let savedPromotion: DeliveryPromotionResponse
+
       if (isEdit && editId) {
-        await deliveryFeeService.updateMerchantPromotion(merchantId, editId, {
+        savedPromotion = await deliveryFeeService.updateMerchantPromotion(merchantId, editId, {
           name: form.name.trim(),
           min_order_amount: minOrderFen,
           discount_amount: discountFen,
@@ -243,10 +428,23 @@ Page({
           valid_from: toRFC3339Start(form.valid_from),
           valid_until: toRFC3339End(form.valid_until)
         }
-        await deliveryFeeService.createMerchantPromotion(merchantId, payload)
+        savedPromotion = await deliveryFeeService.createMerchantPromotion(merchantId, payload)
       }
-      this.setData({ formVisible: false })
-      await this.loadPromotions()
+
+      this.setData({
+        promotions: upsertPromotionView(this.data.promotions, savedPromotion),
+        formVisible: false,
+        isEdit: false,
+        editId: 0,
+        form: defaultFormData(),
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        actionNoticeMessage: isEdit ? '配送优惠已更新。' : '配送优惠已创建。',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
+      void this.loadPromotions(false, true)
     } catch (err: unknown) {
       logger.error('Submit promotion failed', err)
       const msg = getErrorUserMessage(err, isEdit ? '更新失败，请稍后重试' : '创建失败，请稍后重试')
@@ -261,22 +459,29 @@ Page({
 
   async onTogglePromoStatus(e: WechatMiniprogram.TouchEvent) {
     const { id, active } = e.currentTarget.dataset as { id: number, active: boolean }
+    if (!id || this.data.actingPromotionId) return
+
     const targetActive = !active
     const { merchantId } = this.data
 
-    wx.showLoading({ title: '处理中...' })
+    this.setData({ actingPromotionId: id, actingPromotionAction: 'toggle' })
     try {
-      await deliveryFeeService.updateMerchantPromotion(merchantId, id, { is_active: targetActive })
-      const idx = this.data.promotions.findIndex((p) => p.id === id)
-      if (idx >= 0) {
-        const updated = buildPromotionView({ ...this.data.promotions[idx], is_active: targetActive })
-        this.setData({ [`promotions[${idx}]`]: updated })
-      }
+      const updatedPromotion = await deliveryFeeService.updateMerchantPromotion(merchantId, id, { is_active: targetActive })
+      this.setData({
+        promotions: upsertPromotionView(this.data.promotions, updatedPromotion),
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        actionNoticeMessage: updatedPromotion.is_active ? '配送优惠已启用。' : '配送优惠已停用。',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
+      void this.loadPromotions(false, true)
     } catch (err) {
       logger.error('Toggle promo status failed', err)
-      wx.showToast({ title: '操作失败', icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
     } finally {
-      wx.hideLoading()
+      this.setData({ actingPromotionId: 0, actingPromotionAction: '' })
     }
   },
 
@@ -284,6 +489,7 @@ Page({
 
   onDeletePromotion(e: WechatMiniprogram.TouchEvent) {
     const { id, name } = e.currentTarget.dataset as { id: number, name: string }
+    if (!id || this.data.actingPromotionId) return
 
     wx.showModal({
       title: '确认删除',
@@ -291,15 +497,24 @@ Page({
       confirmColor: '#e34d59',
       success: async (res) => {
         if (!res.confirm) return
-        wx.showLoading({ title: '删除中...' })
+        this.setData({ actingPromotionId: id, actingPromotionAction: 'delete' })
         try {
           await deliveryFeeService.deleteMerchantPromotion(this.data.merchantId, id)
-          await this.loadPromotions()
+          this.setData({
+            promotions: removePromotionView(this.data.promotions, id),
+            initialLoading: false,
+            initialError: false,
+            initialErrorMessage: '',
+            actionNoticeMessage: '配送优惠已删除。',
+            refreshErrorMessage: '',
+            lastLoadedAt: Date.now()
+          })
+          void this.loadPromotions(false, true)
         } catch (err) {
           logger.error('Delete promotion failed', err)
-          wx.showToast({ title: '删除失败', icon: 'none' })
+          wx.showToast({ title: getErrorUserMessage(err, '删除失败，请稍后重试'), icon: 'none' })
         } finally {
-          wx.hideLoading()
+          this.setData({ actingPromotionId: 0, actingPromotionAction: '' })
         }
       }
     })

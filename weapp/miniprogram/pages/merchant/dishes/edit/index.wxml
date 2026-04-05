@@ -8,7 +8,7 @@
         mediaType="{{['image']}}"
         max="{{1}}"
         files="{{fileList}}"
-        gridConfig="{{ { column: 1 } }}"
+        gridConfig="{{ { column: 1, width: 240, height: 240 } }}"
         bind:add="onImageAdd"
         bind:remove="onImageRemove"
         bind:preview="onImagePreview"

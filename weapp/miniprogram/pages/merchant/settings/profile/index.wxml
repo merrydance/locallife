@@ -1,16 +1,30 @@
 <custom-navbar title="店铺资料" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <block wx:else>
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载店铺资料中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '店铺资料加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+    <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
+    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
+      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
+    </view>
+
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
       <text class="inline-banner-text">{{refreshErrorMessage}}</text>
       <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
@@ -32,18 +46,33 @@
       <t-cell-group theme="card">
         <t-input label="店铺名称" value="{{form.name}}" data-field="name" placeholder="请输入店铺名称" bindchange="onInputChange" />
         <t-input label="联系电话" type="number" value="{{form.phone}}" data-field="phone" placeholder="11位联系电话" bindchange="onInputChange" />
-        <t-input label="店铺地址" value="{{form.address}}" data-field="address" placeholder="请输入店铺地址" bindchange="onInputChange" />
-        <t-input label="纬度" type="digit" value="{{form.latitude}}" data-field="latitude" placeholder="例如 31.2304，范围 3.0-54.0" bindchange="onInputChange" />
-        <t-input label="经度" type="digit" value="{{form.longitude}}" data-field="longitude" placeholder="例如 121.4737，范围 73.0-135.0" bindchange="onInputChange" />
         <t-textarea label="店铺介绍" value="{{form.description}}" data-field="description" placeholder="介绍店铺招牌菜、经营特色和营业氛围" maxlength="500" indicator bindchange="onInputChange" />
       </t-cell-group>
+    </view>
+
+    <view class="section-block">
+      <view class="section-head">
+        <view class="section-title">经营位置</view>
+        <text class="section-tip">地址与坐标会一并更新，请通过位置选择完成。</text>
+      </view>
+      <view class="location-card">
+        <view class="location-head">
+          <text class="location-title">当前经营位置</text>
+          <t-tag theme="{{form.address && form.latitude && form.longitude ? 'success' : 'warning'}}" variant="dark" size="small">
+            {{form.address && form.latitude && form.longitude ? '已选择' : '待选择'}}
+          </t-tag>
+        </view>
+        <view class="location-value">{{locationLabel}}</view>
+        <view class="location-hint">{{locationHint}}</view>
+        <t-button theme="default" size="small" shape="round" disabled="{{loading || saving}}" bindtap="onChooseLocation">选择经营位置</t-button>
+      </view>
     </view>
 
     <view class="section-block">
       <view class="section-title">扩展设置</view>
       <t-cell-group theme="card">
         <t-cell title="店铺图片管理" description="维护 Logo、门头照和环境照" arrow bindtap="onGoProfileImages" />
-        <t-cell title="经营类目设置" description="选择影响曝光和分类筛选的经营类目" arrow bindtap="onGoMerchantCategories" />
+        <t-cell title="经营类目设置" description="选择顾客检索和平台分类展示使用的经营类目" arrow bindtap="onGoMerchantCategories" />
         <t-cell title="营业时间" description="维护每周营业时段并查看特殊日期安排" arrow bindtap="onGoBusinessHours" />
         <t-cell title="会员设置" description="配置余额与赠送金在各业务场景中的使用规则" arrow bindtap="onGoMembership" />
         <t-cell title="主体申请" description="维护主体申请草稿、上传证照并提交审核" arrow bindtap="onGoApplication" />
@@ -54,5 +83,6 @@
     <view class="save-wrap">
       <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存店铺资料</t-button>
     </view>
+  </block>
   </block>
 </view>

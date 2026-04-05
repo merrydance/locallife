@@ -13,12 +13,15 @@ import {
   listMerchantSettlements,
   ApplymentStatusResponse,
   MerchantDailyFinanceItem,
+  MerchantDailyFinanceSummaryResponse,
   MerchantFinanceOrderItem,
+  MerchantFinanceOrdersResponse,
   MerchantFinanceOverviewResponse,
   MerchantPromotionExpenseItem,
   MerchantPromotionExpensesResponse,
   MerchantSettlementItem,
   MerchantSettlementTimelineItem,
+  MerchantSettlementTimelineResponse,
   MerchantSettlementsResponse,
   MerchantServiceFeeItem,
   MerchantServiceFeeSummaryResponse,
@@ -27,9 +30,10 @@ import {
   listMerchantWithdrawals
 } from '../../../api/merchant-finance'
 import { logger } from '../../../utils/logger'
-import { settleAll } from '../../../utils/promise'
+import { settleAll, type SettledResult } from '../../../utils/promise'
 import dayjs from 'dayjs'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 
 type InputChangeDetail = {
   value: string
@@ -49,6 +53,17 @@ type SettlementStatusOption = {
   label: string
 }
 
+type FinanceSectionKey = 'overview' | 'orders' | 'serviceFees' | 'promotions' | 'daily' | 'settlements' | 'timeline'
+
+type FinanceSectionState = {
+  loaded: boolean
+  error: boolean
+  errorMessage: string
+  stale: boolean
+}
+
+type FinanceSectionStates = Record<FinanceSectionKey, FinanceSectionState>
+
 const emptyApplyment: ApplymentStatusResponse = {
   status: '',
   status_desc: ''
@@ -66,6 +81,26 @@ const SETTLEMENT_STATUS_OPTIONS: SettlementStatusOption[] = [
   { key: 'finished', label: '已完成' },
   { key: 'failed', label: '失败' }
 ]
+
+const FINANCE_SECTION_KEYS: FinanceSectionKey[] = [
+  'overview',
+  'orders',
+  'serviceFees',
+  'promotions',
+  'daily',
+  'settlements',
+  'timeline'
+]
+
+const FINANCE_SECTION_LABELS: Record<FinanceSectionKey, string> = {
+  overview: '财务概览',
+  orders: '订单收入明细',
+  serviceFees: '服务费明细',
+  promotions: '营销支出',
+  daily: '财务日报',
+  settlements: '结算记录',
+  timeline: '结算流水'
+}
 
 const EMPTY_FINANCE_OVERVIEW: MerchantFinanceOverviewResponse = {
   completed_orders: 0,
@@ -123,11 +158,61 @@ function buildFinanceRange(rangeKey: FinanceRangeKey) {
   }
 }
 
+function createFinanceSectionState(): FinanceSectionState {
+  return {
+    loaded: false,
+    error: false,
+    errorMessage: '',
+    stale: false
+  }
+}
+
+function createFinanceSectionStates(): FinanceSectionStates {
+  return {
+    overview: createFinanceSectionState(),
+    orders: createFinanceSectionState(),
+    serviceFees: createFinanceSectionState(),
+    promotions: createFinanceSectionState(),
+    daily: createFinanceSectionState(),
+    settlements: createFinanceSectionState(),
+    timeline: createFinanceSectionState()
+  }
+}
+
+function cloneFinanceSectionStates(states: FinanceSectionStates): FinanceSectionStates {
+  return {
+    overview: { ...states.overview },
+    orders: { ...states.orders },
+    serviceFees: { ...states.serviceFees },
+    promotions: { ...states.promotions },
+    daily: { ...states.daily },
+    settlements: { ...states.settlements },
+    timeline: { ...states.timeline }
+  }
+}
+
+function buildFinanceSnapshotKey(rangeKey: FinanceRangeKey, status: SettlementStatusFilter) {
+  return `${rangeKey}:${status}`
+}
+
+function buildRefreshErrorMessage(messages: string[]) {
+  const normalized = messages.filter((message) => typeof message === 'string' && message.trim())
+  if (!normalized.length) return ''
+  return Array.from(new Set(normalized)).join('；')
+}
+
+function hasExistingApplyment(status?: string) {
+  return Boolean(status && status !== 'not_applied' && status !== 'pending')
+}
+
 const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     loading: true,
     submitting: false,
     notConfigured: false,
@@ -143,8 +228,12 @@ Page({
     financeLoading: true,
     financeError: false,
     financeErrorMessage: '',
+    financeRefreshErrorMessage: '',
     financeUpdatedAtLabel: '--',
     financeDateRangeLabel: '--',
+    financeSnapshotKey: '',
+    financeRequestVersion: 0,
+    financeSectionStates: createFinanceSectionStates() as FinanceSectionStates,
     financeOverview: EMPTY_FINANCE_OVERVIEW as MerchantFinanceOverviewResponse,
     financeOrders: [] as MerchantFinanceOrderItem[],
     serviceFeeSummary: EMPTY_SERVICE_FEES as MerchantServiceFeeSummaryResponse,
@@ -179,14 +268,37 @@ Page({
     hasApplyment: false
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ loading: false })
+      return
+    }
+
     this.loadData()
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     this.loadData()
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      loading: true
+    })
+    this.onLoad()
   },
 
   async loadData() {
@@ -197,12 +309,24 @@ Page({
   },
 
   async loadFinanceInsights() {
-    const { params, label } = buildFinanceRange(this.data.currentRange)
+    const requestedRange = this.data.currentRange
+    const requestedSettlementStatus = this.data.currentSettlementStatus
+    const { params, label } = buildFinanceRange(requestedRange)
+    const requestedSnapshotKey = buildFinanceSnapshotKey(requestedRange, requestedSettlementStatus)
+    const requestVersion = this.data.financeRequestVersion + 1
+    const sameSnapshot = this.data.financeSnapshotKey === requestedSnapshotKey
+    const previousSectionStates = sameSnapshot
+      ? cloneFinanceSectionStates(this.data.financeSectionStates as FinanceSectionStates)
+      : createFinanceSectionStates()
 
     this.setData({
+      financeRequestVersion: requestVersion,
       financeLoading: true,
       financeError: false,
       financeErrorMessage: '',
+      financeRefreshErrorMessage: '',
+      financeLoaded: sameSnapshot ? this.data.financeLoaded : false,
+      financeSectionStates: sameSnapshot ? this.data.financeSectionStates : createFinanceSectionStates(),
       financeDateRangeLabel: label
     })
 
@@ -217,49 +341,111 @@ Page({
           ...params,
           page: 1,
           limit: 5,
-          ...(this.data.currentSettlementStatus !== 'all'
-            ? { status: this.data.currentSettlementStatus }
+          ...(requestedSettlementStatus !== 'all'
+            ? { status: requestedSettlementStatus }
             : {})
         }),
         listMerchantSettlementTimeline({ ...params, page: 1, limit: 5 })
       ] as const)
 
-      if (
-        overviewResult.status === 'rejected'
-        && ordersResult.status === 'rejected'
-        && serviceFeeResult.status === 'rejected'
-        && promotionsResult.status === 'rejected'
-        && dailyResult.status === 'rejected'
-        && settlementsResult.status === 'rejected'
-        && timelineResult.status === 'rejected'
-      ) {
-        throw new Error('all_finance_requests_failed')
+      if (requestVersion !== this.data.financeRequestVersion) {
+        return
       }
 
+      const nextSectionStates = cloneFinanceSectionStates(previousSectionStates)
+      const nextData: Record<string, unknown> = {}
+      const staleMessages: string[] = []
+      let hasAnySuccess = false
+
+      const applySectionResult = <T>(
+        key: FinanceSectionKey,
+        result: SettledResult<T>,
+        onSuccess: (value: T) => void
+      ) => {
+        if (result.status === 'fulfilled') {
+          hasAnySuccess = true
+          onSuccess(result.value)
+          nextSectionStates[key] = {
+            loaded: true,
+            error: false,
+            errorMessage: '',
+            stale: false
+          }
+          return
+        }
+
+        const message = getErrorMessage(result.reason, `${FINANCE_SECTION_LABELS[key]}加载失败，请稍后重试`)
+        if (previousSectionStates[key].loaded) {
+          const staleMessage = `${message}，当前已保留上次同步结果`
+          nextSectionStates[key] = {
+            loaded: true,
+            error: true,
+            errorMessage: staleMessage,
+            stale: true
+          }
+          staleMessages.push(staleMessage)
+          return
+        }
+
+        nextSectionStates[key] = {
+          loaded: false,
+          error: true,
+          errorMessage: message,
+          stale: false
+        }
+      }
+
+      applySectionResult<MerchantFinanceOverviewResponse>('overview', overviewResult, (value) => {
+        nextData.financeOverview = value
+      })
+      applySectionResult<MerchantFinanceOrdersResponse>('orders', ordersResult, (value) => {
+        nextData.financeOrders = value.orders || []
+      })
+      applySectionResult<MerchantServiceFeeSummaryResponse>('serviceFees', serviceFeeResult, (value) => {
+        nextData.serviceFeeSummary = value
+        nextData.serviceFeeDetails = value.details || []
+      })
+      applySectionResult<MerchantPromotionExpensesResponse>('promotions', promotionsResult, (value) => {
+        nextData.promotionSummary = value
+        nextData.promotionOrders = value.orders || []
+      })
+      applySectionResult<MerchantDailyFinanceSummaryResponse>('daily', dailyResult, (value) => {
+        nextData.dailyFinanceRows = (value.daily_stats || []).slice(0, 7)
+      })
+      applySectionResult<MerchantSettlementsResponse>('settlements', settlementsResult, (value) => {
+        nextData.settlementsSummary = value
+        nextData.settlements = value.settlements || []
+      })
+      applySectionResult<MerchantSettlementTimelineResponse>('timeline', timelineResult, (value) => {
+        nextData.settlementTimeline = value.timeline || []
+      })
+
+      const hasAnyLoaded = FINANCE_SECTION_KEYS.some((key) => nextSectionStates[key].loaded)
+
       this.setData({
-        financeOverview: overviewResult.status === 'fulfilled' ? overviewResult.value : EMPTY_FINANCE_OVERVIEW,
-        financeOrders: ordersResult.status === 'fulfilled' ? ordersResult.value.orders || [] : [],
-        serviceFeeSummary: serviceFeeResult.status === 'fulfilled' ? serviceFeeResult.value : EMPTY_SERVICE_FEES,
-        serviceFeeDetails: serviceFeeResult.status === 'fulfilled' ? serviceFeeResult.value.details || [] : [],
-        promotionSummary: promotionsResult.status === 'fulfilled' ? promotionsResult.value : EMPTY_PROMOTIONS,
-        promotionOrders: promotionsResult.status === 'fulfilled' ? promotionsResult.value.orders || [] : [],
-        dailyFinanceRows: dailyResult.status === 'fulfilled' ? (dailyResult.value.daily_stats || []).slice(0, 7) : [],
-        settlementsSummary: settlementsResult.status === 'fulfilled' ? settlementsResult.value : EMPTY_SETTLEMENTS,
-        settlements: settlementsResult.status === 'fulfilled' ? settlementsResult.value.settlements || [] : [],
-        settlementTimeline: timelineResult.status === 'fulfilled' ? timelineResult.value.timeline || [] : [],
-        financeLoaded: true,
+        ...nextData,
+        financeSnapshotKey: hasAnyLoaded ? requestedSnapshotKey : this.data.financeSnapshotKey,
+        financeSectionStates: nextSectionStates,
+        financeLoaded: hasAnyLoaded,
         financeLoading: false,
-        financeError: false,
-        financeErrorMessage: '',
-        financeUpdatedAtLabel: dayjs().format('HH:mm')
+        financeError: !hasAnyLoaded,
+        financeErrorMessage: !hasAnyLoaded ? '财务数据加载失败，请稍后重试' : '',
+        financeRefreshErrorMessage: buildRefreshErrorMessage(staleMessages),
+        ...(hasAnySuccess ? { financeUpdatedAtLabel: dayjs().format('HH:mm') } : {})
       })
     } catch (error) {
+      if (requestVersion !== this.data.financeRequestVersion) {
+        return
+      }
+
       logger.error('Load merchant finance insights failed', error, 'merchant-finance')
+      const hasExistingData = FINANCE_SECTION_KEYS.some((key) => previousSectionStates[key].loaded)
       this.setData({
-        financeLoaded: true,
+        financeLoaded: hasExistingData,
         financeLoading: false,
-        financeError: true,
-        financeErrorMessage: '财务概览加载失败，请稍后重试'
+        financeError: !hasExistingData,
+        financeErrorMessage: hasExistingData ? '' : '财务数据加载失败，请稍后重试',
+        financeRefreshErrorMessage: hasExistingData ? '财务数据刷新失败，当前已保留上次同步结果' : ''
       })
     }
   },
@@ -313,7 +499,7 @@ Page({
       const data = await getMerchantApplymentStatus()
       this.setData({
         applymentStatus: data,
-        hasApplyment: true,
+        hasApplyment: hasExistingApplyment(data.status),
         applymentLoaded: true,
         applymentError: false,
         applymentErrorMessage: ''
@@ -402,7 +588,23 @@ Page({
   },
 
   onRetrySection() {
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
     this.loadData()
+  },
+
+  onRetryFinanceInsights() {
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadFinanceInsights()
   },
 
   async onRefreshWithdrawal(e: WechatMiniprogram.TouchEvent) {
@@ -563,6 +765,8 @@ Page({
 
   getApplymentStatusText(status: string): string {
     const map: Record<string, string> = {
+      not_applied: '尚未提交进件资料',
+      pending: '尚未提交进件资料',
       submitted: '已提交',
       bindbank_submitted: '进件审核中',
       auditing: '审核中',
@@ -570,9 +774,11 @@ Page({
       signing: '签约中',
       finish: '已开通',
       active: '已开通',
-      rejected: '已拒绝'
+      rejected: '已拒绝',
+      rejected_sign: '签约被拒绝',
+      frozen: '已冻结'
     }
-    return map[status] || status
+    return map[status] || '状态更新中'
   },
 
   getApplymentStatusTheme(status: string): string {
@@ -581,6 +787,8 @@ Page({
       case 'active':
         return 'success'
       case 'rejected':
+      case 'rejected_sign':
+      case 'frozen':
         return 'danger'
       case 'to_be_signed':
       case 'signing':

@@ -1,7 +1,16 @@
 <custom-navbar title="开通完成" showBack="{{false}}" />
 
 <view class="page" style="padding-top: {{navBarHeight}}px;">
-  <view wx:if="{{loading}}" class="state-block">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{loading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载开通结果中..." vertical />
   </view>
 
@@ -25,7 +34,7 @@
     <view class="action-group">
       <t-button wx:if="{{completed}}" theme="primary" block shape="round" size="large" bindtap="onGoFinance">查看资金账户</t-button>
       <t-button wx:else theme="primary" block shape="round" size="large" bindtap="onBackToApplyment">返回进件页</t-button>
-      <t-button theme="default" block shape="round" size="large" bindtap="onBackToApplyment">查看进件页</t-button>
+      <t-button wx:if="{{completed}}" theme="default" block shape="round" size="large" bindtap="onBackToApplyment">查看进件页</t-button>
     </view>
   </view>
 </view>

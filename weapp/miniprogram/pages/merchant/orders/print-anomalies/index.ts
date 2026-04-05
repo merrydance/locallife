@@ -6,7 +6,10 @@ import {
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 import dayjs from 'dayjs'
+
+const PRINT_ANOMALIES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 type PrintAnomalyFilter = 'all' | 'failed' | 'pending'
 type PrintAnomalyTheme = 'warning' | 'danger' | 'default'
@@ -38,6 +41,14 @@ const FILTER_OPTIONS: Array<{ key: PrintAnomalyFilter, label: string }> = [
   { key: 'failed', label: '打印失败' },
   { key: 'pending', label: '待回执' }
 ]
+
+function getPrintAnomalyFilterLabel(filter: PrintAnomalyFilter) {
+  return FILTER_OPTIONS.find((item) => item.key === filter)?.label || '当前筛选'
+}
+
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
 
 function formatPrintAnomalyStatus(status: string) {
   if (status === 'failed') return '打印失败'
@@ -83,53 +94,97 @@ const getErrorMessage = getErrorUserMessage
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     filterOptions: FILTER_OPTIONS,
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
     refreshErrorMessage: '',
+    syncMessage: '',
     loading: false,
     retryingPrintLogId: 0,
     currentFilter: 'all' as PrintAnomalyFilter,
+    loadedFilter: 'all' as PrintAnomalyFilter,
     anomalies: [] as PrintAnomalyView[],
     pageId: 1,
     pageSize: 20,
-    hasMore: true
+    hasMore: true,
+    lastLoadedAt: 0
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
     this.loadAnomalies(true)
   },
 
   onShow() {
-    if (!this.data.initialLoading && !this.data.loading) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
+    if (!this.data.initialLoading && !this.data.loading && shouldAutoRefresh(this.data.lastLoadedAt, PRINT_ANOMALIES_AUTO_REFRESH_WINDOW_MS)) {
       this.loadAnomalies(true, false)
     }
   },
 
   onPullDownRefresh() {
-    this.loadAnomalies(true, false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadAnomalies(true, false, true)
   },
 
   onReachBottom() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     this.loadAnomalies(false)
   },
 
-  async loadAnomalies(reset = false, showLoading = true) {
+  onRetryAccess() {
+    this.setData({ accessReady: false, accessDenied: false, accessErrorMessage: '', initialLoading: true })
+    this.onLoad()
+  },
+
+  async loadAnomalies(
+    reset = false,
+    showLoading = true,
+    force = false,
+    requestedFilter?: PrintAnomalyFilter,
+    source: 'default' | 'filter' = 'default'
+  ) {
     if (this.data.loading) return
     if (!reset && !this.data.hasMore) return
 
-    const hasExistingData = this.data.anomalies.length > 0
+    const activeFilter = this.data.loadedFilter || this.data.currentFilter || 'all'
+    const targetFilter = requestedFilter || activeFilter
+    const hasExistingData = this.data.anomalies.length > 0 || this.data.lastLoadedAt > 0
     const isSilentRefresh = reset && !showLoading && hasExistingData
+    const isFilterSwitch = reset && source === 'filter' && targetFilter !== activeFilter
+
+    if (reset && !force && hasExistingData && !isFilterSwitch && !shouldAutoRefresh(this.data.lastLoadedAt, PRINT_ANOMALIES_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData({
       loading: true,
       ...(showLoading
-        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '', syncMessage: '' }
         : isSilentRefresh
-          ? { refreshErrorMessage: '' }
+          ? {
+              refreshErrorMessage: '',
+              syncMessage: isFilterSwitch ? `正在同步${getPrintAnomalyFilterLabel(targetFilter)}...` : ''
+            }
           : {})
     })
 
@@ -138,61 +193,77 @@ Page({
       const response = await MerchantOrderManagementService.listPrintAnomalies({
         page_id: pageId,
         page_size: this.data.pageSize,
-        status: this.data.currentFilter === 'all' ? undefined : this.data.currentFilter
+        status: targetFilter === 'all' ? undefined : targetFilter
       })
 
       const items = Array.isArray(response.items) ? response.items.map(buildPrintAnomalyView) : []
       this.setData({
+        currentFilter: targetFilter,
+        loadedFilter: targetFilter,
         anomalies: reset ? items : [...this.data.anomalies, ...items],
         pageId: pageId + 1,
         hasMore: pageId * this.data.pageSize < (response.total || 0),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: ''
+        refreshErrorMessage: '',
+        syncMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (err: unknown) {
       logger.error('Load merchant print anomalies failed', err)
       const message = getErrorMessage(err, '打印异常加载失败，请稍后重试')
 
-      if (this.data.initialLoading) {
+      if (this.data.initialLoading || !hasExistingData) {
         this.setData({
           initialLoading: false,
           initialError: true,
-          initialErrorMessage: message
+          initialErrorMessage: message,
+          syncMessage: ''
+        })
+      } else if (isFilterSwitch) {
+        this.setData({
+          refreshErrorMessage: `${message}，当前仍显示${getPrintAnomalyFilterLabel(activeFilter)}`,
+          syncMessage: ''
         })
       } else if (isSilentRefresh) {
-        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果`, syncMessage: '' })
       } else {
+        this.setData({ syncMessage: '' })
         wx.showToast({ title: message, icon: 'none' })
       }
     } finally {
-      this.setData({ loading: false })
+      this.setData({ loading: false, syncMessage: '' })
       wx.stopPullDownRefresh()
     }
   },
 
   onRetry() {
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
     this.loadAnomalies(true)
   },
 
   onRetryRefresh() {
-    this.loadAnomalies(true, false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadAnomalies(true, false, true)
   },
 
   onChangeFilter(e: WechatMiniprogram.TouchEvent) {
     const { key } = e.currentTarget.dataset as { key?: PrintAnomalyFilter }
-    if (!key || key === this.data.currentFilter) return
+    const activeFilter = this.data.loadedFilter || this.data.currentFilter || 'all'
+    if (!key || key === activeFilter) return
 
-    this.setData({
-      currentFilter: key,
-      anomalies: [],
-      pageId: 1,
-      hasMore: true,
-      refreshErrorMessage: ''
-    }, () => {
-      this.loadAnomalies(true)
-    })
+    if (this.data.loading) {
+      wx.showToast({ title: '正在同步列表，请稍后再试', icon: 'none' })
+      return
+    }
+
+    this.loadAnomalies(true, false, true, key, 'filter')
   },
 
   onViewOrder(e: WechatMiniprogram.TouchEvent) {
@@ -220,7 +291,7 @@ Page({
         this.setData({ retryingPrintLogId: printLogId })
         try {
           await MerchantOrderManagementService.retryOrderPrintJob(orderId, printLogId)
-          await this.loadAnomalies(true, false)
+          await this.loadAnomalies(true, false, true)
         } catch (err: unknown) {
           logger.error('Retry merchant print anomaly failed', err)
           wx.showToast({ title: getErrorMessage(err, '重试失败，请稍后重试'), icon: 'none' })

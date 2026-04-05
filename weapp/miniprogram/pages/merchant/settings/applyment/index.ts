@@ -7,6 +7,9 @@ import type { ApplymentBindBankPayload } from '../../../../api/applyment-bank'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
+
+const APPLYMENT_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 const EMPTY_APPLYMENT: ApplymentStatusResponse = {
   status: '',
@@ -15,6 +18,10 @@ const EMPTY_APPLYMENT: ApplymentStatusResponse = {
 
 function hasExistingApplyment(status?: string) {
   return Boolean(status && status !== 'not_applied' && status !== 'pending')
+}
+
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
 }
 
 function canEditApplyment(status?: string) {
@@ -30,6 +37,52 @@ function resolveCanSubmitApplyment(data: ApplymentStatusResponse) {
 
 function isCompletedApplyment(status?: string) {
   return status === 'finish' || status === 'active'
+}
+
+function getApplymentStatusText(status?: string) {
+  switch (status) {
+    case 'not_applied':
+    case 'pending':
+      return '尚未提交进件资料'
+    case 'submitted':
+      return '已提交'
+    case 'bindbank_submitted':
+      return '进件审核中'
+    case 'auditing':
+      return '审核中'
+    case 'to_be_signed':
+      return '待签约'
+    case 'signing':
+      return '签约中'
+    case 'finish':
+    case 'active':
+      return '已开通'
+    case 'rejected':
+      return '已拒绝'
+    case 'rejected_sign':
+      return '签约被拒绝'
+    case 'frozen':
+      return '已冻结'
+    default:
+      return '状态更新中'
+  }
+}
+
+function getApplymentStatusTheme(status?: string) {
+  switch (status) {
+    case 'finish':
+    case 'active':
+      return 'success'
+    case 'rejected':
+    case 'rejected_sign':
+    case 'frozen':
+      return 'danger'
+    case 'to_be_signed':
+    case 'signing':
+      return 'primary'
+    default:
+      return 'warning'
+  }
 }
 
 function getApplymentActionLabel(status?: string) {
@@ -87,10 +140,15 @@ const getErrorMessage = getErrorUserMessage
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     loading: true,
     initialError: false,
     initialErrorMessage: '',
+    refreshErrorMessage: '',
     loadingApplyment: true,
+    lastLoadedAt: 0,
     applymentLoaded: false,
     applymentStatus: EMPTY_APPLYMENT as ApplymentStatusResponse | null,
     hasApplyment: false,
@@ -101,35 +159,74 @@ Page({
     bindBankDraft: null as ApplymentBindBankPayload | null,
     showBindForm: false,
     submittingBind: false,
-    refreshingStatus: false
+    refreshingStatus: false,
+    allowCompletedView: false
   },
 
-  onLoad() {
+  async onLoad(options: Record<string, string>) {
     const { navBarHeight } = getStableBarHeights()
-    this.setData({ navBarHeight })
+    this.setData({
+      navBarHeight,
+      allowCompletedView: options.allowCompletedView === '1'
+    })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ loading: false, loadingApplyment: false })
+      return
+    }
+
     this.loadApplyment()
   },
 
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      loading: true,
+      loadingApplyment: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad({ allowCompletedView: this.data.allowCompletedView ? '1' : '0' })
+  },
+
   onShow() {
-    if (!this.data.loading && !this.data.submittingBind) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    if (!this.data.loading && !this.data.submittingBind && shouldAutoRefresh(this.data.lastLoadedAt, APPLYMENT_AUTO_REFRESH_WINDOW_MS)) {
       this.loadApplyment(true)
     }
   },
 
   onPullDownRefresh() {
-    this.loadApplyment()
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadApplyment(this.data.applymentLoaded, true)
   },
 
-  async loadApplyment(silent = false) {
+  async loadApplyment(silent = false, force = false) {
+    const hasExistingData = this.data.applymentLoaded || this.data.lastLoadedAt > 0
+    if (!force && hasExistingData && !shouldAutoRefresh(this.data.lastLoadedAt, APPLYMENT_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
     if (!silent) {
-      this.setData({ loading: true, initialError: false, initialErrorMessage: '' })
+      this.setData({ loading: true, initialError: false, initialErrorMessage: '', refreshErrorMessage: '' })
+    } else if (hasExistingData) {
+      this.setData({ refreshErrorMessage: '' })
     }
     this.setData({ loadingApplyment: true })
 
     try {
       const data = await getMerchantApplymentStatus()
       const status = data.status || ''
-      if (isCompletedApplyment(status)) {
+      if (isCompletedApplyment(status) && !this.data.allowCompletedView) {
         wx.redirectTo({ url: '/pages/merchant/settings/applyment/completed/index' })
         return
       }
@@ -150,22 +247,28 @@ Page({
         bindBankDraft: canEdit ? this.data.bindBankDraft : null,
         showBindForm: canEdit ? this.data.showBindForm : false,
         initialError: false,
-        initialErrorMessage: ''
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (error: unknown) {
       logger.error('Load merchant applyment page failed', error, 'merchant-applyment-page')
       const message = getErrorMessage(error, '进件状态加载失败，请稍后重试')
-      if (!silent || !this.data.applymentLoaded) {
+      if (!silent || !hasExistingData) {
         this.setData({
           loading: false,
           loadingApplyment: false,
           applymentLoaded: false,
           initialError: true,
-          initialErrorMessage: message
+          initialErrorMessage: message,
+          refreshErrorMessage: ''
         })
       } else {
-        this.setData({ loading: false, loadingApplyment: false })
-        wx.showToast({ title: message, icon: 'none' })
+        this.setData({
+          loading: false,
+          loadingApplyment: false,
+          refreshErrorMessage: `${message}，当前已保留上次同步结果`
+        })
       }
     } finally {
       wx.stopPullDownRefresh()
@@ -201,7 +304,7 @@ Page({
         bindBankDraft: null,
         showBindForm: false
       })
-      await this.loadApplyment(true)
+      await this.loadApplyment(true, true)
     } catch (error) {
       logger.error('Submit merchant applyment bind bank failed', error, 'merchant-applyment-page')
       wx.showToast({ title: getErrorMessage(error, '提交进件资料失败，请稍后重试'), icon: 'none' })
@@ -228,10 +331,15 @@ Page({
 
     this.setData({ refreshingStatus: true })
     try {
-      await this.loadApplyment(true)
+      await this.loadApplyment(true, true)
     } finally {
       this.setData({ refreshingStatus: false })
     }
+  },
+
+  onRetryRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.onRefreshStatus()
   },
 
   onGoFinance() {
@@ -239,6 +347,20 @@ Page({
   },
 
   onRetry() {
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
     this.loadApplyment()
+  },
+
+  getApplymentStatusText(status?: string) {
+    return getApplymentStatusText(status)
+  },
+
+  getApplymentStatusTheme(status?: string) {
+    return getApplymentStatusTheme(status)
   }
 })

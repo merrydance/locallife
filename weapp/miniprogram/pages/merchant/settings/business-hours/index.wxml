@@ -1,6 +1,16 @@
 <custom-navbar title="营业时间" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <block wx:else>
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载营业时间中..." vertical />
   </view>
@@ -54,7 +64,7 @@
           </view>
         </view>
 
-        <t-button size="medium" theme="primary" variant="outline" shape="round" data-day="{{day.day_of_week}}" bindtap="onAddSlot">新增营业时段</t-button>
+        <t-button size="medium" theme="default" shape="round" data-day="{{day.day_of_week}}" bindtap="onAddSlot">新增营业时段</t-button>
       </view>
     </view>
 
@@ -77,5 +87,6 @@
     <view class="save-wrap">
       <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存营业时间</t-button>
     </view>
+  </block>
   </block>
 </view>

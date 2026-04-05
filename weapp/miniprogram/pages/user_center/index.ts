@@ -5,13 +5,15 @@ import { logger } from '../../utils/logger'
 import { UploadService } from '../../api/upload'
 import { getStableBarHeights } from '../../utils/responsive'
 import { notificationService } from '../../api/notification'
-import { resolveConsoleWorkbenches } from '../../utils/console-access'
+import { invalidateConsoleAccessUserInfoCache, resolveConsoleWorkbenches } from '../../utils/console-access'
 
 const app = getApp<IAppOption>()
 let _refreshUserInfoPromise: Promise<void> | null = null
+let _pendingForcedRefresh = false
 let _lastRefreshUserInfoAt = 0
 let _fetchUnreadPromise: Promise<void> | null = null
 let _lastFetchUnreadAt = 0
+const USER_CENTER_FORCE_REFRESH_FLAG = 'user_center_force_refresh_after_bind_merchant'
 
 interface MessageError {
   userMessage?: string
@@ -24,6 +26,16 @@ interface ScanCodeRawPayload {
   rawData?: string
   scene?: string
   query?: Record<string, unknown>
+}
+
+interface WebLoginSessionLookupResult {
+  code?: string
+  status?: string
+}
+
+interface StatusCodeError {
+  statusCode?: number | string
+  code?: number | string
 }
 
 const ROLE_LABEL_MAP: Record<string, string> = {
@@ -53,6 +65,24 @@ function pickPrimaryRole(roles: string[]) {
   if (roles.includes('operator') || roles.includes('admin')) return 'operator'
   if (roles.includes('customer')) return 'customer'
   return 'guest'
+}
+
+function getErrorStatusCode(error: unknown) {
+  if (!error || typeof error !== 'object') return 0
+  const knownError = error as StatusCodeError
+  const candidates = [knownError.statusCode, knownError.code]
+  for (const candidate of candidates) {
+    const numericStatusCode = typeof candidate === 'number' ? candidate : Number(candidate)
+    if (Number.isFinite(numericStatusCode)) {
+      return numericStatusCode
+    }
+  }
+  return 0
+}
+
+function isUsableWebLoginSession(session?: WebLoginSessionLookupResult | null) {
+  if (!session?.code) return false
+  return session.status !== 'expired' && session.status !== 'consumed'
 }
 
 function toFriendlyMessage(error: unknown, fallback: string) {
@@ -93,6 +123,14 @@ function toFriendlyMessage(error: unknown, fallback: string) {
     return '网络异常，请稍后重试'
   }
   return fallback
+}
+
+function consumeForceRefreshUserInfoFlag() {
+  const shouldForceRefresh = wx.getStorageSync(USER_CENTER_FORCE_REFRESH_FLAG) === '1'
+  if (shouldForceRefresh) {
+    wx.removeStorageSync(USER_CENTER_FORCE_REFRESH_FLAG)
+  }
+  return shouldForceRefresh
 }
 
 Page({
@@ -136,8 +174,9 @@ Page({
       const roles = cachedRoles && cachedRoles.length > 0 ? cachedRoles : app.globalData.userRole
       this.updateUser(app.globalData.userInfo, roles)
     }
+    const shouldForceRefresh = consumeForceRefreshUserInfoFlag()
     // Always try to fetch fresh data on show to ensure persistence check
-    this.refreshUserInfo()
+    this.refreshUserInfo(shouldForceRefresh, shouldForceRefresh)
     // Gap 4: 获取未读消息数
     this.fetchUnreadCount()
   },
@@ -183,6 +222,9 @@ Page({
   async refreshUserInfo(force: boolean = false, suppressUiError: boolean = false) {
     const now = Date.now()
     if (_refreshUserInfoPromise) {
+      if (force) {
+        _pendingForcedRefresh = true
+      }
       return _refreshUserInfoPromise
     }
     // 同一会话内最多每 60 秒请求一次，避免频繁 tab 切换触发大量请求
@@ -200,6 +242,7 @@ Page({
         const user = await getUserInfo()
         if (user) {
           logger.debug('Refreshed User Info from Backend', user)
+          invalidateConsoleAccessUserInfoCache()
 
           // Recover avatar from local storage if backend returns empty
           const localAvatar = wx.getStorageSync('user_avatar')
@@ -235,6 +278,10 @@ Page({
       }
     })().finally(() => {
       _refreshUserInfoPromise = null
+      if (_pendingForcedRefresh) {
+        _pendingForcedRefresh = false
+        void this.refreshUserInfo(true, true)
+      }
     })
 
     return _refreshUserInfoPromise
@@ -412,16 +459,26 @@ Page({
 
     // 优先识别 Web 登录码
     if (isWebLoginHint) {
+      const loginCode = webLoginMeta?.code || code
       try {
-        const loginCode = webLoginMeta?.code || code
         const session = await getWebLoginSessionStatus(loginCode)
-        if (session?.code) {
+        if (isUsableWebLoginSession(session)) {
           this.confirmWebLogin(loginCode, webLoginMeta?.sig, webLoginMeta?.ts)
           return
         }
       } catch (error) {
-        logger.warn('Scan not web login', error, 'UserCenter.scan')
+        logger.warn('Web login session validation failed', error, 'UserCenter.scan')
+        if (getErrorStatusCode(error) === 404) {
+          this.showInvalidWebLoginCode()
+        } else {
+          this.showWebLoginStatusCheckFailed()
+        }
+        return
       }
+
+      logger.warn('Web login session missing', { code: loginCode }, 'UserCenter.scan')
+      this.showInvalidWebLoginCode()
+      return
     }
 
     // 识别为入职码
@@ -489,13 +546,32 @@ Page({
       success: async (res) => {
         if (!res.confirm || !res.content) return
         const raw = String(res.content)
-        const code = this.extractCode(raw)
+        const webLoginMeta = this.extractWebLoginMeta(raw)
+        const code = webLoginMeta.code || this.extractCode(raw)
         if (!code) {
           wx.showToast({ title: '内容无效', icon: 'none' })
           return
         }
-        await this.handleCodeCandidate(raw, code)
+        await this.handleCodeCandidate(raw, code, webLoginMeta)
       }
+    })
+  },
+
+  showInvalidWebLoginCode() {
+    wx.showModal({
+      title: '网页登录码无效',
+      content: '当前网页登录码无效或已失效，请返回网页刷新二维码后重试。',
+      showCancel: false,
+      confirmText: '我知道了'
+    })
+  },
+
+  showWebLoginStatusCheckFailed() {
+    wx.showModal({
+      title: '状态校验失败',
+      content: '网页登录状态校验失败，请稍后重试。',
+      showCancel: false,
+      confirmText: '我知道了'
     })
   },
 

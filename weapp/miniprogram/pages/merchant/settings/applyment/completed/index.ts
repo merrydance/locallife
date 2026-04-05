@@ -1,6 +1,7 @@
 import { getMerchantApplymentStatus } from '../../../../../api/merchant-finance'
 import { getStableBarHeights } from '../../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../../utils/console-access'
 
 function isCompletedStatus(status?: string) {
   return status === 'finish' || status === 'active'
@@ -9,6 +10,9 @@ function isCompletedStatus(status?: string) {
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     loading: true,
     error: '',
     completed: false,
@@ -16,10 +20,33 @@ Page({
     statusDesc: ''
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ loading: false })
+      return
+    }
+
     void this.loadStatus()
+  },
+
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      loading: true,
+      error: ''
+    })
+    void this.onLoad()
   },
 
   async loadStatus() {
@@ -49,6 +76,6 @@ Page({
   },
 
   onBackToApplyment() {
-    wx.redirectTo({ url: '/pages/merchant/settings/applyment/index' })
+    wx.redirectTo({ url: '/pages/merchant/settings/applyment/index?allowCompletedView=1' })
   }
 })

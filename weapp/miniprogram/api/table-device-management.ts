@@ -46,7 +46,7 @@ export interface UpdateTableRequest extends Record<string, unknown> {
     description?: string
     minimum_spend?: number
     qr_code_url?: string
-    status?: 'available' | 'occupied' | 'disabled'
+    status?: TableStatus
     table_no?: string
     tag_ids?: number[]  // 标签ID列表
 }

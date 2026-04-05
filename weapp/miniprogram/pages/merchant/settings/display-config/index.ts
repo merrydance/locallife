@@ -2,6 +2,7 @@ import { displayConfigService, DisplayConfigResponse } from '../../../../api/tab
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 interface DisplayConfigForm {
   enable_print: boolean
@@ -16,6 +17,8 @@ interface DisplayConfigForm {
   voice_dine_in: boolean
   kds_url: string
 }
+
+const DISPLAY_CONFIG_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 function normalizeForm(form: DisplayConfigForm): DisplayConfigForm {
   return {
@@ -50,17 +53,26 @@ function hasFormChanged(current: DisplayConfigForm, initial: DisplayConfigForm) 
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
+    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     saving: false,
+    lastLoadedAt: 0,
     form: buildForm() as DisplayConfigForm,
     initialForm: buildForm() as DisplayConfigForm,
     hasChanges: false,
@@ -75,36 +87,73 @@ Page({
     ]
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.loadConfig()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadConfig(true, true)
   },
 
   onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
-      this.loadConfig(false)
+      if (shouldAutoRefresh(this.data.lastLoadedAt, DISPLAY_CONFIG_AUTO_REFRESH_WINDOW_MS)) {
+        this.loadConfig(false)
+      }
     }
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
       wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
       return
     }
-    this.loadConfig(false)
+    this.loadConfig(false, true)
   },
 
   onRetryRefresh() {
-    this.loadConfig(false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadConfig(false, true)
   },
 
-  async loadConfig(showLoading = true) {
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
+  },
+
+  async loadConfig(showLoading = true, force = false) {
     if (this.data.loading) return
 
     const hasExistingData = !this.data.initialLoading
     const isSilentRefresh = !showLoading && hasExistingData
+
+    if (!force && hasExistingData && !shouldAutoRefresh(this.data.lastLoadedAt, DISPLAY_CONFIG_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData({
       loading: true,
@@ -121,11 +170,13 @@ Page({
       this.setData({
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
+        actionNoticeMessage: '',
         hasChanges: false,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: ''
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (err) {
       logger.error('Load merchant display config failed', err)
@@ -156,6 +207,7 @@ Page({
     }
     const form = normalizeForm(nextForm)
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       form,
       hasChanges: hasFormChanged(form, this.data.initialForm)
@@ -168,6 +220,7 @@ Page({
       kds_url: e.detail.value || ''
     })
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       form,
       hasChanges: hasFormChanged(form, this.data.initialForm)
@@ -180,6 +233,7 @@ Page({
       print_dispatch_mode: e.detail.value as DisplayConfigForm['print_dispatch_mode']
     }
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       form,
       hasChanges: hasFormChanged(form, this.data.initialForm)
@@ -192,6 +246,7 @@ Page({
       print_trigger_mode: e.detail.value as DisplayConfigForm['print_trigger_mode']
     }
     this.setData({
+      actionNoticeMessage: '',
       refreshErrorMessage: '',
       form,
       hasChanges: hasFormChanged(form, this.data.initialForm)
@@ -227,6 +282,7 @@ Page({
       this.setData({
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
+        actionNoticeMessage: '显示设置已保存。',
         hasChanges: false,
         refreshErrorMessage: ''
       })
@@ -240,6 +296,12 @@ Page({
   },
 
   onRetry() {
-    this.loadConfig()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadConfig(true, true)
   }
 })

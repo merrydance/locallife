@@ -77,12 +77,19 @@ class WebSocketManager {
 
     logger.info(`WebSocket: Connecting to ${wsUrl.split('?')[0]}...`, undefined, 'WS')
 
-    this.socket = wx.connectSocket({
+    let socketTask: WechatMiniprogram.SocketTask | null = null
+    socketTask = wx.connectSocket({
       url: wsUrl,
       success: () => {
+        if (this.socket !== socketTask) {
+          return
+        }
         logger.debug('WebSocket: Request sent successfully', undefined, 'WS')
       },
       fail: (err) => {
+        if (this.socket !== socketTask) {
+          return
+        }
         this.isConnecting = false
         logger.error('WebSocket: Failed to request connection', err, 'WS')
         this.socket = null
@@ -90,7 +97,8 @@ class WebSocketManager {
       }
     })
 
-    this.setupListeners()
+    this.socket = socketTask
+    this.setupListeners(socketTask)
   }
 
   /**
@@ -118,10 +126,13 @@ class WebSocketManager {
     return () => this.eventBus.off(type, callback)
   }
 
-  private setupListeners() {
-    if (!this.socket) return
+  private setupListeners(socketTask: WechatMiniprogram.SocketTask) {
+    if (!socketTask) return
 
-    this.socket.onOpen(() => {
+    socketTask.onOpen(() => {
+      if (this.socket !== socketTask) {
+        return
+      }
       logger.info('✅ WebSocket: Connected', undefined, 'WS')
       this.isConnected = true
       this.isConnecting = false
@@ -129,7 +140,11 @@ class WebSocketManager {
       this.clearReconnectTimer()
     })
 
-    this.socket.onMessage((res) => {
+    socketTask.onMessage((res) => {
+      if (this.socket !== socketTask) {
+        return
+      }
+
       try {
         const rawJson = typeof res.data === 'string' ? res.data : new TextDecoder().decode(res.data as ArrayBuffer)
         const msg = JSON.parse(rawJson)
@@ -160,7 +175,11 @@ class WebSocketManager {
       }
     })
 
-    this.socket.onClose((res) => {
+    socketTask.onClose((res) => {
+      if (this.socket !== socketTask) {
+        return
+      }
+
       logger.warn('WebSocket: Connection closed', res, 'WS')
       this.isConnected = false
       this.isConnecting = false
@@ -170,7 +189,11 @@ class WebSocketManager {
       }
     })
 
-    this.socket.onError((err) => {
+    socketTask.onError((err) => {
+      if (this.socket !== socketTask) {
+        return
+      }
+
       logger.error('WebSocket: Connection error', err, 'WS')
       this.isConnected = false
       this.isConnecting = false

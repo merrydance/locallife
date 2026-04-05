@@ -1,22 +1,32 @@
 <custom-navbar title="员工管理" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
-  <view wx:if="{{initialLoading}}" class="state-block">
-    <t-loading theme="circular" size="40rpx" text="加载员工列表中..." vertical />
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
-  <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty description="{{initialErrorMessage || '员工列表加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bindtap="onRetryAccess">重新校验</t-button>
   </view>
 
-  <block wx:else>
+  <block wx:elif="{{accessReady}}">
+    <view wx:if="{{initialLoading}}" class="state-block">
+      <t-loading theme="circular" size="40rpx" text="加载员工列表中..." vertical />
+    </view>
+
+    <view wx:elif="{{initialError}}" class="state-block">
+      <t-empty description="{{initialErrorMessage || '员工列表加载失败，请重试'}}" />
+      <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+    </view>
+
+    <block wx:else>
     <view class="hero-card">
       <view class="hero-copy">
         <text class="hero-title">门店协作成员</text>
-        <text class="hero-subtitle">当前身份：{{currentUserRoleLabel}}。店长可生成邀请码，老板可继续分配角色与移除员工。</text>
+        <text class="hero-subtitle">当前身份：{{currentUserRoleLabel}}。这里只处理门店成员加入与岗位分配；品牌或集团合作请回配置中心中的品牌协作入口处理。</text>
       </view>
-      <t-button wx:if="{{canGenerateInvite}}" size="small" theme="primary" shape="round" bindtap="onOpenInvitePopup">邀请店员</t-button>
+      <t-button wx:if="{{canGenerateInvite}}" size="small" theme="primary" shape="round" bindtap="onOpenInvitePopup">邀请店员加入</t-button>
     </view>
 
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
@@ -31,13 +41,13 @@
       </view>
       <view class="summary-item">
         <text class="summary-value">{{pendingCount}}</text>
-        <text class="summary-label">待分配</text>
+        <text class="summary-label">待分配岗位</text>
       </view>
     </view>
 
     <view wx:if="{{!staff.length}}" class="empty-wrap">
-      <t-empty description="门店还没有员工，先生成邀请码邀请店员加入。" />
-      <t-button wx:if="{{canGenerateInvite}}" theme="primary" shape="round" bindtap="onOpenInvitePopup">立即生成邀请码</t-button>
+      <t-empty description="门店还没有成员，先生成扫码邀请，让店员从“我的”页头像卡右上角的扫码入口加入。" />
+      <t-button wx:if="{{canGenerateInvite}}" theme="primary" shape="round" bindtap="onOpenInvitePopup">生成邀请二维码</t-button>
     </view>
 
     <view wx:else class="staff-list">
@@ -53,39 +63,70 @@
           </view>
           <view class="staff-tags">
             <t-tag size="small" variant="dark" theme="{{item.roleTheme}}">{{item.roleLabel}}</t-tag>
-            <t-tag size="small" variant="light" theme="{{item.statusTheme}}">{{item.statusLabel}}</t-tag>
+            <t-tag size="small" variant="dark" theme="{{item.statusTheme}}">{{item.statusLabel}}</t-tag>
           </view>
         </view>
 
         <view wx:if="{{item.role === 'pending'}}" class="pending-tip">该员工已入职，但还未分配具体岗位。建议尽快设置角色，避免权限和工作流不清晰。</view>
 
         <view class="staff-actions">
-          <t-button wx:if="{{item.canEditRole}}" size="small" theme="primary" variant="outline" shape="round" data-id="{{item.id}}" bindtap="onOpenRolePopup">改角色</t-button>
-          <t-button wx:if="{{item.canRemove}}" size="small" theme="danger" variant="outline" shape="round" data-id="{{item.id}}" disabled="{{removingStaffId === item.id}}" bindtap="onRemoveStaff">移除</t-button>
+          <t-button wx:if="{{item.canEditRole}}" size="small" theme="default" shape="round" data-id="{{item.id}}" bindtap="onOpenRolePopup">改角色</t-button>
+          <t-button wx:if="{{item.canRemove}}" size="small" theme="danger" shape="round" data-id="{{item.id}}" disabled="{{removingStaffId === item.id}}" bindtap="onRemoveStaff">移除</t-button>
         </view>
       </view>
     </view>
+    </block>
   </block>
+
+  <view wx:else class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
 
   <t-popup wx:if="{{inviteVisible}}" visible="{{inviteVisible}}" placement="bottom" bind:visible-change="onCloseInvitePopup">
     <view class="popup-sheet">
-      <view class="popup-title">邀请店员</view>
+      <view class="popup-title">邀请店员加入门店</view>
+      <text class="popup-subtitle">让店员打开“我的”页，点击头像卡右上角的扫码图标扫描当前二维码；暂时无法扫码时，再使用备用邀请码。</text>
 
       <view wx:if="{{inviteLoading}}" class="popup-state">
-        <t-loading theme="circular" size="40rpx" text="生成邀请码中..." vertical />
+        <t-loading theme="circular" size="40rpx" text="生成邀请二维码中..." vertical />
       </view>
 
       <view wx:elif="{{inviteError}}" class="popup-state">
-        <t-empty description="{{inviteErrorMessage || '生成邀请码失败，请重试'}}" />
-        <t-button theme="primary" shape="round" bindtap="onRetryInviteCode">重新生成</t-button>
+        <t-empty description="{{inviteErrorMessage || '生成邀请失败，请重试'}}" />
+        <view class="popup-actions">
+          <t-button block theme="default" size="large" shape="round" bindtap="onCloseInvitePopup">关闭</t-button>
+          <t-button block theme="primary" size="large" shape="round" bindtap="onRetryInviteCode">重新生成</t-button>
+        </view>
       </view>
 
       <view wx:else class="invite-body">
-        <t-qrcode value="{{inviteCode}}" size="220" level="M" borderless="{{true}}" />
-        <text class="invite-code">{{inviteCode}}</text>
-        <text class="invite-expire">24 小时内有效，截止 {{inviteExpiresAtLabel}}</text>
-        <text class="invite-tip">把邀请码发给店员，对方可在“我的”页进入“加入商户”后输入完成入职。</text>
-        <t-button theme="primary" shape="round" bindtap="onCopyInviteCode">复制邀请码</t-button>
+        <view class="invite-qr-card">
+          <t-qrcode value="{{inviteQRCodeValue}}" size="220" level="M" borderless="{{true}}" />
+        </view>
+
+        <view class="invite-step-list">
+          <view class="invite-step">
+            <text class="invite-step-index">1</text>
+            <text class="invite-step-text">让店员打开“我的”页，点击头像卡右上角的扫码图标。</text>
+          </view>
+          <view class="invite-step">
+            <text class="invite-step-index">2</text>
+            <text class="invite-step-text">扫描当前二维码后，确认加入商户，即可进入门店协作。</text>
+          </view>
+        </view>
+
+        <view class="invite-code-card">
+          <text class="invite-code-label">备用邀请码</text>
+          <text class="invite-code">{{inviteCode}}</text>
+          <text class="invite-expire">24 小时内有效，截止 {{inviteExpiresAtLabel}}</text>
+        </view>
+
+        <text class="invite-tip">主路径是“我的”页头像卡右上角扫码；备用邀请码仅用于暂时无法扫码时的协助加入。</text>
+
+        <view class="popup-actions">
+          <t-button block theme="default" size="large" shape="round" bindtap="onCloseInvitePopup">关闭</t-button>
+          <t-button block theme="primary" size="large" shape="round" bindtap="onCopyInviteCode">复制备用邀请码</t-button>
+        </view>
       </view>
     </view>
   </t-popup>
@@ -104,8 +145,8 @@
         </label>
       </radio-group>
       <view class="popup-actions">
-        <t-button theme="primary" variant="outline" size="large" shape="round" bindtap="onCloseRolePopup">取消</t-button>
-        <t-button theme="primary" size="large" shape="round" loading="{{roleSubmitting}}" bindtap="onSubmitRole">保存角色</t-button>
+        <t-button block theme="default" size="large" shape="round" bindtap="onCloseRolePopup">取消</t-button>
+        <t-button block theme="primary" size="large" shape="round" loading="{{roleSubmitting}}" bindtap="onSubmitRole">保存角色</t-button>
       </view>
     </view>
   </t-popup>

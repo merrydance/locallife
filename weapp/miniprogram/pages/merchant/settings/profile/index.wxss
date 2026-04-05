@@ -14,14 +14,6 @@
   padding: 140rpx 24rpx;
 }
 
-.retry-button {
-  padding: 18rpx 36rpx;
-  border-radius: 999rpx;
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 26rpx;
-}
-
 .inline-banner {
   display: flex;
   align-items: flex-start;
@@ -34,6 +26,10 @@
 
 .inline-banner-danger {
   background: var(--td-error-color-1);
+}
+
+.inline-banner-success {
+  background: var(--td-success-color-1);
 }
 
 .inline-banner-text {
@@ -121,6 +117,50 @@
   font-weight: 600;
   color: var(--td-text-color-primary);
   margin-bottom: 16rpx;
+}
+
+.section-head {
+  margin-bottom: 16rpx;
+}
+
+.section-tip {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.location-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  padding: 24rpx;
+  border-radius: 18rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.location-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.location-title {
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.location-value {
+  font-size: 28rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.location-hint {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
 }
 
 .save-wrap {

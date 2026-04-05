@@ -7,6 +7,7 @@ import {
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
 interface MembershipFormState {
   allow_with_voucher: boolean
@@ -21,6 +22,8 @@ const SCENE_OPTIONS: Array<{ key: MerchantMembershipScene, label: string, desc: 
   { key: 'dine_in', label: '堂食订单', desc: '顾客在线下桌台或堂食下单时可使用' },
   { key: 'reservation', label: '预订订单', desc: '顾客支付预订或预订加菜时可使用' }
 ]
+
+const MEMBERSHIP_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 function createSceneState(selected: MerchantMembershipScene[]) {
   const selectedSet = new Set(selected)
@@ -49,12 +52,19 @@ function hasFormChanged(current: MembershipFormState, initial: MembershipFormSta
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
     navBarHeight: 88,
     sceneOptions: SCENE_OPTIONS,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
@@ -63,6 +73,7 @@ Page({
     loading: false,
     saving: false,
     merchantId: 0,
+    lastLoadedAt: 0,
     form: buildForm({
       merchant_id: 0,
       balance_usable_scenes: [],
@@ -82,36 +93,73 @@ Page({
     hasChanges: false
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
-    this.loadSettings()
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
+    this.loadSettings(true, true)
   },
 
   onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
-      this.loadSettings(false)
+      if (shouldAutoRefresh(this.data.lastLoadedAt, MEMBERSHIP_AUTO_REFRESH_WINDOW_MS)) {
+        this.loadSettings(false)
+      }
     }
   },
 
   onPullDownRefresh() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
       wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
       return
     }
-    this.loadSettings(false)
+    this.loadSettings(false, true)
   },
 
   onRetryRefresh() {
-    this.loadSettings(false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadSettings(false, true)
   },
 
-  async loadSettings(showLoading = true) {
+  onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: ''
+    })
+    this.onLoad()
+  },
+
+  async loadSettings(showLoading = true, force = false) {
     if (this.data.loading) return
 
     const hasExistingData = !this.data.initialLoading
     const isSilentRefresh = !showLoading && hasExistingData
+
+    if (!force && hasExistingData && !shouldAutoRefresh(this.data.lastLoadedAt, MEMBERSHIP_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData({
       loading: true,
@@ -134,7 +182,8 @@ Page({
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: ''
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (err: unknown) {
       logger.error('Load merchant membership settings failed', err)
@@ -220,7 +269,7 @@ Page({
         merchantId: updated.merchant_id,
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
-        actionNoticeMessage: '会员设置已保存并同步到门店权益配置。',
+        actionNoticeMessage: '会员设置已保存。',
         hasChanges: false
       })
     } catch (err: unknown) {
@@ -234,7 +283,13 @@ Page({
   },
 
   onRetry() {
-    this.loadSettings()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
+    this.loadSettings(true, true)
   },
 
   onOpenRechargeRules() {

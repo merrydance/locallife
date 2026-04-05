@@ -2,8 +2,23 @@
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
 
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验商户权限中..." vertical />
+  </view>
+
+  <block wx:elif="{{accessReady}}">
+
   <!-- 加载中 -->
-  <view class="loading-container" wx:if="{{loading}}">
+  <view class="loading-container" wx:if="{{loading && !hasLoaded}}">
     <t-loading theme="circular" size="60rpx" text="加载中..." layout="vertical" />
   </view>
 
@@ -29,8 +44,9 @@
         <t-upload
           mediaType="{{['image']}}"
           max="{{1}}"
-          files="{{logoImage ? [logoImage] : []}}"
-          disabled="{{logoUploading || storefrontSaving || environmentSaving}}"
+          gridConfig="{{ { column: 1, width: 220, height: 220 } }}"
+          files="{{logoFiles}}"
+          disabled="{{logoUploading}}"
           bind:add="onLogoUpload"
           bind:remove="onLogoRemove"
         />
@@ -50,8 +66,9 @@
         <t-upload
           mediaType="{{['image']}}"
           max="{{3}}"
-          files="{{storefrontImages}}"
-          disabled="{{storefrontSaving || logoUploading || environmentSaving}}"
+          gridConfig="{{ { column: 3, width: 200, height: 200 } }}"
+          files="{{storefrontFiles}}"
+          disabled="{{storefrontSaving}}"
           bind:add="onStorefrontUpload"
           bind:remove="onStorefrontRemove"
         />
@@ -71,14 +88,17 @@
         <t-upload
           mediaType="{{['image']}}"
           max="{{5}}"
-          files="{{environmentImages}}"
-          disabled="{{environmentSaving || logoUploading || storefrontSaving}}"
+          gridConfig="{{ { column: 3, width: 200, height: 200 } }}"
+          files="{{environmentFiles}}"
+          disabled="{{environmentSaving}}"
           bind:add="onEnvironmentUpload"
           bind:remove="onEnvironmentRemove"
         />
         <view class="upload-tip">请上传店内环境照片，最多5张</view>
       </view>
     </view>
+
+  </block>
 
   </block>
 

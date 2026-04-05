@@ -15,17 +15,13 @@
   gap: 24rpx;
 }
 
-.state-block,
-.empty-wrap {
-  padding: 140rpx 24rpx;
+.state-block {
+  min-height: 60vh;
+  padding: 0 24rpx;
 }
 
-.retry-button {
-  padding: 18rpx 36rpx;
-  border-radius: 999rpx;
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
-  font-size: 26rpx;
+.empty-wrap {
+  padding: 140rpx 24rpx;
 }
 
 .inline-banner {
@@ -213,7 +209,12 @@
 
 .staff-actions {
   justify-content: flex-end;
+  flex-wrap: wrap;
   margin-top: 20rpx;
+}
+
+.staff-actions t-button {
+  min-width: 144rpx;
 }
 
 .popup-sheet {
@@ -234,8 +235,72 @@
   padding-top: 28rpx;
 }
 
+.invite-qr-card,
+.invite-step,
+.invite-code-card {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 18rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.invite-qr-card {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 28rpx 24rpx;
+}
+
+.invite-step-list {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.invite-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16rpx;
+  padding: 20rpx 24rpx;
+}
+
+.invite-step-index {
+  width: 36rpx;
+  height: 36rpx;
+  border-radius: 999rpx;
+  background: var(--td-brand-color);
+  color: var(--td-text-color-anti);
+  font-size: 22rpx;
+  font-weight: 700;
+  line-height: 36rpx;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.invite-step-text {
+  flex: 1;
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-primary);
+}
+
+.invite-code-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12rpx;
+  padding: 24rpx;
+}
+
+.invite-code-label {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
 .invite-code {
-  font-size: 40rpx;
+  font-size: 34rpx;
   font-weight: 700;
   letter-spacing: 2rpx;
   text-align: center;

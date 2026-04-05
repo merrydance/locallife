@@ -444,6 +444,7 @@ export interface UpdateMyMerchantProfileRequest {
   latitude?: string
   longitude?: string
   logo_asset_id?: number | null
+  clear_logo?: boolean
   version: number
 }
 
@@ -495,7 +496,11 @@ export function getMyMerchantProfile() {
  */
 export function updateMyMerchantLogo(logoAssetId: number | null, version: number) {
   const data: Record<string, unknown> = { version }
-  if (logoAssetId) data.logo_asset_id = logoAssetId
+  if (logoAssetId === null) {
+    data.clear_logo = true
+  } else if (logoAssetId) {
+    data.logo_asset_id = logoAssetId
+  }
   return request<MerchantOperatorResponse>({
     url: '/v1/merchants/me',
     method: 'PATCH',

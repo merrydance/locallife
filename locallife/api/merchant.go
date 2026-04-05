@@ -249,6 +249,7 @@ type updateMerchantRequest struct {
 	Name        *string `json:"name" binding:"omitempty,min=2,max=50"`
 	Description *string `json:"description" binding:"omitempty,max=500"`
 	LogoAssetID *int64  `json:"logo_asset_id" binding:"omitempty,min=1"`
+	ClearLogo   bool    `json:"clear_logo"`
 	Phone       *string `json:"phone" binding:"omitempty,min=11,max=11"`
 	Address     *string `json:"address" binding:"omitempty,min=5,max=200"`
 	Latitude    *string `json:"latitude"`
@@ -305,57 +306,70 @@ func (server *Server) updateCurrentMerchant(ctx *gin.Context) {
 		return
 	}
 
-	// 构造更新参数
-	arg := db.UpdateMerchantParams{
-		ID:      merchant.ID,
-		Version: req.Version,
+	if req.ClearLogo && req.LogoAssetID != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("clear_logo and logo_asset_id cannot be set together")))
+		return
 	}
 
-	if req.Name != nil {
-		arg.Name = pgtype.Text{String: *req.Name, Valid: true}
-	}
-	if req.Description != nil {
-		arg.Description = pgtype.Text{String: *req.Description, Valid: true}
-	}
-	if req.LogoAssetID != nil {
-		arg.LogoMediaAssetID = pgtype.Int8{Int64: *req.LogoAssetID, Valid: true}
-	}
-	if req.Phone != nil {
-		arg.Phone = pgtype.Text{String: *req.Phone, Valid: true}
-	}
-	if req.Address != nil {
-		arg.Address = pgtype.Text{String: *req.Address, Valid: true}
-	}
-	if req.Latitude != nil {
-		// 将 string 转换为 pgtype.Numeric
-		if lat, err := parseNumericString(*req.Latitude); err == nil {
-			latFloat, _ := strconv.ParseFloat(*req.Latitude, 64)
-			if latFloat < minLatitude || latFloat > maxLatitude {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("latitude must be between %.1f and %.1f", minLatitude, maxLatitude)))
-				return
-			}
-			arg.Latitude = lat
-		} else {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude: %w", err)))
-			return
+	var updatedMerchant db.Merchant
+	if req.ClearLogo {
+		updatedMerchant, err = server.store.ClearMerchantLogo(ctx, db.ClearMerchantLogoParams{
+			ID:      merchant.ID,
+			Version: req.Version,
+		})
+	} else {
+		// 构造更新参数
+		arg := db.UpdateMerchantParams{
+			ID:      merchant.ID,
+			Version: req.Version,
 		}
-	}
-	if req.Longitude != nil {
-		// 将 string 转换为 pgtype.Numeric
-		if lng, err := parseNumericString(*req.Longitude); err == nil {
-			lngFloat, _ := strconv.ParseFloat(*req.Longitude, 64)
-			if lngFloat < minLongitude || lngFloat > maxLongitude {
-				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("longitude must be between %.1f and %.1f", minLongitude, maxLongitude)))
-				return
-			}
-			arg.Longitude = lng
-		} else {
-			ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude: %w", err)))
-			return
-		}
-	}
 
-	updatedMerchant, err := server.store.UpdateMerchant(ctx, arg)
+		if req.Name != nil {
+			arg.Name = pgtype.Text{String: *req.Name, Valid: true}
+		}
+		if req.Description != nil {
+			arg.Description = pgtype.Text{String: *req.Description, Valid: true}
+		}
+		if req.LogoAssetID != nil {
+			arg.LogoMediaAssetID = pgtype.Int8{Int64: *req.LogoAssetID, Valid: true}
+		}
+		if req.Phone != nil {
+			arg.Phone = pgtype.Text{String: *req.Phone, Valid: true}
+		}
+		if req.Address != nil {
+			arg.Address = pgtype.Text{String: *req.Address, Valid: true}
+		}
+		if req.Latitude != nil {
+			// 将 string 转换为 pgtype.Numeric
+			if lat, err := parseNumericString(*req.Latitude); err == nil {
+				latFloat, _ := strconv.ParseFloat(*req.Latitude, 64)
+				if latFloat < minLatitude || latFloat > maxLatitude {
+					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("latitude must be between %.1f and %.1f", minLatitude, maxLatitude)))
+					return
+				}
+				arg.Latitude = lat
+			} else {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid latitude: %w", err)))
+				return
+			}
+		}
+		if req.Longitude != nil {
+			// 将 string 转换为 pgtype.Numeric
+			if lng, err := parseNumericString(*req.Longitude); err == nil {
+				lngFloat, _ := strconv.ParseFloat(*req.Longitude, 64)
+				if lngFloat < minLongitude || lngFloat > maxLongitude {
+					ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("longitude must be between %.1f and %.1f", minLongitude, maxLongitude)))
+					return
+				}
+				arg.Longitude = lng
+			} else {
+				ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("invalid longitude: %w", err)))
+				return
+			}
+		}
+
+		updatedMerchant, err = server.store.UpdateMerchant(ctx, arg)
+	}
 	if err != nil {
 		// 检查是否是乐观锁冲突（没有返回结果 = version不匹配）
 		if isNotFoundError(err) {

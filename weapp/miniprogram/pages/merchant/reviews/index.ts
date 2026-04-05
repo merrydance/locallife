@@ -4,6 +4,9 @@ import ReviewService, { Review } from '../../../api/review'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
+
+const REVIEWS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 interface MerchantReviewCardView {
   id: number
@@ -49,6 +52,10 @@ function buildReplyHint(review: Review) {
     : '该评价当前不对外展示，但仍建议回复说明处理结果。'
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 function toMerchantReviewCard(review: Review, previous?: MerchantReviewCardView): MerchantReviewCardView {
   const imageUrls = Array.isArray(review.images)
     ? review.images
@@ -83,6 +90,9 @@ const getErrorMessage = getErrorUserMessage
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
@@ -90,6 +100,7 @@ Page({
     actionNoticeMessage: '',
     loading: false,
     loadingMore: false,
+    lastLoadedAt: 0,
     merchantId: 0,
     merchantName: '',
     reviews: [] as MerchantReviewCardView[],
@@ -104,31 +115,64 @@ Page({
     replySubmitting: false
   },
 
-  onLoad() {
+  async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+    if (accessResult.status !== 'granted') {
+      this.setData({ initialLoading: false })
+      return
+    }
+
     this.loadReviews({ reset: true })
   },
 
+  onRetryAccess() {
+    this.setData({ accessReady: false, accessDenied: false, accessErrorMessage: '', initialLoading: true })
+    this.onLoad()
+  },
+
   onShow() {
-    if (!this.data.initialLoading && !this.data.loading && !this.data.loadingMore) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
+    if (
+      !this.data.initialLoading
+      && !this.data.loading
+      && !this.data.loadingMore
+      && shouldAutoRefresh(this.data.lastLoadedAt, REVIEWS_AUTO_REFRESH_WINDOW_MS)
+    ) {
       this.loadReviews({ reset: true, silent: true })
     }
   },
 
   onPullDownRefresh() {
-    this.loadReviews({ reset: true, silent: this.data.reviews.length > 0 })
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadReviews({ reset: true, silent: this.data.reviews.length > 0 || this.data.lastLoadedAt > 0, force: true })
   },
 
   onRetry() {
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    if (!this.data.accessReady || this.data.accessDenied) return
     this.loadReviews({ reset: true })
   },
 
   onRetryRefresh() {
-    this.loadReviews({ reset: true, silent: true })
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadReviews({ reset: true, silent: true, force: true })
   },
 
   onLoadMore() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     if (!this.data.hasMore || this.data.loadingMore) return
     this.loadReviews({ reset: false })
   },
@@ -256,13 +300,18 @@ Page({
     return profile.id
   },
 
-  async loadReviews(options: { reset: boolean, silent?: boolean }) {
-    const { reset, silent = false } = options
+  async loadReviews(options: { reset: boolean, silent?: boolean, force?: boolean }) {
+    const { reset, silent = false, force = false } = options
     if (reset && this.data.loading) return
     if (!reset && (this.data.loadingMore || !this.data.hasMore)) return
 
     const nextPage = reset ? 1 : this.data.page + 1
-    const hasExistingReviews = this.data.reviews.length > 0
+    const hasExistingReviews = this.data.reviews.length > 0 || this.data.lastLoadedAt > 0
+
+    if (reset && !force && hasExistingReviews && !shouldAutoRefresh(this.data.lastLoadedAt, REVIEWS_AUTO_REFRESH_WINDOW_MS)) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     this.setData(reset
       ? (silent && hasExistingReviews
@@ -301,7 +350,8 @@ Page({
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        refreshErrorMessage: ''
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
       })
     } catch (err) {
       logger.error('Load merchant reviews failed', err)

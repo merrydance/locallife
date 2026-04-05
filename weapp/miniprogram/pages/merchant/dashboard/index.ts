@@ -8,17 +8,19 @@ import {
 } from '../../../api/merchant-stats'
 import { getMerchantComplaintSummary } from '../../../api/merchant-complaints'
 import { ReservationService } from '../../../api/reservation'
-import { getUserInfo } from '../../../api/auth'
 import { getMyMerchantOpenStatus, getMyMerchantProfile, updateMyMerchantOpenStatus } from '../../../api/merchant'
 import { logger } from '../../../utils/logger'
 import { settleAll } from '../../../utils/promise'
-import { shouldBypassConsoleRoleValidation } from '../../../utils/console-access'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { getConsoleDashboardErrorState } from '../../../utils/console-dashboard'
 import dayjs from 'dayjs'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
 import { playNewOrderAlert, destroyAudioAlert } from '../../../utils/audio-alert'
 
 type WsUnsubscribe = () => void
+
+const DASHBOARD_AUTO_REFRESH_WINDOW_MS = 60 * 1000
+const DASHBOARD_INSIGHT_REFRESH_WINDOW_MS = 5 * 60 * 1000
 
 interface DashboardTodoItem {
   id: string
@@ -34,6 +36,28 @@ interface DashboardInsightItem {
   value: string
   desc: string
 }
+
+interface DashboardInsightSource {
+  hourlyStats: MerchantHourlyStatRow[]
+  sourceStats: MerchantOrderSourceStatRow[]
+  repurchase: MerchantRepurchaseRateResponse | null
+}
+
+interface DashboardCollaborationItem {
+  id: string
+  title: string
+  desc: string
+  path: string
+}
+
+const DASHBOARD_COLLABORATION_ITEMS: DashboardCollaborationItem[] = [
+  {
+    id: 'reviews',
+    title: '评价管理',
+    desc: '查看顾客评价并及时处理回复。',
+    path: '/pages/merchant/reviews/index'
+  }
+]
 
 const ORDER_TYPE_LABELS: Record<string, string> = {
   takeout: '外卖',
@@ -73,7 +97,7 @@ function buildTodoItems(params: {
     {
       id: 'printAnomalies',
       title: '打印异常',
-      path: '/pages/merchant/printers/index',
+      path: '/pages/merchant/orders/print-anomalies/index',
       count: params.printAnomalies,
       accent: 'neutral'
     }
@@ -158,6 +182,10 @@ function buildRefreshErrorMessage(messages: string[]) {
   return `${unique.join('；')}，当前已保留上次同步结果`
 }
 
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -178,11 +206,22 @@ Page({
       avgOrderPrice: 0
     },
     todayTodos: [] as DashboardTodoItem[],
+    insightSource: {
+      hourlyStats: [],
+      sourceStats: [],
+      repurchase: null
+    } as DashboardInsightSource,
     insightItems: buildInsightItems({}) as DashboardInsightItem[],
+    insightLoading: false,
+    insightErrorMessage: '',
+    collaborationItems: DASHBOARD_COLLABORATION_ITEMS,
     businessStatusText: '营业中，当前经营平稳',
     loading: false,
+    lastPrimaryRefreshAt: 0,
+    lastInsightRefreshAt: 0,
     businessStatusSubmitting: false,
     accessDenied: false,
+    accessErrorMessage: '',
     initialErrorCanRetry: true,
     _wsListeners: [] as WsUnsubscribe[]
   },
@@ -197,19 +236,34 @@ Page({
       this.setData({ merchantInfo: currentMerchant })
     }
 
-    const hasAccess = await this.ensureMerchantAccess()
-    if (!hasAccess) {
-      this.setData({ accessReady: true, accessDenied: true, initialLoading: false })
+    const accessResult = await ensureMerchantConsoleAccess()
+    if (accessResult.status !== 'granted') {
+      this.setData({
+        accessReady: true,
+        accessDenied: accessResult.status === 'denied',
+        accessErrorMessage: accessResult.status === 'error' ? accessResult.message : '',
+        initialLoading: false
+      })
       return
     }
 
-    this.setData({ accessReady: true, accessDenied: false })
-    this.refreshData().catch((err) => logger.error('Merchant dashboard initial refresh failed', err))
+    this.setData({ accessReady: true, accessDenied: false, accessErrorMessage: '' })
+    this.refreshData({ force: true }).catch((err) => logger.error('Merchant dashboard initial refresh failed', err))
   },
 
   onShow() {
-    if (this.data.accessDenied || !this.data.accessReady) return
-    this.refreshData().catch((err) => logger.error('Merchant dashboard onShow refresh failed', err))
+    if (this.data.accessDenied || this.data.accessErrorMessage || !this.data.accessReady) return
+
+    if (shouldAutoRefresh(this.data.lastPrimaryRefreshAt, DASHBOARD_AUTO_REFRESH_WINDOW_MS)) {
+      this.refreshData().catch((err) => logger.error('Merchant dashboard onShow refresh failed', err))
+      return
+    }
+
+    this.syncOpenStatusOnShow()
+
+    if (shouldAutoRefresh(this.data.lastInsightRefreshAt, DASHBOARD_INSIGHT_REFRESH_WINDOW_MS)) {
+      this.refreshInsights().catch((err) => logger.error('Merchant dashboard onShow insights refresh failed', err))
+    }
   },
 
   onHide() {
@@ -221,28 +275,49 @@ Page({
     destroyAudioAlert()
   },
 
-  async ensureMerchantAccess() {
-    if (shouldBypassConsoleRoleValidation()) {
-      return true
-    }
-
+  updateCurrentMerchantCache(params: {
+    merchantId?: number
+    merchantName?: string
+    isOpen?: boolean
+  } = {}) {
     try {
-      const user = await getUserInfo()
-      const normalizedRoles = (user.roles || []).map((role) => String(role).toLowerCase())
-      const isMerchant = normalizedRoles.some((role) =>
-        ['merchant', 'merchant_owner', 'merchant_staff'].includes(role)
-      )
-
-      if (!isMerchant) {
-        wx.showToast({ title: '当前账号无商户权限', icon: 'none' })
-      }
-
-      return isMerchant
-    } catch (err) {
-      logger.error('Check merchant access failed', err)
-      wx.showToast({ title: '无法校验商户权限', icon: 'none' })
-      return false
+      const currentMerchant = wx.getStorageSync('current_merchant') || {}
+      const merchantId = params.merchantId ?? currentMerchant.id ?? currentMerchant.merchant_id ?? this.data.merchantInfo.merchant_id
+      const merchantName = params.merchantName ?? currentMerchant.name ?? this.data.merchantInfo.name
+      wx.setStorageSync('current_merchant', {
+        ...currentMerchant,
+        ...(merchantId
+          ? {
+              id: merchantId,
+              merchant_id: merchantId
+            }
+          : {}),
+        ...(merchantName ? { name: merchantName } : {}),
+        ...(typeof params.isOpen === 'boolean' ? { is_open: params.isOpen } : {})
+      })
+    } catch (storageErr) {
+      logger.warn('Sync current merchant cache failed', storageErr)
     }
+  },
+
+  async syncOpenStatusOnShow() {
+    try {
+      const merchantOpenStatus = await getMyMerchantOpenStatus()
+      const todoCount = this.data.todayTodos.reduce((sum, item) => sum + item.count, 0)
+      this.setData({
+        isOpen: merchantOpenStatus.is_open,
+        businessStatusText: buildBusinessStatusText(merchantOpenStatus.is_open, todoCount)
+      })
+      this.updateCurrentMerchantCache({ isOpen: merchantOpenStatus.is_open })
+      this.syncRealtimeRuntime(merchantOpenStatus.is_open)
+    } catch (err) {
+      logger.warn('Merchant dashboard onShow open status sync failed', err)
+    }
+  },
+
+  onRetryAccess() {
+    this.setData({ accessReady: false, accessDenied: false, accessErrorMessage: '', initialLoading: true })
+    this.onLoad()
   },
 
   initWebSocket() {
@@ -270,7 +345,11 @@ Page({
             }
           }
         })
-        this.refreshData()
+        this.refreshData({
+          showLoading: false,
+          force: true,
+          refreshInsights: false
+        }).catch((err) => logger.error('Merchant dashboard realtime order refresh failed', err))
       }
     })
 
@@ -298,15 +377,34 @@ Page({
     wsManager.disconnect()
   },
 
-  async refreshData() {
+  async refreshData(options: { showLoading?: boolean, force?: boolean, refreshInsights?: boolean } = {}) {
     if (this.data.loading) return
+
     const isFirstLoad = this.data.initialLoading
+    const showLoading = options.showLoading ?? isFirstLoad
+    const force = options.force === true
+    const refreshInsights = options.refreshInsights !== false
+    const hasExistingData = !isFirstLoad
+    const isSilentRefresh = !showLoading && hasExistingData
+
+    if (!force && !shouldAutoRefresh(this.data.lastPrimaryRefreshAt, DASHBOARD_AUTO_REFRESH_WINDOW_MS)) {
+      if (refreshInsights && shouldAutoRefresh(this.data.lastInsightRefreshAt, DASHBOARD_INSIGHT_REFRESH_WINDOW_MS)) {
+        this.refreshInsights().catch((err) => logger.error('Merchant dashboard deferred insights refresh failed', err))
+      }
+      wx.stopPullDownRefresh()
+      return
+    }
+
     this.setData({
       loading: true,
-      ...(isFirstLoad
+      ...(showLoading
         ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '', refreshErrorCanRetry: true }
-        : { refreshErrorMessage: '', refreshErrorCanRetry: true })
+        : isSilentRefresh
+          ? { refreshErrorMessage: '', refreshErrorCanRetry: true }
+          : {})
     })
+
+    let shouldKickOffInsights = false
 
     try {
       const today = dayjs().format('YYYY-MM-DD')
@@ -342,36 +440,25 @@ Page({
           isOpen: resolvedIsOpen
         })
         this.syncRealtimeRuntime(resolvedIsOpen)
-
-        try {
-          const currentMerchant = wx.getStorageSync('current_merchant') || {}
-          wx.setStorageSync('current_merchant', {
-            ...currentMerchant,
-            id: merchantProfile.id,
-            merchant_id: merchantProfile.id,
-            name: merchantProfile.name,
-            is_open: merchantOpenStatus?.is_open ?? merchantProfile.is_open
-          })
-        } catch (storageErr) {
-          logger.warn('Sync current merchant cache failed', storageErr)
-        }
+        this.updateCurrentMerchantCache({
+          merchantId: merchantProfile.id,
+          merchantName: merchantProfile.name,
+          isOpen: merchantOpenStatus?.is_open ?? merchantProfile.is_open
+        })
       } else {
         logger.error('Failed to fetch merchant runtime status', merchantProfileResult.reason)
         this.stopRealtimeRuntime()
         addRefreshError(merchantProfileResult.reason, '工作台基础信息加载失败，请重试')
       }
 
-      const recentThirtyDays = dayjs().subtract(29, 'day').format('YYYY-MM-DD')
-      const [overview, reservationStats, complaintResult, hourlyResult, sourceResult, repurchaseResult] = await settleAll([
+      const [overview, reservationStats, complaintResult, paidOrderSummary] = await settleAll([
         MerchantStatsService.getOverview({
           start_date: today,
           end_date: today
         }),
         ReservationService.getReservationStats(),
         getMerchantComplaintSummary(),
-        MerchantStatsService.getHourlyStats({ start_date: today, end_date: today }),
-        MerchantStatsService.getOrderSources({ start_date: today, end_date: today }),
-        MerchantStatsService.getRepurchaseRate({ start_date: recentThirtyDays, end_date: today })
+        MerchantOrderManagementService.getOrderSummary()
       ] as const)
 
       const currentTodoItems = this.data.todayTodos
@@ -398,9 +485,7 @@ Page({
             avgOrderPrice: orderCount > 0 ? Math.round(revenue / orderCount) : 0
           }
         })
-      }
-
-      if (overview.status === 'rejected') {
+      } else {
         logger.error('Failed to fetch merchant overview', overview.reason)
         addRefreshError(overview.reason, '经营概览加载失败，请稍后重试')
       }
@@ -415,63 +500,27 @@ Page({
         addRefreshError(complaintResult.reason, '投诉待办同步失败，请稍后重试')
       }
 
-      if (hourlyResult.status === 'rejected') {
-        logger.error('Failed to fetch dashboard hourly insights', hourlyResult.reason)
-        addRefreshError(hourlyResult.reason, '高峰时段同步失败，请稍后重试')
+      const pendingPaidOrders = paidOrderSummary.status === 'fulfilled'
+        ? paidOrderSummary.value.paid_count || 0
+        : getTodoCount(currentTodoItems, 'paidOrders')
+
+      if (paidOrderSummary.status === 'rejected') {
+        logger.error('Load dashboard order flow failed', paidOrderSummary.reason)
+        addRefreshError(paidOrderSummary.reason, '待接单数量同步失败，请稍后重试')
       }
 
-      if (sourceResult.status === 'rejected') {
-        logger.error('Failed to fetch dashboard source insights', sourceResult.reason)
-        addRefreshError(sourceResult.reason, '订单结构同步失败，请稍后重试')
-      }
+      const todayTodos = buildTodoItems({
+        pendingPaidOrders,
+        pendingReservations,
+        pendingComplaints,
+        printAnomalies
+      })
+      const todoCount = todayTodos.reduce((sum, item) => sum + item.count, 0)
 
-      if (repurchaseResult.status === 'rejected') {
-        logger.error('Failed to fetch dashboard repurchase insights', repurchaseResult.reason)
-        addRefreshError(repurchaseResult.reason, '复购数据同步失败，请稍后重试')
-      }
-
-      let pendingPaidOrders = getTodoCount(currentTodoItems, 'paidOrders')
-
-      try {
-        const paidOrderSummary = await MerchantOrderManagementService.getOrderSummary()
-        pendingPaidOrders = paidOrderSummary.paid_count || 0
-
-        const todayTodos = buildTodoItems({
-          pendingPaidOrders,
-          pendingReservations,
-          pendingComplaints,
-          printAnomalies
-        })
-        const todoCount = todayTodos.reduce((sum, item) => sum + item.count, 0)
-        const nextInsights = buildInsightItems({
-          hourlyStats: hourlyResult.status === 'fulfilled' ? hourlyResult.value : this.data.insightItems[0] ? undefined : [],
-          sourceStats: sourceResult.status === 'fulfilled' ? sourceResult.value : this.data.insightItems[1] ? undefined : [],
-          repurchase: repurchaseResult.status === 'fulfilled' ? repurchaseResult.value : undefined
-        })
-
-        this.setData({
-          todayTodos,
-          insightItems: nextInsights,
-          businessStatusText: buildBusinessStatusText(resolvedIsOpen, todoCount)
-        })
-      } catch (error) {
-        const errorState = getConsoleDashboardErrorState('merchant', error, '待接单数量同步失败，请稍后重试')
-        const message = errorState.message
-        const todayTodos = buildTodoItems({
-          pendingPaidOrders,
-          pendingReservations,
-          pendingComplaints,
-          printAnomalies
-        })
-        const todoCount = todayTodos.reduce((sum, item) => sum + item.count, 0)
-        logger.error('Load dashboard order flow failed', error)
-        this.setData({
-          todayTodos,
-          businessStatusText: buildBusinessStatusText(resolvedIsOpen, todoCount)
-        })
-        refreshErrors.push(message)
-        refreshErrorStates.push({ message, canRetry: errorState.canRetry })
-      }
+      this.setData({
+        todayTodos,
+        businessStatusText: buildBusinessStatusText(resolvedIsOpen, todoCount)
+      })
 
       if (isFirstLoad && (!runtimeLoaded || !summaryLoaded)) {
         const initialErrorState = refreshErrorStates[0] || getConsoleDashboardErrorState(
@@ -490,10 +539,11 @@ Page({
           initialErrorMessage: '',
           initialErrorCanRetry: true,
           refreshErrorMessage: buildRefreshErrorMessage(refreshErrors),
-          refreshErrorCanRetry: refreshErrorStates.every((state) => state.canRetry)
+          refreshErrorCanRetry: refreshErrorStates.every((state) => state.canRetry),
+          lastPrimaryRefreshAt: Date.now()
         })
+        shouldKickOffInsights = refreshInsights
       }
-
     } catch (err) {
       logger.error('Merchant dashboard refresh failed', err)
       const errorState = getConsoleDashboardErrorState('merchant', err, '商户工作台暂时无法加载，请稍后重试。')
@@ -513,10 +563,82 @@ Page({
       this.setData({ loading: false, initialLoading: false })
       wx.stopPullDownRefresh()
     }
+
+    if (shouldKickOffInsights && (force || shouldAutoRefresh(this.data.lastInsightRefreshAt, DASHBOARD_INSIGHT_REFRESH_WINDOW_MS))) {
+      this.refreshInsights({ force }).catch((err) => logger.error('Merchant dashboard insights refresh failed', err))
+    }
+  },
+
+  async refreshInsights(options: { force?: boolean } = {}) {
+    if (this.data.insightLoading) return
+
+    const force = options.force === true
+    const hasExistingInsights = this.data.lastInsightRefreshAt > 0
+
+    if (!force && !shouldAutoRefresh(this.data.lastInsightRefreshAt, DASHBOARD_INSIGHT_REFRESH_WINDOW_MS)) {
+      return
+    }
+
+    this.setData({ insightLoading: true, insightErrorMessage: '' })
+
+    try {
+      const today = dayjs().format('YYYY-MM-DD')
+      const recentThirtyDays = dayjs().subtract(29, 'day').format('YYYY-MM-DD')
+      const [hourlyResult, sourceResult, repurchaseResult] = await settleAll([
+        MerchantStatsService.getHourlyStats({ start_date: today, end_date: today }),
+        MerchantStatsService.getOrderSources({ start_date: today, end_date: today }),
+        MerchantStatsService.getRepurchaseRate({ start_date: recentThirtyDays, end_date: today })
+      ] as const)
+
+      const insightErrors: string[] = []
+      const nextInsightSource: DashboardInsightSource = {
+        hourlyStats: hourlyResult.status === 'fulfilled' ? hourlyResult.value : this.data.insightSource.hourlyStats,
+        sourceStats: sourceResult.status === 'fulfilled' ? sourceResult.value : this.data.insightSource.sourceStats,
+        repurchase: repurchaseResult.status === 'fulfilled' ? repurchaseResult.value : this.data.insightSource.repurchase
+      }
+
+      if (hourlyResult.status === 'rejected') {
+        logger.error('Failed to fetch dashboard hourly insights', hourlyResult.reason)
+        insightErrors.push(getConsoleDashboardErrorState('merchant', hourlyResult.reason, '高峰时段同步失败，请稍后重试').message)
+      }
+
+      if (sourceResult.status === 'rejected') {
+        logger.error('Failed to fetch dashboard source insights', sourceResult.reason)
+        insightErrors.push(getConsoleDashboardErrorState('merchant', sourceResult.reason, '订单结构同步失败，请稍后重试').message)
+      }
+
+      if (repurchaseResult.status === 'rejected') {
+        logger.error('Failed to fetch dashboard repurchase insights', repurchaseResult.reason)
+        insightErrors.push(getConsoleDashboardErrorState('merchant', repurchaseResult.reason, '复购数据同步失败，请稍后重试').message)
+      }
+
+      this.setData({
+        insightSource: nextInsightSource,
+        insightItems: buildInsightItems({
+          hourlyStats: nextInsightSource.hourlyStats,
+          sourceStats: nextInsightSource.sourceStats,
+          repurchase: nextInsightSource.repurchase || undefined
+        }),
+        insightErrorMessage: insightErrors.length
+          ? hasExistingInsights
+            ? `${buildRefreshErrorMessage(insightErrors)}`
+            : buildRefreshErrorMessage(insightErrors).replace('，当前已保留上次同步结果', '')
+          : '',
+        lastInsightRefreshAt: Date.now()
+      })
+    } catch (err) {
+      logger.error('Merchant dashboard insights refresh failed', err)
+      const errorState = getConsoleDashboardErrorState('merchant', err, '经营洞察同步失败，请稍后重试')
+      this.setData({
+        insightErrorMessage: hasExistingInsights ? `${errorState.message}，当前已保留上次同步结果` : errorState.message
+      })
+    } finally {
+      this.setData({ insightLoading: false })
+    }
   },
 
   onPullDownRefresh() {
-    this.refreshData()
+    this.refreshData({ showLoading: false, force: true, refreshInsights: true })
   },
 
   onGoOrderList() {
@@ -532,17 +654,24 @@ Page({
   },
 
   onGoShortcut(e: WechatMiniprogram.TouchEvent) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
     const { path } = e.currentTarget.dataset as { path?: string }
     if (!path) return
     wx.navigateTo({ url: path })
   },
 
   onRetry() {
-    this.refreshData()
+    if (this.data.accessErrorMessage) {
+      this.onRetryAccess()
+      return
+    }
+
+    this.refreshData({ force: true, refreshInsights: true })
   },
 
   onRetryRefresh() {
-    this.refreshData()
+    this.refreshData({ showLoading: false, force: true, refreshInsights: true })
   },
 
   async onToggleBusiness() {
@@ -573,7 +702,7 @@ Page({
         isOpen: response.is_open,
         businessStatusText: buildBusinessStatusText(response.is_open, todoCount)
       })
-      this.refreshData().catch((err) => logger.error('Refresh dashboard after toggle failed', err))
+      this.refreshData({ force: true }).catch((err) => logger.error('Refresh dashboard after toggle failed', err))
     } catch (err: unknown) {
       logger.error('Update merchant open status failed', err)
       let message = '营业状态更新失败'
