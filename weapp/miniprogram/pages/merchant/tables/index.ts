@@ -64,6 +64,29 @@ function normalizeQRCodeUrl(path?: string): string {
   return getPublicImageUrl(path)
 }
 
+interface TableQRCodeContext {
+  tableNo: string
+  qrCodeUrl: string
+}
+
+function getMiniProgramErrorMessage(error: unknown): string {
+  if (typeof error === 'string') return error
+  if (error && typeof error === 'object' && typeof (error as { errMsg?: unknown }).errMsg === 'string') {
+    return (error as { errMsg: string }).errMsg
+  }
+  if (error instanceof Error) return error.message
+  return ''
+}
+
+function isPermissionDeniedError(error: unknown): boolean {
+  const message = getMiniProgramErrorMessage(error)
+  return message.includes('auth deny') || message.includes('auth denied')
+}
+
+function isUserCancelledError(error: unknown): boolean {
+  return getMiniProgramErrorMessage(error).includes('cancel')
+}
+
 function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
 }
@@ -168,6 +191,14 @@ Page({
     imageMutating: false,
     imageMutatingImageId: 0,
     tagSubmitting: false,
+    qrCodeVisible: false,
+    qrCodeLoading: false,
+    qrCodeDownloading: false,
+    qrCodeError: false,
+    qrCodeErrorMessage: '',
+    qrCodeImageUrl: '',
+    qrCodeTableId: 0,
+    qrCodeTableNo: '',
     formVisible: false,
     isEdit: false,
     editingTableId: 0,
@@ -380,48 +411,199 @@ Page({
     })
   },
 
-  onShowQRCode(e: WechatMiniprogram.TouchEvent) {
-    const { id, url } = e.currentTarget.dataset as { id?: number, url?: string }
-    this.previewTableQRCode(id, url)
+  getTableQRCodeContext(tableId: number): TableQRCodeContext {
+    const rawTable = ensureArray(this.data.rawTables).find((item) => item.id === tableId)
+    if (rawTable) {
+      return {
+        tableNo: rawTable.table_no,
+        qrCodeUrl: normalizeQRCodeUrl(rawTable.qr_code_url)
+      }
+    }
+
+    const viewTable = ensureArray(this.data.tables).find((item) => item.id === tableId)
+    return {
+      tableNo: viewTable?.table_no || '',
+      qrCodeUrl: normalizeQRCodeUrl(viewTable?.qr_code_url)
+    }
   },
 
-  previewTableQRCode(id?: number, url?: string) {
-    if (id) {
-      tableManagementService.getTableQRCode(id)
-        .then((res) => {
-          const qrCodeUrl = normalizeQRCodeUrl(res?.qr_code_url)
-          if (!qrCodeUrl) {
-            wx.showToast({ title: '暂无二维码', icon: 'none' })
-            return
-          }
-          wx.previewImage({ urls: [qrCodeUrl], current: qrCodeUrl })
-        })
-        .catch((err) => {
-          logger.error('Get table qrcode failed', err)
+  syncTableQRCodeUrl(tableId: number, qrCodeUrl: string) {
+    const nextUrl = normalizeQRCodeUrl(qrCodeUrl)
+    if (!nextUrl) return
 
-          const fallbackUrl = normalizeQRCodeUrl(url)
-          if (fallbackUrl) {
-            wx.previewImage({ urls: [fallbackUrl], current: fallbackUrl })
-            return
-          }
+    this.setData({
+      rawTables: ensureArray(this.data.rawTables).map((item) => (
+        item.id === tableId ? { ...item, qr_code_url: nextUrl } : item
+      )),
+      tables: ensureArray(this.data.tables).map((item) => (
+        item.id === tableId ? { ...item, qr_code_url: nextUrl } : item
+      ))
+    })
+  },
 
-          wx.showToast({ title: '获取二维码失败', icon: 'none' })
+  async fetchTableQRCode(tableId: number, fallbackUrl = '') {
+    try {
+      const res = await tableManagementService.getTableQRCode(tableId)
+      const qrCodeUrl = normalizeQRCodeUrl(res?.qr_code_url)
+      if (!qrCodeUrl) {
+        throw new Error('missing qr code url')
+      }
+
+      this.syncTableQRCodeUrl(tableId, qrCodeUrl)
+      this.setData({
+        qrCodeLoading: false,
+        qrCodeError: false,
+        qrCodeErrorMessage: '',
+        qrCodeImageUrl: qrCodeUrl
+      })
+    } catch (err) {
+      logger.error('Get table qrcode failed', err)
+      if (fallbackUrl) {
+        this.setData({
+          qrCodeLoading: false,
+          qrCodeError: false,
+          qrCodeErrorMessage: '',
+          qrCodeImageUrl: fallbackUrl
         })
+        wx.showToast({ title: '二维码刷新失败，已展示当前版本', icon: 'none' })
+        return
+      }
+
+      this.setData({
+        qrCodeLoading: false,
+        qrCodeError: true,
+        qrCodeErrorMessage: getErrorMessage(err, '生成二维码失败，请稍后重试'),
+        qrCodeImageUrl: ''
+      })
+    }
+  },
+
+  openTableQRCode(options: { id?: number, tableNo?: string, url?: string, fetchFresh?: boolean } = {}) {
+    const tableId = Number(options.id || 0)
+    const knownContext = tableId > 0 ? this.getTableQRCodeContext(tableId) : { tableNo: '', qrCodeUrl: '' }
+    const fallbackUrl = normalizeQRCodeUrl(options.url) || knownContext.qrCodeUrl
+    const tableNo = options.tableNo || knownContext.tableNo
+    const shouldFetch = tableId > 0 && (options.fetchFresh || !fallbackUrl)
+
+    if (!tableId && !fallbackUrl) {
+      wx.showToast({ title: '暂无二维码', icon: 'none' })
       return
     }
 
-    if (!url) {
-      return wx.showToast({ title: '暂无二维码', icon: 'none' })
+    this.setData({
+      qrCodeVisible: true,
+      qrCodeLoading: shouldFetch,
+      qrCodeDownloading: false,
+      qrCodeError: false,
+      qrCodeErrorMessage: '',
+      qrCodeImageUrl: fallbackUrl,
+      qrCodeTableId: tableId,
+      qrCodeTableNo: tableNo
+    })
+
+    if (shouldFetch) {
+      this.fetchTableQRCode(tableId, fallbackUrl)
+    }
+  },
+
+  onShowQRCode(e: WechatMiniprogram.TouchEvent) {
+    const { id, no, url } = e.currentTarget.dataset as { id?: number, no?: string, url?: string }
+    this.openTableQRCode({ id, tableNo: no, url, fetchFresh: !url })
+  },
+
+  onShowEditingQRCode() {
+    if (!this.data.isEdit || !this.data.editingTableId) {
+      wx.showToast({ title: '请先保存桌台后查看二维码', icon: 'none' })
+      return
     }
 
-    const finalUrl = normalizeQRCodeUrl(url)
-    if (!finalUrl) {
-      return wx.showToast({ title: '暂无二维码', icon: 'none' })
-    }
-    wx.previewImage({
-      urls: [finalUrl],
-      current: finalUrl
+    const context = this.getTableQRCodeContext(this.data.editingTableId)
+    this.openTableQRCode({
+      id: this.data.editingTableId,
+      tableNo: context.tableNo,
+      url: context.qrCodeUrl,
+      fetchFresh: !context.qrCodeUrl
     })
+  },
+
+  onCloseQRCodePopup() {
+    this.setData({
+      qrCodeVisible: false,
+      qrCodeLoading: false,
+      qrCodeDownloading: false,
+      qrCodeError: false,
+      qrCodeErrorMessage: ''
+    })
+  },
+
+  onRetryQRCode() {
+    if (!this.data.qrCodeTableId) return
+
+    this.openTableQRCode({
+      id: this.data.qrCodeTableId,
+      tableNo: this.data.qrCodeTableNo,
+      url: this.data.qrCodeImageUrl,
+      fetchFresh: true
+    })
+  },
+
+  async onDownloadQRCode() {
+    if (this.data.qrCodeDownloading || !this.data.qrCodeImageUrl) return
+
+    this.setData({ qrCodeDownloading: true })
+    wx.showLoading({ title: '保存中...' })
+
+    try {
+      const downloadResult = await new Promise<WechatMiniprogram.DownloadFileSuccessCallbackResult>((resolve, reject) => {
+        wx.downloadFile({
+          url: this.data.qrCodeImageUrl,
+          success: (res) => {
+            if (res.statusCode >= 200 && res.statusCode < 300 && res.tempFilePath) {
+              resolve(res)
+              return
+            }
+
+            reject(new Error('download failed'))
+          },
+          fail: reject
+        })
+      })
+
+      await new Promise<void>((resolve, reject) => {
+        wx.saveImageToPhotosAlbum({
+          filePath: downloadResult.tempFilePath,
+          success: () => resolve(),
+          fail: reject
+        })
+      })
+
+      wx.showToast({ title: '二维码已保存到相册', icon: 'success' })
+    } catch (err) {
+      logger.error('Download table qrcode failed', err)
+
+      if (isPermissionDeniedError(err)) {
+        wx.showModal({
+          title: '需要相册权限',
+          content: '请在设置中开启“保存到相册”权限后重试。',
+          confirmText: '去设置',
+          success: (result) => {
+            if (result.confirm) {
+              wx.openSetting()
+            }
+          }
+        })
+        return
+      }
+
+      if (isUserCancelledError(err)) {
+        return
+      }
+
+      wx.showToast({ title: '下载二维码失败，请稍后重试', icon: 'none' })
+    } finally {
+      wx.hideLoading()
+      this.setData({ qrCodeDownloading: false })
+    }
   },
 
   onAddTable() {
@@ -691,7 +873,7 @@ Page({
     this.setData({ 'formData.status': value })
   },
 
-  onTagChange(e: WechatMiniprogram.CustomEvent<{ value: string[] }>) {
+  onTagChange(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> }>) {
     const values = Array.isArray(e.detail?.value) ? e.detail.value : []
     const tagIds = values.map((value) => Number(value)).filter((id) => Number.isFinite(id) && id > 0)
     this.setData({ 'formData.tag_ids': tagIds })
@@ -737,50 +919,19 @@ Page({
     })
   },
 
-  onDeleteTag(e: WechatMiniprogram.TouchEvent) {
-    if (this.data.tagSubmitting) return
-    const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
-    if (!id) return
-
-    const selectedTagIds = ensureArray(this.data.formData.tag_ids)
-    if (!selectedTagIds.includes(id)) return
-
-    const isEdit = this.data.isEdit && this.data.editingTableId > 0
-    const modalContent = isEdit
-      ? `确认取消标签「${name || ''}」与当前桌台的关联吗？`
-      : `确认取消标签「${name || ''}」的选择吗？`
-
-    wx.showModal({
-      title: isEdit ? '取消关联标签' : '取消选择标签',
-      content: modalContent,
-      success: async (res) => {
-        if (!res.confirm) return
-
-        this.setData({ tagSubmitting: true })
-        try {
-          if (isEdit) {
-            await tableManagementService.deleteTableTag(this.data.editingTableId, id)
-          }
-
-          this.setData({
-            'formData.tag_ids': selectedTagIds.filter((tagId) => tagId !== id)
-          })
-        } catch (err) {
-          logger.error('Remove table tag failed', err)
-          wx.showToast({ title: isEdit ? '取消关联失败' : '取消选择失败', icon: 'none' })
-        } finally {
-          this.setData({ tagSubmitting: false })
-        }
-      }
-    })
-  },
-
   onGenerateQRCode() {
     if (!this.data.isEdit || !this.data.editingTableId) {
       wx.showToast({ title: '请先保存桌台后生成二维码', icon: 'none' })
       return
     }
-    this.previewTableQRCode(this.data.editingTableId)
+
+    const context = this.getTableQRCodeContext(this.data.editingTableId)
+    this.openTableQRCode({
+      id: this.data.editingTableId,
+      tableNo: context.tableNo,
+      url: context.qrCodeUrl,
+      fetchFresh: true
+    })
   },
 
   async onSubmitForm() {

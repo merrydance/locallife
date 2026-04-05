@@ -60,7 +60,7 @@
             <t-button size="extra-small" theme="primary" catchtap="onReleaseTable" data-id="{{item.id}}" data-no="{{item.table_no}}" shape="round">手动释放</t-button>
           </view>
           <view class="table-footer" wx:else>
-            <t-icon name="qrcode" size="32rpx" color="var(--td-text-color-placeholder)" catchtap="onShowQRCode" data-id="{{item.id}}" data-url="{{item.qr_code_url}}" />
+            <t-button size="small" theme="default" shape="round" catchtap="onShowQRCode" data-id="{{item.id}}" data-no="{{item.table_no}}" data-url="{{item.qr_code_url}}">桌台码</t-button>
           </view>
         </view>
       </view>
@@ -136,19 +136,30 @@
         </view>
 
         <view class="form-item">
-          <view class="form-label">标签</view>
-          <view class="tag-manage-actions">
-            <t-button size="small" bindtap="onCreateTag" loading="{{tagSubmitting}}" shape="round">新增标签</t-button>
-          </view>
-          <checkbox-group bindchange="onTagChange" wx:if="{{availableTags}}">
-            <view class="tags-grid">
-              <label class="tag-option" wx:for="{{availableTags}}" wx:key="id">
-                <checkbox value="{{item.id + ''}}" checked="{{formData.tag_ids.indexOf(item.id) !== -1}}" color="var(--td-brand-color)" />
-                <t-tag size="small" variant="dark" theme="default" shape="round" class="tag-name">{{item.name}}</t-tag>
-                <text wx:if="{{formData.tag_ids.indexOf(item.id) !== -1}}" class="tag-delete" data-id="{{item.id}}" data-name="{{item.name}}" catchtap="onDeleteTag">{{isEdit ? '取消关联' : '取消选择'}}</text>
-              </label>
+          <view class="form-label-row">
+            <view>
+              <view class="form-label">标签</view>
+              <text class="tag-selection-hint">{{formData.tag_ids.length ? '已选 ' + formData.tag_ids.length + ' 个标签' : '请选择适用标签，可多选'}}</text>
             </view>
-          </checkbox-group>
+            <t-button size="extra-small" theme="default" bindtap="onCreateTag" loading="{{tagSubmitting}}" disabled="{{formSubmitting}}" shape="round">新增标签</t-button>
+          </view>
+          <t-checkbox-group value="{{formData.tag_ids}}" bind:change="onTagChange" wx:if="{{availableTags && availableTags.length}}">
+            <view class="tags-grid">
+              <view wx:for="{{availableTags}}" wx:key="id" class="tag-card {{formData.tag_ids.indexOf(item.id) !== -1 ? 'tag-card-active' : ''}}">
+                <view class="tag-card-icon-slot">
+                  <t-icon wx:if="{{formData.tag_ids.indexOf(item.id) !== -1}}" name="check" size="20rpx" class="tag-card-icon" ariaHidden="{{true}}" />
+                </view>
+                <t-checkbox
+                  value="{{item.id}}"
+                  label="{{item.name}}"
+                  icon="none"
+                  borderless
+                  t-class="tag-card-checkbox"
+                />
+              </view>
+            </view>
+          </t-checkbox-group>
+          <text wx:else class="tag-empty-hint">暂无标签，可先新增标签</text>
         </view>
 
         <view class="form-item">
@@ -181,8 +192,12 @@
         </view>
 
         <view class="form-item" wx:if="{{isEdit}}">
-          <view class="form-label">二维码</view>
-          <t-button size="medium" theme="default" bindtap="onGenerateQRCode" shape="round">生成并预览</t-button>
+          <view class="form-label">桌台二维码</view>
+          <text class="qr-hint">生成后可直接展示大图，并下载到系统相册。</text>
+          <view class="qr-action-row">
+            <t-button block theme="default" size="large" bindtap="onShowEditingQRCode" shape="round" disabled="{{formSubmitting || qrCodeLoading}}">展示二维码</t-button>
+            <t-button block theme="primary" size="large" bindtap="onGenerateQRCode" shape="round" loading="{{qrCodeLoading && qrCodeTableId === editingTableId}}" disabled="{{formSubmitting || qrCodeDownloading}}">生成二维码</t-button>
+          </view>
         </view>
 
       </scroll-view>
@@ -193,5 +208,33 @@
     </view>
   </t-popup>
 </view>
+
+<t-popup wx:if="{{qrCodeVisible}}" visible="{{qrCodeVisible}}" placement="bottom" bind:visible-change="onCloseQRCodePopup">
+  <view class="form-popup qr-popup">
+    <view class="qr-popup-content">
+      <view class="form-title qr-popup-title">{{qrCodeTableNo ? qrCodeTableNo + ' 桌台二维码' : '桌台二维码'}}</view>
+      <text class="qr-popup-subtitle">顾客扫码后可直接进入当前桌台点餐，下载后可打印张贴到桌台上。</text>
+
+      <view wx:if="{{qrCodeLoading}}" class="state-block qr-popup-state">
+        <t-loading theme="circular" size="40rpx" text="生成二维码中..." vertical />
+      </view>
+
+      <view wx:elif="{{qrCodeError}}" class="state-block qr-popup-state">
+        <t-empty icon="error-circle" description="{{qrCodeErrorMessage || '生成二维码失败，请重试'}}" />
+      </view>
+
+      <view wx:else class="qr-card">
+        <image class="qr-image" src="{{qrCodeImageUrl}}" mode="aspectFit" />
+        <text class="qr-popup-tip">下载到相册后，可直接转发打印或长期张贴。</text>
+      </view>
+    </view>
+
+    <view class="form-actions">
+      <t-button block theme="default" size="large" bind:tap="onCloseQRCodePopup" shape="round">关闭</t-button>
+      <t-button wx:if="{{qrCodeError}}" block theme="primary" size="large" bind:tap="onRetryQRCode" shape="round">重新生成</t-button>
+      <t-button wx:else block theme="primary" size="large" bind:tap="onDownloadQRCode" shape="round" loading="{{qrCodeDownloading}}" disabled="{{qrCodeLoading || !qrCodeImageUrl}}">下载二维码</t-button>
+    </view>
+  </view>
+</t-popup>
 
 <t-dialog id="t-dialog" />

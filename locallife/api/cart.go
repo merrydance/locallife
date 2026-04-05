@@ -897,7 +897,6 @@ type userCartsResponse struct {
 func (server *Server) getUserCartsSummary(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	orderType := ctx.Query("order_type")
-	log.Debug().Int64("user_id", authPayload.UserID).Str("order_type", orderType).Msg("getUserCartsSummary")
 
 	argSummary := db.GetUserCartsSummaryParams{
 		UserID: authPayload.UserID,

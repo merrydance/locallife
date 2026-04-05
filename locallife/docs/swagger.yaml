@@ -7881,6 +7881,8 @@ definitions:
         maxLength: 200
         minLength: 5
         type: string
+      clear_logo:
+        type: boolean
       description:
         maxLength: 500
         type: string

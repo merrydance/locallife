@@ -475,6 +475,60 @@ func TestListComboSetsAPI(t *testing.T) {
 	}
 }
 
+func TestGetPublicComboDetailAPI_ApprovedMerchantKeepsOpenState(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
+	combo := randomComboSet(merchant.ID)
+	combo.IsOnline = true
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	detailsRow := db.GetComboSetWithDetailsRow{
+		ID:                combo.ID,
+		MerchantID:        combo.MerchantID,
+		Name:              combo.Name,
+		Description:       combo.Description,
+		ImageMediaAssetID: combo.ImageMediaAssetID,
+		OriginalPrice:     combo.OriginalPrice,
+		ComboPrice:        combo.ComboPrice,
+		IsOnline:          true,
+		CreatedAt:         combo.CreatedAt,
+		UpdatedAt:         combo.UpdatedAt,
+	}
+
+	store.EXPECT().
+		GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return(detailsRow, nil)
+
+	store.EXPECT().
+		GetMerchant(gomock.Any(), combo.MerchantID).
+		Times(1).
+		Return(merchant, nil)
+
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+		Times(1).
+		Return(nil, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/public/combos/%d", combo.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var response comboSetWithDetailsResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+	require.True(t, response.IsOpen)
+}
+
 // ==================== 套餐更新测试 ====================
 
 func TestUpdateComboSetAPI(t *testing.T) {

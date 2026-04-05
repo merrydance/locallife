@@ -124,7 +124,7 @@
   margin-top: 8rpx;
   display: flex;
   justify-content: flex-end;
-  height: 48rpx;
+  min-height: 64rpx;
   align-items: center;
 }
 
@@ -147,34 +147,80 @@
 }
 
 .tags-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 10rpx;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacer-sm);
 }
 
-.tag-option {
+.tag-card {
   display: flex;
   align-items: center;
   gap: 8rpx;
-  min-height: 60rpx;
-  padding: 0 8rpx;
-  border-radius: 8rpx;
-  background: var(--td-bg-color-page);
-  font-size: 24rpx;
-  color: var(--td-text-color-primary);
+  padding: 0 18rpx 0 14rpx;
+  border-radius: var(--radius-round);
+  background: var(--td-bg-color-secondarycontainer);
+  transition: var(--transition-base);
 }
 
-.tag-name {
-  max-width: 180rpx;
+.tag-card-active {
+  background: var(--td-brand-color-light);
 }
 
-.tag-delete {
-  color: var(--td-error-color);
-  font-size: 24rpx;
+.tag-card-icon-slot {
+  width: 24rpx;
+  min-width: 24rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.tag-manage-actions {
+.tag-card-icon {
+  color: var(--td-brand-color);
+}
+
+.form-label-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16rpx;
   margin-bottom: 12rpx;
+}
+
+.tag-selection-hint {
+  display: block;
+  margin-top: 4rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
+.tag-empty-hint {
+  display: block;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
+.tag-card-checkbox {
+  flex: 1;
+  min-width: 0;
+  --td-checkbox-vertical-padding: 10rpx;
+  --td-checkbox-title-font: var(--td-font-body-small);
+  --td-checkbox-title-line-height: 40rpx;
+}
+
+.qr-hint {
+  display: block;
+  margin-bottom: 12rpx;
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
+}
+
+.qr-action-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16rpx;
 }
 
 .image-actions {
@@ -249,4 +295,57 @@
 
 .form-actions {
   margin-top: 24rpx;
+}
+
+.qr-popup {
+  height: auto;
+  max-height: 72vh;
+}
+
+.qr-popup-content {
+  flex: 1;
+  min-height: 0;
+  padding: 32rpx 24rpx 8rpx;
+  display: flex;
+  flex-direction: column;
+  gap: 24rpx;
+}
+
+.qr-popup-title {
+  margin-bottom: 0;
+}
+
+.qr-popup-subtitle {
+  display: block;
+  font-size: 26rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+  text-align: center;
+}
+
+.qr-popup-state {
+  min-height: 360rpx;
+}
+
+.qr-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20rpx;
+  padding: 32rpx 24rpx;
+  border-radius: var(--radius-lg);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.qr-image {
+  width: 440rpx;
+  height: 440rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-container);
+}
+
+.qr-popup-tip {
+  font-size: 24rpx;
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
 }

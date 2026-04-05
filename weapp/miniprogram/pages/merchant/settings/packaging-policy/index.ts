@@ -7,7 +7,6 @@ import {
 } from '../../../../api/merchant'
 import { DishManagementService, DishResponse } from '../../../../api/dish'
 import { logger } from '../../../../utils/logger'
-import { settleAll } from '../../../../utils/promise'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'

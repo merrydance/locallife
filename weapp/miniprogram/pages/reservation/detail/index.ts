@@ -106,13 +106,7 @@ Page({
              wx.showToast({ title: '暂无地址信息', icon: 'none' })
              return
         }
-        // 简单处理，实际应解析经纬度
-        wx.openLocation({
-            latitude: 39.9, // Demo default
-            longitude: 116.4,
-            name: this.data.reservation?.merchantName,
-            address
-        })
+        wx.showToast({ title: '暂不支持地图导航，请联系商家确认位置', icon: 'none' })
     },
 
     onCallMerchant() {

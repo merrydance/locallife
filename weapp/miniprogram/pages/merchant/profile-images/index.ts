@@ -361,10 +361,6 @@ function clearPendingSyncFromImages(images: ImageItem[]): ImageItem[] {
   })
 }
 
-function buildLogoUploadFiles(logoImage: ImageItem | null): ImageItem[] {
-  return buildUploadRenderImages(logoImage ? [logoImage] : [])
-}
-
 function isSameImageIdentity(left: ImageItem | null | undefined, right: ImageItem | null | undefined): boolean {
   if (!left || !right) {
     return false

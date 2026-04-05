@@ -62,7 +62,7 @@ import { Separator } from "@/components/ui/separator";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 
 import { PageShell, PageHeader, PageContent } from "@/components/merchant/layout/page-shell";
-import { apiGet, apiPost, apiPatch, apiPut, apiDelete, getAuthToken } from "@/lib/api";
+import { apiGet, apiPost, apiPatch, apiPut, apiDelete, getAuthToken, getMediaUrl } from "@/lib/api";
 import { uploadMedia } from "@/lib/media";
 import { cn } from "@/lib/utils";
 import type { TableResponse, TableType, TableStatus, TableTag, CreateTableRequest, TableImageResponse } from "@/types/table";

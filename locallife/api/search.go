@@ -350,14 +350,6 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 				Msg("calculateDeliveryFeeInternal failed in searchDishes")
 		} else if feeResult != nil && !feeResult.DeliverySuspended {
 			response[i].EstimatedDeliveryFee = int(feeResult.FinalFee)
-
-			log.Debug().
-				Int64("dish_id", dish.ID).
-				Int64("region_id", dish.MerchantRegionID).
-				Int64("merchant_id", dish.MerchantID).
-				Int("distance", distanceMeters).
-				Int64("final_fee", feeResult.FinalFee).
-				Msg("searchDishes fee calculation details")
 		}
 	}
 
@@ -687,11 +679,6 @@ func (server *Server) searchCombos(ctx *gin.Context) {
 					Int("distance", distanceMeters).
 					Msg("calculateDeliveryFeeInternal failed in searchCombos")
 			} else if feeResult != nil && !feeResult.DeliverySuspended {
-				log.Info().
-					Int64("merchant_id", row.MerchantID).
-					Int64("region_id", row.MerchantRegionID).
-					Int64("final_fee", feeResult.FinalFee).
-					Msg("Delivery fee calculated successfully") // DEBUG LOG
 				estimatedFee = &feeResult.FinalFee
 			} else {
 				log.Warn().

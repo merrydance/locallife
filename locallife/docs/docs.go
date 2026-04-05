@@ -40650,6 +40650,9 @@ const docTemplate = `{
                     "maxLength": 200,
                     "minLength": 5
                 },
+                "clear_logo": {
+                    "type": "boolean"
+                },
                 "description": {
                     "type": "string",
                     "maxLength": 500

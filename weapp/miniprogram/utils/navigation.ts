@@ -138,10 +138,6 @@ export class Navigation {
 
   /**
      * 跳转到评价页
-     * TODO: 页面 pages/orders/review/index 不存在
-     */
-  /**
-     * 跳转到评价页
      */
   static toReview(orderId: string) {
     wx.navigateTo({
@@ -168,12 +164,11 @@ export class Navigation {
 
   /**
      * 跳转到地址编辑页
-     * TODO: 页面 pages/user_center/address-edit/index 不存在
      */
   static toAddressEdit(addressId?: string) {
     const url = addressId
-      ? `/pages/user_center/address-edit/index?id=${addressId}`
-      : '/pages/user_center/address-edit/index'
+      ? `/pages/user_center/addresses/edit/index?id=${addressId}`
+      : '/pages/user_center/addresses/edit/index'
     wx.navigateTo({ url })
   }
 
@@ -203,7 +198,6 @@ export class Navigation {
 
   /**
      * 跳转到预订详情页
-     * TODO: 页面 pages/reservation/detail/index 不存在
      */
   static toReservationDetail(reservationId: string) {
     wx.navigateTo({

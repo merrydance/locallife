@@ -303,7 +303,7 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 	merchant, _ = server.store.GetMerchant(ctx, result.MerchantID)
 	isOpen := false
 	if merchant.ID > 0 {
-		isOpen = merchant.IsOpen && merchant.Status == "active"
+		isOpen = merchant.IsOpen && merchant.Status == "approved"
 	}
 
 	resp := comboSetWithDetailsResponse{
@@ -402,14 +402,8 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 	merchant, _ := server.store.GetMerchant(ctx, result.MerchantID)
 	isOpen := false
 	if merchant.ID > 0 {
-		isOpen = merchant.IsOpen && merchant.Status == "active"
+		isOpen = merchant.IsOpen && merchant.Status == "approved"
 	}
-
-	log.Debug().
-		Int64("id", result.ID).
-		Int64("merchant_id", result.MerchantID).
-		Bool("is_open", isOpen).
-		Msg("getPublicComboDetail")
 
 	resp := comboSetWithDetailsResponse{
 		ID:            result.ID,
