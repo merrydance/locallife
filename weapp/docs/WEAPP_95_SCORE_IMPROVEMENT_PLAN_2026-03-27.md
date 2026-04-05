@@ -22,7 +22,7 @@
 
 执行拆分：
 
-- [weapp/docs/weapp_95_task_cards_20260327/README.md](weapp/docs/weapp_95_task_cards_20260327/README.md)
+- [weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/README.md](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/README.md)
 
 ## 2. 当前判断
 
@@ -234,7 +234,7 @@
 
 执行细化：
 
-- [weapp/docs/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md](weapp/docs/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md)
+- [weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md](weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md)
 
 ### 7.2 重点页面
 

@@ -1,7 +1,7 @@
 ---
 name: "任务清单闭环执行"
-description: "Use when executing a task list through an implement -> review -> fix -> review -> docs sync loop until complete. Trigger phrases: run task list, handoff to review, fix findings, continue next task, close all tasks. 适用于把一组任务按开发、审查、修复、复审、文档同步的闭环方式逐项完成。"
-argument-hint: "Provide target area, ordered task list, acceptance criteria, validation scope, and any doc-sync expectations."
+description: "Use when executing a task list through an implement -> review -> fix -> review -> docs sync loop until complete. Trigger phrases: run task list, handoff to review, fix findings, continue next task, close all tasks, execute task cards batch by batch. 适用于把一组任务按开发、审查、修复、复审、文档同步的闭环方式逐项完成，也适用于按任务卡或批次计划自动闭环执行。"
+argument-hint: "Provide target area, ordered task list or task-card links, acceptance criteria, validation scope, and any doc-sync expectations."
 agent: "Delivery Loop Orchestrator"
 ---
 Run the provided task list through a closed delivery loop.
@@ -10,6 +10,7 @@ Required input:
 
 - Target area: <backend, web, weapp, or mixed>
 - Ordered task list: <task 1, task 2, task 3...>
+	- You may provide task-card links or a batch-plan section instead of rewriting each task by hand.
 - Acceptance criteria: <what counts as done>
 - Risk notes: <known or suspected G0/G1/G2/G3 items, or say unknown>
 
@@ -22,6 +23,7 @@ Optional input:
 Execution rules:
 
 - Work one task at a time.
+- For task-card driven work, treat one accepted task card as one loop unit unless the input explicitly groups several cards into a single gated batch.
 - At the start of each task, classify the task risk as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` when the classification is not already given.
 - Choose validation depth and hand-off detail using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
 - For each task, follow this order: implement -> validate -> review -> fix if needed -> review again -> docs sync decision -> next task.

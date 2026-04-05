@@ -6,7 +6,7 @@
 >
 > 本文是 2026-03-28 审计阶段的基线台账快照，主要用于保留当时的诊断上下文、问题分布和执行起点，不代表当前 rider 子包的现行页面数量、入口结构、接口承接或最终评分。
 >
-> 涉及当前实现时，请优先以 weapp/miniprogram/app.json、实际页面代码、后端真实路由，以及 weapp/docs/rider/task-cards 下的最新任务卡和后续收口文档为准。
+> 涉及当前实现时，请优先以 weapp/miniprogram/app.json、实际页面代码、后端真实路由，以及 weapp/docs/historical/pre-2026-04-05/rider/task-cards 下的最新任务卡和后续收口文档为准。
 
 ## 1. 用途
 

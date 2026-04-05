@@ -14,14 +14,14 @@
 
 本图只覆盖以下 8 张任务卡：
 
-1. [CARD-01 路由与页面注册总排查](weapp/docs/weapp_95_task_cards_20260327/card-01-route-and-page-registry-audit.md)
-2. [CARD-02 页面动作到 API 闭环清单](weapp/docs/weapp_95_task_cards_20260327/card-02-button-api-closure-matrix.md)
-3. [CARD-03 列表筛选与分页合同治理](weapp/docs/weapp_95_task_cards_20260327/card-03-pagination-and-filter-contract.md)
-4. [CARD-04 实时订阅生命周期模板收口](weapp/docs/weapp_95_task_cards_20260327/card-04-realtime-lifecycle-template.md)
-5. [CARD-05 修复骑手首页冷启动实时链路](weapp/docs/weapp_95_task_cards_20260327/card-05-rider-dashboard-cold-start-realtime.md)
-6. [CARD-06 修复堂食扫码入口死链](weapp/docs/weapp_95_task_cards_20260327/card-06-dinein-scan-route-repair.md)
-7. [CARD-07 商户营业状态切换真实化](weapp/docs/weapp_95_task_cards_20260327/card-07-merchant-business-status-contract.md)
-8. [CARD-08 修复商户预订订单过滤与分页错位](weapp/docs/weapp_95_task_cards_20260327/card-08-merchant-reservation-order-contract.md)
+1. [CARD-01 路由与页面注册总排查](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-01-route-and-page-registry-audit.md)
+2. [CARD-02 页面动作到 API 闭环清单](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-02-button-api-closure-matrix.md)
+3. [CARD-03 列表筛选与分页合同治理](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-03-pagination-and-filter-contract.md)
+4. [CARD-04 实时订阅生命周期模板收口](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-04-realtime-lifecycle-template.md)
+5. [CARD-05 修复骑手首页冷启动实时链路](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-05-rider-dashboard-cold-start-realtime.md)
+6. [CARD-06 修复堂食扫码入口死链](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-06-dinein-scan-route-repair.md)
+7. [CARD-07 商户营业状态切换真实化](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-07-merchant-business-status-contract.md)
+8. [CARD-08 修复商户预订订单过滤与分页错位](weapp/docs/historical/pre-2026-04-05/weapp_95_task_cards_20260327/card-08-merchant-reservation-order-contract.md)
 
 ## 总图
 

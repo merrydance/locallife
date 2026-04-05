@@ -12,9 +12,9 @@
 
 详细审计与拆分见：
 
-- `weapp/docs/operator/OPERATOR_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md`
-- `weapp/docs/operator/OPERATOR_PHASE0_BASELINE_LEDGER_2026-03-28.md`
-- `weapp/docs/operator/task-cards/README.md`
+- `weapp/docs/historical/pre-2026-04-05/operator/OPERATOR_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md`
+- `weapp/docs/historical/pre-2026-04-05/operator/OPERATOR_PHASE0_BASELINE_LEDGER_2026-03-28.md`
+- `weapp/docs/historical/pre-2026-04-05/operator/task-cards/README.md`
 
 ## 影响范围
 

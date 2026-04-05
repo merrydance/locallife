@@ -15,6 +15,13 @@
 - 实现和 review 时必须使用 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
 - 完成后回填状态、PR 链接、验证结果和残余风险。
 
+## 自动闭环执行建议
+
+- 这套任务卡可以直接作为 [.github/prompts/general-task-loop.prompt.md](.github/prompts/general-task-loop.prompt.md) 的输入来源，借用 Delivery Loop Orchestrator 做全自动闭环执行。
+- 推荐一次只跑一个 batch，一个 card 对应一个完整闭环单元。
+- 每张 card 通过 review 和 doc-sync 决策后，再自动切到下一张 card。
+- 不建议直接把 16 张卡一次性塞进同一轮自动执行，这会显著放大 UI 回归面和 review 噪音。
+
 ## Batch 1：预订支付与结果承接簇
 
 - [ ] [CARD-01 预订确认页任务边界与支付真实化](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-01-reservation-confirm-contract-and-task-flow.md)
@@ -33,6 +40,22 @@
 - [ ] [CARD-08 收付通进件页状态承接与阻塞任务流统一](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-08-merchant-applyment-state-and-blocking-flow.md)
 - [ ] [CARD-09 结算配置跨页回流与入口一致性收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-09-merchant-settlement-cross-page-consistency.md)
 
+## Batch 4：商户预订运营簇
+
+- [ ] [CARD-10 商户预订页日视图、汇总与主任务重构](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-10-merchant-reservations-day-view-and-task-focus.md)
+- [ ] [CARD-11 商户订单列表任务化与动作层级收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-11-merchant-orders-list-task-surface.md)
+- [ ] [CARD-12 订单与预订运营页跨页一致性收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-12-merchant-ops-cross-page-consistency.md)
+
+## Batch 5：骑手首页实时工作台簇
+
+- [ ] [CARD-13 骑手首页实时区与状态语义重构](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-13-rider-dashboard-realtime-and-state-semantics.md)
+- [ ] [CARD-14 骑手工作台与历史任务回流一致性收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-14-rider-workbench-history-consistency.md)
+
+## Batch 6：运营首页聚合控制台簇
+
+- [ ] [CARD-15 运营首页首屏优先级与待办工作台收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-15-operator-dashboard-priority-and-workbench.md)
+- [ ] [CARD-16 运营分析页与首页关系重构](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-16-operator-analytics-and-dashboard-boundary.md)
+
 ## 推荐执行顺序
 
 1. 先做 CARD-01，清除确认页的假控件和伪任务边界。
@@ -44,6 +67,13 @@
 7. 接着做 CARD-07，把主体申请页从超长滚动表单收口成清晰分段任务流。
 8. 再做 CARD-08，统一进件页的状态卡、阻塞说明、刷新失败和后续动作。
 9. 最后做 CARD-09，把主体申请、进件、完成页和资金入口之间的回流与入口一致性收口。
+10. 然后做 CARD-10，把预订页从多任务堆叠页收口成清晰的日视图任务页。
+11. 再做 CARD-11，把订单列表从“有动作的列表”收口成真正的任务页。
+12. 最后做 CARD-12，统一订单页和预订页在状态、筛选、动作和空态上的系统感。
+13. 再做 CARD-13，把骑手首页的实时区、空态和失败语义拉回可信工作台。
+14. 然后做 CARD-14，统一骑手首页与历史任务页的入口和回流体验。
+15. 接着做 CARD-15，把运营首页首屏收口成真正的待办与决策工作台。
+16. 最后做 CARD-16，明确运营首页与分析页的边界和信息层级。
 
 ## Batch 1 完成标准
 
@@ -65,3 +95,22 @@
 - [ ] 已接受的闭环止血项保持成立，同时页面的信息架构、跨页回流和恢复路径继续提升到统一可用水平。
 - [ ] 主体申请、进件、完成页、资金入口之间的跳转与返回上下文一致，不再像多个状态中转页拼接在一起。
 - [ ] Batch 3 的实现与 review 全部使用 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
+
+## Batch 4 完成标准
+
+- [ ] 商户预订页和订单列表都能一眼看出当前最重要的待处理任务，而不是让用户在一屏里自己找重点。
+- [ ] 订单与预订页的动作层级、按钮强调、状态筛选和空态语义明显更统一。
+- [ ] 两个页面都具备更稳定的日常高频使用体验，包括筛选、刷新、失败恢复和跨页回流。
+- [ ] Batch 4 的实现与 review 全部使用 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
+
+## Batch 5 完成标准
+
+- [ ] 骑手能分清“真的没单”“加载失败”“订阅未恢复”“历史列表失败”等不同状态，不再被模糊空态误导。
+- [ ] 骑手首页和历史任务页读起来像同一套工作台，而不是主入口和工具页各自演化。
+- [ ] Batch 5 的实现与 review 全部使用 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
+
+## Batch 6 完成标准
+
+- [ ] 运营首页首屏能快速表达当前最重要的待办和决策信息，不再首屏过载。
+- [ ] dashboard 与 analytics 的职责边界清楚，首页不再和分析页互相复制摘要。
+- [ ] Batch 6 的实现与 review 全部使用 `.github/standards/weapp/REVIEW_CHECKLIST.md`。

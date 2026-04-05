@@ -57,7 +57,7 @@
 - deposit 与 claims/detail 均已接入支付后的状态轮询或详情刷新，不再只依赖微信支付 success callback。
 - rider websocket 客户端已补 ACK，上游后端的 ACK、回放、背压队列和 retry 机制与当前前端消费链闭合。
 - 自动验证已完成：`npm run quality:check`、`go test ./websocket`、`go test ./logic -run 'TestListNearbyBroadcastRiders|TestBroadcastNewOrderNotification'` 通过。
-- 当前真值流程图与后端实时支撑核对结果见：`weapp/docs/rider/RIDER_RUNTIME_REALTIME_FLOW_MAP.md`。
+- 当前真值流程图与后端实时支撑核对结果见：`weapp/docs/historical/pre-2026-04-05/rider/RIDER_RUNTIME_REALTIME_FLOW_MAP.md`。
 - 仍待真机或开发者工具执行主链、支付链和弱网回归，因此暂不标记 95 分验收完成。
 
 ## 剩余风险

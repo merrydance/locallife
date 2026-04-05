@@ -9,7 +9,7 @@
 > 涉及当前实现时，请优先以实际代码、当前注册配置、后端真实路由，以及 weapp/docs/merchant 下的最新任务卡和后续收口文档为准。
 
 配套文档：
-- `weapp/docs/merchant/MERCHANT_BACKEND_ALIGNMENT_MATRIX_2026-03-26.md`
+- `weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_BACKEND_ALIGNMENT_MATRIX_2026-03-26.md`
 
 ## 文档目标
 

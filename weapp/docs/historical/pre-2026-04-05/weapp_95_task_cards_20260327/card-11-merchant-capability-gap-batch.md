@@ -14,8 +14,8 @@
 
 ## 影响范围
 
-- [weapp/docs/merchant/MERCHANT_BACKEND_ALIGNMENT_MATRIX_2026-03-26.md](weapp/docs/merchant/MERCHANT_BACKEND_ALIGNMENT_MATRIX_2026-03-26.md)
-- [weapp/docs/merchant/MERCHANT_PAGE_GAP_AND_IMPLEMENTATION_CHECKLIST_2026-03-26.md](weapp/docs/merchant/MERCHANT_PAGE_GAP_AND_IMPLEMENTATION_CHECKLIST_2026-03-26.md)
+- [weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_BACKEND_ALIGNMENT_MATRIX_2026-03-26.md](weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_BACKEND_ALIGNMENT_MATRIX_2026-03-26.md)
+- [weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_PAGE_GAP_AND_IMPLEMENTATION_CHECKLIST_2026-03-26.md](weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_PAGE_GAP_AND_IMPLEMENTATION_CHECKLIST_2026-03-26.md)
 - `weapp/miniprogram/pages/merchant/**`
 
 ## 任务内容
@@ -91,8 +91,8 @@
 - [x] 已将 `merchant/finance` 中重复的进件、签约和绑卡表单收口到 `merchant/settings/applyment`，资金页仅保留开通状态摘要、余额/提现/结算洞察与统一跳转入口，消除重复入口与重复状态源
 - [x] 已按后端真实订单 DTO 收口 `merchant/orders/list` 与 `merchant/orders/detail`，补齐拒单退款动作、配送履约细态 `courier_accepted / picked / rider_delivered / user_delivered`、真实配送/联系人字段与动态时间线，移除对不存在字段的前端假设
 - [x] 已补齐 `merchant/dishes/edit` 的规格组、规格选项与加价编辑链路，并将 `merchant/tables`、`merchant/printers`、`merchant/delivery-promotions` 长表单弹层切换为 `scroll-view` 滚动容器；同时修复桌台二维码相对路径与接口失败时的预览兜底，降低小屏滚动和二维码预览失效风险
-- [x] 已新增商户侧全域审查执行计划 [weapp/docs/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md](weapp/docs/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md)，明确 Phase 0 到 Phase 6 的阶段边界、95 分评分标准与 P0 风险
-- [x] 已新增 Phase 0 基线台账 [weapp/docs/merchant/MERCHANT_PHASE0_BASELINE_LEDGER_2026-03-28.md](weapp/docs/merchant/MERCHANT_PHASE0_BASELINE_LEDGER_2026-03-28.md)，将 32 个 merchant 页面与首批共享组件纳入合同核查与媒体风险跟踪
+- [x] 已新增商户侧全域审查执行计划 [weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md](weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_95_FULL_AUDIT_EXECUTION_PLAN_2026-03-28.md)，明确 Phase 0 到 Phase 6 的阶段边界、95 分评分标准与 P0 风险
+- [x] 已新增 Phase 0 基线台账 [weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_PHASE0_BASELINE_LEDGER_2026-03-28.md](weapp/docs/historical/pre-2026-04-05/merchant/MERCHANT_PHASE0_BASELINE_LEDGER_2026-03-28.md)，将 32 个 merchant 页面与首批共享组件纳入合同核查与媒体风险跟踪
 - [x] 已将 `merchant/dishes` 列表页从页面内 `API_BASE` 图片拼接切回共享 `getPublicImageUrl` 语义，避免菜品图继续沿用旧公共媒体合同
 - [x] 已将 `merchant/profile-images` 的 logo、门头照、环境照回显切到共享 `getPublicImageUrl`，修复 local `/dev/uploads/...` 在页面中被吞掉的显示问题
 - [x] 已补齐 `merchant/profile-images` 的上传保存闭环：门头照和环境照上传/删除改为以后端 `PATCH /v1/merchants/me/shop-images` 返回值回写真值，删除失败时不再先留下本地脏态，并补上保存中禁用与更准确的成功/失败反馈

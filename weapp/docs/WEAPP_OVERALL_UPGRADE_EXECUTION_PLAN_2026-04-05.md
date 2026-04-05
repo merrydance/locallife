@@ -52,6 +52,16 @@
 2. 所有批次都必须使用 `.github/standards/weapp/REVIEW_CHECKLIST.md` 做 review。
 3. 做整体升级 review 时，应额外使用历史蓝图文档识别“仍在延续的旧问题模式”。
 
+## 3.1 闭环执行建议
+
+本计划可以直接接入 [.github/prompts/general-task-loop.prompt.md](.github/prompts/general-task-loop.prompt.md) 对应的 Delivery Loop Orchestrator 模式执行，但建议按批次推进，而不是一次把全部卡片塞进同一轮自动闭环。
+
+推荐方式：
+
+1. 以一个 batch 作为一次自动闭环的任务集合。
+2. 以一张 task card 作为一个 implement -> review -> fix -> review -> doc-sync 单元。
+3. 当前 batch 通过 review 后，再进入下一批，避免把视觉、交互、性能和跨页一致性问题混成不可控的大回归面。
+
 ## 4. 优先级总表
 
 ### P0：必须最先启动
@@ -199,6 +209,12 @@
 
 目标：把重运营页面从“功能很多但不好用”提升到“任务清楚、动作顺手、视觉统一”。
 
+执行拆分：
+
+- [ ] [CARD-10 商户预订页日视图、汇总与主任务重构](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-10-merchant-reservations-day-view-and-task-focus.md)
+- [ ] [CARD-11 商户订单列表任务化与动作层级收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-11-merchant-orders-list-task-surface.md)
+- [ ] [CARD-12 订单与预订运营页跨页一致性收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-12-merchant-ops-cross-page-consistency.md)
+
 页面范围：
 
 1. `weapp/miniprogram/pages/merchant/reservations/index.ts`
@@ -231,6 +247,11 @@
 
 目标：把骑手首页从超大聚合页收口成可信的实时工作台。
 
+执行拆分：
+
+- [ ] [CARD-13 骑手首页实时区与状态语义重构](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-13-rider-dashboard-realtime-and-state-semantics.md)
+- [ ] [CARD-14 骑手工作台与历史任务回流一致性收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-14-rider-workbench-history-consistency.md)
+
 页面范围：
 
 1. `weapp/miniprogram/pages/rider/dashboard/index.ts`
@@ -260,6 +281,11 @@
 ### Batch 6：运营首页聚合控制台簇
 
 目标：把运营首页从首屏过载的聚合页改造成有明确优先级的控制台。
+
+执行拆分：
+
+- [ ] [CARD-15 运营首页首屏优先级与待办工作台收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-15-operator-dashboard-priority-and-workbench.md)
+- [ ] [CARD-16 运营分析页与首页关系重构](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-16-operator-analytics-and-dashboard-boundary.md)
 
 页面范围：
 

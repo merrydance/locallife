@@ -247,12 +247,12 @@
 
 详细任务卡见：
 
-1. weapp/docs/operator/task-cards/README.md
-2. weapp/docs/operator/task-cards/card-01-operator-truth-and-route-closure.md
-3. weapp/docs/operator/task-cards/card-02-operator-merchant-rider-contract.md
-4. weapp/docs/operator/task-cards/card-03-operator-appeal-and-safety.md
-5. weapp/docs/operator/task-cards/card-04-operator-region-delivery-rule.md
-6. weapp/docs/operator/task-cards/card-05-operator-finance-analytics-applyment.md
+1. weapp/docs/historical/pre-2026-04-05/operator/task-cards/README.md
+2. weapp/docs/historical/pre-2026-04-05/operator/task-cards/card-01-operator-truth-and-route-closure.md
+3. weapp/docs/historical/pre-2026-04-05/operator/task-cards/card-02-operator-merchant-rider-contract.md
+4. weapp/docs/historical/pre-2026-04-05/operator/task-cards/card-03-operator-appeal-and-safety.md
+5. weapp/docs/historical/pre-2026-04-05/operator/task-cards/card-04-operator-region-delivery-rule.md
+6. weapp/docs/historical/pre-2026-04-05/operator/task-cards/card-05-operator-finance-analytics-applyment.md
 
 ## 8. 验证基线
 

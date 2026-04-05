@@ -6,7 +6,7 @@
 >
 > 本文是 2026-03-28 审计阶段形成的执行计划快照，保留的是当时的问题判断、页面分层和修复路径，不代表当前 rider 子包的现行注册页、页面职责或最终交付状态。
 >
-> 涉及当前真值时，请优先以 weapp/miniprogram/app.json、实际页面代码、后端真实路由，以及 weapp/docs/rider/task-cards 下的最新任务卡和后续收口文档为准。
+> 涉及当前真值时，请优先以 weapp/miniprogram/app.json、实际页面代码、后端真实路由，以及 weapp/docs/historical/pre-2026-04-05/rider/task-cards 下的最新任务卡和后续收口文档为准。
 
 ## 1. 目标
 
@@ -192,13 +192,13 @@
 
 详细任务卡见：
 
-1. weapp/docs/rider/task-cards/README.md
-2. weapp/docs/rider/task-cards/card-01-rider-dashboard-and-history-contract.md
-3. weapp/docs/rider/task-cards/card-02-rider-task-detail-and-status-closure.md
-4. weapp/docs/rider/task-cards/card-04-rider-exception-claim-appeal-split.md
-5. weapp/docs/rider/task-cards/card-05-rider-wallet-withdraw-closure.md
-6. weapp/docs/rider/task-cards/card-06-rider-orphan-pages-and-legacy-manage-cleanup.md
-7. weapp/docs/rider/task-cards/card-07-rider-runtime-validation-and-weak-network-regression.md
+1. weapp/docs/historical/pre-2026-04-05/rider/task-cards/README.md
+2. weapp/docs/historical/pre-2026-04-05/rider/task-cards/card-01-rider-dashboard-and-history-contract.md
+3. weapp/docs/historical/pre-2026-04-05/rider/task-cards/card-02-rider-task-detail-and-status-closure.md
+4. weapp/docs/historical/pre-2026-04-05/rider/task-cards/card-04-rider-exception-claim-appeal-split.md
+5. weapp/docs/historical/pre-2026-04-05/rider/task-cards/card-05-rider-wallet-withdraw-closure.md
+6. weapp/docs/historical/pre-2026-04-05/rider/task-cards/card-06-rider-orphan-pages-and-legacy-manage-cleanup.md
+7. weapp/docs/historical/pre-2026-04-05/rider/task-cards/card-07-rider-runtime-validation-and-weak-network-regression.md
 
 ## 8. 验证基线
 
