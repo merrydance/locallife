@@ -5,6 +5,7 @@ Use this process when updating standards, instructions, or prompt templates.
 ## 1. Decide The Source Layer
 
 - Update `.github/standards/` when the change is a project-owned engineering or domain standard.
+- Prefer `.github/standards/engineering/` for long-lived cross-cutting governance that spans backend, web, weapp, review, release, or incident feedback.
 - Update `.github/instructions/` when the change affects high-frequency implementation, review, regeneration, or validation behavior.
 - Update `.github/prompts/` when the change should influence how users ask for common task types.
 
@@ -18,6 +19,14 @@ If a standard changes in `.github/standards/`, update the matching instruction f
 - validation commands
 - review expectations
 - high-risk domain workflows
+
+If the changed standard is cross-cutting governance under `.github/standards/engineering/`, also evaluate whether it should update:
+
+- `.github/prompts/` task entrypoints
+- `.github/workflows/` or validation scripts
+- `.github/NORMS_AUDIT.md` coverage status
+
+If the task is an incident follow-up, escaped-defect closure, or systematic bug-class fix, evaluate whether the result should update `.github/standards/engineering/INCIDENT_FEEDBACK_LOOP.md` consumers such as prompts, review wording, workflows, tests, or runbooks.
 
 ## 3. Keep Naming Normalized
 
@@ -51,6 +60,7 @@ Before considering a customization change complete:
 1. Confirm the canonical standard path is correct.
 2. Confirm instructions point to the new canonical path.
 3. Confirm prompts use normalized naming.
-4. Confirm no scattered duplicate or temporary compatibility path has been reintroduced unless the migration explicitly requires one.
-5. Update `.github/NORMS_AUDIT.md` if coverage status changes.
-6. If rollout or execution-plan docs were touched, state whether they remain active guidance or should be archived or moved out of the default reading path.
+4. Confirm workflows or scripts were evaluated when the rule is meant to become an automated gate.
+5. Confirm no scattered duplicate or temporary compatibility path has been reintroduced unless the migration explicitly requires one.
+6. Update `.github/NORMS_AUDIT.md` if coverage status changes.
+7. If rollout or execution-plan docs were touched, state whether they remain active guidance or should be archived or moved out of the default reading path.

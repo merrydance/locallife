@@ -10,11 +10,21 @@ More specific web instruction files under `.github/instructions/` take precedenc
 
 ## Read First
 
+- `.github/standards/engineering/README.md`
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
+- `web/README.md`
 - `.github/standards/web/WEB_UI_STANDARDS.md`
 - `.github/standards/web/DESIGN_GUARDRAILS.md`
-- `web/README.md`
 - `.github/standards/web/design-system.md`
+
+Use `.github/standards/engineering/README.md` as the stable governance index, then open the baseline or validation matrix when the active change needs deeper risk or release-readiness guidance.
+
+## Risk Classification
+
+- Treat style-only or copy-only work as `G0` only when no data contract, page state, dangerous action, permission display, or user flow behavior changes.
+- Treat ordinary page or component work as `G1` when it does not alter status semantics, sensitive fields, dangerous operations, or cross-surface behavior.
+- Escalate to `G2` when the change affects multi-state task flows, approval/rejection, disabling/enabling, payout-like status handling, cross-page field propagation, or failure recovery behavior.
+- Escalate to `G3` when the UI exposes or controls authz-sensitive actions, sensitive/private data, money-related operations, moderation-sensitive material, or any flow where an incorrect state or confirmation pattern could cause a high-impact incident.
 
 ## Working Style
 
@@ -23,6 +33,7 @@ More specific web instruction files under `.github/instructions/` take precedenc
 - Do not hardcode one-off colors or typography tokens when a semantic utility already exists.
 - Check the existing route segment and nearby pages before introducing a new layout pattern.
 - Keep page-level data fetching and API logic out of presentational components when the codebase already separates them.
+- Preserve established operator and merchant page patterns unless the task explicitly changes the design system.
 
 ## UI Rules To Apply Directly
 
@@ -32,14 +43,12 @@ More specific web instruction files under `.github/instructions/` take precedenc
 - Keep user-facing copy business-readable. Map backend enum values to readable labels instead of exposing raw enum strings.
 - Treat feedback behavior as a system rule: no raw backend errors in UI, no redundant success prompt after navigation or structural page update, and no Toast-only handling for first-screen failures.
 - Do not use developer-facing phrasing such as `debug`, `fallback`, `proxy`, or “与小程序一致” in operator-facing or merchant-facing UI copy.
+- Any user-visible status or field added in a high-risk flow must be threaded through types, API calls, page state, loading/empty/error branches, dangerous-action confirmation, and disabled/in-flight states as applicable.
+- For `G2` and `G3` changes, explicitly check what the user sees during submit, timeout, retry, partial failure, and refresh-after-action scenarios.
 
 ## Validation Defaults
 
 - Run commands from `web/`.
 - Common commands: `npm run dev`, `npm run build`, `npm run lint`.
 - Prefer the smallest relevant validation command for the area you changed.
-
-## Scope Reminders
-
-- Preserve established operator and merchant page patterns unless the task explicitly changes the design system.
-- Link to existing UI docs instead of restating them in new markdown files.
+- In hand-off, state the risk class and any residual UX or contract risk that was not verified, using concrete paths instead of generic caveats.

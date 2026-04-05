@@ -6,6 +6,8 @@ applyTo: "locallife/db/sqlc/**"
 
 Apply these rules for files under `locallife/db/sqlc/`.
 
+Use `.github/standards/backend/SQL_STANDARDS.md` as the canonical persistence-facing SQL and transaction standard for this layer.
+
 ## Role Of This Layer
 
 - Keep this layer responsible for typed persistence access, generated query surfaces, transaction helpers, and shared persistence constants.

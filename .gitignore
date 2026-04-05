@@ -66,6 +66,8 @@ yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 package-lock.json
+!web/package-lock.json
+!weapp/package-lock.json
 
 # TypeScript
 *.tsbuildinfo

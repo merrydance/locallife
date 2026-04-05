@@ -45,6 +45,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Go
         uses: actions/setup-go@v5
@@ -60,6 +62,12 @@ jobs:
 
       - name: Run migrations
         run: make migrateup
+
+      - name: Changed-file size guardrail
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash ../.github/scripts/backend_changed_filesize_guard.sh "$BASE_SHA" "$HEAD_SHA"
 
       - name: Unit tests
         run: make test-unit

@@ -6,15 +6,20 @@ description: "Use only when drafting a review request that spans multiple produc
 
 Use this template when asking for a code review in this workspace.
 
+Use `general-review.prompt.md` only when the review spans multiple product areas or the target area is still ambiguous. Once the scope is clearly backend-only, web-only, or Mini Program-only, prefer the matching area-specific review prompt and let `.github/instructions/review.instructions.md` plus the area instructions carry the detailed review rules.
+
+If the change is cross-area, high-risk, or touches security, status semantics, async recovery, sensitive data, or dangerous user actions, ask the reviewer to infer the risk level (`G0`/`G1`/`G2`/`G3`) using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` and scale the review depth accordingly, with validation expectations grounded in `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
+
 ## General Review
 
 Request:
 
 - Review this change with findings first, ordered by severity
+- Infer the likely risk level (`G0`/`G1`/`G2`/`G3`) and call out if the implementation or validation evidence treated a clearly higher-risk path as routine
 - Prioritize bugs, behavioral regressions, contract violations, broken change propagation, and missing validation
-- Check authentication, authorization, sensitive data exposure, unsafe defaults, and obvious injection or callback-handling risks when relevant
 - Check whether the change forms a complete end-to-end path instead of stopping at one layer
 - Call out missing tests, missing regeneration steps, and residual risk
+- For `G2` and `G3` paths, call out missing failure-mode coverage, duplicate-trigger handling, rollback or recovery story, and user-visible degradation handling
 - If a high-risk path changed but was not actually validated, say exactly which path remains unverified
 - If there are no findings, say so explicitly
 
@@ -22,61 +27,13 @@ Optional context:
 
 - Changed files or PR scope: <paths>
 - Expected behavior: <details>
+- Risk level if already known: <G0/G1/G2/G3 and why>
 - Known risk areas: <details>
 - Validation evidence already run: <commands or none>
+- Release or rollback notes: <details or none>
 
-## Backend Review
+Area-specific reminders:
 
-Target area: `locallife/`
-
-Request:
-
-- Review this backend change against `.github/standards/backend/API_CONTRACT_STANDARDS.md`
-- Check handler, logic, store, route, DTO, Swagger, and tests for end-to-end completeness
-- Flag logic that appears unused, unreachable, or computed without affecting behavior
-- Flag SQL added under `locallife/db/query/` when it is not wired through generated code, logic, handlers, workers, or tests
-- Check whether `make sqlc`, `make mock`, or `make swagger` should have been run
-- Call out debug leftovers such as temporary prints, panic probes, hardcoded values, or short-circuit returns
-- Check authn/authz boundaries, secret or PII exposure, callback verification, upload/download access control, and unsafe logging
-
-Optional context:
-
-- Changed endpoint or package: <path>
-- Contract change: <details>
-- Related docs: `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`, `.github/standards/backend/API_CONTRACT_STANDARDS.md`
-
-## Web Review
-
-Target area: `web/`
-
-Request:
-
-- Review this UI change against `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`
-- Check whether new fields and statuses are fully threaded through state, API calls, rendering states, and user-facing copy
-- Flag places where the UI diverges from existing patterns without a clear reason
-- Call out missing empty states, loading states, validation states, and tests where relevant
-- Flag sensitive field exposure, client-only permission gating, unsafe rendering of user content, and dangerous actions without proper confirmation
-
-Optional context:
-
-- Route or component path: <path>
-- Expected UX behavior: <details>
-- Existing reference page: <path>
-
-## Mini Program Review
-
-Target area: `weapp/`
-
-Request:
-
-- Review this Mini Program change against `.github/standards/weapp/DESIGN_SYSTEM.md`
-- Check whether new actions and fields are fully wired through page state, service calls, event handlers, and user-visible states
-- Flag business styles that leak into shared global styles
-- Call out debug leftovers, placeholder branches, and missing validation or quality checks
-- Flag exposed private materials or sensitive fields, client-only permission assumptions, and dangerous actions without clear confirmation or failure handling
-
-Optional context:
-
-- Page or component path: <path>
-- Expected behavior: <details>
-- Existing reference page: <path>
+- Backend-heavy review: name the handler/logic/store or worker path, any DTO or contract change, and whether regeneration steps may be relevant.
+- Web-heavy review: name the route or component path, expected loading or error behavior, and any sensitive fields or dangerous actions involved.
+- Mini Program-heavy review: name the page or component path, expected weak-network or re-entry behavior, and any state-recovery expectations.

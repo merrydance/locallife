@@ -1,0 +1,65 @@
+name: backend-generated-artifacts
+
+on:
+  pull_request:
+    paths:
+      - 'locallife/**'
+      - '.github/scripts/backend_sql_guard.sh'
+      - '.github/scripts/test_backend_sql_guard.sh'
+      - '.github/workflows/backend-generated-artifacts.yml'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'locallife/**'
+      - '.github/scripts/backend_sql_guard.sh'
+      - '.github/scripts/test_backend_sql_guard.sh'
+      - '.github/workflows/backend-generated-artifacts.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  generated-artifacts:
+    name: Backend Generated Artifacts
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: locallife
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: locallife/go.mod
+          cache-dependency-path: locallife/go.sum
+
+      - name: Self-test SQL guard script
+        run: bash ../.github/scripts/test_backend_sql_guard.sh
+
+      - name: SQL guardrail
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash ../.github/scripts/backend_sql_guard.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Install generation tools
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@latest
+          go install github.com/golang/mock/mockgen@latest
+          go install github.com/swaggo/swag/cmd/swag@v1.16.6
+
+      - name: Regenerate sqlc and mocks
+        run: make sqlc
+
+      - name: Regenerate swagger
+        run: make swagger
+
+      - name: Check generated artifacts are committed
+        run: git diff --exit-code -- db/sqlc db/mock worker/mock wechat/mock docs

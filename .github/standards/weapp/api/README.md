@@ -1,4 +1,12 @@
-# API接口重构说明
+# API 接口重构历史说明
+
+> 说明：本文件记录小程序 API 重构过程、兼容性处理和阶段性成果，属于历史材料。
+>
+> 当前长期有效的规则请优先查看：
+>
+> - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+> - `.github/standards/weapp/INTERACTION_STANDARDS.md`
+> - `.github/standards/weapp/DESIGN_SYSTEM.md`
 
 ## 重构概述
 

@@ -9,7 +9,9 @@ This directory is the normalized entrypoint for AI-facing workspace rules, promp
 - `instructions/`: auto-matched rules using `applyTo` patterns.
 - `agents/`: narrowly scoped custom agents kept only when a dedicated tool boundary or read-only mode is required.
 - `prompts/`: reusable prompt templates with normalized names.
-- `workflows/`: workflow assets if the workspace later adds them.
+- `workflows/`: workflow assets and CI gate definitions used by this workspace.
+
+Cross-cutting governance lives under `standards/engineering/` and should be treated as the parent baseline for security, consistency, resilience, validation, release readiness, and incident feedback loops that span multiple product areas.
 
 ## Naming Conventions
 
@@ -17,6 +19,7 @@ Use these naming patterns for new files under `.github/`:
 
 - Instructions: `<scope>-<area>.instructions.md`
 - Prompts: `<scope>-<intent>.prompt.md`
+- Agents: `<workflow-or-domain>.agent.md`
 - Shared indexes: `README.md`
 
 Examples:
@@ -44,9 +47,16 @@ Practical defaults for this workspace:
 - Prefer area-specific prompts over `general-` prompts once the target is clearly `locallife/`, `web/`, or `weapp/`.
 - Prefer specialized prompts such as payment, integration-test, task-card, or Mermaid only when the request explicitly matches that workflow.
 - Do not create a new agent just to express expertise. Expertise belongs in prompt wording or instructions unless a tool boundary is required.
-- Keep agent count minimal. At the moment, read-only Mini Program audit is the only agent-mode that justifies a separate boundary.
+- Keep agent count minimal. In this workspace, read-only Mini Program audit and the delivery-loop orchestration workflow are the two user-facing agent modes that justify a separate boundary.
+- The delivery workflow also uses three internal helper agents for implement, review, and doc-sync delegation. Treat those as supporting workflow parts, not as equal top-level routing modes.
 - Do not use `prompts/` as a task archive. One-off planning notes and temporary implementation breakdowns should stay in session state or an existing design document unless the user explicitly asks to persist them.
 - When a prompt is worth keeping, prefer updating an existing reusable prompt over adding another near-duplicate file.
+
+Specialized workflow currently provided:
+
+- `Delivery Loop Orchestrator`: executes an ordered task list through implement, review, fix, review, and doc-sync stages.
+
+See `agents/README.md` for the active agent set and the distinction between user-facing agent modes and internal helper agents.
 
 ## Authoritative Source Strategy
 
@@ -59,13 +69,28 @@ Prefer this order when maintaining rules:
 2. Reflect the operationally important parts in the matching `.github/instructions/*.instructions.md` file.
 3. Link back to the original document when details are too long or domain-specific to duplicate.
 
+Hot-path maintenance rule:
+
+- Broad entrypoints such as `.github/README.md`, `copilot-instructions.md`, and app-wide instruction files should prefer stable index docs like `standards/engineering/README.md` or `standards/weapp/README.md` instead of enumerating long nested reading lists.
+- Use long `Read First` enumerations only in narrower instructions when a specific subtree genuinely needs extra sources beyond the area index.
+
 ## High-Value Original Sources
 
 Backend:
 
 - `.github/standards/backend/AGENT.md`
 - `.github/standards/backend/SYSTEM_PROMPT.md`
+- `.github/standards/backend/GO_PRACTICES.md`
+- `.github/standards/backend/SQL_STANDARDS.md`
 - `.github/standards/backend/API_CONTRACT_STANDARDS.md`
+
+Cross-cutting engineering governance:
+
+- `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`
+- `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`
+- `.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`
+- `.github/standards/engineering/INCIDENT_FEEDBACK_LOOP.md`
+- `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md`
 
 Web:
 
@@ -77,8 +102,12 @@ Web:
 Mini Program:
 
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
+- `.github/standards/weapp/README.md`
 - `.github/standards/weapp/DESIGN_SYSTEM.md`
-- `.github/standards/weapp/api/README.md`
+- `.github/standards/weapp/INTERACTION_STANDARDS.md`
+- `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
+- `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+- `weapp/docs/miniprogram-prompt-system.md`
 
 Domain modules:
 
@@ -89,9 +118,10 @@ Domain modules:
 ## Recommended Read Order
 
 1. Start with `copilot-instructions.md`.
-2. Follow the matching file in `instructions/` for the current directory.
-3. Use the matching prompt template in `prompts/` when the task is implementation, review, or integration-test related.
-4. Open the linked project-owned source document when the task needs deeper domain detail.
+2. If the task is cross-cutting, high-risk, or about governance itself, read `standards/engineering/README.md` next.
+3. Follow the matching file in `instructions/` for the current directory.
+4. Use the matching prompt template in `prompts/` when the task is implementation, review, or integration-test related.
+5. Open the linked project-owned source document such as the governance baseline, validation matrix, area standard, or domain runbook only when the task needs deeper detail.
 
 ## Maintenance Rule
 
@@ -103,3 +133,4 @@ When adding a new customization, update this index only if the new file changes 
 - Once a rollout document becomes historical, move it under the matching domain `historical/` directory instead of leaving it in the default hot path.
 - When moving a file to `historical/`, update the domain `README.md`, any matching `instructions/*.instructions.md`, and any prompt that still points at the old active path.
 - Keep active guidance focused on long-lived design, security, operations, and validation rules that future code changes still need by default.
+- Completed governance rollout plans belong under `.github/standards/engineering/historical/`, not in the default engineering hot path.

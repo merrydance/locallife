@@ -6,11 +6,24 @@ applyTo: "**"
 
 Apply these rules when the user asks for a review.
 
+Read with:
+
+- `.github/standards/engineering/README.md`
+
+Use `.github/standards/engineering/README.md` as the stable governance index, then open the baseline, validation matrix, or high-risk checklists when the changed path needs deeper review criteria.
+
 ## Primary Objective
 
 - Prioritize bugs, behavioral regressions, contract violations, broken change propagation, and missing validation.
 - Treat findings as more important than summaries.
 - Focus on the changed code, the nearby code paths it can affect, and whether the change forms a complete end-to-end path.
+- Apply `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` as the cross-cutting baseline for risk classification, resilience expectations, validation depth, release readiness, and incident feedback requirements.
+
+## Risk Lens
+
+- Infer whether the change is `G0`, `G1`, `G2`, or `G3` based on the affected trust boundary, state semantics, async recovery behavior, sensitive data exposure, and production impact radius.
+- Review depth should scale with the inferred risk level; do not review a `G2` or `G3` change with the same assumptions used for a routine low-risk patch.
+- If the author treated a clearly high-risk path as routine and therefore skipped meaningful validation or design explanation, call that out.
 
 ## What To Check First
 
@@ -18,11 +31,15 @@ Apply these rules when the user asks for a review.
 - Missing or weak validation, especially around status transitions, permissions, and nil or empty inputs.
 - Regressions caused by moving logic across handler, service, persistence, or UI boundaries.
 - Missing regeneration steps such as `make sqlc`, `make mock`, or `make swagger` after source changes.
+- Newly introduced or still-unresolved dependency and toolchain vulnerability findings when the change updates dependencies, touches security-sensitive code, or claims release readiness.
 - Missing tests for new branches, edge cases, or failure paths.
+- Missing explanation of failure behavior, duplicate-trigger behavior, or user-visible degradation on `G2` and `G3` paths.
 
 ## Security Checks
 
 - Check authentication and authorization boundaries, especially object-level access control and role scoping.
+- Check whether dependency, toolchain, or package-lock updates close the intended vulnerability and whether CI will actually use the patched version.
+- When a scan result is only `required module not called` or equivalent module-only exposure, verify it is recorded in `.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md` with a concrete re-evaluation trigger instead of being hand-waved away.
 - Flag handlers or services that rely only on client-provided identity, role, merchant_id, owner_id, or status fields without server-side verification.
 - Check whether new fields, endpoints, or actions expose secrets, tokens, internal IDs, raw provider payloads, or personally identifiable information to logs, responses, or UI.
 - Flag missing validation or sanitization on user-controlled inputs that could affect SQL, HTML rendering, file paths, object keys, callback handling, or downstream requests.
@@ -35,6 +52,7 @@ Apply these rules when the user asks for a review.
 - Do not treat "not enough evidence" as neutral. If a high-risk path was changed but not verified, report it as residual risk or a finding depending on the severity and likelihood of regression.
 - Prefer concrete statements such as "callback idempotency was not exercised" or "worker retry classification remains unverified" over generic phrases like "needs more testing".
 - If you cannot determine whether a high-risk path is safe because the diff lacks surrounding validation or evidence, say that directly.
+- If the change also lacks a clear rollback, recovery, or user-facing failure-handling story, treat that as part of the risk analysis rather than as optional polish.
 
 ## Structural Completeness Checks
 
@@ -65,6 +83,8 @@ Apply these rules when the user asks for a review.
 - Keep summaries brief and secondary.
 - If no findings are discovered, state that explicitly and mention any residual risk or untested area.
 - If no code-level bug is proven but a changed high-risk path remains unverified, say so explicitly instead of presenting the review as fully closed.
+- When relevant, name the inferred risk class or state clearly that the change should have been treated as higher risk than the implementation or validation evidence suggests.
+- When a finding reveals a repeated bug class, escaped defect pattern, or missing systemic gate, say whether the issue should be fed back into standards, prompts, workflows, tests, or runbooks.
 
 ## Area-Specific Review Reminders
 
@@ -81,3 +101,7 @@ Apply these rules when the user asks for a review.
 - Mini Program: check that new fields or actions are wired through page state, service calls, event handlers, and user-facing states.
 - Mini Program: flag client-only permission assumptions, exposed private materials or internal fields, unsafe weak-network fallbacks, and dangerous operations without clear confirmation or failure handling.
 - Mini Program: when payment, login recovery, realtime state, or weak-network flows are touched, call out any unverified cold-start, retry, duplicate-tap, or re-entry behavior explicitly.
+- Mini Program: treat shared UI system drift as a valid finding when the changed scope no longer looks or behaves like one coherent system; do not wave it away as harmless style variance.
+- Mini Program: flag popup forms whose bottom actions remain inside scroll content, whose dual actions are not equal-width block buttons, or whose bottom actions still render as visually small content-width buttons.
+- Mini Program: flag default use of outline-style buttons or tags where the standards require filled or default variants, unless the diff shows an explicit documented exception.
+- Mini Program: flag non-essential overrides of TDesign internal classes, structure, states, or visuals when the same result should have been achieved with tokens, theme props, spacing, safe-area handling, or approved shared shells.

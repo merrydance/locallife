@@ -18,6 +18,7 @@ Apply these rules for files under `locallife/worker/`.
 - Make task handlers safe for retries and re-entry; do not assume a task runs exactly once.
 - Reuse existing logging and observability helpers instead of ad hoc prints or panic-based debugging.
 - Prefer task handlers to delegate business decisions to logic or store-backed services instead of embedding large domain rule sets inline.
+- Keep goroutine and channel ownership explicit inside worker code; do not add background fan-out without a clear owner, cancellation path, and duplicate-delivery story.
 
 ## Boundary Checks
 

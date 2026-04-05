@@ -22,7 +22,9 @@ Optional context:
 
 - Affected package or endpoint: <path>
 - Payment flow or callback involved: <details>
-- Related docs: `.github/standards/domains/wechat-payment/historical/WECHAT_PAYMENT_REFACTOR_EXECUTION_PLAN_2026-03-24.md`, `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`
+- Related docs: `.github/standards/domains/wechat-payment/README.md`, `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`
+
+Use `.github/standards/domains/wechat-payment/historical/WECHAT_PAYMENT_REFACTOR_EXECUTION_PLAN_2026-03-24.md` only when the task changes historical rollout assumptions, stage ownership, or migration baseline.
 
 ## Payment Review Request
 

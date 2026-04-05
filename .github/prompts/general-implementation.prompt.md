@@ -6,58 +6,36 @@ description: "Use only when drafting an implementation request that spans multip
 
 Use this template when asking for a concrete code change in this workspace.
 
-## Backend Feature Or Fix
+Use `general-implementation.prompt.md` only when the task spans multiple product areas or the target area is still ambiguous. Once the target is clearly `locallife/`, `web/`, or `weapp/`, prefer the matching area-specific implementation prompt and let `.github/instructions/` carry the detailed execution rules.
 
-Target area: `locallife/`
+If the task is cross-area, high-risk, or touches security, money movement, status semantics, async recovery, or sensitive data, also ask the implementer to classify the work as `G0`, `G1`, `G2`, or `G3` using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` and to state the validation depth that matches that risk using `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
+
+## General Change Request
 
 Request:
 
 - Implement <feature or fix>
-- Follow the existing handler/logic/db layering
+- Keep the affected execution path complete across every touched layer or surface
 - Reuse nearby patterns before introducing a new abstraction
-- Tell me whether the change requires `make sqlc`, `make mock`, or `make swagger`
+- Tell me which target areas are involved: <backend, web, weapp, mixed>
+- Classify the risk level (`G0`/`G1`/`G2`/`G3`) and explain why when the task is not obviously routine
+- Tell me whether any regeneration or derived-artifact steps are required
 - Run the smallest relevant validation command and report what was executed
+- State which relevant paths were not verified and what residual risk remains
+
+Required context:
+
+- Target area or affected paths: <paths>
+- Expected behavior after the change: <details>
 
 Optional context:
 
-- Affected endpoint or package: <path>
-- Contract or behavior change: <details>
-- Related docs: `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`, `.github/standards/backend/API_CONTRACT_STANDARDS.md`
-- Acceptance checklist: handler/logic/store wiring, status constant reuse, regeneration steps, smallest relevant test command
+- Related contract, workflow, or runbook: <paths>
+- Existing reference implementation or page: <paths>
+- Validation budget: <focused tests, lint + build, compile only, etc.>
 
-## Web Page Change
+Area-specific reminders:
 
-Target area: `web/`
-
-Request:
-
-- Update <page or component>
-- Follow `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`
-- Reuse existing components from `web/src/components/ui/` where possible
-- Keep data logic out of presentational components when existing patterns already do that
-- Run the smallest relevant validation command and report what was executed
-
-Optional context:
-
-- Route or component path: <path>
-- Desired UX change: <details>
-- Existing reference page: <path>
-- Acceptance checklist: field threading, loading/empty/error states, copy review, smallest relevant validation command
-
-## Mini Program Change
-
-Target area: `weapp/`
-
-Request:
-
-- Update <page or component>
-- Reuse existing TDesign-based patterns and local components first
-- Keep business-specific styles out of global styles unless they are truly shared
-- Run the smallest relevant validation command and report what was executed
-
-Optional context:
-
-- Page or component path: <path>
-- Desired behavior: <details>
-- Existing reference page: <path>
-- Acceptance checklist: page state completeness, service/event wiring, token usage, smallest relevant validation command
+- Backend-heavy work: name the handler/logic/store or worker path that should close the loop, and call out whether `make sqlc`, `make mock`, or `make swagger` may be needed.
+- Web-heavy work: name the page or component path, expected loading or error behavior, and any sensitive fields or dangerous actions involved.
+- Mini Program-heavy work: name the page or component path, expected weak-network or re-entry behavior, and any state-recovery expectations.

@@ -9,10 +9,8 @@ Apply these rules for files under `locallife/media/`.
 ## Read First
 
 - `.github/standards/domains/media/README.md`
-- `.github/standards/domains/media/MEDIA_BACKEND_MODULE_DESIGN_2026-03-18.md`
-- `.github/standards/domains/media/MEDIA_API_CONTRACT_DESIGN_2026-03-18.md`
-- `.github/standards/domains/media/MEDIA_DATABASE_SCHEMA_DESIGN_2026-03-18.md`
-- `.github/standards/domains/media/MEDIA_TEST_AND_ACCEPTANCE_CHECKLIST_2026-03-18.md`
+
+Use `.github/standards/domains/media/README.md` as the media domain index. Open the active design, contract, schema, or acceptance docs from that index only when the active media task needs the extra detail.
 
 ## Role Of This Layer
 

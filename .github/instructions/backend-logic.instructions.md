@@ -15,9 +15,11 @@ Apply these rules for files under `locallife/logic/`.
 
 - Accept `context.Context` as the first argument.
 - Prefer explicit input and result structs or service methods with constructor-injected dependencies.
+- Prefer narrow interfaces defined by actual caller needs instead of lifting large concrete service surfaces into a broad dependency contract.
 - Use `logic.NewRequestError(...)` patterns where business failures need to map to request-level errors.
 - Reuse constants from `locallife/db/sqlc/constants.go` instead of redefining status strings.
 - Do not introduce package-level mutable runtime state for caches, clients, or configuration.
+- Do not store `context.Context` in service structs or switch to `context.Background()` inside ordinary logic flows.
 
 ## Boundary Checks
 

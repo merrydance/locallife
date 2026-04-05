@@ -46,3 +46,8 @@ Cross-cutting:
 ## Maintenance Rule
 
 If an original project standard is updated, mirror the most actionable operational changes here so the auto-matched instruction layer stays aligned.
+
+Broad-scope instruction rule:
+
+- If an instruction file applies to a whole app surface such as `locallife/**`, `web/**`, or `weapp/**`, keep it thin and prefer linking to the relevant standards index instead of restating every nested source document.
+- Save longer `Read First` lists for narrower files only when the narrower scope truly needs extra docs that the area index would not already route correctly.

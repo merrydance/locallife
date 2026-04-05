@@ -19,6 +19,7 @@ Apply these rules for files under `locallife/api/`.
 - Use validation tags and existing binding patterns for request input.
 - Keep outward-facing routes under the existing `/v1/` API contract.
 - Prefer strong typed response structs over ad hoc maps when shaping JSON responses.
+- Do not start background goroutines from handlers to hide latency or defer correctness-sensitive work; move that work to an explicit async boundary if it must outlive the request.
 - Map internal, database, driver, and upstream provider failures into stable business-facing API errors. Do not leak raw SQL text, Go driver errors, or untranslated upstream payloads into user-facing responses.
 
 ## Boundary Checks

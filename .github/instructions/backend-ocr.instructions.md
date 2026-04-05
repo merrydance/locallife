@@ -9,13 +9,12 @@ Apply these rules for files under `locallife/ocr/`.
 ## Read First
 
 - `.github/standards/domains/ocr/README.md`
-- `.github/standards/domains/ocr/OCR_OPERATIONS_RUNBOOK_2026-03-25.md`
-- `.github/standards/domains/ocr/OCR_ALIYUN_RAM_STS_MIN_PERMISSION_2026-03-25.md`
-- `.github/standards/domains/ocr/OCR_BASELINE_EVALUATION_2026-03-25.md`
+
+Use `.github/standards/domains/ocr/README.md` as the OCR domain index. Open the operations runbook, credential guidance, or baseline evaluation only when the active change needs those specific details.
 
 ## Historical Rollout References
 
-- Consult `.github/standards/domains/ocr/historical/OCR_REFACTOR_EXECUTION_PLAN_2026-03-25.md`, `.github/standards/domains/ocr/historical/OCR_RELEASE_RUNBOOK_2026-03-25.md`, `.github/standards/domains/ocr/historical/OCR_TEST_ENV_E2E_CHECKLIST_2026-03-25.md`, `.github/standards/domains/ocr/historical/OCR_UNIFIED_API_CUTOVER_CHECKLIST_2026-03-25.md`, `.github/standards/domains/ocr/historical/OCR_ROLLBACK_GUIDELINES_2026-03-25.md`, or `.github/standards/domains/ocr/historical/OCR_ACCEPTANCE_CHECKLIST_2026-03-25.md` only when the task changes rollout, release, cutover, rollback, or acceptance behavior.
+- Consult the `historical/` files listed by `.github/standards/domains/ocr/README.md` only when the task changes rollout, release, cutover, rollback, or acceptance behavior.
 
 ## Role Of This Layer
 

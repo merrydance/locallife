@@ -2,6 +2,8 @@
 
 > 本文件定义 **不可违反的工程约束**。项目架构、分层、错误处理等实现细节见
 > `.github/standards/backend/SYSTEM_PROMPT.md`。
+> SQL 编写、migration、索引与 sqlc 约定见 `.github/standards/backend/SQL_STANDARDS.md`。
+> Go 代码组织、`context`、并发、接口与测试实践见 `.github/standards/backend/GO_PRACTICES.md`。
 
 ## 1. 依赖注入
 

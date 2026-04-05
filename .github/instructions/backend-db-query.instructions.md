@@ -6,6 +6,8 @@ applyTo: "locallife/db/query/**"
 
 Apply these rules for files under `locallife/db/query/`.
 
+Use `.github/standards/backend/SQL_STANDARDS.md` as the canonical SQL authoring and migration standard for this layer.
+
 ## Role Of This Layer
 
 - Keep this directory as the source of truth for SQL query definitions consumed by sqlc.

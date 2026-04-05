@@ -17,10 +17,13 @@ See `.github/README.md` for the normalized index of standards, instructions, pro
 2. Run commands from the correct project directory instead of the workspace root.
 3. Prefer updating existing patterns over introducing a new architecture.
 4. Link to authoritative docs in this repo instead of duplicating them in code comments or new docs.
+5. Prefer area index docs and broad instructions first; only drill into deeper standards when the active path actually needs them.
 
 Area-specific instructions live in `.github/instructions/` and should be treated as stricter rules when the current file matches their `applyTo` patterns.
 
 Reusable prompt templates live in `.github/prompts/`.
+
+Use this file as a workspace routing summary. Detailed execution rules should live in `.github/instructions/`, and long-lived norms should live in `.github/standards/`.
 
 ## Prompt Artifact Hygiene
 
@@ -36,6 +39,7 @@ Reusable prompt templates live in `.github/prompts/`.
 
 Read these first when changing backend behavior:
 
+- `.github/standards/engineering/README.md`
 - `.github/standards/backend/AGENT.md`
 - `.github/standards/backend/SYSTEM_PROMPT.md`
 - `.github/standards/backend/API_CONTRACT_STANDARDS.md`
@@ -74,9 +78,11 @@ Backend generation and validation rules:
 
 Read these first when changing the web app:
 
+- `.github/standards/engineering/README.md`
+- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
+- `web/README.md`
 - `.github/standards/web/WEB_UI_STANDARDS.md`
 - `.github/standards/web/DESIGN_GUARDRAILS.md`
-- `web/README.md`
 - `.github/standards/web/design-system.md`
 
 Common commands:
@@ -97,8 +103,9 @@ Web conventions:
 
 Read these first when changing the Mini Program:
 
-- `.github/standards/weapp/DESIGN_SYSTEM.md`
-- `.github/standards/weapp/api/README.md`
+- `.github/standards/engineering/README.md`
+- `.github/standards/weapp/README.md`
+- `weapp/docs/miniprogram-prompt-system.md`
 
 Common commands:
 

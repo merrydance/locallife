@@ -1,8 +1,11 @@
 # LocalLife 后端工程一致性指南
 
+> Go 代码组织、`context`、并发、接口与测试实践见 `.github/standards/backend/GO_PRACTICES.md`。
+> SQL 编写、migration、索引与 sqlc 约定见 `.github/standards/backend/SQL_STANDARDS.md`。
+
 ## 架构概述
 
-本项目采用 **HTTP 三层架构**，Go 1.24，Gin 框架：
+本项目采用 **HTTP 三层架构**，Go 1.25，Gin 框架：
 
 ```
 Handler (api/)  →  Logic (logic/)  →  Store (db/sqlc/)  →  PostgreSQL
@@ -190,10 +193,16 @@ params.AddressID = pgtype.Int8{Int64: *req.AddressID, Valid: req.AddressID != ni
 
 ```sql
 -- name: GetUser :one
-SELECT * FROM users WHERE id = $1 LIMIT 1;
+SELECT id, username, email, created_at, updated_at
+FROM users
+WHERE id = $1
+LIMIT 1;
 
 -- name: ListUsers :many
-SELECT * FROM users ORDER BY id LIMIT $1 OFFSET $2;
+SELECT id, username, email, created_at, updated_at
+FROM users
+ORDER BY id
+LIMIT $1 OFFSET $2;
 
 -- name: CreateUser :one
 INSERT INTO users (username, email) VALUES ($1, $2) RETURNING *;

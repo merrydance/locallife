@@ -9,12 +9,12 @@ Apply these rules for files under `locallife/wechat/`.
 ## Read First
 
 - `.github/standards/domains/wechat-payment/README.md`
-- `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_OPERATIONS_RUNBOOK_2026-03-24.md`
-- `.github/standards/domains/wechat-payment/WECHAT_PAYMENT_COMPLAINT_SUBSIDY_FRONTEND_SPEC_2026-03-22.md` when changing complaint or subsidy flows that cross backend and client behavior
+
+Use `.github/standards/domains/wechat-payment/README.md` as the payment domain index. Open the operations runbook for payment operations and recovery work, and open the complaint or subsidy spec only when the active change crosses backend and client behavior in those flows.
 
 ## Historical Rollout References
 
-- Consult `.github/standards/domains/wechat-payment/historical/WECHAT_PAYMENT_REFACTOR_EXECUTION_PLAN_2026-03-24.md` only when a task changes the rollout baseline, stage ownership, or historical migration assumptions.
+- Consult the `historical/` execution plan referenced by `.github/standards/domains/wechat-payment/README.md` only when a task changes the rollout baseline, stage ownership, or historical migration assumptions.
 
 ## Role Of This Layer
 

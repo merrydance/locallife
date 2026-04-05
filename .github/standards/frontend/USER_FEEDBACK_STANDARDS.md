@@ -36,7 +36,14 @@ This is a product and engineering constraint, not a page-level preference.
 - Inline/page state: first-screen failure, refresh failure, weak-network retry, persistent action results, or any result that should remain visible after the action completes.
 - Loading: processing only. Loading must not also carry final business meaning.
 
-### 2.4 Persistent State Beats Ephemeral Toast
+### 2.4 Do Not Stack Banner-Like Surfaces
+
+- Top banners, inline banners, page notices, and similar strip-style prompt surfaces count as the same prompt family.
+- Do not combine top banner, inline banner, Toast, and Modal for the same event.
+- For Mini Program, do not use banner-style surfaces as the default primary feedback channel for transient action results.
+- If a persistent result must remain visible, prefer a dedicated page state or result block over temporary banner stacking.
+
+### 2.5 Persistent State Beats Ephemeral Toast
 
 - If the page exposes the result through status text, amount changes, list mutations, steps, banners, badges, tabs, or result pages, prefer that structure over success Toast.
 - If the action result should still be visible after several seconds, use inline state or a result page, not a disappearing Toast.
@@ -103,7 +110,8 @@ Use this checklist in frontend PR review:
 
 - Follow this standard together with the Mini Program design and prompt docs.
 - Use shared utilities for error mapping and prompt dedup where available.
-- Prefer inline banners, action notices, and page states over success Toast when the page already updates structurally.
+- Prefer dedicated page states or result blocks over banner-style prompts when the page already updates structurally.
+- For transient action feedback in Mini Program, default to Toast or Modal instead of top-banner or inline-banner stacking.
 
 ### 6.2 Web
 
