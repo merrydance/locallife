@@ -15,21 +15,21 @@
 - 页面接入工具与迁移路径
 - 小程序端特有的文案和错误映射落点
 
+当同一主题在本文件和长期标准里同时出现时，按以下顺序裁定：
+
+- 提示是否该出现、该由页面状态还是结果区承接：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md` 与 `.github/standards/weapp/INTERACTION_STANDARDS.md`
+- 请求层错误映射职责、后端真值和异步结果 contract：看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+- 本文件只负责运行时提示守卫、错误对象字段、页面接入工具、保留 success Toast 例外和当前实现细节
+
 ## 运行时验收关注点
 
-- 按真实任务流走查，而不是只看单个页面。
-- 每条任务流至少检查一次成功、失败、弱网或刷新后的表现。
 - 页面状态本身已经承接结果时，不把“没有 success Toast”视为缺失。
 - 本文列出的保留项只代表当前可接受例外，不代表未来新增页面可以默认照抄。
-- 同一页面不应同时出现顶部横幅、页内横幅、Toast、Modal 去解释同一个结果。
 
-## 小程序提示通道默认规则
+## 提示通道继承说明
 
-- 短时动作反馈默认使用 Toast。
-- 确认、解释原因、指引下一步默认使用 Modal。
-- 首屏失败、长时结果、稳定状态承接默认使用页面状态或明确结果区。
-- 小程序默认不使用横幅类提示作为短时反馈主通道。
-- 如果页面结果已经由结构本身承接，不再额外加横幅或 success Toast。
+- 提示通道选择继承共享前端反馈标准与小程序交互标准，本文件不重新定义一套新的页面级通道规则。
+- 运行时层只额外约束两件事：同一结果不要被重复提示，以及已经由页面结构承接的结果不应再额外叠加 success Toast。
 
 ## 当前可保留的 success Toast 例外
 
@@ -61,18 +61,17 @@
 - `weapp/miniprogram/pages/user_center/index.ts` 的“已确认登录”
 - 原因：复制和网页登录确认缺少页内结构承接，单次 Toast 足够且不构成双提示。
 
-### 轻业务完成后的即时确认
-
-- `weapp/miniprogram/pages/reservation/confirm/index.ts` 的“领券完成”
-- `weapp/miniprogram/pages/takeout/order-confirm/index.ts` 的“领券完成”
-- `weapp/miniprogram/pages/merchant/settings/application/index.ts` 的“识别完成，请确认回填信息”
-- 原因：虽然页面金额或表单会更新，但用户仍需要一个短确认，告诉自己“领券已成功”或“识别结果已回填并等待确认”。
-
-## 待继续收口的边界项
+## 待继续收口或逐页复审的边界项
 
 - `weapp/miniprogram/pages/dine-in/scan-entry/scan-entry.ts` 的“换桌成功”
 - 当前行为：Toast 后立即跳转到堂食点餐页。
 - 结论：这是仍可继续收口的边界项。如果后续还要压缩 success Toast，可优先把这里改成直接跳转，由目标页桌台信息承接结果。
+
+- `weapp/miniprogram/pages/reservation/confirm/index.ts` 的“领券完成”
+- `weapp/miniprogram/pages/takeout/order-confirm/index.ts` 的“领券完成”
+- `weapp/miniprogram/pages/merchant/settings/application/index.ts` 的“识别完成，请确认回填信息”
+- 当前行为：页面金额或表单会更新，同时再给一个 success Toast。
+- 结论：这类提示不再视为长期稳定例外。只有当页面在短时间内无法让用户明确感知结果时，才可暂时保留；一旦结构结果已经足够明确，应优先删除 success Toast，交给金额变化、结果区或表单回填状态承接。
 
 ## 文案与错误映射补充规则
 
@@ -96,7 +95,7 @@
 
 ### 错误映射落点
 
-- 请求层负责把后端返回归一成用户可展示的 userMessage。
+- 请求层负责把后端返回归一成用户可展示的 userMessage；这是对 API contract 中“错误映射责任”的运行时落地。
 - 页面层优先读取 userMessage，不直接使用原始 message。
 - 技术细节只保留在日志和监控里，不进入 Toast、Modal、页内文案。
 
@@ -135,6 +134,5 @@
 - 同一失败动作不会连续出现两个以上提示。
 - 同一成功动作不会同时出现 Toast 和结果页/返回页状态双重承接。
 - 长文案、确认型提示不再使用 Toast。
-- 页面首屏失败有页内错误态和重试入口。
 - 所有后端错误对用户展示的都是中文业务文案。
 - 日志仍可看到 detailMessage，方便排查问题。

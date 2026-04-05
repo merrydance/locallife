@@ -28,7 +28,7 @@ Use `.github/standards/weapp/README.md` as the Mini Program standards index and 
 
 - Prefer TDesign Miniprogram native components before adding a local component or wrapper.
 - When adding, replacing, or upgrading TDesign usage, check the official TDesign MCP or official docs first for component list, props, events, and changelog, then confirm the conclusion still matches the version pinned in `weapp/package.json`.
-- Buttons and tags default to non-outline variants. Do not introduce `variant="outline"`, `variant="light-outline"`, or equivalent border-only affordances unless an approved exception is explicitly documented.
+- Do not use outline or border-only affordances as the default style for primary actions or status tags. Low-emphasis button and tag variants are acceptable only for secondary classification, filters, or inline auxiliary actions with clear contrast and an explicitly weaker role.
 - Use the design tokens already defined in `app.wxss`; do not hardcode one-off color, spacing, or radius values when an existing token can express the same meaning.
 - Keep business-specific styles out of global app styles unless they are genuinely shared.
 - Treat user-visible copy as product copy, not engineering terminology.
@@ -53,7 +53,7 @@ Use `.github/standards/weapp/README.md` as the Mini Program standards index and 
 - Cold-start realtime gaps: websocket or event listeners that only work after a second entry, manual refresh, or status toggle.
 - First-screen request explosions: page boot logic that multiplies network requests per item and makes weak-network behavior unstable.
 - TDesign drift: replacing a suitable TDesign component with custom UI, or changing TDesign internals for non-essential visual preference.
-- Outline drift: using outline buttons or tags as a default page style instead of the approved filled/default variants.
+- Outline drift: using outline buttons or tags as a default page style, or letting border-only affordances carry primary action or key status semantics.
 - Toast-only first-screen failure: the page has no inline recovery surface.
 - Hidden duplicate submission: the request is in flight but the main action still looks idle and re-clickable.
 - False empty state: service failure or loading gap is rendered as “暂无数据”.

@@ -61,6 +61,7 @@ Use this order to avoid prompt collisions:
 - `backend-payment-runbook.prompt.md`: WeChat payment, callback, refund, runbook, or audit-ledger work.
 - `weapp-implementation.prompt.md`: generic Mini Program page or component changes outside payment-specialized flows.
 - `weapp-payment-flow.prompt.md`: Mini Program payment, login recovery after pay, result state, retry, or duplicate-tap guarding.
+- `weapp-review.prompt.md`: Mini Program review requests, including overall upgrade audits that must combine current standards with historical blueprint-based gap detection.
 - `weapp-page-refactor-blueprint.prompt.md`: request generation for a diagnosis-first refactor blueprint before coding.
 
 Cross-cutting governance rule:
@@ -92,16 +93,19 @@ Expected target: `weapp-payment-flow.prompt.md`
 7. "改一下小程序页面的列表空态和错误态。"
 Expected target: `weapp-implementation.prompt.md`
 
-8. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
+8. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看历史蓝图里反复出现的问题。"
+Expected target: `weapp-review.prompt.md`
+
+9. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
 Expected target: `general-implementation.prompt.md`
 
-9. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
+10. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
 Expected target: `business-flow-mermaid.prompt.md`
 
-10. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
+11. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
 Expected target: `general-task-loop.prompt.md`
 
-11. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
+12. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
 Expected target: `general-incident-followup.prompt.md`
 
 ## Maintenance Rule

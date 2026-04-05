@@ -13,6 +13,7 @@ description: "Use when drafting a Mini Program page refactor request that must s
 - 先给出现状诊断书，再给重构蓝图，最后给实施要求
 - 明确指出痛点、风险等级、量化分数，以及为什么这些问题会影响真实用户体验或维护成本
 - 要求最终实现遵循 `.github/standards/weapp/DESIGN_SYSTEM.md`、`.github/standards/weapp/INTERACTION_STANDARDS.md`、`.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 和仓库现有模式
+- 若任务目标是整页升级、统一风格或系统性改造，可把 `weapp/docs/WEAPP_DOCUMENTATION_ARCHITECTURE_2026-04-04.md`、`weapp/docs/WEAPP_DOCUMENT_REWRITE_BLUEPRINTS_2026-04-04.md` 与 `weapp/docs/WEAPP_95_SCORE_IMPROVEMENT_PLAN_2026-03-27.md` 作为历史审计输入，用于识别长期低质量模式；若与现行标准冲突，仍以现行标准为准
 - 要求任何被改动的接口使用都先对齐真实后端契约，不得臆造后端并不存在的字段、状态、类型或能力
 - 要求改动贯通 service、page state、event handlers、view feedback，而不是只改 WXML 或 WXSS
 - 评分必须使用固定维度，不要自由发挥评分标准

@@ -4,6 +4,8 @@
 
 它不负责 token、视觉基础和组件样式细则，这些内容由 `.github/standards/weapp/DESIGN_SYSTEM.md` 负责。
 
+它也不负责后端字段真值、分页真值、请求幂等语义或异步结果 contract 的最终裁定；这些内容由 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 负责。请求预算、预加载和 `onShow` / `onLoad` 重拉量控制由 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 负责。
+
 ## 1. 目标
 
 小程序交互标准要同时满足两类要求：
@@ -69,7 +71,7 @@
 - 危险动作必须使用确认性反馈，不应依赖轻 Toast。
 - 成功后如果页面结构、结果页或状态区已经能够承接结果，不再额外叠加成功 Toast。
 - 不要同时使用顶部横幅、页内横幅、Toast、Modal 去表达同一个结果。
-- 小程序页面默认不使用横幅类提示作为短时动作反馈主通道；短时反馈用 Toast，确认或解释用 Modal，长期结果用明确的结果区或页面状态承接。
+- 具体提示通道选择、Toast 去重和运行时例外项，遵循共享前端反馈标准与 `weapp/docs/miniprogram-prompt-system.md`，不要在页面层另起一套本地规则。
 
 ## 5. 弱网、回退与重入恢复
 
@@ -91,6 +93,8 @@
 - 不允许把“必须手动下拉刷新才能恢复正确状态”当作正常交互。
 
 ## 6. 防重复点击与动作可信度
+
+- 本节只约束用户可感知的防重入表现；请求幂等、自动重试和高风险动作的请求语义边界，以 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 为准。
 
 - 所有会触发后端状态变更的主操作都必须有防重入策略。
 - 防重入可以通过按钮禁用、局部 loading、请求中的状态锁实现，但必须让用户可感知。

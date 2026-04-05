@@ -12,6 +12,7 @@ Request:
 
 - Update <page or component>
 - Follow `.github/standards/weapp/DESIGN_SYSTEM.md`, `.github/standards/weapp/INTERACTION_STANDARDS.md`, and `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+- Treat every page task as requiring explicit visual, interaction, and performance consideration, with backend contract truth as the hard boundary
 - Reuse existing TDesign-based patterns first
 - Keep business-specific styles out of global styles unless they are truly shared
 - Run the smallest relevant validation command and report what was executed
@@ -34,9 +35,11 @@ Optional context:
 
 Acceptance checklist:
 
+- Layout structure, spacing rhythm, component composition, and safe-area handling follow existing page-shell patterns instead of ad-hoc local styling
 - Page shell stays stable before data returns; no full-page white flash
 - Loading, success, empty, and error states are all defined where relevant
 - Refresh, retry, and re-entry behavior are deliberate where the task can span multiple states
+- First-screen request scope, preloading, and foreground re-entry refreshes are controlled rather than left to default overfetch behavior
 - New fields or actions are wired through service calls, page state, handlers, and user-visible feedback
 - Request parameters, response fields, status enums, and types are aligned with the real backend contract; any adapter layer is explicit and does not invent backend truth
 - Primary action is visually clear and duplicate-tap protection is explicit for backend-affecting actions
