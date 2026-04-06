@@ -5562,6 +5562,17 @@ definitions:
       updated_at:
         type: string
     type: object
+  api.platformAccountBalanceResponse:
+    properties:
+      account_type:
+        type: string
+      available_amount:
+        type: integer
+      balance_date:
+        type: string
+      pending_amount:
+        type: integer
+    type: object
   api.platformAlertEventResponse:
     properties:
       alert_type:
@@ -22782,6 +22793,50 @@ paths:
       summary: 获取平台告警历史
       tags:
       - 通知管理
+  /v1/platform/finance/account/balance:
+    get:
+      description: 管理员查询平台商户号微信支付账户实时余额；传入 date 时查询指定日期日终余额
+      parameters:
+      - description: 账户类型，默认 BASIC
+        enum:
+        - BASIC
+        - OPERATION
+        - FEES
+        in: query
+        name: account_type
+        type: string
+      - description: 日终余额日期，格式 YYYY-MM-DD；传入后查询日终余额
+        in: query
+        name: date
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformAccountBalanceResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询平台微信支付账户余额
+      tags:
+      - 平台财务
   /v1/platform/operational-configs:
     get:
       description: 获取平台维护的运营真实配置项，包括平台佣金、运营商佣金、商户保证金与骑手押金。

@@ -21261,6 +21261,74 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/platform/finance/account/balance": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员查询平台商户号微信支付账户实时余额；传入 date 时查询指定日期日终余额",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "查询平台微信支付账户余额",
+                "parameters": [
+                    {
+                        "enum": [
+                            "BASIC",
+                            "OPERATION",
+                            "FEES"
+                        ],
+                        "type": "string",
+                        "description": "账户类型，默认 BASIC",
+                        "name": "account_type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "日终余额日期，格式 YYYY-MM-DD；传入后查询日终余额",
+                        "name": "date",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformAccountBalanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/operational-configs": {
             "get": {
                 "security": [
@@ -37647,6 +37715,23 @@ const docTemplate = `{
                 },
                 "updated_at": {
                     "type": "string"
+                }
+            }
+        },
+        "api.platformAccountBalanceResponse": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "type": "string"
+                },
+                "available_amount": {
+                    "type": "integer"
+                },
+                "balance_date": {
+                    "type": "string"
+                },
+                "pending_amount": {
+                    "type": "integer"
                 }
             }
         },

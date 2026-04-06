@@ -881,6 +881,36 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceFundBalance(ct
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryEcommerceFundBalance", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryEcommerceFundBalance), ctx, subMchID)
 }
 
+// QueryEcommerceFundBalanceByAccountType mocks base method.
+func (m *MockEcommerceClientInterface) QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*wechat.EcommerceFundBalanceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryEcommerceFundBalanceByAccountType", ctx, subMchID, accountType)
+	ret0, _ := ret[0].(*wechat.EcommerceFundBalanceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryEcommerceFundBalanceByAccountType indicates an expected call of QueryEcommerceFundBalanceByAccountType.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceFundBalanceByAccountType(ctx, subMchID, accountType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryEcommerceFundBalanceByAccountType", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryEcommerceFundBalanceByAccountType), ctx, subMchID, accountType)
+}
+
+// QueryEcommerceFundDayEndBalance mocks base method.
+func (m *MockEcommerceClientInterface) QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*wechat.EcommerceFundBalanceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryEcommerceFundDayEndBalance", ctx, subMchID, date, accountType)
+	ret0, _ := ret[0].(*wechat.EcommerceFundBalanceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryEcommerceFundDayEndBalance indicates an expected call of QueryEcommerceFundDayEndBalance.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceFundDayEndBalance(ctx, subMchID, date, accountType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryEcommerceFundDayEndBalance", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryEcommerceFundDayEndBalance), ctx, subMchID, date, accountType)
+}
+
 // QueryEcommerceRefund mocks base method.
 func (m *MockEcommerceClientInterface) QueryEcommerceRefund(ctx context.Context, subMchID, outRefundNo string) (*wechat.EcommerceRefundResponse, error) {
 	m.ctrl.T.Helper()
@@ -939,6 +969,36 @@ func (m *MockEcommerceClientInterface) QueryPartnerOrderByTransactionID(ctx cont
 func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPartnerOrderByTransactionID(ctx, transactionID, subMchID any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryPartnerOrderByTransactionID", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryPartnerOrderByTransactionID), ctx, transactionID, subMchID)
+}
+
+// QueryPlatformFundBalance mocks base method.
+func (m *MockEcommerceClientInterface) QueryPlatformFundBalance(ctx context.Context, accountType string) (*wechat.PlatformFundBalanceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryPlatformFundBalance", ctx, accountType)
+	ret0, _ := ret[0].(*wechat.PlatformFundBalanceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryPlatformFundBalance indicates an expected call of QueryPlatformFundBalance.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPlatformFundBalance(ctx, accountType any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryPlatformFundBalance", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryPlatformFundBalance), ctx, accountType)
+}
+
+// QueryPlatformFundDayEndBalance mocks base method.
+func (m *MockEcommerceClientInterface) QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*wechat.PlatformFundBalanceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryPlatformFundDayEndBalance", ctx, accountType, date)
+	ret0, _ := ret[0].(*wechat.PlatformFundBalanceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryPlatformFundDayEndBalance indicates an expected call of QueryPlatformFundDayEndBalance.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPlatformFundDayEndBalance(ctx, accountType, date any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryPlatformFundDayEndBalance", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryPlatformFundDayEndBalance), ctx, accountType, date)
 }
 
 // QueryProfitSharing mocks base method.

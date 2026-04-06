@@ -879,6 +879,187 @@ func TestIsProfitSharingReturnProcessingError(t *testing.T) {
 	require.False(t, IsProfitSharingReturnProcessingError(errors.New("network error")))
 }
 
+func TestQueryEcommerceFundBalanceByAccountType(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/ecommerce/fund/balance/sub-mchid-001", req.URL.Path)
+			require.Equal(t, "account_type=FEES", req.URL.RawQuery)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"sub-mchid-001","available_amount":1234,"pending_amount":5,"account_type":"FEES"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryEcommerceFundBalanceByAccountType(context.Background(), "sub-mchid-001", "FEES")
+	require.NoError(t, err)
+	require.Equal(t, "sub-mchid-001", resp.SubMchID)
+	require.Equal(t, "FEES", resp.AccountType)
+	require.Equal(t, int64(1234), resp.AvailableAmount)
+	require.Equal(t, int64(1234), resp.WithdrawableAmount)
+}
+
+func TestQueryEcommerceFundDayEndBalance(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/ecommerce/fund/enddaybalance/sub-mchid-001", req.URL.Path)
+			require.Equal(t, "account_type=DEPOSIT&date=2026-04-05", req.URL.RawQuery)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"sub-mchid-001","available_amount":88,"pending_amount":1,"account_type":"DEPOSIT"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryEcommerceFundDayEndBalance(context.Background(), "sub-mchid-001", "2026-04-05", "DEPOSIT")
+	require.NoError(t, err)
+	require.Equal(t, "DEPOSIT", resp.AccountType)
+	require.Equal(t, int64(88), resp.AvailableAmount)
+	require.Equal(t, int64(88), resp.WithdrawableAmount)
+}
+
+func TestQueryPlatformFundBalance(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/merchant/fund/balance/OPERATION", req.URL.Path)
+			require.Empty(t, req.URL.RawQuery)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"available_amount":5000,"pending_amount":20}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryPlatformFundBalance(context.Background(), "OPERATION")
+	require.NoError(t, err)
+	require.Equal(t, "OPERATION", resp.AccountType)
+	require.Equal(t, int64(5000), resp.AvailableAmount)
+	require.Equal(t, int64(20), resp.PendingAmount)
+}
+
+func TestQueryPlatformFundDayEndBalance(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/merchant/fund/dayendbalance/FEES", req.URL.Path)
+			require.Equal(t, "date=2026-04-05", req.URL.RawQuery)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"available_amount":7000,"pending_amount":0}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryPlatformFundDayEndBalance(context.Background(), "FEES", "2026-04-05")
+	require.NoError(t, err)
+	require.Equal(t, "FEES", resp.AccountType)
+	require.Equal(t, int64(7000), resp.AvailableAmount)
+	require.Equal(t, int64(0), resp.PendingAmount)
+}
+
 func decryptEcommerceTestCiphertext(t *testing.T, privateKey *rsa.PrivateKey, ciphertext string) string {
 	t.Helper()
 	decoded, err := base64.StdEncoding.DecodeString(ciphertext)

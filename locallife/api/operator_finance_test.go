@@ -193,7 +193,7 @@ func TestWithdrawOperatorAPI(t *testing.T) {
 			ctrl := gomock.NewController(t)
 			defer ctrl.Finish()
 
-				store := newMockStoreWithAlertSink(ctrl)
+			store := newMockStoreWithAlertSink(ctrl)
 			var ecommerce *mockwechat.MockEcommerceClientInterface
 			if tc.useEcommerce {
 				ecommerce = mockwechat.NewMockEcommerceClientInterface(ctrl)
@@ -252,11 +252,12 @@ func TestGetOperatorAccountBalanceAPI(t *testing.T) {
 		Return(activeOperator, nil)
 
 	ecommerce.EXPECT().
-		QueryEcommerceFundBalance(gomock.Any(), activeOperator.SubMchID.String).
+		QueryEcommerceFundBalanceByAccountType(gomock.Any(), activeOperator.SubMchID.String, "BASIC").
 		Return(&wechat.EcommerceFundBalanceResponse{
 			SubMchID:           activeOperator.SubMchID.String,
 			AvailableAmount:    123456,
 			PendingAmount:      789,
+			AccountType:        "BASIC",
 			WithdrawableAmount: 120000,
 		}, nil)
 
@@ -275,6 +276,66 @@ func TestGetOperatorAccountBalanceAPI(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.Equal(t, int64(123456), resp.AvailableAmount)
 	require.Equal(t, int64(120000), resp.WithdrawableAmount)
+	require.Equal(t, "BASIC", resp.AccountType)
+}
+
+func TestGetOperatorAccountBalanceAPI_DayEndBalance(t *testing.T) {
+	user, _ := randomUser(t)
+	activeOperator := db.Operator{
+		ID:       1003,
+		UserID:   user.ID,
+		RegionID: 1,
+		Status:   "active",
+		SubMchID: pgtype.Text{String: "sub_mch_operator_002", Valid: true},
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerce := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), user.ID).
+		Return([]db.UserRole{{
+			UserID:          user.ID,
+			Role:            "operator",
+			Status:          "active",
+			RelatedEntityID: pgtype.Int8{Int64: activeOperator.RegionID, Valid: true},
+		}}, nil)
+
+	store.EXPECT().
+		GetOperatorByUser(gomock.Any(), user.ID).
+		Times(2).
+		Return(activeOperator, nil)
+
+	ecommerce.EXPECT().
+		QueryEcommerceFundDayEndBalance(gomock.Any(), activeOperator.SubMchID.String, "2026-04-05", "DEPOSIT").
+		Return(&wechat.EcommerceFundBalanceResponse{
+			SubMchID:           activeOperator.SubMchID.String,
+			AvailableAmount:    8888,
+			PendingAmount:      22,
+			AccountType:        "DEPOSIT",
+			WithdrawableAmount: 8888,
+		}, nil)
+
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerce)
+
+	recorder := httptest.NewRecorder()
+	req, err := http.NewRequest(http.MethodGet, "/v1/operators/me/finance/account/balance?date=2026-04-05&account_type=deposit", nil)
+	require.NoError(t, err)
+	addAuthorization(t, req, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, req)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp operatorAccountBalanceResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, "DEPOSIT", resp.AccountType)
+	require.Equal(t, "2026-04-05", resp.BalanceDate)
+	require.Equal(t, int64(8888), resp.AvailableAmount)
+	require.Equal(t, int64(8888), resp.WithdrawableAmount)
 }
 
 func TestGetOperatorAccountBalanceAPI_NotConfigured(t *testing.T) {

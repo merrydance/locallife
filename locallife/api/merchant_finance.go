@@ -1047,6 +1047,8 @@ type merchantAccountBalanceResponse struct {
 	AvailableAmount    int64  `json:"available_amount"`
 	PendingAmount      int64  `json:"pending_amount"`
 	WithdrawableAmount int64  `json:"withdrawable_amount"`
+	AccountType        string `json:"account_type,omitempty"`
+	BalanceDate        string `json:"balance_date,omitempty"`
 	AccountStatus      string `json:"account_status"`
 	StatusDesc         string `json:"status_desc"`
 }
@@ -1271,6 +1273,11 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 		return
 	}
 
+	query, ok := bindSubMerchantFundBalanceQuery(ctx)
+	if !ok {
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	_, paymentConfig, accountStatus, statusDesc, err := server.getFinanceViewerPaymentConfigState(ctx, authPayload.UserID)
 	if err != nil {
@@ -1288,13 +1295,15 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 			AvailableAmount:    0,
 			PendingAmount:      0,
 			WithdrawableAmount: 0,
+			AccountType:        query.AccountType,
+			BalanceDate:        query.Date,
 			AccountStatus:      accountStatus,
 			StatusDesc:         statusDesc,
 		})
 		return
 	}
 
-	balance, err := server.ecommerceClient.QueryEcommerceFundBalance(ctx, paymentConfig.SubMchID)
+	balance, err := loadSubMerchantFundBalance(ctx, server.ecommerceClient, paymentConfig.SubMchID, query)
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("query ecommerce fund balance: %w", err)))
 		return
@@ -1305,6 +1314,8 @@ func (server *Server) getMerchantAccountBalance(ctx *gin.Context) {
 		AvailableAmount:    balance.AvailableAmount,
 		PendingAmount:      balance.PendingAmount,
 		WithdrawableAmount: balance.WithdrawableAmount,
+		AccountType:        query.AccountType,
+		BalanceDate:        query.Date,
 		AccountStatus:      "active",
 		StatusDesc:         "收付通账户已激活",
 	})

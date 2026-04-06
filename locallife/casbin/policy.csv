@@ -32,6 +32,7 @@ p, admin, /v1/platform/stats/*, GET
 p, admin, /v1/platform/profit-sharing/*, GET
 p, admin, /v1/platform/profit-sharing/*, POST
 p, admin, /v1/platform/profit-sharing/*, PATCH
+p, admin, /v1/platform/finance/*, GET
 
 # Platform Rules
 p, admin, /v1/platform/rules, GET

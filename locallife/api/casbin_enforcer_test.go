@@ -33,6 +33,7 @@ g, rider, customer
 
 # Admin policies
 p, admin, /v1/platform/stats/*, GET
+p, admin, /v1/platform/finance/*, GET
 
 # Operator policies
 p, operator, /v1/operator/*, GET

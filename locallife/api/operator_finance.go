@@ -25,6 +25,8 @@ type operatorAccountBalanceResponse struct {
 	AvailableAmount    int64  `json:"available_amount,omitempty"`
 	PendingAmount      int64  `json:"pending_amount,omitempty"`
 	WithdrawableAmount int64  `json:"withdrawable_amount,omitempty"`
+	AccountType        string `json:"account_type,omitempty"`
+	BalanceDate        string `json:"balance_date,omitempty"`
 	AccountStatus      string `json:"account_status,omitempty"`
 	StatusDesc         string `json:"status_desc,omitempty"`
 }
@@ -158,6 +160,11 @@ func (server *Server) getOperatorAccountBalance(ctx *gin.Context) {
 		return
 	}
 
+	query, ok := bindSubMerchantFundBalanceQuery(ctx)
+	if !ok {
+		return
+	}
+
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 	operator, err := server.getOperatorFromUserID(ctx, authPayload.UserID)
 	if err != nil {
@@ -169,13 +176,15 @@ func (server *Server) getOperatorAccountBalance(ctx *gin.Context) {
 	}
 	if accountStatus, statusDesc := getOperatorFinanceAccountStatus(operator); accountStatus != "active" {
 		ctx.JSON(http.StatusOK, operatorAccountBalanceResponse{
+			AccountType:   query.AccountType,
+			BalanceDate:   query.Date,
 			AccountStatus: accountStatus,
 			StatusDesc:    statusDesc,
 		})
 		return
 	}
 
-	balance, err := server.ecommerceClient.QueryEcommerceFundBalance(ctx, operator.SubMchID.String)
+	balance, err := loadSubMerchantFundBalance(ctx, server.ecommerceClient, operator.SubMchID.String, query)
 	if err != nil {
 		ctx.JSON(http.StatusBadGateway, internalError(ctx, fmt.Errorf("query ecommerce fund balance: %w", err)))
 		return
@@ -186,6 +195,8 @@ func (server *Server) getOperatorAccountBalance(ctx *gin.Context) {
 		AvailableAmount:    balance.AvailableAmount,
 		PendingAmount:      balance.PendingAmount,
 		WithdrawableAmount: balance.WithdrawableAmount,
+		AccountType:        query.AccountType,
+		BalanceDate:        query.Date,
 		AccountStatus:      "active",
 	})
 }

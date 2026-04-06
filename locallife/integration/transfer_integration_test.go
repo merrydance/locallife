@@ -53,6 +53,7 @@ const testCasbinPolicyDef = `
 # Role inheritance
 g, customer, customer
 g, operator, operator
+g, admin, admin
 
 # Customer policies
 p, customer, /v1/dining-sessions/*, POST
@@ -63,6 +64,10 @@ p, operator, /v1/operator/appeals/*, GET
 p, operator, /v1/operator/appeals/*, POST
 p, operator, /v1/operator/claims/*/recovery/waive, POST
 p, operator, /v1/operator/claims/*/recovery, GET
+p, operator, /v1/operators/me/*, GET
+
+# Admin policies
+p, admin, /v1/platform/finance/*, GET
 `
 
 var (

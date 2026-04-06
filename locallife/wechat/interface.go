@@ -234,6 +234,18 @@ type EcommerceClientInterface interface {
 	// QueryEcommerceFundBalance 查询二级商户可用余额
 	QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error)
 
+	// QueryEcommerceFundBalanceByAccountType 按账户类型查询二级商户实时余额
+	QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*EcommerceFundBalanceResponse, error)
+
+	// QueryEcommerceFundDayEndBalance 查询二级商户指定日期日终余额
+	QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*EcommerceFundBalanceResponse, error)
+
+	// QueryPlatformFundBalance 查询平台商户实时余额
+	QueryPlatformFundBalance(ctx context.Context, accountType string) (*PlatformFundBalanceResponse, error)
+
+	// QueryPlatformFundDayEndBalance 查询平台商户指定日期日终余额
+	QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*PlatformFundBalanceResponse, error)
+
 	// CreateEcommerceWithdraw 发起二级商户提现
 	CreateEcommerceWithdraw(ctx context.Context, req *EcommerceWithdrawRequest) (*EcommerceWithdrawResponse, error)
 

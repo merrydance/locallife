@@ -1387,6 +1387,12 @@ func (server *Server) setupRouter() {
 		platformRulesGroup.GET("/hits", server.listRuleHits)
 	}
 
+	platformFinanceGroup := authGroup.Group("/platform/finance")
+	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
+	{
+		platformFinanceGroup.GET("/account/balance", server.getPlatformAccountBalance)
+	}
+
 	platformOperatorRulesGroup := authGroup.Group("/platform/operator-rules")
 	platformOperatorRulesGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{

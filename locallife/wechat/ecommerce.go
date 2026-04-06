@@ -66,6 +66,9 @@ const (
 
 	// 账户资金管理（平台收付通）
 	ecommerceFundBalanceURL        = "/v3/ecommerce/fund/balance/%s"
+	ecommerceFundDayEndBalanceURL  = "/v3/ecommerce/fund/enddaybalance/%s"
+	platformFundBalanceURL         = "/v3/merchant/fund/balance/%s"
+	platformFundDayEndBalanceURL   = "/v3/merchant/fund/dayendbalance/%s"
 	ecommerceFundWithdrawURL       = "/v3/ecommerce/fund/withdraw"
 	ecommerceFundWithdrawQueryByNo = "/v3/ecommerce/fund/withdraw/out-request-no/%s"
 
@@ -1877,14 +1880,36 @@ type EcommerceFundBalanceResponse struct {
 	SubMchID           string `json:"sub_mchid"`
 	AvailableAmount    int64  `json:"available_amount"`
 	PendingAmount      int64  `json:"pending_amount"`
+	AccountType        string `json:"account_type"`
 	WithdrawableAmount int64  `json:"withdrawable_amount"`
+}
+
+// PlatformFundBalanceResponse 平台商户资金账户余额
+type PlatformFundBalanceResponse struct {
+	AvailableAmount int64  `json:"available_amount"`
+	PendingAmount   int64  `json:"pending_amount"`
+	AccountType     string `json:"account_type"`
 }
 
 // QueryEcommerceFundBalance 查询二级商户可用余额
 func (c *EcommerceClient) QueryEcommerceFundBalance(ctx context.Context, subMchID string) (*EcommerceFundBalanceResponse, error) {
-	url := fmt.Sprintf(ecommerceFundBalanceURL, subMchID)
+	return c.QueryEcommerceFundBalanceByAccountType(ctx, subMchID, "BASIC")
+}
 
-	respBody, err := c.doRequest(ctx, http.MethodGet, url, nil)
+// QueryEcommerceFundBalanceByAccountType 按账户类型查询二级商户实时余额
+func (c *EcommerceClient) QueryEcommerceFundBalanceByAccountType(ctx context.Context, subMchID, accountType string) (*EcommerceFundBalanceResponse, error) {
+	if subMchID == "" {
+		return nil, fmt.Errorf("query ecommerce fund balance: sub_mchid is required")
+	}
+	if accountType == "" {
+		accountType = "BASIC"
+	}
+
+	query := url.Values{}
+	query.Set("account_type", accountType)
+	requestURL := fmt.Sprintf(ecommerceFundBalanceURL, url.PathEscape(subMchID)) + "?" + query.Encode()
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
 	if err != nil {
 		return nil, fmt.Errorf("query ecommerce fund balance: %w", err)
 	}
@@ -1896,6 +1921,104 @@ func (c *EcommerceClient) QueryEcommerceFundBalance(ctx context.Context, subMchI
 
 	if resp.SubMchID == "" {
 		resp.SubMchID = subMchID
+	}
+	if resp.AccountType == "" {
+		resp.AccountType = accountType
+	}
+	if resp.WithdrawableAmount == 0 && resp.AvailableAmount > 0 {
+		resp.WithdrawableAmount = resp.AvailableAmount
+	}
+
+	return &resp, nil
+}
+
+// QueryEcommerceFundDayEndBalance 查询二级商户指定日期日终余额
+func (c *EcommerceClient) QueryEcommerceFundDayEndBalance(ctx context.Context, subMchID, date, accountType string) (*EcommerceFundBalanceResponse, error) {
+	if subMchID == "" {
+		return nil, fmt.Errorf("query ecommerce fund day end balance: sub_mchid is required")
+	}
+	if date == "" {
+		return nil, fmt.Errorf("query ecommerce fund day end balance: date is required")
+	}
+	if accountType == "" {
+		accountType = "BASIC"
+	}
+
+	query := url.Values{}
+	query.Set("date", date)
+	query.Set("account_type", accountType)
+	requestURL := fmt.Sprintf(ecommerceFundDayEndBalanceURL, url.PathEscape(subMchID)) + "?" + query.Encode()
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query ecommerce fund day end balance: %w", err)
+	}
+
+	var resp EcommerceFundBalanceResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	if resp.SubMchID == "" {
+		resp.SubMchID = subMchID
+	}
+	if resp.AccountType == "" {
+		resp.AccountType = accountType
+	}
+	if resp.WithdrawableAmount == 0 && resp.AvailableAmount > 0 {
+		resp.WithdrawableAmount = resp.AvailableAmount
+	}
+
+	return &resp, nil
+}
+
+// QueryPlatformFundBalance 查询平台商户实时余额
+func (c *EcommerceClient) QueryPlatformFundBalance(ctx context.Context, accountType string) (*PlatformFundBalanceResponse, error) {
+	if accountType == "" {
+		accountType = "BASIC"
+	}
+
+	requestURL := fmt.Sprintf(platformFundBalanceURL, url.PathEscape(accountType))
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query platform fund balance: %w", err)
+	}
+
+	var resp PlatformFundBalanceResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.AccountType == "" {
+		resp.AccountType = accountType
+	}
+
+	return &resp, nil
+}
+
+// QueryPlatformFundDayEndBalance 查询平台商户指定日期日终余额
+func (c *EcommerceClient) QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*PlatformFundBalanceResponse, error) {
+	if date == "" {
+		return nil, fmt.Errorf("query platform fund day end balance: date is required")
+	}
+	if accountType == "" {
+		accountType = "BASIC"
+	}
+
+	query := url.Values{}
+	query.Set("date", date)
+	requestURL := fmt.Sprintf(platformFundDayEndBalanceURL, url.PathEscape(accountType)) + "?" + query.Encode()
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query platform fund day end balance: %w", err)
+	}
+
+	var resp PlatformFundBalanceResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.AccountType == "" {
+		resp.AccountType = accountType
 	}
 
 	return &resp, nil
