@@ -57,18 +57,22 @@
 
 当前真实主路径：
 
-- `order` 与 `reservation` 主支付已经统一收口到收付通合单模式。
+- 业务口径上，`order` 与 `reservation` 主支付都按“单订单的平台收付通普通支付”处理，不以商户数作为链路选择条件。
+- 当前产品里，预约、堂食、外带天然只会生成 1 笔订单，因此都走平台收付通普通支付。
+- 外卖只有在一次结算里生成多笔订单时才走合单支付；当前实际会触发这一路径的场景是多商户外卖购物车一起下单。
+- 如果外卖只选择了 1 个商户，即使该商户下有多个商品，也只会生成 1 笔订单，因此仍走平台收付通普通支付，不走合单支付。
 - [api/payment_order.go](../api/payment_order.go) 会把 `payment_type` 归一成兼容字段，旧客户端传 `native` 不再改变底层物理支付链路。
 
 落库路径：
 
-- 单商户收付通支付：`CreateEcommercePaymentTx`，见 [db/sqlc/tx_create_ecommerce_payment.go](../db/sqlc/tx_create_ecommerce_payment.go)
+- 平台收付通普通支付：订单主支付见 [db/sqlc/tx_create_partner_payment.go](../db/sqlc/tx_create_partner_payment.go) 的 `CreatePartnerPaymentTx`
+- 预订等普通支付结构见 [db/sqlc/tx_create_ecommerce_payment.go](../db/sqlc/tx_create_ecommerce_payment.go) 的 `CreateEcommercePaymentTx`
 - 多订单合单支付：`CreateCombinedPaymentTx`，见 [db/sqlc/tx_create_combined_payment.go](../db/sqlc/tx_create_combined_payment.go)
 - 合单关闭：`CloseCombinedPaymentOrderTx`，见 [db/sqlc/tx_close_combined_payment.go](../db/sqlc/tx_close_combined_payment.go)
 
 超时处理：
 
-- 单支付单超时：[worker/task_payment_timeout.go](../worker/task_payment_timeout.go)
+- 平台收付通普通支付超时：[worker/task_payment_timeout.go](../worker/task_payment_timeout.go)
 - 合单支付超时：[worker/task_combined_payment_timeout.go](../worker/task_combined_payment_timeout.go)
 - 订单支付超时：[worker/task_order_timeout.go](../worker/task_order_timeout.go)
 
@@ -164,7 +168,7 @@
 
 | 链路 | 主入口 | 主要落库/事务 | 第三方接口 | 异步/恢复 |
 | --- | --- | --- | --- | --- |
-| 订单支付 | [api/payment_order.go](../api/payment_order.go) | `CreateEcommercePaymentTx` | `CreateCombineOrder` | 支付超时、支付回调、支付恢复 |
+| 平台收付通普通支付 | [api/payment_order.go](../api/payment_order.go) | `CreateEcommercePaymentTx` | `CreateCombineOrder` | 支付超时、支付回调、支付恢复 |
 | 多订单合单支付 | [api/payment_order.go](../api/payment_order.go) | `CreateCombinedPaymentTx` | `CreateCombineOrder` | 合单超时、合单回调 |
 | 预订押金支付 | [api/payment_order.go](../api/payment_order.go) | `CreateEcommercePaymentTx` | `CreateCombineOrder` | 支付成功后预订状态推进 |
 | 预订加菜补差 | [logic/reservation_dishes.go](../logic/reservation_dishes.go) | `CreateEcommercePaymentTx` | `CreateCombineOrder` | 支付成功后 `reservation_addon` 处理 |
@@ -185,7 +189,7 @@
 
 ## 4. 各资金链路展开
 
-### 4.1 订单/预订主支付
+### 4.1 平台收付通普通支付
 
 生产入口：
 
@@ -194,8 +198,11 @@
 
 当前实现要点：
 
-- `order` 和 `reservation` 统一创建 `combined_payment_orders + payment_orders` 组合结构。
-- 单商户场景也走收付通单子单合单，便于统一后续分账与结算事件处理。
+- 业务语义上，`order` 和 `reservation` 主支付都属于平台收付通普通支付，不走微信多订单合单下单接口。
+- 当前产品里，预约、堂食、外带，以及单商户外卖，都会落到这条平台收付通普通支付链路。
+- 外卖如果只选了一个商户，即使包含多个商品，也只生成一笔订单，因此仍是平台收付通普通支付。
+- 只有一次结算需要支付多笔订单时才进入合单支付；当前真实业务场景是多商户外卖购物车一起下单。
+- 个别单商户收付通支线会复用 `combined_payment_orders + payment_orders` 的本地结构承接回调与恢复，但这不改变其业务口径仍是平台收付通普通支付。
 - 幂等复用已有 pending 支付单，并在已有 `prepay_id` 时重新签名生成 `pay_params`。
 
 ### 4.2 合单支付
@@ -206,9 +213,11 @@
 
 特点：
 
-- 支持最多 10 个订单合并支付。
+- 合单支付的定义是“一次支付多笔订单”，不是“跨商户”本身；只是当前产品里多订单场景恰好来自多商户外卖结算。
+- 外卖若只选择一个商户，只会生成一笔订单，应走平台收付通普通支付而不是合单支付。
+- 支持最多 50 个订单合并支付。
 - 在微信下单失败时会主动把本地合单和子支付单关闭，避免僵尸数据。
-- 合单回调由 [api/payment_callback.go](../api/payment_callback.go) 的 `handleCombinePaymentNotify` 处理。
+- 合单回调由 [api/payment_callback.go](../api/payment_callback.go) 的 `handleCombinePaymentNotify` 处理，对应独立地址 `/v1/webhooks/wechat-ecommerce/combine-notify`。
 
 ### 4.3 直连支付支线
 
@@ -228,6 +237,7 @@
 回调入口：
 
 - 直连支付回调：`handlePaymentNotify`
+- 平台收付通普通支付回调：`handleEcommercePaymentNotify`
 - 合单支付回调：`handleCombinePaymentNotify`
 - 订单结算事件：`handleOrderSettlementNotify`
 - 直连退款回调：`handleRefundNotify`

@@ -579,7 +579,7 @@ func TestHandleCombinePaymentNotifyIdempotency(t *testing.T) {
 				bodyBytes, err := json.Marshal(requestBody)
 				require.NoError(t, err)
 
-				request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/notify", bytes.NewReader(bodyBytes))
+				request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/combine-notify", bytes.NewReader(bodyBytes))
 				require.NoError(t, err)
 
 				request.Header.Set("Wechatpay-Timestamp", "1234567890")
@@ -642,31 +642,37 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 		DecryptCombinePaymentNotification(gomock.Any()).
 		Return(&wechat.CombinePaymentNotification{
 			CombineOutTradeNo: combineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{
-				{
-					OutTradeNo:    outTradeNo,
-					TransactionID: transactionID,
-					TradeState:    "SUCCESS",
-					Amount: struct {
-						TotalAmount int64  `json:"total_amount"`
-						PayerAmount int64  `json:"payer_amount"`
-						Currency    string `json:"currency"`
-					}{
-						TotalAmount: 10000,
-						PayerAmount: 10000,
-						Currency:    "CNY",
-					},
+			SubOrders: []wechat.CombineSubOrderResult{{
+				OutTradeNo:    outTradeNo,
+				TransactionID: transactionID,
+				TradeState:    "SUCCESS",
+				Amount: struct {
+					TotalAmount    int64  `json:"total_amount"`
+					PayerAmount    int64  `json:"payer_amount"`
+					Currency       string `json:"currency"`
+					PayerCurrency  string `json:"payer_currency"`
+					SettlementRate int64  `json:"settlement_rate"`
+				}{
+					TotalAmount:   10000,
+					PayerAmount:   10000,
+					Currency:      "CNY",
+					PayerCurrency: "CNY",
 				},
-			},
+			}},
 		}, nil)
+
+	store.EXPECT().
+		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
+		Return(db.CombinedPaymentOrder{ID: 201, CombineOutTradeNo: combineOutTradeNo, Status: PaymentStatusPending}, nil)
 
 	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
 		Return(db.PaymentOrder{
-			ID:         11,
-			OutTradeNo: outTradeNo,
-			Amount:     10000,
-			Status:     PaymentStatusClosed,
+			ID:                11,
+			OutTradeNo:        outTradeNo,
+			Amount:            10000,
+			Status:            PaymentStatusClosed,
+			CombinedPaymentID: pgtype.Int8{Int64: 201, Valid: true},
 		}, nil)
 
 	taskDistributor.EXPECT().
@@ -689,7 +695,7 @@ func TestHandleCombinePaymentNotify_ClosedOrderEnqueuesAnomalyRefund(t *testing.
 	assertWechatSuccessResponse(t, recorder, "OK")
 }
 
-func TestHandleCombinePaymentNotify_PartnerSingleDelegatesToPartnerHandler(t *testing.T) {
+func TestHandleEcommercePaymentNotify_DelegatesToPartnerHandler(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -707,10 +713,6 @@ func TestHandleCombinePaymentNotify_PartnerSingleDelegatesToPartnerHandler(t *te
 	store.EXPECT().
 		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 		Return(true, nil)
-
-	ecommerceClient.EXPECT().
-		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{}, nil)
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
@@ -755,14 +757,14 @@ func TestHandleCombinePaymentNotify_PartnerSingleDelegatesToPartnerHandler(t *te
 
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	recorder := httptest.NewRecorder()
-	request := newCombinePaymentNotifyRequest(t, notificationID)
+	request := newEcommercePaymentNotifyRequest(t, notificationID)
 
 	server.router.ServeHTTP(recorder, request)
 
 	assertWechatNoContentResponse(t, recorder)
 }
 
-func TestHandleCombinePaymentNotify_PartnerSingleUsesPersistedSubMchIDWhenConfigDrifts(t *testing.T) {
+func TestHandleEcommercePaymentNotify_UsesPersistedSubMchIDWhenConfigDrifts(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -780,10 +782,6 @@ func TestHandleCombinePaymentNotify_PartnerSingleUsesPersistedSubMchIDWhenConfig
 	store.EXPECT().
 		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 		Return(true, nil)
-
-	ecommerceClient.EXPECT().
-		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{}, nil)
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
@@ -820,14 +818,14 @@ func TestHandleCombinePaymentNotify_PartnerSingleUsesPersistedSubMchIDWhenConfig
 
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	recorder := httptest.NewRecorder()
-	request := newCombinePaymentNotifyRequest(t, notificationID)
+	request := newEcommercePaymentNotifyRequest(t, notificationID)
 
 	server.router.ServeHTTP(recorder, request)
 
 	assertWechatNoContentResponse(t, recorder)
 }
 
-func TestHandleCombinePaymentNotify_PartnerSinglePaidUnprocessedReenqueuesPaymentSuccess(t *testing.T) {
+func TestHandleEcommercePaymentNotify_PaidUnprocessedReenqueuesPaymentSuccess(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -846,10 +844,6 @@ func TestHandleCombinePaymentNotify_PartnerSinglePaidUnprocessedReenqueuesPaymen
 	store.EXPECT().
 		TryClaimWechatNotification(gomock.Any(), gomock.Any()).
 		Return(true, nil)
-
-	ecommerceClient.EXPECT().
-		DecryptCombinePaymentNotification(gomock.Any()).
-		Return(&wechat.CombinePaymentNotification{}, nil)
 
 	ecommerceClient.EXPECT().
 		DecryptPartnerPaymentNotification(gomock.Any()).
@@ -905,14 +899,14 @@ func TestHandleCombinePaymentNotify_PartnerSinglePaidUnprocessedReenqueuesPaymen
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	server.SetTaskDistributorForTest(taskDistributor)
 	recorder := httptest.NewRecorder()
-	request := newCombinePaymentNotifyRequest(t, notificationID)
+	request := newEcommercePaymentNotifyRequest(t, notificationID)
 
 	server.router.ServeHTTP(recorder, request)
 
 	assertWechatNoContentResponse(t, recorder)
 }
 
-func TestHandleCombinePaymentNotify_PartnerSingleClosedOrderEnqueueFailureEmitsAlert(t *testing.T) {
+func TestHandleEcommercePaymentNotify_ClosedOrderEnqueueFailureEmitsAlert(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -931,7 +925,6 @@ func TestHandleCombinePaymentNotify_PartnerSingleClosedOrderEnqueueFailureEmitsA
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(&wechat.CombinePaymentNotification{}, nil)
 	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
 		SpMchID:       "sp_expected",
 		SpAppID:       "app_expected",
@@ -962,14 +955,14 @@ func TestHandleCombinePaymentNotify_PartnerSingleClosedOrderEnqueueFailureEmitsA
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	server.SetTaskDistributorForTest(taskDistributor)
 	recorder := httptest.NewRecorder()
-	request := newCombinePaymentNotifyRequest(t, notificationID)
+	request := newEcommercePaymentNotifyRequest(t, notificationID)
 
 	server.router.ServeHTTP(recorder, request)
 
 	assertWechatNoContentResponse(t, recorder)
 }
 
-func TestHandleCombinePaymentNotify_PartnerSingleAmountMismatchEnqueueFailureEmitsAlert(t *testing.T) {
+func TestHandleEcommercePaymentNotify_AmountMismatchEnqueueFailureEmitsAlert(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -988,7 +981,6 @@ func TestHandleCombinePaymentNotify_PartnerSingleAmountMismatchEnqueueFailureEmi
 
 	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
 	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
-	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(&wechat.CombinePaymentNotification{}, nil)
 	ecommerceClient.EXPECT().DecryptPartnerPaymentNotification(gomock.Any()).Return(&wechat.PartnerPaymentNotificationResource{
 		SpMchID:       "sp_expected",
 		SpAppID:       "app_expected",
@@ -1026,7 +1018,7 @@ func TestHandleCombinePaymentNotify_PartnerSingleAmountMismatchEnqueueFailureEmi
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	server.SetTaskDistributorForTest(taskDistributor)
 	recorder := httptest.NewRecorder()
-	request := newCombinePaymentNotifyRequest(t, notificationID)
+	request := newEcommercePaymentNotifyRequest(t, notificationID)
 
 	server.router.ServeHTTP(recorder, request)
 
@@ -1108,16 +1100,23 @@ func TestHandleCombinePaymentNotify_SubOrderNotFoundReturnsFail(t *testing.T) {
 				TransactionID: transactionID,
 				TradeState:    "SUCCESS",
 				Amount: struct {
-					TotalAmount int64  `json:"total_amount"`
-					PayerAmount int64  `json:"payer_amount"`
-					Currency    string `json:"currency"`
+					TotalAmount    int64  `json:"total_amount"`
+					PayerAmount    int64  `json:"payer_amount"`
+					Currency       string `json:"currency"`
+					PayerCurrency  string `json:"payer_currency"`
+					SettlementRate int64  `json:"settlement_rate"`
 				}{
-					TotalAmount: 10000,
-					PayerAmount: 10000,
-					Currency:    "CNY",
+					TotalAmount:   10000,
+					PayerAmount:   10000,
+					Currency:      "CNY",
+					PayerCurrency: "CNY",
 				},
 			}},
 		}, nil)
+
+	store.EXPECT().
+		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
+		Return(db.CombinedPaymentOrder{ID: 301, CombineOutTradeNo: combineOutTradeNo, Status: PaymentStatusPending}, nil)
 
 	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
@@ -1168,27 +1167,35 @@ func TestHandleCombinePaymentNotify_AmountMismatchEnqueuesRefund(t *testing.T) {
 					TransactionID: transactionID,
 					TradeState:    "SUCCESS",
 					Amount: struct {
-						TotalAmount int64  `json:"total_amount"`
-						PayerAmount int64  `json:"payer_amount"`
-						Currency    string `json:"currency"`
+						TotalAmount    int64  `json:"total_amount"`
+						PayerAmount    int64  `json:"payer_amount"`
+						Currency       string `json:"currency"`
+						PayerCurrency  string `json:"payer_currency"`
+						SettlementRate int64  `json:"settlement_rate"`
 					}{
-						TotalAmount: 12000,
-						PayerAmount: 12000,
-						Currency:    "CNY",
+						TotalAmount:   12000,
+						PayerAmount:   12000,
+						Currency:      "CNY",
+						PayerCurrency: "CNY",
 					},
 				},
 			},
 		}, nil)
 
 	store.EXPECT().
+		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
+		Return(db.CombinedPaymentOrder{ID: 401, CombineOutTradeNo: combineOutTradeNo, Status: PaymentStatusPending}, nil)
+
+	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
 		Return(db.PaymentOrder{
-			ID:           12,
-			OutTradeNo:   outTradeNo,
-			Amount:       10000,
-			Status:       PaymentStatusPending,
-			BusinessType: "order",
-			OrderID:      pgtype.Int8{Int64: 88, Valid: true},
+			ID:                12,
+			OutTradeNo:        outTradeNo,
+			Amount:            10000,
+			Status:            PaymentStatusPending,
+			BusinessType:      "order",
+			OrderID:           pgtype.Int8{Int64: 88, Valid: true},
+			CombinedPaymentID: pgtype.Int8{Int64: 401, Valid: true},
 		}, nil)
 
 	store.EXPECT().
@@ -1225,7 +1232,6 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 
 	store := newMockStoreWithAlertSink(ctrl)
 	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
-	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
 
 	notificationID := util.RandomString(32)
 	combineOutTradeNo := "COMB_" + util.RandomString(18)
@@ -1249,34 +1255,19 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 				TransactionID: transactionID,
 				TradeState:    "SUCCESS",
 				Amount: struct {
-					TotalAmount int64  `json:"total_amount"`
-					PayerAmount int64  `json:"payer_amount"`
-					Currency    string `json:"currency"`
+					TotalAmount    int64  `json:"total_amount"`
+					PayerAmount    int64  `json:"payer_amount"`
+					Currency       string `json:"currency"`
+					PayerCurrency  string `json:"payer_currency"`
+					SettlementRate int64  `json:"settlement_rate"`
 				}{
-					TotalAmount: 10000,
-					PayerAmount: 10000,
-					Currency:    "CNY",
+					TotalAmount:   10000,
+					PayerAmount:   10000,
+					Currency:      "CNY",
+					PayerCurrency: "CNY",
 				},
 			}},
 		}, nil)
-
-	store.EXPECT().
-		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
-		Return(db.PaymentOrder{
-			ID:           13,
-			OutTradeNo:   outTradeNo,
-			Amount:       10000,
-			Status:       PaymentStatusPending,
-			BusinessType: "order",
-		}, nil)
-
-	store.EXPECT().
-		UpdatePaymentOrderToPaid(gomock.Any(), gomock.Any()).
-		Return(db.PaymentOrder{ID: 13, Status: PaymentStatusPaid}, nil)
-
-	taskDistributor.EXPECT().
-		DistributeTaskProcessPaymentSuccess(gomock.Any(), gomock.AssignableToTypeOf(&worker.PaymentSuccessPayload{}), gomock.Any(), gomock.Any(), gomock.Any()).
-		Return(nil)
 
 	store.EXPECT().
 		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
@@ -1287,7 +1278,6 @@ func TestHandleCombinePaymentNotify_MainOrderNotFoundReturnsFail(t *testing.T) {
 		Return(nil)
 
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
-	server.SetTaskDistributorForTest(taskDistributor)
 
 	recorder := httptest.NewRecorder()
 	request := newCombinePaymentNotifyRequest(t, notificationID)
@@ -1328,26 +1318,34 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *t
 					TransactionID: transactionID,
 					TradeState:    "SUCCESS",
 					Amount: struct {
-						TotalAmount int64  `json:"total_amount"`
-						PayerAmount int64  `json:"payer_amount"`
-						Currency    string `json:"currency"`
+						TotalAmount    int64  `json:"total_amount"`
+						PayerAmount    int64  `json:"payer_amount"`
+						Currency       string `json:"currency"`
+						PayerCurrency  string `json:"payer_currency"`
+						SettlementRate int64  `json:"settlement_rate"`
 					}{
-						TotalAmount: 10000,
-						PayerAmount: 10000,
-						Currency:    "CNY",
+						TotalAmount:   10000,
+						PayerAmount:   10000,
+						Currency:      "CNY",
+						PayerCurrency: "CNY",
 					},
 				},
 			},
 		}, nil)
 
 	store.EXPECT().
+		GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).
+		Return(db.CombinedPaymentOrder{ID: 501, CombineOutTradeNo: combineOutTradeNo, Status: PaymentStatusPending}, nil)
+
+	store.EXPECT().
 		GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).
 		Return(db.PaymentOrder{
-			ID:           13,
-			OutTradeNo:   outTradeNo,
-			Amount:       10000,
-			Status:       PaymentStatusPending,
-			BusinessType: "order",
+			ID:                13,
+			OutTradeNo:        outTradeNo,
+			Amount:            10000,
+			Status:            PaymentStatusPending,
+			BusinessType:      "order",
+			CombinedPaymentID: pgtype.Int8{Int64: 501, Valid: true},
 		}, nil)
 
 	store.EXPECT().
@@ -1366,6 +1364,65 @@ func TestHandleCombinePaymentNotify_PaymentSuccessEnqueueFailureReturnsFail(t *t
 	store.EXPECT().
 		ReleaseWechatNotificationClaim(gomock.Any(), notificationID).
 		Return(nil)
+
+	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
+	server.SetTaskDistributorForTest(taskDistributor)
+
+	recorder := httptest.NewRecorder()
+	request := newCombinePaymentNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+	assertWechatFailResponse(t, recorder, "1 orders failed")
+}
+
+func TestHandleCombinePaymentNotify_ClosedOrderEnqueueFailureReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	taskDistributor := mockwk.NewMockTaskDistributor(ctrl)
+
+	notificationID := util.RandomString(32)
+	combineOutTradeNo := "COMB_" + util.RandomString(18)
+	outTradeNo := "SUB_" + util.RandomString(18)
+	transactionID := "WX_" + util.RandomString(18)
+
+	store.EXPECT().CreatePlatformAlertEvent(gomock.Any(), gomock.Any()).Return(db.PlatformAlertEvent{}, nil)
+
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
+	ecommerceClient.EXPECT().DecryptCombinePaymentNotification(gomock.Any()).Return(&wechat.CombinePaymentNotification{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.CombineSubOrderResult{{
+			OutTradeNo:    outTradeNo,
+			TransactionID: transactionID,
+			TradeState:    "SUCCESS",
+			Amount: struct {
+				TotalAmount    int64  `json:"total_amount"`
+				PayerAmount    int64  `json:"payer_amount"`
+				Currency       string `json:"currency"`
+				PayerCurrency  string `json:"payer_currency"`
+				SettlementRate int64  `json:"settlement_rate"`
+			}{
+				TotalAmount:   10000,
+				PayerAmount:   10000,
+				Currency:      "CNY",
+				PayerCurrency: "CNY",
+			},
+		}},
+	}, nil)
+	store.EXPECT().GetCombinedPaymentOrderByOutTradeNo(gomock.Any(), combineOutTradeNo).Return(db.CombinedPaymentOrder{ID: 601, CombineOutTradeNo: combineOutTradeNo, Status: PaymentStatusPending}, nil)
+	store.EXPECT().GetPaymentOrderByOutTradeNo(gomock.Any(), outTradeNo).Return(db.PaymentOrder{
+		ID:                61,
+		OutTradeNo:        outTradeNo,
+		Amount:            10000,
+		Status:            PaymentStatusClosed,
+		CombinedPaymentID: pgtype.Int8{Int64: 601, Valid: true},
+	}, nil)
+	taskDistributor.EXPECT().DistributeTaskProcessAnomalyRefund(gomock.Any(), gomock.AssignableToTypeOf(&worker.PayloadProcessAnomalyRefund{}), gomock.Any(), gomock.Any()).Return(errors.New("enqueue failed"))
+	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
 
 	server := newTestServerWithEcommerceClient(t, store, ecommerceClient)
 	server.SetTaskDistributorForTest(taskDistributor)
@@ -2315,7 +2372,35 @@ func newCombinePaymentNotifyRequest(t *testing.T, notificationID string) *http.R
 	bodyBytes, err := json.Marshal(requestBody)
 	require.NoError(t, err)
 
-	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/notify", bytes.NewReader(bodyBytes))
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/combine-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	return request
+}
+
+func newEcommercePaymentNotifyRequest(t *testing.T, notificationID string) *http.Request {
+	t.Helper()
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "transaction",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/payment-notify", bytes.NewReader(bodyBytes))
 	require.NoError(t, err)
 
 	request.Header.Set("Wechatpay-Timestamp", "1234567890")

@@ -233,6 +233,12 @@ type claimRecoveryPaymentCreateResponse struct {
 	PayParams      *recoveryPayParamsResponse  `json:"pay_params"`
 }
 
+type takeoutCombinedPaymentFixture struct {
+	Customer db.User
+	Order    db.Order
+	Combined combinedPaymentOrderResponse
+}
+
 func markClaimRecoveryPaymentPaid(t *testing.T, store *db.SQLStore, paymentOrderID int64, transactionID string) {
 	t.Helper()
 
@@ -279,6 +285,223 @@ func ensureIntegrationMerchantRecovery(t *testing.T, store *db.SQLStore, orderID
 	return recovery
 }
 
+func createTakeoutCombinedPaymentFixture(t *testing.T, server *api.Server, store *db.SQLStore) takeoutCombinedPaymentFixture {
+	t.Helper()
+
+	ctx := context.Background()
+	region := createIntegrationRegion(t, store)
+	merchantOwner := createIntegrationUser(t, store)
+	merchant := createIntegrationMerchant(t, store, merchantOwner.ID, region.ID)
+
+	_, err := store.UpdateMerchantStatus(ctx, db.UpdateMerchantStatusParams{ID: merchant.ID, Status: "active"})
+	require.NoError(t, err)
+	_, err = store.UpdateMerchantIsOpen(ctx, db.UpdateMerchantIsOpenParams{ID: merchant.ID, IsOpen: true, AutoCloseAt: pgtype.Timestamptz{Valid: false}})
+	require.NoError(t, err)
+	merchant = ensureIntegrationMerchantCoords(t, store, merchant.ID)
+
+	_, err = store.CreateMerchantPaymentConfig(ctx, db.CreateMerchantPaymentConfigParams{
+		MerchantID: merchant.ID,
+		SubMchID:   "sub_mch_001",
+		Status:     "active",
+	})
+	require.NoError(t, err)
+
+	dish := createIntegrationDish(t, store, merchant.ID)
+	customer := createIntegrationUser(t, store)
+	addr := createIntegrationUserAddress(t, store, customer.ID, region.ID)
+
+	createBody := map[string]any{
+		"merchant_id":           merchant.ID,
+		"order_type":            "takeout",
+		"address_id":            addr.ID,
+		"items":                 []map[string]any{{"dish_id": dish.ID, "quantity": 1}},
+		"use_balance":           false,
+		"delivery_fee":          int64(500),
+		"delivery_distance":     int32(1000),
+		"delivery_fee_discount": int64(0),
+	}
+
+	var created takeoutOrderResponse
+	{
+		rec := doJSON(t, server, http.MethodPost, "/v1/orders", createBody, customer.ID)
+		require.Equal(t, http.StatusCreated, rec.Code)
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &created)
+		require.Equal(t, "pending", created.Status)
+	}
+
+	order, err := store.GetOrder(ctx, created.ID)
+	require.NoError(t, err)
+
+	customerRow, err := store.GetUser(ctx, customer.ID)
+	require.NoError(t, err)
+	if customerRow.WechatOpenid == "" {
+		_, err = integrationPool.Exec(ctx, `UPDATE users SET wechat_openid = $2 WHERE id = $1`, customer.ID, "wx_openid_"+util.RandomString(8))
+		require.NoError(t, err)
+	}
+
+	if existingPayment, err := store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
+		OrderID:      pgtype.Int8{Int64: created.ID, Valid: true},
+		BusinessType: "order",
+	}); err == nil {
+		if existingPayment.Status == "pending" && existingPayment.PaymentType != "profit_sharing" {
+			_, err = integrationPool.Exec(ctx, `UPDATE payment_orders SET status = 'closed' WHERE id = $1`, existingPayment.ID)
+			require.NoError(t, err)
+		}
+	}
+
+	var combined combinedPaymentOrderResponse
+	{
+		body := map[string]any{
+			"order_ids": []int64{created.ID},
+		}
+		rec := doJSON(t, server, http.MethodPost, "/v1/payments/combined", body, customer.ID)
+		require.Equalf(t, http.StatusCreated, rec.Code, "create combined payment failed: %s", rec.Body.String())
+		requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &combined)
+		require.Greater(t, combined.ID, int64(0))
+		require.Equal(t, "pending", combined.Status)
+		require.Equal(t, order.TotalAmount, combined.TotalAmount)
+		require.Len(t, combined.SubOrders, 1)
+		require.Equal(t, created.ID, combined.SubOrders[0].OrderID)
+	}
+
+	return takeoutCombinedPaymentFixture{
+		Customer: customer,
+		Order:    order,
+		Combined: combined,
+	}
+}
+
+func newIntegrationCombineQueryResponse(combineOutTradeNo, outTradeNo, tradeState, transactionID string, amount int64) *wechat.CombineQueryResponse {
+	resp := &wechat.CombineQueryResponse{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.CombineSubOrderResult{{
+			OutTradeNo:     outTradeNo,
+			TransactionID:  transactionID,
+			TradeType:      "JSAPI",
+			TradeState:     tradeState,
+			TradeStateDesc: "integration",
+			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+		}},
+	}
+	resp.SubOrders[0].Amount = struct {
+		TotalAmount    int64  `json:"total_amount"`
+		PayerAmount    int64  `json:"payer_amount"`
+		Currency       string `json:"currency"`
+		PayerCurrency  string `json:"payer_currency"`
+		SettlementRate int64  `json:"settlement_rate"`
+	}{
+		TotalAmount:   amount,
+		PayerAmount:   amount,
+		Currency:      "CNY",
+		PayerCurrency: "CNY",
+	}
+	return resp
+}
+
+func newIntegrationCombinePaymentNotification(combineOutTradeNo, outTradeNo, transactionID string, amount int64) *wechat.CombinePaymentNotification {
+	resp := &wechat.CombinePaymentNotification{
+		CombineOutTradeNo: combineOutTradeNo,
+		SubOrders: []wechat.CombineSubOrderResult{{
+			OutTradeNo:     outTradeNo,
+			TransactionID:  transactionID,
+			TradeState:     "SUCCESS",
+			TradeStateDesc: "integration",
+			TradeType:      "JSAPI",
+			SuccessTime:    time.Now().UTC().Format(time.RFC3339),
+		}},
+	}
+	resp.SubOrders[0].Amount = struct {
+		TotalAmount    int64  `json:"total_amount"`
+		PayerAmount    int64  `json:"payer_amount"`
+		Currency       string `json:"currency"`
+		PayerCurrency  string `json:"payer_currency"`
+		SettlementRate int64  `json:"settlement_rate"`
+	}{
+		TotalAmount:   amount,
+		PayerAmount:   amount,
+		Currency:      "CNY",
+		PayerCurrency: "CNY",
+	}
+	return resp
+}
+
+func postIntegrationCombinedPaymentNotify(t *testing.T, server *api.Server, notificationID string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body := map[string]any{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_ciphertext",
+			"nonce":           "mock_nonce",
+			"associated_data": "transaction",
+			"original_type":   "transaction",
+		},
+		"summary": "success",
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/combine-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Wechatpay-Timestamp", "1234567890")
+	req.Header.Set("Wechatpay-Nonce", "test_nonce")
+	req.Header.Set("Wechatpay-Signature", "test_signature")
+	req.Header.Set("Wechatpay-Serial", "test_serial")
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func postIntegrationEcommercePaymentNotify(t *testing.T, server *api.Server, notificationID string) *httptest.ResponseRecorder {
+	t.Helper()
+
+	body := map[string]any{
+		"id":            notificationID,
+		"event_type":    "TRANSACTION.SUCCESS",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]any{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_ciphertext",
+			"nonce":           "mock_nonce",
+			"associated_data": "transaction",
+			"original_type":   "transaction",
+		},
+		"summary": "success",
+	}
+
+	bodyBytes, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/payment-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Wechatpay-Timestamp", "1234567890")
+	req.Header.Set("Wechatpay-Nonce", "test_nonce")
+	req.Header.Set("Wechatpay-Signature", "test_signature")
+	req.Header.Set("Wechatpay-Serial", "test_serial")
+
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+	return rec
+}
+
+func processCapturedPaymentSuccessPayload(t *testing.T, store *db.SQLStore, payload worker.PaymentSuccessPayload) {
+	t.Helper()
+
+	payloadBytes, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	processor := worker.NewTestTaskProcessor(store, worker.NewNoopTaskDistributor(), nil, nil)
+	task := asynq.NewTask(worker.TaskProcessPaymentSuccess, payloadBytes)
+	require.NoError(t, processor.ProcessTaskPaymentSuccess(context.Background(), task))
+}
+
 type roomAvailabilitySlot struct {
 	Time      string `json:"time"`
 	Available bool   `json:"available"`
@@ -306,17 +529,50 @@ type deliveryRecommendResponse struct {
 	MerchantID int64 `json:"merchant_id"`
 }
 
+type combinedPaymentSubOrderResponse struct {
+	OrderID    int64  `json:"order_id"`
+	SubMchID   string `json:"sub_mch_id"`
+	OutTradeNo string `json:"out_trade_no"`
+}
+
+type combinedPaymentWechatAmountResult struct {
+	TotalAmount   int64  `json:"total_amount"`
+	PayerAmount   int64  `json:"payer_amount"`
+	Currency      string `json:"currency"`
+	PayerCurrency string `json:"payer_currency,omitempty"`
+}
+
+type combinedPaymentWechatSubOrderResult struct {
+	MchID         string                            `json:"mchid"`
+	SubMchID      string                            `json:"sub_mch_id,omitempty"`
+	SubAppID      string                            `json:"sub_appid,omitempty"`
+	SubOpenID     string                            `json:"sub_openid,omitempty"`
+	OutTradeNo    string                            `json:"out_trade_no"`
+	TransactionID string                            `json:"transaction_id,omitempty"`
+	TradeType     string                            `json:"trade_type,omitempty"`
+	TradeState    string                            `json:"trade_state"`
+	BankType      string                            `json:"bank_type,omitempty"`
+	Attach        string                            `json:"attach,omitempty"`
+	SuccessTime   string                            `json:"success_time,omitempty"`
+	Amount        combinedPaymentWechatAmountResult `json:"amount"`
+}
+
+type combinedPaymentWechatQueryResult struct {
+	CombineOutTradeNo   string                                `json:"combine_out_trade_no"`
+	AggregateTradeState string                                `json:"aggregate_trade_state"`
+	SubOrders           []combinedPaymentWechatSubOrderResult `json:"sub_orders"`
+}
+
 type combinedPaymentOrderResponse struct {
-	ID                int64   `json:"id"`
-	Status            string  `json:"status"`
-	CombineOutTradeNo string  `json:"combine_out_trade_no"`
-	TotalAmount       int64   `json:"total_amount"`
-	PrepayID          *string `json:"prepay_id"`
-	SubOrders         []struct {
-		OrderID    int64  `json:"order_id"`
-		SubMchID   string `json:"sub_mch_id"`
-		OutTradeNo string `json:"out_trade_no"`
-	} `json:"sub_orders"`
+	ID                int64                             `json:"id"`
+	Status            string                            `json:"status"`
+	CombineOutTradeNo string                            `json:"combine_out_trade_no"`
+	TotalAmount       int64                             `json:"total_amount"`
+	PrepayID          *string                           `json:"prepay_id,omitempty"`
+	PayParams         *recoveryPayParamsResponse        `json:"pay_params,omitempty"`
+	ExpiresAt         *time.Time                        `json:"expires_at,omitempty"`
+	WechatQuery       *combinedPaymentWechatQueryResult `json:"wechat_query,omitempty"`
+	SubOrders         []combinedPaymentSubOrderResponse `json:"sub_orders"`
 }
 
 type listTodayReservationsResponse struct {
@@ -941,6 +1197,186 @@ func TestTakeoutJourneyB0CombinedPaymentIntegration(t *testing.T) {
 	}
 }
 
+// TestTakeoutJourneyB0CombinedPaymentQueryRecoveryBeforeCallbackIntegration
+// 外卖旅程（B0）端到端验收：回调到达前查询合单，后端仅暴露可恢复的 pay_params，且不改写本地状态。
+func TestTakeoutJourneyB0CombinedPaymentQueryRecoveryBeforeCallbackIntegration(t *testing.T) {
+	server, store := initIntegrationServer(t)
+	resetIntegrationData(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	mockEcommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_recovery_001"}, &wechat.JSAPIPayParams{
+			TimeStamp: "1",
+			NonceStr:  "nonce",
+			Package:   "prepay_id=prepay_combined_recovery_001",
+			SignType:  "RSA",
+			PaySign:   "sign",
+		}, nil)
+
+	server.SetEcommerceClientForTest(mockEcommerceClient)
+	defer server.SetEcommerceClientForTest(nil)
+
+	fixture := createTakeoutCombinedPaymentFixture(t, server, store)
+
+	mockEcommerceClient.EXPECT().
+		GenerateJSAPIPayParams("prepay_combined_recovery_001").
+		Times(1).
+		Return(&wechat.JSAPIPayParams{
+			TimeStamp: "2",
+			NonceStr:  "nonce-recovery",
+			Package:   "prepay_id=prepay_combined_recovery_001",
+			SignType:  "RSA",
+			PaySign:   "sign-recovery",
+		}, nil)
+	mockEcommerceClient.EXPECT().
+		QueryCombineOrder(gomock.Any(), fixture.Combined.CombineOutTradeNo).
+		Times(1).
+		Return(newIntegrationCombineQueryResponse(fixture.Combined.CombineOutTradeNo, fixture.Combined.SubOrders[0].OutTradeNo, "NOTPAY", "", fixture.Order.TotalAmount), nil)
+
+	url := fmt.Sprintf("/v1/payments/combined/%d/query", fixture.Combined.ID)
+	rec := doGET(t, server, url, fixture.Customer.ID)
+	require.Equalf(t, http.StatusOK, rec.Code, "query combined payment failed: %s", rec.Body.String())
+
+	var queried combinedPaymentOrderResponse
+	requireUnmarshalAPIResponseData(t, rec.Body.Bytes(), &queried)
+	require.Equal(t, fixture.Combined.ID, queried.ID)
+	require.Equal(t, "pending", queried.Status)
+	require.NotNil(t, queried.PayParams)
+	require.NotNil(t, queried.WechatQuery)
+	require.Equal(t, "pending", queried.WechatQuery.AggregateTradeState)
+	require.Len(t, queried.WechatQuery.SubOrders, 1)
+	require.Equal(t, fixture.Combined.SubOrders[0].OutTradeNo, queried.WechatQuery.SubOrders[0].OutTradeNo)
+
+	combinedOrder, err := store.GetCombinedPaymentOrder(ctx, fixture.Combined.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", combinedOrder.Status)
+
+	paymentOrder, err := store.GetPaymentOrderByOutTradeNo(ctx, fixture.Combined.SubOrders[0].OutTradeNo)
+	require.NoError(t, err)
+	require.Equal(t, "pending", paymentOrder.Status)
+
+	order, err := store.GetOrder(ctx, fixture.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", order.Status)
+}
+
+// TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration
+// 外卖旅程（B0）端到端验收：远端已支付但回调延迟时，query 不再返回 pay_params；待回调与 worker 完成后本地状态收敛。
+func TestTakeoutJourneyB0CombinedPaymentDelayedCallbackRecoveryIntegration(t *testing.T) {
+	server, store := initIntegrationServer(t)
+	resetIntegrationData(t)
+
+	ctx := context.Background()
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	mockEcommerceClient.EXPECT().
+		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_combined_delayed_001"}, &wechat.JSAPIPayParams{
+			TimeStamp: "1",
+			NonceStr:  "nonce",
+			Package:   "prepay_id=prepay_combined_delayed_001",
+			SignType:  "RSA",
+			PaySign:   "sign",
+		}, nil)
+
+	server.SetEcommerceClientForTest(mockEcommerceClient)
+	defer server.SetEcommerceClientForTest(nil)
+
+	distributor := &capturePaymentSuccessDistributor{}
+	server.SetTaskDistributorForTest(distributor)
+	defer server.SetTaskDistributorForTest(nil)
+
+	fixture := createTakeoutCombinedPaymentFixture(t, server, store)
+
+	remotePaidResp := newIntegrationCombineQueryResponse(
+		fixture.Combined.CombineOutTradeNo,
+		fixture.Combined.SubOrders[0].OutTradeNo,
+		"SUCCESS",
+		"integration_tx_delayed_001",
+		fixture.Order.TotalAmount,
+	)
+
+	mockEcommerceClient.EXPECT().
+		QueryCombineOrder(gomock.Any(), fixture.Combined.CombineOutTradeNo).
+		Times(1).
+		Return(remotePaidResp, nil)
+
+	queryURL := fmt.Sprintf("/v1/payments/combined/%d/query", fixture.Combined.ID)
+	queryBeforeCallback := doGET(t, server, queryURL, fixture.Customer.ID)
+	require.Equalf(t, http.StatusOK, queryBeforeCallback.Code, "query before callback failed: %s", queryBeforeCallback.Body.String())
+
+	var beforeCallback combinedPaymentOrderResponse
+	requireUnmarshalAPIResponseData(t, queryBeforeCallback.Body.Bytes(), &beforeCallback)
+	require.Equal(t, "pending", beforeCallback.Status)
+	require.Nil(t, beforeCallback.PayParams)
+	require.NotNil(t, beforeCallback.WechatQuery)
+	require.Equal(t, "paid", beforeCallback.WechatQuery.AggregateTradeState)
+
+	combinedOrder, err := store.GetCombinedPaymentOrder(ctx, fixture.Combined.ID)
+	require.NoError(t, err)
+	require.Equal(t, "pending", combinedOrder.Status)
+
+	paymentOrder, err := store.GetPaymentOrderByOutTradeNo(ctx, fixture.Combined.SubOrders[0].OutTradeNo)
+	require.NoError(t, err)
+	require.Equal(t, "pending", paymentOrder.Status)
+
+	mockEcommerceClient.EXPECT().
+		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
+		Times(1).
+		Return(nil)
+	mockEcommerceClient.EXPECT().
+		DecryptCombinePaymentNotification(gomock.Any()).
+		Times(1).
+		Return(newIntegrationCombinePaymentNotification(
+			fixture.Combined.CombineOutTradeNo,
+			fixture.Combined.SubOrders[0].OutTradeNo,
+			"integration_tx_delayed_001",
+			fixture.Order.TotalAmount,
+		), nil)
+	mockEcommerceClient.EXPECT().
+		QueryCombineOrder(gomock.Any(), fixture.Combined.CombineOutTradeNo).
+		Times(1).
+		Return(remotePaidResp, nil)
+
+	callbackRec := postIntegrationCombinedPaymentNotify(t, server, "notify_delayed_"+util.RandomString(8))
+	require.Equalf(t, http.StatusNoContent, callbackRec.Code, "combine payment callback failed: %s", callbackRec.Body.String())
+
+	combinedOrder, err = store.GetCombinedPaymentOrder(ctx, fixture.Combined.ID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", combinedOrder.Status)
+
+	paymentOrder, err = store.GetPaymentOrderByOutTradeNo(ctx, fixture.Combined.SubOrders[0].OutTradeNo)
+	require.NoError(t, err)
+	require.Equal(t, "paid", paymentOrder.Status)
+
+	payloads := distributor.Payloads()
+	require.Len(t, payloads, 1)
+	processCapturedPaymentSuccessPayload(t, store, payloads[0])
+
+	order, err := store.GetOrder(ctx, fixture.Order.ID)
+	require.NoError(t, err)
+	require.Equal(t, "paid", order.Status)
+
+	queryAfterCallback := doGET(t, server, queryURL, fixture.Customer.ID)
+	require.Equalf(t, http.StatusOK, queryAfterCallback.Code, "query after callback failed: %s", queryAfterCallback.Body.String())
+
+	var afterCallback combinedPaymentOrderResponse
+	requireUnmarshalAPIResponseData(t, queryAfterCallback.Body.Bytes(), &afterCallback)
+	require.Equal(t, "paid", afterCallback.Status)
+	require.Nil(t, afterCallback.PayParams)
+	require.NotNil(t, afterCallback.WechatQuery)
+	require.Equal(t, "paid", afterCallback.WechatQuery.AggregateTradeState)
+}
+
 // TestTakeoutJourneyB0DeliveryRecommendIntegration
 // 外卖旅程（B0）端到端验收：骑手推荐订单列表包含待配送订单。
 func TestTakeoutJourneyB0DeliveryRecommendIntegration(t *testing.T) {
@@ -1254,9 +1690,9 @@ func TestTakeoutJourneyB7MerchantRejectRefundIntegration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_b7_integration_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b7_integration_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b7_integration_001",
@@ -2071,9 +2507,9 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_c1_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_c1_001",
@@ -2101,7 +2537,7 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（收付通合单支付）
+	// 2) 创建预订支付单（平台收付通普通支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -2118,35 +2554,30 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	po, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 
-	// 3) 走合单支付回调 + 任务入队
+	// 3) 走平台收付通普通支付回调 + 任务入队
 	mockEcommerceClient.EXPECT().
 		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
-	combinedPaymentOrder, err := store.GetCombinedPaymentOrder(ctx, po.CombinedPaymentID.Int64)
-	require.NoError(t, err)
-
 	mockEcommerceClient.EXPECT().
-		DecryptCombinePaymentNotification(gomock.Any()).
+		DecryptPartnerPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{
-				{
-					OutTradeNo:    po.OutTradeNo,
-					TransactionID: "integration_tx_reservation_001",
-					TradeState:    "SUCCESS",
-					Amount: struct {
-						TotalAmount int64  `json:"total_amount"`
-						PayerAmount int64  `json:"payer_amount"`
-						Currency    string `json:"currency"`
-					}{
-						TotalAmount: po.Amount,
-						PayerAmount: po.Amount,
-						Currency:    "CNY",
-					},
-				},
+		Return(&wechat.PartnerPaymentNotificationResource{
+			SubMchID:      "sub_mch_reservation_c1",
+			OutTradeNo:    po.OutTradeNo,
+			TransactionID: "integration_tx_reservation_001",
+			TradeState:    "SUCCESS",
+			Amount: struct {
+				Total         int64  `json:"total"`
+				PayerTotal    int64  `json:"payer_total"`
+				Currency      string `json:"currency"`
+				PayerCurrency string `json:"payer_currency"`
+			}{
+				Total:         po.Amount,
+				PayerTotal:    po.Amount,
+				Currency:      "CNY",
+				PayerCurrency: "CNY",
 			},
 		}, nil)
 
@@ -2155,34 +2586,8 @@ func TestReservationJourneyC1Integration(t *testing.T) {
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "notify_reservation_" + util.RandomString(8)
-	body := map[string]any{
-		"id":            notificationID,
-		"event_type":    "TRANSACTION.SUCCESS",
-		"resource_type": "encrypt-resource",
-		"resource": map[string]any{
-			"algorithm":       "AEAD_AES_256_GCM",
-			"ciphertext":      "mock_ciphertext",
-			"nonce":           "mock_nonce",
-			"associated_data": "transaction",
-			"original_type":   "transaction",
-		},
-		"summary": "success",
-	}
-
-	bodyBytes, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/notify", bytes.NewReader(bodyBytes))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Wechatpay-Timestamp", "1234567890")
-	req.Header.Set("Wechatpay-Nonce", "test_nonce")
-	req.Header.Set("Wechatpay-Signature", "test_signature")
-	req.Header.Set("Wechatpay-Serial", "test_serial")
-
-	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
+	rec := postIntegrationEcommercePaymentNotify(t, server, notificationID)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 
 	// 4) 处理支付成功任务
 	payloads := distributor.Payloads()
@@ -2464,9 +2869,9 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_noshow_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_noshow_001",
@@ -2494,7 +2899,7 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（收付通合单支付）
+	// 2) 创建预订支付单（平台收付通普通支付）
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -2511,35 +2916,30 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	po, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
 
-	// 3) 走合单支付回调 + 任务入队
+	// 3) 走平台收付通普通支付回调 + 任务入队
 	mockEcommerceClient.EXPECT().
 		VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).
 		Times(1).
 		Return(nil)
 
-	combinedPaymentOrder, err := store.GetCombinedPaymentOrder(ctx, po.CombinedPaymentID.Int64)
-	require.NoError(t, err)
-
 	mockEcommerceClient.EXPECT().
-		DecryptCombinePaymentNotification(gomock.Any()).
+		DecryptPartnerPaymentNotification(gomock.Any()).
 		Times(1).
-		Return(&wechat.CombinePaymentNotification{
-			CombineOutTradeNo: combinedPaymentOrder.CombineOutTradeNo,
-			SubOrders: []wechat.CombineSubOrderResult{
-				{
-					OutTradeNo:    po.OutTradeNo,
-					TransactionID: "integration_tx_reservation_noshow_001",
-					TradeState:    "SUCCESS",
-					Amount: struct {
-						TotalAmount int64  `json:"total_amount"`
-						PayerAmount int64  `json:"payer_amount"`
-						Currency    string `json:"currency"`
-					}{
-						TotalAmount: po.Amount,
-						PayerAmount: po.Amount,
-						Currency:    "CNY",
-					},
-				},
+		Return(&wechat.PartnerPaymentNotificationResource{
+			SubMchID:      "sub_mch_reservation_noshow",
+			OutTradeNo:    po.OutTradeNo,
+			TransactionID: "integration_tx_reservation_noshow_001",
+			TradeState:    "SUCCESS",
+			Amount: struct {
+				Total         int64  `json:"total"`
+				PayerTotal    int64  `json:"payer_total"`
+				Currency      string `json:"currency"`
+				PayerCurrency string `json:"payer_currency"`
+			}{
+				Total:         po.Amount,
+				PayerTotal:    po.Amount,
+				Currency:      "CNY",
+				PayerCurrency: "CNY",
 			},
 		}, nil)
 
@@ -2548,34 +2948,8 @@ func TestReservationJourneyCNoShowIntegration(t *testing.T) {
 	defer server.SetTaskDistributorForTest(nil)
 
 	notificationID := "notify_reservation_noshow_" + util.RandomString(8)
-	body := map[string]any{
-		"id":            notificationID,
-		"event_type":    "TRANSACTION.SUCCESS",
-		"resource_type": "encrypt-resource",
-		"resource": map[string]any{
-			"algorithm":       "AEAD_AES_256_GCM",
-			"ciphertext":      "mock_ciphertext",
-			"nonce":           "mock_nonce",
-			"associated_data": "transaction",
-			"original_type":   "transaction",
-		},
-		"summary": "success",
-	}
-
-	bodyBytes, err := json.Marshal(body)
-	require.NoError(t, err)
-
-	req, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/notify", bytes.NewReader(bodyBytes))
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Wechatpay-Timestamp", "1234567890")
-	req.Header.Set("Wechatpay-Nonce", "test_nonce")
-	req.Header.Set("Wechatpay-Signature", "test_signature")
-	req.Header.Set("Wechatpay-Serial", "test_serial")
-
-	rec := httptest.NewRecorder()
-	server.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
+	rec := postIntegrationEcommercePaymentNotify(t, server, notificationID)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 
 	// 4) 处理支付成功任务
 	payloads := distributor.Payloads()
@@ -2644,9 +3018,9 @@ func TestReservationJourneyCCancelRefundIntegration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_cancel_001",
@@ -2775,9 +3149,9 @@ func TestReservationJourneyCCancelAfterDeadlineIntegration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_cancel_deadline_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_cancel_deadline_001",
@@ -2889,9 +3263,9 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_reservation_refund_notify_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_reservation_refund_notify_001",
@@ -2919,7 +3293,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 		require.Equal(t, "pending", created.Status)
 	}
 
-	// 2) 创建预订支付单（收付通合单支付）并标记已支付
+	// 2) 创建预订支付单（平台收付通普通支付）并标记已支付
 	var payment takeoutPaymentOrderResponse
 	{
 		payBody := map[string]any{
@@ -3011,7 +3385,7 @@ func TestReservationJourneyCRefundNotifyIntegration(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 
 	payloads := distributor.Payloads()
 	require.Len(t, payloads, 1)

@@ -49,6 +49,7 @@ const (
 
 	// 分账
 	profitSharingURL            = "/v3/ecommerce/profitsharing/orders"
+	profitSharingAmountsURL     = "/v3/ecommerce/profitsharing/orders/%s/amounts"
 	profitSharingFinishURL      = "/v3/ecommerce/profitsharing/finish-order"
 	profitSharingReturnURL      = "/v3/ecommerce/profitsharing/returnorders"
 	profitSharingReturnQueryURL = "/v3/ecommerce/profitsharing/returnorders"
@@ -77,10 +78,12 @@ const (
 // EcommerceClient 平台收付通客户端
 // 用于多商户场景，支持分账功能
 type EcommerceClient struct {
-	*PaymentClient        // 复用基础支付客户端
-	spMchID        string // 服务商商户号
-	spAppID        string // 服务商 AppID
-	spMchName      string // 服务商名称（可选）
+	*PaymentClient          // 复用基础支付客户端
+	spMchID          string // 服务商商户号
+	spAppID          string // 服务商 AppID
+	spMchName        string // 服务商名称（可选）
+	partnerNotifyURL string
+	combineNotifyURL string
 }
 
 // EcommerceClientConfig 平台收付通客户端配置
@@ -89,6 +92,8 @@ type EcommerceClientConfig struct {
 	SpMchID             string // 服务商商户号（如与 MchID 相同可不填）
 	SpAppID             string // 服务商 AppID（如与 AppID 相同可不填）
 	SpMchName           string // 服务商名称（可选）
+	PartnerNotifyURL    string // 收付通普通支付回调地址（空则回退到 PaymentClientConfig.NotifyURL）
+	CombineNotifyURL    string // 收付通合单支付回调地址（空则回退到 PartnerNotifyURL / PaymentClientConfig.NotifyURL）
 }
 
 // PartnerJSAPIOrderRequest 服务商模式单笔 JSAPI 下单请求。
@@ -198,12 +203,22 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 	}
 
 	spMchName := strings.TrimSpace(cfg.SpMchName)
+	partnerNotifyURL := strings.TrimSpace(cfg.PartnerNotifyURL)
+	if partnerNotifyURL == "" {
+		partnerNotifyURL = strings.TrimSpace(cfg.NotifyURL)
+	}
+	combineNotifyURL := strings.TrimSpace(cfg.CombineNotifyURL)
+	if combineNotifyURL == "" {
+		combineNotifyURL = partnerNotifyURL
+	}
 
 	return &EcommerceClient{
-		PaymentClient: baseClient,
-		spMchID:       spMchID,
-		spAppID:       spAppID,
-		spMchName:     spMchName,
+		PaymentClient:    baseClient,
+		spMchID:          spMchID,
+		spAppID:          spAppID,
+		spMchName:        spMchName,
+		partnerNotifyURL: partnerNotifyURL,
+		combineNotifyURL: combineNotifyURL,
 	}, nil
 }
 
@@ -249,7 +264,7 @@ func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *Part
 	}
 	notifyURL := req.NotifyURL
 	if notifyURL == "" {
-		notifyURL = c.notifyURL
+		notifyURL = c.partnerNotifyURL
 	}
 	body := map[string]interface{}{
 		"sp_appid":     c.spAppID,
@@ -920,7 +935,7 @@ func (c *EcommerceClient) CreateCombineOrder(ctx context.Context, req *CombineOr
 		combinePayerInfo["sub_openid"] = req.PayerSubOpenID
 	}
 
-	notifyURL := c.notifyURL
+	notifyURL := c.combineNotifyURL
 	if req.NotifyURL != "" {
 		notifyURL = req.NotifyURL
 	}
@@ -1005,9 +1020,11 @@ type CombineSubOrderResult struct {
 	BankType       string `json:"bank_type,omitempty"`
 	Attach         string `json:"attach,omitempty"`
 	Amount         struct {
-		TotalAmount int64  `json:"total_amount"`
-		PayerAmount int64  `json:"payer_amount"`
-		Currency    string `json:"currency"`
+		TotalAmount    int64  `json:"total_amount"`
+		PayerAmount    int64  `json:"payer_amount"`
+		Currency       string `json:"currency"`
+		PayerCurrency  string `json:"payer_currency"`
+		SettlementRate int64  `json:"settlement_rate"`
 	} `json:"amount"`
 	SuccessTime string `json:"success_time"`
 }
@@ -1095,7 +1112,12 @@ type ProfitSharingResponse struct {
 // CreateProfitSharing 请求分账
 // 订单支付成功后，调用此接口将资金分给各方
 func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSharingRequest) (*ProfitSharingResponse, error) {
+	if err := c.validateProfitSharingRequest(req); err != nil {
+		return nil, err
+	}
+
 	receivers := make([]map[string]interface{}, len(req.Receivers))
+	hasSensitiveReceiverName := false
 	for i, r := range req.Receivers {
 		receivers[i] = map[string]interface{}{
 			"type":             r.Type,
@@ -1110,6 +1132,7 @@ func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSh
 		}
 		if receiverName != "" {
 			receivers[i]["receiver_name"] = receiverName
+			hasSensitiveReceiverName = true
 		}
 	}
 
@@ -1122,7 +1145,12 @@ func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSh
 		"finish":         req.Finish,
 	}
 
-	respBody, err := c.doRequest(ctx, http.MethodPost, profitSharingURL, body)
+	requestFn := c.doRequest
+	if hasSensitiveReceiverName {
+		requestFn = c.doRequestWithWechatSerial
+	}
+
+	respBody, err := requestFn(ctx, http.MethodPost, profitSharingURL, body)
 	if err != nil {
 		return nil, fmt.Errorf("create profit sharing: %w", err)
 	}
@@ -1130,6 +1158,34 @@ func (c *EcommerceClient) CreateProfitSharing(ctx context.Context, req *ProfitSh
 	var resp ProfitSharingResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ProfitSharingAmountsResponse 查询订单剩余待分账金额响应。
+type ProfitSharingAmountsResponse struct {
+	TransactionID string `json:"transaction_id"`
+	UnsplitAmount int64  `json:"unsplit_amount"`
+}
+
+// QueryProfitSharingAmounts 查询订单剩余待分账金额。
+func (c *EcommerceClient) QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*ProfitSharingAmountsResponse, error) {
+	if strings.TrimSpace(transactionID) == "" {
+		return nil, fmt.Errorf("query profit sharing amounts: transaction_id is required")
+	}
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf(profitSharingAmountsURL, url.PathEscape(transactionID)), nil)
+	if err != nil {
+		return nil, fmt.Errorf("query profit sharing amounts: %w", err)
+	}
+
+	var resp ProfitSharingAmountsResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+	if resp.TransactionID == "" {
+		resp.TransactionID = transactionID
 	}
 
 	return &resp, nil
@@ -1214,11 +1270,10 @@ const (
 // RelationType 分账关系类型
 const (
 	RelationServiceProvider = "SERVICE_PROVIDER" // 服务商
-	RelationStore           = "STORE"            // 门店
-	RelationStaff           = "STAFF"            // 员工
 	RelationDistributor     = "DISTRIBUTOR"      // 分销商
 	RelationSupplier        = "SUPPLIER"         // 供应商
-	RelationPartner         = "PARTNER"          // 合作伙伴
+	RelationPlatform        = "PLATFORM"         // 平台
+	RelationOthers          = "OTHERS"           // 其他
 )
 
 // AddReceiverRequest 添加分账接收方请求
@@ -1241,6 +1296,10 @@ type AddReceiverResponse struct {
 // AddProfitSharingReceiver 添加分账接收方
 // 在二级商户进件成功后，需要将商户添加为分账接收方才能分账
 func (c *EcommerceClient) AddProfitSharingReceiver(ctx context.Context, req *AddReceiverRequest) (*AddReceiverResponse, error) {
+	if err := c.validateAddReceiverRequest(req); err != nil {
+		return nil, err
+	}
+
 	body := map[string]interface{}{
 		"appid":         req.AppID,
 		"type":          req.Type,
@@ -1308,10 +1367,11 @@ func (c *EcommerceClient) DeleteProfitSharingReceiver(ctx context.Context, req *
 
 // ProfitSharingReturnRequest 分账回退请求
 type ProfitSharingReturnRequest struct {
-	SubMchID    string // 二级商户号
-	OrderID     string // 微信分账单号
-	OutOrderNo  string // 商户分账单号
-	OutReturnNo string // 商户回退单号
+	SubMchID      string // 二级商户号
+	OrderID       string // 微信分账单号
+	OutOrderNo    string // 商户分账单号
+	OutReturnNo   string // 商户回退单号
+	TransactionID string // 微信订单号（大于 6 个月订单必填）
 	// 回退接收方（兼容两种写法）
 	// 推荐：ReturnAccountType + ReturnAccount
 	// 兼容：ReturnMchID（历史商户号字段）
@@ -1328,7 +1388,7 @@ type ProfitSharingReturnResponse struct {
 	OrderID           string `json:"order_id"`
 	OutOrderNo        string `json:"out_order_no"`
 	OutReturnNo       string `json:"out_return_no"`
-	ReturnID          string `json:"return_id"`
+	ReturnID          string `json:"return_no"`
 	ReturnMchID       string `json:"return_mchid"`
 	ReturnAccountType string `json:"return_account_type"`
 	ReturnAccount     string `json:"return_account"`
@@ -1336,25 +1396,37 @@ type ProfitSharingReturnResponse struct {
 	Result            string `json:"result"` // PROCESSING/SUCCESS/FAILED
 	FinishTime        string `json:"finish_time"`
 	FailReason        string `json:"fail_reason"`
+	TransactionID     string `json:"transaction_id"`
 }
 
 // CreateProfitSharingReturn 请求分账回退
 // 退款时需要先从各分账方回退资金
 func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *ProfitSharingReturnRequest) (*ProfitSharingReturnResponse, error) {
+	if err := c.validateProfitSharingReturnRequest(req); err != nil {
+		return nil, err
+	}
+
 	body := map[string]interface{}{
 		"sub_mchid":     req.SubMchID,
-		"order_id":      req.OrderID,
 		"out_order_no":  req.OutOrderNo,
 		"out_return_no": req.OutReturnNo,
 		"amount":        req.Amount,
 		"description":   req.Description,
 	}
+	if req.OrderID != "" {
+		body["order_id"] = req.OrderID
+	}
+	if req.TransactionID != "" {
+		body["transaction_id"] = req.TransactionID
+	}
 
-	if req.ReturnAccountType != "" && req.ReturnAccount != "" {
+	if req.ReturnMchID != "" {
+		body["return_mchid"] = req.ReturnMchID
+	} else if req.ReturnAccountType == ReceiverTypeMerchant && req.ReturnAccount != "" {
+		body["return_mchid"] = req.ReturnAccount
+	} else if req.ReturnAccountType != "" && req.ReturnAccount != "" {
 		body["return_account_type"] = req.ReturnAccountType
 		body["return_account"] = req.ReturnAccount
-	} else if req.ReturnMchID != "" {
-		body["return_mchid"] = req.ReturnMchID
 	}
 
 	respBody, err := c.doRequest(ctx, http.MethodPost, profitSharingReturnURL, body)
@@ -1372,10 +1444,16 @@ func (c *EcommerceClient) CreateProfitSharingReturn(ctx context.Context, req *Pr
 
 // QueryProfitSharingReturn 查询分账回退结果
 func (c *EcommerceClient) QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*ProfitSharingReturnResponse, error) {
+	if strings.TrimSpace(subMchID) == "" || strings.TrimSpace(outReturnNo) == "" {
+		return nil, fmt.Errorf("query profit sharing return: sub_mchid and out_return_no are required")
+	}
+
 	query := url.Values{}
 	query.Set("sub_mchid", subMchID)
 	query.Set("out_return_no", outReturnNo)
-	query.Set("out_order_no", outOrderNo)
+	if strings.TrimSpace(outOrderNo) != "" {
+		query.Set("out_order_no", outOrderNo)
+	}
 	requestURL := profitSharingReturnQueryURL + "?" + query.Encode()
 
 	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
@@ -1404,6 +1482,94 @@ func (c *EcommerceClient) resolveEncryptedReceiverName(name, encryptedName strin
 		return "", fmt.Errorf("encrypt receiver name: %w", err)
 	}
 	return resolved, nil
+}
+
+func (c *EcommerceClient) validateProfitSharingRequest(req *ProfitSharingRequest) error {
+	if req == nil {
+		return fmt.Errorf("create profit sharing: request is nil")
+	}
+	if strings.TrimSpace(req.SubMchID) == "" || strings.TrimSpace(req.TransactionID) == "" || strings.TrimSpace(req.OutOrderNo) == "" {
+		return fmt.Errorf("create profit sharing: sub_mchid, transaction_id and out_order_no are required")
+	}
+	if len(req.Receivers) == 0 {
+		return fmt.Errorf("create profit sharing: receivers are required")
+	}
+
+	seenReceivers := make(map[string]struct{}, len(req.Receivers))
+	for _, receiver := range req.Receivers {
+		receiverType := strings.TrimSpace(receiver.Type)
+		receiverAccount := strings.TrimSpace(receiver.ReceiverAccount)
+		if receiverType == "" || receiverAccount == "" {
+			return fmt.Errorf("create profit sharing: receiver type and account are required")
+		}
+		if receiver.Amount <= 0 {
+			return fmt.Errorf("create profit sharing: receiver amount must be positive")
+		}
+		if strings.TrimSpace(receiver.Description) == "" {
+			return fmt.Errorf("create profit sharing: receiver description is required")
+		}
+		if receiverType == ReceiverTypePersonal && strings.TrimSpace(c.spAppID) == "" {
+			return fmt.Errorf("create profit sharing: appid is required for personal receivers")
+		}
+		if req.Finish && receiverType == ReceiverTypeMerchant && receiverAccount == req.SubMchID {
+			return fmt.Errorf("create profit sharing: finish=true does not allow sub_mchid as receiver")
+		}
+
+		receiverKey := receiverType + ":" + receiverAccount
+		if _, exists := seenReceivers[receiverKey]; exists {
+			return fmt.Errorf("create profit sharing: duplicate receiver %s", receiverKey)
+		}
+		seenReceivers[receiverKey] = struct{}{}
+	}
+
+	return nil
+}
+
+func (c *EcommerceClient) validateAddReceiverRequest(req *AddReceiverRequest) error {
+	if req == nil {
+		return fmt.Errorf("add profit sharing receiver: request is nil")
+	}
+	if strings.TrimSpace(req.Type) == "" || strings.TrimSpace(req.Account) == "" {
+		return fmt.Errorf("add profit sharing receiver: type and account are required")
+	}
+	if req.Type == ReceiverTypePersonal && strings.TrimSpace(req.AppID) == "" {
+		return fmt.Errorf("add profit sharing receiver: appid is required for personal receivers")
+	}
+	if !isSupportedRelationType(req.RelationType) {
+		return fmt.Errorf("add profit sharing receiver: unsupported relation_type %q", req.RelationType)
+	}
+	return nil
+}
+
+func (c *EcommerceClient) validateProfitSharingReturnRequest(req *ProfitSharingReturnRequest) error {
+	if req == nil {
+		return fmt.Errorf("create profit sharing return: request is nil")
+	}
+	if strings.TrimSpace(req.SubMchID) == "" || strings.TrimSpace(req.OutReturnNo) == "" {
+		return fmt.Errorf("create profit sharing return: sub_mchid and out_return_no are required")
+	}
+	if strings.TrimSpace(req.OrderID) == "" && strings.TrimSpace(req.OutOrderNo) == "" {
+		return fmt.Errorf("create profit sharing return: order_id or out_order_no is required")
+	}
+	if req.Amount <= 0 {
+		return fmt.Errorf("create profit sharing return: amount must be positive")
+	}
+	if strings.TrimSpace(req.Description) == "" {
+		return fmt.Errorf("create profit sharing return: description is required")
+	}
+	if strings.TrimSpace(req.ReturnMchID) == "" && strings.TrimSpace(req.ReturnAccount) == "" {
+		return fmt.Errorf("create profit sharing return: return target is required")
+	}
+	return nil
+}
+
+func isSupportedRelationType(relationType string) bool {
+	switch strings.TrimSpace(relationType) {
+	case RelationServiceProvider, RelationDistributor, RelationSupplier, RelationPlatform, RelationOthers:
+		return true
+	default:
+		return false
+	}
 }
 
 // IsProfitSharingReturnProcessingError 判断分账回退请求错误是否仍需进入结果轮询。

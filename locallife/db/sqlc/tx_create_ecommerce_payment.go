@@ -12,7 +12,7 @@ import (
 // 适用于预定押金、预定加菜、会员充值等无 orders 表记录的业务。
 // 注意：由于 combined_payment_sub_orders.order_id NOT NULL 约束，此事务只创建
 // combined_payment_orders 和 payment_orders，不插入 sub_orders 行。
-// 回调（handleCombinePaymentNotify）通过 payment_orders.out_trade_no 查找记录，
+// 合单回调（handleCombinePaymentNotify）通过 payment_orders.out_trade_no 查找记录，
 // 无需 sub_orders 表参与。
 type CreateEcommercePaymentTxParams struct {
 	UserID            int64

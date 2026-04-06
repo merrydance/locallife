@@ -129,6 +129,10 @@ func (f *DefaultPaymentFacade) GetCombinedPaymentOrder(ctx context.Context, inpu
 	return f.combinedService.GetCombinedPaymentOrder(ctx, input)
 }
 
+func (f *DefaultPaymentFacade) QueryCombinedPaymentOrder(ctx context.Context, input QueryCombinedPaymentOrderInput) (QueryCombinedPaymentOrderResult, error) {
+	return f.combinedService.QueryCombinedPaymentOrder(ctx, input)
+}
+
 func (f *DefaultPaymentFacade) CloseCombinedPaymentOrder(ctx context.Context, input CloseCombinedPaymentOrderInput) (CloseCombinedPaymentOrderResult, error) {
 	return f.combinedService.CloseCombinedPaymentOrder(ctx, input)
 }

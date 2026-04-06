@@ -461,29 +461,11 @@ func (s *RefundService) processProfitSharingRefund(
 		operator = op
 	}
 
-	riderOpenID := ""
-	if profitSharingOrder.RiderAmount > 0 && profitSharingOrder.RiderID.Valid {
-		rider, getRiderErr := s.store.GetRider(ctx, profitSharingOrder.RiderID.Int64)
-		if getRiderErr != nil {
-			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-			}
-			return getRiderErr
+	if profitSharingOrder.RiderAmount > 0 {
+		if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
+			log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
 		}
-		user, getUserErr := s.store.GetUser(ctx, rider.UserID)
-		if getUserErr != nil {
-			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-			}
-			return getUserErr
-		}
-		if user.WechatOpenid == "" {
-			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-			}
-			return NewRequestError(http.StatusBadRequest, errors.New("rider wechat openid not configured"))
-		}
-		riderOpenID = user.WechatOpenid
+		return NewRequestError(http.StatusBadRequest, errors.New("订单包含个人分账，当前不支持自动退款，请联系平台处理"))
 	}
 
 	hasProcessing := false
@@ -520,6 +502,7 @@ func (s *RefundService) processProfitSharingRefund(
 		returnResp, returnErr := s.paymentFacade.CreateProfitSharingReturn(ctx, &wechat.ProfitSharingReturnRequest{
 			SubMchID:          paymentConfig.SubMchID,
 			OrderID:           profitSharingOrder.SharingOrderID.String,
+			TransactionID:     paymentOrder.TransactionID.String,
 			OutOrderNo:        profitSharingOrder.OutOrderNo,
 			OutReturnNo:       outReturnNo,
 			ReturnAccountType: returnAccountType,
@@ -649,16 +632,6 @@ func (s *RefundService) processProfitSharingRefund(
 			return fmt.Errorf("operator profit sharing return: %w", returnErr)
 		}
 	}
-	if profitSharingOrder.RiderAmount > 0 {
-		outReturnNo := fmt.Sprintf("PR%dRD", refundOrder.ID)
-		if returnErr := processReturn(outReturnNo, wechat.ReceiverTypePersonal, riderOpenID, "骑手分账回退", profitSharingOrder.RiderAmount, delay); returnErr != nil {
-			if _, dbErr := s.store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
-				log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
-			}
-			return fmt.Errorf("rider profit sharing return: %w", returnErr)
-		}
-	}
-
 	if hasProcessing {
 		return nil
 	}

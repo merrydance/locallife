@@ -197,6 +197,9 @@ type EcommerceClientInterface interface {
 	// QueryProfitSharing 查询分账结果
 	QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*ProfitSharingQueryResponse, error)
 
+	// QueryProfitSharingAmounts 查询订单剩余待分账金额
+	QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*ProfitSharingAmountsResponse, error)
+
 	// FinishProfitSharing 完结分账
 	FinishProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo, description string) (*ProfitSharingResponse, error)
 

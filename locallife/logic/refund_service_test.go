@@ -258,3 +258,66 @@ func TestCreateRefundOrder_ProfitSharingReturnAmbiguousErrorFallsBackToPolling(t
 	require.Equal(t, refundOrder.ID, taskScheduler.profitSharingReturnInputs[0].RefundOrderID)
 	require.Equal(t, 30*time.Second, taskScheduler.profitSharingReturnInputs[0].Delay)
 }
+
+func TestCreateRefundOrder_BlocksPersonalProfitSharingReturn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	service := NewRefundService(
+		store,
+		NewDefaultPaymentFacade(store, nil, ecommerceClient),
+		nil,
+		nil,
+		refundServiceIDGeneratorStub{outRefundNo: "RF-logic-002"},
+	)
+
+	merchant := db.Merchant{ID: 44, OwnerUserID: 7}
+	paymentOrder := db.PaymentOrder{
+		ID:            23,
+		Amount:        1000,
+		Status:        "paid",
+		PaymentType:   paymentTypeProfitSharing,
+		TransactionID: pgtype.Text{String: "wx_txn_23", Valid: true},
+		OrderID:       pgtype.Int8{Int64: 33, Valid: true},
+	}
+	order := db.Order{ID: 33, MerchantID: merchant.ID}
+	refundOrder := db.RefundOrder{ID: 56, PaymentOrderID: paymentOrder.ID, OutRefundNo: "RF-logic-002", Status: "pending"}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             67,
+		MerchantID:     merchant.ID,
+		OutOrderNo:     "PS-logic-002",
+		SharingOrderID: pgtype.Text{String: "wx-profitsharing-002", Valid: true},
+		RiderAmount:    300,
+		RiderID:        pgtype.Int8{Int64: 88, Valid: true},
+	}
+
+	store.EXPECT().GetMerchantByOwner(gomock.Any(), merchant.OwnerUserID).Return(merchant, nil)
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "merchant_cancel",
+		RefundAmount:   300,
+		RefundReason:   "商品售罄",
+		OutRefundNo:    refundOrder.OutRefundNo,
+	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), merchant.ID).Return(db.MerchantPaymentConfig{MerchantID: merchant.ID, SubMchID: "sub-mchid-002"}, nil)
+	store.EXPECT().UpdateRefundOrderToFailed(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "failed"}, nil)
+
+	_, err := service.CreateRefundOrder(context.Background(), CreateRefundOrderInput{
+		ActorUserID:    merchant.OwnerUserID,
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "merchant_cancel",
+		RefundAmount:   300,
+		RefundReason:   "商品售罄",
+	})
+	require.Error(t, err)
+
+	var requestErr *RequestError
+	require.True(t, errors.As(err, &requestErr))
+	require.Equal(t, 400, requestErr.Status)
+	require.Contains(t, err.Error(), "订单包含个人分账，当前不支持自动退款")
+}

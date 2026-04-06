@@ -956,6 +956,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryProfitSharing(ctx, subM
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryProfitSharing", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryProfitSharing), ctx, subMchID, transactionID, outOrderNo)
 }
 
+// QueryProfitSharingAmounts mocks base method.
+func (m *MockEcommerceClientInterface) QueryProfitSharingAmounts(ctx context.Context, transactionID string) (*wechat.ProfitSharingAmountsResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryProfitSharingAmounts", ctx, transactionID)
+	ret0, _ := ret[0].(*wechat.ProfitSharingAmountsResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryProfitSharingAmounts indicates an expected call of QueryProfitSharingAmounts.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryProfitSharingAmounts(ctx, transactionID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryProfitSharingAmounts", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryProfitSharingAmounts), ctx, transactionID)
+}
+
 // QueryProfitSharingReturn mocks base method.
 func (m *MockEcommerceClientInterface) QueryProfitSharingReturn(ctx context.Context, subMchID, outReturnNo, outOrderNo string) (*wechat.ProfitSharingReturnResponse, error) {
 	m.ctrl.T.Helper()

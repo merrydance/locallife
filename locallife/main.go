@@ -279,15 +279,17 @@ func buildEcommerceClient(config util.Config) wechat.EcommerceClientInterface {
 			HTTPTimeout:             config.WechatPayHTTPTimeout,
 			PrivateKeyPath:          config.EffectiveWechatEcommercePrivateKeyPath(),
 			APIV3Key:                config.EffectiveWechatEcommerceAPIV3Key(),
-			NotifyURL:               config.EffectiveWechatEcommerceNotifyURL(),
+			NotifyURL:               config.EffectiveWechatEcommercePaymentNotifyURL(),
 			RefundNotifyURL:         config.EffectiveWechatEcommerceRefundNotifyURL(),
 			PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
 			PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
 			PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
 		},
-		SpMchID:   config.WechatEcommerceSpMchID,
-		SpAppID:   config.WechatEcommerceSpAppID,
-		SpMchName: config.WechatEcommerceSpName,
+		SpMchID:          config.WechatEcommerceSpMchID,
+		SpAppID:          config.WechatEcommerceSpAppID,
+		SpMchName:        config.WechatEcommerceSpName,
+		PartnerNotifyURL: config.EffectiveWechatEcommercePaymentNotifyURL(),
+		CombineNotifyURL: config.EffectiveWechatEcommerceCombineNotifyURL(),
 	})
 	if err != nil {
 		log.Warn().Err(err).Msg("failed to create ecommerce client, profit sharing disabled")

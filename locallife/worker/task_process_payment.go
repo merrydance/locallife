@@ -212,7 +212,7 @@ func (processor *RedisTaskProcessor) ensurePersonalProfitSharingReceiver(ctx con
 		AppID:        processor.ecommerceClient.GetSpAppID(),
 		Type:         wechat.ReceiverTypePersonal,
 		Account:      openid,
-		RelationType: wechat.RelationPartner, // 骑手为平台合作伙伴（非雇员），消费者委托代取模式
+		RelationType: wechat.RelationOthers,
 	}
 	if realName != "" {
 		encryptedName, err := processor.ecommerceClient.EncryptSensitiveData(realName)
@@ -226,6 +226,44 @@ func (processor *RedisTaskProcessor) ensurePersonalProfitSharingReceiver(ctx con
 	if err != nil && !isProfitSharingReceiverAlreadyExistsErr(err) {
 		return err
 	}
+
+	return nil
+}
+
+func (processor *RedisTaskProcessor) finishProfitSharingOrder(
+	ctx context.Context,
+	profitSharingOrderID int64,
+	subMchID string,
+	transactionID string,
+	outOrderNo string,
+	description string,
+) error {
+	if processor.ecommerceClient == nil {
+		return fmt.Errorf("ecommerce client not configured for profit sharing: %w", asynq.SkipRetry)
+	}
+
+	resp, err := processor.ecommerceClient.FinishProfitSharing(ctx, subMchID, transactionID, outOrderNo, description)
+	if err != nil {
+		return fmt.Errorf("finish profit sharing: %w", err)
+	}
+
+	sharingOrderID := pgtype.Text{}
+	if resp != nil && resp.OrderID != "" {
+		sharingOrderID = pgtype.Text{String: resp.OrderID, Valid: true}
+	}
+
+	if _, err := processor.store.UpdateProfitSharingOrderToProcessing(ctx, db.UpdateProfitSharingOrderToProcessingParams{
+		ID:             profitSharingOrderID,
+		SharingOrderID: sharingOrderID,
+	}); err != nil {
+		return fmt.Errorf("update profit sharing order to processing: %w", err)
+	}
+
+	log.Info().
+		Int64("profit_sharing_order_id", profitSharingOrderID).
+		Str("out_order_no", outOrderNo).
+		Str("wechat_order_id", sharingOrderID.String).
+		Msg("profit sharing finish order sent")
 
 	return nil
 }
@@ -1360,11 +1398,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 如果不需要分账（堂食/打包），直接完结分账
 	if !needProfitSharing {
-		_, err = processor.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID)
+		err = processor.finishProfitSharingOrder(ctx, profitSharingOrder.ID, paymentConfig.SubMchID, paymentOrder.TransactionID.String, outOrderNo, "无需继续分账，解冻剩余资金")
 		if err != nil {
-			return fmt.Errorf("update profit sharing order to finished: %w", err)
+			return err
 		}
-		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no profit sharing needed, marked as finished")
+		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no profit sharing needed, finish order requested")
 		return nil
 	}
 
@@ -1409,16 +1447,16 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 
 	// 如果没有接收方，直接完结
 	if len(receivers) == 0 {
-		_, err = processor.store.UpdateProfitSharingOrderToFinished(ctx, profitSharingOrder.ID)
+		err = processor.finishProfitSharingOrder(ctx, profitSharingOrder.ID, paymentConfig.SubMchID, paymentOrder.TransactionID.String, outOrderNo, "无可用分账接收方，解冻剩余资金")
 		if err != nil {
-			return fmt.Errorf("update profit sharing order to finished: %w", err)
+			return err
 		}
-		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no receivers, marked as finished")
+		log.Info().Int64("profit_sharing_order_id", profitSharingOrder.ID).Msg("no receivers, finish order requested")
 		return nil
 	}
 
 	if hasOperator && operatorCommission > 0 && operator.WechatMchID.Valid {
-		if err := processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationPartner); err != nil {
+		if err := processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationDistributor); err != nil {
 			log.Error().Err(err).
 				Int64("profit_sharing_order_id", profitSharingOrder.ID).
 				Str("operator_mchid", operator.WechatMchID.String).
@@ -1453,7 +1491,7 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 			Msg("create profit sharing failed, retry once after re-ensuring receivers")
 
 		if hasOperator && operatorCommission > 0 && operator.WechatMchID.Valid {
-			_ = processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationPartner)
+			_ = processor.ensureMerchantProfitSharingReceiver(ctx, operator.WechatMchID.String, operator.Name, wechat.RelationDistributor)
 		}
 		if hasRider && riderAmount > 0 && riderUserOpenID != "" {
 			_ = processor.ensurePersonalProfitSharingReceiver(ctx, riderUserOpenID, rider.RealName)
@@ -1693,16 +1731,20 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			return fmt.Errorf("profit sharing order not found")
 		}
 		if profitSharingOrder.RiderAmount > 0 {
-			log.Warn().
+			blockingErr := errors.New("订单包含个人分账，当前不支持自动退款，请联系平台处理")
+			log.Error().
 				Int64("refund_order_id", refundOrder.ID).
 				Int64("profit_sharing_order_id", profitSharingOrder.ID).
 				Int64("rider_amount", profitSharingOrder.RiderAmount).
-				Msg("refund includes rider personal profit sharing amount, verify return capability and monitor closely")
+				Msg("refund blocked because rider personal profit sharing return is unsupported")
+			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
+				return errors.Join(blockingErr, fmt.Errorf("mark refund order as failed: %w", dbErr))
+			}
 			processor.publishAlert(ctx, AlertData{
 				AlertType:   AlertTypeRefundFailed,
-				Level:       AlertLevelWarning,
-				Title:       "退款涉及骑手个人分账",
-				Message:     fmt.Sprintf("退款单 %d 涉及骑手个人分账金额 %.2f 元，请关注分账回退与退款结果", refundOrder.ID, float64(profitSharingOrder.RiderAmount)/100),
+				Level:       AlertLevelCritical,
+				Title:       "退款被阻断：存在个人分账",
+				Message:     fmt.Sprintf("退款单 %d 包含骑手个人分账金额 %.2f 元，微信暂不支持个人接收方分账回退，已自动阻断并标记失败，请平台人工处理。", refundOrder.ID, float64(profitSharingOrder.RiderAmount)/100),
 				RelatedID:   refundOrder.ID,
 				RelatedType: "refund_order",
 				Extra: mergeAlertExtra(
@@ -1710,6 +1752,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 					profitSharingOrderAlertExtra(profitSharingOrder, nil),
 				),
 			})
+			return fmt.Errorf("%w: %w", blockingErr, asynq.SkipRetry)
 		}
 		if !profitSharingOrder.SharingOrderID.Valid || profitSharingOrder.SharingOrderID.String == "" {
 			if dbErr := processor.markRefundOrderFailed(ctx, refundOrder.ID); dbErr != nil {
@@ -1801,6 +1844,7 @@ func (processor *RedisTaskProcessor) ProcessTaskInitiateRefund(ctx context.Conte
 			returnResp, err := processor.ecommerceClient.CreateProfitSharingReturn(ctx, &wechat.ProfitSharingReturnRequest{
 				SubMchID:          paymentConfig.SubMchID,
 				OrderID:           profitSharingOrder.SharingOrderID.String,
+				TransactionID:     paymentOrder.TransactionID.String,
 				OutOrderNo:        profitSharingOrder.OutOrderNo,
 				OutReturnNo:       outReturnNo,
 				ReturnAccountType: returnAccountType,
@@ -2684,7 +2728,7 @@ func (processor *RedisTaskProcessor) handleApplymentSuccess(ctx context.Context,
 			Type:         wechat.ReceiverTypeMerchant,
 			Account:      payload.SubMchID,
 			Name:         strings.TrimSpace(merchant.Name),
-			RelationType: wechat.RelationStore, // 门店关系
+			RelationType: wechat.RelationOthers,
 		})
 		if err != nil {
 			// 添加失败不影响流程，但需要记录告警

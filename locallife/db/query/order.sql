@@ -53,10 +53,25 @@ SELECT
     m.address as merchant_address,
     COALESCE(o.delivery_contact_name_snapshot, ua.contact_name) as delivery_contact_name,
     COALESCE(o.delivery_contact_phone_snapshot, ua.contact_phone) as delivery_contact_phone,
-    COALESCE(o.delivery_address_snapshot, ua.detail_address) as delivery_address
+    COALESCE(o.delivery_address_snapshot, ua.detail_address) as delivery_address,
+    pending_combined_payment.combined_payment_id,
+    pending_combined_payment.combine_out_trade_no
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 LEFT JOIN user_addresses ua ON o.address_id = ua.id
+LEFT JOIN LATERAL (
+    SELECT
+        po.combined_payment_id,
+        c.combine_out_trade_no
+    FROM payment_orders po
+    INNER JOIN combined_payment_orders c ON c.id = po.combined_payment_id
+    WHERE po.order_id = o.id
+        AND po.business_type = 'order'
+        AND po.status = 'pending'
+        AND c.status = 'pending'
+    ORDER BY po.created_at DESC
+    LIMIT 1
+) pending_combined_payment ON TRUE
 WHERE o.id = $1;
 
 -- name: ListOrdersByUser :many
@@ -72,9 +87,24 @@ LIMIT $2 OFFSET $3;
 -- name: ListOrdersByUserWithFilters :many
 SELECT
         o.*,
-        m.name as merchant_name
+        m.name as merchant_name,
+        pending_combined_payment.combined_payment_id,
+        pending_combined_payment.combine_out_trade_no
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
+LEFT JOIN LATERAL (
+    SELECT
+        po.combined_payment_id,
+        c.combine_out_trade_no
+    FROM payment_orders po
+    INNER JOIN combined_payment_orders c ON c.id = po.combined_payment_id
+    WHERE po.order_id = o.id
+        AND po.business_type = 'order'
+        AND po.status = 'pending'
+        AND c.status = 'pending'
+    ORDER BY po.created_at DESC
+    LIMIT 1
+) pending_combined_payment ON TRUE
 WHERE o.user_id = sqlc.arg('user_id')
     AND (sqlc.narg('status')::text IS NULL OR o.status = sqlc.narg('status'))
     AND (sqlc.narg('order_type')::text IS NULL OR o.order_type = sqlc.narg('order_type'))

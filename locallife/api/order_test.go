@@ -953,10 +953,14 @@ func TestGetOrderAPI(t *testing.T) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
 			},
 			buildStubs: func(store *mockdb.MockStore) {
+				orderWithDetails := orderWithDetailsFromOrder(order)
+				orderWithDetails.CombinedPaymentID = pgtype.Int8{Int64: 9001, Valid: true}
+				orderWithDetails.CombineOutTradeNo = "CP202604061234560001"
+
 				store.EXPECT().
 					GetOrderWithDetails(gomock.Any(), order.ID).
 					Times(1).
-					Return(orderWithDetailsFromOrder(order), nil)
+					Return(orderWithDetails, nil)
 
 				store.EXPECT().
 					ListOrderItemsWithDishByOrder(gomock.Any(), order.ID).
@@ -970,6 +974,12 @@ func TestGetOrderAPI(t *testing.T) {
 			},
 			checkResponse: func(recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var response orderResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.NotNil(t, response.PaymentContext)
+				require.Equal(t, int64(9001), response.PaymentContext.CombinedPaymentID)
+				require.Equal(t, "CP202604061234560001", response.PaymentContext.CombineOutTradeNo)
 			},
 		},
 		{
@@ -3154,16 +3164,18 @@ func TestListOrdersAPI(t *testing.T) {
 
 	orders := []db.ListOrdersByUserWithFiltersRow{
 		{
-			ID:           1,
-			OrderNo:      "20251210000001",
-			UserID:       user.ID,
-			MerchantID:   merchant.ID,
-			MerchantName: "测试商户",
-			OrderType:    "takeaway",
-			Subtotal:     1000,
-			TotalAmount:  1000,
-			Status:       "pending",
-			CreatedAt:    time.Now(),
+			ID:                1,
+			OrderNo:           "20251210000001",
+			UserID:            user.ID,
+			MerchantID:        merchant.ID,
+			MerchantName:      "测试商户",
+			OrderType:         "takeaway",
+			Subtotal:          1000,
+			TotalAmount:       1000,
+			Status:            "pending",
+			CreatedAt:         time.Now(),
+			CombinedPaymentID: pgtype.Int8{Int64: 9002, Valid: true},
+			CombineOutTradeNo: "CP202604061234560002",
 		},
 	}
 
@@ -3197,6 +3209,9 @@ func TestListOrdersAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.Orders, 1)
 				require.Equal(t, int64(21), response.Total)
+				require.NotNil(t, response.Orders[0].PaymentContext)
+				require.Equal(t, int64(9002), response.Orders[0].PaymentContext.CombinedPaymentID)
+				require.Equal(t, "CP202604061234560002", response.Orders[0].PaymentContext.CombineOutTradeNo)
 			},
 		},
 		{

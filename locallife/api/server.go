@@ -178,15 +178,17 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 				HTTPTimeout:             config.WechatPayHTTPTimeout,
 				PrivateKeyPath:          config.EffectiveWechatEcommercePrivateKeyPath(),
 				APIV3Key:                config.EffectiveWechatEcommerceAPIV3Key(),
-				NotifyURL:               config.WechatPayNotifyURL,
-				RefundNotifyURL:         config.WechatPayRefundNotifyURL,
+				NotifyURL:               config.EffectiveWechatEcommercePaymentNotifyURL(),
+				RefundNotifyURL:         config.EffectiveWechatEcommerceRefundNotifyURL(),
 				PlatformCertificatePath: config.WechatPayPlatformCertificatePath,
 				PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
 				PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
 			},
-			SpMchID:   config.WechatEcommerceSpMchID,
-			SpAppID:   config.WechatEcommerceSpAppID,
-			SpMchName: config.WechatEcommerceSpName,
+			SpMchID:          config.WechatEcommerceSpMchID,
+			SpAppID:          config.WechatEcommerceSpAppID,
+			SpMchName:        config.WechatEcommerceSpName,
+			PartnerNotifyURL: config.EffectiveWechatEcommercePaymentNotifyURL(),
+			CombineNotifyURL: config.EffectiveWechatEcommerceCombineNotifyURL(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)
@@ -510,7 +512,8 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-pay/notify", server.handlePaymentNotify)
 		webhooksGroup.POST("/wechat-pay/refund-notify", server.handleRefundNotify)
 		// 平台收付通回调
-		webhooksGroup.POST("/wechat-ecommerce/notify", server.handleCombinePaymentNotify)
+		webhooksGroup.POST("/wechat-ecommerce/payment-notify", server.handleEcommercePaymentNotify)
+		webhooksGroup.POST("/wechat-ecommerce/combine-notify", server.handleCombinePaymentNotify)
 		webhooksGroup.POST("/wechat-ecommerce/refund-notify", server.handleEcommerceRefundNotify)
 		webhooksGroup.POST("/wechat-ecommerce/applyment-notify", server.handleApplymentStateNotify)
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
@@ -1026,6 +1029,7 @@ func (server *Server) setupRouter() {
 		paymentGroup.POST("", server.createPaymentOrder)
 		paymentGroup.POST("/combined", server.createCombinedPaymentOrder)
 		paymentGroup.GET("/combined/:id", server.getCombinedPaymentOrder)
+		paymentGroup.GET("/combined/:id/query", server.queryCombinedPaymentOrder)
 		paymentGroup.POST("/combined/:id/close", server.closeCombinedPaymentOrder)
 		paymentGroup.GET("/ledger", server.listPaymentLedger)
 		paymentGroup.GET("", server.listPaymentOrders)

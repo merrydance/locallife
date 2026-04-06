@@ -1519,6 +1519,8 @@ definitions:
         type: array
       total_amount:
         type: integer
+      wechat_query:
+        $ref: '#/definitions/api.combinedPaymentWechatQueryResult'
     type: object
   api.combinedPaymentSubOrderResponse:
     properties:
@@ -1543,6 +1545,39 @@ definitions:
       profit_sharing_status:
         type: string
       sub_mch_id:
+        type: string
+    type: object
+  api.combinedPaymentWechatAmountResult:
+    properties:
+      currency:
+        type: string
+      payer_amount:
+        type: integer
+      payer_currency:
+        type: string
+      total_amount:
+        type: integer
+    type: object
+  api.combinedPaymentWechatQueryResult:
+    properties:
+      aggregate_trade_state:
+        type: string
+      combine_out_trade_no:
+        type: string
+      sub_orders:
+        items:
+          $ref: '#/definitions/api.combinedPaymentWechatSubOrderResult'
+        type: array
+    type: object
+  api.combinedPaymentWechatSubOrderResult:
+    properties:
+      amount:
+        $ref: '#/definitions/api.combinedPaymentWechatAmountResult'
+      out_trade_no:
+        type: string
+      success_time:
+        type: string
+      trade_state:
         type: string
     type: object
   api.comboDishInput:
@@ -1668,7 +1703,7 @@ definitions:
       order_ids:
         items:
           type: integer
-        maxItems: 10
+        maxItems: 50
         minItems: 1
         type: array
     required:
@@ -5208,6 +5243,15 @@ definitions:
         example: 2880
         type: integer
     type: object
+  api.orderPaymentContextResponse:
+    properties:
+      combine_out_trade_no:
+        example: CP202604061234560001
+        type: string
+      combined_payment_id:
+        example: 9001
+        type: integer
+    type: object
   api.orderPromotion:
     properties:
       amount:
@@ -5332,6 +5376,8 @@ definitions:
       paid_at:
         example: "2025-12-01T12:30:00Z"
         type: string
+      payment_context:
+        $ref: '#/definitions/api.orderPaymentContextResponse'
       payment_method:
         enum:
         - wechat
@@ -22297,7 +22343,7 @@ paths:
 
         **兼容字段：**
         - `payment_type` 仅作为兼容保留字段，可不传。
-        - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通单笔支付。
+        - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。
         - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
 
         **业务类型：**
@@ -22481,9 +22527,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: 为多个订单创建合单支付订单（平台收付通）
+      description: 为单次结算中的多个订单创建平台收付通合单支付订单，当前主要用于多商户外卖一起结算
       parameters:
-      - description: 合单支付参数
+      - description: 多订单合单支付参数
         in: body
         name: request
         required: true
@@ -22493,7 +22539,7 @@ paths:
       - application/json
       responses:
         "201":
-          description: 合单支付订单(含小程序支付参数)
+          description: 多订单合单支付订单(含小程序支付参数)
           schema:
             $ref: '#/definitions/api.combinedPaymentOrderResponse'
         "400":
@@ -22518,14 +22564,14 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 创建合单支付订单
+      summary: 创建多订单合单支付订单
       tags:
       - 支付管理
   /v1/payments/combined/{id}:
     get:
       consumes:
       - application/json
-      description: 根据ID获取合单支付订单详情
+      description: 根据ID获取多订单合单支付订单详情
       parameters:
       - description: 合单支付订单ID
         in: path
@@ -22535,8 +22581,8 @@ paths:
       produces:
       - application/json
       responses:
-        "201":
-          description: 合单支付订单详情
+        "200":
+          description: 多订单合单支付订单详情
           schema:
             $ref: '#/definitions/api.combinedPaymentOrderResponse'
         "400":
@@ -22561,14 +22607,14 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 获取合单支付订单详情
+      summary: 获取多订单合单支付订单详情
       tags:
       - 支付管理
   /v1/payments/combined/{id}/close:
     post:
       consumes:
       - application/json
-      description: 关闭待支付的合单支付订单
+      description: 关闭待支付的多订单合单支付订单
       parameters:
       - description: 合单支付订单ID
         in: path
@@ -22579,7 +22625,7 @@ paths:
       - application/json
       responses:
         "200":
-          description: 关闭成功的合单支付订单
+          description: 关闭成功的多订单合单支付订单
           schema:
             $ref: '#/definitions/api.combinedPaymentOrderResponse'
         "400":
@@ -22604,7 +22650,50 @@ paths:
             $ref: '#/definitions/api.ErrorResponse'
       security:
       - BearerAuth: []
-      summary: 关闭合单支付订单
+      summary: 关闭多订单合单支付订单
+      tags:
+      - 支付管理
+  /v1/payments/combined/{id}/query:
+    get:
+      consumes:
+      - application/json
+      description: 查询本地多订单合单详情，并拉取微信侧最新支付状态，供小程序恢复支付或判断后续动作
+      parameters:
+      - description: 合单支付订单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 多订单合单支付订单详情(含微信远端状态)
+          schema:
+            $ref: '#/definitions/api.combinedPaymentOrderResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 合单支付订单不属于当前用户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 合单支付订单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务不可用
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询多订单合单支付远端状态
       tags:
       - 支付管理
   /v1/payments/ledger:

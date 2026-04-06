@@ -51,6 +51,58 @@ func readWebhookBody(ctx *gin.Context) ([]byte, int, error) {
 	return body, 0, nil
 }
 
+func (server *Server) readVerifiedEcommerceSuccessNotification(ctx *gin.Context, callbackType string) (*wechat.PaymentNotification, bool) {
+	if server.ecommerceClient == nil {
+		log.Error().Str("callback_type", callbackType).Msg("ecommerce callback received but ecommerce client is not configured")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "ecommerce client not configured",
+		})
+		return nil, false
+	}
+
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		log.Error().Err(err).Str("callback_type", callbackType).Msg("read ecommerce notification body")
+		ctx.JSON(status, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "read body failed",
+		})
+		return nil, false
+	}
+
+	signature := ctx.GetHeader("Wechatpay-Signature")
+	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
+	nonce := ctx.GetHeader("Wechatpay-Nonce")
+
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+		log.Error().Err(err).Str("callback_type", callbackType).Msg("invalid wechat signature for ecommerce notification")
+		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "signature verification failed",
+		})
+		return nil, false
+	}
+
+	var notification wechat.PaymentNotification
+	if err := json.Unmarshal(body, &notification); err != nil {
+		log.Error().Err(err).Str("callback_type", callbackType).Msg("parse ecommerce notification")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "parse notification failed",
+		})
+		return nil, false
+	}
+
+	if notification.EventType != "TRANSACTION.SUCCESS" {
+		log.Info().Str("callback_type", callbackType).Str("event_type", notification.EventType).Msg("ignore non-success notification")
+		writeWechatNotifySuccess(ctx, callbackType)
+		return nil, false
+	}
+
+	return &notification, true
+}
+
 func (server *Server) markNotificationProcessed(ctx context.Context, notificationID, outTradeNo, transactionID string) {
 	sqlStore, ok := server.store.(*db.SQLStore)
 	if !ok {
@@ -1848,69 +1900,46 @@ func (server *Server) handleProfitSharingNotify(ctx *gin.Context) {
 	server.markNotificationProcessed(ctx, notification.ID, "", resource.TransactionID)
 }
 
-// handleCombinePaymentNotify 处理平台收付通合单支付回调通知
-// POST /v1/webhooks/wechat-ecommerce/notify
-func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
-	if server.ecommerceClient == nil {
-		log.Error().Msg("combine payment callback received but ecommerce client is not configured")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "ecommerce client not configured",
-		})
+// handleEcommercePaymentNotify 处理平台收付通普通支付回调通知
+// POST /v1/webhooks/wechat-ecommerce/payment-notify
+func (server *Server) handleEcommercePaymentNotify(ctx *gin.Context) {
+	notification, ok := server.readVerifiedEcommerceSuccessNotification(ctx, "ecommerce_payment")
+	if !ok {
 		return
 	}
 
-	// 读取请求体用于验签
-	body, status, err := readWebhookBody(ctx)
+	if !server.tryClaimNotification(ctx, *notification, "ecommerce_payment") {
+		return
+	}
+
+	resource, err := server.ecommerceClient.DecryptPartnerPaymentNotification(notification)
 	if err != nil {
-		log.Error().Err(err).Msg("read combine payment notification body")
-		ctx.JSON(status, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "read body failed",
-		})
-		return
-	}
-
-	// 🔒 验证微信签名
-	signature := ctx.GetHeader("Wechatpay-Signature")
-	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
-	nonce := ctx.GetHeader("Wechatpay-Nonce")
-
-	// 验证签名（EcommerceClient继承自PaymentClient，拥有此方法）
-	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
-		log.Error().Err(err).Msg("⚠️ invalid wechat signature for combine payment notification")
-		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "signature verification failed",
-		})
-		return
-	}
-
-	// 解析通知
-	var notification wechat.PaymentNotification
-	if err := json.Unmarshal(body, &notification); err != nil {
-		log.Error().Err(err).Msg("parse combine payment notification")
+		log.Error().Err(err).Msg("decrypt ecommerce payment notification")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_payment")
 		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
-			Message: "parse notification failed",
+			Message: "decrypt failed",
 		})
 		return
 	}
 
-	// 检查通知类型
-	if notification.EventType != "TRANSACTION.SUCCESS" {
-		log.Info().Str("event_type", notification.EventType).Msg("ignore non-success notification")
-		writeWechatNotifySuccess(ctx, "combine_payment")
+	server.handlePartnerPaymentNotification(ctx, *notification, resource)
+}
+
+// handleCombinePaymentNotify 处理平台收付通合单支付回调通知
+// POST /v1/webhooks/wechat-ecommerce/combine-notify
+func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
+	notification, ok := server.readVerifiedEcommerceSuccessNotification(ctx, "combine_payment")
+	if !ok {
 		return
 	}
 
 	// 🔐 #1: 原子幂等性门
-	if !server.tryClaimNotification(ctx, notification, "combine_payment") {
+	if !server.tryClaimNotification(ctx, *notification, "combine_payment") {
 		return
 	}
 
-	// 解密通知内容。收付通 notify 可能是合单，也可能是单笔服务商支付。
-	resource, err := server.ecommerceClient.DecryptCombinePaymentNotification(&notification)
+	resource, err := server.ecommerceClient.DecryptCombinePaymentNotification(notification)
 	if err != nil {
 		log.Error().Err(err).Msg("decrypt combine payment notification")
 		server.releaseNotification(ctx, notification.ID, "combine_payment")
@@ -1918,20 +1947,6 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 			Code:    "FAIL",
 			Message: "decrypt failed",
 		})
-		return
-	}
-	if resource.CombineOutTradeNo == "" && len(resource.SubOrders) == 0 {
-		partnerResource, partnerErr := server.ecommerceClient.DecryptPartnerPaymentNotification(&notification)
-		if partnerErr != nil {
-			log.Error().Err(partnerErr).Msg("decrypt partner payment notification")
-			server.releaseNotification(ctx, notification.ID, "combine_payment")
-			ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{
-				Code:    "FAIL",
-				Message: "decrypt failed",
-			})
-			return
-		}
-		server.handlePartnerPaymentNotification(ctx, notification, partnerResource)
 		return
 	}
 
@@ -1962,6 +1977,34 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
 			Code:    "FAIL",
 			Message: "ownership validation failed",
+		})
+		return
+	}
+
+	combinedOrder, err := server.store.GetCombinedPaymentOrderByOutTradeNo(ctx, resource.CombineOutTradeNo)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "combined_order_not_found").Inc()
+		log.Error().Err(err).
+			Str("combine_out_trade_no", resource.CombineOutTradeNo).
+			Msg("get combined payment order failed before processing sub orders")
+		if isNotFoundError(err) {
+			server.sendAlert(websocket.AlertData{
+				AlertType:   websocket.AlertTypeSystemError,
+				Level:       websocket.AlertLevelCritical,
+				Title:       "合单回调未找到本地主合单",
+				Message:     fmt.Sprintf("合单回调 combine_out_trade_no=%s 未找到本地 combined_payment_order。系统已返回 FAIL 等待微信重试，请尽快排查主合单创建链路。", resource.CombineOutTradeNo),
+				RelatedID:   0,
+				RelatedType: "combined_payment_order",
+				Extra: map[string]interface{}{
+					"combine_out_trade_no": resource.CombineOutTradeNo,
+					"business_action":      "wechat_retry_expected",
+				},
+			})
+		}
+		server.releaseNotification(ctx, notification.ID, "combine_payment")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "get combined payment order failed",
 		})
 		return
 	}
@@ -2008,6 +2051,32 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 			continue
 		}
 
+		if !paymentOrder.CombinedPaymentID.Valid || paymentOrder.CombinedPaymentID.Int64 != combinedOrder.ID {
+			paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "combined_order_mismatch").Inc()
+			log.Error().
+				Int64("payment_order_id", paymentOrder.ID).
+				Str("out_trade_no", subOrder.OutTradeNo).
+				Str("combine_out_trade_no", resource.CombineOutTradeNo).
+				Msg("combine sub-order does not belong to the notified combined payment")
+			server.sendAlert(websocket.AlertData{
+				AlertType:   websocket.AlertTypeSystemError,
+				Level:       websocket.AlertLevelCritical,
+				Title:       "合单回调子单归属校验失败",
+				Message:     fmt.Sprintf("合单回调 combine_out_trade_no=%s 的子单 %s 归属校验失败，本地 payment_order=%d 不属于该主合单。系统已返回 FAIL 等待微信重试，请尽快排查。", resource.CombineOutTradeNo, subOrder.OutTradeNo, paymentOrder.ID),
+				RelatedID:   paymentOrder.ID,
+				RelatedType: "payment_order",
+				Extra: map[string]interface{}{
+					"combine_out_trade_no":      resource.CombineOutTradeNo,
+					"out_trade_no":              subOrder.OutTradeNo,
+					"payment_order_id":          paymentOrder.ID,
+					"payment_combined_order_id": paymentOrder.CombinedPaymentID.Int64,
+					"expected_combined_id":      combinedOrder.ID,
+				},
+			})
+			failedOrders = append(failedOrders, subOrder.OutTradeNo)
+			continue
+		}
+
 		// 检查是否已处理（幂等）
 		if paymentOrder.Status == PaymentStatusPaid {
 			if paymentOrder.ProcessedAt.Valid {
@@ -2037,21 +2106,57 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 				Msg("⚠️ CRITICAL: combine sub-order payment received for closed/failed order — auto refund initiated")
 
 			outRefundNo := fmt.Sprintf("CRF%d", paymentOrder.ID)
-			if server.taskDistributor != nil {
-				if enqErr := server.taskDistributor.DistributeTaskProcessAnomalyRefund(ctx,
-					&worker.PayloadProcessAnomalyRefund{
-						PaymentOrderID: paymentOrder.ID,
-						TransactionID:  subOrder.TransactionID,
-						RefundAmount:   subOrder.Amount.TotalAmount,
-						OutRefundNo:    outRefundNo,
+			if server.taskDistributor == nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "anomaly_refund_distributor_missing").Inc()
+				server.sendAlert(websocket.AlertData{
+					AlertType:   websocket.AlertTypePaymentAmountMismatch,
+					Level:       websocket.AlertLevelCritical,
+					Title:       "合单异常到账无法入队退款",
+					Message:     fmt.Sprintf("合单子订单 %s 已处于 %s 状态但微信仍到账，任务分发器未配置，系统已返回 FAIL 等待微信重试，请立即排查退款链路。", subOrder.OutTradeNo, paymentOrder.Status),
+					RelatedID:   paymentOrder.ID,
+					RelatedType: "payment_order",
+					Extra: map[string]interface{}{
+						"combine_out_trade_no": resource.CombineOutTradeNo,
+						"out_trade_no":         subOrder.OutTradeNo,
+						"transaction_id":       subOrder.TransactionID,
+						"payment_status":       paymentOrder.Status,
 					},
-					asynq.MaxRetry(5),
-					asynq.Queue(worker.QueueCritical),
-				); enqErr != nil {
-					log.Error().Err(enqErr).
-						Int64("payment_order_id", paymentOrder.ID).
-						Msg("failed to enqueue anomaly refund task for combine sub-order")
-				}
+				})
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
+			}
+
+			if enqErr := server.taskDistributor.DistributeTaskProcessAnomalyRefund(ctx,
+				&worker.PayloadProcessAnomalyRefund{
+					PaymentOrderID: paymentOrder.ID,
+					TransactionID:  subOrder.TransactionID,
+					RefundAmount:   subOrder.Amount.TotalAmount,
+					OutRefundNo:    outRefundNo,
+				},
+				asynq.MaxRetry(5),
+				asynq.Queue(worker.QueueCritical),
+			); enqErr != nil {
+				paymentCallbackFailuresTotal.WithLabelValues("combine_payment", "enqueue_anomaly_refund_task").Inc()
+				log.Error().Err(enqErr).
+					Int64("payment_order_id", paymentOrder.ID).
+					Msg("failed to enqueue anomaly refund task for combine sub-order")
+				server.sendAlert(websocket.AlertData{
+					AlertType:   websocket.AlertTypePaymentAmountMismatch,
+					Level:       websocket.AlertLevelCritical,
+					Title:       "合单异常到账退款任务入队失败",
+					Message:     fmt.Sprintf("合单子订单 %s 已处于 %s 状态但微信仍到账，异常退款任务入队失败。系统已返回 FAIL 等待微信重试，请立即排查。", subOrder.OutTradeNo, paymentOrder.Status),
+					RelatedID:   paymentOrder.ID,
+					RelatedType: "payment_order",
+					Extra: map[string]interface{}{
+						"combine_out_trade_no": resource.CombineOutTradeNo,
+						"out_trade_no":         subOrder.OutTradeNo,
+						"transaction_id":       subOrder.TransactionID,
+						"payment_status":       paymentOrder.Status,
+						"error":                enqErr.Error(),
+					},
+				})
+				failedOrders = append(failedOrders, subOrder.OutTradeNo)
+				continue
 			}
 			exceptionalCount++ // 异常到账子单不应推动主合单进入 paid
 			continue
@@ -2207,30 +2312,9 @@ func (server *Server) handleCombinePaymentNotify(ctx *gin.Context) {
 
 	// ✅ 更新合单主单状态为已支付，保证对账、恢复扫描、报表的 paid_at 正常落库。
 	// 合单层级无单一 transaction_id（每子单各持一个），主单 transaction_id 置 NULL 合规。
-	combinedOrder, err := server.store.GetCombinedPaymentOrderByOutTradeNo(ctx, resource.CombineOutTradeNo)
-	if err != nil {
-		log.Error().Err(err).
-			Str("combine_out_trade_no", resource.CombineOutTradeNo).
-			Msg("get combined payment order failed after sub orders paid")
-		if isNotFoundError(err) {
-			server.sendAlert(websocket.AlertData{
-				AlertType:   websocket.AlertTypeSystemError,
-				Level:       websocket.AlertLevelCritical,
-				Title:       "合单回调未找到本地主合单",
-				Message:     fmt.Sprintf("合单回调 combine_out_trade_no=%s 的所有子单已处理，但未找到 combined_payment_order。系统已返回 FAIL 等待微信重试，请尽快排查主合单创建链路。", resource.CombineOutTradeNo),
-				RelatedID:   0,
-				RelatedType: "combined_payment_order",
-				Extra: map[string]interface{}{
-					"combine_out_trade_no": resource.CombineOutTradeNo,
-					"business_action":      "wechat_retry_expected",
-				},
-			})
-		}
-		server.releaseNotification(ctx, notification.ID, "combine_payment")
-		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
-			Code:    "FAIL",
-			Message: "get combined payment order failed",
-		})
+	if combinedOrder.Status == PaymentStatusPaid {
+		writeWechatNotifySuccess(ctx, "combine_payment")
+		server.markNotificationProcessed(ctx, notification.ID, resource.CombineOutTradeNo, "")
 		return
 	}
 

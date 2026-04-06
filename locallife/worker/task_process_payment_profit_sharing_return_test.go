@@ -3,6 +3,7 @@ package worker_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/hibiken/asynq"
@@ -114,4 +115,58 @@ func TestProcessTaskInitiateRefund_ProfitSharingReturnAmbiguousErrorFallsBackToP
 	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
 	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
 	require.NoError(t, err)
+}
+
+func TestProcessTaskInitiateRefund_BlocksPersonalProfitSharingReturn(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	paymentOrder := db.PaymentOrder{
+		ID:           21,
+		OutTradeNo:   "PAY_21",
+		Amount:       3200,
+		Status:       "paid",
+		BusinessType: "takeout",
+		PaymentType:  "profit_sharing",
+		OrderID:      pgtype.Int8{Int64: 31, Valid: true},
+	}
+	order := db.Order{ID: 31, MerchantID: 41}
+	refundOrder := db.RefundOrder{ID: 51, PaymentOrderID: paymentOrder.ID, Status: "pending", OutRefundNo: "RF21_31"}
+	profitSharingOrder := db.ProfitSharingOrder{
+		ID:             61,
+		MerchantID:     order.MerchantID,
+		OutOrderNo:     "PS21",
+		SharingOrderID: pgtype.Text{String: "wx-ps-021", Valid: true},
+		RiderAmount:    800,
+	}
+
+	store.EXPECT().GetPaymentOrder(gomock.Any(), paymentOrder.ID).Return(paymentOrder, nil)
+	store.EXPECT().GetOrder(gomock.Any(), order.ID).Return(order, nil)
+	store.EXPECT().GetMerchantPaymentConfig(gomock.Any(), order.MerchantID).Return(db.MerchantPaymentConfig{MerchantID: order.MerchantID, SubMchID: "sub-mchid-021"}, nil)
+	store.EXPECT().GetRefundOrderByOutRefundNo(gomock.Any(), refundOrder.OutRefundNo).Return(db.RefundOrder{}, db.ErrRecordNotFound)
+	store.EXPECT().CreateRefundOrderTx(gomock.Any(), db.CreateRefundOrderTxParams{
+		PaymentOrderID: paymentOrder.ID,
+		RefundType:     "user_cancel",
+		RefundAmount:   800,
+		RefundReason:   "用户取消",
+		OutRefundNo:    refundOrder.OutRefundNo,
+	}).Return(db.CreateRefundOrderTxResult{RefundOrder: refundOrder}, nil)
+	store.EXPECT().GetProfitSharingOrderByPaymentOrder(gomock.Any(), paymentOrder.ID).Return(profitSharingOrder, nil)
+	store.EXPECT().UpdateRefundOrderToFailed(gomock.Any(), refundOrder.ID).Return(db.RefundOrder{ID: refundOrder.ID, Status: "failed"}, nil)
+
+	processor := worker.NewTestTaskProcessor(store, nil, nil, ecommerceClient)
+	payloadBytes, err := json.Marshal(worker.PayloadProcessRefund{
+		PaymentOrderID: paymentOrder.ID,
+		RefundAmount:   800,
+		Reason:         "用户取消",
+	})
+	require.NoError(t, err)
+
+	task := asynq.NewTask(worker.TaskProcessRefund, payloadBytes)
+	err = processor.ProcessTaskInitiateRefund(context.Background(), task)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "订单包含个人分账，当前不支持自动退款")
+	require.True(t, errors.Is(err, asynq.SkipRetry))
 }

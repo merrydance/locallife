@@ -879,10 +879,25 @@ SELECT
     m.address as merchant_address,
     COALESCE(o.delivery_contact_name_snapshot, ua.contact_name) as delivery_contact_name,
     COALESCE(o.delivery_contact_phone_snapshot, ua.contact_phone) as delivery_contact_phone,
-    COALESCE(o.delivery_address_snapshot, ua.detail_address) as delivery_address
+    COALESCE(o.delivery_address_snapshot, ua.detail_address) as delivery_address,
+    pending_combined_payment.combined_payment_id,
+    pending_combined_payment.combine_out_trade_no
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 LEFT JOIN user_addresses ua ON o.address_id = ua.id
+LEFT JOIN LATERAL (
+    SELECT
+        po.combined_payment_id,
+        c.combine_out_trade_no
+    FROM payment_orders po
+    INNER JOIN combined_payment_orders c ON c.id = po.combined_payment_id
+    WHERE po.order_id = o.id
+        AND po.business_type = 'order'
+        AND po.status = 'pending'
+        AND c.status = 'pending'
+    ORDER BY po.created_at DESC
+    LIMIT 1
+) pending_combined_payment ON TRUE
 WHERE o.id = $1
 `
 
@@ -945,6 +960,8 @@ type GetOrderWithDetailsRow struct {
 	DeliveryContactName          string             `json:"delivery_contact_name"`
 	DeliveryContactPhone         string             `json:"delivery_contact_phone"`
 	DeliveryAddress              string             `json:"delivery_address"`
+	CombinedPaymentID            pgtype.Int8        `json:"combined_payment_id"`
+	CombineOutTradeNo            string             `json:"combine_out_trade_no"`
 }
 
 func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWithDetailsRow, error) {
@@ -1009,6 +1026,8 @@ func (q *Queries) GetOrderWithDetails(ctx context.Context, id int64) (GetOrderWi
 		&i.DeliveryContactName,
 		&i.DeliveryContactPhone,
 		&i.DeliveryAddress,
+		&i.CombinedPaymentID,
+		&i.CombineOutTradeNo,
 	)
 	return i, err
 }
@@ -1875,9 +1894,24 @@ func (q *Queries) ListOrdersByUserAndStatus(ctx context.Context, arg ListOrdersB
 const listOrdersByUserWithFilters = `-- name: ListOrdersByUserWithFilters :many
 SELECT
         o.id, o.order_no, o.user_id, o.merchant_id, o.order_type, o.address_id, o.delivery_fee, o.delivery_distance, o.table_id, o.reservation_id, o.subtotal, o.discount_amount, o.delivery_fee_discount, o.total_amount, o.status, o.payment_method, o.paid_at, o.notes, o.created_at, o.updated_at, o.completed_at, o.cancelled_at, o.cancel_reason, o.final_amount, o.platform_commission, o.user_voucher_id, o.voucher_amount, o.balance_paid, o.membership_id, o.fulfillment_status, o.replaced_by_order_id, o.pickup_code, o.dispatch_order_id, o.flow_id, o.status_hint, o.badges, o.exception_state, o.claim_channel, o.overtime, o.prep_start_at, o.ready_at, o.courier_accept_at, o.picked_at, o.rider_delivered_at, o.user_delivered_at, o.auto_user_delivered_at, o.delivery_duration, o.delivery_contact_name_snapshot, o.delivery_contact_phone_snapshot, o.delivery_address_snapshot, o.delivery_longitude_snapshot, o.delivery_latitude_snapshot,
-        m.name as merchant_name
+        m.name as merchant_name,
+        pending_combined_payment.combined_payment_id,
+        pending_combined_payment.combine_out_trade_no
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
+LEFT JOIN LATERAL (
+    SELECT
+        po.combined_payment_id,
+        c.combine_out_trade_no
+    FROM payment_orders po
+    INNER JOIN combined_payment_orders c ON c.id = po.combined_payment_id
+    WHERE po.order_id = o.id
+        AND po.business_type = 'order'
+        AND po.status = 'pending'
+        AND c.status = 'pending'
+    ORDER BY po.created_at DESC
+    LIMIT 1
+) pending_combined_payment ON TRUE
 WHERE o.user_id = $1
     AND ($2::text IS NULL OR o.status = $2)
     AND ($3::text IS NULL OR o.order_type = $3)
@@ -1949,6 +1983,8 @@ type ListOrdersByUserWithFiltersRow struct {
 	DeliveryLongitudeSnapshot    pgtype.Numeric     `json:"delivery_longitude_snapshot"`
 	DeliveryLatitudeSnapshot     pgtype.Numeric     `json:"delivery_latitude_snapshot"`
 	MerchantName                 string             `json:"merchant_name"`
+	CombinedPaymentID            pgtype.Int8        `json:"combined_payment_id"`
+	CombineOutTradeNo            string             `json:"combine_out_trade_no"`
 }
 
 func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrdersByUserWithFiltersParams) ([]ListOrdersByUserWithFiltersRow, error) {
@@ -2021,6 +2057,8 @@ func (q *Queries) ListOrdersByUserWithFilters(ctx context.Context, arg ListOrder
 			&i.DeliveryLongitudeSnapshot,
 			&i.DeliveryLatitudeSnapshot,
 			&i.MerchantName,
+			&i.CombinedPaymentID,
+			&i.CombineOutTradeNo,
 		); err != nil {
 			return nil, err
 		}

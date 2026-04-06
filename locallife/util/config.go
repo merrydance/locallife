@@ -51,7 +51,8 @@ type Config struct {
 	WechatPayHTTPTimeout                   time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                      // HTTP请求超时时间
 	WechatEcommerceSpMchID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`                    // 收付通服务商商户号
 	WechatEcommerceSpAppID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`                    // 收付通服务商 AppID
-	WechatEcommerceNotifyURL               string        `mapstructure:"WECHAT_ECOMMERCE_NOTIFY_URL"`                  // 收付通支付回调URL
+	WechatEcommercePaymentNotifyURL        string        `mapstructure:"WECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL"`          // 收付通普通支付回调URL
+	WechatEcommerceCombineNotifyURL        string        `mapstructure:"WECHAT_ECOMMERCE_COMBINE_NOTIFY_URL"`          // 收付通合单支付回调URL
 	WechatEcommerceRefundNotifyURL         string        `mapstructure:"WECHAT_ECOMMERCE_REFUND_NOTIFY_URL"`           // 收付通退款回调URL
 	WechatEcommerceSpName                  string        `mapstructure:"WECHAT_ECOMMERCE_SP_NAME"`                     // 收付通服务商主体全称（可选，用于分账接收方姓名）
 	WechatEcommerceSpSerialNumber          string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`            // 收付通服务商 API 证书序列号
@@ -229,8 +230,12 @@ func deriveWechatEcommerceWebhookURL(current, explicit, fallbackPath string) str
 	return trimmed
 }
 
-func (c Config) EffectiveWechatEcommerceNotifyURL() string {
-	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommerceNotifyURL, "/v1/webhooks/wechat-ecommerce/notify")
+func (c Config) EffectiveWechatEcommercePaymentNotifyURL() string {
+	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommercePaymentNotifyURL, "/v1/webhooks/wechat-ecommerce/payment-notify")
+}
+
+func (c Config) EffectiveWechatEcommerceCombineNotifyURL() string {
+	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommerceCombineNotifyURL, "/v1/webhooks/wechat-ecommerce/combine-notify")
 }
 
 func (c Config) EffectiveWechatEcommerceRefundNotifyURL() string {

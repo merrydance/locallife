@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"strings"
 	"testing"
 	"time"
@@ -58,8 +59,14 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 		{
 			name: "TooManyOrders",
 			input: CreateCombinedPaymentOrderInput{
-				UserID:   1001,
-				OrderIDs: []int64{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11},
+				UserID: 1001,
+				OrderIDs: func() []int64 {
+					orderIDs := make([]int64, 51)
+					for index := range orderIDs {
+						orderIDs[index] = int64(index + 1)
+					}
+					return orderIDs
+				}(),
 				ClientIP: "127.0.0.1",
 			},
 			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
@@ -525,6 +532,131 @@ func TestCreateCombinedPaymentOrder(t *testing.T) {
 	}
 }
 
+func TestCreateCombinedPaymentOrder_ReusesConcurrentPendingCombinedPayment(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	svc := NewCombinedPaymentService(store, client)
+
+	input := CreateCombinedPaymentOrderInput{
+		UserID:   1001,
+		OrderIDs: []int64{22, 11},
+		ClientIP: "127.0.0.1",
+	}
+
+	subOrders, err := json.Marshal([]combinedSubOrderPayload{
+		{OrderID: 11, PaymentOrderID: 7001, MerchantID: 501, SubMchID: "190001", Amount: 3200, OutTradeNo: "P11", Description: "m1 - Order Payment"},
+		{OrderID: 22, PaymentOrderID: 7002, MerchantID: 502, SubMchID: "190002", Amount: 4800, OutTradeNo: "P22", Description: "m2 - Order Payment"},
+	})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetUser(gomock.Any(), input.UserID).
+		Return(db.User{ID: input.UserID, WechatOpenid: "openid-1"}, nil)
+	store.EXPECT().
+		CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+		Return(db.CreateCombinedPaymentTxResult{}, db.ErrOrderPendingPaymentConflict)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 11, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Return(db.PaymentOrder{ID: 7001, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 22, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Return(db.PaymentOrder{ID: 7002, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetCombinedPaymentOrderWithSubOrders(gomock.Any(), int64(9001)).
+		Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+			ID:                9001,
+			UserID:            input.UserID,
+			CombineOutTradeNo: "CP20260406000001",
+			TotalAmount:       8000,
+			PrepayID:          pgtype.Text{String: "combine-prepay-9001", Valid: true},
+			Status:            paymentStatusPending,
+			SubOrders:         subOrders,
+		}, nil)
+	client.EXPECT().
+		GenerateJSAPIPayParams("combine-prepay-9001").
+		Return(&wechat.JSAPIPayParams{Package: "prepay_id=combine-prepay-9001"}, nil)
+
+	result, err := svc.CreateCombinedPaymentOrder(context.Background(), input)
+	require.NoError(t, err)
+	require.Equal(t, int64(9001), result.CombinedPayment.ID)
+	require.NotNil(t, result.PayParams)
+	require.Equal(t, "prepay_id=combine-prepay-9001", result.PayParams.Package)
+	require.Len(t, result.SubOrders, 2)
+	require.Equal(t, []int64{11, 22}, []int64{result.SubOrders[0].OrderID, result.SubOrders[1].OrderID})
+}
+
+func TestCreateCombinedPaymentOrder_ConcurrentPendingCombinedWithoutPayParamsReturnsConflict(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	svc := NewCombinedPaymentService(store, client)
+
+	input := CreateCombinedPaymentOrderInput{
+		UserID:   1001,
+		OrderIDs: []int64{11, 22},
+		ClientIP: "127.0.0.1",
+	}
+
+	subOrders, err := json.Marshal([]combinedSubOrderPayload{
+		{OrderID: 11, PaymentOrderID: 7001, MerchantID: 501, SubMchID: "190001", Amount: 3200, OutTradeNo: "P11", Description: "m1 - Order Payment"},
+		{OrderID: 22, PaymentOrderID: 7002, MerchantID: 502, SubMchID: "190002", Amount: 4800, OutTradeNo: "P22", Description: "m2 - Order Payment"},
+	})
+	require.NoError(t, err)
+
+	store.EXPECT().
+		GetUser(gomock.Any(), input.UserID).
+		Return(db.User{ID: input.UserID, WechatOpenid: "openid-1"}, nil)
+	store.EXPECT().
+		CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+		Return(db.CreateCombinedPaymentTxResult{}, db.ErrOrderPendingPaymentConflict)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 11, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Times(outTradeNoMaxRetry).
+		Return(db.PaymentOrder{ID: 7001, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetLatestPaymentOrderByOrder(gomock.Any(), db.GetLatestPaymentOrderByOrderParams{
+			OrderID:      pgtype.Int8{Int64: 22, Valid: true},
+			BusinessType: businessTypeOrder,
+		}).
+		Times(outTradeNoMaxRetry).
+		Return(db.PaymentOrder{ID: 7002, Status: paymentStatusPending, CombinedPaymentID: pgtype.Int8{Int64: 9001, Valid: true}}, nil)
+	store.EXPECT().
+		GetCombinedPaymentOrderWithSubOrders(gomock.Any(), int64(9001)).
+		Times(outTradeNoMaxRetry).
+		Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+			ID:                9001,
+			UserID:            input.UserID,
+			CombineOutTradeNo: "CP20260406000001",
+			TotalAmount:       8000,
+			PrepayID:          pgtype.Text{String: "combine-prepay-9001", Valid: true},
+			Status:            paymentStatusPending,
+			SubOrders:         subOrders,
+		}, nil)
+	client.EXPECT().
+		GenerateJSAPIPayParams("combine-prepay-9001").
+		Times(outTradeNoMaxRetry).
+		Return(nil, errors.New("signing unavailable"))
+
+	_, err = svc.CreateCombinedPaymentOrder(context.Background(), input)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, http.StatusConflict, reqErr.Status)
+	require.Equal(t, "combined payment order is still preparing, please retry", reqErr.Err.Error())
+}
+
 func TestGetCombinedPaymentOrder(t *testing.T) {
 	input := GetCombinedPaymentOrderInput{UserID: 1001, CombinedPaymentID: 2001}
 
@@ -589,6 +721,282 @@ func TestGetCombinedPaymentOrder(t *testing.T) {
 
 			svc := NewCombinedPaymentService(store, nil)
 			result, err := svc.GetCombinedPaymentOrder(context.Background(), input)
+			tc.check(t, result, err)
+		})
+	}
+}
+
+func TestGetCombinedPaymentOrder_DoesNotReturnPayParams(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	client := mockwechat.NewMockEcommerceClientInterface(ctrl)
+
+	store.EXPECT().
+		GetCombinedPaymentOrderWithSubOrders(gomock.Any(), int64(2001)).
+		Times(1).
+		Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+			ID:        2001,
+			UserID:    1001,
+			Status:    paymentStatusPending,
+			PrepayID:  pgtype.Text{String: "combine-prepay-001", Valid: true},
+			ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-1 * time.Minute), Valid: true},
+		}, nil)
+
+	svc := NewCombinedPaymentService(store, client)
+	result, err := svc.GetCombinedPaymentOrder(context.Background(), GetCombinedPaymentOrderInput{
+		UserID:            1001,
+		CombinedPaymentID: 2001,
+	})
+	require.NoError(t, err)
+	require.Nil(t, result.PayParams)
+}
+
+func TestQueryCombinedPaymentOrder(t *testing.T) {
+	input := QueryCombinedPaymentOrderInput{UserID: 1001, CombinedPaymentID: 2001}
+
+	testCases := []struct {
+		name       string
+		buildStubs func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface)
+		withClient bool
+		check      func(t *testing.T, result QueryCombinedPaymentOrderResult, err error)
+	}{
+		{
+			name:       "ClientNotConfigured",
+			withClient: false,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {},
+			check: func(t *testing.T, _ QueryCombinedPaymentOrderResult, err error) {
+				require.EqualError(t, err, "ecommerce client: not configured")
+			},
+		},
+		{
+			name:       "NotFound",
+			withClient: true,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetCombinedPaymentOrderWithSubOrders(gomock.Any(), input.CombinedPaymentID).
+					Times(1).
+					Return(db.GetCombinedPaymentOrderWithSubOrdersRow{}, db.ErrRecordNotFound)
+			},
+			check: func(t *testing.T, _ QueryCombinedPaymentOrderResult, err error) {
+				reqErr := assertRequestError(t, err)
+				require.Equal(t, 404, reqErr.Status)
+			},
+		},
+		{
+			name:       "SuccessPendingRemoteStateReturnsPayParams",
+			withClient: true,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetCombinedPaymentOrderWithSubOrders(gomock.Any(), input.CombinedPaymentID).
+					Times(1).
+					Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+						ID:                input.CombinedPaymentID,
+						UserID:            input.UserID,
+						Status:            paymentStatusPending,
+						CombineOutTradeNo: "CP20260406000001",
+						PrepayID:          pgtype.Text{String: "combine-prepay-2001", Valid: true},
+						ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
+					}, nil)
+				client.EXPECT().
+					GenerateJSAPIPayParams("combine-prepay-2001").
+					Times(1).
+					Return(&wechat.JSAPIPayParams{Package: "prepay_id=combine-prepay-2001"}, nil)
+				client.EXPECT().
+					QueryCombineOrder(gomock.Any(), "CP20260406000001").
+					Times(1).
+					Return(&wechat.CombineQueryResponse{
+						CombineOutTradeNo: "CP20260406000001",
+						SubOrders: []wechat.CombineSubOrderResult{
+							{
+								OutTradeNo:    "PO-11",
+								TransactionID: "wx-txn-11",
+								TradeType:     "JSAPI",
+								TradeState:    "NOTPAY",
+								Amount: struct {
+									TotalAmount    int64  `json:"total_amount"`
+									PayerAmount    int64  `json:"payer_amount"`
+									Currency       string `json:"currency"`
+									PayerCurrency  string `json:"payer_currency"`
+									SettlementRate int64  `json:"settlement_rate"`
+								}{TotalAmount: 100, PayerAmount: 100, Currency: "CNY", PayerCurrency: "CNY"},
+							},
+						},
+					}, nil)
+			},
+			check: func(t *testing.T, result QueryCombinedPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.NotNil(t, result.PayParams)
+				require.Equal(t, "prepay_id=combine-prepay-2001", result.PayParams.Package)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "pending", result.WechatOrder.AggregateTradeState)
+				require.Len(t, result.WechatOrder.SubOrders, 1)
+				require.Equal(t, "PO-11", result.WechatOrder.SubOrders[0].OutTradeNo)
+			},
+		},
+		{
+			name:       "SignExistingPayParamsFailureReturnsError",
+			withClient: true,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetCombinedPaymentOrderWithSubOrders(gomock.Any(), input.CombinedPaymentID).
+					Times(1).
+					Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+						ID:                input.CombinedPaymentID,
+						UserID:            input.UserID,
+						Status:            paymentStatusPending,
+						CombineOutTradeNo: "CP20260406000001",
+						PrepayID:          pgtype.Text{String: "combine-prepay-2001", Valid: true},
+						ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
+					}, nil)
+				client.EXPECT().
+					QueryCombineOrder(gomock.Any(), "CP20260406000001").
+					Times(1).
+					Return(&wechat.CombineQueryResponse{
+						CombineOutTradeNo: "CP20260406000001",
+						SubOrders: []wechat.CombineSubOrderResult{{
+							OutTradeNo: "PO-11",
+							TradeType:  "JSAPI",
+							TradeState: "NOTPAY",
+							Amount: struct {
+								TotalAmount    int64  `json:"total_amount"`
+								PayerAmount    int64  `json:"payer_amount"`
+								Currency       string `json:"currency"`
+								PayerCurrency  string `json:"payer_currency"`
+								SettlementRate int64  `json:"settlement_rate"`
+							}{TotalAmount: 100, PayerAmount: 100, Currency: "CNY", PayerCurrency: "CNY"},
+						}},
+					}, nil)
+				client.EXPECT().
+					GenerateJSAPIPayParams("combine-prepay-2001").
+					Times(1).
+					Return(nil, errors.New("sign failed"))
+			},
+			check: func(t *testing.T, result QueryCombinedPaymentOrderResult, err error) {
+				require.Error(t, err)
+				require.ErrorContains(t, err, "sign combined payment order")
+				require.ErrorContains(t, err, "sign failed")
+				require.Nil(t, result.PayParams)
+			},
+		},
+		{
+			name:       "RemotePaidSuppressesPayParams",
+			withClient: true,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetCombinedPaymentOrderWithSubOrders(gomock.Any(), input.CombinedPaymentID).
+					Times(1).
+					Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+						ID:                input.CombinedPaymentID,
+						UserID:            input.UserID,
+						Status:            paymentStatusPending,
+						CombineOutTradeNo: "CP20260406000001",
+						PrepayID:          pgtype.Text{String: "combine-prepay-2001", Valid: true},
+						ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
+					}, nil)
+				client.EXPECT().
+					QueryCombineOrder(gomock.Any(), "CP20260406000001").
+					Times(1).
+					Return(&wechat.CombineQueryResponse{
+						CombineOutTradeNo: "CP20260406000001",
+						SubOrders: []wechat.CombineSubOrderResult{{
+							OutTradeNo:    "PO-11",
+							TransactionID: "wx-txn-11",
+							TradeType:     "JSAPI",
+							TradeState:    "SUCCESS",
+							Amount: struct {
+								TotalAmount    int64  `json:"total_amount"`
+								PayerAmount    int64  `json:"payer_amount"`
+								Currency       string `json:"currency"`
+								PayerCurrency  string `json:"payer_currency"`
+								SettlementRate int64  `json:"settlement_rate"`
+							}{TotalAmount: 100, PayerAmount: 100, Currency: "CNY", PayerCurrency: "CNY"},
+						}},
+					}, nil)
+			},
+			check: func(t *testing.T, result QueryCombinedPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Nil(t, result.PayParams)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "paid", result.WechatOrder.AggregateTradeState)
+			},
+		},
+		{
+			name:       "MixedSuccessAndPendingIsPartial",
+			withClient: true,
+			buildStubs: func(store *mockdb.MockStore, client *mockwechat.MockEcommerceClientInterface) {
+				store.EXPECT().
+					GetCombinedPaymentOrderWithSubOrders(gomock.Any(), input.CombinedPaymentID).
+					Times(1).
+					Return(db.GetCombinedPaymentOrderWithSubOrdersRow{
+						ID:                input.CombinedPaymentID,
+						UserID:            input.UserID,
+						Status:            paymentStatusPending,
+						CombineOutTradeNo: "CP20260406000001",
+						PrepayID:          pgtype.Text{String: "combine-prepay-2001", Valid: true},
+						ExpiresAt:         pgtype.Timestamptz{Time: time.Now().Add(10 * time.Minute), Valid: true},
+					}, nil)
+				client.EXPECT().
+					QueryCombineOrder(gomock.Any(), "CP20260406000001").
+					Times(1).
+					Return(&wechat.CombineQueryResponse{
+						CombineOutTradeNo: "CP20260406000001",
+						SubOrders: []wechat.CombineSubOrderResult{
+							{
+								OutTradeNo:    "PO-11",
+								TransactionID: "wx-txn-11",
+								TradeType:     "JSAPI",
+								TradeState:    "SUCCESS",
+								Amount: struct {
+									TotalAmount    int64  `json:"total_amount"`
+									PayerAmount    int64  `json:"payer_amount"`
+									Currency       string `json:"currency"`
+									PayerCurrency  string `json:"payer_currency"`
+									SettlementRate int64  `json:"settlement_rate"`
+								}{TotalAmount: 100, PayerAmount: 100, Currency: "CNY", PayerCurrency: "CNY"},
+							},
+							{
+								OutTradeNo: "PO-12",
+								TradeType:  "JSAPI",
+								TradeState: "NOTPAY",
+								Amount: struct {
+									TotalAmount    int64  `json:"total_amount"`
+									PayerAmount    int64  `json:"payer_amount"`
+									Currency       string `json:"currency"`
+									PayerCurrency  string `json:"payer_currency"`
+									SettlementRate int64  `json:"settlement_rate"`
+								}{TotalAmount: 100, PayerAmount: 0, Currency: "CNY", PayerCurrency: "CNY"},
+							},
+						},
+					}, nil)
+			},
+			check: func(t *testing.T, result QueryCombinedPaymentOrderResult, err error) {
+				require.NoError(t, err)
+				require.Nil(t, result.PayParams)
+				require.NotNil(t, result.WechatOrder)
+				require.Equal(t, "partial", result.WechatOrder.AggregateTradeState)
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			client := mockwechat.NewMockEcommerceClientInterface(ctrl)
+			tc.buildStubs(store, client)
+
+			var ecommerceClient wechat.EcommerceClientInterface
+			if tc.withClient {
+				ecommerceClient = client
+			}
+
+			svc := NewCombinedPaymentService(store, ecommerceClient)
+			result, err := svc.QueryCombinedPaymentOrder(context.Background(), input)
 			tc.check(t, result, err)
 		})
 	}

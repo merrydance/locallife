@@ -93,6 +93,65 @@ func TestCreateEcommerceApplyment_SetsWechatpaySerialHeader(t *testing.T) {
 	require.Equal(t, int64(123456789), resp.ApplymentID)
 }
 
+func TestCreatePartnerJSAPIOrder_UsesDedicatedNotifyURL(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/fallback-notify",
+		},
+		SpMchID:          "service-mchid-001",
+		SpAppID:          "service-appid-001",
+		PartnerNotifyURL: "https://example.com/payment-notify",
+		CombineNotifyURL: "https://example.com/combine-notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, ecommercePartnerJSAPIOrderURL, req.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "https://example.com/payment-notify", body["notify_url"])
+			require.Equal(t, "service-mchid-001", body["sp_mchid"])
+			require.Equal(t, "sub-mchid-001", body["sub_mchid"])
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"prepay_id":"wx_partner_prepay_001"}`)),
+			}, nil
+		}),
+	}
+
+	resp, payParams, err := client.CreatePartnerJSAPIOrder(context.Background(), &PartnerJSAPIOrderRequest{
+		SubMchID:      "sub-mchid-001",
+		Description:   "测试普通支付",
+		OutTradeNo:    "partner-order-001",
+		ExpireTime:    time.Now().Add(30 * time.Minute),
+		TotalAmount:   188,
+		PayerOpenID:   "openid-001",
+		ProfitSharing: true,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "wx_partner_prepay_001", resp.PrepayID)
+	require.Equal(t, "prepay_id=wx_partner_prepay_001", payParams.Package)
+}
+
 func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T) {
 	merchantPrivateKey, _ := generateTestKeyPair(t)
 	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
@@ -110,10 +169,12 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 			PrivateKeyPath:        privateKeyPath,
 			PlatformPublicKeyPath: publicKeyPath,
 			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
-			NotifyURL:             "https://example.com/notify",
+			NotifyURL:             "https://example.com/fallback-notify",
 		},
-		SpMchID: "service-mchid-001",
-		SpAppID: "service-appid-001",
+		SpMchID:          "service-mchid-001",
+		SpAppID:          "service-appid-001",
+		PartnerNotifyURL: "https://example.com/payment-notify",
+		CombineNotifyURL: "https://example.com/combine-notify",
 	})
 	require.NoError(t, err)
 
@@ -127,6 +188,7 @@ func TestCreateCombineOrder_UsesServiceProviderAndSubMerchantFields(t *testing.T
 
 			require.Equal(t, "service-appid-001", body["combine_appid"])
 			require.Equal(t, "service-mchid-001", body["combine_mchid"])
+			require.Equal(t, "https://example.com/combine-notify", body["notify_url"])
 
 			payerInfo, ok := body["combine_payer_info"].(map[string]any)
 			require.True(t, ok)
@@ -704,7 +766,7 @@ func TestAddProfitSharingReceiver_UsesNameFieldAndWechatpaySerial(t *testing.T) 
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"type":"PERSONAL_OPENID","account":"openid-001","relation_type":"PARTNER"}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"type":"PERSONAL_OPENID","account":"openid-001","relation_type":"OTHERS"}`)),
 			}, nil
 		}),
 	}
@@ -714,11 +776,11 @@ func TestAddProfitSharingReceiver_UsesNameFieldAndWechatpaySerial(t *testing.T) 
 		Type:         ReceiverTypePersonal,
 		Account:      "openid-001",
 		Name:         "张三",
-		RelationType: RelationPartner,
+		RelationType: RelationOthers,
 	})
 	require.NoError(t, err)
 	require.Equal(t, ReceiverTypePersonal, resp.Type)
-	require.Equal(t, RelationPartner, resp.RelationType)
+	require.Equal(t, RelationOthers, resp.RelationType)
 }
 
 func TestQueryProfitSharingReturn_UsesCollectionEndpointAndEscapedQuery(t *testing.T) {
@@ -756,7 +818,7 @@ func TestQueryProfitSharingReturn_UsesCollectionEndpointAndEscapedQuery(t *testi
 			return &http.Response{
 				StatusCode: http.StatusOK,
 				Header:     make(http.Header),
-				Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"sub-mchid-001","out_order_no":"order no/001","out_return_no":"return no/001","return_id":"return-id-001","amount":520,"result":"PROCESSING"}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"sub-mchid-001","out_order_no":"order no/001","out_return_no":"return no/001","return_no":"return-id-001","amount":520,"result":"PROCESSING"}`)),
 			}, nil
 		}),
 	}
@@ -765,6 +827,49 @@ func TestQueryProfitSharingReturn_UsesCollectionEndpointAndEscapedQuery(t *testi
 	require.NoError(t, err)
 	require.Equal(t, "return-id-001", resp.ReturnID)
 	require.Equal(t, "PROCESSING", resp.Result)
+}
+
+func TestQueryProfitSharingAmounts_UsesTransactionEndpoint(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/notify",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, "/v3/ecommerce/profitsharing/orders/wx-transaction-009/amounts", req.URL.Path)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"transaction_id":"wx-transaction-009","unsplit_amount":180}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryProfitSharingAmounts(context.Background(), "wx-transaction-009")
+	require.NoError(t, err)
+	require.Equal(t, "wx-transaction-009", resp.TransactionID)
+	require.Equal(t, int64(180), resp.UnsplitAmount)
 }
 
 func TestIsProfitSharingReturnProcessingError(t *testing.T) {

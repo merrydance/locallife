@@ -171,6 +171,11 @@ type orderBadge struct {
 	Locale string `json:"locale,omitempty"`
 }
 
+type orderPaymentContextResponse struct {
+	CombinedPaymentID int64  `json:"combined_payment_id" example:"9001"`
+	CombineOutTradeNo string `json:"combine_out_trade_no" example:"CP202604061234560001"`
+}
+
 type orderResponse struct {
 	ID                   int64               `json:"id" example:"100001"`
 	OrderNo              string              `json:"order_no" example:"ORD20251201123456"`
@@ -223,7 +228,19 @@ type orderResponse struct {
 	DeliveryContactPhone *string             `json:"delivery_contact_phone,omitempty" example:"13800138000"`
 	DeliveryAddress      *string             `json:"delivery_address,omitempty" example:"北京市朝阳区某小区1号楼"`
 	// 微信支付交易号，用于拉起小程序确认收货组件
-	WechatTransactionID *string `json:"wechat_transaction_id,omitempty"`
+	WechatTransactionID *string                      `json:"wechat_transaction_id,omitempty"`
+	PaymentContext      *orderPaymentContextResponse `json:"payment_context,omitempty"`
+}
+
+func newOrderPaymentContext(combinedPaymentID pgtype.Int8, combineOutTradeNo string) *orderPaymentContextResponse {
+	if !combinedPaymentID.Valid || combineOutTradeNo == "" {
+		return nil
+	}
+
+	return &orderPaymentContextResponse{
+		CombinedPaymentID: combinedPaymentID.Int64,
+		CombineOutTradeNo: combineOutTradeNo,
+	}
 }
 
 func newOrderResponse(o db.Order) orderResponse {
@@ -334,6 +351,7 @@ func newOrderWithDetailsResponse(o db.GetOrderWithDetailsRow) orderResponse {
 	if o.DeliveryAddress != "" {
 		resp.DeliveryAddress = ptrString(o.DeliveryAddress)
 	}
+	resp.PaymentContext = newOrderPaymentContext(o.CombinedPaymentID, o.CombineOutTradeNo)
 
 	resp.Actions = orderActions(db.Order{
 		ID:                o.ID,
@@ -444,6 +462,7 @@ func newOrderWithMerchantFromFilterResponse(o db.ListOrdersByUserWithFiltersRow)
 		AutoUserDeliveredAt: o.AutoUserDeliveredAt, DeliveryDuration: o.DeliveryDuration,
 		Badges: o.Badges,
 	}.applyTo(&resp)
+	resp.PaymentContext = newOrderPaymentContext(o.CombinedPaymentID, o.CombineOutTradeNo)
 
 	return resp
 }

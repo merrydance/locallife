@@ -20596,7 +20596,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n**兼容字段：**\n- ` + "`" + `payment_type` + "`" + ` 仅作为兼容保留字段，可不传。\n- 对 ` + "`" + `order` + "`" + ` 和 ` + "`" + `reservation` + "`" + ` 主支付，系统已统一走平台收付通单笔支付。\n- 旧客户端即使传入 ` + "`" + `native` + "`" + ` 或 ` + "`" + `miniprogram` + "`" + `，也不会再改变底层支付物理链路。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
+                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n**兼容字段：**\n- ` + "`" + `payment_type` + "`" + ` 仅作为兼容保留字段，可不传。\n- 对 ` + "`" + `order` + "`" + ` 和 ` + "`" + `reservation` + "`" + ` 主支付，系统已统一走平台收付通普通支付。\n- 旧客户端即使传入 ` + "`" + `native` + "`" + ` 或 ` + "`" + `miniprogram` + "`" + `，也不会再改变底层支付物理链路。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
                 "consumes": [
                     "application/json"
                 ],
@@ -20665,7 +20665,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "为多个订单创建合单支付订单（平台收付通）",
+                "description": "为单次结算中的多个订单创建平台收付通合单支付订单，当前主要用于多商户外卖一起结算",
                 "consumes": [
                     "application/json"
                 ],
@@ -20675,10 +20675,10 @@ const docTemplate = `{
                 "tags": [
                     "支付管理"
                 ],
-                "summary": "创建合单支付订单",
+                "summary": "创建多订单合单支付订单",
                 "parameters": [
                     {
-                        "description": "合单支付参数",
+                        "description": "多订单合单支付参数",
                         "name": "request",
                         "in": "body",
                         "required": true,
@@ -20689,7 +20689,7 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "201": {
-                        "description": "合单支付订单(含小程序支付参数)",
+                        "description": "多订单合单支付订单(含小程序支付参数)",
                         "schema": {
                             "$ref": "#/definitions/api.combinedPaymentOrderResponse"
                         }
@@ -20734,7 +20734,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "根据ID获取合单支付订单详情",
+                "description": "根据ID获取多订单合单支付订单详情",
                 "consumes": [
                     "application/json"
                 ],
@@ -20744,7 +20744,7 @@ const docTemplate = `{
                 "tags": [
                     "支付管理"
                 ],
-                "summary": "获取合单支付订单详情",
+                "summary": "获取多订单合单支付订单详情",
                 "parameters": [
                     {
                         "type": "integer",
@@ -20755,8 +20755,8 @@ const docTemplate = `{
                     }
                 ],
                 "responses": {
-                    "201": {
-                        "description": "合单支付订单详情",
+                    "200": {
+                        "description": "多订单合单支付订单详情",
                         "schema": {
                             "$ref": "#/definitions/api.combinedPaymentOrderResponse"
                         }
@@ -20801,7 +20801,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "关闭待支付的合单支付订单",
+                "description": "关闭待支付的多订单合单支付订单",
                 "consumes": [
                     "application/json"
                 ],
@@ -20811,7 +20811,7 @@ const docTemplate = `{
                 "tags": [
                     "支付管理"
                 ],
-                "summary": "关闭合单支付订单",
+                "summary": "关闭多订单合单支付订单",
                 "parameters": [
                     {
                         "type": "integer",
@@ -20823,13 +20823,80 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "关闭成功的合单支付订单",
+                        "description": "关闭成功的多订单合单支付订单",
                         "schema": {
                             "$ref": "#/definitions/api.combinedPaymentOrderResponse"
                         }
                     },
                     "400": {
                         "description": "请求参数错误或订单状态不允许关闭",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "合单支付订单不属于当前用户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "合单支付订单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "支付服务不可用",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/payments/combined/{id}/query": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "查询本地多订单合单详情，并拉取微信侧最新支付状态，供小程序恢复支付或判断后续动作",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "支付管理"
+                ],
+                "summary": "查询多订单合单支付远端状态",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "合单支付订单ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "多订单合单支付订单详情(含微信远端状态)",
+                        "schema": {
+                            "$ref": "#/definitions/api.combinedPaymentOrderResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -31687,6 +31754,9 @@ const docTemplate = `{
                 },
                 "total_amount": {
                     "type": "integer"
+                },
+                "wechat_query": {
+                    "$ref": "#/definitions/api.combinedPaymentWechatQueryResult"
                 }
             }
         },
@@ -31724,6 +31794,57 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "sub_mch_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.combinedPaymentWechatAmountResult": {
+            "type": "object",
+            "properties": {
+                "currency": {
+                    "type": "string"
+                },
+                "payer_amount": {
+                    "type": "integer"
+                },
+                "payer_currency": {
+                    "type": "string"
+                },
+                "total_amount": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.combinedPaymentWechatQueryResult": {
+            "type": "object",
+            "properties": {
+                "aggregate_trade_state": {
+                    "type": "string"
+                },
+                "combine_out_trade_no": {
+                    "type": "string"
+                },
+                "sub_orders": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.combinedPaymentWechatSubOrderResult"
+                    }
+                }
+            }
+        },
+        "api.combinedPaymentWechatSubOrderResult": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "$ref": "#/definitions/api.combinedPaymentWechatAmountResult"
+                },
+                "out_trade_no": {
+                    "type": "string"
+                },
+                "success_time": {
+                    "type": "string"
+                },
+                "trade_state": {
                     "type": "string"
                 }
             }
@@ -31913,7 +32034,7 @@ const docTemplate = `{
             "properties": {
                 "order_ids": {
                     "type": "array",
-                    "maxItems": 10,
+                    "maxItems": 50,
                     "minItems": 1,
                     "items": {
                         "type": "integer"
@@ -37074,6 +37195,19 @@ const docTemplate = `{
                 }
             }
         },
+        "api.orderPaymentContextResponse": {
+            "type": "object",
+            "properties": {
+                "combine_out_trade_no": {
+                    "type": "string",
+                    "example": "CP202604061234560001"
+                },
+                "combined_payment_id": {
+                    "type": "integer",
+                    "example": 9001
+                }
+            }
+        },
         "api.orderPromotion": {
             "type": "object",
             "properties": {
@@ -37241,6 +37375,9 @@ const docTemplate = `{
                 "paid_at": {
                     "type": "string",
                     "example": "2025-12-01T12:30:00Z"
+                },
+                "payment_context": {
+                    "$ref": "#/definitions/api.orderPaymentContextResponse"
                 },
                 "payment_method": {
                     "type": "string",

@@ -12,6 +12,7 @@ import (
 	"github.com/merrydance/locallife/logic"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/util"
+	"github.com/merrydance/locallife/wechat"
 	"github.com/merrydance/locallife/worker"
 
 	"github.com/gin-gonic/gin"
@@ -72,7 +73,7 @@ type paymentOrderResponse struct {
 }
 
 type createCombinedPaymentOrderRequest struct {
-	OrderIDs []int64 `json:"order_ids" binding:"required,min=1,max=10"`
+	OrderIDs []int64 `json:"order_ids" binding:"required,min=1,max=50"`
 }
 
 type combinedPaymentSubOrderResponse struct {
@@ -97,7 +98,28 @@ type combinedPaymentOrderResponse struct {
 	PrepayID          *string                           `json:"prepay_id,omitempty"`
 	PayParams         *miniProgramPayParams             `json:"pay_params,omitempty"`
 	ExpiresAt         *time.Time                        `json:"expires_at,omitempty"`
+	WechatQuery       *combinedPaymentWechatQueryResult `json:"wechat_query,omitempty"`
 	SubOrders         []combinedPaymentSubOrderResponse `json:"sub_orders"`
+}
+
+type combinedPaymentWechatQueryResult struct {
+	CombineOutTradeNo   string                                `json:"combine_out_trade_no"`
+	AggregateTradeState string                                `json:"aggregate_trade_state"`
+	SubOrders           []combinedPaymentWechatSubOrderResult `json:"sub_orders"`
+}
+
+type combinedPaymentWechatSubOrderResult struct {
+	OutTradeNo  string                            `json:"out_trade_no"`
+	TradeState  string                            `json:"trade_state"`
+	SuccessTime string                            `json:"success_time,omitempty"`
+	Amount      combinedPaymentWechatAmountResult `json:"amount"`
+}
+
+type combinedPaymentWechatAmountResult struct {
+	TotalAmount   int64  `json:"total_amount"`
+	PayerAmount   int64  `json:"payer_amount"`
+	Currency      string `json:"currency"`
+	PayerCurrency string `json:"payer_currency,omitempty"`
 }
 
 // miniProgramPayParams 小程序调起支付所需参数
@@ -132,6 +154,70 @@ func newPaymentOrderResponse(p db.PaymentOrder) paymentOrderResponse {
 	}
 
 	return resp
+}
+
+func newMiniProgramPayParams(payParams *wechat.JSAPIPayParams) *miniProgramPayParams {
+	if payParams == nil {
+		return nil
+	}
+	return &miniProgramPayParams{
+		TimeStamp: payParams.TimeStamp,
+		NonceStr:  payParams.NonceStr,
+		Package:   payParams.Package,
+		SignType:  payParams.SignType,
+		PaySign:   payParams.PaySign,
+	}
+}
+
+func buildCombinedPaymentOrderResponse(combinedRow db.GetCombinedPaymentOrderWithSubOrdersRow, payParams *wechat.JSAPIPayParams) (combinedPaymentOrderResponse, error) {
+	var subOrders []combinedPaymentSubOrderResponse
+	if err := json.Unmarshal(combinedRow.SubOrders, &subOrders); err != nil {
+		return combinedPaymentOrderResponse{}, err
+	}
+
+	resp := combinedPaymentOrderResponse{
+		ID:                combinedRow.ID,
+		CombineOutTradeNo: combinedRow.CombineOutTradeNo,
+		TotalAmount:       combinedRow.TotalAmount,
+		Status:            combinedRow.Status,
+		SubOrders:         subOrders,
+		PayParams:         newMiniProgramPayParams(payParams),
+	}
+	if combinedRow.PrepayID.Valid {
+		resp.PrepayID = &combinedRow.PrepayID.String
+	}
+	if combinedRow.ExpiresAt.Valid {
+		expires := combinedRow.ExpiresAt.Time
+		resp.ExpiresAt = &expires
+	}
+	return resp, nil
+}
+
+func newCombinedPaymentWechatQueryResult(query *logic.QueryCombinedPaymentWechatOrder) *combinedPaymentWechatQueryResult {
+	if query == nil {
+		return nil
+	}
+
+	subOrders := make([]combinedPaymentWechatSubOrderResult, 0, len(query.SubOrders))
+	for _, subOrder := range query.SubOrders {
+		subOrders = append(subOrders, combinedPaymentWechatSubOrderResult{
+			OutTradeNo:  subOrder.OutTradeNo,
+			TradeState:  subOrder.TradeState,
+			SuccessTime: subOrder.SuccessTime,
+			Amount: combinedPaymentWechatAmountResult{
+				TotalAmount:   subOrder.Amount.TotalAmount,
+				PayerAmount:   subOrder.Amount.PayerAmount,
+				Currency:      subOrder.Amount.Currency,
+				PayerCurrency: subOrder.Amount.PayerCurrency,
+			},
+		})
+	}
+
+	return &combinedPaymentWechatQueryResult{
+		CombineOutTradeNo:   query.CombineOutTradeNo,
+		AggregateTradeState: query.AggregateTradeState,
+		SubOrders:           subOrders,
+	}
 }
 
 // generateOutTradeNo 生成商户订单号
@@ -182,7 +268,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 // @Description
 // @Description **兼容字段：**
 // @Description - `payment_type` 仅作为兼容保留字段，可不传。
-// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通单笔支付。
+// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通普通支付。
 // @Description - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
 // @Description
 // @Description **业务类型：**
@@ -326,14 +412,14 @@ func isEcommerceClientNotConfigured(err error) bool {
 	return strings.Contains(msg, "ecommerce client") && strings.Contains(msg, "not configured")
 }
 
-// createCombinedPaymentOrder 创建平台收付通合单支付订单
-// @Summary 创建合单支付订单
-// @Description 为多个订单创建合单支付订单（平台收付通）
+// createCombinedPaymentOrder 创建平台收付通多订单合单支付订单
+// @Summary 创建多订单合单支付订单
+// @Description 为单次结算中的多个订单创建平台收付通合单支付订单，当前主要用于多商户外卖一起结算
 // @Tags 支付管理
 // @Accept json
 // @Produce json
-// @Param request body createCombinedPaymentOrderRequest true "合单支付参数"
-// @Success 201 {object} combinedPaymentOrderResponse "合单支付订单(含小程序支付参数)"
+// @Param request body createCombinedPaymentOrderRequest true "多订单合单支付参数"
+// @Success 201 {object} combinedPaymentOrderResponse "多订单合单支付订单(含小程序支付参数)"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "订单不属于当前用户"
@@ -423,19 +509,19 @@ func (server *Server) createCombinedPaymentOrder(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, resp)
 }
 
-// getCombinedPaymentOrder 获取合单支付订单详情
+// getCombinedPaymentOrder 获取多订单合单支付订单详情
 type getCombinedPaymentOrderRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1"`
 }
 
 // getCombinedPaymentOrder godoc
-// @Summary 获取合单支付订单详情
-// @Description 根据ID获取合单支付订单详情
+// @Summary 获取多订单合单支付订单详情
+// @Description 根据ID获取多订单合单支付订单详情
 // @Tags 支付管理
 // @Accept json
 // @Produce json
 // @Param id path int true "合单支付订单ID"
-// @Success 201 {object} combinedPaymentOrderResponse "合单支付订单详情"
+// @Success 200 {object} combinedPaymentOrderResponse "多订单合单支付订单详情"
 // @Failure 400 {object} ErrorResponse "请求参数错误"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
@@ -467,45 +553,83 @@ func (server *Server) getCombinedPaymentOrder(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
-	combinedRow := result.CombinedPayment
 
-	var subOrders []combinedPaymentSubOrderResponse
-	if err := json.Unmarshal(combinedRow.SubOrders, &subOrders); err != nil {
+	resp, err := buildCombinedPaymentOrderResponse(result.CombinedPayment, result.PayParams)
+	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
-	}
-
-	resp := combinedPaymentOrderResponse{
-		ID:                combinedRow.ID,
-		CombineOutTradeNo: combinedRow.CombineOutTradeNo,
-		TotalAmount:       combinedRow.TotalAmount,
-		Status:            combinedRow.Status,
-		SubOrders:         subOrders,
-	}
-	if combinedRow.PrepayID.Valid {
-		resp.PrepayID = &combinedRow.PrepayID.String
-	}
-	if combinedRow.ExpiresAt.Valid {
-		expires := combinedRow.ExpiresAt.Time
-		resp.ExpiresAt = &expires
 	}
 
 	ctx.JSON(http.StatusOK, resp)
 }
 
-// closeCombinedPaymentOrder 关闭合单支付订单
+// queryCombinedPaymentOrder godoc
+// @Summary 查询多订单合单支付远端状态
+// @Description 查询本地多订单合单详情，并拉取微信侧最新支付状态，供小程序恢复支付或判断后续动作
+// @Tags 支付管理
+// @Accept json
+// @Produce json
+// @Param id path int true "合单支付订单ID"
+// @Success 200 {object} combinedPaymentOrderResponse "多订单合单支付订单详情(含微信远端状态)"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未授权"
+// @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
+// @Failure 404 {object} ErrorResponse "合单支付订单不存在"
+// @Failure 503 {object} ErrorResponse "支付服务不可用"
+// @Router /v1/payments/combined/{id}/query [get]
+// @Security BearerAuth
+func (server *Server) queryCombinedPaymentOrder(ctx *gin.Context) {
+	var req getCombinedPaymentOrderRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	facade := server.paymentFacade
+	if facade == nil {
+		facade = server.buildPaymentFacade()
+	}
+
+	result, err := facade.QueryCombinedPaymentOrder(ctx, logic.QueryCombinedPaymentOrderInput{
+		UserID:            authPayload.UserID,
+		CombinedPaymentID: req.ID,
+	})
+	if err != nil {
+		if isEcommerceClientNotConfigured(err) {
+			ctx.JSON(http.StatusServiceUnavailable, loggedServerError(ctx, err, "payment service unavailable", "query combined payment ecommerce client not configured"))
+			return
+		}
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	resp, err := buildCombinedPaymentOrderResponse(result.CombinedPayment, result.PayParams)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	resp.WechatQuery = newCombinedPaymentWechatQueryResult(result.WechatOrder)
+
+	ctx.JSON(http.StatusOK, resp)
+}
+
+// closeCombinedPaymentOrder 关闭多订单合单支付订单
 type closeCombinedPaymentOrderRequest struct {
 	ID int64 `uri:"id" binding:"required,min=1"`
 }
 
 // closeCombinedPaymentOrder godoc
-// @Summary 关闭合单支付订单
-// @Description 关闭待支付的合单支付订单
+// @Summary 关闭多订单合单支付订单
+// @Description 关闭待支付的多订单合单支付订单
 // @Tags 支付管理
 // @Accept json
 // @Produce json
 // @Param id path int true "合单支付订单ID"
-// @Success 200 {object} combinedPaymentOrderResponse "关闭成功的合单支付订单"
+// @Success 200 {object} combinedPaymentOrderResponse "关闭成功的多订单合单支付订单"
 // @Failure 400 {object} ErrorResponse "请求参数错误或订单状态不允许关闭"
 // @Failure 401 {object} ErrorResponse "未授权"
 // @Failure 403 {object} ErrorResponse "合单支付订单不属于当前用户"
