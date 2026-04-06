@@ -24,6 +24,7 @@ Page({
         errorMessage: '',
         refreshErrorMessage: '',
         navBarHeight: 88,
+        paying: false,
         
         // Dialog State
         showCancelDialog: false,
@@ -151,25 +152,27 @@ Page({
     },
 
     async onPay() {
-        if (!this.data.reservation) return
-        wx.showLoading({ title: '拉起支付' })
+        if (!this.data.reservation || this.data.paying) return
+        this.setData({ paying: true })
         try {
-            await processPayment(this.data.reservation.id, 'reservation')
-            
-            Navigation.toPaymentSuccess({
-                orderId: String(this.data.id),
-                orderNo: String(this.data.id),
-                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00'
+            const paymentResult = await processPayment(this.data.reservation.id, 'reservation')
+
+            Navigation.toReservationPaymentResult({
+                reservationId: String(this.data.id),
+                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00',
+                result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+                source: 'detail'
             })
         } catch (e) {
-            if (e instanceof PaymentCancelledError) {
-                wx.showToast({ title: '已取消支付', icon: 'none' })
-            } else {
-                logger.error('Pay failed', e)
-                wx.showToast({ title: '支付失败', icon: 'none' })
-            }
+            logger.error('Pay failed', e)
+            Navigation.toReservationPaymentResult({
+                reservationId: String(this.data.id),
+                amount: this.data.reservation.depositDisplay?.replace('¥', '') || '0.00',
+                result: e instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
+                source: 'detail'
+            })
         } finally {
-            wx.hideLoading()
+            this.setData({ paying: false })
         }
     },
     

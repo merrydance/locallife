@@ -62,7 +62,7 @@
           <view class="card-footer" catchtap="preventBubble">
              <t-button wx:if="{{item.canCancel}}" size="small" shape="round" catchtap="onCancelReservation" data-id="{{item.id}}">取消</t-button>
              <t-button wx:if="{{item.canViewDetail}}" size="small" shape="round" catchtap="onViewDetail" data-id="{{item.id}}">详情</t-button>
-             <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" catchtap="onPayReservation" data-id="{{item.id}}">去支付</t-button>
+             <t-button wx:if="{{item.canPay}}" size="small" theme="primary" shape="round" loading="{{payingReservationId === item.id}}" disabled="{{payingReservationId > 0}}" catchtap="onPayReservation" data-id="{{item.id}}">去支付</t-button>
              <t-button wx:if="{{item.canOrder}}" size="small" theme="primary" shape="round" catchtap="onGoToOrder" data-item="{{item}}">加菜/点餐</t-button>
           </view>
         </view>

@@ -44,6 +44,7 @@ Page({
     showContactButton: true, // 总是显示联系客服/商家
     showReviewButton: false,
     isReviewed: false,
+    paying: false,
     
     lastUrgeTime: 0,  // 上次催单时间
     urgeCountdown: 0  // 催单倒计时（秒）
@@ -323,12 +324,21 @@ Page({
   },
 
   async onPayOrder() {
-    const { orderId } = this.data
-    if (!orderId) return
+    const { orderId, paying } = this.data
+    if (!orderId || paying) return
 
-    wx.showLoading({ title: '拉起支付...' })
+    this.setData({ paying: true })
     try {
-      await processPayment(parseInt(orderId), 'order')
+      const paymentResult = await processPayment(parseInt(orderId, 10), 'order')
+
+      if (paymentResult.status !== 'paid') {
+        await this.loadOrderDetail()
+        wx.showToast({
+          title: paymentResult.status === 'failed' ? '支付未完成，请重新发起' : '支付结果确认中，请稍后刷新',
+          icon: 'none'
+        })
+        return
+      }
       
       const { order } = this.data
       if (order) {
@@ -345,10 +355,11 @@ Page({
         wx.showToast({ title: '已取消支付', icon: 'none' })
       } else {
         logger.error('支付失败', error, 'Detail.onPayOrder')
-        wx.showToast({ title: '支付失败', icon: 'none' })
+        await this.loadOrderDetail()
+        wx.showToast({ title: '支付结果确认中，请稍后刷新', icon: 'none' })
       }
     } finally {
-      wx.hideLoading()
+      this.setData({ paying: false })
     }
   },
 

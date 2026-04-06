@@ -88,10 +88,10 @@
 
 执行拆分：
 
-- [ ] [Batch 1 任务卡索引](weapp/docs/weapp_overall_upgrade_task_cards_20260405/README.md)
-- [ ] [CARD-01 预订确认页任务边界与支付真实化](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-01-reservation-confirm-contract-and-task-flow.md)
-- [ ] [CARD-02 支付结果页与未知状态承接收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-02-payment-result-state-recovery.md)
-- [ ] [CARD-03 预订详情与返回重入恢复链路收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-03-reservation-detail-reentry-and-context.md)
+- [x] [Batch 1 任务卡索引](weapp/docs/weapp_overall_upgrade_task_cards_20260405/README.md)
+- [x] [CARD-01 预订确认页任务边界与支付真实化](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-01-reservation-confirm-contract-and-task-flow.md)
+- [x] [CARD-02 支付结果页与未知状态承接收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-02-payment-result-state-recovery.md)
+- [x] [CARD-03 预订详情与返回重入恢复链路收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-03-reservation-detail-reentry-and-context.md)
 
 页面范围：
 
@@ -101,6 +101,8 @@
 4. `weapp/miniprogram/pages/reservation/detail/index.wxml`
 5. `weapp/miniprogram/pages/orders/success/index.ts`
 6. `weapp/miniprogram/pages/orders/success/index.wxml`
+7. `weapp/miniprogram/pages/user_center/reservations/index.ts`
+8. `weapp/miniprogram/pages/user_center/reservations/index.wxml`
 
 已知核心问题：
 
@@ -122,6 +124,8 @@
 3. 支付后重进、回前台、弱网回跳不会让用户丢失关键上下文。
 
 风险等级：G3
+
+状态回填：Batch 1 任务卡与回填摘要已更新；当前无需新增标准文档或提示文档。
 
 ### Batch 2：外卖结算与首页性能簇
 

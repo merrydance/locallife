@@ -63,7 +63,7 @@
             <text wx:if="{{showPayButton}}">订单等待支付，请在15分钟内完成</text>
             <text wx:if="{{showTrackingButton}}">骑手正在为您配送中</text>
           </view>
-          <t-button wx:if="{{showPayButton}}" theme="primary" size="small" shape="round" bindtap="onPayOrder">立即支付</t-button>
+          <t-button wx:if="{{showPayButton}}" theme="primary" size="small" shape="round" loading="{{paying}}" disabled="{{paying}}" bindtap="onPayOrder">立即支付</t-button>
           <t-button wx:if="{{showTrackingButton}}" size="small" shape="round" bindtap="onViewTracking">查看进度</t-button>
        </view>
     </view>
@@ -178,7 +178,7 @@
 
       <!-- 主要按钮 -->
       <view class="primary-actions">
-         <t-button wx:if="{{showPayButton}}" theme="primary" size="medium" shape="round" bindtap="onPayOrder">去支付</t-button>
+         <t-button wx:if="{{showPayButton}}" theme="primary" size="medium" shape="round" loading="{{paying}}" disabled="{{paying}}" bindtap="onPayOrder">去支付</t-button>
          <t-button wx:if="{{showUrgeButton}}" theme="primary" size="medium" shape="round" bindtap="onUrgeOrder" disabled="{{urgeCountdown > 0}}">{{urgeCountdown > 0 ? urgeCountdown + 's' : '催单'}}</t-button>
          <t-button wx:if="{{showConfirmButton}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">确认收货</t-button>
          <t-button wx:if="{{order.type === 'takeaway' && orderDTO.status === 'ready'}}" theme="primary" size="medium" shape="round" bindtap="onConfirmReceipt">我已取餐</t-button>

@@ -24,9 +24,28 @@
 
 ## Batch 1：预订支付与结果承接簇
 
-- [ ] [CARD-01 预订确认页任务边界与支付真实化](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-01-reservation-confirm-contract-and-task-flow.md)
-- [ ] [CARD-02 支付结果页与未知状态承接收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-02-payment-result-state-recovery.md)
-- [ ] [CARD-03 预订详情与返回重入恢复链路收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-03-reservation-detail-reentry-and-context.md)
+- [x] [CARD-01 预订确认页任务边界与支付真实化](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-01-reservation-confirm-contract-and-task-flow.md)
+- [x] [CARD-02 支付结果页与未知状态承接收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-02-payment-result-state-recovery.md)
+- [x] [CARD-03 预订详情与返回重入恢复链路收口](weapp/docs/weapp_overall_upgrade_task_cards_20260405/card-03-reservation-detail-reentry-and-context.md)
+
+### Batch 1 回填摘要
+
+- 状态：代码修复完成，人工回归待补
+- PR 链接：当前为未提交工作区改动，暂无 PR
+- 验证结果：2026-04-06 已补做共享支付语义修复，修正 `processPayment` 把 `failed`/`closed` 错承接为 `unknown` 以及普通订单详情页伪成功跳转问题；受影响的预订与支付链路 TypeScript 文件诊断无报错；已通过定向 ESLint 校验；全量 `cd /home/sam/locallife/weapp && npm run quality:check` 仍被工作区既有 `console-access` 导出缺失编译错误阻塞，与本批支付链路修复无关；人工回归记录尚未在当前文档中补记
+- 残余风险：微信真实回跳、弱网延迟同步、前后台重入与支付后即时查询失败路径仍需继续按预订详情真值做人工回归；工作区仍存在与本批无关的全量编译阻塞项
+- 标准与提示文档：无需更新，现行小程序交互标准、API contract 和提示系统文档已覆盖真实结果承接、未知结果与上下文保留要求
+
+### Batch 1 人工回归清单
+
+- 场景 1：从预订确认页提交定金预订并完成支付，确认结果页落成功态，主按钮进入预订详情后状态与金额一致。
+- 场景 2：从预订确认页提交定金预订后主动取消支付，确认结果页落取消态，进入预订详情后仍显示待支付且可继续支付。
+- 场景 3：从预订确认页提交定金预订后制造支付失败或支付参数缺失，确认结果页落失败态，不会伪装成成功或“确认中”。
+- 场景 4：从预订确认页提交定金预订后在支付完成后立即断网或弱网，确认结果页可落 unknown 并支持重新查询，随后能按预订详情真值收敛。
+- 场景 5：从预订详情页发起支付，确认按钮有进行中态且不可重复点击；支付成功、取消、失败、unknown 四类结果与确认页一致。
+- 场景 6：从我的预订列表发起支付，确认列表内只有当前项进入 loading，结果页返回后保留原有筛选状态。
+- 场景 7：在预订结果页处于 unknown 时切到后台再回前台，确认页面会重新拉取状态，不会停留在伪成功或伪失败。
+- 场景 8：普通订单详情页发起支付后，如果支付结果未同步或明确失败，不会再直接跳转到成功页，而是回到订单详情继续承接真值。
 
 ## Batch 2：外卖结算与首页性能簇
 
@@ -77,8 +96,8 @@
 
 ## Batch 1 完成标准
 
-- [ ] 预订确认页不存在展示了但不生效的支付交互。
-- [ ] 支付结果页不再只是静态成功页，具备成功、失败、取消、未知结果等关键状态承接。
+- [x] 预订确认页不存在展示了但不生效的支付交互。
+- [x] 支付结果页不再只是静态成功页，具备成功、失败、取消、未知结果等关键状态承接。
 - [ ] 用户从确认页、详情页、微信回跳、前后台切换和重试路径中都能回到可信状态。
 - [ ] Batch 1 的实现与 review 全部使用 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
 

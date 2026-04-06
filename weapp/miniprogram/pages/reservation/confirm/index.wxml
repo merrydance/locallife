@@ -30,84 +30,41 @@
       <t-input label="备注" placeholder="如有特殊需求请备注" value="{{form.remark}}" data-field="remark" bindchange="onInputChange" />
     </t-cell-group>
 
-    <!-- 支付方式选择 (仅当需要支付定金或全款时展示) -->
-    <t-cell-group title="支付方式" style="margin-top: 24rpx;" wx:if="{{paymentMode !== 'none'}}">
-      <view class="payment-selector">
-        <t-radio-group value="{{selectedPaymentMethod}}" bind:change="onSelectedPaymentMethodChange">
-          <t-radio value="wechat" label="微信支付" icon="circle">
-            <t-icon name="logo-wechat" size="40rpx" color="#07C160" slot="icon" />
-          </t-radio>
-          <t-radio value="balance" label="余额支付" icon="circle" disabled="{{memberBalance <= 0}}">
-            <view slot="label" style="display: flex; flex-direction: column;">
-              <view style="display: flex; align-items: center; gap: 8rpx;">
-                <text>余额支付</text>
-                <t-tag wx:if="{{memberBalance > 0 && memberBalance < (paymentMode === 'deposit' ? deposit : 0)}}" size="extra-small" theme="warning" variant="dark">余额不足以全抵</t-tag>
-              </view>
-              <text class="balance-note" wx:if="{{memberBalanceDisplay}}">可用余额: ¥{{memberBalanceDisplay}}</text>
-              <text class="balance-note" wx:else>未加入会员或无余额</text>
-            </view>
-            <t-icon name="wallet" size="40rpx" color="{{memberBalance <= 0 ? '#ccc' : '#FF6B00'}}" slot="icon" />
-          </t-radio>
-        </t-radio-group>
+    <view class="task-summary-card">
+      <view class="task-summary-title">当前步骤</view>
+      <view class="task-summary-row">
+        <text class="task-summary-label">本步将完成</text>
+        <text class="task-summary-value">{{paymentMode === 'deposit' ? '提交预订并拉起定金支付' : '提交预订并进入点菜页'}}</text>
       </view>
-    </t-cell-group>
-
-    <!-- 商户优惠活动 -->
-    <view style="margin: 24rpx;">
-      <merchant-promos 
-        merchantId="{{merchantId}}"
-        membershipId="{{membershipId}}"
-        currentBalance="{{memberBalance}}"
-        orderTotal="{{calculation.total_amount}}"
-        bind:recharged="onRecharged"
-        bind:voucherClaimed="onVoucherClaimed"
-      />
+      <view class="task-summary-row">
+        <text class="task-summary-label">下一步</text>
+        <text class="task-summary-desc">{{paymentMode === 'deposit' ? '支付结果会继续由结果页和预订详情页承接' : '进入点菜页后再确认菜品和后续支付'}}</text>
+      </view>
     </view>
   </view>
 
-    <!-- 费用明细 -->
-    <view class="price-section" wx:if="{{paymentMode !== 'none'}}">
+    <view class="price-section">
       <view class="price-row">
-        <text class="price-row-label">预计金额 ({{paymentMode === 'deposit' ? '定金' : '全款'}})</text>
-        <text class="price-row-value">¥{{paymentMode === 'deposit' ? depositDisplay : calculation.subtotalDisplay}}</text>
+        <text class="price-row-label">{{paymentMode === 'deposit' ? '应付定金' : '本步费用'}}</text>
+        <text class="price-row-value">{{paymentMode === 'deposit' ? '¥' + depositDisplay : '无需支付'}}</text>
       </view>
-      
-      <!-- 优惠明细 -->
-      <view class="price-row" wx:for="{{calculation.ladder_promotions || []}}" wx:key="rule_id">
-        <text class="price-row-discount-label" wx:if="{{item.current_hit}}">{{item.name}}（已满¥{{item.thresholdDisplay}}）</text>
-        <text class="price-row-discount-label" wx:else>{{item.name}}（还差¥{{item.missingNeedDisplay}}）</text>
-        <text class="price-row-discount-value">可减¥{{item.discountDisplay}}</text>
-      </view>
-      <view class="price-row" wx:for="{{calculation.applied_promotions || []}}" wx:key="title">
-        <text class="price-row-label highlight-red">{{item.title}}</text>
-        <text class="price-row-value highlight-red">-¥{{item.amountDisplay}}</text>
-      </view>
-      <view class="price-row" wx:for="{{calculation.voucher_trials || []}}" wx:key="voucher_id">
-        <text class="price-row-discount-label">券试算：{{item.voucher_name}}（减¥{{item.amountDisplay}}）</text>
-        <text class="price-row-discount-value">试算后¥{{item.trialPayableDisplay}}</text>
-      </view>
-      <view class="price-row" wx:if="{{calculation.payment_assessment && calculation.payment_assessment.payment_hint}}">
-        <text class="price-row-label">支付提示</text>
-        <text class="price-row-value">{{calculation.payment_assessment.payment_hint}}</text>
-      </view>
-
-      <view class="price-row price-row-total">
-        <text class="price-row-total-label">最终应付</text>
-        <text class="price-row-total-value">¥{{calculation.totalDisplay}}</text>
+      <view class="price-row" wx:if="{{paymentMode === 'deposit'}}">
+        <text class="price-row-label">支付方式</text>
+        <text class="price-row-value">提交后拉起微信支付</text>
       </view>
     </view>
 
   <!-- 支付提示 -->
   <view class="payment-tip">
     <t-icon name="info-circle" size="32rpx" color="#999" />
-    <text>提交预定后需在30分钟内完成支付，否则预定将自动取消。</text>
+    <text>{{paymentMode === 'deposit' ? '提交预订后需在30分钟内完成支付，否则预订将自动取消。' : '本页只负责提交预订并进入点菜，后续金额和支付以点菜链路为准。'}}</text>
   </view>
 </view>
 
 <!-- 底部提交栏 -->
 <view class="bottom-bar">
   <t-button theme="primary" size="large" block loading="{{submitting}}" bindtap="onSubmit" shape="round">
-    {{paymentMode === 'deposit' ? '确认预定 (¥' + calculation.totalDisplay + ')' : '下一步：选择菜品'}}
+    {{paymentMode === 'deposit' ? '提交预订并支付定金' : '提交预订并去点菜'}}
   </t-button>
 </view>
 

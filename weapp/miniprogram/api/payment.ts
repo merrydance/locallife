@@ -9,6 +9,12 @@ export type RefundStatus = 'pending' | 'processing' | 'success' | 'failed' | 'cl
 export type PaymentType = 'native' | 'miniprogram'
 export type BusinessType = 'order' | 'reservation' | 'reservation_addon' | 'membership_recharge' | 'rider_deposit' | 'claim_recovery'
 export type PaymentLedgerEntryType = 'payment' | 'refund'
+export type PaymentProcessStatus = 'paid' | 'failed' | 'unknown'
+
+export interface PaymentProcessResult {
+  paymentId: number
+  status: PaymentProcessStatus
+}
 
 export interface MiniProgramPayParams {
   timeStamp: string
@@ -358,14 +364,46 @@ export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Prom
   })
 }
 
-export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<void> {
-  const payment = await createPayment({
-    order_id: orderId,
-    business_type: businessType
-  })
+export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<PaymentProcessResult> {
+  let payment: PaymentOrderResponse
+
+  try {
+    payment = await createPayment({
+      order_id: orderId,
+      business_type: businessType
+    })
+  } catch (error: unknown) {
+    console.warn('[payment] 创建支付单异常，按 unknown 承接', error)
+    return {
+      paymentId: 0,
+      status: 'unknown'
+    }
+  }
 
   if (!payment.pay_params) {
-    throw new Error('支付参数缺失')
+    if (payment.status === 'paid' || payment.status === 'refunded') {
+      return {
+        paymentId: payment.id,
+        status: 'paid'
+      }
+    }
+
+    if (payment.status === 'failed' || payment.status === 'closed') {
+      return {
+        paymentId: payment.id,
+        status: 'failed'
+      }
+    }
+
+    console.warn('[payment] 支付参数缺失', {
+      paymentId: payment.id,
+      paymentStatus: payment.status,
+      businessType
+    })
+    return {
+      paymentId: payment.id,
+      status: 'failed'
+    }
   }
 
   try {
@@ -375,17 +413,34 @@ export async function processPayment(orderId: number, businessType: BusinessType
     if (wxError?.errMsg?.includes('cancel')) {
       throw new PaymentCancelledError()
     }
-    throw error
+
+    console.warn('[payment] 拉起支付失败', error)
+    return {
+      paymentId: payment.id,
+      status: 'failed'
+    }
   }
 
   try {
-    await pollPaymentStatus(payment.id, 5, 2000)
-  } catch (error: unknown) {
-    if (error instanceof Error && error.message === '支付状态检查超时') {
-      console.warn('[payment] 支付状态轮询超时，后端 webhook 可能延迟，继续跳转成功页')
-      return
+    const finalStatus = await pollPaymentStatus(payment.id, 5, 2000)
+
+    if (finalStatus === 'paid' || finalStatus === 'refunded') {
+      return {
+        paymentId: payment.id,
+        status: 'paid'
+      }
     }
-    throw error
+
+    return {
+      paymentId: payment.id,
+      status: 'failed'
+    }
+  } catch (error: unknown) {
+    console.warn('[payment] 支付结果暂未同步，按 unknown 承接', error)
+    return {
+      paymentId: payment.id,
+      status: 'unknown'
+    }
   }
 }
 
@@ -398,7 +453,7 @@ export async function pollPaymentStatus(paymentId: number, maxAttempts: number =
   for (let i = 0; i < maxAttempts; i++) {
     const status = await checkPaymentStatus(paymentId)
 
-    if (status === 'paid' || status === 'refunded' || status === 'closed') {
+    if (status === 'paid' || status === 'refunded' || status === 'closed' || status === 'failed') {
       return status
     }
 

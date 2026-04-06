@@ -6,45 +6,13 @@
 import { formatPriceNoSymbol } from '@/utils/util'
 import { createReservation, CreateReservationRequest } from '../../../api/reservation'
 import { checkRoomAvailability } from '../../../api/room'
-import { getMyMemberships, MembershipResponse } from '../../../api/personal'
-import { createReservationPayment, invokeWechatPay } from '../../../api/payment'
-import { calculateCart, CalculateCartResponse } from '../../../api/cart'
+import { processPayment, PaymentCancelledError } from '../../../api/payment'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface TimeSlot {
   time: string
   available: boolean
-}
-
-type PromotionItem = NonNullable<CalculateCartResponse['applied_promotions']>[number] & {
-  amountDisplay: string
-}
-
-type LadderItem = NonNullable<CalculateCartResponse['ladder_promotions']>[number] & {
-  thresholdDisplay: string
-  discountDisplay: string
-  missingNeedDisplay: string
-}
-
-type VoucherTrialItem = NonNullable<CalculateCartResponse['voucher_trials']>[number] & {
-  amountDisplay: string
-  trialPayableDisplay: string
-}
-
-type PaymentAssessmentItem = NonNullable<CalculateCartResponse['payment_assessment']>
-
-interface ReservationCalculationView {
-  subtotal: number
-  discount_amount: number
-  total_amount: number
-  subtotalDisplay: string
-  discountDisplay: string
-  totalDisplay: string
-  applied_promotions: PromotionItem[]
-  ladder_promotions: LadderItem[]
-  voucher_trials: VoucherTrialItem[]
-  payment_assessment: PaymentAssessmentItem | null
 }
 
 Page({
@@ -56,13 +24,7 @@ Page({
     capacity: 10,
     deposit: 0,
     depositDisplay: '0.00',
-    paymentMode: 'full' as 'deposit' | 'full',
-    
-    // 支付及会员相关
-    selectedPaymentMethod: 'wechat', // 'wechat' | 'balance'
-    memberBalance: 0,
-    memberBalanceDisplay: '',
-    membershipId: 0,
+    paymentMode: 'deposit' as 'deposit' | 'full',
 
     form: {
       date: '',
@@ -81,20 +43,7 @@ Page({
     availableTimeSlots: [] as Array<{ label: string, value: string }>,  // 可用时段列表（picker格式）
     selectedTimeLabel: '',
     timePickerVisible: false,
-    loadingSlots: false,
-
-    calculation: {
-      subtotal: 0,
-      subtotalDisplay: '0.00',
-      discount_amount: 0,
-      discountDisplay: '0.00',
-      total_amount: 0,
-      totalDisplay: '0.00',
-      applied_promotions: [] as PromotionItem[],
-      ladder_promotions: [] as LadderItem[],
-      voucher_trials: [] as VoucherTrialItem[],
-      payment_assessment: null as PaymentAssessmentItem | null
-    } as ReservationCalculationView
+    loadingSlots: false
   },
 
   onLoad(options: {
@@ -110,7 +59,7 @@ Page({
       const roomIdNum = parseInt(options.roomId || '0', 10) || 0
       const merchantIdNum = parseInt(options.merchantId || '0', 10) || 0
       const capacityNum = parseInt(options.capacity || '10', 10) || 10
-      const depositNum = Number(options.deposit) || 10000
+      const depositNum = Number(options.deposit || 0) || 0
       this.setData({
         roomId: options.roomId,
         tableId: roomIdNum,
@@ -119,7 +68,7 @@ Page({
         capacity: capacityNum,
         deposit: depositNum,
         depositDisplay: formatPriceNoSymbol(depositNum),
-        'calculation.totalDisplay': formatPriceNoSymbol(depositNum)
+        paymentMode: depositNum > 0 ? 'deposit' : 'full'
       })
     }
 
@@ -139,32 +88,6 @@ Page({
       if (options.roomId) {
         this.loadAvailability(dateStr, parseInt(options.roomId || '0', 10))
       }
-    }
-
-    // 加载会员信息
-    this.loadMemberships()
-    // 初始化计算金额
-    this.calculateAmount()
-  },
-
-  async loadMemberships() {
-    const { merchantId } = this.data
-    if (!merchantId) return
-
-    try {
-      const result = await getMyMemberships()
-      const membership = result.memberships?.find(
-        (m: MembershipResponse) => m.merchant_id === merchantId
-      )
-      if (membership) {
-        this.setData({
-          memberBalance: membership.balance,
-          memberBalanceDisplay: formatPriceNoSymbol(membership.balance),
-          membershipId: membership.id
-        })
-      }
-    } catch (error) {
-      console.error('[预订] 加载会员信息失败:', error)
     }
   },
 
@@ -302,73 +225,6 @@ Page({
     return meal ? `${time} (${meal})` : time
   },
 
-  onPaymentModeChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ paymentMode: e.detail.value })
-    this.calculateAmount()
-  },
-
-  onSelectedPaymentMethodChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ selectedPaymentMethod: e.detail.value })
-  },
-
-  onRecharged() {
-    this.loadMemberships()
-  },
-
-  onVoucherClaimed() {
-    wx.showToast({ title: '领券完成', icon: 'success' })
-    this.calculateAmount() // 领券后刷新金额
-  },
-
-  /**
-   * 计算应付金额
-   */
-  async calculateAmount() {
-    const { merchantId, paymentMode, deposit } = this.data
-    if (!merchantId) return
-
-    try {
-      const params = {
-        merchant_id: merchantId,
-        order_type: 'reservation'
-      }
-      
-      const result = await calculateCart(params)
-      
-      this.setData({
-        calculation: {
-          subtotal: paymentMode === 'deposit' ? deposit : result.subtotal,
-          subtotalDisplay: formatPriceNoSymbol(paymentMode === 'deposit' ? deposit : result.subtotal),
-          discount_amount: result.discount_amount,
-          discountDisplay: formatPriceNoSymbol(result.discount_amount),
-          total_amount: result.total_amount,
-          totalDisplay: formatPriceNoSymbol(result.total_amount),
-          applied_promotions: (result.applied_promotions || []).map((p) => ({
-            ...p,
-            amountDisplay: formatPriceNoSymbol(p.amount)
-          })),
-          ladder_promotions: (result.ladder_promotions || []).map((rule) => ({
-            ...rule,
-            thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
-            discountDisplay: formatPriceNoSymbol(rule.discount || 0),
-            missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
-          })),
-          voucher_trials: (result.voucher_trials || []).map((trial) => ({
-            ...trial,
-            amountDisplay: formatPriceNoSymbol(trial.amount || 0),
-            trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
-          })),
-          payment_assessment: result.payment_assessment || null
-        }
-      })
-    } catch (err) {
-      console.error('计算金额失败:', err)
-      this.setData({
-        'calculation.totalDisplay': formatPriceNoSymbol(paymentMode === 'deposit' ? deposit : 0)
-      })
-    }
-  },
-
   async onSubmit() {
     const { form, tableId, paymentMode, merchantId } = this.data
 
@@ -410,28 +266,24 @@ Page({
           url: `/pages/dine-in/menu/menu?reservation_id=${reservation.id}&merchant_id=${merchantId}`
         })
       } else {
-        // 定金模式：发起支付
-        try {
-          const paymentResult = await createReservationPayment(reservation.id)
-          const amount = ((paymentResult.amount || this.data.deposit) / 100).toFixed(2)
+        const resultAmount = formatPriceNoSymbol(reservation.deposit_amount || this.data.deposit)
 
-          if (paymentResult.pay_params) {
-            await invokeWechatPay(paymentResult.pay_params)
-          } else if (paymentResult.status === 'paid') {
-            // 支付已完成，统一走成功页承接反馈
-          }
-          Navigation.toPaymentSuccess({
-            orderId: String(reservation.id),
-            orderNo: String(reservation.id),
-            amount
+        try {
+          const paymentResult = await processPayment(reservation.id, 'reservation')
+          Navigation.toReservationPaymentResult({
+            reservationId: String(reservation.id),
+            amount: resultAmount,
+            result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+            source: 'confirm'
           })
-          
         } catch (payErr) {
           console.error('[预订支付] 支付失败或取消:', payErr)
-          wx.showToast({ title: '支付未完成', icon: 'none' })
-          setTimeout(() => {
-            wx.redirectTo({ url: `/pages/reservation/detail/index?id=${reservation.id}` })
-          }, 1500)
+          Navigation.toReservationPaymentResult({
+            reservationId: String(reservation.id),
+            amount: resultAmount,
+            result: payErr instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
+            source: 'confirm'
+          })
         }
       }
     } catch (error) {

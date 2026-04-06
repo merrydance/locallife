@@ -48,6 +48,19 @@
   margin-top: 80rpx;
 }
 
+.status-note {
+  margin-top: 32rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 183, 3, 0.12);
+  padding: 20rpx 24rpx;
+}
+
+.status-note-text {
+  color: #8a5a00;
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
 .recommend-section {
   padding: 40rpx;
   padding-bottom: calc(40rpx + env(safe-area-inset-bottom));

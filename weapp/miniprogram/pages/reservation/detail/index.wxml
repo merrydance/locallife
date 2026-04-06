@@ -98,7 +98,7 @@
       </view>
 
       <view class="primary-actions">
-          <t-button wx:if="{{reservation.canPay}}" theme="primary" size="medium" shape="round" bindtap="onPay">去支付</t-button>
+          <t-button wx:if="{{reservation.canPay}}" theme="primary" size="medium" shape="round" loading="{{paying}}" bindtap="onPay">去支付</t-button>
           <!-- 只有已确认/已到店才能加菜，或者全款模式且未确认也可以修改菜品(视业务而定)，这里保守按 Adapter 逻辑 -->
           <t-button wx:if="{{reservation.canOrder}}" theme="primary" size="medium" shape="round" bindtap="onModifyDishes">加菜/点餐</t-button>
           

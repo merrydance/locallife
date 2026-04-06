@@ -40,6 +40,7 @@ Page({
         loading: false,
         initialLoading: true,
         error: null as string | null,
+        payingReservationId: 0,
         page: 1,
         pageSize: 10,
         hasMore: true,
@@ -47,7 +48,11 @@ Page({
         currentStatus: '' as string
     },
 
-    onLoad() {
+    onLoad(options?: { status?: string }) {
+        const currentStatus = options?.status === 'all' ? '' : (options?.status || '')
+        if (currentStatus) {
+            this.setData({ currentStatus })
+        }
         this.loadReservations(true)
     },
 
@@ -161,29 +166,32 @@ Page({
      */
     async onPayReservation(e: WechatMiniprogram.BaseEvent) {
         const id = getEventId(e)
-        if (!id) return
+        if (!id || this.data.payingReservationId) return
 
-        wx.showLoading({ title: '拉起支付...' })
+        this.setData({ payingReservationId: id })
         try {
-             // 预订支付通常是定金，这里的objectType可能是 'reservation'
-            await processPayment(id, 'reservation')
+            const paymentResult = await processPayment(id, 'reservation')
             
-            // 找到对应的预订数据用于展示
             const res = this.data.reservations.find((r) => r.id === id)
-            Navigation.toPaymentSuccess({
-                orderId: String(id),
-                orderNo: String(id), // 预订号暂用ID
-                amount: res?.depositDisplay?.replace('¥', '') || '0.00'
+            Navigation.toReservationPaymentResult({
+                reservationId: String(id),
+                amount: res?.depositDisplay?.replace('¥', '') || '0.00',
+                result: paymentResult.status === 'paid' ? 'success' : paymentResult.status,
+                source: 'list',
+                returnStatus: this.data.currentStatus || 'all'
             })
         } catch (error) {
-            if (error instanceof PaymentCancelledError) {
-                wx.showToast({ title: '已取消支付', icon: 'none' })
-            } else {
-                logger.error('支付失败', error, 'Reservations.onPay')
-                wx.showToast({ title: '支付失败', icon: 'none' })
-            }
+            logger.error('支付失败', error, 'Reservations.onPay')
+            const res = this.data.reservations.find((r) => r.id === id)
+            Navigation.toReservationPaymentResult({
+                reservationId: String(id),
+                amount: res?.depositDisplay?.replace('¥', '') || '0.00',
+                result: error instanceof PaymentCancelledError ? 'cancelled' : 'unknown',
+                source: 'list',
+                returnStatus: this.data.currentStatus || 'all'
+            })
         } finally {
-            wx.hideLoading()
+            this.setData({ payingReservationId: 0 })
         }
     },
 
