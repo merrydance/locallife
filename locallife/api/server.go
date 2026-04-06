@@ -1204,6 +1204,8 @@ func (server *Server) setupRouter() {
 	merchantFinanceOwnerGroup.Use(server.MerchantStaffMiddleware("owner"))
 	{
 		merchantFinanceOwnerGroup.POST("/account/withdraw", server.createMerchantAccountWithdraw)
+		merchantFinanceOwnerGroup.POST("/account/settlement-account", server.modifyMerchantSettlementAccount)
+		merchantFinanceOwnerGroup.GET("/account/settlement-account/applications/:application_no", server.getMerchantSettlementApplication)
 	}
 
 	// 商户设备管理路由
@@ -1305,6 +1307,8 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.GET("/finance/account/balance", server.getOperatorAccountBalance)
 		operatorsGroup.GET("/finance/account/settlement-account", server.getOperatorSettlementAccount)
+		operatorsGroup.POST("/finance/account/settlement-account", server.modifyOperatorSettlementAccount)
+		operatorsGroup.GET("/finance/account/settlement-account/applications/:application_no", server.getOperatorSettlementApplication)
 		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
 		operatorsGroup.GET("/finance/withdrawals", server.listOperatorWithdrawals)
 		operatorsGroup.GET("/finance/withdrawals/:id", server.getOperatorWithdrawal)

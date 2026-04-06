@@ -143,6 +143,13 @@ type EcommerceClientInterface interface {
 	// accountNumberRule 为空时使用微信默认规则（ACCOUNT_NUMBER_RULE_MASK_V1）
 	QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*SubMerchantSettlementResponse, error)
 
+	// ModifySubMerchantSettlement 修改特约商户/二级商户结算账户
+	ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *ModifySubMerchantSettlementRequest) (*ModifySubMerchantSettlementResponse, error)
+
+	// QuerySubMerchantSettlementApplication 查询结算账户修改申请单状态
+	// applicationNo: 修改申请单号；accountNumberRule: 账号展示规则（空字符串使用微信默认）
+	QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*QuerySubMerchantSettlementApplicationResponse, error)
+
 	// ListPersonalBankingBanks 查询支持个人业务的银行列表
 	ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error)
 

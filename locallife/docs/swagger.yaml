@@ -4572,6 +4572,30 @@ definitions:
     required:
     - items
     type: object
+  api.modifySettlementAccountApplicationResponse:
+    properties:
+      application_no:
+        type: string
+    type: object
+  api.modifySettlementAccountRequest:
+    properties:
+      account_bank:
+        type: string
+      account_name:
+        type: string
+      account_number:
+        type: string
+      account_type:
+        type: string
+      bank_branch_id:
+        type: string
+      bank_name:
+        type: string
+    required:
+    - account_bank
+    - account_number
+    - account_type
+    type: object
   api.notificationPreferencesResponse:
     properties:
       created_at:
@@ -7366,6 +7390,27 @@ definitions:
       bank_name:
         type: string
       verify_fail_reason:
+        type: string
+      verify_result:
+        type: string
+    type: object
+  api.settlementApplicationResponse:
+    properties:
+      account_bank:
+        type: string
+      account_name:
+        type: string
+      account_number:
+        type: string
+      account_type:
+        type: string
+      bank_branch_id:
+        type: string
+      bank_name:
+        type: string
+      verify_fail_reason:
+        type: string
+      verify_finish_time:
         type: string
       verify_result:
         type: string
@@ -15854,6 +15899,106 @@ paths:
       summary: 查询商户结算账户
       tags:
       - 商户财务
+    post:
+      consumes:
+      - application/json
+      description: 商户修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。
+      parameters:
+      - description: 修改结算账户请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.modifySettlementAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.modifySettlementAccountApplicationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 商户不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: 商户收付通账户未激活
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 加密失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付下游异常
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 修改商户结算账户
+      tags:
+      - 商户财务
+  /v1/merchant/finance/account/settlement-account/applications/{application_no}:
+    get:
+      description: 商户查询自己的结算账户修改申请审核结果。
+      parameters:
+      - description: 修改结算账户申请单号
+        in: path
+        name: application_no
+        required: true
+        type: string
+      - description: 银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）
+        in: query
+        name: account_number_rule
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.settlementApplicationResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 商户或申请单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: 商户收付通账户未激活
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 内部错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付下游异常
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询商户结算账户修改申请状态
+      tags:
+      - 商户财务
   /v1/merchant/finance/daily:
     get:
       consumes:
@@ -21077,6 +21222,98 @@ paths:
       security:
       - BearerAuth: []
       summary: 查询运营商结算账户
+      tags:
+      - 运营商财务
+    post:
+      consumes:
+      - application/json
+      description: 运营商修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。
+      parameters:
+      - description: 修改结算账户请求
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/api.modifySettlementAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.modifySettlementAccountApplicationResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 运营商未激活或无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: 运营商收付通账户未激活
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 加密失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付下游异常
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 修改运营商结算账户
+      tags:
+      - 运营商财务
+  /v1/operators/me/finance/account/settlement-account/applications/{application_no}:
+    get:
+      description: 运营商查询自己的结算账户修改申请审核结果。
+      parameters:
+      - description: 修改结算账户申请单号
+        in: path
+        name: application_no
+        required: true
+        type: string
+      - description: 银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）
+        in: query
+        name: account_number_rule
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.settlementApplicationResponse'
+        "403":
+          description: 运营商未激活或无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 申请单不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "422":
+          description: 运营商收付通账户未激活
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付下游异常
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询运营商结算账户修改申请状态
       tags:
       - 运营商财务
   /v1/operators/me/finance/overview:

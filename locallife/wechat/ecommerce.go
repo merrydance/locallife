@@ -64,8 +64,10 @@ const (
 	ecommerceFundWithdrawURL       = "/v3/ecommerce/fund/withdraw"
 	ecommerceFundWithdrawQueryByNo = "/v3/ecommerce/fund/withdraw/out-request-no/%s"
 
-	// 结算账户查询（apply4sub）
-	apply4subSettlementURL = "/v3/apply4sub/sub_merchants/%s/settlement"
+	// 结算账户查询/修改/申请查询（apply4sub）
+	apply4subSettlementURL            = "/v3/apply4sub/sub_merchants/%s/settlement"
+	apply4subModifySettlementURL      = "/v3/apply4sub/sub_merchants/%s/modify-settlement"
+	apply4subModifySettlementQueryURL = "/v3/apply4sub/sub_merchants/%s/application/%s"
 )
 
 // EcommerceClient 平台收付通客户端
@@ -1609,6 +1611,77 @@ func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMch
 	var resp SubMerchantSettlementResponse
 	if err := json.Unmarshal(respBody, &resp); err != nil {
 		return nil, fmt.Errorf("unmarshal sub merchant settlement: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ==================== 结算账户修改 ====================
+
+// ModifySubMerchantSettlementRequest 修改结算账户请求
+type ModifySubMerchantSettlementRequest struct {
+	AccountType   string `json:"account_type"`             // 账户类型：ACCOUNT_TYPE_BUSINESS / ACCOUNT_TYPE_PRIVATE
+	AccountBank   string `json:"account_bank"`             // 开户银行
+	BankName      string `json:"bank_name,omitempty"`      // 开户银行全称（含支行）
+	BankBranchID  string `json:"bank_branch_id,omitempty"` // 开户银行联行号
+	AccountNumber string `json:"account_number"`           // 银行账号（微信支付公钥加密）
+	AccountName   string `json:"account_name,omitempty"`   // 开户名称（微信支付公钥加密，选填）
+}
+
+// ModifySubMerchantSettlementResponse 修改结算账户应答
+type ModifySubMerchantSettlementResponse struct {
+	ApplicationNo string `json:"application_no"` // 修改结算账户申请单号
+}
+
+// ModifySubMerchantSettlement 修改特约商户/二级商户结算账户
+func (c *EcommerceClient) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *ModifySubMerchantSettlementRequest) (*ModifySubMerchantSettlementResponse, error) {
+	requestURL := fmt.Sprintf(apply4subModifySettlementURL, subMchID)
+
+	respBody, err := c.doRequest(ctx, http.MethodPost, requestURL, req)
+	if err != nil {
+		return nil, fmt.Errorf("modify sub merchant settlement: %w", err)
+	}
+
+	var resp ModifySubMerchantSettlementResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal modify sub merchant settlement: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ==================== 结算账户修改申请查询 ====================
+
+// QuerySubMerchantSettlementApplicationResponse 查询结算账户修改申请状态应答
+type QuerySubMerchantSettlementApplicationResponse struct {
+	AccountName      string `json:"account_name"`        // 开户名称（掩码）
+	AccountType      string `json:"account_type"`        // 账户类型
+	AccountBank      string `json:"account_bank"`        // 开户银行
+	BankName         string `json:"bank_name,omitempty"` // 开户银行全称（含支行）
+	BankBranchID     string `json:"bank_branch_id,omitempty"`
+	AccountNumber    string `json:"account_number"` // 银行账号（掩码）
+	VerifyResult     string `json:"verify_result"`  // 审核状态
+	VerifyFailReason string `json:"verify_fail_reason,omitempty"`
+	VerifyFinishTime string `json:"verify_finish_time,omitempty"`
+}
+
+// QuerySubMerchantSettlementApplication 查询结算账户修改申请状态
+//
+// subMchID: 特约商户号；applicationNo: 申请单号；accountNumberRule: 账号展示规则（空字符串使用微信默认）
+func (c *EcommerceClient) QuerySubMerchantSettlementApplication(ctx context.Context, subMchID, applicationNo, accountNumberRule string) (*QuerySubMerchantSettlementApplicationResponse, error) {
+	requestURL := fmt.Sprintf(apply4subModifySettlementQueryURL, subMchID, applicationNo)
+	if accountNumberRule != "" {
+		requestURL += "?account_number_rule=" + url.QueryEscape(accountNumberRule)
+	}
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query sub merchant settlement application: %w", err)
+	}
+
+	var resp QuerySubMerchantSettlementApplicationResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal sub merchant settlement application: %w", err)
 	}
 
 	return &resp, nil

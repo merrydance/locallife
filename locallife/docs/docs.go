@@ -10841,6 +10841,161 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "修改商户结算账户",
+                "parameters": [
+                    {
+                        "description": "修改结算账户请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.modifySettlementAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.modifySettlementAccountApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "商户收付通账户未激活",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "加密失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付下游异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信客户端未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/merchant/finance/account/settlement-account/applications/{application_no}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户查询自己的结算账户修改申请审核结果。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户结算账户修改申请状态",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "修改结算账户申请单号",
+                        "name": "application_no",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
+                        "name": "account_number_rule",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.settlementApplicationResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "商户或申请单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "商户收付通账户未激活",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付下游异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信客户端未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
             }
         },
         "/v1/merchant/finance/daily": {
@@ -18853,6 +19008,149 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信客户端未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商修改自己的收付通结算银行账户。account_number 和 account_name 传入明文，服务端负责加密后转发给微信支付。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "修改运营商结算账户",
+                "parameters": [
+                    {
+                        "description": "修改结算账户请求",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.modifySettlementAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.modifySettlementAccountApplicationResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "运营商未激活或无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "运营商收付通账户未激活",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "加密失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付下游异常",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信客户端未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/finance/account/settlement-account/applications/{application_no}": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商查询自己的结算账户修改申请审核结果。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "查询运营商结算账户修改申请状态",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "修改结算账户申请单号",
+                        "name": "application_no",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "银行账号展示规则（默认 ACCOUNT_NUMBER_RULE_MASK_V1）",
+                        "name": "account_number_rule",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.settlementApplicationResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "运营商未激活或无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "申请单不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "运营商收付通账户未激活",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付下游异常",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -35857,6 +36155,42 @@ const docTemplate = `{
                 }
             }
         },
+        "api.modifySettlementAccountApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "application_no": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.modifySettlementAccountRequest": {
+            "type": "object",
+            "required": [
+                "account_bank",
+                "account_number",
+                "account_type"
+            ],
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_name": {
+                    "type": "string"
+                },
+                "account_number": {
+                    "type": "string"
+                },
+                "account_type": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "type": "string"
+                }
+            }
+        },
         "api.notificationPreferencesResponse": {
             "type": "object",
             "properties": {
@@ -39973,6 +40307,38 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "verify_fail_reason": {
+                    "type": "string"
+                },
+                "verify_result": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.settlementApplicationResponse": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_name": {
+                    "type": "string"
+                },
+                "account_number": {
+                    "type": "string"
+                },
+                "account_type": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "type": "string"
+                },
+                "verify_fail_reason": {
+                    "type": "string"
+                },
+                "verify_finish_time": {
                     "type": "string"
                 },
                 "verify_result": {
