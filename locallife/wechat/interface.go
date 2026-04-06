@@ -139,6 +139,10 @@ type EcommerceClientInterface interface {
 	// QueryEcommerceApplymentByOutRequestNo 通过业务申请编号查询进件状态
 	QueryEcommerceApplymentByOutRequestNo(ctx context.Context, outRequestNo string) (*EcommerceApplymentQueryResponse, error)
 
+	// QuerySubMerchantSettlement 查询特约商户/二级商户结算账户信息（敏感信息掩码）
+	// accountNumberRule 为空时使用微信默认规则（ACCOUNT_NUMBER_RULE_MASK_V1）
+	QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*SubMerchantSettlementResponse, error)
+
 	// ListPersonalBankingBanks 查询支持个人业务的银行列表
 	ListPersonalBankingBanks(ctx context.Context, offset, limit int) (*CapitalBankListResponse, error)
 

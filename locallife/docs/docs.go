@@ -10806,6 +10806,43 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/finance/account/settlement-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户财务"
+                ],
+                "summary": "查询商户结算账户",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantSettlementAccountResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信客户端未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/finance/daily": {
             "get": {
                 "security": [
@@ -18785,6 +18822,43 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/operators/me/finance/account/settlement-account": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商财务"
+                ],
+                "summary": "查询运营商结算账户",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.operatorSettlementAccountResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信客户端未配置",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -35636,6 +35710,20 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantSettlementAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "$ref": "#/definitions/api.settlementAccountInfo"
+                },
+                "account_status": {
+                    "type": "string"
+                },
+                "status_desc": {
+                    "type": "string"
+                }
+            }
+        },
         "api.merchantStatsDish": {
             "type": "object",
             "properties": {
@@ -36426,6 +36514,20 @@ const docTemplate = `{
                 },
                 "total": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.operatorSettlementAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "$ref": "#/definitions/api.settlementAccountInfo"
+                },
+                "account_status": {
+                    "type": "string"
+                },
+                "status_desc": {
+                    "type": "string"
                 }
             }
         },
@@ -39849,6 +39951,32 @@ const docTemplate = `{
                     "items": {
                         "type": "integer"
                     }
+                }
+            }
+        },
+        "api.settlementAccountInfo": {
+            "type": "object",
+            "properties": {
+                "account_bank": {
+                    "type": "string"
+                },
+                "account_number": {
+                    "type": "string"
+                },
+                "account_type": {
+                    "type": "string"
+                },
+                "bank_branch_id": {
+                    "type": "string"
+                },
+                "bank_name": {
+                    "type": "string"
+                },
+                "verify_fail_reason": {
+                    "type": "string"
+                },
+                "verify_result": {
+                    "type": "string"
                 }
             }
         },

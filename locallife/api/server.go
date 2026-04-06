@@ -1195,6 +1195,7 @@ func (server *Server) setupRouter() {
 		merchantFinanceGroup.GET("/settlements", server.listMerchantSettlements)
 		merchantFinanceGroup.GET("/settlement-timeline", server.listMerchantSettlementTimeline)
 		merchantFinanceGroup.GET("/account/balance", server.getMerchantAccountBalance)
+		merchantFinanceGroup.GET("/account/settlement-account", server.getMerchantSettlementAccount)
 		merchantFinanceGroup.GET("/account/withdrawals", server.listMerchantAccountWithdrawals)
 		merchantFinanceGroup.GET("/account/withdrawals/:id", server.getMerchantAccountWithdrawal)
 	}
@@ -1303,6 +1304,7 @@ func (server *Server) setupRouter() {
 		operatorsGroup.GET("/finance/overview", server.getOperatorFinanceOverview)
 		operatorsGroup.GET("/commission", server.getOperatorCommission)
 		operatorsGroup.GET("/finance/account/balance", server.getOperatorAccountBalance)
+		operatorsGroup.GET("/finance/account/settlement-account", server.getOperatorSettlementAccount)
 		operatorsGroup.POST("/finance/withdraw", server.withdrawOperator) // New
 		operatorsGroup.GET("/finance/withdrawals", server.listOperatorWithdrawals)
 		operatorsGroup.GET("/finance/withdrawals/:id", server.getOperatorWithdrawal)

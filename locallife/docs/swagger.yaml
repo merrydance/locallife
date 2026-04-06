@@ -4476,6 +4476,15 @@ definitions:
       version:
         type: integer
     type: object
+  api.merchantSettlementAccountResponse:
+    properties:
+      account:
+        $ref: '#/definitions/api.settlementAccountInfo'
+      account_status:
+        type: string
+      status_desc:
+        type: string
+    type: object
   api.merchantStatsDish:
     properties:
       dish_name:
@@ -5008,6 +5017,15 @@ definitions:
         type: integer
       total:
         type: integer
+    type: object
+  api.operatorSettlementAccountResponse:
+    properties:
+      account:
+        $ref: '#/definitions/api.settlementAccountInfo'
+      account_status:
+        type: string
+      status_desc:
+        type: string
     type: object
   api.orderBadge:
     properties:
@@ -7334,6 +7352,23 @@ definitions:
         type: array
     required:
     - tag_ids
+    type: object
+  api.settlementAccountInfo:
+    properties:
+      account_bank:
+        type: string
+      account_number:
+        type: string
+      account_type:
+        type: string
+      bank_branch_id:
+        type: string
+      bank_name:
+        type: string
+      verify_fail_reason:
+        type: string
+      verify_result:
+        type: string
     type: object
   api.staffResponse:
     properties:
@@ -15796,6 +15831,29 @@ paths:
       summary: 更新订单展示配置
       tags:
       - 商户设备管理
+  /v1/merchant/finance/account/settlement-account:
+    get:
+      description: 商户查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.merchantSettlementAccountResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询商户结算账户
+      tags:
+      - 商户财务
   /v1/merchant/finance/daily:
     get:
       consumes:
@@ -20998,6 +21056,29 @@ paths:
       summary: 获取佣金明细
       tags:
       - 运营商数据统计
+  /v1/operators/me/finance/account/settlement-account:
+    get:
+      description: 运营商查询自己的收付通结算账户（银行账户）信息，商户号从认证 session 取
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.operatorSettlementAccountResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信客户端未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询运营商结算账户
+      tags:
+      - 运营商财务
   /v1/operators/me/finance/overview:
     get:
       consumes:

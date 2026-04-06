@@ -494,7 +494,7 @@ func TestGetPublicComboDetailAPI_ApprovedMerchantKeepsOpenState(t *testing.T) {
 		ImageMediaAssetID: combo.ImageMediaAssetID,
 		OriginalPrice:     combo.OriginalPrice,
 		ComboPrice:        combo.ComboPrice,
-		IsOnline:          true,
+		IsOnline:          combo.IsOnline,
 		CreatedAt:         combo.CreatedAt,
 		UpdatedAt:         combo.UpdatedAt,
 	}

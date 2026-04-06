@@ -881,6 +881,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryProfitSharingReturn(ctx
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryProfitSharingReturn", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryProfitSharingReturn), ctx, subMchID, outReturnNo, outOrderNo)
 }
 
+// QuerySubMerchantSettlement mocks base method.
+func (m *MockEcommerceClientInterface) QuerySubMerchantSettlement(ctx context.Context, subMchID, accountNumberRule string) (*wechat.SubMerchantSettlementResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QuerySubMerchantSettlement", ctx, subMchID, accountNumberRule)
+	ret0, _ := ret[0].(*wechat.SubMerchantSettlementResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QuerySubMerchantSettlement indicates an expected call of QuerySubMerchantSettlement.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QuerySubMerchantSettlement(ctx, subMchID, accountNumberRule any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QuerySubMerchantSettlement", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QuerySubMerchantSettlement), ctx, subMchID, accountNumberRule)
+}
+
 // RespondComplaint mocks base method.
 func (m *MockEcommerceClientInterface) RespondComplaint(ctx context.Context, req wechat.ComplaintResponseRequest) error {
 	m.ctrl.T.Helper()

@@ -63,6 +63,9 @@ const (
 	ecommerceFundBalanceURL        = "/v3/ecommerce/fund/balance/%s"
 	ecommerceFundWithdrawURL       = "/v3/ecommerce/fund/withdraw"
 	ecommerceFundWithdrawQueryByNo = "/v3/ecommerce/fund/withdraw/out-request-no/%s"
+
+	// 结算账户查询（apply4sub）
+	apply4subSettlementURL = "/v3/apply4sub/sub_merchants/%s/settlement"
 )
 
 // EcommerceClient 平台收付通客户端
@@ -1571,6 +1574,41 @@ func (c *EcommerceClient) QueryEcommerceWithdrawByOutRequestNo(ctx context.Conte
 	}
 	if resp.OutRequestNo == "" {
 		resp.OutRequestNo = outRequestNo
+	}
+
+	return &resp, nil
+}
+
+// ==================== 结算账户查询 ====================
+
+// SubMerchantSettlementResponse 结算账户查询应答
+type SubMerchantSettlementResponse struct {
+	AccountType      string `json:"account_type"`                 // 账户类型：ACCOUNT_TYPE_BUSINESS / ACCOUNT_TYPE_PRIVATE
+	AccountBank      string `json:"account_bank"`                 // 开户银行
+	BankName         string `json:"bank_name,omitempty"`          // 开户银行全称（含支行）
+	BankBranchID     string `json:"bank_branch_id,omitempty"`     // 开户银行联行号
+	AccountNumber    string `json:"account_number"`               // 银行账号（掩码展示）
+	VerifyResult     string `json:"verify_result"`                // 验证结果：VERIFY_SUCCESS / VERIFY_FAIL / VERIFYING
+	VerifyFailReason string `json:"verify_fail_reason,omitempty"` // 验证失败原因
+}
+
+// QuerySubMerchantSettlement 查询特约商户/二级商户结算账户信息
+//
+// subMchID: 特约商户号；accountNumberRule: 账号展示规则（空字符串使用微信默认 ACCOUNT_NUMBER_RULE_MASK_V1）
+func (c *EcommerceClient) QuerySubMerchantSettlement(ctx context.Context, subMchID string, accountNumberRule string) (*SubMerchantSettlementResponse, error) {
+	requestURL := fmt.Sprintf(apply4subSettlementURL, subMchID)
+	if accountNumberRule != "" {
+		requestURL += "?account_number_rule=" + url.QueryEscape(accountNumberRule)
+	}
+
+	respBody, err := c.doRequest(ctx, http.MethodGet, requestURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("query sub merchant settlement: %w", err)
+	}
+
+	var resp SubMerchantSettlementResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal sub merchant settlement: %w", err)
 	}
 
 	return &resp, nil
