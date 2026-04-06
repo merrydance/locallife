@@ -52,6 +52,8 @@ Page({
     hotWords: [] as PopularKeyword[],
     // 建议态数据
     suggestions: [] as SearchSuggestion[],
+    suggestionsError: false,
+    suggestionsErrorMessage: '',
     // 结果态数据
     searching: false,
     resultsError: false,
@@ -126,14 +128,16 @@ Page({
         showResults: false,
         resultsError: false,
         resultsErrorMessage: '',
-        suggestions: []
+        suggestions: [],
+        suggestionsError: false,
+        suggestionsErrorMessage: ''
       })
       if (debounceTimer) clearTimeout(debounceTimer)
       return
     }
 
-    // 有输入 → 切到建议态
-    this.setData({ showInitial: false, showSuggestions: true, showResults: false })
+    // 有输入 → 切到建议态（清除上一次的建议失败状态）
+    this.setData({ showInitial: false, showSuggestions: true, showResults: false, suggestionsError: false, suggestionsErrorMessage: '' })
 
     if (debounceTimer) clearTimeout(debounceTimer)
     debounceTimer = setTimeout(() => this.fetchSuggestions(keyword), DEBOUNCE_MS)
@@ -143,12 +147,12 @@ Page({
     try {
       const suggestions = await getSearchSuggestions(keyword, 'dish')
       if (this.data.keyword === keyword) {
-        this.setData({ suggestions })
+        this.setData({ suggestions, suggestionsError: false, suggestionsErrorMessage: '' })
       }
     } catch (err) {
       console.warn('获取搜索建议失败', err)
       if (this.data.keyword === keyword) {
-        this.setData({ suggestions: [] })
+        this.setData({ suggestions: [], suggestionsError: true, suggestionsErrorMessage: '建议加载失败，直接搜索试试' })
       }
     }
   },

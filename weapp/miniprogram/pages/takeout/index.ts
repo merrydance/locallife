@@ -684,11 +684,13 @@ Page({
 
   async hydrateMerchantMetaBatch(merchantIds: number[], generation: number) {
     const results = await settleAll(
-      merchantIds.map(async (merchantId) => ({
-        merchantId,
-        detail: await getPublicMerchantDetail(merchantId, true),
-        hasOrdered: await getHasUserOrderedFromMerchant(merchantId)
-      }))
+      merchantIds.map(async (merchantId) => {
+        const [detail, hasOrdered] = await Promise.all([
+          getPublicMerchantDetail(merchantId, true),
+          getHasUserOrderedFromMerchant(merchantId)
+        ])
+        return { merchantId, detail, hasOrdered }
+      })
     )
 
     if (generation !== this._feedHydrationGeneration) return

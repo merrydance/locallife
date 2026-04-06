@@ -9,6 +9,7 @@ import { getPublicImageUrl } from '../../../utils/image'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { globalStore } from '../../../utils/global-store'
 
 interface CartItemView {
   id: number
@@ -103,7 +104,6 @@ Page({
   async loadCart() {
     try {
       this.setData({ initLoading: true, loadError: '', pricingError: '' })
-      console.log('[Order-confirm] Loading takeout cart...')
 
       // Step 1: 获取外卖类型的购物车列表
       const userCarts = await CartAPI.getUserCarts('takeout')
@@ -114,7 +114,6 @@ Page({
         return
       }
 
-      // ... (中间过滤逻辑保持不变)
       const { cartIds } = this.data
       let selectedCarts = userCarts.carts
       if (cartIds.length > 0) {
@@ -122,63 +121,66 @@ Page({
       }
       if (selectedCarts.length === 0) selectedCarts = [userCarts.carts[0]]
 
-      // 逐商户拉取购物车详情
-      const cartViews: MerchantCartView[] = []
-      for (const merchantCart of selectedCarts) {
-        const merchantId = merchantCart.merchant_id
-        if (!merchantId) continue
+      // 并行拉取各商户购物车详情
+      const rawResults = await Promise.all(
+        selectedCarts
+          .filter((mc) => !!mc.merchant_id)
+          .map(async (merchantCart) => {
+            const merchantId = merchantCart.merchant_id as number
+            const cartDetail = await CartAPI.getCart({
+              merchant_id: merchantId,
+              order_type: (merchantCart.order_type || 'takeout') as OrderType,
+              table_id: merchantCart.table_id || undefined,
+              reservation_id: merchantCart.reservation_id || undefined
+            })
+            return { merchantCart, merchantId, cartDetail }
+          })
+      )
 
-        const cartDetail = await CartAPI.getCart({
-          merchant_id: merchantId,
-          order_type: (merchantCart.order_type || 'takeout') as OrderType,
-          table_id: merchantCart.table_id || undefined,
-          reservation_id: merchantCart.reservation_id || undefined
+      const cartViews: MerchantCartView[] = rawResults
+        .filter(({ cartDetail }) => cartDetail.items && cartDetail.items.length > 0)
+        .map(({ merchantCart, merchantId, cartDetail }) => {
+          const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
+            id: item.id,
+            dishId: item.dish_id,
+            comboId: item.combo_id,
+            name: item.name,
+            imageUrl: getPublicImageUrl(item.image_url || ''),
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            priceDisplay: formatPriceNoSymbol(item.unit_price),
+            subtotal: item.subtotal,
+            subtotalDisplay: formatPriceNoSymbol(item.subtotal),
+            specText: item.spec_text || '',
+            customizations: item.customizations || undefined,
+            dishImages: (item.combo_member_images || []).map((url: string) => getPublicImageUrl(url))
+          }))
+          return {
+            merchantId,
+            merchantName: merchantCart.merchant_name || '商家',
+            orderType: (merchantCart.order_type || 'takeout') as OrderType,
+            tableId: merchantCart.table_id || undefined,
+            reservationId: merchantCart.reservation_id || undefined,
+            items,
+            totalCount: items.reduce((sum, item) => sum + item.quantity, 0),
+            subtotal: cartDetail.subtotal,
+            subtotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
+            deliveryFee: 0,
+            deliveryFeeDisplay: '待计算',
+            deliveryFeeDiscount: 0,
+            deliveryDistance: 0,
+            deliveryEtaMinutes: 0,
+            deliveryEtaDisplay: '',
+            orderTotal: cartDetail.subtotal,
+            orderTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
+            originalTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
+            hasDiscount: false,
+            appliedPromotions: [],
+            ladderPromotions: [],
+            voucherTrials: [],
+            paymentHint: ''
+          }
         })
-
-        if (!cartDetail.items || cartDetail.items.length === 0) continue
-
-        const items: CartItemView[] = cartDetail.items.map((item: CartItemResponse) => ({
-          id: item.id,
-          dishId: item.dish_id,
-          comboId: item.combo_id,
-          name: item.name,
-          imageUrl: getPublicImageUrl(item.image_url || ''),
-          quantity: item.quantity,
-          unitPrice: item.unit_price,
-          priceDisplay: formatPriceNoSymbol(item.unit_price),
-          subtotal: item.subtotal,
-          subtotalDisplay: formatPriceNoSymbol(item.subtotal),
-          specText: item.spec_text || '',
-          customizations: item.customizations || undefined,
-          dishImages: (item.combo_member_images || []).map((url) => getPublicImageUrl(url))
-        }))
-
-        cartViews.push({
-          merchantId,
-          merchantName: merchantCart.merchant_name || '商家',
-          orderType: (merchantCart.order_type || 'takeout') as OrderType,
-          tableId: merchantCart.table_id || undefined,
-          reservationId: merchantCart.reservation_id || undefined,
-          items,
-          totalCount: items.reduce((sum, item) => sum + item.quantity, 0),
-          subtotal: cartDetail.subtotal,
-          subtotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
-          deliveryFee: 0,
-          deliveryFeeDisplay: '待计算',
-          deliveryFeeDiscount: 0,
-          deliveryDistance: 0,
-          deliveryEtaMinutes: 0,
-          deliveryEtaDisplay: '',
-          orderTotal: cartDetail.subtotal,
-          orderTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
-          originalTotalDisplay: formatPriceNoSymbol(cartDetail.subtotal),
-          hasDiscount: false,
-          appliedPromotions: [],
-          ladderPromotions: [],
-          voucherTrials: [],
-          paymentHint: ''
-        })
-      }
 
       this.setData({ carts: cartViews, initLoading: false })
       
@@ -330,66 +332,69 @@ Page({
     }
 
     try {
-      const updated = [] as MerchantCartView[]
-
-      for (const cart of currentCarts) {
-        const result = await CartAPI.calculateCart({
-          merchant_id: cart.merchantId,
-          order_type: cart.orderType,
-          address_id: address.id,
-          latitude: address.latitude ? Number(address.latitude) : undefined,
-          longitude: address.longitude ? Number(address.longitude) : undefined
-        }, { loading: false })
-
-        if (!result) continue
-
-        const deliveryFee = result.delivery_fee || 0
-        const deliveryFeeDiscount = result.delivery_fee_discount || 0
-        const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
-        const deliveryDistance = result.delivery_distance || 0
-        const orderTotal = result.total_amount || 0
-        const originalTotal = (cart.subtotal || 0) + deliveryFee // 原价 = 商品小计 + 原始配送费
-        const hasDiscount = orderTotal < originalTotal
-
-        const deliveryEtaMinutes = result.delivery_eta_minutes || 0
-        const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
-        const appliedPromotions = (result.applied_promotions || []).map((p) => ({
-          title: p.title || '优惠',
-          amount: p.amount || 0,
-          amountDisplay: formatPriceNoSymbol(p.amount || 0),
-          type: p.type || 'merchant'
-        }))
-        const ladderPromotions = (result.ladder_promotions || []).map((rule) => ({
-          name: rule.name || '满减活动',
-          thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
-          discountDisplay: formatPriceNoSymbol(rule.discount || 0),
-          currentHit: !!rule.current_hit,
-          missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
-        }))
-        const voucherTrials = (result.voucher_trials || []).map((trial) => ({
-          voucherName: trial.voucher_name || '优惠券',
-          amountDisplay: formatPriceNoSymbol(trial.amount || 0),
-          trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
-        }))
-
-        updated.push({
-          ...cart,
-          deliveryFee,
-          deliveryFeeDisplay: finalDeliveryFee > 0 ? '¥' + formatPriceNoSymbol(finalDeliveryFee) : '免代取费',
-          deliveryFeeDiscount,
-          deliveryDistance,
-          orderTotal,
-          orderTotalDisplay: formatPriceNoSymbol(orderTotal),
-          originalTotalDisplay: formatPriceNoSymbol(originalTotal),
-          hasDiscount,
-          deliveryEtaMinutes,
-          deliveryEtaDisplay,
-          appliedPromotions: appliedPromotions || [],
-          ladderPromotions,
-          voucherTrials,
-          paymentHint: result.payment_assessment?.payment_hint || ''
+      // 并行计算各商户配送费
+      const calcResults = await Promise.all(
+        currentCarts.map(async (cart) => {
+          const result = await CartAPI.calculateCart({
+            merchant_id: cart.merchantId,
+            order_type: cart.orderType,
+            address_id: address.id,
+            latitude: address.latitude ? Number(address.latitude) : undefined,
+            longitude: address.longitude ? Number(address.longitude) : undefined
+          }, { loading: false })
+          return { cart, result }
         })
-      }
+      )
+
+      const updated = calcResults
+        .filter(({ result }) => !!result)
+        .map(({ cart, result }) => {
+          const deliveryFee = result.delivery_fee || 0
+          const deliveryFeeDiscount = result.delivery_fee_discount || 0
+          const finalDeliveryFee = Math.max(0, deliveryFee - deliveryFeeDiscount)
+          const deliveryDistance = result.delivery_distance || 0
+          const orderTotal = result.total_amount || 0
+          const originalTotal = (cart.subtotal || 0) + deliveryFee
+          const hasDiscount = orderTotal < originalTotal
+
+          const deliveryEtaMinutes = result.delivery_eta_minutes || 0
+          const deliveryEtaDisplay = this.formatEtaWindow(deliveryEtaMinutes)
+          const appliedPromotions = (result.applied_promotions || []).map((p) => ({
+            title: p.title || '优惠',
+            amount: p.amount || 0,
+            amountDisplay: formatPriceNoSymbol(p.amount || 0),
+            type: p.type || 'merchant'
+          }))
+          const ladderPromotions = (result.ladder_promotions || []).map((rule) => ({
+            name: rule.name || '满减活动',
+            thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
+            discountDisplay: formatPriceNoSymbol(rule.discount || 0),
+            currentHit: !!rule.current_hit,
+            missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
+          }))
+          const voucherTrials = (result.voucher_trials || []).map((trial) => ({
+            voucherName: trial.voucher_name || '优惠券',
+            amountDisplay: formatPriceNoSymbol(trial.amount || 0),
+            trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
+          }))
+          return {
+            ...cart,
+            deliveryFee,
+            deliveryFeeDisplay: finalDeliveryFee > 0 ? '¥' + formatPriceNoSymbol(finalDeliveryFee) : '免代取费',
+            deliveryFeeDiscount,
+            deliveryDistance,
+            orderTotal,
+            orderTotalDisplay: formatPriceNoSymbol(orderTotal),
+            originalTotalDisplay: formatPriceNoSymbol(originalTotal),
+            hasDiscount,
+            deliveryEtaMinutes,
+            deliveryEtaDisplay,
+            appliedPromotions: appliedPromotions || [],
+            ladderPromotions,
+            voucherTrials,
+            paymentHint: result.payment_assessment?.payment_hint || ''
+          }
+        })
 
       const summarySubtotal = updated.reduce((sum, c) => {
         const merchDiscount = (c.appliedPromotions || [])
@@ -507,10 +512,14 @@ Page({
             await Promise.all(cartItemIds.map((id) => CartAPI.removeFromCart(id)))
           } catch (clearErr) {
             logger.error('Remove cart items after order failed', clearErr, 'Order-confirm')
-            showDebugModal('清理购物车失败（已创建订单）', clearErr)
+            // 清理失败不阻断支付流程，仅记录日志
           }
         }
       }
+
+      // 无论购物车项清理是否成功，都立即使 globalStore 缓存失效，
+      // 确保外卖首页 / 购物车页的下次 onShow 拿到空购物车，而不是脏缓存。
+      globalStore.set('cart', { items: [], totalCount: 0, totalPrice: 0, totalPriceDisplay: '0.00' })
 
       if (ordersCreated.length === 1) {
         await this.handlePayment(ordersCreated[0])
@@ -538,9 +547,15 @@ Page({
             orderNo,
             amount
           })
-        } catch (err) {
-          console.log('[Order-confirm] Payment cancelled or failed:', err)
-          wx.showToast({ title: '支付取消', icon: 'none' })
+        } catch {
+          // 用户取消支付或唤起失败：订单已创建，引导用户前往订单详情重新支付
+          wx.showModal({
+            title: '支付未完成',
+            content: '订单已创建，可在订单详情页重新发起支付。',
+            showCancel: false,
+            confirmText: '查看订单',
+            success: () => wx.redirectTo({ url: `/pages/orders/detail/index?id=${orderId}` })
+          })
         }
       } else if (paymentResult.status === 'paid') {
         Navigation.toPaymentSuccess({
@@ -549,11 +564,13 @@ Page({
           amount
         })
       } else {
-        this.showPaymentDevModal(orderId)
+        this.showPaymentCreateFailed(orderId)
       }
     } catch (paymentError) {
-      console.error('[Order-confirm] Payment creation failed:', paymentError)
-      this.showPaymentDevModal(orderId)
+      logger.error('Payment creation failed', paymentError, 'Order-confirm')
+      this.showPaymentCreateFailed(orderId)
+    } finally {
+      this.setData({ loading: false })
     }
   },
 
@@ -574,9 +591,15 @@ Page({
             isCombined: true,
             orderCount: orderIds.length
           })
-        } catch (err) {
-          console.log('[Order-confirm] Combined payment cancelled or failed:', err)
-          wx.showToast({ title: '支付取消', icon: 'none' })
+        } catch {
+          // 合单支付取消：引导用户前往订单列表逐单支付
+          wx.showModal({
+            title: '支付未完成',
+            content: '订单已创建，可在订单列表逐单重新支付。',
+            showCancel: false,
+            confirmText: '查看订单',
+            success: () => Navigation.redirectToOrderList()
+          })
         }
       } else if (combinedPayment.status === 'paid') {
         Navigation.toPaymentSuccess({
@@ -589,16 +612,16 @@ Page({
       } else {
         wx.showModal({
           title: '订单已创建',
-          content: '合单支付创建失败，请在订单列表逐单支付。',
+          content: '支付创建失败，请在订单列表逐单支付。',
           showCancel: false,
           success: () => Navigation.redirectToOrderList()
         })
       }
     } catch (paymentError) {
-      console.error('[Order-confirm] Combined payment creation failed:', paymentError)
+      logger.error('Combined payment creation failed', paymentError, 'Order-confirm')
       wx.showModal({
         title: '订单已创建',
-        content: '合单支付创建失败，请在订单列表逐单支付。',
+        content: '支付创建失败，请在订单列表逐单支付。',
         showCancel: false,
         success: () => Navigation.redirectToOrderList()
       })
@@ -607,11 +630,11 @@ Page({
     }
   },
 
-  showPaymentDevModal(orderId: number) {
+  showPaymentCreateFailed(orderId: number) {
     this.setData({ loading: false })
     wx.showModal({
-      title: '支付功能开发中',
-      content: '微信支付功能正在开发中，订单已创建成功。',
+      title: '订单已创建',
+      content: '支付创建失败，请在订单详情页重新发起支付。',
       showCancel: false,
       confirmText: '查看订单',
       success: () => {
@@ -644,12 +667,3 @@ Page({
   }
 
 })
-
-function showDebugModal(title: string, error: unknown) {
-  const message = getErrorUserMessage(error, '订单已创建，但购物车清理失败，请稍后检查订单状态')
-  wx.showModal({
-    title,
-    content: message || '未知错误',
-    showCancel: false
-  })
-}

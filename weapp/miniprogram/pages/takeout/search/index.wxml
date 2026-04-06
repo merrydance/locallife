@@ -78,7 +78,10 @@
 
   <!-- ======= 建议态：实时搜索建议 ======= -->
   <view wx:elif="{{showSuggestions}}" class="suggest-list">
-    <view wx:if="{{suggestions.length === 0}}" class="suggest-empty">
+    <view wx:if="{{suggestionsError}}" class="suggest-empty">
+      <text class="suggest-empty-text">{{suggestionsErrorMessage || '建议加载失败，直接搜索试试'}}</text>
+    </view>
+    <view wx:elif="{{suggestions.length === 0}}" class="suggest-empty">
       <text class="suggest-empty-text">没有相关搜索建议，直接搜索试试</text>
     </view>
     <block wx:else>
