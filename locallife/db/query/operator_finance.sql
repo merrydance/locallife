@@ -40,10 +40,14 @@ LIMIT $2;
 -- name: UpdateWithdrawalStatus :one
 UPDATE withdrawal_records
 SET 
-    status = $2,
-    reason = COALESCE(sqlc.narg(reason), reason),
+    status = sqlc.arg('status'),
+    reason = CASE
+        WHEN sqlc.arg('clear_reason')::bool THEN NULL
+        WHEN sqlc.narg('reason')::text IS NOT NULL THEN sqlc.narg('reason')::text
+        ELSE reason
+    END,
     updated_at = now()
-WHERE id = $1
+WHERE id = sqlc.arg('id')
 RETURNING *;
 
 -- name: UpdateWithdrawalAccountInfo :one

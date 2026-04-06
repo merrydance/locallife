@@ -2439,6 +2439,34 @@ func newSettlementNotifyRequest(t *testing.T, notificationID string) *http.Reque
 	return request
 }
 
+func newEcommerceWithdrawNotifyRequest(t *testing.T, notificationID string) *http.Request {
+	t.Helper()
+
+	requestBody := map[string]interface{}{
+		"id":            notificationID,
+		"event_type":    "MCHWITHDRAW.CHANGE",
+		"resource_type": "encrypt-resource",
+		"resource": map[string]interface{}{
+			"algorithm":       "AEAD_AES_256_GCM",
+			"ciphertext":      "mock_encrypted_data",
+			"nonce":           "mock_nonce",
+			"associated_data": "mch_withdraw",
+		},
+	}
+	bodyBytes, err := json.Marshal(requestBody)
+	require.NoError(t, err)
+
+	request, err := http.NewRequest(http.MethodPost, "/v1/webhooks/wechat-ecommerce/withdraw-notify", bytes.NewReader(bodyBytes))
+	require.NoError(t, err)
+
+	request.Header.Set("Wechatpay-Timestamp", "1234567890")
+	request.Header.Set("Wechatpay-Nonce", "test_nonce")
+	request.Header.Set("Wechatpay-Signature", "test_signature")
+	request.Header.Set("Wechatpay-Serial", "test_serial")
+
+	return request
+}
+
 func assertWechatSuccessResponse(t *testing.T, recorder *httptest.ResponseRecorder, expectedMessage string) {
 	t.Helper()
 	_ = expectedMessage
@@ -2465,6 +2493,216 @@ func newMockStoreWithAlertSink(ctrl *gomock.Controller) *mockdb.MockStore {
 	store := mockdb.NewMockStore(ctrl)
 	store.EXPECT().CreatePlatformAlertEvent(gomock.Any(), gomock.Any()).AnyTimes().Return(db.PlatformAlertEvent{}, nil)
 	return store
+}
+
+func TestHandleEcommerceWithdrawNotify_SuccessUpdatesWithdrawal(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerceClient)
+
+	notificationID := util.RandomString(32)
+	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   88,
+		SubMchID:     "sub-mch-001",
+		OutRequestNo: "MW202604060001",
+	})
+	require.NoError(t, err)
+
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
+		ID:          66,
+		UserID:      99,
+		Amount:      1200,
+		Status:      "pending",
+		Channel:     merchantWithdrawChannel,
+		Reason:      pgtype.Text{String: "query withdraw result failed: timeout", Valid: true},
+		AccountInfo: accountInfoBytes,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}, nil)
+	store.EXPECT().UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalAccountInfoParams) (db.WithdrawalRecord, error) {
+		info := parseMerchantWithdrawAccountInfo(arg.AccountInfo)
+		require.Equal(t, "wd_001", info.WithdrawID)
+		return db.WithdrawalRecord{ID: 66, UserID: 99, Amount: 1200, Status: "pending", Channel: merchantWithdrawChannel, Reason: pgtype.Text{String: "query withdraw result failed: timeout", Valid: true}, AccountInfo: arg.AccountInfo, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+	})
+	store.EXPECT().UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).DoAndReturn(func(_ interface{}, arg db.UpdateWithdrawalStatusParams) (db.WithdrawalRecord, error) {
+		require.Equal(t, int64(66), arg.ID)
+		require.Equal(t, "success", arg.Status)
+		require.False(t, arg.Reason.Valid)
+		require.True(t, arg.ClearReason)
+		return db.WithdrawalRecord{ID: 66, UserID: 99, Amount: 1200, Status: "success", Channel: merchantWithdrawChannel, AccountInfo: accountInfoBytes, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil
+	})
+
+	recorder := httptest.NewRecorder()
+	req := newEcommerceWithdrawNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, req)
+
+	assertWechatNoContentResponse(t, recorder)
+}
+
+func TestHandleEcommerceWithdrawNotify_AccountInfoPersistFailureReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerceClient)
+
+	notificationID := util.RandomString(32)
+	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   88,
+		SubMchID:     "sub-mch-001",
+		OutRequestNo: "MW202604060001",
+	})
+	require.NoError(t, err)
+
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
+		ID:          66,
+		UserID:      99,
+		Amount:      1200,
+		Status:      "pending",
+		Channel:     merchantWithdrawChannel,
+		AccountInfo: accountInfoBytes,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}, nil)
+	store.EXPECT().UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).Return(db.WithdrawalRecord{}, errors.New("db unavailable"))
+	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
+	store.EXPECT().UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).Times(0)
+
+	recorder := httptest.NewRecorder()
+	req := newEcommerceWithdrawNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, req)
+
+	assertWechatFailResponse(t, recorder, "withdrawal sync failed")
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestHandleEcommerceWithdrawNotify_StatusPersistFailureReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerceClient)
+
+	notificationID := util.RandomString(32)
+	accountInfoBytes, err := json.Marshal(merchantWithdrawAccountInfo{
+		MerchantID:   88,
+		SubMchID:     "sub-mch-001",
+		OutRequestNo: "MW202604060001",
+	})
+	require.NoError(t, err)
+
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_001","out_request_no":"MW202604060001","status":"SUCCESS","reason":""}`), nil)
+	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW202604060001", Valid: true}).Return(db.WithdrawalRecord{
+		ID:          66,
+		UserID:      99,
+		Amount:      1200,
+		Status:      "pending",
+		Channel:     merchantWithdrawChannel,
+		AccountInfo: accountInfoBytes,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}, nil)
+	store.EXPECT().UpdateWithdrawalAccountInfo(gomock.Any(), gomock.Any()).Return(db.WithdrawalRecord{ID: 66, UserID: 99, Amount: 1200, Status: "pending", Channel: merchantWithdrawChannel, AccountInfo: accountInfoBytes, CreatedAt: time.Now(), UpdatedAt: time.Now()}, nil)
+	store.EXPECT().UpdateWithdrawalStatus(gomock.Any(), gomock.Any()).Return(db.WithdrawalRecord{}, errors.New("db unavailable"))
+	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
+
+	recorder := httptest.NewRecorder()
+	req := newEcommerceWithdrawNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, req)
+
+	assertWechatFailResponse(t, recorder, "withdrawal sync failed")
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestHandleEcommerceWithdrawNotify_WithdrawalNotFoundReturnsFail(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerceClient)
+
+	notificationID := util.RandomString(32)
+
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(true, nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Return([]byte(`{"sub_mchid":"sub-mch-001","withdraw_id":"wd_404","out_request_no":"MW404","status":"FAIL","reason":"账户异常"}`), nil)
+	store.EXPECT().GetWithdrawalRecordByOutRequestNo(gomock.Any(), pgtype.Text{String: "MW404", Valid: true}).Return(db.WithdrawalRecord{}, db.ErrRecordNotFound)
+	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
+
+	recorder := httptest.NewRecorder()
+	req := newEcommerceWithdrawNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, req)
+
+	assertWechatFailResponse(t, recorder, "withdrawal record not found, please retry")
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
+}
+
+func TestHandleEcommerceWithdrawNotifyIdempotency(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerceClient)
+
+	notificationID := util.RandomString(32)
+
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(false, nil)
+	store.EXPECT().GetWechatNotification(gomock.Any(), notificationID).Return(db.WechatNotification{ID: notificationID, ProcessedAt: pgtype.Timestamp{Time: time.Now(), Valid: true}}, nil)
+
+	recorder := httptest.NewRecorder()
+	req := newEcommerceWithdrawNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, req)
+
+	assertWechatNoContentResponse(t, recorder)
+}
+
+func TestHandleEcommerceWithdrawNotify_StaleClaimReturnsFailAndReleases(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := newMockStoreWithAlertSink(ctrl)
+	ecommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
+	server := newTestServer(t, store)
+	server.SetEcommerceClientForTest(ecommerceClient)
+
+	notificationID := util.RandomString(32)
+
+	ecommerceClient.EXPECT().VerifyNotificationSignature(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(nil)
+	store.EXPECT().TryClaimWechatNotification(gomock.Any(), gomock.Any()).Return(false, nil)
+	store.EXPECT().GetWechatNotification(gomock.Any(), notificationID).Return(db.WechatNotification{
+		ID:        notificationID,
+		CreatedAt: pgtype.Timestamp{Time: time.Now().Add(-notificationClaimStaleWindow - time.Second), Valid: true},
+	}, nil)
+	store.EXPECT().ReleaseWechatNotificationClaim(gomock.Any(), notificationID).Return(nil)
+	ecommerceClient.EXPECT().DecryptNotificationRaw(gomock.Any()).Times(0)
+
+	recorder := httptest.NewRecorder()
+	req := newEcommerceWithdrawNotifyRequest(t, notificationID)
+	server.router.ServeHTTP(recorder, req)
+
+	assertWechatFailResponse(t, recorder, "stale claim, please retry")
+	require.Equal(t, http.StatusInternalServerError, recorder.Code)
 }
 
 // TestHandleApplymentStateNotifyIdempotency 测试进件回调的幂等性检查

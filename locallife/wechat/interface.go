@@ -265,6 +265,9 @@ type EcommerceClientInterface interface {
 	// DecryptEcommerceRefundNotification 解密电商退款通知
 	DecryptEcommerceRefundNotification(notification *PaymentNotification) (*EcommerceRefundNotification, error)
 
+	// DecryptNotificationRaw 解密通知原始数据（返回 JSON 字节）
+	DecryptNotificationRaw(notification *PaymentNotification) ([]byte, error)
+
 	// DecryptSettlementNotification 解密结算事件通知（trade_manage_order_settlement）
 	DecryptSettlementNotification(notification *PaymentNotification) (*SettlementNotificationResource, error)
 

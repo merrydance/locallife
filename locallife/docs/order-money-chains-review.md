@@ -328,8 +328,9 @@
 1. 先创建 `withdrawal_records`
 2. 调用 `CreateEcommerceWithdraw`
 3. 立即保存 `withdraw_id` 与状态
-4. 通过 [worker/task_merchant_withdraw_result.go](../worker/task_merchant_withdraw_result.go) 轮询微信提现结果
-5. [worker/merchant_withdraw_recovery_scheduler.go](../worker/merchant_withdraw_recovery_scheduler.go) 做 pending 恢复
+4. 通过 [api/payment_callback.go](../api/payment_callback.go) 的提现回调处理微信 `MCHWITHDRAW.CHANGE` 事件，并在 durable 落库后 ack
+5. 通过 [worker/task_merchant_withdraw_result.go](../worker/task_merchant_withdraw_result.go) 轮询微信提现结果，作为回调缺失或延迟时的恢复兜底
+6. [worker/merchant_withdraw_recovery_scheduler.go](../worker/merchant_withdraw_recovery_scheduler.go) 做 pending 恢复
 
 ### 4.9 分账、结算与分账回退
 

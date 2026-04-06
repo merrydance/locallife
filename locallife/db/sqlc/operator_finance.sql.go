@@ -252,21 +252,31 @@ func (q *Queries) UpdateWithdrawalAccountInfo(ctx context.Context, arg UpdateWit
 const updateWithdrawalStatus = `-- name: UpdateWithdrawalStatus :one
 UPDATE withdrawal_records
 SET 
-    status = $2,
-    reason = COALESCE($3, reason),
+    status = $1,
+    reason = CASE
+        WHEN $2::bool THEN NULL
+        WHEN $3::text IS NOT NULL THEN $3::text
+        ELSE reason
+    END,
     updated_at = now()
-WHERE id = $1
+WHERE id = $4
 RETURNING id, user_id, amount, status, channel, account_info, reason, created_at, updated_at, out_request_no
 `
 
 type UpdateWithdrawalStatusParams struct {
-	ID     int64       `json:"id"`
-	Status string      `json:"status"`
-	Reason pgtype.Text `json:"reason"`
+	Status      string      `json:"status"`
+	ClearReason bool        `json:"clear_reason"`
+	Reason      pgtype.Text `json:"reason"`
+	ID          int64       `json:"id"`
 }
 
 func (q *Queries) UpdateWithdrawalStatus(ctx context.Context, arg UpdateWithdrawalStatusParams) (WithdrawalRecord, error) {
-	row := q.db.QueryRow(ctx, updateWithdrawalStatus, arg.ID, arg.Status, arg.Reason)
+	row := q.db.QueryRow(ctx, updateWithdrawalStatus,
+		arg.Status,
+		arg.ClearReason,
+		arg.Reason,
+		arg.ID,
+	)
 	var i WithdrawalRecord
 	err := row.Scan(
 		&i.ID,

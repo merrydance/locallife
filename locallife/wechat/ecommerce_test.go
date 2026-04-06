@@ -1060,6 +1060,63 @@ func TestQueryPlatformFundDayEndBalance(t *testing.T) {
 	require.Equal(t, int64(0), resp.PendingAmount)
 }
 
+func TestCreateEcommerceWithdraw_UsesDedicatedNotifyURL(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/fallback-notify",
+		},
+		SpMchID:           "service-mchid-001",
+		SpAppID:           "service-appid-001",
+		WithdrawNotifyURL: "https://example.com/withdraw-notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, ecommerceFundWithdrawURL, req.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "1900000109", body["sub_mchid"])
+			require.Equal(t, "MW202604060001", body["out_request_no"])
+			require.Equal(t, float64(1200), body["amount"])
+			require.Equal(t, "商户提现", body["remark"])
+			require.Equal(t, "https://example.com/withdraw-notify", body["notify_url"])
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"sub_mchid":"1900000109","withdraw_id":"wd_001","out_request_no":"MW202604060001"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.CreateEcommerceWithdraw(context.Background(), &EcommerceWithdrawRequest{
+		SubMchID:     "1900000109",
+		OutRequestNo: "MW202604060001",
+		Amount:       1200,
+		Remark:       "商户提现",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "wd_001", resp.WithdrawID)
+	require.Equal(t, "MW202604060001", resp.OutRequestNo)
+	}
+
 func decryptEcommerceTestCiphertext(t *testing.T, privateKey *rsa.PrivateKey, ciphertext string) string {
 	t.Helper()
 	decoded, err := base64.StdEncoding.DecodeString(ciphertext)

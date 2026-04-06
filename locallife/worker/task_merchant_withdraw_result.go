@@ -40,7 +40,7 @@ func mapWechatWithdrawStatus(status string) string {
 	switch strings.ToUpper(status) {
 	case "SUCCESS":
 		return "success"
-	case "FAILED", "CLOSED", "ABNORMAL", "CANCELLED":
+	case "FAIL", "REFUND", "CLOSE":
 		return "failed"
 	default:
 		return "pending"
@@ -117,6 +117,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 				ID:     record.ID,
 				Status: "failed",
 				Reason: pgtype.Text{String: fmt.Sprintf("withdraw request not found in wechat after retries: %v", err), Valid: true},
+				ClearReason: false,
 			})
 			processor.publishAlert(ctx, AlertData{
 				AlertType:   AlertTypeWithdrawFailed,
@@ -139,6 +140,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 				ID:     record.ID,
 				Status: "pending",
 				Reason: pgtype.Text{String: fmt.Sprintf("query withdraw result failed: %v", err), Valid: true},
+				ClearReason: false,
 			})
 			processor.publishAlert(ctx, AlertData{
 				AlertType:   AlertTypeWithdrawFailed,
@@ -169,15 +171,17 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 
 	newStatus := mapWechatWithdrawStatus(resp.Status)
 	reason := pgtype.Text{}
-	if resp.FailReason != "" {
-		reason = pgtype.Text{String: resp.FailReason, Valid: true}
+	if resp.Reason != "" {
+		reason = pgtype.Text{String: resp.Reason, Valid: true}
 	}
+	clearReason := !reason.Valid && record.Reason.Valid
 
-	if newStatus != record.Status || reason.Valid {
+	if newStatus != record.Status || reason.Valid || clearReason {
 		_, err = processor.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
 			ID:     record.ID,
 			Status: newStatus,
 			Reason: reason,
+			ClearReason: clearReason,
 		})
 		if err != nil {
 			return fmt.Errorf("update withdrawal status: %w", err)
@@ -194,7 +198,7 @@ func (processor *RedisTaskProcessor) ProcessTaskMerchantWithdrawResult(ctx conte
 			RelatedType: "withdrawal_record",
 			Extra: withdrawalAlertExtra(record, accountInfo, map[string]interface{}{
 				"wechat_status": resp.Status,
-				"fail_reason":   resp.FailReason,
+				"fail_reason":   resp.Reason,
 			}),
 		})
 	}

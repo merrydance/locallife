@@ -26,6 +26,7 @@ import (
 const (
 	merchantWithdrawMinAmount = int64(100) // 1元
 	merchantWithdrawMaxAmount = int64(500000000)
+	merchantWithdrawChannel   = "wechat_ecommerce_fund"
 )
 
 // ==================== 财务概览 ====================
@@ -1104,7 +1105,7 @@ func mapWechatWithdrawStatus(status string) string {
 	switch strings.ToUpper(status) {
 	case "SUCCESS":
 		return "success"
-	case "FAILED", "CLOSED", "ABNORMAL", "CANCELLED":
+	case "FAIL", "REFUND", "CLOSE":
 		return "failed"
 	default:
 		return "pending"
@@ -1112,6 +1113,14 @@ func mapWechatWithdrawStatus(status string) string {
 }
 
 func (server *Server) updateWithdrawalRecordStatus(ctx *gin.Context, record db.WithdrawalRecord, status, reason string) db.WithdrawalRecord {
+	updated, err := server.persistWithdrawalRecordStatus(ctx, record, status, reason)
+	if err == nil {
+		return updated
+	}
+	return record
+}
+
+func (server *Server) persistWithdrawalRecordStatus(ctx *gin.Context, record db.WithdrawalRecord, status, reason string) (db.WithdrawalRecord, error) {
 	if status == "" {
 		status = record.Status
 	}
@@ -1119,28 +1128,24 @@ func (server *Server) updateWithdrawalRecordStatus(ctx *gin.Context, record db.W
 	if reason != "" {
 		reasonArg = pgtype.Text{String: reason, Valid: true}
 	}
-	if status == record.Status && !reasonArg.Valid {
-		return record
+	clearReason := reason == "" && record.Reason.Valid
+	if status == record.Status && !reasonArg.Valid && !clearReason {
+		return record, nil
 	}
 	updated, err := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
 		ID:     record.ID,
 		Status: status,
 		Reason: reasonArg,
+		ClearReason: clearReason,
 	})
-	if err == nil {
-		return updated
+	if err != nil {
+		return record, err
 	}
-	return record
+	return updated, nil
 }
 
 func (server *Server) updateWithdrawalRecordAccountInfo(ctx *gin.Context, record db.WithdrawalRecord, accountInfo []byte) db.WithdrawalRecord {
-	if len(accountInfo) == 0 || bytes.Equal(accountInfo, record.AccountInfo) {
-		return record
-	}
-	updated, err := server.store.UpdateWithdrawalAccountInfo(ctx, db.UpdateWithdrawalAccountInfoParams{
-		ID:          record.ID,
-		AccountInfo: accountInfo,
-	})
+	updated, err := server.persistWithdrawalRecordAccountInfo(ctx, record, accountInfo)
 	if err == nil {
 		return updated
 	}
@@ -1159,6 +1164,20 @@ func (server *Server) updateWithdrawalRecordAccountInfo(ctx *gin.Context, record
 		},
 	})
 	return record
+}
+
+func (server *Server) persistWithdrawalRecordAccountInfo(ctx *gin.Context, record db.WithdrawalRecord, accountInfo []byte) (db.WithdrawalRecord, error) {
+	if len(accountInfo) == 0 || bytes.Equal(accountInfo, record.AccountInfo) {
+		return record, nil
+	}
+	updated, err := server.store.UpdateWithdrawalAccountInfo(ctx, db.UpdateWithdrawalAccountInfoParams{
+		ID:          record.ID,
+		AccountInfo: accountInfo,
+	})
+	if err != nil {
+		return record, err
+	}
+	return updated, nil
 }
 
 func (server *Server) enqueueWithdrawalResultPolling(ctx *gin.Context, record db.WithdrawalRecord) {
@@ -1390,7 +1409,7 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 		UserID:       authPayload.UserID,
 		Amount:       req.Amount,
 		Status:       "pending",
-		Channel:      "wechat_ecommerce_fund",
+		Channel:      merchantWithdrawChannel,
 		AccountInfo:  accountInfoBytes,
 		OutRequestNo: pgtype.Text{String: outRequestNo, Valid: true},
 	})
@@ -1434,8 +1453,8 @@ func (server *Server) createMerchantAccountWithdraw(ctx *gin.Context) {
 
 	status := mapWechatWithdrawStatus(withdrawResp.Status)
 	reason := ""
-	if withdrawResp.FailReason != "" {
-		reason = withdrawResp.FailReason
+	if withdrawResp.Reason != "" {
+		reason = withdrawResp.Reason
 	}
 	record = server.updateWithdrawalRecordStatus(ctx, record, status, reason)
 	server.enqueueWithdrawalResultPolling(ctx, record)
@@ -1488,7 +1507,7 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 	offset := pageOffset(req.Page, req.Limit)
 	rows, err := server.store.ListWithdrawalRecords(ctx, db.ListWithdrawalRecordsParams{
 		UserID:  authPayload.UserID,
-		Channel: "wechat_ecommerce_fund",
+		Channel: merchantWithdrawChannel,
 		Limit:   req.Limit,
 		Offset:  offset,
 	})
@@ -1499,7 +1518,7 @@ func (server *Server) listMerchantAccountWithdrawals(ctx *gin.Context) {
 
 	totalCount, err := server.store.CountWithdrawalRecords(ctx, db.CountWithdrawalRecordsParams{
 		UserID:  authPayload.UserID,
-		Channel: "wechat_ecommerce_fund",
+		Channel: merchantWithdrawChannel,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -1568,7 +1587,7 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 		return
 	}
 
-	if record.UserID != authPayload.UserID || record.Channel != "wechat_ecommerce_fund" {
+	if record.UserID != authPayload.UserID || record.Channel != merchantWithdrawChannel {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("no permission to access this withdrawal")))
 		return
 	}
@@ -1579,20 +1598,11 @@ func (server *Server) getMerchantAccountWithdrawal(ctx *gin.Context) {
 		if queryErr == nil {
 			newStatus := mapWechatWithdrawStatus(wxResp.Status)
 			reasonText := ""
-			if wxResp.FailReason != "" {
-				reasonText = wxResp.FailReason
+			if wxResp.Reason != "" {
+				reasonText = wxResp.Reason
 			}
 
-			if newStatus != record.Status || reasonText != "" {
-				updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-					ID:     record.ID,
-					Status: newStatus,
-					Reason: pgtype.Text{String: reasonText, Valid: reasonText != ""},
-				})
-				if updateErr == nil {
-					record = updated
-				}
-			}
+			record = server.updateWithdrawalRecordStatus(ctx, record, newStatus, reasonText)
 
 			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
 				info.WithdrawID = wxResp.WithdrawID

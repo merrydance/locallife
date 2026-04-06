@@ -189,6 +189,7 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 			SpMchName:        config.WechatEcommerceSpName,
 			PartnerNotifyURL: config.EffectiveWechatEcommercePaymentNotifyURL(),
 			CombineNotifyURL: config.EffectiveWechatEcommerceCombineNotifyURL(),
+			WithdrawNotifyURL: config.EffectiveWechatEcommerceWithdrawNotifyURL(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)
@@ -515,6 +516,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ecommerce/payment-notify", server.handleEcommercePaymentNotify)
 		webhooksGroup.POST("/wechat-ecommerce/combine-notify", server.handleCombinePaymentNotify)
 		webhooksGroup.POST("/wechat-ecommerce/refund-notify", server.handleEcommerceRefundNotify)
+		webhooksGroup.POST("/wechat-ecommerce/withdraw-notify", server.handleEcommerceWithdrawNotify)
 		webhooksGroup.POST("/wechat-ecommerce/applyment-notify", server.handleApplymentStateNotify)
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）

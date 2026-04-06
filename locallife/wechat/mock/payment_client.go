@@ -540,6 +540,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptEcommerceRefundNotifi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptEcommerceRefundNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptEcommerceRefundNotification), notification)
 }
 
+// DecryptNotificationRaw mocks base method.
+func (m *MockEcommerceClientInterface) DecryptNotificationRaw(notification *wechat.PaymentNotification) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecryptNotificationRaw", notification)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DecryptNotificationRaw indicates an expected call of DecryptNotificationRaw.
+func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptNotificationRaw(notification any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptNotificationRaw", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptNotificationRaw), notification)
+}
+
 // DecryptPartnerPaymentNotification mocks base method.
 func (m *MockEcommerceClientInterface) DecryptPartnerPaymentNotification(notification *wechat.PaymentNotification) (*wechat.PartnerPaymentNotificationResource, error) {
 	m.ctrl.T.Helper()

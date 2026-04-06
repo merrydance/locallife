@@ -93,7 +93,7 @@ func TestWithdrawOperatorAPI(t *testing.T) {
 						OutRequestNo: "ow_test_001",
 						WithdrawID:   "withdraw_test_001",
 						Amount:       1200,
-						Status:       "PROCESSING",
+						Status:       "CREATE_SUCCESS",
 					}, nil)
 
 				store.EXPECT().
@@ -525,7 +525,7 @@ func TestGetOperatorWithdrawalAPI(t *testing.T) {
 			OutRequestNo: "ow_test_001",
 			WithdrawID:   "withdraw_test_001",
 			Amount:       1200,
-			Status:       "PROCESSING",
+			Status:       "CREATE_SUCCESS",
 		}, nil)
 
 	store.EXPECT().

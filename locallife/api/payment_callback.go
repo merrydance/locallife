@@ -322,6 +322,76 @@ func (server *Server) resolvePaymentOrderSubMchID(ctx context.Context, paymentOr
 	return config.SubMchID, nil
 }
 
+func (server *Server) syncWithdrawalRecordWithWechat(ctx *gin.Context, record db.WithdrawalRecord, resource *wechat.EcommerceWithdrawResponse) (db.WithdrawalRecord, error) {
+	if resource == nil {
+		return record, errors.New("withdraw resource is nil")
+	}
+	if resource.OutRequestNo == "" {
+		return record, errors.New("withdraw out_request_no missing")
+	}
+
+	switch record.Channel {
+	case merchantWithdrawChannel:
+		info := parseMerchantWithdrawAccountInfo(record.AccountInfo)
+		if info.OutRequestNo != "" && info.OutRequestNo != resource.OutRequestNo {
+			return record, fmt.Errorf("merchant withdraw out_request_no mismatch")
+		}
+		if info.SubMchID != "" && resource.SubMchID != "" && info.SubMchID != resource.SubMchID {
+			return record, fmt.Errorf("merchant withdraw sub_mchid mismatch")
+		}
+		if resource.WithdrawID != "" && info.WithdrawID != resource.WithdrawID {
+			info.WithdrawID = resource.WithdrawID
+			if info.OutRequestNo == "" {
+				info.OutRequestNo = resource.OutRequestNo
+			}
+			if info.SubMchID == "" {
+				info.SubMchID = resource.SubMchID
+			}
+			raw, err := json.Marshal(info)
+			if err != nil {
+				return record, fmt.Errorf("marshal merchant withdraw account info: %w", err)
+			}
+			record, err = server.persistWithdrawalRecordAccountInfo(ctx, record, raw)
+			if err != nil {
+				return record, fmt.Errorf("persist merchant withdraw account info: %w", err)
+			}
+		}
+	case operatorWithdrawChannel:
+		info := parseOperatorWithdrawAccountInfo(record.AccountInfo)
+		if info.OutRequestNo != "" && info.OutRequestNo != resource.OutRequestNo {
+			return record, fmt.Errorf("operator withdraw out_request_no mismatch")
+		}
+		if info.SubMchID != "" && resource.SubMchID != "" && info.SubMchID != resource.SubMchID {
+			return record, fmt.Errorf("operator withdraw sub_mchid mismatch")
+		}
+		if resource.WithdrawID != "" && info.WithdrawID != resource.WithdrawID {
+			info.WithdrawID = resource.WithdrawID
+			if info.OutRequestNo == "" {
+				info.OutRequestNo = resource.OutRequestNo
+			}
+			if info.SubMchID == "" {
+				info.SubMchID = resource.SubMchID
+			}
+			raw, err := json.Marshal(info)
+			if err != nil {
+				return record, fmt.Errorf("marshal operator withdraw account info: %w", err)
+			}
+			record, err = server.persistWithdrawalRecordAccountInfo(ctx, record, raw)
+			if err != nil {
+				return record, fmt.Errorf("persist operator withdraw account info: %w", err)
+			}
+		}
+	default:
+		return record, fmt.Errorf("unsupported withdrawal channel: %s", record.Channel)
+	}
+
+	record, err := server.persistWithdrawalRecordStatus(ctx, record, mapWechatWithdrawStatus(resource.Status), resource.Reason)
+	if err != nil {
+		return record, fmt.Errorf("persist withdrawal status: %w", err)
+	}
+	return record, nil
+}
+
 func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notification wechat.PaymentNotification, resource *wechat.PartnerPaymentNotificationResource) {
 	if err := server.validatePartnerNotifyOwnership(resource); err != nil {
 		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_payment", "ownership").Inc()
@@ -631,6 +701,108 @@ func (server *Server) handlePartnerPaymentNotification(ctx *gin.Context, notific
 
 	server.markNotificationProcessed(ctx, notification.ID, resource.OutTradeNo, resource.TransactionID)
 	writeWechatNotifySuccess(ctx, "ecommerce_payment")
+}
+
+// handleEcommerceWithdrawNotify 处理平台收付通提现状态变更通知
+// POST /v1/webhooks/wechat-ecommerce/withdraw-notify
+func (server *Server) handleEcommerceWithdrawNotify(ctx *gin.Context) {
+	if server.ecommerceClient == nil {
+		log.Error().Msg("ecommerce withdraw callback received but ecommerce client is not configured")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{
+			Code:    "FAIL",
+			Message: "ecommerce client not configured",
+		})
+		return
+	}
+
+	body, status, err := readWebhookBody(ctx)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "read_body").Inc()
+		log.Error().Err(err).Msg("read ecommerce withdraw notification body")
+		ctx.JSON(status, wechatPaymentNotifyResponse{Code: "FAIL", Message: "read body failed"})
+		return
+	}
+
+	signature := ctx.GetHeader("Wechatpay-Signature")
+	timestamp := ctx.GetHeader("Wechatpay-Timestamp")
+	nonce := ctx.GetHeader("Wechatpay-Nonce")
+
+	if err := server.ecommerceClient.VerifyNotificationSignature(signature, timestamp, nonce, string(body)); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "signature").Inc()
+		log.Error().Err(err).Msg("invalid wechat signature for ecommerce withdraw notification")
+		ctx.JSON(http.StatusUnauthorized, wechatPaymentNotifyResponse{Code: "FAIL", Message: "signature verification failed"})
+		return
+	}
+
+	var notification wechat.PaymentNotification
+	if err := json.Unmarshal(body, &notification); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "parse").Inc()
+		log.Error().Err(err).Msg("parse ecommerce withdraw notification")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "parse notification failed"})
+		return
+	}
+
+	if notification.EventType != "MCHWITHDRAW.CHANGE" {
+		log.Info().Str("event_type", notification.EventType).Msg("ignore non-withdraw ecommerce notification")
+		writeWechatNotifySuccess(ctx, "ecommerce_withdraw")
+		return
+	}
+
+	if !server.tryClaimNotification(ctx, notification, "ecommerce_withdraw") {
+		return
+	}
+
+	decrypted, err := server.ecommerceClient.DecryptNotificationRaw(&notification)
+	if err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "decrypt").Inc()
+		log.Error().Err(err).Msg("decrypt ecommerce withdraw notification")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "decrypt failed"})
+		return
+	}
+
+	var resource wechat.EcommerceWithdrawResponse
+	if err := json.Unmarshal(decrypted, &resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "parse_resource").Inc()
+		log.Error().Err(err).Str("decrypted", string(decrypted)).Msg("parse ecommerce withdraw resource")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "parse resource failed"})
+		return
+	}
+	if resource.OutRequestNo == "" {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "missing_out_request_no").Inc()
+		log.Error().Str("notification_id", notification.ID).Msg("ecommerce withdraw resource missing out_request_no")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusBadRequest, wechatPaymentNotifyResponse{Code: "FAIL", Message: "missing out_request_no"})
+		return
+	}
+
+	record, err := server.store.GetWithdrawalRecordByOutRequestNo(ctx, pgtype.Text{String: resource.OutRequestNo, Valid: true})
+	if err != nil {
+		if isNotFoundError(err) {
+			paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "withdrawal_not_found").Inc()
+			log.Error().Str("out_request_no", resource.OutRequestNo).Msg("withdrawal record not found for ecommerce withdraw callback")
+			server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+			ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "withdrawal record not found, please retry"})
+			return
+		}
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "query_withdrawal").Inc()
+		log.Error().Err(err).Str("out_request_no", resource.OutRequestNo).Msg("query withdrawal record by out_request_no failed")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "internal error"})
+		return
+	}
+
+	if _, err := server.syncWithdrawalRecordWithWechat(ctx, record, &resource); err != nil {
+		paymentCallbackFailuresTotal.WithLabelValues("ecommerce_withdraw", "sync_withdrawal").Inc()
+		log.Error().Err(err).Int64("withdrawal_record_id", record.ID).Str("out_request_no", resource.OutRequestNo).Msg("sync withdrawal record with ecommerce callback failed")
+		server.releaseNotification(ctx, notification.ID, "ecommerce_withdraw")
+		ctx.JSON(http.StatusInternalServerError, wechatPaymentNotifyResponse{Code: "FAIL", Message: "withdrawal sync failed"})
+		return
+	}
+
+	writeWechatNotifySuccess(ctx, "ecommerce_withdraw")
+	server.markNotificationProcessed(ctx, notification.ID, resource.OutRequestNo, resource.WithdrawID)
 }
 
 func buildAmountMismatchRefundOutRefundNo(paymentOrder db.PaymentOrder) string {

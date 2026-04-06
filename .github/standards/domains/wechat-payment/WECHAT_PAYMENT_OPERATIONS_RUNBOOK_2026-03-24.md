@@ -7,7 +7,7 @@
 - 平台收付通支付
 - 收付通退款
 - 分账与分账回退
-- 商户提现结果轮询
+- 商户与运营商收付通提现回调、结果轮询与恢复
 - 骑手押金退款式提现到期提醒与过期失效
 
 目标不是替代代码逻辑，而是回答三个运维问题：
@@ -39,9 +39,11 @@
 
 ### 2.4 商户提现补偿
 
+- 商户与运营商提现都会向微信上送专用回调地址 `/v1/webhooks/wechat-ecommerce/withdraw-notify`
+- 微信 `MCHWITHDRAW.CHANGE` 回调会先验签、幂等 claim，并在关键状态与账户信息 durable 落库后再返回 success ack
 - 商户提现结果查询任务为 `payment:process_merchant_withdraw_result`
 - 自动补偿依赖 `MerchantWithdrawRecoveryScheduler`
-- `MerchantWithdrawRecoveryScheduler` 默认每 3 分钟扫描 pending 提现并补发结果轮询任务
+- `MerchantWithdrawRecoveryScheduler` 默认每 3 分钟扫描 pending 提现并补发结果轮询任务，作为回调缺失、延迟或乱序时的兜底恢复
 - 若查询重试耗尽或最终失败，当前会发布平台告警，extra 中会携带 withdrawal_record 级别的关键标识
 
 ### 2.5 骑手押金到期提醒与过期处理
@@ -175,6 +177,7 @@
 - `TASK_ENQUEUE_FAILURE` 是否持续出现
 - payment recovery 与 refund recovery 是否实际有补偿命中
 - 分账是否出现异常积压
+- 提现回调失败、重试或 pending 积压是否异常升高
 - 骑手押金提醒任务是否产生日志与通知
 
 首周重点看：
@@ -189,7 +192,7 @@
 
 推荐按以下顺序在测试环境完成一次完整闭环：
 
-1. 校验测试环境已加载最新 `WECHAT_PAY_*`、`WECHAT_ECOMMERCE_*`、`REDIS_*` 配置。
+1. 校验测试环境已加载最新 `WECHAT_PAY_*`、`WECHAT_ECOMMERCE_*`、`REDIS_*` 配置，尤其确认 `WECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL` 指向当前环境可访问域名。
 2. 执行 `make migrateup`，确认新增 migration 已全部落库且 `migratestatus` 无 dirty 标记。
 3. 部署后端新版本，确认 `/health`、`/ready` 正常，scheduler 与 task processor 初始化日志正常。
 4. 验证订单/预订支付仍走收付通合单链路。
@@ -227,7 +230,8 @@
 2. `WECHAT_ECOMMERCE_*` 服务商配置完整。
 3. `REDIS_ADDRESS`、`REDIS_PASSWORD` 已配置，生产环境不会退化为 Noop task distributor。
 4. 回调 URL 指向即将发布的新环境域名。
-5. 生产 `ALLOWED_ORIGINS` 不为空且不包含 `*`。
+5. `WECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL` 已配置，且与 `/v1/webhooks/wechat-ecommerce/withdraw-notify` 路由一致。
+6. 生产 `ALLOWED_ORIGINS` 不为空且不包含 `*`。
 
 ### 8.2 数据库 migration
 

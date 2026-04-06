@@ -321,7 +321,7 @@ func (server *Server) withdrawOperator(ctx *gin.Context) {
 	record = server.updateWithdrawalRecordAccountInfo(ctx, record, accountInfoBytes)
 
 	status := mapWechatWithdrawStatus(withdrawResp.Status)
-	record = server.updateWithdrawalRecordStatus(ctx, record, status, withdrawResp.FailReason)
+	record = server.updateWithdrawalRecordStatus(ctx, record, status, withdrawResp.Reason)
 	server.enqueueWithdrawalResultPolling(ctx, record)
 
 	ctx.JSON(http.StatusOK, operatorWithdrawCreateResponse{Withdrawal: toOperatorWithdrawItem(record), Wechat: withdrawResp})
@@ -441,20 +441,11 @@ func (server *Server) getOperatorWithdrawal(ctx *gin.Context) {
 		if queryErr == nil {
 			newStatus := mapWechatWithdrawStatus(wxResp.Status)
 			reasonText := ""
-			if wxResp.FailReason != "" {
-				reasonText = wxResp.FailReason
+			if wxResp.Reason != "" {
+				reasonText = wxResp.Reason
 			}
 
-			if newStatus != record.Status || reasonText != "" {
-				updated, updateErr := server.store.UpdateWithdrawalStatus(ctx, db.UpdateWithdrawalStatusParams{
-					ID:     record.ID,
-					Status: newStatus,
-					Reason: pgtype.Text{String: reasonText, Valid: reasonText != ""},
-				})
-				if updateErr == nil {
-					record = updated
-				}
-			}
+			record = server.updateWithdrawalRecordStatus(ctx, record, newStatus, reasonText)
 
 			if wxResp.WithdrawID != "" && wxResp.WithdrawID != info.WithdrawID {
 				info.WithdrawID = wxResp.WithdrawID

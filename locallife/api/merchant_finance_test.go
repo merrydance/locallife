@@ -385,7 +385,7 @@ func TestGetMerchantAccountWithdrawalAPI_PersistsWithdrawIDFromWechat(t *testing
 			OutRequestNo: "MW1001",
 			WithdrawID:   "withdraw_test_merchant_001",
 			Amount:       1200,
-			Status:       "PROCESSING",
+			Status:       "CREATE_SUCCESS",
 		}, nil)
 
 	store.EXPECT().

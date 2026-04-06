@@ -87,6 +87,7 @@ type EcommerceClient struct {
 	spMchName        string // 服务商名称（可选）
 	partnerNotifyURL string
 	combineNotifyURL string
+	withdrawNotifyURL string
 }
 
 // EcommerceClientConfig 平台收付通客户端配置
@@ -97,6 +98,7 @@ type EcommerceClientConfig struct {
 	SpMchName           string // 服务商名称（可选）
 	PartnerNotifyURL    string // 收付通普通支付回调地址（空则回退到 PaymentClientConfig.NotifyURL）
 	CombineNotifyURL    string // 收付通合单支付回调地址（空则回退到 PartnerNotifyURL / PaymentClientConfig.NotifyURL）
+	WithdrawNotifyURL   string // 收付通提现回调地址（空则不为提现请求上送 notify_url）
 }
 
 // PartnerJSAPIOrderRequest 服务商模式单笔 JSAPI 下单请求。
@@ -214,6 +216,7 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 	if combineNotifyURL == "" {
 		combineNotifyURL = partnerNotifyURL
 	}
+	withdrawNotifyURL := strings.TrimSpace(cfg.WithdrawNotifyURL)
 
 	return &EcommerceClient{
 		PaymentClient:    baseClient,
@@ -222,6 +225,7 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 		spMchName:        spMchName,
 		partnerNotifyURL: partnerNotifyURL,
 		combineNotifyURL: combineNotifyURL,
+		withdrawNotifyURL: withdrawNotifyURL,
 	}, nil
 }
 
@@ -2042,7 +2046,7 @@ type EcommerceWithdrawResponse struct {
 	CreateTime   string `json:"create_time"`
 	UpdateTime   string `json:"update_time"`
 	SuccessTime  string `json:"success_time"`
-	FailReason   string `json:"fail_reason"`
+	Reason       string `json:"reason"`
 }
 
 // CreateEcommerceWithdraw 发起二级商户提现
@@ -2052,6 +2056,9 @@ func (c *EcommerceClient) CreateEcommerceWithdraw(ctx context.Context, req *Ecom
 		"out_request_no": req.OutRequestNo,
 		"amount":         req.Amount,
 		"remark":         req.Remark,
+	}
+	if c.withdrawNotifyURL != "" {
+		body["notify_url"] = c.withdrawNotifyURL
 	}
 
 	respBody, err := c.doRequest(ctx, http.MethodPost, ecommerceFundWithdrawURL, body)
