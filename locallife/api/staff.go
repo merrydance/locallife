@@ -333,7 +333,7 @@ type generateInviteCodeResponse struct {
 // @Failure 401 {object} ErrorResponse "未认证"
 // @Failure 403 {object} ErrorResponse "权限不足"
 // @Failure 500 {object} ErrorResponse "服务器错误"
-// @Router /v1/merchant/invite-code [post]
+// @Router /v1/merchant/staff/invite-code [post]
 // @Security BearerAuth
 func (server *Server) generateInviteCode(ctx *gin.Context) {
 	merchant, ok := GetMerchantFromContext(ctx)

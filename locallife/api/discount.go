@@ -44,6 +44,20 @@ type discountRuleResponse struct {
 }
 
 // createDiscountRule 创建满减规则
+// @Summary 创建商户满减规则
+// @Description 为当前商户创建新的满减规则
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Param request body createDiscountRuleRequest true "满减规则"
+// @Success 201 {object} discountRuleResponse "创建成功"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts [post]
 func (server *Server) createDiscountRule(ctx *gin.Context) {
 	var req createDiscountRuleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -88,6 +102,21 @@ type getDiscountRuleRequest struct {
 }
 
 // getDiscountRule 获取满减规则详情
+// @Summary 获取商户满减规则详情
+// @Description 查询单条满减规则详情
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Param rule_id path int true "规则ID"
+// @Success 200 {object} discountRuleResponse "规则详情"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 404 {object} ErrorResponse "规则不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts/{rule_id} [get]
 func (server *Server) getDiscountRule(ctx *gin.Context) {
 	var req getDiscountRuleRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -137,6 +166,21 @@ type listMerchantDiscountRulesResponse struct {
 }
 
 // listMerchantDiscountRules 获取商户满减规则列表
+// @Summary 获取商户满减规则列表
+// @Description 返回商户全部满减规则，支持分页
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Param page_id query int true "页码"
+// @Param page_size query int true "每页数量，范围 5-50"
+// @Success 200 {object} listMerchantDiscountRulesResponse "规则列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts [get]
 func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 	var uriReq listMerchantDiscountRulesURIRequest
 	if err := ctx.ShouldBindUri(&uriReq); err != nil {
@@ -189,6 +233,19 @@ type listActiveDiscountRulesRequest struct {
 }
 
 // listActiveDiscountRules 获取商户当前有效的满减规则
+// @Summary 获取商户生效中满减规则
+// @Description 返回当前商户所有生效中的满减规则
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Success 200 {array} discountRuleResponse "生效中规则列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts/active [get]
 func (server *Server) listActiveDiscountRules(ctx *gin.Context) {
 	var req listActiveDiscountRulesRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {
@@ -224,6 +281,20 @@ func (server *Server) listActiveDiscountRules(ctx *gin.Context) {
 }
 
 // getApplicableDiscountRules 获取订单可使用的满减规则
+// @Summary 获取订单可用满减规则
+// @Description 根据订单金额返回当前商户可适用的满减规则
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Param order_amount query int true "订单金额，单位分"
+// @Success 200 {array} discountRuleResponse "可用规则列表"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts/applicable [get]
 func (server *Server) getApplicableDiscountRules(ctx *gin.Context) {
 	var uriReq struct {
 		MerchantID int64 `uri:"id" binding:"required,min=1"`
@@ -270,6 +341,21 @@ func (server *Server) getApplicableDiscountRules(ctx *gin.Context) {
 }
 
 // getBestDiscountRule 获取订单最优满减规则（折扣最大）
+// @Summary 获取订单最优满减规则
+// @Description 根据订单金额返回折扣最大的满减规则
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Param order_amount query int true "订单金额，单位分"
+// @Success 200 {object} discountRuleResponse "最优规则"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 404 {object} ErrorResponse "规则不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts/best [get]
 func (server *Server) getBestDiscountRule(ctx *gin.Context) {
 	var uriReq struct {
 		MerchantID int64 `uri:"id" binding:"required,min=1"`
@@ -327,6 +413,22 @@ type updateDiscountRuleRequest struct {
 }
 
 // updateDiscountRule 更新满减规则
+// @Summary 更新商户满减规则
+// @Description 更新单条满减规则的字段和启停状态
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Param rule_id path int true "规则ID"
+// @Param request body updateDiscountRuleRequest true "更新内容"
+// @Success 200 {object} discountRuleResponse "更新后的规则"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 404 {object} ErrorResponse "规则不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts/{rule_id} [patch]
 func (server *Server) updateDiscountRule(ctx *gin.Context) {
 	var req updateDiscountRuleRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -373,6 +475,21 @@ type deleteDiscountRuleRequest struct {
 }
 
 // deleteDiscountRule 删除满减规则
+// @Summary 删除商户满减规则
+// @Description 删除单条满减规则
+// @Tags 商户满减规则
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param merchant_id path int true "商户ID"
+// @Param rule_id path int true "规则ID"
+// @Success 200 {object} successMessageResponse "删除成功"
+// @Failure 400 {object} ErrorResponse "请求参数错误"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 404 {object} ErrorResponse "规则不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchants/{merchant_id}/discounts/{rule_id} [delete]
 func (server *Server) deleteDiscountRule(ctx *gin.Context) {
 	var req deleteDiscountRuleRequest
 	if err := ctx.ShouldBindUri(&req); err != nil {

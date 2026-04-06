@@ -1654,6 +1654,41 @@ definitions:
           $ref: '#/definitions/api.tagResponse'
         type: array
     type: object
+  api.complaintResponse:
+    properties:
+      amount:
+        type: integer
+      complaint_detail:
+        type: string
+      complaint_id:
+        type: string
+      complaint_state:
+        type: string
+      complaint_time:
+        type: string
+      completed_at:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: integer
+      last_synced_at:
+        type: string
+      out_trade_no:
+        type: string
+      payer_openid:
+        type: string
+      responded_at:
+        type: string
+      response_content:
+        type: string
+      transaction_id:
+        type: string
+      updated_at:
+        type: string
+      wxpay_update_time:
+        type: string
+    type: object
   api.completeUploadRequest:
     properties:
       etag:
@@ -1809,6 +1844,38 @@ definitions:
       name:
         maxLength: 50
         minLength: 1
+        type: string
+      valid_from:
+        type: string
+      valid_until:
+        type: string
+    required:
+    - discount_amount
+    - min_order_amount
+    - name
+    - valid_from
+    - valid_until
+    type: object
+  api.createDiscountRuleRequest:
+    properties:
+      can_stack_with_membership:
+        type: boolean
+      can_stack_with_voucher:
+        type: boolean
+      description:
+        type: string
+      discount_amount:
+        minimum: 1
+        type: integer
+      min_order_amount:
+        minimum: 1
+        type: integer
+      name:
+        maxLength: 100
+        minLength: 1
+        type: string
+      stacking_group:
+        maxLength: 50
         type: string
       valid_from:
         type: string
@@ -2867,6 +2934,35 @@ definitions:
       reason:
         type: string
     type: object
+  api.discountRuleResponse:
+    properties:
+      can_stack_with_membership:
+        type: boolean
+      can_stack_with_voucher:
+        type: boolean
+      created_at:
+        type: string
+      description:
+        type: string
+      discount_amount:
+        type: integer
+      id:
+        type: integer
+      is_active:
+        type: boolean
+      merchant_id:
+        type: integer
+      min_order_amount:
+        type: integer
+      name:
+        type: string
+      stacking_group:
+        type: string
+      valid_from:
+        type: string
+      valid_until:
+        type: string
+    type: object
   api.dishCategoryResponse:
     properties:
       id:
@@ -3487,6 +3583,30 @@ definitions:
         items:
           $ref: '#/definitions/api.transactionResponse'
         type: array
+    type: object
+  api.listMerchantComplaintsResponse:
+    properties:
+      complaints:
+        items:
+          $ref: '#/definitions/api.complaintResponse'
+        type: array
+      limit:
+        type: integer
+      page:
+        type: integer
+    type: object
+  api.listMerchantDiscountRulesResponse:
+    properties:
+      page_id:
+        type: integer
+      page_size:
+        type: integer
+      rules:
+        items:
+          $ref: '#/definitions/api.discountRuleResponse'
+        type: array
+      total:
+        type: integer
     type: object
   api.listMerchantMembersResponse:
     properties:
@@ -6625,6 +6745,17 @@ definitions:
     - resolution_notes
     - status
     type: object
+  api.respondToComplaintRequest:
+    properties:
+      jump_url:
+        type: string
+      response_content:
+        maxLength: 256
+        minLength: 1
+        type: string
+    required:
+    - response_content
+    type: object
   api.retryMerchantOrderPrintJobResponse:
     properties:
       message:
@@ -7804,6 +7935,34 @@ definitions:
         type: string
       valid_until:
         type: string
+    type: object
+  api.updateDiscountRuleRequest:
+    properties:
+      can_stack_with_membership:
+        type: boolean
+      can_stack_with_voucher:
+        type: boolean
+      description:
+        type: string
+      discount_amount:
+        type: integer
+      id:
+        minimum: 1
+        type: integer
+      is_active:
+        type: boolean
+      min_order_amount:
+        type: integer
+      name:
+        type: string
+      stacking_group:
+        type: string
+      valid_from:
+        type: string
+      valid_until:
+        type: string
+    required:
+    - id
     type: object
   api.updateDishCategoryRequest:
     properties:
@@ -15389,6 +15548,183 @@ paths:
       summary: 获取商户索赔汇总
       tags:
       - 商户申诉管理
+  /v1/merchant/complaints:
+    get:
+      consumes:
+      - application/json
+      description: 返回当前商户收到的投诉列表，支持按投诉状态筛选和分页
+      parameters:
+      - description: 投诉状态，支持 PENDING_RESPONSE/PROCESSING/PROCESSED
+        in: query
+        name: state
+        type: string
+      - description: 页码，默认 1
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量，默认 20，最大 100
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 投诉列表
+          schema:
+            $ref: '#/definitions/api.listMerchantComplaintsResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户投诉列表
+      tags:
+      - 商户投诉管理
+  /v1/merchant/complaints/{id}:
+    get:
+      consumes:
+      - application/json
+      description: 返回当前商户名下单个投诉的详细信息
+      parameters:
+      - description: 投诉单ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 投诉详情
+          schema:
+            $ref: '#/definitions/api.complaintResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 投诉不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户投诉详情
+      tags:
+      - 商户投诉管理
+  /v1/merchant/complaints/{id}/complete:
+    post:
+      consumes:
+      - application/json
+      description: 商户将投诉标记为已完结，幂等返回最新投诉状态
+      parameters:
+      - description: 投诉单ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 完结后的投诉信息
+          schema:
+            $ref: '#/definitions/api.complaintResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 投诉不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信完结失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 完结商户投诉
+      tags:
+      - 商户投诉管理
+  /v1/merchant/complaints/{id}/response:
+    post:
+      consumes:
+      - application/json
+      description: 商户向微信侧提交投诉回复，并同步更新本地投诉状态
+      parameters:
+      - description: 投诉单ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 投诉回复内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.respondToComplaintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 回复后的投诉信息
+          schema:
+            $ref: '#/definitions/api.complaintResponse'
+        "400":
+          description: 请求参数错误或投诉已完结
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 投诉不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信回复失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 回复商户投诉
+      tags:
+      - 商户投诉管理
   /v1/merchant/complaints/summary:
     get:
       consumes:
@@ -16473,33 +16809,6 @@ paths:
       summary: 获取结算记录
       tags:
       - 商户财务管理
-  /v1/merchant/invite-code:
-    post:
-      description: 商户老板或店长生成员工邀请码
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: 邀请码
-          schema:
-            $ref: '#/definitions/api.generateInviteCodeResponse'
-        "401":
-          description: 未认证
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "403":
-          description: 权限不足
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-        "500":
-          description: 服务器错误
-          schema:
-            $ref: '#/definitions/api.ErrorResponse'
-      security:
-      - BearerAuth: []
-      summary: 生成邀请码
-      tags:
-      - 员工管理
   /v1/merchant/orders:
     get:
       consumes:
@@ -17325,6 +17634,33 @@ paths:
       security:
       - BearerAuth: []
       summary: 更新员工角色
+      tags:
+      - 员工管理
+  /v1/merchant/staff/invite-code:
+    post:
+      description: 商户老板或店长生成员工邀请码
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 邀请码
+          schema:
+            $ref: '#/definitions/api.generateInviteCodeResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 权限不足
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 生成邀请码
       tags:
       - 员工管理
   /v1/merchant/stats/categories:
@@ -18426,6 +18762,382 @@ paths:
       summary: 获取可领取代金券列表
       tags:
       - 代金券管理
+  /v1/merchants/{merchant_id}/discounts:
+    get:
+      consumes:
+      - application/json
+      description: 返回商户全部满减规则，支持分页
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: 页码
+        in: query
+        name: page_id
+        required: true
+        type: integer
+      - description: 每页数量，范围 5-50
+        in: query
+        name: page_size
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 规则列表
+          schema:
+            $ref: '#/definitions/api.listMerchantDiscountRulesResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户满减规则列表
+      tags:
+      - 商户满减规则
+    post:
+      consumes:
+      - application/json
+      description: 为当前商户创建新的满减规则
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: 满减规则
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.createDiscountRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: 创建成功
+          schema:
+            $ref: '#/definitions/api.discountRuleResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建商户满减规则
+      tags:
+      - 商户满减规则
+  /v1/merchants/{merchant_id}/discounts/{rule_id}:
+    delete:
+      consumes:
+      - application/json
+      description: 删除单条满减规则
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: 规则ID
+        in: path
+        name: rule_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 删除成功
+          schema:
+            $ref: '#/definitions/api.successMessageResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 规则不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除商户满减规则
+      tags:
+      - 商户满减规则
+    get:
+      consumes:
+      - application/json
+      description: 查询单条满减规则详情
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: 规则ID
+        in: path
+        name: rule_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 规则详情
+          schema:
+            $ref: '#/definitions/api.discountRuleResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 规则不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户满减规则详情
+      tags:
+      - 商户满减规则
+    patch:
+      consumes:
+      - application/json
+      description: 更新单条满减规则的字段和启停状态
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: 规则ID
+        in: path
+        name: rule_id
+        required: true
+        type: integer
+      - description: 更新内容
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateDiscountRuleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 更新后的规则
+          schema:
+            $ref: '#/definitions/api.discountRuleResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 规则不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户满减规则
+      tags:
+      - 商户满减规则
+  /v1/merchants/{merchant_id}/discounts/active:
+    get:
+      consumes:
+      - application/json
+      description: 返回当前商户所有生效中的满减规则
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 生效中规则列表
+          schema:
+            items:
+              $ref: '#/definitions/api.discountRuleResponse'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户生效中满减规则
+      tags:
+      - 商户满减规则
+  /v1/merchants/{merchant_id}/discounts/applicable:
+    get:
+      consumes:
+      - application/json
+      description: 根据订单金额返回当前商户可适用的满减规则
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: 订单金额，单位分
+        in: query
+        name: order_amount
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 可用规则列表
+          schema:
+            items:
+              $ref: '#/definitions/api.discountRuleResponse'
+            type: array
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取订单可用满减规则
+      tags:
+      - 商户满减规则
+  /v1/merchants/{merchant_id}/discounts/best:
+    get:
+      consumes:
+      - application/json
+      description: 根据订单金额返回折扣最大的满减规则
+      parameters:
+      - description: 商户ID
+        in: path
+        name: merchant_id
+        required: true
+        type: integer
+      - description: 订单金额，单位分
+        in: query
+        name: order_amount
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 最优规则
+          schema:
+            $ref: '#/definitions/api.discountRuleResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 规则不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取订单最优满减规则
+      tags:
+      - 商户满减规则
   /v1/merchants/images/upload:
     post:
       description: '**已下线**。请改用媒体上传三步流程：POST /v1/media/upload-sessions → 直传 OSS →

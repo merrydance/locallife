@@ -54,6 +54,12 @@ type merchantComplaintSummaryResponse struct {
 	Processed       int64 `json:"processed"`
 }
 
+type listMerchantComplaintsResponse struct {
+	Complaints []complaintResponse `json:"complaints"`
+	Page       int32               `json:"page"`
+	Limit      int32               `json:"limit"`
+}
+
 func toComplaintResponse(c db.WechatComplaint) complaintResponse {
 	resp := complaintResponse{
 		ID:              c.ID,
@@ -96,6 +102,20 @@ func toComplaintResponse(c db.WechatComplaint) complaintResponse {
 // ========================= 商户端：查看自己的投诉列表 =========================
 
 // listMerchantComplaints 商户查看自己收到的投诉列表
+// @Summary 获取商户投诉列表
+// @Description 返回当前商户收到的投诉列表，支持按投诉状态筛选和分页
+// @Tags 商户投诉管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param state query string false "投诉状态，支持 PENDING_RESPONSE/PROCESSING/PROCESSED"
+// @Param page query int false "页码，默认 1"
+// @Param limit query int false "每页数量，默认 20，最大 100"
+// @Success 200 {object} listMerchantComplaintsResponse "投诉列表"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchant/complaints [get]
 // GET /v1/merchant/complaints
 func (server *Server) listMerchantComplaints(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
@@ -133,7 +153,11 @@ func (server *Server) listMerchantComplaints(ctx *gin.Context) {
 	for _, r := range rows {
 		resp = append(resp, toComplaintResponse(r))
 	}
-	ctx.JSON(http.StatusOK, gin.H{"complaints": resp, "page": page, "limit": limit})
+	ctx.JSON(http.StatusOK, listMerchantComplaintsResponse{
+		Complaints: resp,
+		Page:       page,
+		Limit:      limit,
+	})
 }
 
 // getMerchantComplaintSummary 商户投诉汇总
@@ -194,6 +218,19 @@ func (server *Server) getMerchantComplaintSummary(ctx *gin.Context) {
 // ========================= 商户端：投诉单详情 =================================
 
 // getMerchantComplaintDetail 商户查看投诉单详情并验证归属
+// @Summary 获取商户投诉详情
+// @Description 返回当前商户名下单个投诉的详细信息
+// @Tags 商户投诉管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "投诉单ID"
+// @Success 200 {object} complaintResponse "投诉详情"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 404 {object} ErrorResponse "投诉不存在"
+// @Failure 500 {object} ErrorResponse "服务器错误"
+// @Router /v1/merchant/complaints/{id} [get]
 // GET /v1/merchant/complaints/:id
 func (server *Server) getMerchantComplaintDetail(ctx *gin.Context) {
 	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
@@ -230,6 +267,22 @@ type respondToComplaintRequest struct {
 }
 
 // respondToComplaint 商户回复投诉（同时调用微信 API + 更新本地状态）
+// @Summary 回复商户投诉
+// @Description 商户向微信侧提交投诉回复，并同步更新本地投诉状态
+// @Tags 商户投诉管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "投诉单ID"
+// @Param request body respondToComplaintRequest true "投诉回复内容"
+// @Success 200 {object} complaintResponse "回复后的投诉信息"
+// @Failure 400 {object} ErrorResponse "请求参数错误或投诉已完结"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 404 {object} ErrorResponse "投诉不存在"
+// @Failure 502 {object} ErrorResponse "微信回复失败"
+// @Failure 503 {object} ErrorResponse "支付服务未配置"
+// @Router /v1/merchant/complaints/{id}/response [post]
 // POST /v1/merchant/complaints/:id/response
 func (server *Server) respondToComplaint(ctx *gin.Context) {
 	if server.ecommerceClient == nil {
@@ -299,6 +352,20 @@ func (server *Server) respondToComplaint(ctx *gin.Context) {
 // ========================= 商户/运营商：完结投诉 ===============================
 
 // completeComplaint 将投诉标记为已完结（向微信发送完结请求并更新本地状态）
+// @Summary 完结商户投诉
+// @Description 商户将投诉标记为已完结，幂等返回最新投诉状态
+// @Tags 商户投诉管理
+// @Accept json
+// @Produce json
+// @Security BearerAuth
+// @Param id path string true "投诉单ID"
+// @Success 200 {object} complaintResponse "完结后的投诉信息"
+// @Failure 401 {object} ErrorResponse "未认证"
+// @Failure 403 {object} ErrorResponse "无权限"
+// @Failure 404 {object} ErrorResponse "投诉不存在"
+// @Failure 502 {object} ErrorResponse "微信完结失败"
+// @Failure 503 {object} ErrorResponse "支付服务未配置"
+// @Router /v1/merchant/complaints/{id}/complete [post]
 // POST /v1/merchant/complaints/:id/complete （商户端）
 // POST /v1/operator/complaints/:id/complete （运营商端，路由复用同一 handler）
 func (server *Server) completeComplaint(ctx *gin.Context) {
