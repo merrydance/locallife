@@ -12,10 +12,13 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 
 - `.github/standards/engineering/README.md`
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-- `.github/standards/weapp/README.md`
+- `.github/standards/weapp/INTERACTION_STANDARDS.md`
+- `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
+- `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
 - `weapp/docs/miniprogram-prompt-system.md`
 
-Use `.github/standards/weapp/README.md` as the Mini Program standards index and `.github/standards/engineering/README.md` as the governance index; only drill into the individual standards when the active path needs the extra detail.
+Use `.github/standards/engineering/README.md` as the governance index; use the Mini Program interaction, performance, and API contract docs as the default hot path for `weapp/` work.
+When choosing components, inspect TDesign Miniprogram through the TDesign MCP component list and docs first: start from the component group that matches the task purpose, then narrow to the closest existing component before adding local UI.
 
 ## Risk Classification
 
@@ -26,37 +29,23 @@ Use `.github/standards/weapp/README.md` as the Mini Program standards index and 
 
 ## Must-Follow Rules
 
-- Prefer TDesign Miniprogram native components before adding a local component or wrapper.
-- When adding, replacing, or upgrading TDesign usage, check the official TDesign MCP or official docs first for component list, props, events, and changelog, then confirm the conclusion still matches the version pinned in `weapp/package.json`.
-- Do not use outline or border-only affordances as the default style for primary actions or status tags. Low-emphasis button and tag variants are acceptable only for secondary classification, filters, or inline auxiliary actions with clear contrast and an explicitly weaker role.
-- Use the design tokens already defined in `app.wxss`; do not hardcode one-off color, spacing, or radius values when an existing token can express the same meaning.
-- Keep business-specific styles out of global app styles unless they are genuinely shared.
-- Treat user-visible copy as product copy, not engineering terminology.
-- Any data-driven surface must define explicit state handling for first-screen loading, success, empty, and error.
-- First-screen failure must be visible inside page structure with retry; Toast-only failure handling is not complete.
-- Do not display raw backend, gateway, provider, database, or English diagnostic text directly to users.
-- A single user action should produce one primary prompt. If state change, navigation, or result page already explains the outcome, do not add another success Toast.
-- Any backend-affecting action must call the real API or be removed from the UI. Pure local `setData` is not a valid substitute for a server-side state change.
-- Treat the backend contract as the single source of truth for interface capability, field semantics, status enums, and types. Before using or changing an API, align the frontend request and response model with the real backend contract instead of guessing from existing page code.
-- High-risk actions must have deliberate duplicate-tap protection and visible in-flight state.
-- For `G2` and `G3` changes, define what happens on timeout, retry, re-entry, duplicate trigger, refresh after action, and cold-start recovery. Do not leave these behaviors implicit.
-- Keep first-screen request count controlled. Do not preload subpages, cross-role surfaces, or per-item detail requests unless the preload has explicit high-probability benefit and safe weak-network degradation.
-- Do not restyle TDesign internals for local visual preference. Default to tokens, theme props, spacing, safe-area handling, and outer layout composition; only make minimal internal overrides for verified platform or component limitations.
+- Treat the backend contract as the sole source of truth. Capabilities, fields, enums, permissions, pagination truth, and state semantics must come from the real backend contract, not from old page code or local assumptions.
+- Prefer TDesign Miniprogram first. Use the TDesign MCP component list and docs to find components by task purpose and group before building a local component or wrapper.
+- Keep page shell spacing consistent. The gap between page content and the top navigation must follow one stable pattern, left-right page gutters must stay consistent across pages, and bottom content or action areas must include safe-area handling.
+- Treat user-visible copy as product copy, and never expose raw backend, provider, database, or English diagnostic text to users.
+- Every data-driven surface must have clear first-screen states: loading, success, empty, and error. First-screen failure must stay visible in the page with retry.
+- One user action gets one clear primary prompt. Pick the clearest single channel for the context; Toast is allowed, including a moderately longer duration when that makes the result easier to notice.
+- Backend-affecting actions must call the real API, show visible in-flight state, prevent duplicate taps, and for `G2`/`G3` changes define timeout, retry, re-entry, refresh-after-action, and cold-start recovery behavior.
+- Keep first-screen requests controlled. Avoid per-item detail fan-out, unnecessary cross-role preload, and low-probability subpage prefetch.
 
 ## High-Risk Anti-Patterns
 
-- Dead routes: buttons or cards that navigate to missing pages.
-- Fake success: success toast or optimistic copy without a real backend state change.
-- Partial delivery: page UI added without connecting API, handler, state, and render branches together.
-- Client-only truth: list totals, filtered counts, or permission states inferred locally in a way that can drift from backend truth.
-- Raw server leakage: exposing untranslated backend, SQL, provider, or internal diagnostic strings directly to users.
-- Cold-start realtime gaps: websocket or event listeners that only work after a second entry, manual refresh, or status toggle.
-- First-screen request explosions: page boot logic that multiplies network requests per item and makes weak-network behavior unstable.
-- TDesign drift: replacing a suitable TDesign component with custom UI, or changing TDesign internals for non-essential visual preference.
-- Outline drift: using outline buttons or tags as a default page style, or letting border-only affordances carry primary action or key status semantics.
-- Toast-only first-screen failure: the page has no inline recovery surface.
-- Hidden duplicate submission: the request is in flight but the main action still looks idle and re-clickable.
-- False empty state: service failure or loading gap is rendered as “暂无数据”.
+- Fake truth: optimistic copy, local-only `setData`, fake permission states, or filtered totals that drift from backend truth.
+- Partial delivery: UI was added but route, API, state, permissions, or render branches are not fully wired together.
+- Invisible failure: first-screen failure only uses Toast, or service failure is rendered as empty state.
+- Hidden async risk: duplicate submission remains clickable, realtime state only recovers after a second entry, or re-entry behavior is undefined.
+- First-screen request explosion: per-item fan-out or low-value preload makes weak-network behavior unstable.
+- Raw leakage: untranslated backend, SQL, provider, or English diagnostic text reaches the user.
 
 ## Validation Defaults
 

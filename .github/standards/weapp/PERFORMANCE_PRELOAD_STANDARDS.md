@@ -2,7 +2,7 @@
 
 本文件定义 LocalLife 小程序在入口页、聚合页、首屏性能、预加载、请求预算、弱网韧性和跨角色数据拉取上的长期标准。
 
-它不负责视觉设计，也不负责接口字段语义；这些内容分别由 `.github/standards/weapp/DESIGN_SYSTEM.md` 和 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 负责。
+它不负责视觉设计，也不负责接口字段语义；视觉内容如需参考可按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`，接口字段语义由 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 负责。
 
 它也不替代页面交互标准中对回退恢复、重入恢复、首屏错误承接和异步任务结果承接的约束。本文件只裁定“拉多少、何时拉、预不预拉、失败后是否应静默退化”，而不是“页面结果应该如何向用户表达”。
 
@@ -180,5 +180,4 @@
 
 - 页面状态与恢复：看 `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - API 契约与分页真值：看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-- 视觉基础和组件模式：看 `.github/standards/weapp/DESIGN_SYSTEM.md`
 - 运行时提示与错误映射：看 `weapp/docs/miniprogram-prompt-system.md`

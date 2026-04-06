@@ -2,7 +2,7 @@
 
 本文件定义 LocalLife 小程序的页面级交互标准与任务流承接规则。
 
-它不负责 token、视觉基础和组件样式细则，这些内容由 `.github/standards/weapp/DESIGN_SYSTEM.md` 负责。
+它不负责视觉样式定义；相关内容如需参考，可按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`，但该文档不属于默认 prompt 热路径。
 
 它也不负责后端字段真值、分页真值、请求幂等语义或异步结果 contract 的最终裁定；这些内容由 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 负责。请求预算、预加载和 `onShow` / `onLoad` 重拉量控制由 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 负责。
 
@@ -129,7 +129,6 @@
 
 ## 10. 与其他文档的关系
 
-- 视觉基础和组件模式：看 `.github/standards/weapp/DESIGN_SYSTEM.md`
 - 提示与错误反馈总规则：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - 运行时提示系统接入细节：看 `weapp/docs/miniprogram-prompt-system.md`
 - API 消费契约：看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`

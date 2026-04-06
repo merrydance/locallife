@@ -71,7 +71,7 @@ Prefer this order when maintaining rules:
 
 Hot-path maintenance rule:
 
-- Broad entrypoints such as `.github/README.md`, `copilot-instructions.md`, and app-wide instruction files should prefer stable index docs like `standards/engineering/README.md` or `standards/weapp/README.md` instead of enumerating long nested reading lists.
+- Broad entrypoints such as `.github/README.md`, `copilot-instructions.md`, and app-wide instruction files should prefer stable governance indexes and the minimal active area standards set instead of enumerating long nested reading lists.
 - Use long `Read First` enumerations only in narrower instructions when a specific subtree genuinely needs extra sources beyond the area index.
 
 ## High-Value Original Sources
@@ -102,8 +102,6 @@ Web:
 Mini Program:
 
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-- `.github/standards/weapp/README.md`
-- `.github/standards/weapp/DESIGN_SYSTEM.md`
 - `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
 - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`

@@ -121,6 +121,5 @@
 ## 14. 与其他文档的关系
 
 - 页面交互和任务流：看 `.github/standards/weapp/INTERACTION_STANDARDS.md`
-- 视觉基础与组件模式：看 `.github/standards/weapp/DESIGN_SYSTEM.md`
 - 提示反馈基础规则：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
 - 小程序运行时提示接入：看 `weapp/docs/miniprogram-prompt-system.md`

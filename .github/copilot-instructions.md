@@ -104,7 +104,9 @@ Web conventions:
 Read these first when changing the Mini Program:
 
 - `.github/standards/engineering/README.md`
-- `.github/standards/weapp/README.md`
+- `.github/standards/weapp/INTERACTION_STANDARDS.md`
+- `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
+- `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
 - `weapp/docs/miniprogram-prompt-system.md`
 
 Common commands:
@@ -116,8 +118,9 @@ Common commands:
 
 Mini Program conventions:
 
-- Prefer existing TDesign-based patterns and local components before introducing new UI structure.
-- Keep business-specific styles out of global app styles unless they are truly shared.
+- Treat the backend contract as the sole source of truth for capabilities, fields, enums, and state semantics.
+- Prefer TDesign Miniprogram before introducing local UI primitives or wrappers. Use the TDesign MCP component list and docs to inspect component groups by use, then choose the closest existing component.
+- Keep page shell spacing consistent: the gap below the top navigation must follow one approved spacing pattern, horizontal page gutters must stay consistent across pages, and bottom content or actions must include safe-area handling.
 - Treat user-facing copy as product copy, not developer terminology.
 
 ## Documentation Map

@@ -20,8 +20,10 @@ This is a product and engineering constraint, not a page-level preference.
 
 - A single user action may only have one primary feedback channel.
 - Do not stack Toast, Modal, inline banner, result page, and refreshed page state to describe the same outcome twice.
-- If a page already shows the result clearly after refresh, jump, return, tab switch, or state update, do not add a success Toast.
-- Do not keep artificial delays only to let a success Toast stay visible before navigation.
+- Choose the clearest single channel for the current context.
+- “Page result” means the user can directly perceive the outcome from visible page structure or data changes, such as status text, amount updates, list mutations, badges, result blocks, steps, or the target page state after jump, return, tab switch, or refresh.
+- If structural feedback is weak, delayed, or easy to miss, one success Toast may be kept as the only primary prompt.
+- Success Toast duration may be moderately extended when needed, but do not block a natural transition only to force the Toast to linger.
 
 ### 2.2 Do Not Leak Raw Backend Errors
 
@@ -31,9 +33,9 @@ This is a product and engineering constraint, not a page-level preference.
 
 ### 2.3 Feedback Channel Selection
 
-- Toast: short, lightweight feedback for actions that stay on the current page and do not already have obvious structural feedback.
+- Toast: short or moderately extended feedback when it is the clearest single confirmation, especially for lightweight actions or subtle state changes that users could otherwise miss.
 - Modal: confirmation, explanation, authorization guidance, destructive actions, or next-step instructions.
-- Inline/page state: first-screen failure, refresh failure, weak-network retry, persistent action results, or any result that should remain visible after the action completes.
+- Inline/page state: first-screen failure, refresh failure, weak-network retry, persistent action results, or any result that should remain visible and revisitable after the action completes.
 - Loading: processing only. Loading must not also carry final business meaning.
 
 ### 2.4 Do Not Stack Banner-Like Surfaces
@@ -43,20 +45,19 @@ This is a product and engineering constraint, not a page-level preference.
 - For Mini Program, do not use banner-style surfaces as the default primary feedback channel for transient action results.
 - If a persistent result must remain visible, prefer a dedicated page state or result block over temporary banner stacking.
 
-### 2.5 Persistent State Beats Ephemeral Toast
+### 2.5 Lasting Visibility Needs Lasting State
 
-- If the page exposes the result through status text, amount changes, list mutations, steps, banners, badges, tabs, or result pages, prefer that structure over success Toast.
-- If the action result should still be visible after several seconds, use inline state or a result page, not a disappearing Toast.
+- If the result should still be visible after several seconds or be re-checked later, use inline state or a result page instead of relying only on Toast.
 - If an operation is asynchronous and the final outcome will sync later, at most show one short acknowledgement such as “已提交，稍后同步”, then let page state take over.
 
 ## 3. Success Feedback Rules
 
-### 3.1 Keep Success Toast Only When All Conditions Hold
+### 3.1 Use Success Toast When It Is The Clearest Single Prompt
 
-- The user stays on the current page.
-- The page does not already show a strong visual result.
-- The action is lightweight or transient.
+- Only one primary prompt is shown.
+- The Toast is the clearest way to confirm the result in the current context, or structural feedback would be too subtle or easy to miss.
 - The feedback fits within one short sentence.
+- The duration is long enough to be noticed, but not so long that it turns into flow-blocking noise.
 
 Typical keep cases:
 
@@ -64,13 +65,14 @@ Typical keep cases:
 - copy success
 - send test command
 - call waiter
+- save or apply a subtle state change on the current page when the updated structure is not obvious enough on its own
 
-### 3.2 Remove Success Toast When Any of These Happens
+### 3.2 Replace Success Toast With Another Single Prompt When Any of These Happens
 
-- the action immediately navigates, redirects, returns, or switches tabs
-- the target page is itself a result surface
-- the current page immediately reloads and the updated data already explains the result
-- the current page already has an inline banner, result block, stepper, balance card, or status area that updates after success
+- a Modal, result page, or inline state already fully explains the outcome
+- the result must remain visible for several seconds or be revisited later
+- immediate navigation would make the Toast effectively invisible or misleading
+- multiple prompt surfaces would otherwise describe the same outcome
 
 Typical remove cases:
 
@@ -98,7 +100,7 @@ Typical remove cases:
 Use this checklist in frontend PR review:
 
 - Does one action produce only one primary prompt?
-- Is any success Toast redundant with navigation, refresh, result page, or visible state change?
+- Is any success Toast duplicated by another equally clear prompt surface?
 - Can the user see any raw backend or English diagnostic text?
 - Does first-screen failure have inline recovery instead of Toast-only handling?
 - Are destructive or confirmatory flows using Modal rather than Toast?
@@ -108,9 +110,9 @@ Use this checklist in frontend PR review:
 
 ### 6.1 Mini Program
 
-- Follow this standard together with the Mini Program design and prompt docs.
+- Follow this standard together with the Mini Program interaction and prompt docs.
 - Use shared utilities for error mapping and prompt dedup where available.
-- Prefer dedicated page states or result blocks over banner-style prompts when the page already updates structurally.
+- Prefer whichever single prompt channel users can perceive most clearly in context; for long-lived outcomes, use dedicated page states or result blocks.
 - For transient action feedback in Mini Program, default to Toast or Modal instead of top-banner or inline-banner stacking.
 
 ### 6.2 Web

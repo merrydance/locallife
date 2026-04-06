@@ -97,11 +97,7 @@ Use `.github/standards/engineering/README.md` as the stable governance index, th
 - Web: check that new data or status fields are fully threaded through page state, API calls, rendering states, and user-visible copy.
 - Web: flag client-only permission checks, sensitive data exposure in page state or rendered fields, unsafe rendering of user content, and dangerous actions without proper confirmation or disabled states.
 - Web: if dangerous actions, payout states, private materials, or moderation-sensitive fields changed but no user-visible confirmation or failure-state evidence is shown, call out the gap.
-- Mini Program: check that new patterns align with `.github/standards/weapp/DESIGN_SYSTEM.md` and do not leak business styles into shared global styles.
 - Mini Program: check that new fields or actions are wired through page state, service calls, event handlers, and user-facing states.
+- Mini Program: check that page shell spacing stays consistent, including the content gap below top navigation, consistent left-right page gutters, and bottom safe-area handling.
 - Mini Program: flag client-only permission assumptions, exposed private materials or internal fields, unsafe weak-network fallbacks, and dangerous operations without clear confirmation or failure handling.
 - Mini Program: when payment, login recovery, realtime state, or weak-network flows are touched, call out any unverified cold-start, retry, duplicate-tap, or re-entry behavior explicitly.
-- Mini Program: treat shared UI system drift as a valid finding when the changed scope no longer looks or behaves like one coherent system; do not wave it away as harmless style variance.
-- Mini Program: flag popup forms whose bottom actions remain inside scroll content, whose dual actions are not equal-width block buttons, or whose bottom actions still render as visually small content-width buttons.
-- Mini Program: flag default use of outline-style buttons or tags where the standards require filled or default variants, unless the diff shows an explicit documented exception.
-- Mini Program: flag non-essential overrides of TDesign internal classes, structure, states, or visuals when the same result should have been achieved with tokens, theme props, spacing, safe-area handling, or approved shared shells.
