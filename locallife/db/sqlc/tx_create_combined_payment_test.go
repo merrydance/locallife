@@ -153,6 +153,40 @@ func TestCreateCombinedPaymentTx_UsesRemainingPayableAmount(t *testing.T) {
 	require.Equal(t, int64(2000), amountByOrderID[order2.ID])
 }
 
+func TestCreateCombinedPaymentTx_CopiesReservationIDFromOrder(t *testing.T) {
+	store := testStore
+	user := createRandomUser(t)
+	owner := createRandomUser(t)
+	merchant := createRandomMerchantWithOwner(t, owner.ID)
+	_ = createRandomMerchantPaymentConfig(t, merchant)
+	table := createRandomRoom(t, merchant.ID)
+	reservation := createRandomReservation(t, user.ID, merchant.ID, table.ID, "confirmed")
+
+	order, err := store.CreateOrder(context.Background(), CreateOrderParams{
+		OrderNo:       util.RandomString(20),
+		UserID:        user.ID,
+		MerchantID:    merchant.ID,
+		OrderType:     "dine_in",
+		TableID:       pgtype.Int8{Int64: table.ID, Valid: true},
+		ReservationID: pgtype.Int8{Int64: reservation.ID, Valid: true},
+		Subtotal:      1200,
+		TotalAmount:   1200,
+		Status:        "pending",
+	})
+	require.NoError(t, err)
+
+	result, err := store.CreateCombinedPaymentTx(context.Background(), CreateCombinedPaymentTxParams{
+		UserID:            user.ID,
+		OrderIDs:          []int64{order.ID},
+		CombineOutTradeNo: "CP" + util.RandomString(10),
+		ExpiresAt:         time.Now().Add(time.Hour),
+	})
+	require.NoError(t, err)
+	require.Len(t, result.PaymentOrders, 1)
+	require.True(t, result.PaymentOrders[0].ReservationID.Valid)
+	require.Equal(t, reservation.ID, result.PaymentOrders[0].ReservationID.Int64)
+}
+
 func TestCreateCombinedPaymentTx_ReturnsPendingPaymentConflict(t *testing.T) {
 	store := testStore
 	user := createRandomUser(t)

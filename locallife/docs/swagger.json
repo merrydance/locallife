@@ -20590,7 +20590,7 @@
                         "BearerAuth": []
                     }
                 ],
-                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n**兼容字段：**\n- `payment_type` 仅作为兼容保留字段，可不传。\n- 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通合单支付。\n- 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
+                "description": "为订单或预定创建支付订单，当前主路径会按业务类型自动选择真实支付链路。\n\n**兼容字段：**\n- `payment_type` 仅作为兼容保留字段，可不传。\n- 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通单笔支付。\n- 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。\n\n**业务类型：**\n- order: 订单支付\n- reservation: 预定押金\n\n**幂等性：** 如果已存在待支付的支付订单，将直接返回该订单。\n\n**安全限制：**\n- 订单必须属于当前用户\n- 订单必须处于pending状态",
                 "consumes": [
                     "application/json"
                 ],

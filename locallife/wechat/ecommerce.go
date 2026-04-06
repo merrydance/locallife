@@ -39,9 +39,13 @@ const (
 	capitalBankBranchesURL         = "/v3/capital/capitallhh/banks/%s/branches"
 
 	// 合单支付（收付通）
-	ecommerceCombineOrderURL = "/v3/combine-transactions/jsapi"
-	ecommerceQueryCombineURL = "/v3/combine-transactions/out-trade-no/%s"
-	ecommerceCloseCombineURL = "/v3/combine-transactions/out-trade-no/%s/close"
+	ecommercePartnerJSAPIOrderURL        = "/v3/pay/partner/transactions/jsapi"
+	ecommercePartnerQueryByIDURL         = "/v3/pay/partner/transactions/id/%s?sp_mchid=%s&sub_mchid=%s"
+	ecommercePartnerQueryByOutTradeNoURL = "/v3/pay/partner/transactions/out-trade-no/%s?sp_mchid=%s&sub_mchid=%s"
+	ecommercePartnerCloseOrderURL        = "/v3/pay/partner/transactions/out-trade-no/%s/close"
+	ecommerceCombineOrderURL             = "/v3/combine-transactions/jsapi"
+	ecommerceQueryCombineURL             = "/v3/combine-transactions/out-trade-no/%s"
+	ecommerceCloseCombineURL             = "/v3/combine-transactions/out-trade-no/%s/close"
 
 	// 分账
 	profitSharingURL            = "/v3/ecommerce/profitsharing/orders"
@@ -87,6 +91,95 @@ type EcommerceClientConfig struct {
 	SpMchName           string // 服务商名称（可选）
 }
 
+// PartnerJSAPIOrderRequest 服务商模式单笔 JSAPI 下单请求。
+type PartnerJSAPIOrderRequest struct {
+	SubMchID       string
+	SubAppID       string
+	Description    string
+	OutTradeNo     string
+	ExpireTime     time.Time
+	Attach         string
+	GoodsTag       string
+	TotalAmount    int64
+	Currency       string
+	NotifyURL      string
+	PayerOpenID    string
+	PayerSubOpenID string
+	PayerClientIP  string
+	DeviceID       string
+	ProfitSharing  bool
+	SupportFapiao  *bool
+}
+
+// PartnerJSAPIOrderResponse 服务商模式单笔 JSAPI 下单响应。
+type PartnerJSAPIOrderResponse struct {
+	PrepayID string `json:"prepay_id"`
+}
+
+// PartnerOrderPayerInfo 服务商模式支付者信息。
+type PartnerOrderPayerInfo struct {
+	SpOpenID  string `json:"sp_openid,omitempty"`
+	SubOpenID string `json:"sub_openid,omitempty"`
+}
+
+// PartnerOrderSceneInfo 服务商模式场景信息。
+type PartnerOrderSceneInfo struct {
+	PayerClientIP string `json:"payer_client_ip,omitempty"`
+	DeviceID      string `json:"device_id,omitempty"`
+}
+
+// PartnerOrderQueryResponse 服务商模式单笔支付查询响应。
+type PartnerOrderQueryResponse struct {
+	SpAppID        string                `json:"sp_appid"`
+	SpMchID        string                `json:"sp_mchid"`
+	SubAppID       string                `json:"sub_appid,omitempty"`
+	SubMchID       string                `json:"sub_mchid"`
+	OutTradeNo     string                `json:"out_trade_no"`
+	TransactionID  string                `json:"transaction_id,omitempty"`
+	TradeType      string                `json:"trade_type,omitempty"`
+	TradeState     string                `json:"trade_state"`
+	TradeStateDesc string                `json:"trade_state_desc"`
+	BankType       string                `json:"bank_type,omitempty"`
+	Attach         string                `json:"attach,omitempty"`
+	SuccessTime    string                `json:"success_time,omitempty"`
+	Payer          PartnerOrderPayerInfo `json:"payer,omitempty"`
+	Amount         struct {
+		Total         int64  `json:"total"`
+		PayerTotal    int64  `json:"payer_total"`
+		Currency      string `json:"currency"`
+		PayerCurrency string `json:"payer_currency"`
+	} `json:"amount,omitempty"`
+	SceneInfo *struct {
+		DeviceID string `json:"device_id"`
+	} `json:"scene_info,omitempty"`
+}
+
+// PartnerPaymentNotificationResource 服务商模式单笔支付成功回调资源。
+type PartnerPaymentNotificationResource struct {
+	SpAppID        string                `json:"sp_appid"`
+	SpMchID        string                `json:"sp_mchid"`
+	SubAppID       string                `json:"sub_appid,omitempty"`
+	SubMchID       string                `json:"sub_mchid"`
+	OutTradeNo     string                `json:"out_trade_no"`
+	TransactionID  string                `json:"transaction_id"`
+	TradeType      string                `json:"trade_type"`
+	TradeState     string                `json:"trade_state"`
+	TradeStateDesc string                `json:"trade_state_desc"`
+	BankType       string                `json:"bank_type"`
+	Attach         string                `json:"attach,omitempty"`
+	SuccessTime    string                `json:"success_time"`
+	Payer          PartnerOrderPayerInfo `json:"payer"`
+	Amount         struct {
+		Total         int64  `json:"total"`
+		PayerTotal    int64  `json:"payer_total"`
+		Currency      string `json:"currency"`
+		PayerCurrency string `json:"payer_currency"`
+	} `json:"amount"`
+	SceneInfo *struct {
+		DeviceID string `json:"device_id"`
+	} `json:"scene_info,omitempty"`
+}
+
 // NewEcommerceClient 创建平台收付通客户端
 func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 	baseClient, err := NewPaymentClient(cfg.PaymentClientConfig)
@@ -127,6 +220,144 @@ func (c *EcommerceClient) GetSpAppID() string {
 // GetSpMchName 获取服务商名称
 func (c *EcommerceClient) GetSpMchName() string {
 	return c.spMchName
+}
+
+// CreatePartnerJSAPIOrder 创建服务商模式单笔 JSAPI 订单。
+func (c *EcommerceClient) CreatePartnerJSAPIOrder(ctx context.Context, req *PartnerJSAPIOrderRequest) (*PartnerJSAPIOrderResponse, *JSAPIPayParams, error) {
+	if req == nil {
+		return nil, nil, fmt.Errorf("create partner jsapi order: request is nil")
+	}
+	if req.SubMchID == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: sub_mchid is required")
+	}
+	if req.Description == "" || req.OutTradeNo == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: description and out_trade_no are required")
+	}
+	if req.TotalAmount <= 0 {
+		return nil, nil, fmt.Errorf("create partner jsapi order: total amount must be positive")
+	}
+	if req.PayerOpenID == "" && req.PayerSubOpenID == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: sp_openid or sub_openid is required")
+	}
+	if req.PayerSubOpenID != "" && req.SubAppID == "" {
+		return nil, nil, fmt.Errorf("create partner jsapi order: sub_appid is required when sub_openid is provided")
+	}
+
+	currency := req.Currency
+	if currency == "" {
+		currency = "CNY"
+	}
+	notifyURL := req.NotifyURL
+	if notifyURL == "" {
+		notifyURL = c.notifyURL
+	}
+	body := map[string]interface{}{
+		"sp_appid":     c.spAppID,
+		"sp_mchid":     c.spMchID,
+		"sub_mchid":    req.SubMchID,
+		"description":  req.Description,
+		"out_trade_no": req.OutTradeNo,
+		"notify_url":   notifyURL,
+		"amount": map[string]interface{}{
+			"total":    req.TotalAmount,
+			"currency": currency,
+		},
+		"payer": map[string]interface{}{},
+		"settle_info": map[string]interface{}{
+			"profit_sharing": req.ProfitSharing,
+		},
+	}
+	if !req.ExpireTime.IsZero() {
+		body["time_expire"] = req.ExpireTime.Format(time.RFC3339)
+	}
+	if req.SubAppID != "" {
+		body["sub_appid"] = req.SubAppID
+	}
+	if req.Attach != "" {
+		body["attach"] = req.Attach
+	}
+	if req.GoodsTag != "" {
+		body["goods_tag"] = req.GoodsTag
+	}
+	if req.SupportFapiao != nil {
+		body["support_fapiao"] = *req.SupportFapiao
+	}
+	payer := body["payer"].(map[string]interface{})
+	if req.PayerOpenID != "" {
+		payer["sp_openid"] = req.PayerOpenID
+	}
+	if req.PayerSubOpenID != "" {
+		payer["sub_openid"] = req.PayerSubOpenID
+	}
+	if req.PayerClientIP != "" || req.DeviceID != "" {
+		sceneInfo := map[string]interface{}{}
+		if req.PayerClientIP != "" {
+			sceneInfo["payer_client_ip"] = req.PayerClientIP
+		}
+		if req.DeviceID != "" {
+			sceneInfo["device_id"] = req.DeviceID
+		}
+		body["scene_info"] = sceneInfo
+	}
+
+	respBody, err := c.doRequest(ctx, http.MethodPost, ecommercePartnerJSAPIOrderURL, body)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create partner jsapi order: %w", err)
+	}
+
+	var resp PartnerJSAPIOrderResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	payParams, err := c.generateJSAPIPayParams(resp.PrepayID)
+	if err != nil {
+		return nil, nil, fmt.Errorf("generate pay params: %w", err)
+	}
+
+	return &resp, payParams, nil
+}
+
+// QueryPartnerOrderByTransactionID 通过微信支付订单号查询服务商模式单笔订单。
+func (c *EcommerceClient) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*PartnerOrderQueryResponse, error) {
+	respBody, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByIDURL, transactionID, c.spMchID, subMchID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("query partner order by transaction id: %w", err)
+	}
+
+	var resp PartnerOrderQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// QueryPartnerOrderByOutTradeNo 通过商户订单号查询服务商模式单笔订单。
+func (c *EcommerceClient) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*PartnerOrderQueryResponse, error) {
+	respBody, err := c.doRequest(ctx, http.MethodGet, fmt.Sprintf(ecommercePartnerQueryByOutTradeNoURL, outTradeNo, c.spMchID, subMchID), nil)
+	if err != nil {
+		return nil, fmt.Errorf("query partner order by out trade no: %w", err)
+	}
+
+	var resp PartnerOrderQueryResponse
+	if err := json.Unmarshal(respBody, &resp); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &resp, nil
+}
+
+// ClosePartnerOrder 关闭服务商模式单笔订单。
+func (c *EcommerceClient) ClosePartnerOrder(ctx context.Context, outTradeNo, subMchID string) error {
+	body := map[string]interface{}{
+		"sp_mchid":  c.spMchID,
+		"sub_mchid": subMchID,
+	}
+	if _, err := c.doRequest(ctx, http.MethodPost, fmt.Sprintf(ecommercePartnerCloseOrderURL, outTradeNo), body); err != nil {
+		return fmt.Errorf("close partner order: %w", err)
+	}
+	return nil
 }
 
 // ==================== 二级商户进件 ====================
@@ -1711,6 +1942,25 @@ func (c *EcommerceClient) DecryptCombinePaymentNotification(notification *Paymen
 	}
 
 	var result CombinePaymentNotification
+	if err := json.Unmarshal(plaintext, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal notification: %w", err)
+	}
+
+	return &result, nil
+}
+
+// DecryptPartnerPaymentNotification 解密服务商模式单笔支付通知。
+func (c *EcommerceClient) DecryptPartnerPaymentNotification(notification *PaymentNotification) (*PartnerPaymentNotificationResource, error) {
+	plaintext, err := c.decryptAESGCM(
+		notification.Resource.Nonce,
+		notification.Resource.Ciphertext,
+		notification.Resource.AssociatedData,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt notification: %w", err)
+	}
+
+	var result PartnerPaymentNotificationResource
 	if err := json.Unmarshal(plaintext, &result); err != nil {
 		return nil, fmt.Errorf("unmarshal notification: %w", err)
 	}

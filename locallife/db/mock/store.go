@@ -3858,6 +3858,21 @@ func (mr *MockStoreMockRecorder) CreateOrderTx(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateOrderTx", reflect.TypeOf((*MockStore)(nil).CreateOrderTx), ctx, arg)
 }
 
+// CreatePartnerPaymentTx mocks base method.
+func (m *MockStore) CreatePartnerPaymentTx(ctx context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePartnerPaymentTx", ctx, arg)
+	ret0, _ := ret[0].(db.CreatePartnerPaymentTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreatePartnerPaymentTx indicates an expected call of CreatePartnerPaymentTx.
+func (mr *MockStoreMockRecorder) CreatePartnerPaymentTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePartnerPaymentTx", reflect.TypeOf((*MockStore)(nil).CreatePartnerPaymentTx), ctx, arg)
+}
+
 // CreatePaymentOrder mocks base method.
 func (m *MockStore) CreatePaymentOrder(ctx context.Context, arg db.CreatePaymentOrderParams) (db.PaymentOrder, error) {
 	m.ctrl.T.Helper()

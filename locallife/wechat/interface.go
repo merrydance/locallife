@@ -169,6 +169,18 @@ type EcommerceClientInterface interface {
 	ListBankBranches(ctx context.Context, bankAliasCode string, cityCode, offset, limit int) (*CapitalBranchListResponse, error)
 
 	// ==================== 合单支付 ====================
+	// CreatePartnerJSAPIOrder 创建服务商模式单笔 JSAPI 订单（平台收付通）
+	CreatePartnerJSAPIOrder(ctx context.Context, req *PartnerJSAPIOrderRequest) (*PartnerJSAPIOrderResponse, *JSAPIPayParams, error)
+
+	// QueryPartnerOrderByTransactionID 通过微信支付订单号查询服务商模式单笔订单
+	QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*PartnerOrderQueryResponse, error)
+
+	// QueryPartnerOrderByOutTradeNo 通过商户订单号查询服务商模式单笔订单
+	QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*PartnerOrderQueryResponse, error)
+
+	// ClosePartnerOrder 关闭服务商模式单笔订单
+	ClosePartnerOrder(ctx context.Context, outTradeNo, subMchID string) error
+
 	// CreateCombineOrder 创建合单订单（平台收付通）
 	CreateCombineOrder(ctx context.Context, req *CombineOrderRequest) (*CombineOrderResponse, *JSAPIPayParams, error)
 
@@ -226,6 +238,9 @@ type EcommerceClientInterface interface {
 	QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*EcommerceWithdrawResponse, error)
 
 	// ==================== 通知解密 ====================
+	// DecryptPartnerPaymentNotification 解密服务商模式单笔支付通知
+	DecryptPartnerPaymentNotification(notification *PaymentNotification) (*PartnerPaymentNotificationResource, error)
+
 	// DecryptCombinePaymentNotification 解密合单支付通知
 	DecryptCombinePaymentNotification(notification *PaymentNotification) (*CombinePaymentNotification, error)
 

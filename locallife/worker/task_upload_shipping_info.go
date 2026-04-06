@@ -76,7 +76,25 @@ func (processor *RedisTaskProcessor) ProcessTaskUploadShippingInfo(ctx context.C
 	switch po.PaymentType {
 	case "profit_sharing":
 		if !po.CombinedPaymentID.Valid {
-			log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: profit_sharing order missing combined_payment_id, skip")
+			transactionID := ""
+			if po.TransactionID.Valid {
+				transactionID = po.TransactionID.String
+			}
+			if transactionID == "" && po.OutTradeNo == "" {
+				log.Warn().Int64("payment_order_id", po.ID).Msg("shipping upload: partner profit_sharing order missing transaction_id and out_trade_no, skip")
+				return nil
+			}
+
+			if err := processor.wechatClient.UploadShippingInfo(ctx, &wechat.UploadShippingInfoRequest{
+				TransactionID: transactionID,
+				OutTradeNo:    po.OutTradeNo,
+				PayerOpenID:   user.WechatOpenid,
+				NotifyURL:     notifyURL,
+				UploadTime:    now,
+			}); err != nil {
+				return fmt.Errorf("upload_shipping_info for partner profit_sharing failed: %w", err)
+			}
+			log.Info().Int64("order_id", payload.OrderID).Msg("upload_shipping_info for partner profit_sharing ok")
 			return nil
 		}
 

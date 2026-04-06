@@ -182,7 +182,7 @@ func sleepWithContext(ctx context.Context, d time.Duration) bool {
 // @Description
 // @Description **兼容字段：**
 // @Description - `payment_type` 仅作为兼容保留字段，可不传。
-// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通合单支付。
+// @Description - 对 `order` 和 `reservation` 主支付，系统已统一走平台收付通单笔支付。
 // @Description - 旧客户端即使传入 `native` 或 `miniprogram`，也不会再改变底层支付物理链路。
 // @Description
 // @Description **业务类型：**

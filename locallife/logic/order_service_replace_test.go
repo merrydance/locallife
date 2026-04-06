@@ -15,9 +15,9 @@ import (
 )
 
 type replaceOrderTaskSchedulerStub struct {
-	combinedOutTradeNo string
-	at                 time.Time
-	called             bool
+	paymentOrderNo string
+	at             time.Time
+	called         bool
 }
 
 type replaceOrderNormalizerStub struct{}
@@ -31,13 +31,13 @@ func (s *replaceOrderTaskSchedulerStub) ScheduleOrderPaymentTimeout(ctx context.
 }
 
 func (s *replaceOrderTaskSchedulerStub) SchedulePaymentOrderTimeout(ctx context.Context, paymentOrderNo string, at time.Time) error {
+	s.called = true
+	s.paymentOrderNo = paymentOrderNo
+	s.at = at
 	return nil
 }
 
 func (s *replaceOrderTaskSchedulerStub) ScheduleCombinedPaymentOrderTimeout(ctx context.Context, combineOutTradeNo string, at time.Time) error {
-	s.called = true
-	s.combinedOutTradeNo = combineOutTradeNo
-	s.at = at
 	return nil
 }
 
@@ -57,7 +57,7 @@ func (s *replaceOrderTaskSchedulerStub) ScheduleOrderPrint(ctx context.Context, 
 	return nil
 }
 
-func TestOrderServiceReplaceOrderSchedulesCombinedTimeout(t *testing.T) {
+func TestOrderServiceReplaceOrderSchedulesPaymentTimeout(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
 
@@ -93,16 +93,16 @@ func TestOrderServiceReplaceOrderSchedulesCombinedTimeout(t *testing.T) {
 	session := db.DiningSession{ID: 77, UserID: userID}
 	dish := db.Dish{ID: dishID, MerchantID: merchantID, Name: "Noodles", Price: 1500, IsOnline: true, IsAvailable: true}
 	paymentOrder := db.PaymentOrder{
-		ID:                222,
-		UserID:            userID,
-		OrderID:           pgtype.Int8{Int64: 111, Valid: true},
-		PaymentType:       "profit_sharing",
-		BusinessType:      "order",
-		Amount:            500,
-		OutTradeNo:        "CP111202603230001",
-		Status:            "pending",
-		CombinedPaymentID: pgtype.Int8{Int64: 3333, Valid: true},
-		ExpiresAt:         pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ID:            222,
+		UserID:        userID,
+		OrderID:       pgtype.Int8{Int64: 111, Valid: true},
+		PaymentType:   "profit_sharing",
+		BusinessType:  "order",
+		Amount:        500,
+		OutTradeNo:    "RO111202603230001",
+		Status:        "pending",
+		ExpiresAt:     pgtype.Timestamptz{Time: expiresAt, Valid: true},
+		ReservationID: pgtype.Int8{Int64: reservationID, Valid: true},
 	}
 
 	store.EXPECT().GetOrderForUpdate(gomock.Any(), orderID).Times(1).Return(oldOrder, nil)
@@ -118,6 +118,7 @@ func TestOrderServiceReplaceOrderSchedulesCombinedTimeout(t *testing.T) {
 			OrderType:         arg.CreateOrderParams.OrderType,
 			Status:            arg.CreateOrderParams.Status,
 			FulfillmentStatus: arg.CreateOrderParams.FulfillmentStatus,
+			ReservationID:     arg.CreateOrderParams.ReservationID,
 			Subtotal:          arg.CreateOrderParams.Subtotal,
 			DiscountAmount:    arg.CreateOrderParams.DiscountAmount,
 			TotalAmount:       arg.CreateOrderParams.TotalAmount,
@@ -125,25 +126,21 @@ func TestOrderServiceReplaceOrderSchedulesCombinedTimeout(t *testing.T) {
 		return db.ReplaceOrderTxResult{NewOrder: newOrder}, nil
 	})
 	store.EXPECT().GetUser(gomock.Any(), userID).Times(1).Return(db.User{ID: userID, WechatOpenid: "openid-1"}, nil)
-	store.EXPECT().CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).Times(1).Return(db.CreateCombinedPaymentTxResult{
-		CombinedPaymentOrder: db.CombinedPaymentOrder{ID: 3333, UserID: userID, CombineOutTradeNo: "RC123"},
-		PaymentOrders:        []db.PaymentOrder{paymentOrder},
-		OrderInfos: []db.CombinedPaymentOrderInfo{{
-			Order:         db.Order{ID: 111, MerchantID: merchantID, TotalAmount: 500},
-			PaymentOrder:  paymentOrder,
-			PaymentConfig: db.MerchantPaymentConfig{MerchantID: merchantID, SubMchID: "1900000109", Status: "active"},
-			Merchant:      db.Merchant{ID: merchantID, Name: "Test Merchant"},
-		}},
-	}, nil)
-	ecommerceClient.EXPECT().CreateCombineOrder(gomock.Any(), gomock.Any()).Times(1).Return(&wechat.CombineOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil)
+	store.EXPECT().GetMerchant(gomock.Any(), merchantID).Times(1).Return(db.Merchant{ID: merchantID, Name: "Test Merchant"}, nil)
+	store.EXPECT().CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.CreatePartnerPaymentTxParams) (db.CreatePartnerPaymentTxResult, error) {
+		require.Equal(t, reservationID, arg.ReservationID)
+		return db.CreatePartnerPaymentTxResult{PaymentOrder: paymentOrder, SubMchID: "1900000109"}, nil
+	})
+	ecommerceClient.EXPECT().CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+		require.True(t, req.ProfitSharing)
+		return &wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay-replace-1"}, &wechat.JSAPIPayParams{}, nil
+	})
 	store.EXPECT().UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).Times(1).DoAndReturn(func(_ context.Context, arg db.UpdatePaymentOrderPrepayIdParams) (db.PaymentOrder, error) {
 		updated := paymentOrder
 		updated.PrepayID = arg.PrepayID
 		return updated, nil
 	})
-	store.EXPECT().UpdateCombinedPaymentOrderPrepay(gomock.Any(), gomock.Any()).Times(1).Return(db.CombinedPaymentOrder{}, nil)
 	store.EXPECT().GetPaymentOrder(gomock.Any(), int64(222)).Times(1).Return(paymentOrder, nil)
-	store.EXPECT().GetCombinedPaymentOrder(gomock.Any(), int64(3333)).Times(1).Return(db.CombinedPaymentOrder{ID: 3333, CombineOutTradeNo: "RC123"}, nil)
 
 	service := NewOrderService(store, nil, nil, nil, taskScheduler, replaceOrderNormalizerStub{}, nil, ecommerceClient, nil, nil, nil)
 	result, err := service.ReplaceOrder(context.Background(), ReplaceOrderInput{
@@ -157,6 +154,6 @@ func TestOrderServiceReplaceOrderSchedulesCombinedTimeout(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result.PaymentOrderID)
 	require.True(t, taskScheduler.called)
-	require.Equal(t, "RC123", taskScheduler.combinedOutTradeNo)
+	require.Equal(t, "RO111202603230001", taskScheduler.paymentOrderNo)
 	require.True(t, taskScheduler.at.Equal(expiresAt))
 }

@@ -81,14 +81,6 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 	paymentOrder.Amount = order.TotalAmount
 	paymentOrder.PaymentType = PaymentTypeProfitShare
 	paymentOrder.CombinedPaymentID = pgtype.Int8{Int64: util.RandomInt(1, 1000), Valid: true}
-	combinedPaymentOrder := db.CombinedPaymentOrder{
-		ID:                paymentOrder.CombinedPaymentID.Int64,
-		UserID:            user.ID,
-		CombineOutTradeNo: "OC" + util.RandomString(21),
-		TotalAmount:       order.TotalAmount,
-		Status:            PaymentStatusPending,
-		ExpiresAt:         paymentOrder.ExpiresAt,
-	}
 	payParams := &wechat.JSAPIPayParams{
 		TimeStamp: "1234567890",
 		NonceStr:  "nonce",
@@ -130,27 +122,22 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					Return(user, nil)
 
 				store.EXPECT().
-					CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
-					Return(db.CreateCombinedPaymentTxResult{
-						CombinedPaymentOrder: combinedPaymentOrder,
-						PaymentOrders:        []db.PaymentOrder{paymentOrder},
-						OrderInfos: []db.CombinedPaymentOrderInfo{{
-							Order:        order,
-							PaymentOrder: paymentOrder,
-							PaymentConfig: db.MerchantPaymentConfig{
-								MerchantID: merchant.ID,
-								SubMchID:   "1900000109",
-								Status:     "active",
-							},
-							Merchant: merchant,
-						}},
+					Return(merchant, nil)
+
+				store.EXPECT().
+					CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreatePartnerPaymentTxResult{
+						PaymentOrder: paymentOrder,
+						SubMchID:     "1900000109",
 					}, nil)
 
 				ecommerceClient.EXPECT().
-					CreateCombineOrder(gomock.Any(), gomock.Any()).
+					CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.CombineOrderResponse{PrepayID: "wx123"}, payParams, nil)
+					Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
 
 				store.EXPECT().
 					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
@@ -160,11 +147,6 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						updated.PrepayID = arg.PrepayID
 						return updated, nil
 					})
-
-				store.EXPECT().
-					UpdateCombinedPaymentOrderPrepay(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(combinedPaymentOrder, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -303,9 +285,13 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						Times(1).
 						Return(user, nil),
 					store.EXPECT().
-						CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+						GetMerchant(gomock.Any(), merchant.ID).
 						Times(1).
-						Return(db.CreateCombinedPaymentTxResult{}, db.ErrOrderPendingPaymentConflict),
+						Return(merchant, nil),
+					store.EXPECT().
+						CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).
+						Times(1).
+						Return(db.CreatePartnerPaymentTxResult{}, db.ErrOrderPendingPaymentConflict),
 					store.EXPECT().
 						GetLatestPaymentOrderByOrder(gomock.Any(), gomock.Any()).
 						Times(1).
@@ -368,27 +354,22 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 					Return(user, nil)
 
 				store.EXPECT().
-					CreateCombinedPaymentTx(gomock.Any(), gomock.Any()).
+					GetMerchant(gomock.Any(), merchant.ID).
 					Times(1).
-					Return(db.CreateCombinedPaymentTxResult{
-						CombinedPaymentOrder: combinedPaymentOrder,
-						PaymentOrders:        []db.PaymentOrder{paymentOrder},
-						OrderInfos: []db.CombinedPaymentOrderInfo{{
-							Order:        order,
-							PaymentOrder: paymentOrder,
-							PaymentConfig: db.MerchantPaymentConfig{
-								MerchantID: merchant.ID,
-								SubMchID:   "1900000109",
-								Status:     "active",
-							},
-							Merchant: merchant,
-						}},
+					Return(merchant, nil)
+
+				store.EXPECT().
+					CreatePartnerPaymentTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.CreatePartnerPaymentTxResult{
+						PaymentOrder: paymentOrder,
+						SubMchID:     "1900000109",
 					}, nil)
 
 				ecommerceClient.EXPECT().
-					CreateCombineOrder(gomock.Any(), gomock.Any()).
+					CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(&wechat.CombineOrderResponse{PrepayID: "wx123"}, payParams, nil)
+					Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "wx123"}, payParams, nil)
 
 				store.EXPECT().
 					UpdatePaymentOrderPrepayId(gomock.Any(), gomock.Any()).
@@ -398,11 +379,6 @@ func TestCreatePaymentOrderAPI(t *testing.T) {
 						updated.PrepayID = arg.PrepayID
 						return updated, nil
 					})
-
-				store.EXPECT().
-					UpdateCombinedPaymentOrderPrepay(gomock.Any(), gomock.Any()).
-					Times(1).
-					Return(combinedPaymentOrder, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)

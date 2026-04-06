@@ -145,7 +145,7 @@ func (store *SQLStore) CreateCombinedPaymentTx(ctx context.Context, arg CreateCo
 
 			po, err := q.CreatePaymentOrder(ctx, CreatePaymentOrderParams{
 				OrderID:       pgtype.Int8{Int64: info.Order.ID, Valid: true},
-				ReservationID: pgtype.Int8{Valid: false},
+				ReservationID: info.Order.ReservationID,
 				UserID:        arg.UserID,
 				PaymentType:   "profit_sharing", // 合单支付走收付通渠道，子单必须标记为 profit_sharing
 				BusinessType:  "order",

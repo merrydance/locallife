@@ -2,6 +2,7 @@ package util
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -50,6 +51,8 @@ type Config struct {
 	WechatPayHTTPTimeout                   time.Duration `mapstructure:"WECHAT_PAY_HTTP_TIMEOUT"`                      // HTTP请求超时时间
 	WechatEcommerceSpMchID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_MCHID"`                    // 收付通服务商商户号
 	WechatEcommerceSpAppID                 string        `mapstructure:"WECHAT_ECOMMERCE_SP_APPID"`                    // 收付通服务商 AppID
+	WechatEcommerceNotifyURL               string        `mapstructure:"WECHAT_ECOMMERCE_NOTIFY_URL"`                  // 收付通支付回调URL
+	WechatEcommerceRefundNotifyURL         string        `mapstructure:"WECHAT_ECOMMERCE_REFUND_NOTIFY_URL"`           // 收付通退款回调URL
 	WechatEcommerceSpName                  string        `mapstructure:"WECHAT_ECOMMERCE_SP_NAME"`                     // 收付通服务商主体全称（可选，用于分账接收方姓名）
 	WechatEcommerceSpSerialNumber          string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`            // 收付通服务商 API 证书序列号
 	WechatEcommerceSpPrivateKeyPath        string        `mapstructure:"WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH"`         // 收付通服务商 API 私钥文件路径
@@ -203,6 +206,35 @@ func (c Config) EffectiveWechatEcommercePlatformPublicKeyID() string {
 		return c.WechatEcommerceSpPlatformPublicKeyID
 	}
 	return c.WechatPayPlatformPublicKeyID
+}
+
+func deriveWechatEcommerceWebhookURL(current, explicit, fallbackPath string) string {
+	if strings.TrimSpace(explicit) != "" {
+		return strings.TrimSpace(explicit)
+	}
+
+	trimmed := strings.TrimSpace(current)
+	if trimmed == "" {
+		return ""
+	}
+
+	if parsed, err := url.Parse(trimmed); err == nil {
+		parsed.Path = fallbackPath
+		parsed.RawPath = ""
+		parsed.RawQuery = ""
+		parsed.Fragment = ""
+		return parsed.String()
+	}
+
+	return trimmed
+}
+
+func (c Config) EffectiveWechatEcommerceNotifyURL() string {
+	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommerceNotifyURL, "/v1/webhooks/wechat-ecommerce/notify")
+}
+
+func (c Config) EffectiveWechatEcommerceRefundNotifyURL() string {
+	return deriveWechatEcommerceWebhookURL(c.WechatPayRefundNotifyURL, c.WechatEcommerceRefundNotifyURL, "/v1/webhooks/wechat-ecommerce/refund-notify")
 }
 
 func (c Config) ValidateWechatEcommerceConfig() error {

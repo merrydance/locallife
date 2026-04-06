@@ -1090,6 +1090,11 @@ func (processor *RedisTaskProcessor) ProcessTaskProfitSharing(ctx context.Contex
 		totalAmount = paymentOrder.Amount
 		deliveryFee = order.DeliveryFee
 		orderSource = order.OrderType
+		if order.ReservationID.Valid && order.OrderType == "dine_in" {
+			// 预订到店后的替换/补差价订单会落在 dine_in 订单类型上，
+			// 但资金语义仍属于预订链路，后续分账必须继续按 reservation 配置执行。
+			orderSource = db.OrderTypeReservation
+		}
 		outOrderNoSuffix = fmt.Sprintf("%d", payload.OrderID)
 	} else if payload.ReservationID > 0 {
 		// 获取预订信息

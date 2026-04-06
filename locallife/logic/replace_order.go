@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -155,7 +154,7 @@ func ReplaceReservationOrder(
 	}
 
 	if delta > 0 {
-		payOrder, createErr := createReplaceOrderEcommercePayment(ctx, store, ecommerceClient, input.UserID, replaceTx.NewOrder.ID, delta)
+		payOrder, createErr := createReplaceOrderEcommercePayment(ctx, store, ecommerceClient, input.UserID, replaceTx.NewOrder, delta)
 		if createErr != nil {
 			return ReplaceOrderResult{}, createErr
 		}
@@ -163,23 +162,32 @@ func ReplaceReservationOrder(
 	} else if delta < 0 {
 		refundAmount := -delta
 		if refundAmount > 0 && (paymentClient != nil || ecommerceClient != nil) {
-			paymentOrder, err := store.GetLatestPaymentOrderByOrder(ctx, db.GetLatestPaymentOrderByOrderParams{
-				OrderID:      pgtype.Int8{Int64: oldOrder.ID, Valid: true},
-				BusinessType: "order",
-			})
+			refundAllocations, err := buildReservationRefundAllocations(ctx, store, reservation.ID, refundAmount)
 			if err != nil {
 				return ReplaceOrderResult{}, err
 			}
-			if paymentOrder.Status == "paid" {
+			allocatedRefundAmount := sumReservationRefundAllocations(refundAllocations)
+			if allocatedRefundAmount != refundAmount {
+				return ReplaceOrderResult{}, NewRequestError(http.StatusConflict, errors.New("reservation refund funding chain changed, please retry"))
+			}
+			for _, allocation := range refundAllocations {
+				if allocation.RefundAmount <= 0 {
+					continue
+				}
 				refundReason := "订单改菜单退款"
 				outRefundNo, err := generateOutRefundNo()
 				if err != nil {
 					return ReplaceOrderResult{}, fmt.Errorf("generate out refund no: %w", err)
 				}
+
+				refundType := allocation.PaymentOrder.PaymentType
+				if refundType == paymentTypeNative {
+					refundType = paymentTypeMiniProgram
+				}
 				refundOrder, err := store.CreateRefundOrder(ctx, db.CreateRefundOrderParams{
-					PaymentOrderID: paymentOrder.ID,
-					RefundType:     "partial",
-					RefundAmount:   refundAmount,
+					PaymentOrderID: allocation.PaymentOrder.ID,
+					RefundType:     refundType,
+					RefundAmount:   allocation.RefundAmount,
 					RefundReason:   pgtype.Text{String: refundReason, Valid: true},
 					OutRefundNo:    outRefundNo,
 					Status:         "pending",
@@ -188,7 +196,7 @@ func ReplaceReservationOrder(
 					return ReplaceOrderResult{}, err
 				}
 
-				refundStatus, refundErr := processReplaceOrderRefund(ctx, store, paymentClient, ecommerceClient, oldOrder.MerchantID, paymentOrder, outRefundNo, refundReason, refundAmount)
+				refundStatus, refundErr := processReplaceOrderRefund(ctx, store, paymentClient, ecommerceClient, oldOrder.MerchantID, allocation.PaymentOrder, outRefundNo, refundReason, allocation.RefundAmount)
 				if refundErr != nil {
 					if _, dbErr := store.UpdateRefundOrderToFailed(ctx, refundOrder.ID); dbErr != nil {
 						log.Error().Err(dbErr).Int64("refund_order_id", refundOrder.ID).Msg("failed to mark refund order as failed")
@@ -218,7 +226,7 @@ func createReplaceOrderEcommercePayment(
 	store db.Store,
 	ecommerceClient wechat.EcommerceClientInterface,
 	userID int64,
-	orderID int64,
+	order db.Order,
 	amount int64,
 ) (db.PaymentOrder, error) {
 	if ecommerceClient == nil {
@@ -234,79 +242,73 @@ func createReplaceOrderEcommercePayment(
 	}
 
 	expiresAt := time.Now().Add(30 * time.Minute)
-	combineOutTradeNo, err := generateCombineOutTradeNoForSingle("RC")
-	if err != nil {
-		return db.PaymentOrder{}, fmt.Errorf("generate combine out trade no: %w", err)
+	merchantName := "Order Payment"
+	if merchant, err := store.GetMerchant(ctx, order.MerchantID); err == nil && merchant.Name != "" {
+		merchantName = merchant.Name + " - Reservation Adjustment"
 	}
 
-	txResult, err := store.CreateCombinedPaymentTx(ctx, db.CreateCombinedPaymentTxParams{
-		UserID:            userID,
-		OrderIDs:          []int64{orderID},
-		CombineOutTradeNo: combineOutTradeNo,
-		ExpiresAt:         expiresAt,
-	})
-	if err != nil {
-		if mapped := mapCombinedPaymentError(err); mapped != nil {
-			return db.PaymentOrder{}, mapped
+	var txResult db.CreatePartnerPaymentTxResult
+	for attempt := 1; attempt <= outTradeNoMaxRetry; attempt++ {
+		outTradeNo, genErr := generateOutTradeNoWithPrefix("RO")
+		if genErr != nil {
+			return db.PaymentOrder{}, fmt.Errorf("generate out trade no: %w", genErr)
 		}
-		return db.PaymentOrder{}, fmt.Errorf("create combined payment: %w", err)
-	}
-	if len(txResult.OrderInfos) == 0 {
-		return db.PaymentOrder{}, fmt.Errorf("create combined payment: empty order infos")
+		txResult, err = store.CreatePartnerPaymentTx(ctx, db.CreatePartnerPaymentTxParams{
+			UserID:        userID,
+			MerchantID:    order.MerchantID,
+			OrderID:       order.ID,
+			ReservationID: order.ReservationID.Int64,
+			BusinessType:  businessTypeOrder,
+			Amount:        amount,
+			OutTradeNo:    outTradeNo,
+			ExpiresAt:     expiresAt,
+			Attach:        fmt.Sprintf("order_id:%d", order.ID),
+		})
+		if err == nil {
+			break
+		}
+		if isOutTradeNoConflict(err) && attempt < outTradeNoMaxRetry {
+			continue
+		}
+		if status, ok := db.IsPartnerPaymentRequestError(err); ok {
+			return db.PaymentOrder{}, NewRequestError(status, errors.New(err.Error()))
+		}
+		return db.PaymentOrder{}, fmt.Errorf("create partner payment: %w", err)
 	}
 
-	info := txResult.OrderInfos[0]
-	description := "Order Payment"
-	if info.Merchant.Name != "" {
-		description = info.Merchant.Name + " - Order Payment"
-	}
-
-	combineResp, _, err := ecommerceClient.CreateCombineOrder(ctx, &wechat.CombineOrderRequest{
-		CombineOutTradeNo: combineOutTradeNo,
-		SubOrders: []wechat.SubOrder{{
-			SubMchID:    info.PaymentConfig.SubMchID,
-			Amount:      amount,
-			OutTradeNo:  info.PaymentOrder.OutTradeNo,
-			Description: description,
-			Attach:      info.PaymentOrder.Attach.String,
-		}},
-		PayerOpenID: user.WechatOpenid,
-		ExpireTime:  expiresAt,
+	orderResp, _, err := ecommerceClient.CreatePartnerJSAPIOrder(ctx, &wechat.PartnerJSAPIOrderRequest{
+		SubMchID:      txResult.SubMchID,
+		Description:   merchantName,
+		OutTradeNo:    txResult.PaymentOrder.OutTradeNo,
+		ExpireTime:    expiresAt,
+		Attach:        fmt.Sprintf("order_id:%d", order.ID),
+		TotalAmount:   amount,
+		PayerOpenID:   user.WechatOpenid,
+		ProfitSharing: order.ReservationID.Valid || shouldEnableOrderProfitSharing(order.OrderType),
 	})
 	if err != nil {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
-		_, _ = store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		return db.PaymentOrder{}, fmt.Errorf("create combine order: %w", err)
+		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
+		return db.PaymentOrder{}, fmt.Errorf("create partner jsapi order: %w", err)
 	}
-	if combineResp == nil || strings.TrimSpace(combineResp.PrepayID) == "" {
+	if orderResp == nil || orderResp.PrepayID == "" {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, info.PaymentOrder.ID)
-		_, _ = store.UpdateCombinedPaymentOrderToClosed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		return db.PaymentOrder{}, fmt.Errorf("create combine order: empty prepay id")
+		_, _ = store.UpdatePaymentOrderToClosed(cleanupCtx, txResult.PaymentOrder.ID)
+		return db.PaymentOrder{}, fmt.Errorf("create partner jsapi order: empty prepay id")
 	}
 
 	updatedPayment, err := store.UpdatePaymentOrderPrepayId(ctx, db.UpdatePaymentOrderPrepayIdParams{
-		ID:       info.PaymentOrder.ID,
-		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
+		ID:       txResult.PaymentOrder.ID,
+		PrepayID: pgtype.Text{String: orderResp.PrepayID, Valid: true},
 	})
 	if err != nil {
 		cleanupCtx := context.Background()
-		_, _ = store.UpdatePaymentOrderToFailed(cleanupCtx, info.PaymentOrder.ID)
-		_, _ = store.UpdateCombinedPaymentOrderToFailed(cleanupCtx, txResult.CombinedPaymentOrder.ID)
-		if closeErr := ecommerceClient.CloseCombineOrder(cleanupCtx, combineOutTradeNo, []wechat.SubOrderClose{{
-			SubMchID:   info.PaymentConfig.SubMchID,
-			OutTradeNo: info.PaymentOrder.OutTradeNo,
-		}}); closeErr != nil {
-			log.Warn().Err(closeErr).Str("combine_out_trade_no", combineOutTradeNo).Msg("close combine order after prepay update failure")
+		_, _ = store.UpdatePaymentOrderToFailed(cleanupCtx, txResult.PaymentOrder.ID)
+		if closeErr := ecommerceClient.ClosePartnerOrder(cleanupCtx, txResult.PaymentOrder.OutTradeNo, txResult.SubMchID); closeErr != nil {
+			log.Warn().Err(closeErr).Str("out_trade_no", txResult.PaymentOrder.OutTradeNo).Msg("close partner order after prepay update failure")
 		}
 		return db.PaymentOrder{}, fmt.Errorf("update prepay id: %w", err)
 	}
-
-	_, _ = store.UpdateCombinedPaymentOrderPrepay(ctx, db.UpdateCombinedPaymentOrderPrepayParams{
-		ID:       txResult.CombinedPaymentOrder.ID,
-		PrepayID: pgtype.Text{String: combineResp.PrepayID, Valid: true},
-	})
 
 	return updatedPayment, nil
 }

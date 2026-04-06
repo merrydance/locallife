@@ -330,6 +330,20 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CloseCombineOrder(ctx, combi
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseCombineOrder", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CloseCombineOrder), ctx, combineOutTradeNo, subOrders)
 }
 
+// ClosePartnerOrder mocks base method.
+func (m *MockEcommerceClientInterface) ClosePartnerOrder(ctx context.Context, outTradeNo, subMchID string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClosePartnerOrder", ctx, outTradeNo, subMchID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClosePartnerOrder indicates an expected call of ClosePartnerOrder.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ClosePartnerOrder(ctx, outTradeNo, subMchID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClosePartnerOrder", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ClosePartnerOrder), ctx, outTradeNo, subMchID)
+}
+
 // CompleteComplaint mocks base method.
 func (m *MockEcommerceClientInterface) CompleteComplaint(ctx context.Context, complaintID string) error {
 	m.ctrl.T.Helper()
@@ -403,6 +417,22 @@ func (m *MockEcommerceClientInterface) CreateEcommerceWithdraw(ctx context.Conte
 func (mr *MockEcommerceClientInterfaceMockRecorder) CreateEcommerceWithdraw(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateEcommerceWithdraw", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreateEcommerceWithdraw), ctx, req)
+}
+
+// CreatePartnerJSAPIOrder mocks base method.
+func (m *MockEcommerceClientInterface) CreatePartnerJSAPIOrder(ctx context.Context, req *wechat.PartnerJSAPIOrderRequest) (*wechat.PartnerJSAPIOrderResponse, *wechat.JSAPIPayParams, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreatePartnerJSAPIOrder", ctx, req)
+	ret0, _ := ret[0].(*wechat.PartnerJSAPIOrderResponse)
+	ret1, _ := ret[1].(*wechat.JSAPIPayParams)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
+}
+
+// CreatePartnerJSAPIOrder indicates an expected call of CreatePartnerJSAPIOrder.
+func (mr *MockEcommerceClientInterfaceMockRecorder) CreatePartnerJSAPIOrder(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreatePartnerJSAPIOrder", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreatePartnerJSAPIOrder), ctx, req)
 }
 
 // CreateProfitSharing mocks base method.
@@ -508,6 +538,21 @@ func (m *MockEcommerceClientInterface) DecryptEcommerceRefundNotification(notifi
 func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptEcommerceRefundNotification(notification any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptEcommerceRefundNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptEcommerceRefundNotification), notification)
+}
+
+// DecryptPartnerPaymentNotification mocks base method.
+func (m *MockEcommerceClientInterface) DecryptPartnerPaymentNotification(notification *wechat.PaymentNotification) (*wechat.PartnerPaymentNotificationResource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecryptPartnerPaymentNotification", notification)
+	ret0, _ := ret[0].(*wechat.PartnerPaymentNotificationResource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DecryptPartnerPaymentNotification indicates an expected call of DecryptPartnerPaymentNotification.
+func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptPartnerPaymentNotification(notification any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptPartnerPaymentNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptPartnerPaymentNotification), notification)
 }
 
 // DecryptProfitSharingNotification mocks base method.
@@ -761,6 +806,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) ListProvinceAreas(ctx any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListProvinceAreas", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ListProvinceAreas), ctx)
 }
 
+// ModifySubMerchantSettlement mocks base method.
+func (m *MockEcommerceClientInterface) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *wechat.ModifySubMerchantSettlementRequest) (*wechat.ModifySubMerchantSettlementResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ModifySubMerchantSettlement", ctx, subMchID, req)
+	ret0, _ := ret[0].(*wechat.ModifySubMerchantSettlementResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ModifySubMerchantSettlement indicates an expected call of ModifySubMerchantSettlement.
+func (mr *MockEcommerceClientInterfaceMockRecorder) ModifySubMerchantSettlement(ctx, subMchID, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModifySubMerchantSettlement", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ModifySubMerchantSettlement), ctx, subMchID, req)
+}
+
 // QueryCombineOrder mocks base method.
 func (m *MockEcommerceClientInterface) QueryCombineOrder(ctx context.Context, combineOutTradeNo string) (*wechat.CombineQueryResponse, error) {
 	m.ctrl.T.Helper()
@@ -851,6 +911,36 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QueryEcommerceWithdrawByOutR
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryEcommerceWithdrawByOutRequestNo", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryEcommerceWithdrawByOutRequestNo), ctx, subMchID, outRequestNo)
 }
 
+// QueryPartnerOrderByOutTradeNo mocks base method.
+func (m *MockEcommerceClientInterface) QueryPartnerOrderByOutTradeNo(ctx context.Context, outTradeNo, subMchID string) (*wechat.PartnerOrderQueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryPartnerOrderByOutTradeNo", ctx, outTradeNo, subMchID)
+	ret0, _ := ret[0].(*wechat.PartnerOrderQueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryPartnerOrderByOutTradeNo indicates an expected call of QueryPartnerOrderByOutTradeNo.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPartnerOrderByOutTradeNo(ctx, outTradeNo, subMchID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryPartnerOrderByOutTradeNo", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryPartnerOrderByOutTradeNo), ctx, outTradeNo, subMchID)
+}
+
+// QueryPartnerOrderByTransactionID mocks base method.
+func (m *MockEcommerceClientInterface) QueryPartnerOrderByTransactionID(ctx context.Context, transactionID, subMchID string) (*wechat.PartnerOrderQueryResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryPartnerOrderByTransactionID", ctx, transactionID, subMchID)
+	ret0, _ := ret[0].(*wechat.PartnerOrderQueryResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryPartnerOrderByTransactionID indicates an expected call of QueryPartnerOrderByTransactionID.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryPartnerOrderByTransactionID(ctx, transactionID, subMchID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryPartnerOrderByTransactionID", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryPartnerOrderByTransactionID), ctx, transactionID, subMchID)
+}
+
 // QueryProfitSharing mocks base method.
 func (m *MockEcommerceClientInterface) QueryProfitSharing(ctx context.Context, subMchID, transactionID, outOrderNo string) (*wechat.ProfitSharingQueryResponse, error) {
 	m.ctrl.T.Helper()
@@ -894,21 +984,6 @@ func (m *MockEcommerceClientInterface) QuerySubMerchantSettlement(ctx context.Co
 func (mr *MockEcommerceClientInterfaceMockRecorder) QuerySubMerchantSettlement(ctx, subMchID, accountNumberRule any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QuerySubMerchantSettlement", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QuerySubMerchantSettlement), ctx, subMchID, accountNumberRule)
-}
-
-// ModifySubMerchantSettlement mocks base method.
-func (m *MockEcommerceClientInterface) ModifySubMerchantSettlement(ctx context.Context, subMchID string, req *wechat.ModifySubMerchantSettlementRequest) (*wechat.ModifySubMerchantSettlementResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ModifySubMerchantSettlement", ctx, subMchID, req)
-	ret0, _ := ret[0].(*wechat.ModifySubMerchantSettlementResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ModifySubMerchantSettlement indicates an expected call of ModifySubMerchantSettlement.
-func (mr *MockEcommerceClientInterfaceMockRecorder) ModifySubMerchantSettlement(ctx, subMchID, req any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ModifySubMerchantSettlement", reflect.TypeOf((*MockEcommerceClientInterface)(nil).ModifySubMerchantSettlement), ctx, subMchID, req)
 }
 
 // QuerySubMerchantSettlementApplication mocks base method.

@@ -303,7 +303,9 @@ func buildReservationRefundAllocations(
 		if paymentOrder.Status != paymentStatusPaid {
 			continue
 		}
-		if paymentOrder.BusinessType != businessTypeReservation && paymentOrder.BusinessType != reservationAddonBusiness {
+		if paymentOrder.BusinessType != businessTypeReservation &&
+			paymentOrder.BusinessType != reservationAddonBusiness &&
+			!(paymentOrder.BusinessType == businessTypeOrder && paymentOrder.ReservationID.Valid) {
 			continue
 		}
 

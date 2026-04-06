@@ -149,7 +149,16 @@ func (s apiTaskScheduler) ScheduleProfitSharing(ctx context.Context, paymentOrde
 			log.Info().
 				Int64("payment_order_id", paymentOrderID).
 				Int64("order_id", orderID).
+				Str("order_type", order.OrderType).
 				Msg("skip takeout profit sharing scheduling outside settlement")
+			return nil
+		}
+		if (order.OrderType == "dine_in" && !order.ReservationID.Valid) || order.OrderType == "takeaway" {
+			log.Info().
+				Int64("payment_order_id", paymentOrderID).
+				Int64("order_id", orderID).
+				Str("order_type", order.OrderType).
+				Msg("skip non-profit-sharing order scheduling outside settlement")
 			return nil
 		}
 	}
