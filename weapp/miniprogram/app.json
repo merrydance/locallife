@@ -201,6 +201,8 @@
         "orders/detail/index",
         "orders/print-anomalies/index",
         "tables/index",
+        "tables/edit/index",
+        "tables/tags/index",
         "printers/index",
         "profile-images/index",
         "discount-rules/index",

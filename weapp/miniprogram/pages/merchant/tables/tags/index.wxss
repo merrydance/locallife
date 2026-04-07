@@ -1,0 +1,119 @@
+.page-container {
+  min-height: 100vh;
+  background: var(--td-bg-color-page);
+  padding-bottom: calc(96rpx + var(--safe-area-bottom));
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  padding-top: var(--spacer-md);
+}
+
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+  padding: 0 var(--spacer-lg);
+}
+
+.action-strip,
+.warning-banner,
+.list-section,
+.tag-row {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.action-strip {
+  padding: var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.action-strip-copy,
+.warning-banner-text,
+.tag-meta {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.warning-banner {
+  padding: var(--spacer-sm) var(--spacer-md);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+  background: var(--td-warning-color-1);
+}
+
+.list-section {
+  padding: var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.list-header,
+.tag-row-main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.list-title,
+.tag-name {
+  font-size: var(--font-size-base);
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+}
+
+.section-empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.tag-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.tag-row {
+  padding: var(--spacer-md);
+}
+
+.tag-row-copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.tag-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+  margin-top: 8rpx;
+}
+
+.tag-actions {
+  display: flex;
+  align-items: center;
+}
+
+@media (max-width: 420px) {
+  .warning-banner,
+  .list-header,
+  .tag-row-main {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

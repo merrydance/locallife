@@ -1,0 +1,211 @@
+<custom-navbar title="{{isEdit ? '编辑桌台' : '新增桌台'}}" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载桌台编辑信息中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '桌台编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
+        <text class="notice-text">{{loadWarningMessage}}</text>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">桌台图片</text>
+        </view>
+
+        <t-upload
+          mediaType="{{['image']}}"
+          files="{{uploadFiles}}"
+          gridConfig="{{ { column: 3, width: 180, height: 180 } }}"
+          disabled="{{imageUploading || imageMutating || submitting}}"
+          bind:add="onImageAdd"
+          bind:remove="onUploadFileRemove"
+        />
+
+        <view wx:if="{{imageUploading}}" class="uploading-row">
+          <t-loading theme="dots" size="28rpx" />
+          <text class="uploading-text">图片上传中...</text>
+        </view>
+
+        <view wx:if="{{!isEdit && uploadFiles.length}}" class="inline-note-card">
+          当前已上传 {{uploadFiles.length}} 张图片，保存桌台后会自动关联。
+        </view>
+
+        <block wx:if="{{isEdit}}">
+          <text wx:if="{{tableImages.length}}" class="section-caption">已上传图片</text>
+
+          <view wx:if="{{tableImages.length}}" class="image-list">
+            <view class="image-item" wx:for="{{tableImages}}" wx:key="id">
+              <image class="image-thumb" src="{{item.image_url}}" mode="aspectFill" data-url="{{item.image_url}}" bindtap="onPreviewImage" />
+
+              <view class="image-meta">
+                <text class="image-primary" wx:if="{{item.is_primary}}">当前主图</text>
+                <text class="image-link" wx:if="{{imageMutating && imageMutatingImageId === item.id}}">处理中...</text>
+
+                <view wx:else class="image-action-row">
+                  <t-button wx:if="{{!item.is_primary}}" size="small" theme="primary" shape="round" data-image-id="{{item.id}}" bind:tap="onSetPrimaryImage">设为主图</t-button>
+                  <t-button size="small" theme="danger" shape="round" data-image-id="{{item.id}}" bind:tap="onDeleteImage">删除</t-button>
+                </view>
+              </view>
+            </view>
+          </view>
+
+          <view wx:else class="inline-note-card">当前还没有已保存图片，可直接上传。</view>
+        </block>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">基础信息</text>
+        </view>
+
+        <view class="selector-group">
+          <text class="selector-label">桌台类型</text>
+          <view class="tag-check-list">
+            <t-check-tag checked="{{formData.table_type === 'table'}}" content="大厅桌台" shape="round" data-value="table" bind:change="onTypeSelect" />
+            <t-check-tag checked="{{formData.table_type === 'room'}}" content="包间" shape="round" data-value="room" bind:change="onTypeSelect" />
+          </view>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-input
+            label="{{formData.table_type === 'room' ? '包间名' : '桌号'}}"
+            placeholder="{{formData.table_type === 'room' ? '例如 二楼包间 1' : '例如 A01'}}"
+            value="{{formData.table_no}}"
+            data-field="table_no"
+            bind:change="onInputChange"
+            required
+          />
+
+          <t-input
+            label="容纳人数"
+            type="number"
+            placeholder="请输入 1-100"
+            value="{{formData.capacity}}"
+            bind:change="onCapacityChange"
+            required
+          />
+
+          <t-input
+            label="最低消费"
+            type="digit"
+            suffix="元"
+            placeholder="可选，如 88.00"
+            value="{{formData.minimum_spend_yuan}}"
+            data-field="minimum_spend_yuan"
+            bind:change="onInputChange"
+          />
+        </t-cell-group>
+
+        <t-textarea
+          placeholder="补充位置、朝向、环境说明等信息"
+          value="{{formData.description}}"
+          data-field="description"
+          bind:change="onInputChange"
+          bordered
+          maxlength="200"
+          indicator
+        />
+      </view>
+
+      <view wx:if="{{isEdit}}" class="section-panel">
+        <view class="section-top">
+          <text class="section-title">经营状态</text>
+        </view>
+
+        <view class="tag-check-list">
+          <t-check-tag
+            wx:for="{{statusOptions}}"
+            wx:key="value"
+            checked="{{formData.status === item.value}}"
+            content="{{item.label}}"
+            shape="round"
+            data-value="{{item.value}}"
+            bind:change="onStatusSelect"
+          />
+        </view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">桌台标签</text>
+            <text class="section-caption">已选 {{formData.tag_ids.length}} 个，用于列表识别与筛选</text>
+          </view>
+          <view class="section-top-button">
+            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onManageTags" />
+          </view>
+        </view>
+
+        <view wx:if="{{availableTags.length}}" class="tag-check-list">
+          <t-check-tag
+            wx:for="{{availableTags}}"
+            wx:key="id"
+            checked="{{selectedTagState[item.id]}}"
+            content="{{item.name}}"
+            shape="round"
+            data-tag-id="{{item.id}}"
+            bind:change="onTagToggle"
+          />
+        </view>
+
+        <view wx:else class="inline-note-card">暂无桌台标签，可先去标签管理页新增。</view>
+      </view>
+
+      <view wx:if="{{isEdit}}" class="section-panel">
+        <view class="section-top">
+          <text class="section-title">桌台二维码</text>
+          <text class="section-caption">顾客扫码后可进入当前桌台点餐，也可下载后打印张贴</text>
+        </view>
+
+        <view class="qr-action-row">
+          <t-button theme="primary" size="small" shape="round" bind:tap="onGenerateQRCode" loading="{{qrCodeLoading && qrCodeVisible}}" disabled="{{submitting || qrCodeDownloading}}">刷新二维码</t-button>
+          <t-button theme="default" size="small" shape="round" bind:tap="onShowQRCode">展示二维码</t-button>
+        </view>
+      </view>
+    </view>
+
+    <view class="footer-bar">
+      <t-button block size="large" shape="round" theme="primary" loading="{{submitting}}" bind:tap="onSubmit">{{isEdit ? '保存桌台' : '创建桌台'}}</t-button>
+    </view>
+
+    <t-popup wx:if="{{qrCodeVisible}}" visible="{{qrCodeVisible}}" placement="bottom" bind:visible-change="onCloseQRCodePopup">
+      <view class="popup-panel qr-popup">
+        <view class="popup-copy">
+          <text class="popup-title">{{qrCodeTableNo ? qrCodeTableNo + ' 桌台二维码' : '桌台二维码'}}</text>
+          <text class="popup-hint">下载后可直接转发打印，也可以长期张贴到桌台或包间门口。</text>
+        </view>
+
+        <view wx:if="{{qrCodeLoading}}" class="state-block qr-popup-state">
+          <t-loading theme="circular" size="40rpx" text="生成二维码中..." vertical />
+        </view>
+
+        <view wx:elif="{{qrCodeError}}" class="state-block qr-popup-state">
+          <t-empty icon="error-circle" description="{{qrCodeErrorMessage || '生成二维码失败，请重试'}}" />
+        </view>
+
+        <view wx:else class="qr-card">
+          <image class="qr-image" src="{{qrCodeImageUrl}}" mode="aspectFit" />
+          <text class="qr-popup-tip">顾客扫码即可进入当前桌台点餐页面。</text>
+        </view>
+
+        <view class="popup-actions">
+          <t-button block size="large" shape="round" theme="default" bind:tap="onCloseQRCodePopup">关闭</t-button>
+          <t-button wx:if="{{qrCodeError}}" block size="large" shape="round" theme="primary" bind:tap="onRetryQRCode">重新生成</t-button>
+          <t-button wx:else block size="large" shape="round" theme="primary" bind:tap="onDownloadQRCode" loading="{{qrCodeDownloading}}" disabled="{{qrCodeLoading || !qrCodeImageUrl}}">下载二维码</t-button>
+        </view>
+      </view>
+    </t-popup>
+  </block>
+</view>

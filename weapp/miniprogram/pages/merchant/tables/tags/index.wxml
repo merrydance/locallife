@@ -1,0 +1,60 @@
+<custom-navbar title="桌台标签管理" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 64rpx;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载桌台标签中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '桌台标签加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view wx:if="{{refreshErrorMessage}}" class="warning-banner">
+        <text class="warning-banner-text">{{refreshErrorMessage}}</text>
+        <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
+      </view>
+
+      <view class="action-strip">
+        <text class="action-strip-copy">标签会在桌台编辑页中用于筛选和快速识别。</text>
+        <t-button block size="medium" theme="primary" shape="round" bind:tap="onCreateTag">新建标签</t-button>
+      </view>
+
+      <view class="list-section">
+        <view class="list-header">
+          <text class="list-title">当前标签列表</text>
+          <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">刷新</t-button>
+        </view>
+
+        <view wx:if="{{!tags.length}}" class="section-empty">
+          <t-empty icon="info-circle" description="还没有桌台标签，先新建一个常用标签" />
+        </view>
+
+        <view wx:else class="tag-list">
+          <view class="tag-row" wx:for="{{tags}}" wx:key="id">
+            <view class="tag-row-main">
+              <view class="tag-row-copy">
+                <text class="tag-name">{{item.name}}</text>
+                <view class="tag-meta-row">
+                  <text class="tag-meta">用于桌台识别与筛选</text>
+                  <t-tag size="small" theme="default" variant="light">桌台可选</t-tag>
+                </view>
+              </view>
+
+              <view class="tag-actions">
+                <t-button size="small" theme="danger" variant="text" data-id="{{item.id}}" loading="{{pendingDeleteId === item.id}}" disabled="{{pendingDeleteId === item.id}}" bind:tap="onDeleteTag">删除</t-button>
+              </view>
+            </view>
+          </view>
+        </view>
+      </view>
+
+      <t-fab icon="add" bind:click="onCreateTag" />
+    </view>
+  </block>
+</view>
