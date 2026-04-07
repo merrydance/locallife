@@ -1,0 +1,10 @@
+{
+  "purpose": "Merchant dish option-row editor for inline editing of customization item names, extra prices, and row-level add/remove actions.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "input",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "Option rows have their own editing rhythm and action density. Splitting them out keeps the parent group component focused on group structure while the child stays within TDesign input and button composition."
+}

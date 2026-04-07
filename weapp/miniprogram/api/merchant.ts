@@ -412,6 +412,8 @@ export interface MerchantOperatorResponse {
   status: string
   is_open: boolean
   version: number
+  group_id?: number
+  brand_id?: number
   created_at: string
   updated_at: string
 }
@@ -475,6 +477,17 @@ export interface UpdateMerchantMembershipSettingsRequest {
   allow_with_voucher?: boolean
   allow_with_discount?: boolean
   max_deduction_percent?: number
+}
+
+/**
+ * 获取当前用户可访问的全部商户（多门店切换）
+ * GET /v1/merchants/my
+ */
+export function listMyMerchants() {
+  return request<MerchantOperatorResponse[]>({
+    url: '/v1/merchants/my',
+    method: 'GET'
+  })
 }
 
 /**

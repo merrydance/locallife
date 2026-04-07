@@ -1,12 +1,17 @@
 {
     "usingComponents": {
-        "t-icon": "tdesign-miniprogram/icon/icon",
         "t-button": "tdesign-miniprogram/button/button",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
+        "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
+        "t-grid": "tdesign-miniprogram/grid/grid",
+        "t-grid-item": "tdesign-miniprogram/grid-item/grid-item",
+        "t-badge": "tdesign-miniprogram/badge/badge",
+        "t-icon": "tdesign-miniprogram/icon/icon",
         "custom-navbar": "/components/custom-navbar/index"
     },
-    "navigationStyle": "custom"
+    "navigationStyle": "custom",
+    "enablePullDownRefresh": true
 }

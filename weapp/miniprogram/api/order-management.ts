@@ -99,12 +99,13 @@ export interface OrderItemCustomization {
  * 订单统计响应 - 对齐 db.GetOrderStatsRow
  */
 export interface OrderStatsResponse {
-    total_orders: number                         // 总订单数
-    total_revenue: number                        // 总营收（分）
-    avg_order_value: number                      // 平均订单价值（分）
-    completed_orders: number                     // 已完成订单数
-    cancelled_orders: number                     // 已取消订单数
-    completion_rate: number                      // 完成率
+    pending_count: number                        // 待处理订单数
+    paid_count: number                           // 已支付订单数
+    preparing_count: number                      // 制作中订单数
+    ready_count: number                          // 待取餐/待配送订单数
+    delivering_count: number                     // 配送中订单数
+    completed_count: number                      // 已完成订单数（含用户确认收货）
+    cancelled_count: number                      // 已取消订单数
 }
 
 export interface MerchantOrderListResult {

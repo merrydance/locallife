@@ -1,6 +1,12 @@
 .page-container {
-  background-color: var(--td-bg-color-page);
   min-height: 100vh;
+  background: var(--td-bg-color-page);
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
 }
 
 .state-block {
@@ -10,301 +16,211 @@
   align-items: center;
   justify-content: center;
   gap: var(--spacer-md);
-  padding: var(--spacer-lg);
+  padding: 0 var(--spacer-lg);
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-sm);
-  padding: var(--spacer-sm) var(--spacer-lg) 0;
+.page-notice {
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.search-wrap {
-  background-color: var(--td-bg-color-container);
-  padding: var(--spacer-sm) var(--spacer-lg);
-}
-
-.filter-section {
+.control-panel {
   display: flex;
   flex-direction: column;
   gap: var(--spacer-sm);
-  padding: 0 var(--spacer-lg) var(--spacer-sm);
-  background-color: var(--td-bg-color-container);
+  background: var(--td-bg-color-page);
 }
 
-.filter-group {
+.tabs-shell {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.tabs-shell--top {
+  margin-top: 0;
+}
+
+.filter-panel {
+  padding: var(--spacer-sm) var(--spacer-md);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-block {
   display: flex;
   flex-direction: column;
   gap: 12rpx;
 }
 
-.filter-group-label {
+.filter-label {
   font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary);
 }
 
-.filter-chip-list {
+.filter-tags {
   display: flex;
   flex-wrap: wrap;
   gap: 12rpx;
 }
 
-.filter-chip {
-  padding: 10rpx 20rpx;
-  border-radius: 999rpx;
-  background: var(--td-bg-color-page);
-  color: var(--td-text-color-secondary);
-  font-size: var(--font-size-xs);
-  line-height: 1;
-}
-
-.filter-chip-active {
-  background: rgba(0, 82, 217, 0.12);
-  color: var(--td-brand-color);
-  font-weight: 600;
-}
-
-.tabs-container {
-  background-color: var(--td-bg-color-container) !important;
-  margin-bottom: 4rpx;
-}
-
-.list-section {
-  padding: var(--spacer-md) 0;
-}
-
-.batch-toolbar {
+.result-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
   gap: var(--spacer-sm);
-  margin: 0 var(--spacer-lg) var(--spacer-md);
-  padding: var(--spacer-sm) var(--spacer-md);
-  border-radius: var(--radius-md);
-  background: rgba(0, 82, 217, 0.06);
+  padding: 0 4rpx;
 }
 
-.batch-toolbar-text {
+.result-summary {
   font-size: var(--font-size-sm);
   color: var(--td-text-color-primary);
   font-weight: 600;
 }
 
-.batch-toolbar-action {
-  font-size: var(--font-size-sm);
-  color: var(--td-brand-color);
-  font-weight: 600;
-}
-
-.inline-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacer-sm);
-  padding: var(--spacer-sm) var(--spacer-md);
-  margin: 0 var(--spacer-lg) var(--spacer-md);
-  border-radius: var(--radius-md);
-}
-
-.inline-banner-danger {
-  background: rgba(229, 57, 53, 0.08);
-  color: var(--td-error-color);
-}
-
-.inline-banner-text {
-  flex: 1;
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-}
-
-.inline-banner-action {
-  font-size: var(--font-size-sm);
-  font-weight: 600;
-  color: var(--td-brand-color);
-}
-
-.loading-state {
-  padding: 100rpx 0;
+.loading-state,
+.load-more {
   display: flex;
   justify-content: center;
 }
 
-.dish-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: var(--spacer-md) var(--spacer-lg);
-  background-color: var(--td-bg-color-container);
-  border-bottom: 1rpx solid var(--td-component-stroke);
+.loading-state {
+  padding: 100rpx 0;
 }
 
-.dish-item-batch {
-  gap: 20rpx;
-}
-
-.dish-select-wrap {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-}
-
-.dish-main {
-  display: flex;
-  flex: 1;
-  gap: 24rpx;
-}
-
-.dish-img {
-  width: 140rpx;
-  height: 140rpx;
-  border-radius: var(--radius-md);
-  background-color: var(--td-bg-color-page);
-}
-
-.dish-info {
-  flex: 1;
+.dish-list {
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
+  gap: var(--spacer-sm);
 }
 
-.dish-name-row {
+.dish-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.dish-card-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.dish-content {
+  padding: var(--spacer-md);
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.dish-header {
   display: flex;
   align-items: center;
-  gap: 12rpx;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.dish-header-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
 }
 
 .dish-name {
   font-size: var(--font-size-heading);
-  font-weight: 600;
+  line-height: 1.35;
+  font-weight: 700;
   color: var(--td-text-color-primary);
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   overflow: hidden;
+}
+
+.dish-switch-wrap {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .dish-desc {
   font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary);
+  line-height: 1.5;
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 1;
+  -webkit-line-clamp: 2;
   overflow: hidden;
-  margin: 4rpx 0;
+}
+
+.dish-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
 }
 
 .dish-price-row {
   display: flex;
-  align-items: baseline;
-  gap: 4rpx;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
 }
 
-.price-unit {
-  font-size: var(--font-size-xs);
-  color: var(--td-brand-color);
-  font-weight: bold;
+.dish-category-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.dish-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacer-md);
+}
+
+.dish-action-slot {
+  flex: 1;
+  display: flex;
+  justify-content: center;
 }
 
 .price-value {
   font-size: var(--font-size-title);
+  line-height: 1;
   color: var(--td-brand-color);
-  font-weight: bold;
+  font-weight: 700;
 }
 
-.member-price {
-  font-size: var(--font-size-xxs);
-  color: var(--td-warning-color);
-  margin-left: 12rpx;
-  background: var(--td-brand-color-light);
-  padding: 2rpx 8rpx;
-  border-radius: var(--radius-sm);
+.dish-action-button {
+  flex: 0 0 auto;
 }
 
-.dish-status-toggle {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: 8rpx;
-  min-width: 120rpx;
-}
-
-.toggle-label {
-  font-size: var(--font-size-xxs);
-  color: var(--td-text-color-placeholder);
-}
-
-.dish-status-summary {
-  flex-shrink: 0;
-  min-width: 120rpx;
-  display: flex;
-  justify-content: flex-end;
-  text-align: right;
-}
-
-/* 滑动操作 */
-.swipe-action-wrap {
-  display: flex;
-  height: 100%;
-}
-
-.action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--td-text-color-anti);
-  width: 120rpx;
-  font-size: var(--font-size-base);
-}
-
-.delete-btn {
-  background-color: var(--td-error-color);
+.dialog-content {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
 }
 
 .load-more {
-  padding: 40rpx 0;
-  text-align: center;
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
+  padding: var(--spacer-sm) 0 8rpx;
 }
 
-.batch-action-bar {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 20;
+.list-end {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--spacer-md);
-  padding: var(--spacer-md) var(--spacer-lg) calc(var(--spacer-md) + env(safe-area-inset-bottom));
-  background: var(--td-bg-color-container);
-  box-shadow: 0 -8rpx 24rpx rgba(0, 0, 0, 0.06);
+  justify-content: center;
+  padding: var(--spacer-sm) 0 8rpx;
 }
 
-.batch-action-summary {
-  display: flex;
-  flex-direction: column;
-  gap: 4rpx;
-  min-width: 0;
-}
-
-.batch-selected-count {
-  font-size: var(--font-size-base);
-  color: var(--td-text-color-primary);
-  font-weight: 600;
-}
-
-.batch-summary-hint {
+.list-end__text {
   font-size: var(--font-size-xs);
   color: var(--td-text-color-secondary);
 }
 
-.batch-action-buttons {
-  display: flex;
-  align-items: center;
-  gap: var(--spacer-sm);
-  flex-shrink: 0;
+@media (max-width: 420px) {
+  .dish-action-bar {
+    padding: 0 var(--spacer-sm);
+  }
 }

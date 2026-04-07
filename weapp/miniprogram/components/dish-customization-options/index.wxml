@@ -1,0 +1,32 @@
+<view class="option-editor">
+  <view wx:for="{{internalOptions}}" wx:key="key" wx:for-item="option" wx:for-index="index" class="option-editor__row">
+    <t-input
+      t-class="option-editor__input option-editor__input--name"
+      custom-style="--td-input-vertical-padding: 18rpx;"
+      borderless="{{false}}"
+      size="small"
+      placeholder="规格项名称"
+      value="{{option.name}}"
+      data-index="{{index}}"
+      bind:change="onOptionNameChange"
+    />
+
+    <t-input
+      t-class="option-editor__input option-editor__input--price"
+      custom-style="--td-input-vertical-padding: 18rpx;"
+      borderless="{{false}}"
+      size="small"
+      type="digit"
+      placeholder="加价"
+      suffix="元"
+      value="{{option.extraPriceYuan}}"
+      data-index="{{index}}"
+      bind:change="onOptionPriceChange"
+    />
+
+    <view class="option-editor__actions">
+      <t-button size="small" shape="circle" theme="primary" icon="add" data-index="{{index}}" bind:tap="onAddAfter" />
+      <t-button size="small" shape="circle" theme="default" icon="remove" data-index="{{index}}" bind:tap="onRemoveAt" />
+    </view>
+  </view>
+</view>

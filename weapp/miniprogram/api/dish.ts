@@ -723,10 +723,11 @@ export class DishManagementService {
      * GET /v1/dishes/{id}/customizations
      */
     static async getDishCustomizations(dishId: number): Promise<CustomizationGroup[]> {
-        return await request({
+        const response = await request<DishCustomizationsResponse>({
             url: `/v1/dishes/${dishId}/customizations`,
             method: 'GET'
         })
+        return Array.isArray(response.groups) ? response.groups : []
     }
 
     /**

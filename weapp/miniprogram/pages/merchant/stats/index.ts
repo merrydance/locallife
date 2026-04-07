@@ -12,15 +12,11 @@ import {
 import { MerchantOrderManagementService, OrderStatsResponse } from '../../../api/order-management'
 import { ReservationService, ReservationStats } from '../../../api/reservation'
 import { logger } from '../../../utils/logger'
-import { settleAll } from '../../../utils/promise'
+import { isSettledFulfilled, isSettledRejected, settleAll, type SettledResult } from '../../../utils/promise'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type StatsRangeKey = '7d' | '30d'
-
-type SettledResult<T> =
-  | { status: 'fulfilled', value: T }
-  | { status: 'rejected', reason: unknown }
 
 interface RangeOption {
   key: StatsRangeKey
@@ -101,12 +97,13 @@ const EMPTY_OVERVIEW: MerchantOverviewResponse = {
 }
 
 const EMPTY_ORDER_STATS: OrderStatsResponse = {
-  total_orders: 0,
-  total_revenue: 0,
-  avg_order_value: 0,
-  completed_orders: 0,
-  cancelled_orders: 0,
-  completion_rate: 0
+  pending_count: 0,
+  paid_count: 0,
+  preparing_count: 0,
+  ready_count: 0,
+  delivering_count: 0,
+  completed_count: 0,
+  cancelled_count: 0
 }
 
 const EMPTY_RESERVATION_STATS: ReservationStats = {
@@ -172,17 +169,27 @@ function buildSummary(
   orderStats: OrderStatsResponse,
   dateRangeLabel: string
 ): MerchantStatsSummary {
-  const totalOrders = orderStats.total_orders || overview.total_orders || 0
-  const totalSales = orderStats.total_revenue || overview.total_sales || 0
+  const completedOrders = overview.total_orders || orderStats.completed_count || 0
+  const totalOrders =
+    (orderStats.pending_count || 0) +
+    (orderStats.paid_count || 0) +
+    (orderStats.preparing_count || 0) +
+    (orderStats.ready_count || 0) +
+    (orderStats.delivering_count || 0) +
+    completedOrders +
+    (orderStats.cancelled_count || 0)
+  const totalSales = overview.total_sales || 0
+  const avgOrderValue = completedOrders > 0 ? Math.round(totalSales / completedOrders) : 0
+  const completionRate = totalOrders > 0 ? (completedOrders / totalOrders) * 100 : 0
   return {
     totalOrders,
     totalSalesText: formatAmount(totalSales),
-    avgOrderValueText: formatAmount(orderStats.avg_order_value || 0),
+    avgOrderValueText: formatAmount(avgOrderValue),
     avgDailySalesText: formatAmount(overview.avg_daily_sales || 0),
     totalCommissionText: formatAmount(overview.total_commission || 0),
-    completionRateText: formatPercent(orderStats.completion_rate || 0),
-    cancelledOrders: orderStats.cancelled_orders || 0,
-    completedOrders: orderStats.completed_orders || 0,
+    completionRateText: formatPercent(completionRate),
+    cancelledOrders: orderStats.cancelled_count || 0,
+    completedOrders,
     dateRangeLabel
   }
 }
@@ -270,7 +277,7 @@ function buildCategoryRows(rows: MerchantCategoryStatRow[]): CategoryStatsViewMo
       totalSalesText: formatAmount(item.total_sales || 0),
       orderCountLabel: `${item.order_count || 0} 单`,
       totalQuantityLabel: `${item.total_quantity || 0} 份`,
-      shareText: totalSales > 0 ? `营收占比 ${(((item.total_sales || 0) / totalSales) * 100).toFixed(1)}%` : '营收占比 --',
+      shareText: totalSales > 0 ? `小计占比 ${(((item.total_sales || 0) / totalSales) * 100).toFixed(1)}%` : '小计占比 --',
       barWidth: `${Math.max(widthPercent, item.total_sales > 0 ? 18 : 0)}%`
     }
   })
@@ -282,20 +289,20 @@ function getSummaryErrorMessage(
   overviewResult: SettledResult<MerchantOverviewResponse>,
   orderStatsResult: SettledResult<OrderStatsResponse>
 ) {
-  if (overviewResult.status === 'rejected' && orderStatsResult.status === 'rejected') {
+  if (isSettledRejected(overviewResult) && isSettledRejected(orderStatsResult)) {
     return getErrorMessage(overviewResult.reason, '经营概览加载失败，请稍后重试')
   }
-  if (overviewResult.status === 'rejected') {
+  if (isSettledRejected(overviewResult)) {
     return getErrorMessage(overviewResult.reason, '经营概览同步失败，请稍后重试')
   }
-  if (orderStatsResult.status === 'rejected') {
+  if (isSettledRejected(orderStatsResult)) {
     return getErrorMessage(orderStatsResult.reason, '订单统计同步失败，请稍后重试')
   }
   return ''
 }
 
 function getSectionErrorMessage<T>(result: SettledResult<T>, fallback: string) {
-  if (result.status === 'rejected') {
+  if (isSettledRejected(result)) {
     return getErrorMessage(result.reason, fallback)
   }
   return ''
@@ -406,14 +413,14 @@ Page({
         ReservationService.getReservationStats()
       ] as const)
 
-      const summarySuccess = overviewResult.status === 'fulfilled' && orderStatsResult.status === 'fulfilled'
-      const topDishesSuccess = topDishesResult.status === 'fulfilled'
-      const dailyStatsSuccess = dailyStatsResult.status === 'fulfilled'
-      const hourlyStatsSuccess = hourlyStatsResult.status === 'fulfilled'
-      const sourceStatsSuccess = sourceStatsResult.status === 'fulfilled'
-      const repurchaseSuccess = repurchaseResult.status === 'fulfilled'
-      const categoryStatsSuccess = categoryStatsResult.status === 'fulfilled'
-      const reservationStatsSuccess = reservationStatsResult.status === 'fulfilled'
+      const summarySuccess = isSettledFulfilled(overviewResult) && isSettledFulfilled(orderStatsResult)
+      const topDishesSuccess = isSettledFulfilled(topDishesResult)
+      const dailyStatsSuccess = isSettledFulfilled(dailyStatsResult)
+      const hourlyStatsSuccess = isSettledFulfilled(hourlyStatsResult)
+      const sourceStatsSuccess = isSettledFulfilled(sourceStatsResult)
+      const repurchaseSuccess = isSettledFulfilled(repurchaseResult)
+      const categoryStatsSuccess = isSettledFulfilled(categoryStatsResult)
+      const reservationStatsSuccess = isSettledFulfilled(reservationStatsResult)
       const hasSuccessfulResult = summarySuccess || topDishesSuccess || dailyStatsSuccess || hourlyStatsSuccess || sourceStatsSuccess || repurchaseSuccess || categoryStatsSuccess || reservationStatsSuccess
       const canPreserveExisting = silent && this.data.hasLoadedData
 
@@ -526,12 +533,12 @@ Page({
         nextState.categoryStatsErrorMessage = ''
       } else if (canPreserveExisting && this.data.categoryStatsAvailable) {
         nextState.categoryStatsError = true
-        nextState.categoryStatsErrorMessage = `${getSectionErrorMessage(categoryStatsResult, '分类销售同步失败，请稍后重试')}，当前已保留上次结果`
+        nextState.categoryStatsErrorMessage = `${getSectionErrorMessage(categoryStatsResult, '分类小计同步失败，请稍后重试')}，当前已保留上次结果`
       } else {
         nextState.categoryStats = []
         nextState.categoryStatsAvailable = false
         nextState.categoryStatsError = true
-        nextState.categoryStatsErrorMessage = getSectionErrorMessage(categoryStatsResult, '分类销售加载失败，请稍后重试')
+        nextState.categoryStatsErrorMessage = getSectionErrorMessage(categoryStatsResult, '分类小计加载失败，请稍后重试')
       }
 
       if (reservationStatsSuccess) {

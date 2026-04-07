@@ -7,11 +7,15 @@ import { getErrorUserMessage } from '../../../utils/user-facing'
 const getErrorMessage = getErrorUserMessage
 
 type DishOnlineFilterKey = 'all' | 'online' | 'offline'
-type DishAvailabilityFilterKey = 'all' | 'available' | 'unavailable'
 
 interface DishFilterOption<T> {
   label: string
   value: T
+}
+
+interface DishListItem extends DishResponse {
+  statusPending?: boolean
+  deletePending?: boolean
 }
 
 const ONLINE_FILTER_OPTIONS: DishFilterOption<DishOnlineFilterKey>[] = [
@@ -20,38 +24,73 @@ const ONLINE_FILTER_OPTIONS: DishFilterOption<DishOnlineFilterKey>[] = [
   { label: '已下架', value: 'offline' }
 ]
 
-const AVAILABILITY_FILTER_OPTIONS: DishFilterOption<DishAvailabilityFilterKey>[] = [
-  { label: '全部库存', value: 'all' },
-  { label: '可售', value: 'available' },
-  { label: '不可售', value: 'unavailable' }
-]
-
-interface DishListItem extends DishResponse {
-  selected?: boolean
-}
-
 function normalizeDish(dish: DishResponse): DishListItem {
   return {
     ...dish,
     image_url: getPublicImageUrl(dish.image_url),
-    selected: false
+    statusPending: false,
+    deletePending: false
   }
 }
 
-function buildDishSelectionState(dishes: DishListItem[], selectedDishIds: number[]) {
-  const dishIdSet = new Set(dishes.map((dish) => dish.id))
-  const effectiveSelectedIds = Array.from(new Set(selectedDishIds)).filter((id) => dishIdSet.has(id))
-  const selectedSet = new Set(effectiveSelectedIds)
+function buildResultSummaryText(params: {
+  visibleCount: number
+  currentCategoryId: number
+  currentOnlineFilter: DishOnlineFilterKey
+}) {
+  const activeFilters: string[] = []
+  if (params.currentCategoryId > 0) {
+    activeFilters.push('分类')
+  }
+  if (params.currentOnlineFilter !== 'all') {
+    activeFilters.push(params.currentOnlineFilter === 'online' ? '已上架' : '已下架')
+  }
+
+  if (activeFilters.length > 0) {
+    return `${activeFilters.join(' / ')}下共 ${params.visibleCount} 项`
+  }
+
+  return `当前共 ${params.visibleCount} 项菜品`
+}
+
+function buildEmptyDescription(params: {
+  currentCategoryId: number
+  currentOnlineFilter: DishOnlineFilterKey
+}) {
+  if (params.currentCategoryId > 0 || params.currentOnlineFilter !== 'all') {
+    return '暂无符合当前筛选条件的菜品'
+  }
+
+  return '还没有菜品，先新增一个'
+}
+
+function buildDishPresentationState(params: {
+  loadedDishes: DishListItem[]
+  currentCategoryId: number
+  currentOnlineFilter: DishOnlineFilterKey
+}) {
+  const dishes = params.loadedDishes
 
   return {
-    dishes: dishes.map((dish) => ({
-      ...dish,
-      selected: selectedSet.has(dish.id)
-    })),
-    selectedDishIds: effectiveSelectedIds,
-    selectedCount: effectiveSelectedIds.length,
-    allLoadedSelected: dishes.length > 0 && dishes.every((dish) => selectedSet.has(dish.id))
+    dishes,
+    resultSummaryText: buildResultSummaryText({
+      visibleCount: dishes.length,
+      currentCategoryId: params.currentCategoryId,
+      currentOnlineFilter: params.currentOnlineFilter
+    }),
+    emptyDescription: buildEmptyDescription({
+      currentCategoryId: params.currentCategoryId,
+      currentOnlineFilter: params.currentOnlineFilter
+    })
   }
+}
+
+function resolveHasMore(total: number | undefined, loadedCount: number, pageSize: number, lastPageLength: number) {
+  if (typeof total === 'number' && total >= 0) {
+    return loadedCount < total
+  }
+
+  return lastPageLength >= pageSize
 }
 
 Page({
@@ -62,29 +101,35 @@ Page({
     initialErrorMessage: '',
     refreshErrorMessage: '',
     loading: false,
+    loadedDishes: [] as DishListItem[],
     dishes: [] as DishListItem[],
     categories: [] as DishCategory[],
     onlineFilterOptions: ONLINE_FILTER_OPTIONS,
-    availabilityFilterOptions: AVAILABILITY_FILTER_OPTIONS,
     currentCategoryId: 0,
     currentOnlineFilter: 'all' as DishOnlineFilterKey,
-    currentAvailabilityFilter: 'all' as DishAvailabilityFilterKey,
-    searchKeyword: '',
+    resultSummaryText: '当前共 0 项菜品',
+    emptyDescription: '还没有菜品，先新增一个',
     pageId: 1,
     pageSize: 20,
     hasMore: true,
-    batchMode: false,
-    batchSubmitting: false,
-    batchTargetStatus: '' as '' | 'online' | 'offline',
-    selectedDishIds: [] as number[],
-    selectedCount: 0,
-    allLoadedSelected: false
+    deleteDialogVisible: false,
+    deleteDialogSubmitting: false,
+    deleteDialogDishId: 0,
+    deleteDialogDishName: ''
   },
 
   onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
     this.refreshAll()
+  },
+
+  buildPresentationUpdate(loadedDishes: DishListItem[]) {
+    return buildDishPresentationState({
+      loadedDishes,
+      currentCategoryId: this.data.currentCategoryId,
+      currentOnlineFilter: this.data.currentOnlineFilter
+    })
   },
 
   async refreshAll(showLoading = true) {
@@ -110,14 +155,14 @@ Page({
   },
 
   async loadDishesInternal(reset = false, showLoading = true) {
-    if (this.data.loading) return
+    if (this.data.loading) {
+      return
+    }
+    if (!reset && !this.data.hasMore) {
+      return
+    }
 
-    const keyword = this.data.searchKeyword.trim()
-    const isSearchMode = keyword.length > 0
-    if (!reset && !isSearchMode && !this.data.hasMore) return
-    if (!reset && isSearchMode) return
-
-    const hasExistingDishes = this.data.dishes.length > 0
+    const hasExistingDishes = this.data.loadedDishes.length > 0
     const isSilentRefresh = reset && !showLoading && hasExistingDishes
 
     this.setData({
@@ -130,41 +175,21 @@ Page({
     })
 
     try {
-      if (isSearchMode) {
-        const matchedDishes = await this.searchAllDishes(keyword)
-        const selectionState = buildDishSelectionState(
-          matchedDishes,
-          this.data.batchMode ? this.data.selectedDishIds : []
-        )
-        this.setData({
-          ...selectionState,
-          pageId: 1,
-          hasMore: false,
-          initialLoading: false,
-          initialError: false,
-          initialErrorMessage: '',
-          refreshErrorMessage: ''
-        })
-        return
-      }
-
       const pageId = reset ? 1 : this.data.pageId
       const params = this.buildDishListParams(pageId, this.data.pageSize)
-
-      const res = await DishManagementService.listDishes(params)
-      const sourceDishes = Array.isArray(res?.dishes) ? res.dishes.filter((dish): dish is DishResponse => !!dish) : []
+      const response = await DishManagementService.listDishes(params)
+      const sourceDishes = Array.isArray(response?.dishes)
+        ? response.dishes.filter((dish): dish is DishResponse => !!dish)
+        : []
       const newDishes = sourceDishes.map(normalizeDish)
-      const total = typeof res?.total === 'number' ? res.total : 0
-      const mergedDishes = reset ? newDishes : [...this.data.dishes, ...newDishes]
-      const selectionState = buildDishSelectionState(
-        mergedDishes,
-        this.data.batchMode ? this.data.selectedDishIds : []
-      )
+      const loadedDishes = reset ? newDishes : [...this.data.loadedDishes, ...newDishes]
+      const total = typeof response?.total === 'number' ? response.total : undefined
 
       this.setData({
-        ...selectionState,
+        loadedDishes,
+        ...this.buildPresentationUpdate(loadedDishes),
         pageId: pageId + 1,
-        hasMore: total > 0 ? pageId * this.data.pageSize < total : newDishes.length === this.data.pageSize,
+        hasMore: resolveHasMore(total, loadedDishes.length, this.data.pageSize, newDishes.length),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
@@ -191,36 +216,10 @@ Page({
     }
   },
 
-  async searchAllDishes(keyword: string) {
-    const dishes: DishListItem[] = []
-    let pageId = 1
-    let hasMorePages = true
-
-    while (hasMorePages) {
-      const params = this.buildDishListParams(pageId, 50)
-
-      const response = await DishManagementService.listDishes(params)
-      const pageDishes = Array.isArray(response?.dishes)
-        ? response.dishes.filter((dish): dish is DishResponse => !!dish).map(normalizeDish)
-        : []
-
-      dishes.push(...pageDishes)
-
-      const total = typeof response?.total === 'number' ? response.total : 0
-      hasMorePages = !(pageDishes.length < params.page_size || (total > 0 && dishes.length >= total))
-      if (hasMorePages) {
-        pageId += 1
-      }
-    }
-
-    return dishes.filter((dish) => dish.name.includes(keyword))
-  },
-
   buildDishListParams(pageId: number, pageSize: number) {
     const params: {
       category_id?: number
       is_online?: boolean
-      is_available?: boolean
       page_id: number
       page_size: number
     } = {
@@ -231,53 +230,21 @@ Page({
     if (this.data.currentCategoryId > 0) {
       params.category_id = this.data.currentCategoryId
     }
-
     if (this.data.currentOnlineFilter === 'online') {
       params.is_online = true
     } else if (this.data.currentOnlineFilter === 'offline') {
       params.is_online = false
     }
 
-    if (this.data.currentAvailabilityFilter === 'available') {
-      params.is_available = true
-    } else if (this.data.currentAvailabilityFilter === 'unavailable') {
-      params.is_available = false
-    }
-
     return params
-  },
-
-  hasActiveStatusFilter() {
-    return this.data.currentOnlineFilter !== 'all' || this.data.currentAvailabilityFilter !== 'all'
   },
 
   onTabChange(e: WechatMiniprogram.CustomEvent<{ value: string | number }>) {
     const nextCategoryId = Number(e.detail?.value || 0)
-    this.setData({ 
+    this.setData({
       currentCategoryId: Number.isFinite(nextCategoryId) ? nextCategoryId : 0,
       pageId: 1,
-      hasMore: true,
-      batchMode: false,
-      batchSubmitting: false,
-      batchTargetStatus: '',
-      ...buildDishSelectionState(this.data.dishes, [])
-    }, () => {
-      this.loadDishesInternal(true)
-    })
-  },
-
-  onSearchChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    this.setData({ searchKeyword: e.detail.value })
-  },
-
-  onSearchSubmit() {
-    this.setData({
-      pageId: 1,
-      hasMore: true,
-      batchMode: false,
-      batchSubmitting: false,
-      batchTargetStatus: '',
-      ...buildDishSelectionState(this.data.dishes, [])
+      hasMore: true
     }, () => {
       this.loadDishesInternal(true)
     })
@@ -292,30 +259,7 @@ Page({
     this.setData({
       currentOnlineFilter: value,
       pageId: 1,
-      hasMore: true,
-      batchMode: false,
-      batchSubmitting: false,
-      batchTargetStatus: '',
-      ...buildDishSelectionState(this.data.dishes, [])
-    }, () => {
-      this.loadDishesInternal(true)
-    })
-  },
-
-  onAvailabilityFilterChange(e: WechatMiniprogram.TouchEvent) {
-    const { value } = e.currentTarget.dataset as { value?: DishAvailabilityFilterKey }
-    if (!value || value === this.data.currentAvailabilityFilter) {
-      return
-    }
-
-    this.setData({
-      currentAvailabilityFilter: value,
-      pageId: 1,
-      hasMore: true,
-      batchMode: false,
-      batchSubmitting: false,
-      batchTargetStatus: '',
-      ...buildDishSelectionState(this.data.dishes, [])
+      hasMore: true
     }, () => {
       this.loadDishesInternal(true)
     })
@@ -333,10 +277,6 @@ Page({
     wx.navigateTo({ url: '/pages/merchant/dishes/categories/index' })
   },
 
-  onLoadMore() {
-    this.loadDishesInternal(false)
-  },
-
   onRetry() {
     this.refreshAll()
   },
@@ -345,234 +285,183 @@ Page({
     this.loadDishesInternal(true, false)
   },
 
-  onToggleBatchMode() {
-    if (this.data.batchSubmitting) {
-      return
-    }
+  onActionsCatch() {},
 
-    const batchMode = !this.data.batchMode
-    this.setData({
-      batchMode,
-      batchSubmitting: false,
-      batchTargetStatus: '',
-      ...buildDishSelectionState(this.data.dishes, [])
-    })
-  },
-
-  onCancelBatchMode() {
-    if (this.data.batchSubmitting) {
-      return
-    }
-
-    this.setData({
-      batchMode: false,
-      batchSubmitting: false,
-      batchTargetStatus: '',
-      ...buildDishSelectionState(this.data.dishes, [])
-    })
-  },
-
-  onSelectDish(e: WechatMiniprogram.TouchEvent) {
-    if (!this.data.batchMode || this.data.batchSubmitting) {
-      return
-    }
-
+  onDishCardTap(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as { id?: number }
     if (!id) {
       return
     }
 
-    const selectedSet = new Set(this.data.selectedDishIds)
-    if (selectedSet.has(id)) {
-      selectedSet.delete(id)
-    } else {
-      selectedSet.add(id)
-    }
-
-    this.setData(buildDishSelectionState(this.data.dishes, [...selectedSet]))
+    wx.navigateTo({ url: `./edit/index?id=${id}` })
   },
 
-  onSelectAllLoaded() {
-    if (!this.data.batchMode || this.data.batchSubmitting || !this.data.dishes.length) {
+  async onSwitchStatusChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) {
       return
     }
 
-    const nextSelectedIds = this.data.allLoadedSelected ? [] : this.data.dishes.map((dish) => dish.id)
-    this.setData(buildDishSelectionState(this.data.dishes, nextSelectedIds))
-  },
-
-  async onBatchUpdateStatus(e: WechatMiniprogram.TouchEvent) {
-    if (!this.data.batchMode || this.data.batchSubmitting) {
+    const targetDish = this.data.loadedDishes.find((dish) => dish.id === id)
+    if (!targetDish || targetDish.statusPending || targetDish.deletePending) {
       return
     }
 
-    const { online } = e.currentTarget.dataset as { online?: boolean | string }
-    const targetStatus = online === true || online === 'true'
-    const selectedDishIds = this.data.selectedDishIds
-
-    if (!selectedDishIds.length) {
-      wx.showToast({ title: '请先选择菜品', icon: 'none' })
+    const targetStatus = !!e.detail?.value
+    if (targetStatus === targetDish.is_online) {
       return
     }
 
-    const actionText = targetStatus ? '上架' : '下架'
-    wx.showModal({
-      title: `确认批量${actionText}`,
-      content: `将对已选 ${selectedDishIds.length} 个菜品执行${actionText}，是否继续？`,
-      confirmText: `确认${actionText}`,
-      cancelText: '取消',
-      success: async (res) => {
-        if (!res.confirm) {
-          return
-        }
-
-        await this.applyBatchStatusUpdate(targetStatus)
-      }
-    })
-  },
-
-  async applyBatchStatusUpdate(targetStatus: boolean) {
-    const selectedDishIds = this.data.selectedDishIds
-    if (!selectedDishIds.length) {
-      return
-    }
-
+    const pendingDishes = this.data.loadedDishes.map((dish) => (
+      dish.id === id ? { ...dish, statusPending: true } : dish
+    ))
     this.setData({
-      batchSubmitting: true,
-      batchTargetStatus: targetStatus ? 'online' : 'offline'
+      loadedDishes: pendingDishes,
+      ...this.buildPresentationUpdate(pendingDishes)
     })
 
-    try {
-      const response = await DishManagementService.batchUpdateDishStatus({
-        dish_ids: selectedDishIds,
-        is_online: targetStatus
-      })
-
-      const updatedIds = Array.isArray(response?.updated) ? response.updated : []
-      const failedIds = Array.isArray(response?.failed) ? response.failed : []
-      const shouldReloadFilteredList = this.data.currentOnlineFilter !== 'all' && updatedIds.length > 0
-      const updatedSet = new Set(updatedIds)
-
-      const dishes = shouldReloadFilteredList
-        ? this.data.dishes
-        : this.data.dishes.map((dish) => ({
-          ...dish,
-          is_online: updatedSet.has(dish.id) ? targetStatus : dish.is_online
-        }))
-      const selectionState = buildDishSelectionState(dishes, failedIds)
-      const nextBatchMode = failedIds.length > 0
-
-      this.setData({
-        batchMode: nextBatchMode,
-        batchSubmitting: false,
-        batchTargetStatus: '',
-        ...selectionState
-      })
-
-      const actionText = targetStatus ? '上架' : '下架'
-      if (failedIds.length > 0) {
-        wx.showModal({
-          title: `批量${actionText}未全部成功`,
-          content: `成功 ${updatedIds.length} 个，失败 ${failedIds.length} 个。已保留失败项勾选状态，方便继续处理。`,
-          showCancel: false,
-          confirmText: '我知道了'
-        })
-        return
-      }
-
-      if (updatedIds.length > 0) {
-        wx.showToast({ title: `已批量${actionText}${updatedIds.length}个菜品`, icon: 'none' })
-      }
-
-      if (shouldReloadFilteredList) {
-        this.loadDishesInternal(true, false)
-      }
-    } catch (err) {
-      logger.error('Batch update dish status failed', err)
-      this.setData({
-        batchSubmitting: false,
-        batchTargetStatus: ''
-      })
-      wx.showToast({ title: getErrorMessage(err, '批量操作失败，请稍后重试'), icon: 'none' })
-    }
-  },
-
-  // ==================== 状态切换 ====================
-
-  async onToggleStatus(e: WechatMiniprogram.TouchEvent) {
-    const { id, online } = e.currentTarget.dataset as { id?: number, online?: boolean }
-    if (!id) return
-    const targetStatus = !online
-    
-    wx.showLoading({ title: '处理中...' })
     try {
       await DishManagementService.updateDishStatus(id, { is_online: targetStatus })
 
-      if (this.hasActiveStatusFilter()) {
-        this.loadDishesInternal(true, false)
-      } else {
-        const index = this.data.dishes.findIndex((d) => d.id === id)
-        if (index > -1) {
-          const key = `dishes[${index}].is_online`
-          this.setData({ [key]: targetStatus })
-        }
+      const nextLoadedDishes = pendingDishes.map((dish) => (
+        dish.id === id
+          ? { ...dish, is_online: targetStatus, statusPending: false }
+          : dish
+      ))
+
+      this.setData({
+        loadedDishes: nextLoadedDishes,
+        ...this.buildPresentationUpdate(nextLoadedDishes)
+      })
+
+      if (this.data.currentOnlineFilter !== 'all') {
+        void this.loadDishesInternal(true, false)
       }
 
     } catch (err) {
       logger.error('Toggle dish status failed', err)
-      wx.showToast({ title: '操作失败', icon: 'error' })
-    } finally {
-      wx.hideLoading()
+      const restoredDishes = pendingDishes.map((dish) => (
+        dish.id === id ? { ...dish, statusPending: false } : dish
+      ))
+
+      this.setData({
+        loadedDishes: restoredDishes,
+        ...this.buildPresentationUpdate(restoredDishes)
+      })
+      wx.showToast({ title: getErrorMessage(err, '操作失败，请稍后重试'), icon: 'none' })
     }
   },
-
-  // ==================== 编辑/删除 ====================
 
   onAddDish() {
     wx.navigateTo({ url: './edit/index' })
   },
 
-  onEditDish(e: WechatMiniprogram.TouchEvent) {
-    if (this.data.batchMode) {
+  onDishImageError(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) {
       return
     }
 
-    const { id } = e.currentTarget.dataset as { id?: number }
-    wx.navigateTo({ url: `./edit/index?id=${id}` })
-  },
-
-  onDishImageError(e: WechatMiniprogram.TouchEvent) {
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-
-    const index = this.data.dishes.findIndex((d) => d.id === id)
-    if (index < 0) return
-    if (this.data.dishes[index].image_url === '/assets/icons/empty.svg') return
-
-    this.setData({
-      [`dishes[${index}].image_url`]: '/assets/icons/empty.svg'
-    })
-  },
-
-  onDeleteDish(e: WechatMiniprogram.TouchEvent) {
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-
-    wx.showModal({
-      title: '确认删除',
-      content: '删除后无法恢复，确定要删除该菜品吗？',
-      confirmText: '确认删除',
-      cancelText: '取消',
-      success: async (res) => {
-        if (!res.confirm) return
-        try {
-          await DishManagementService.deleteDish(id)
-          await this.loadDishesInternal(true, false)
-        } catch (err) {
-          logger.error('Delete dish failed', err)
-          wx.showToast({ title: '删除失败', icon: 'none' })
-        }
+    const nextLoadedDishes = this.data.loadedDishes.map((dish) => {
+      if (dish.id !== id || dish.image_url === '/assets/icons/empty.svg') {
+        return dish
+      }
+      return {
+        ...dish,
+        image_url: '/assets/icons/empty.svg'
       }
     })
+
+    this.setData({
+      loadedDishes: nextLoadedDishes,
+      ...this.buildPresentationUpdate(nextLoadedDishes)
+    })
+  },
+
+  onRequestDeleteDish(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) {
+      return
+    }
+
+    const targetDish = this.data.loadedDishes.find((dish) => dish.id === id)
+    if (!targetDish || targetDish.deletePending) {
+      return
+    }
+
+    this.setData({
+      deleteDialogVisible: true,
+      deleteDialogSubmitting: false,
+      deleteDialogDishId: id,
+      deleteDialogDishName: targetDish.name || '该菜品'
+    })
+  },
+
+  onCancelDeleteDialog() {
+    if (this.data.deleteDialogSubmitting) {
+      return
+    }
+
+    this.setData({
+      deleteDialogVisible: false,
+      deleteDialogDishId: 0,
+      deleteDialogDishName: '',
+      deleteDialogSubmitting: false
+    })
+  },
+
+  async onConfirmDeleteDish() {
+    const id = Number(this.data.deleteDialogDishId || 0)
+    if (!id) {
+      this.onCancelDeleteDialog()
+      return
+    }
+
+    const targetDish = this.data.loadedDishes.find((dish) => dish.id === id)
+    if (!targetDish || targetDish.deletePending) {
+      this.onCancelDeleteDialog()
+      return
+    }
+
+    this.setData({ deleteDialogSubmitting: true })
+
+    const pendingDishes = this.data.loadedDishes.map((dish) => (
+      dish.id === id ? { ...dish, deletePending: true } : dish
+    ))
+    this.setData({
+      loadedDishes: pendingDishes,
+      ...this.buildPresentationUpdate(pendingDishes)
+    })
+
+    try {
+      await DishManagementService.deleteDish(id)
+      const nextLoadedDishes = pendingDishes.filter((dish) => dish.id !== id)
+
+      this.setData({
+        deleteDialogVisible: false,
+        deleteDialogSubmitting: false,
+        deleteDialogDishId: 0,
+        deleteDialogDishName: '',
+        loadedDishes: nextLoadedDishes,
+        ...this.buildPresentationUpdate(nextLoadedDishes)
+      })
+
+      if (!nextLoadedDishes.length && this.data.pageId > 1) {
+        void this.loadDishesInternal(true, false)
+      }
+      wx.showToast({ title: '菜品已删除', icon: 'none' })
+    } catch (err) {
+      logger.error('Delete dish failed', err)
+      const restoredDishes = pendingDishes.map((dish) => (
+        dish.id === id ? { ...dish, deletePending: false } : dish
+      ))
+
+      this.setData({
+        deleteDialogSubmitting: false,
+        loadedDishes: restoredDishes,
+        ...this.buildPresentationUpdate(restoredDishes)
+      })
+      wx.showToast({ title: getErrorMessage(err, '删除失败，请稍后重试'), icon: 'none' })
+    }
   }
 })

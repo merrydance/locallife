@@ -10,6 +10,14 @@ export type RejectedResult = {
 
 export type SettledResult<T> = FulfilledResult<T> | RejectedResult
 
+export function isSettledFulfilled<T>(result: SettledResult<T>): result is FulfilledResult<T> {
+  return result.status === 'fulfilled'
+}
+
+export function isSettledRejected(result: SettledResult<unknown>): result is RejectedResult {
+  return result.status === 'rejected'
+}
+
 export function settleAll<T extends readonly unknown[]>(
   promises: { [K in keyof T]: Promise<T[K]> }
 ): Promise<{ [K in keyof T]: SettledResult<T[K]> }>

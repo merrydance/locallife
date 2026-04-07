@@ -1,7 +1,12 @@
-<custom-navbar title="商户工作台" showBack="{{true}}" />
+<custom-navbar title="商户管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <t-empty wx:if="{{accessReady && accessDenied}}" icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: var(--spacer-lg);"
+>
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
@@ -13,120 +18,76 @@
   </view>
 
   <block wx:else>
-  <view wx:if="{{initialError || refreshErrorMessage}}" class="console-error-banner">
-    <view class="console-error-banner__body">
-      <t-icon name="error-circle" size="32rpx" color="var(--td-warning-color-7)" />
-      <text class="console-error-banner__text">{{initialError ? (initialErrorMessage || '工作台加载失败，请重试') : refreshErrorMessage}}</text>
+    <t-notice-bar
+      wx:if="{{refreshErrorMessage && !initialError}}"
+      visible="{{true}}"
+      theme="warning"
+      content="{{refreshErrorMessage}}"
+      prefixIcon="error-circle"
+      t-class="dashboard-notice"
+    />
+
+    <view wx:if="{{initialError}}" class="state-block">
+      <t-empty icon="error-circle" description="{{initialErrorMessage || '商户首页加载失败，请重试'}}" />
+      <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
     </view>
-    <t-button wx:if="{{initialError && initialErrorCanRetry}}" theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
-    <t-button wx:elif="{{!initialError && refreshErrorCanRetry}}" theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
-  </view>
-  <t-skeleton 
-    loading="{{initialLoading}}" 
-    rowCol="{{ [{ width: '100%', height: '300rpx' }] }}" 
-    t-class="skeleton-header"
-  >
-    <!-- 1. 营业状态切换与商户名称 -->
-    <view class="merchant-header-card">
-      <view class="header-top">
-        <view class="merchant-profile">
-          <t-icon name="avatar" size="48rpx" color="rgba(255,255,255,0.8)" />
-          <view class="merchant-name">{{merchantInfo.name || '核心商圈店'}}</view>
-          <t-tag size="small" variant="dark" theme="default" shape="round" class="status-tag {{isOpen ? 'tag-open' : 'tag-closed'}}">
-            {{isOpen ? '营业中' : '休息中'}}
-          </t-tag>
-        </view>
-        <view class="setting-entry" bindtap="onGoToSettings">
-          <t-icon name="setting" size="40rpx" color="#fff" />
-        </view>
-      </view>
 
-      <!-- 今日核心指标 -->
-      <view class="stats-grid">
-        <view class="stats-item">
-          <text class="stats-label">今日营业额</text>
-          <text class="stats-value">¥{{todayStats.revenue / 100}}</text>
-        </view>
-        <view class="stats-item">
-          <text class="stats-label">今日订单</text>
-          <text class="stats-value">{{todayStats.orderCount}}</text>
-        </view>
-        <view class="stats-item">
-          <text class="stats-label">实付客单</text>
-          <text class="stats-value">¥{{todayStats.avgOrderPrice / 100}}</text>
-        </view>
-      </view>
-
-      <view wx:if="{{todayTodos.length}}" class="todo-strip">
-        <view class="todo-chip" wx:for="{{todayTodos}}" wx:key="id" data-path="{{item.path}}" bindtap="onGoShortcut">
-          <text class="todo-chip__title">{{item.title}}</text>
-          <text class="todo-chip__count">{{item.count > 99 ? '99+' : item.count}}</text>
-        </view>
-      </view>
-
-      <view class="focus-panel">
-        <view class="focus-panel__header">
-          <text class="focus-panel__label">快捷操作</text>
-          <text class="focus-panel__status">{{businessStatusText}}</text>
-        </view>
-        <view class="focus-panel__actions">
-          <t-button block size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoOrderList">订单中心</t-button>
-          <t-button block size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoKitchen">进入后厨</t-button>
-          <t-button block size="small" variant="outline" theme="primary" shape="round" bind:tap="onGoStats">经营统计</t-button>
-        </view>
-      </view>
-
-      <view class="business-strip {{isOpen ? 'is-open' : 'is-closed'}}">
-        <view class="business-strip__copy">
-          <view class="business-strip__title-row">
-            <t-icon name="{{isOpen ? 'check-circle' : 'error-circle'}}" size="28rpx" />
-            <text class="business-strip__title">{{isOpen ? '当前营业中' : '当前已打烊'}}</text>
+    <block wx:else>
+      <t-skeleton loading="{{initialLoading}}" rowCol="{{skeletonRows}}">
+        <view class="hero-card">
+          <view class="hero-top">
+            <view class="hero-copy">
+              <view class="hero-title-row">
+                <view class="hero-title-main">
+                  <text class="hero-title">{{activeMerchant.name || '商户中心'}}</text>
+                  <t-tag
+                    size="small"
+                    shape="round"
+                    variant="dark"
+                    theme="{{isOpen ? 'success' : 'warning'}}"
+                  >
+                    {{isOpen ? '营业中' : '休息中'}}
+                  </t-tag>
+                </view>
+                <text class="hero-period">{{monthRangeLabel}}</text>
+              </view>
+            </view>
           </view>
-          <text class="business-strip__desc">{{isOpen ? '顾客可正常下单，忙时也可临时打烊' : '顾客暂时无法下单，已生成订单仍需继续处理'}}</text>
+
+          <view class="metric-grid">
+            <view wx:for="{{overviewMetrics}}" wx:key="id" class="metric-card">
+              <text class="metric-label">{{item.label}}</text>
+              <text class="metric-value">{{item.value}}</text>
+              <text class="metric-note">{{item.note}}</text>
+            </view>
+          </view>
         </view>
-        <t-button size="small" variant="outline" theme="default" shape="round" bind:tap="onToggleBusiness" loading="{{businessStatusSubmitting}}">{{isOpen ? '打烊' : '开门'}}</t-button>
-      </view>
-    </view>
-  </t-skeleton>
 
-  <t-skeleton
-    loading="{{initialLoading}}"
-    rowCol="{{ [{ width: '100%', height: '260rpx' }] }}"
-    t-class="skeleton-body"
-  >
-    <view class="insight-section">
-      <view class="insight-section__head">
-        <view>
-          <view class="insight-section__title">经营洞察</view>
-          <text class="insight-section__desc">{{insightErrorMessage || (insightLoading ? '经营洞察同步中，不影响待办与营业状态刷新' : '只展示首页需要快速判断的统计信息')}}</text>
+        <view class="section-list">
+          <view wx:for="{{sections}}" wx:key="id" class="section-block">
+            <view class="section-header">
+              <text class="section-title">{{item.title}}</text>
+            </view>
+
+            <t-grid column="4" gutter="{{gridGutter}}" border="{{false}}" theme="card" hover="{{true}}" t-class="dashboard-grid">
+              <t-grid-item
+                wx:for="{{item.items}}"
+                wx:for-item="entry"
+                wx:key="id"
+                icon="{{entry.icon}}"
+                text="{{entry.title}}"
+                badge-props="{{entry.badgeProps}}"
+                data-path="{{entry.path}}"
+                bind:click="onTapEntry"
+                t-class="dashboard-grid-item"
+                t-class-content="dashboard-grid-content"
+                t-class-text="dashboard-grid-text"
+              />
+            </t-grid>
+          </view>
         </view>
-        <t-button size="small" variant="text" theme="primary" bind:tap="onGoStats">查看详情</t-button>
-      </view>
-
-      <view class="insight-grid">
-        <view class="insight-card" wx:for="{{insightItems}}" wx:key="id">
-          <text class="insight-card__title">{{item.title}}</text>
-          <text class="insight-card__value">{{item.value}}</text>
-          <text class="insight-card__desc">{{item.desc}}</text>
-        </view>
-      </view>
-    </view>
-  </t-skeleton>
-
-  <view wx:if="{{accessReady}}" class="collaboration-section">
-    <view class="collaboration-section__head">
-      <view>
-        <view class="collaboration-section__title">顾客反馈</view>
-        <text class="collaboration-section__desc">集中查看顾客评价，作为日常经营跟进的一部分。</text>
-      </view>
-    </view>
-
-    <view class="collaboration-grid">
-      <view class="collaboration-card" wx:for="{{collaborationItems}}" wx:key="id" data-path="{{item.path}}" bindtap="onGoShortcut">
-        <view class="collaboration-card__title">{{item.title}}</view>
-        <text class="collaboration-card__desc">{{item.desc}}</text>
-      </view>
-    </view>
-  </view>
+      </t-skeleton>
+    </block>
   </block>
+
 </view>

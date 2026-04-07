@@ -2,9 +2,10 @@
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
     "t-button": "tdesign-miniprogram/button/button",
+    "t-cell": "tdesign-miniprogram/cell/cell",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-tag": "tdesign-miniprogram/tag/tag",
     "t-popup": "tdesign-miniprogram/popup/popup",
     "t-picker": "tdesign-miniprogram/picker/picker",
     "t-picker-item": "tdesign-miniprogram/picker-item/picker-item"

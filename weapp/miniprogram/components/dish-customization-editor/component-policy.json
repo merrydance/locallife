@@ -1,0 +1,12 @@
+{
+  "purpose": "Merchant dish customization editor for managing non-collapsible spec groups and option rows within the dish edit flow.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "input",
+    "button",
+    "tag",
+    "nested local component"
+  ],
+  "decision": "local-component",
+  "rationale": "This editor now focuses on group-level structure only: inline group naming, required-state expression, and delegating option-row editing to a dedicated child component. Keeping group orchestration here preserves a clear parent-child boundary without inventing new primitives outside TDesign composition."
+}

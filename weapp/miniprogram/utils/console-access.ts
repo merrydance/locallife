@@ -73,6 +73,18 @@ export type MerchantConsoleAccessResult =
   | { status: 'denied', message: string }
   | { status: 'error', message: string }
 
+export function isMerchantConsoleAccessGranted(result: MerchantConsoleAccessResult) {
+  return result.status === 'granted'
+}
+
+export function isMerchantConsoleAccessDenied(result: MerchantConsoleAccessResult) {
+  return result.status === 'denied'
+}
+
+export function getMerchantConsoleAccessErrorMessage(result: MerchantConsoleAccessResult) {
+  return result.status === 'error' ? result.message : ''
+}
+
 function getFreshCachedUserInfo() {
   if (!cachedUserInfo) {
     return null

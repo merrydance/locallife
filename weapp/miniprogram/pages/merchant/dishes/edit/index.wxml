@@ -1,289 +1,197 @@
 <custom-navbar title="{{isEdit ? '编辑菜品' : '新增菜品'}}" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view class="form-shell">
-    <view class="card">
-      <view class="section-title">菜品图片</view>
-      <t-upload
-        mediaType="{{['image']}}"
-        max="{{1}}"
-        files="{{fileList}}"
-        gridConfig="{{ { column: 1, width: 240, height: 240 } }}"
-        bind:add="onImageAdd"
-        bind:remove="onImageRemove"
-        bind:preview="onImagePreview"
-      />
-      <view class="helper-text">建议上传 1:1 或 4:3 图片，上传后可点击预览</view>
-      <view wx:if="{{imageUploading}}" class="uploading-row">
-        <t-loading theme="dots" size="28rpx" />
-        <text class="uploading-text">图片上传中...</text>
-      </view>
-    </view>
-
-    <view class="card">
-      <view class="section-title">基础信息</view>
-      <t-cell-group theme="card">
-        <t-input
-          label="菜品名称"
-          placeholder="请输入菜品名称"
-          value="{{formData.name}}"
-          bind:change="onInputChange"
-          data-field="name"
-          required
-        />
-
-        <t-cell title="菜品分类" arrow bind:tap="showCategoryPicker" note="{{selectedCategoryName || '请选择分类'}}" />
-
-        <t-input
-          label="价格(元)"
-          type="digit"
-          placeholder="0.00"
-          value="{{displayPrice}}"
-          bind:change="onPriceChange"
-          required
-        />
-
-        <t-input
-          label="会员价(元)"
-          type="digit"
-          placeholder="{{isEdit ? '留空则清除会员价' : '可选'}}"
-          value="{{displayMemberPrice}}"
-          bind:change="onMemberPriceChange"
-        />
-      </t-cell-group>
-    </view>
-
-    <view class="card">
-      <view class="section-title">详情描述</view>
-      <t-textarea
-        placeholder="请输入菜品详细介绍..."
-        value="{{formData.description}}"
-        bind:change="onInputChange"
-        data-field="description"
-        bordered
-        maxlength="200"
-        indicator
-      />
-    </view>
-
-    <view class="card">
-      <view class="section-title">菜品标签</view>
-      <view class="helper-row">
-        <view class="helper-text">用于标记口味、卖点等普通属性，推荐/热卖请使用下方排序标签。</view>
-        <t-button size="small" theme="primary" variant="outline" bindtap="onCreateDishTag" loading="{{tagSubmitting}}">新增标签</t-button>
-      </view>
-
-      <checkbox-group bindchange="onDishTagChange" wx:if="{{availableDishTags.length}}">
-        <view class="tag-grid">
-          <label class="tag-option" wx:for="{{availableDishTags}}" wx:key="id">
-            <checkbox value="{{item.id + ''}}" checked="{{selectedDishTagIds.indexOf(item.id) !== -1}}" color="var(--td-brand-color)" />
-            <text class="tag-option-label">{{item.name}}</text>
-          </label>
-        </view>
-      </checkbox-group>
-
-      <view wx:else class="helper-text">暂无普通菜品标签，可先新增标签。</view>
-    </view>
-
-    <view class="card">
-      <view class="section-title">规格与加价</view>
-      <view class="helper-text">先添加规格组，再在组内添加规格项，层级会更清晰。</view>
-
-      <view wx:if="{{customizationGroups.length === 0}}" class="spec-empty">
-        当前还没有规格组，适合用于份量、辣度、加料等经营选项。
-      </view>
-
-      <view
-        wx:for="{{customizationGroups}}"
-        wx:key="key"
-        wx:for-item="group"
-        wx:for-index="groupIndex"
-        class="spec-group"
-      >
-        <view class="spec-group-top">
-          <view class="spec-group-summary">
-            <text class="spec-group-badge">规格组 {{groupIndex + 1}}</text>
-            <text class="spec-group-meta">{{group.options.length}} 个规格项</text>
-          </view>
-          <view class="spec-required-toggle">
-            <text class="spec-required-label">必选</text>
-            <t-switch
-              size="small"
-              value="{{group.is_required}}"
-              data-group-index="{{groupIndex}}"
-              bind:change="onCustomizationGroupRequiredChange"
-            />
-          </view>
-        </view>
-
-        <view class="spec-group-header">
-          <input
-            class="spec-group-name"
-            placeholder="例如：规格 / 辣度 / 加料"
-            value="{{group.name}}"
-            data-group-index="{{groupIndex}}"
-            bindinput="onCustomizationGroupNameInput"
-          />
-        </view>
-
-        <view class="spec-option-header">
-          <text class="spec-option-header-title">规格项</text>
-          <text class="spec-option-header-desc">每个规格项可单独设置加价</text>
-        </view>
-
-        <view class="spec-options">
-          <view wx:if="{{group.options.length === 0}}" class="spec-option-empty">
-            <text>当前组还没有规格项，请先添加一个选项。</text>
-            <text class="spec-submit-hint">至少添加一个规格项后才能提交。</text>
-          </view>
-
-          <view
-            wx:for="{{group.options}}"
-            wx:key="key"
-            wx:for-item="option"
-            wx:for-index="optionIndex"
-            class="spec-option-card"
-          >
-            <view class="spec-option-card-header">
-              <text class="spec-option-index">规格项 {{optionIndex + 1}}</text>
-              <t-button
-                size="small"
-                theme="danger"
-                variant="text"
-                data-group-index="{{groupIndex}}"
-                data-option-index="{{optionIndex}}"
-                bindtap="onRemoveCustomizationOption"
-              >删除规格项</t-button>
-            </view>
-
-            <view class="spec-option-fields">
-              <input
-                class="spec-option-name"
-                placeholder="规格选项，例如：大份 / 微辣"
-                value="{{option.name}}"
-                data-group-index="{{groupIndex}}"
-                data-option-index="{{optionIndex}}"
-                bindinput="onCustomizationOptionNameInput"
-              />
-              <input
-                class="spec-option-price"
-                type="digit"
-                placeholder="加价(元)"
-                value="{{option.extraPriceYuan}}"
-                data-group-index="{{groupIndex}}"
-                data-option-index="{{optionIndex}}"
-                bindinput="onCustomizationOptionPriceInput"
-              />
-            </view>
-          </view>
-        </view>
-
-        <view class="spec-group-actions">
-          <t-button
-            size="small"
-            theme="primary"
-            variant="outline"
-            data-group-index="{{groupIndex}}"
-            bindtap="onAddCustomizationOption"
-          >添加规格项</t-button>
-          <t-button
-            size="small"
-            theme="danger"
-            variant="outline"
-            data-group-index="{{groupIndex}}"
-            bindtap="onRemoveCustomizationGroup"
-          >删除整个规格组</t-button>
-        </view>
-
-        <view wx:if="{{group.options.length === 0}}" class="spec-group-note">
-          先补充规格项，再提交菜品。
-        </view>
-      </view>
-
-      <t-button theme="primary" variant="outline" block bindtap="onAddCustomizationGroup">
-        添加规格组
-      </t-button>
-    </view>
-
-    <view class="card">
-      <view class="section-title">售卖设置</view>
-      <t-cell-group theme="card">
-        <t-cell title="是否上架">
-          <t-switch
-            slot="note"
-            value="{{formData.is_online}}"
-            bind:change="onSwitchChange"
-            data-field="is_online"
-          />
-        </t-cell>
-        <t-cell title="库存储备可用">
-          <t-switch
-            slot="note"
-            value="{{formData.is_available}}"
-            bind:change="onSwitchChange"
-            data-field="is_available"
-          />
-        </t-cell>
-        <t-input
-          label="预估出餐(分)"
-          type="number"
-          placeholder="15"
-          value="{{formData.prepare_time}}"
-          bind:change="onInputChange"
-          data-field="prepare_time"
-        />
-        <t-input
-          label="排序值"
-          type="number"
-          placeholder="0"
-          value="{{formData.sort_order}}"
-          bind:change="onInputChange"
-          data-field="sort_order"
-        />
-      </t-cell-group>
-    </view>
-
-    <!-- 排序标签（仅编辑模式可用） -->
-    <view class="card" wx:if="{{isEdit}}">
-      <view class="section-title">排序标签</view>
-      <t-cell-group theme="card">
-        <t-cell title="推荐" note="优先显示在菜单前列">
-          <t-switch
-            slot="note"
-            value="{{isFeatured}}"
-            bind:change="onFeaturedTagToggle"
-            data-tag="推荐"
-          />
-        </t-cell>
-        <t-cell title="热卖" note="次优先显示">
-          <t-switch
-            slot="note"
-            value="{{isHotSelling}}"
-            bind:change="onFeaturedTagToggle"
-            data-tag="热卖"
-          />
-        </t-cell>
-      </t-cell-group>
-    </view>
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载菜品编辑信息中..." vertical />
   </view>
 
-  <!-- 底部操作栏 -->
-  <view class="footer-bar {{isIPhoneX ? 'iphone-x' : ''}}">
-    <t-button block size="large" shape="round" theme="primary" loading="{{submitting}}" bind:tap="onSubmit">
-      保存提交
-    </t-button>
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '菜品编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
   </view>
 
-  <!-- 分类选择器 -->
-  <t-picker
-    visible="{{categoryVisible}}"
-    value="{{[selectedCategoryValue || (categoryOptions.length ? categoryOptions[0].value : '')]}}"
-    title="选择菜品分类"
-    cancelBtn="取消"
-    confirmBtn="确定"
-    bind:confirm="onCategoryConfirm"
-    bind:cancel="onCategoryCancel"
-  >
-    <t-picker-item options="{{categoryOptions}}" />
-  </t-picker>
+  <block wx:else>
+    <view class="page-content">
+      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
+        <text class="notice-text">{{loadWarningMessage}}</text>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">基础信息</text>
+        </view>
+
+        <view class="cover-field">
+          <text class="cover-title">菜品封面</text>
+          <t-upload
+            mediaType="{{['image']}}"
+            max="{{1}}"
+            files="{{fileList}}"
+            gridConfig="{{ { column: 1, width: 240, height: 240 } }}"
+            bind:add="onImageAdd"
+            bind:remove="onImageRemove"
+            bind:preview="onImagePreview"
+          />
+          <view wx:if="{{imageUploading}}" class="uploading-row">
+            <t-loading theme="dots" size="28rpx" />
+            <text class="uploading-text">图片上传中...</text>
+          </view>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-input
+            label="菜品名称"
+            placeholder="请输入菜品名称"
+            value="{{formData.name}}"
+            bind:change="onInputChange"
+            data-field="name"
+            required
+          />
+
+          <view class="field-action-row">
+            <view class="field-action-main">
+              <t-cell title="菜品分类" arrow bind:tap="showCategoryPicker" note="{{selectedCategoryName || (categoryOptions.length ? '请选择分类' : '请先创建分类')}}" />
+            </view>
+            <t-button size="small" shape="circle" theme="primary" icon="add" loading="{{categoryCreateSubmitting}}" bind:tap="onManageCategories" />
+          </view>
+
+          <text wx:if="{{!categoryOptions.length}}" class="section-caption">{{formData.category_id ? '当前分类不可调整' : '当前还没有可选分类'}}</text>
+
+          <t-input
+            label="价格(元)"
+            type="digit"
+            placeholder="0.00"
+            value="{{displayPrice}}"
+            bind:change="onPriceChange"
+            required
+          />
+
+          <t-input
+            label="会员价(元)"
+            type="digit"
+            placeholder="{{isEdit ? '留空则清除会员价' : '可选'}}"
+            value="{{displayMemberPrice}}"
+            bind:change="onMemberPriceChange"
+          />
+        </t-cell-group>
+
+        <t-textarea
+          placeholder="请输入菜品详细介绍..."
+          value="{{formData.description}}"
+          bind:change="onInputChange"
+          data-field="description"
+          bordered
+          maxlength="200"
+          indicator
+        />
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">售卖与展示</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-cell title="是否上架">
+            <t-switch slot="note" value="{{formData.is_online}}" bind:change="onSwitchChange" data-field="is_online" />
+          </t-cell>
+          <t-input
+            label="预估出餐"
+            suffix="分钟"
+            type="number"
+            placeholder="15"
+            value="{{formData.prepare_time}}"
+            bind:change="onInputChange"
+            data-field="prepare_time"
+            align="right"
+          />
+          <t-cell title="推荐标签">
+            <t-switch slot="note" value="{{isFeatured}}" bind:change="onFeaturedTagToggle" data-tag="推荐" />
+          </t-cell>
+          <t-cell title="热卖标签">
+            <t-switch slot="note" value="{{isHotSelling}}" bind:change="onFeaturedTagToggle" data-tag="热卖" />
+          </t-cell>
+        </t-cell-group>
+
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">普通标签</text>
+            <text wx:if="{{availableDishTags.length}}" class="section-caption">已选 {{selectedDishTagIds.length}} 个</text>
+          </view>
+          <view class="section-top-button">
+            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onCreateDishTag" loading="{{tagSubmitting}}" />
+          </view>
+        </view>
+
+        <view wx:if="{{availableDishTags.length}}" class="tag-check-list">
+          <t-check-tag
+            wx:for="{{availableDishTags}}"
+            wx:key="id"
+            checked="{{selectedDishTagState[item.id]}}"
+            content="{{item.name}}"
+            shape="round"
+            data-tag-id="{{item.id}}"
+            bind:change="onDishTagToggle"
+          />
+        </view>
+
+        <view wx:else class="inline-note-card">暂无普通菜品标签，可先新增标签。</view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">规格与加价</text>
+            <text wx:if="{{customizationGroups.length}}" class="section-caption">默认必选，共 {{customizationGroups.length}} 组</text>
+          </view>
+          <view class="section-top-button">
+            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onAddCustomizationGroup" />
+          </view>
+        </view>
+
+        <customization-editor id="customizationEditor" value="{{customizationGroups}}" bind:change="onCustomizationGroupsChange" />
+      </view>
+    </view>
+
+    <view class="footer-bar">
+      <t-button block size="large" shape="round" theme="primary" loading="{{submitting}}" disabled="{{!categoryOptions.length && !formData.category_id}}" bind:tap="onSubmit">{{isEdit ? '保存菜品' : '创建菜品'}}</t-button>
+    </view>
+
+    <t-picker
+      visible="{{categoryVisible}}"
+      value="{{[selectedCategoryValue || (categoryOptions.length ? categoryOptions[0].value : '')]}}"
+      title="选择菜品分类"
+      cancelBtn="取消"
+      confirmBtn="确定"
+      bind:confirm="onCategoryConfirm"
+      bind:cancel="onCategoryCancel"
+    >
+      <t-picker-item options="{{categoryOptions}}" />
+    </t-picker>
+
+    <t-dialog
+      visible="{{createPopupVisible}}"
+      title="{{createPopupMode === 'category' ? '新增菜品分类' : '新增菜品标签'}}"
+      confirm-btn="{{ { content: '确定', loading: createPopupMode === 'category' ? categoryCreateSubmitting : tagSubmitting } }}"
+      cancel-btn="取消"
+      bind:confirm="onConfirmCreatePopup"
+      bind:cancel="onCloseCreatePopup"
+    >
+      <view slot="content" class="dialog-form">
+        <t-input
+          label="{{createPopupMode === 'category' ? '分类名称' : '标签名称'}}"
+          placeholder="{{createPopupMode === 'category' ? '请输入分类名称' : '请输入标签名称'}}"
+          value="{{createInputValue}}"
+          bind:change="onCreateInputChange"
+        />
+      </view>
+    </t-dialog>
+
+  </block>
 </view>

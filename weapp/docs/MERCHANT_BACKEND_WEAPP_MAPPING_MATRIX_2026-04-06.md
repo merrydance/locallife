@@ -32,7 +32,7 @@
 
 - Weapp 商户侧当前共有 45 个页面入口，已覆盖订单、后厨、菜品、套餐、库存、桌台、预订、打印机、财务、投诉、申诉、索赔、评价、员工、门店资料、会员、营销、申请与集团申请等主能力域。
 - 后端商户合同并不只在 `/v1/merchant/**` 下，真实商户能力还分散在 `/v1/merchants/me/**`、`/v1/merchants/{id}/**`、`/v1/kitchen/**`、`/v1/dishes/**`、`/v1/combos/**`、`/v1/tables/**`、`/v1/reservations/**`、`/v1/reviews/**`、`/v1/groups/**` 和 `/v1/ocr/jobs`。
-- 当前主链路大多已形成“后端接口 -> weapp API 封装 -> 商户页面”的闭环，但仍有一批后台已暴露、尚未被小程序商户侧完整承接的接口，主要集中在结算账户、多门店切换、充值规则 active 读口、满减规则附加读口，以及房间能力缺少独立商户控制台入口等。
+- 当前主链路大多已形成“后端接口 -> weapp API 封装 -> 商户页面”的闭环，但仍有一批后台已暴露、尚未被小程序商户侧完整承接的接口，主要集中在结算账户、多门店切换、提现详情、充值规则 active 读口与满减规则附加读口等；另有房间专用接口与商户侧当前通过桌台页统一管理包间的实现之间存在模型分叉。
 - 存在少量合同漂移：部分能力真实可用，但 Swagger 或 handler 注解未完整表达，例如投诉详情/回复/完结路由，以及员工邀请码注解路径与真实注册路径不一致。
 
 ## 后端能力域矩阵
@@ -53,7 +53,7 @@
 | 菜品分类与菜品 | `POST /v1/dishes/categories` `GET /v1/dishes/categories` `GET /v1/dishes/categories/global` `PATCH /v1/dishes/categories/{id}` `DELETE /v1/dishes/categories/{id}` `POST /v1/dishes` `GET /v1/dishes` `GET /v1/dishes/{id}` `PUT /v1/dishes/{id}` `DELETE /v1/dishes/{id}` `PATCH /v1/dishes/{id}/status` `PATCH /v1/dishes/batch/status` `PUT /v1/dishes/{id}/customizations` `GET /v1/dishes/{id}/customizations` `PUT /v1/dishes/{id}/featured-tags` | `api/dish.go` | `merchant/dishes` `merchant/dishes/edit` `merchant/dishes/categories` | `dish.ts` | 已闭环 |
 | 套餐 | `POST /v1/combos` `GET /v1/combos` `GET /v1/combos/{id}` `PUT /v1/combos/{id}` `DELETE /v1/combos/{id}` `PUT /v1/combos/{id}/online` `POST /v1/combos/{id}/dishes` `DELETE /v1/combos/{id}/dishes/{dish_id}` | `api/combo.go` | `merchant/combos` `merchant/combos/edit` | `dish.ts` | 已闭环 |
 | 库存 | `GET /v1/inventory` `PUT /v1/inventory` `GET /v1/inventory/stats` | `api/inventory.go` | `merchant/inventory` | `dish.ts` | 已闭环；`POST /v1/inventory` 与 `POST /v1/inventory/check` 不作为独立商户页入口 |
-| 桌台与桌台资产 | `POST /v1/tables` `GET /v1/tables` `GET /v1/tables/{id}` `PATCH /v1/tables/{id}` `PATCH /v1/tables/{id}/status` `DELETE /v1/tables/{id}` `GET /v1/tables/{id}/qrcode` `POST /v1/tables/{id}/images` `GET /v1/tables/{id}/images` `PUT /v1/tables/{id}/images/{image_id}/primary` `DELETE /v1/tables/{id}/images/{image_id}` `POST /v1/tables/{id}/tags` `GET /v1/tables/{id}/tags` `DELETE /v1/tables/{id}/tags/{tag_id}` | `api/table.go` `api/scan.go` | `merchant/tables` | `table-device-management.ts` | 已闭环 |
+| 桌台与桌台资产 | `POST /v1/tables` `GET /v1/tables` `GET /v1/tables/{id}` `PATCH /v1/tables/{id}` `PATCH /v1/tables/{id}/status` `DELETE /v1/tables/{id}` `GET /v1/tables/{id}/qrcode` `POST /v1/tables/{id}/images` `GET /v1/tables/{id}/images` `PUT /v1/tables/{id}/images/{image_id}/primary` `DELETE /v1/tables/{id}/images/{image_id}` `POST /v1/tables/{id}/tags` `GET /v1/tables/{id}/tags` `DELETE /v1/tables/{id}/tags/{tag_id}` | `api/table.go` `api/scan.go` | `merchant/tables` | `table-device-management.ts` | 已闭环；页面以 `table_type=room` 统一承接包间管理 |
 | 预订 | `GET /v1/reservations/merchant` `GET /v1/reservations/merchant/today` `GET /v1/reservations/merchant/stats` `GET /v1/reservations/merchant/dishes` `POST /v1/reservations/merchant/create` `GET /v1/reservations/{id}` `PUT /v1/reservations/{id}/update` `POST /v1/reservations/{id}/confirm` `POST /v1/reservations/{id}/complete` `POST /v1/reservations/{id}/cancel` `POST /v1/reservations/{id}/no-show` `POST /v1/reservations/{id}/checkin` `POST /v1/reservations/{id}/start-cooking` `POST /v1/reservations/{id}/add-dishes` `POST /v1/reservations/{id}/modify-dishes` | `api/table_reservation.go` | `merchant/reservations` | `reservation.ts` | 已闭环 |
 | 打印机与设备同步恢复 | `POST /v1/merchant/devices` `GET /v1/merchant/devices` `GET /v1/merchant/devices/{id}` `GET /v1/merchant/devices/{id}/status` `PUT /v1/merchant/devices/{id}` `DELETE /v1/merchant/devices/{id}` `POST /v1/merchant/devices/{id}/test` `GET /v1/merchant/devices/reconciliation-jobs` `POST /v1/merchant/devices/reconciliation-jobs/{id}/retry` | `api/device.go` `api/device_reconciliation.go` | `merchant/printers` | `table-device-management.ts` | 已闭环 |
 | 展示配置 | `GET /v1/merchant/display-config` `PUT /v1/merchant/display-config` | `api/device.go` | `merchant/settings/display-config` | `table-device-management.ts` | 已闭环 |
@@ -70,7 +70,7 @@
 | 充值规则 | `POST /v1/merchants/{id}/recharge-rules` `GET /v1/merchants/{id}/recharge-rules` `PATCH /v1/merchants/{id}/recharge-rules/{rule_id}` `DELETE /v1/merchants/{id}/recharge-rules/{rule_id}` | `api/membership.go` | `merchant/settings/recharge-rules` | `merchant.ts` | 已闭环 |
 | 包装策略 | `GET /v1/merchants/me/packaging-policy` `PUT /v1/merchants/me/packaging-policy` | `api/packaging_policy.go` | `merchant/settings/packaging-policy` | `merchant.ts` | 已闭环 |
 | 集团申请与加入集团 | `GET /v1/groups/applications/me` `PUT /v1/groups/applications/basic` `DELETE /v1/groups/applications/documents/{document_type}` `POST /v1/groups/applications/submit` `GET /v1/groups` `POST /v1/groups/{id}/join-requests` `POST /v1/ocr/jobs` | `api/group.go` `api/ocr_jobs.go` | `merchant/group/application` `merchant/group/join` | `group-application.ts` `ocr-jobs.ts` | 已闭环 |
-| 房间查询 | `GET /v1/merchants/{id}/rooms` `GET /v1/merchants/{id}/rooms/all` `GET /v1/rooms/{id}` `GET /v1/rooms/{id}/availability` | `api/table.go` | `merchant/reservations` 间接消费包间详情；未发现独立房间页 | `room.ts` `reservation.ts` | API 已有，商户控制台无独立房间入口 |
+| 房间查询 | `GET /v1/merchants/{id}/rooms` `GET /v1/merchants/{id}/rooms/all` `GET /v1/rooms/{id}` `GET /v1/rooms/{id}/availability` | `api/table.go` | `merchant/tables` 通过桌台页统一管理包间；`merchant/reservations` 仅间接读取包间信息 | `room.ts` `reservation.ts` | 包间能力已被桌台页承接，但这组房间专用接口未形成独立商户控制台入口 |
 | 商户身份切换 | `GET /v1/merchants/my` | `api/merchant.go` | 未发现商户页直接承接 | `merchant.ts` 未见对应消费 | 后端已暴露，Weapp 未承接 |
 
 ## Weapp 页面映射矩阵
@@ -89,7 +89,7 @@
 | 菜品 | `pages/merchant/dishes/index` `pages/merchant/dishes/edit/index` `pages/merchant/dishes/categories/index` | `dish.ts` | `/v1/dishes*` `/v1/dishes/categories*` `/v1/tags` | 菜品 CRUD、上下架、定制、分类管理 |
 | 套餐 | `pages/merchant/combos/index` `pages/merchant/combos/edit/index` | `dish.ts` | `/v1/combos*` | 套餐 CRUD、上下架、关联菜品 |
 | 库存 | `pages/merchant/inventory/index` | `dish.ts` | `/v1/inventory` `/v1/inventory/stats` | 查询和更新库存 |
-| 桌台 | `pages/merchant/tables/index` | `table-device-management.ts` `dish.ts` | `/v1/tables*` `/v1/tables/{id}/qrcode` `/v1/tables/{id}/images*` `/v1/tables/{id}/tags*` | 桌台、二维码、图片、标签 |
+| 桌台 | `pages/merchant/tables/index` | `table-device-management.ts` `dish.ts` | `/v1/tables*` `/v1/tables/{id}/qrcode` `/v1/tables/{id}/images*` `/v1/tables/{id}/tags*` | 桌台/包间、二维码、图片、标签 |
 | 预订 | `pages/merchant/reservations/index` | `reservation.ts` `table-device-management.ts` | `/v1/reservations/merchant*` `/v1/reservations/{id}/*` `/v1/tables` | 预订列表、确认、改菜、爽约、代客创建 |
 | 打印机 | `pages/merchant/printers/index` | `table-device-management.ts` | `/v1/merchant/devices*` `/v1/merchant/devices/reconciliation-jobs*` | 打印机 CRUD、测试、状态、同步恢复 |
 | 展示配置 | `pages/merchant/settings/display-config/index` | `table-device-management.ts` | `/v1/merchant/display-config` | 打印、语音、KDS 展示配置 |
@@ -118,11 +118,16 @@
 | --- | --- | --- |
 | 结算账户资料 | `/v1/merchant/finance/account/settlement-account` `POST /v1/merchant/finance/account/settlement-account` `GET /v1/merchant/finance/account/settlement-account/applications/{application_no}` | 后端已实现，当前小程序商户页未发现对应资金账户资料页 |
 | 商户多门店列表 | `GET /v1/merchants/my` | 后端已支持“我的商户列表”，当前小程序商户页仍主要依赖 `current_merchant` 缓存和 `GET /v1/merchants/me` |
-| 房间查询 | `GET /v1/merchants/{id}/rooms` `GET /v1/merchants/{id}/rooms/all` `GET /v1/rooms/{id}` `GET /v1/rooms/{id}/availability` | `room.ts` 与 `reservation.ts` 已有封装，当前商户控制台仅在预订链路间接读取包间详情，未提供独立房间管理入口 |
 | 直接新增员工 | `POST /v1/merchant/staff` | 后端保留了直接创建员工接口，但当前商户页主流程是生成邀请码，由员工自行绑定，不直接调用该写口 |
 | 充值规则 active 读口 | `GET /v1/merchants/{id}/recharge-rules/active` | 现有页面使用列表接口，并未单独消费 active 读口 |
 | 满减规则附加读口 | `GET /v1/merchants/{id}/discounts/{id}` `GET /v1/merchants/{id}/discounts/active` `GET /v1/merchants/{id}/discounts/applicable` `GET /v1/merchants/{id}/discounts/best` | 现有小程序商户页仅承接列表、创建、更新、删除 |
 | 提现详情 | `GET /v1/merchant/finance/account/withdrawals/{id}` | 财务页使用列表与提现申请，未见单笔详情页 |
+
+### 已通过桌台页承接，但房间专用接口未形成独立消费闭环
+
+| 能力 | 路由 | 说明 |
+| --- | --- | --- |
+| 房间查询 | `GET /v1/merchants/{id}/rooms` `GET /v1/merchants/{id}/rooms/all` `GET /v1/rooms/{id}` `GET /v1/rooms/{id}/availability` | 商户侧已在 `pages/merchant/tables/index` 通过 `table_type=room` 统一管理包间，但当前未见商户页直接消费 `room.ts` 这组专用接口；现状更像“页面模型统一到桌台”，而不是“房间能力完全未承接” |
 
 ### 页面存在，但本身不是后端能力页
 
@@ -141,6 +146,6 @@
 
 ## 对齐建议
 
-1. 若要继续补齐商户端能力，优先级最高的是结算账户资料页、多门店切换入口，以及房间独立管理入口；其中房间能力并非完全未接，而是尚未形成独立商户控制台页面闭环。
+1. 若要继续补齐商户端能力，优先级最高的是结算账户资料页、多门店切换入口与提现详情页；房间能力已通过桌台页承接，后续是否补独立房间入口，应先判断是否仍需要保留 `/v1/rooms*` 这组专用商户控制台模型。
 2. 若要收口合同一致性，优先修正投诉与员工邀请码的 Swagger 注解，再补齐满减规则路由的注解覆盖，避免后续审计再次误判。
 3. 后续新增商户页时，不应只搜索 `/v1/merchant/**`，必须同时覆盖 `/v1/merchants/me/**`、`/v1/merchants/{id}/**`、`/v1/kitchen/**`、`/v1/reservations/**`、`/v1/dishes/**`、`/v1/combos/**`、`/v1/tables/**`、`/v1/reviews/**`、`/v1/groups/**` 与 `/v1/ocr/jobs`。
