@@ -1,6 +1,7 @@
 ---
 name: "事故回灌请求模板"
 description: "Use when drafting an incident follow-up or escaped-defect closure request that should convert findings into standards, prompts, workflows, tests, or runbooks. Trigger phrases: incident follow-up, postmortem closure, escaped defect closure, near miss hardening, convert incident to guardrails. 适用于把事故复盘结论落成工程约束与门禁。"
+routing-hints: "事故回灌|线上事故|incident follow-up|postmortem closure|escaped defect closure|near miss hardening|guardrails|runbook 更新清单"
 ---
 # General Incident Follow-Up Template
 

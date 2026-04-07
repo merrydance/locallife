@@ -104,10 +104,10 @@ Web conventions:
 Read these first when changing the Mini Program:
 
 - `.github/standards/engineering/README.md`
+- `.github/standards/weapp/README.md`
 - `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
 - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-- `weapp/docs/miniprogram-prompt-system.md`
 
 Common commands:
 

@@ -35,6 +35,24 @@ The files listed here are the active reusable prompt set for this workspace. Pro
 
 Prefer the most specific prompt template that matches the task. If the task is general and spans multiple areas, start with a `general-` template and add concrete context paths.
 
+## Logical Layers
+
+Treat this directory as a logical layered system even though files are stored flat.
+
+- Protocol layer: `general-implementation.prompt.md`, `general-review.prompt.md`, `general-incident-followup.prompt.md`, `general-task-loop.prompt.md`
+- Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
+- Domain layer: `backend-payment-runbook.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `weapp-payment-flow.prompt.md`, `weapp-page-refactor-blueprint.prompt.md`, `business-flow-mermaid.prompt.md`
+
+Layering rules:
+
+- Protocol prompts define task protocol, risk, validation, and hand-off shape.
+- Stack prompts define technology-specific push and prohibit rules.
+- Domain prompts exist only when a domain has distinct failure modes or workflow needs that the stack prompt should not absorb.
+- Do not let `general-*` prompts grow until they shadow stack or domain prompts.
+- Every prompt must carry `routing-hints` frontmatter so the routing test suite can assert README test cases against deterministic hints.
+
+See `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` for the authoritative layering and matrix rules.
+
 ## Routing Order
 
 Use this order to avoid prompt collisions:
@@ -61,12 +79,13 @@ Use this order to avoid prompt collisions:
 - `backend-payment-runbook.prompt.md`: WeChat payment, callback, refund, runbook, or audit-ledger work.
 - `weapp-implementation.prompt.md`: generic Mini Program page or component changes outside payment-specialized flows.
 - `weapp-payment-flow.prompt.md`: Mini Program payment, login recovery after pay, result state, retry, or duplicate-tap guarding.
-- `weapp-review.prompt.md`: Mini Program review requests, including overall upgrade audits that must combine current standards with historical blueprint-based gap detection.
+- `weapp-review.prompt.md`: Mini Program review requests, including overall upgrade audits that must combine current standards with backend-truth checks, system coherence checks, and interaction-quality review.
 - `weapp-page-refactor-blueprint.prompt.md`: request generation for a diagnosis-first refactor blueprint before coding.
 
 Cross-cutting governance rule:
 
 - When using `general-*` prompts for high-risk or cross-surface work, include a risk classification guess, validation scope, and expected residual-risk or release-readiness output instead of treating the task as routine.
+- Implementation and review prompts should reuse the shared push / prohibit / review matrix from `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` instead of drifting into separate local rule sets.
 
 ## Routing Test Cases
 
@@ -93,7 +112,7 @@ Expected target: `weapp-payment-flow.prompt.md`
 7. "改一下小程序页面的列表空态和错误态。"
 Expected target: `weapp-implementation.prompt.md`
 
-8. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看历史蓝图里反复出现的问题。"
+8. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
 Expected target: `weapp-review.prompt.md`
 
 9. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
@@ -115,3 +134,6 @@ When a new prompt is added, add one routing test case here if it introduces a ne
 Do not keep one-off planning or implementation prompts under `.github/prompts/` after the task ends. If a prompt is too task-specific to index here, remove it instead of leaving an orphan file in the routing hot path.
 
 When engineering governance rules under `.github/standards/engineering/` change, re-check whether `general-implementation`, `general-review`, and `general-task-loop` still ask for the right risk, validation, and hand-off information.
+
+Prompt changes should pass `.github/workflows/prompt-governance.yml`, which validates frontmatter, template indexing, agent references, and AI-facing repo links.
+The same workflow also runs executable routing tests derived from the `Routing Test Cases` section.

@@ -2,7 +2,7 @@
 
 本文件定义 LocalLife 小程序的页面级交互标准与任务流承接规则。
 
-它不负责视觉样式定义；相关内容如需参考，可按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`，但该文档不属于默认 prompt 热路径。
+它不负责视觉样式定义；相关内容如需参考，可按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`，但该文档不属于默认实现热路径。
 
 它也不负责后端字段真值、分页真值、请求幂等语义或异步结果 contract 的最终裁定；这些内容由 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 负责。请求预算、预加载和 `onShow` / `onLoad` 重拉量控制由 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 负责。
 
@@ -71,7 +71,7 @@
 - 危险动作必须使用确认性反馈，不应依赖轻 Toast。
 - 成功后如果页面结构、结果页或状态区已经能够承接结果，不再额外叠加成功 Toast。
 - 不要同时使用顶部横幅、页内横幅、Toast、Modal 去表达同一个结果。
-- 具体提示通道选择、Toast 去重和运行时例外项，遵循共享前端反馈标准与 `weapp/docs/miniprogram-prompt-system.md`，不要在页面层另起一套本地规则。
+- 具体提示通道选择遵循共享前端反馈标准；Toast 去重和运行时接入实现看 `weapp/miniprogram/utils/prompt-feedback.ts` 与 `weapp/miniprogram/utils/user-facing.ts`，不要在页面层另起一套本地规则。
 
 ## 5. 弱网、回退与重入恢复
 
@@ -130,5 +130,5 @@
 ## 10. 与其他文档的关系
 
 - 提示与错误反馈总规则：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-- 运行时提示系统接入细节：看 `weapp/docs/miniprogram-prompt-system.md`
+- 运行时提示系统接入细节：看 `weapp/miniprogram/utils/prompt-feedback.ts` 和 `weapp/miniprogram/utils/user-facing.ts`
 - API 消费契约：看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`

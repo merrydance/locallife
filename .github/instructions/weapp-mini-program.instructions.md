@@ -12,10 +12,10 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 
 - `.github/standards/engineering/README.md`
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
+- `.github/standards/weapp/README.md`
 - `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
 - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-- `weapp/docs/miniprogram-prompt-system.md`
 
 Use `.github/standards/engineering/README.md` as the governance index; use the Mini Program interaction, performance, and API contract docs as the default hot path for `weapp/` work.
 When choosing components, inspect TDesign Miniprogram through the TDesign MCP component list and docs first: start from the component group that matches the task purpose, then narrow to the closest existing component before adding local UI.

@@ -110,7 +110,7 @@ Use this checklist in frontend PR review:
 
 ### 6.1 Mini Program
 
-- Follow this standard together with the Mini Program interaction and prompt docs.
+- Follow this standard together with the Mini Program interaction, performance, and API contract standards. When runtime prompt integration details matter, check `weapp/miniprogram/utils/user-facing.ts` and `weapp/miniprogram/utils/prompt-feedback.ts`.
 - Use shared utilities for error mapping and prompt dedup where available.
 - Prefer whichever single prompt channel users can perceive most clearly in context; for long-lived outcomes, use dedicated page states or result blocks.
 - For transient action feedback in Mini Program, default to Toast or Modal instead of top-banner or inline-banner stacking.

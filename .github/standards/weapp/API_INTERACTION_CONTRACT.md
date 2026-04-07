@@ -4,7 +4,7 @@
 
 它不描述具体 API 列表，也不记录重构过程。它只定义页面与服务之间必须长期稳定遵守的规则。
 
-本文件只裁定后端真值、请求语义和异步结果 contract，不替代页面壳体、结果承接、提示通道或请求预算规则。页面交互与恢复体验看 `.github/standards/weapp/INTERACTION_STANDARDS.md`，请求预算与预加载边界看 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`，运行时错误对象字段和提示例外看 `weapp/docs/miniprogram-prompt-system.md`。
+本文件只裁定后端真值、请求语义和异步结果 contract，不替代页面壳体、结果承接、提示通道或请求预算规则。页面交互与恢复体验看 `.github/standards/weapp/INTERACTION_STANDARDS.md`，请求预算与预加载边界看 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`，提示与错误反馈规则看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`，运行时错误对象字段与提示接入实现看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`。
 
 ## 1. 目标
 
@@ -40,7 +40,7 @@
 - 请求层负责把后端、网关、数据库、第三方服务的错误归一成用户可读文案与调试细节分离的错误对象。
 - 页面层优先消费用户可读文案，不直接拼接或透传原始错误字符串。
 - 技术细节仅用于日志、监控、诊断和分支判断，不进入最终用户提示。
-- 具体的错误对象字段约定、用户文案读取工具和提示守卫行为，见 `weapp/docs/miniprogram-prompt-system.md`。
+- 具体的错误对象字段约定、用户文案读取工具和提示守卫实现，见 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`。
 
 ## 6. 乐观更新与回读校验
 
@@ -122,4 +122,4 @@
 
 - 页面交互和任务流：看 `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - 提示反馈基础规则：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-- 小程序运行时提示接入：看 `weapp/docs/miniprogram-prompt-system.md`
+- 小程序运行时提示接入：看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`

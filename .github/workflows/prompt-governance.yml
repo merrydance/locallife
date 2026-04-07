@@ -1,0 +1,53 @@
+name: prompt-governance
+
+on:
+  pull_request:
+    paths:
+      - '.github/**'
+      - 'locallife/**'
+      - 'web/**'
+      - 'weapp/**'
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - '.github/**'
+      - 'locallife/**'
+      - 'web/**'
+      - 'weapp/**'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  prompt-governance-lint:
+    name: Prompt Governance Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run prompt governance lint
+        run: node .github/scripts/prompt_governance_lint.js
+
+  prompt-routing-tests:
+    name: Prompt Routing Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run prompt routing tests
+        run: node .github/scripts/prompt_routing_test.js

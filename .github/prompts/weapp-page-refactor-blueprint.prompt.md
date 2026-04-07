@@ -1,55 +1,141 @@
 ---
-name: "微信小程序页面重构蓝图"
-description: "Use when drafting a Mini Program page refactor request that must start with diagnosis, scoring, and a production-ready blueprint before coding. Trigger phrases: refactor Mini Program page, page diagnosis, setData optimization plan, weak-network UX blueprint, page architecture cleanup. 适用于发起微信小程序页面重构任务，先诊断，再给出高分方案与实施要求。"
+name: "Mini Program Page Refactor Blueprint"
+description: "Use when drafting a Mini Program page or component refactor request that should be driven by backend truth, user-task boundaries, information architecture, and a step-by-step implementation path before coding. Trigger phrases: refactor Mini Program page, refactor component, redesign page, rebuild dashboard, clean up page IA, fix stats semantics, diagnose page before implementation."
+routing-hints: "重构蓝图|refactor mini program page|setData 热点|weak-network UX blueprint|diagnose page before implementation|clean up page IA"
 ---
-为指定的小程序页面或组件生成一份可直接执行的重构任务说明。先审视现状，再输出高分方案，不要跳过诊断阶段。
+Generate an executable refactor brief for a specific Mini Program page or component. Do not start with visuals. Do not start with code. Do not assume API semantics. Verify facts first, define boundaries second, then produce the solution and implementation steps.
 
-适用边界：
-- 这是 prompt，不是专属 agent 模式
-- 用于生成高质量任务说明或直接发起实现请求
-- 若只需要只读诊断，请改用微信小程序只读审计官
+Scope:
+- This is a prompt, not an agent mode
+- It applies to any Mini Program page or component under `weapp/` that needs a systematic refactor
+- This includes, but is not limited to: consumer pages, merchant pages, operator pages, platform pages, rider pages, stats pages, home pages, dashboards, entry-aggregation pages, management pages, form pages, detail pages, list pages, flow pages, and result pages
+- If you only need a read-only diagnosis and not a refactor plan, use a read-only audit agent instead
+- If the task is only a small copy tweak or a minor style fix, this blueprint is unnecessary
 
-输出目标：
-- 先给出现状诊断书，再给重构蓝图，最后给实施要求
-- 明确指出痛点、风险等级、量化分数，以及为什么这些问题会影响真实用户体验或维护成本
-- 要求最终实现遵循 `.github/standards/weapp/DESIGN_SYSTEM.md`、`.github/standards/weapp/INTERACTION_STANDARDS.md`、`.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 和仓库现有模式
-- 若任务目标是整页升级、统一风格或系统性改造，可把 `weapp/docs/WEAPP_DOCUMENTATION_ARCHITECTURE_2026-04-04.md`、`weapp/docs/WEAPP_DOCUMENT_REWRITE_BLUEPRINTS_2026-04-04.md` 与 `weapp/docs/WEAPP_95_SCORE_IMPROVEMENT_PLAN_2026-03-27.md` 作为历史审计输入，用于识别长期低质量模式；若与现行标准冲突，仍以现行标准为准
-- 要求任何被改动的接口使用都先对齐真实后端契约，不得臆造后端并不存在的字段、状态、类型或能力
-- 要求改动贯通 service、page state、event handlers、view feedback，而不是只改 WXML 或 WXSS
-- 评分必须使用固定维度，不要自由发挥评分标准
+Core methodology:
+- User task first, page structure second. Define what the user must accomplish on the page before deciding what the page should contain.
+- The backend is the only source of truth. Capabilities, fields, states, permissions, pagination semantics, and metric definitions must come from the real backend contract, not from old frontend code, old copy, stale type definitions, or current page behavior.
+- Backend truth first, frontend expression second. Every metric, state, entry, label, and sorting statement must be aligned with the real backend source.
+- Information architecture first, component details second. Define first-screen hierarchy, sections, and primary tasks before selecting components.
+- TDesign first, page styling minimal. Use TDesign MCP to find components by purpose and category first, then choose the best-fitting existing components and tokens. Do not default to only a few familiar components. Keep only the thinnest necessary page shell and local styles.
+- Refactor the whole path together. Service calls, page state, event handlers, WXML, WXSS, loading states, error states, empty states, and refresh behavior must all be aligned together.
+- Do a semantic sweep last. Titles, subtitles, buttons, notes, sorting labels, and percentage copy must be checked one by one against the real data source.
 
-请按以下结构生成：
+Prohibitions:
+- Do not invent backend fields, states, capabilities, or metric semantics
+- Do not use a counting endpoint as if it were a money endpoint
+- Do not collapse `final_amount`, `platform_commission`, and `order_items.subtotal` into the same business concept
+- Do not force future capabilities, cross-role capabilities, or unfinished capabilities into the current page
+- Do not change only WXML or WXSS without updating service, state, handlers, and feedback behavior
+- If backend sources are ambiguous, conflicting, missing, or insufficient to support the intended UX, do not guess on the frontend. Raise the issue explicitly and state whether backend changes are required.
 
-## 任务背景
-- 目标页面或组件路径：<必填>
-- 用户角色与核心任务：<必填>
-- 当前问题或想提升的体验：<必填>
-- 相关 service/API/组件：<选填>
-- 参考页面或交互：<选填>
+Use the exact structure below:
 
-## 用户任务路径
-- 用 3 到 7 步描述真实用户完成任务的路径
-- 标出最容易失败、迷失、重复操作或等待过长的节点
+## Background
+- Target page or component path: <required>
+- Target user or role: <consumer / merchant / operator / platform / rider / other>
+- Primary page task: <required>
+- Main current problems: <required>
+- Related APIs / services / components: <optional>
+- Success condition: <what should become faster, more accurate, or more reliable for the user>
 
-## 诊断书
-- 按条列出主要痛点
-- 每条包含：问题描述、风险等级、量化分数、运行时或维护影响
-- 评分维度固定为：信息架构、状态设计、交互效率、异常恢复、性能负担、组件边界
+## User Tasks And Page Boundaries
+- State the 1 to 3 most important tasks the user must complete on this page
+- State what must be visible on the first screen
+- State which capabilities should remain on the current page and which should move into subcomponents, child pages, or separate flows
+- State what this refactor should deliberately keep out of scope to avoid page overload, boundary drift, or tangled flows
 
-## 高分方案
-- 按模块说明重构方向
-- 覆盖状态设计、交互反馈、性能优化、首屏请求预算、预加载策略、组件边界、样式令牌使用、弱网与异常容错
+## Fact Verification
+- List the real backend sources involved in this page: routes, handlers, typed services, and when necessary SQL or aggregation sources
+- For every core metric, state, entry, sorting rule, or explanatory note, provide:
+  - Current page expression
+  - Actual backend source
+  - Real backend meaning
+  - Whether drift or misleading semantics exist
+- If the source itself is ambiguous, conflicting, or missing, or if the backend does not provide the capability required by the page, list it explicitly as a backend contract problem instead of forcing frontend-only consistency
+- Explicitly check these high-risk areas:
+  - Frontend type drift
+  - References to backend fields that do not actually exist
+  - Copy that silently changes business semantics
+  - Stats cards that mix data from incompatible sources
+  - Sorting labels, subtitles, and percentage statements that do not match the SQL or aggregation logic
 
-## 非目标
-- 明确说明本轮不改什么，避免重构范围失控
+## Diagnosis
+- List the main problems
+- For each problem, include:
+  - Problem description
+  - Risk level
+  - User-facing impact
+  - Maintenance impact
+- If the root cause is backend contract ambiguity, missing capability, misleading field naming, or a backend semantics gap, label it explicitly as requiring backend decision or backend changes rather than disguising it as a frontend-only issue
+- The diagnosis must cover:
+  - User or role boundaries
+  - Information architecture
+  - Backend contract alignment
+  - State design
+  - Interaction efficiency
+  - Failure and recovery behavior
+  - Component boundaries
+  - Styling maintenance cost
 
-## 实施要求
-- 直接要求输出生产可用代码
-- 明确需要补齐 loading、success、empty、error 四态
-- 明确检查 setData 粒度、重复点击保护、懒加载或预加载策略是否合理
-- 明确运行最小相关校验命令并报告结果
+## High-Quality Solution
+- Explain the refactor direction by module or page area
+- At minimum cover:
+  - What the core regions of the page should contain
+  - How first-screen key information, metrics, or actions should be selected, named, and explained
+  - How content areas, action areas, entry areas, list areas, form areas, or result areas should be organized
+  - How low-frequency capabilities should be demoted, split out, or moved off the page
+  - How loading, success, empty, error, and refresh states should be structured
+  - How weak-network behavior, retry, foreground re-entry, and duplicate-tap protection should work
+  - Which parts should be matched to TDesign components through TDesign MCP, which parts should rely on default TDesign behavior, and which parts should keep only the thinnest local styling
 
-附加要求：
-- 如果页面较大，要求先拆出可复用组件边界
-- 如果涉及支付、登录、授权、订阅消息或上传，要求把状态恢复与错误提示写清楚
-- 如果没有明显问题，也要输出残余风险和可提升项
+## Data And Copy Alignment Rules
+- For every key metric, specify:
+  - Display name
+  - Backend source
+  - Real business meaning
+  - Allowed wording
+  - Forbidden misleading wording
+- For every list or stats module, specify:
+  - Sorting basis
+  - Money-field source
+  - Percentage basis
+  - Notes that must be explicitly shown on the page
+
+## Implementation Steps
+- Step 1: User tasks and information architecture convergence
+  - Define the page's primary task, current-page boundary, first-screen essentials, and what should move to child pages or child flows
+- Step 2: Backend contract and metric verification
+  - Verify routes, DTOs, services, and when needed SQL, then remove frontend type drift and API misuse
+- Step 3: Page skeleton and section design
+  - Define the page shell, top regions, card hierarchy, and section structure before selecting components and styles
+- Step 4: TDesign-first implementation
+  - Use TDesign MCP to find the most suitable components by purpose and category first, then map the solution to concrete components. Reuse existing components, icons, and tokens. Avoid both over-localized styling and over-reliance on only a few familiar components.
+- Step 5: End-to-end propagation
+  - Update services, state, handlers, WXML, WXSS, feedback behavior, and recovery paths together
+- Step 6: Semantic sweep
+  - Recheck titles, subtitles, buttons, notes, sorting labels, money names, and percentage copy against the real source of truth
+- Step 7: Gate validation
+  - Run the smallest relevant validation commands and confirm that page shell, request boundary, role contract, business status boundary, and other relevant gates still pass
+
+## Non-Goals
+- State what this refactor does not change
+- State which identified opportunities are intentionally deferred
+- If progress is blocked by missing backend truth, explicitly state which parts the frontend should not fake or force through in this round
+
+## Implementation Requirements
+- The final output must be production-ready code, not a concept sketch
+- Loading, success, empty, error, and refresh states must be covered where relevant
+- First-screen request scope and unnecessary concurrency must be called out explicitly
+- setData granularity, duplicate-tap protection, foreground re-entry refresh, and retry paths must be checked
+- The delivery notes must explicitly state which backend endpoint or field each key metric comes from
+- If ambiguity or missing backend sources are found, the delivery notes must explicitly state the gap, why the frontend cannot safely guess, and whether backend changes are recommended
+- Run the smallest relevant validation commands and report the results
+
+Additional requirements:
+- If the target is a home page, dashboard, or management surface, explicitly check whether entry density is too high
+- If the target is a stats page, explicitly check money semantics, sorting semantics, percentage copy, and explanatory notes
+- If the target is a form page, submission flow page, or result page, explicitly check draft preservation, in-flight state, duplicate submission protection, and failure recovery
+- If the target is a list page or detail page, explicitly check first-screen request scope, pagination truth, back-navigation continuity, and empty-state semantics
+- If the target shares patterns across roles, explicitly check whether role boundaries have been broken
+- Even if no major problem is found, still report residual risks and improvement opportunities

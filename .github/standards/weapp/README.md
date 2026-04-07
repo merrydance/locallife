@@ -84,7 +84,7 @@
 作用：
 
 - 保留为历史设计系统参考与人工补充材料。
-- 不再作为默认实现 prompt、默认 review prompt 或 app-wide instruction 的必读依据。
+- 不再作为默认实现、默认 review 或 app-wide instruction 的必读依据。
 - 只有在任务明确要求讨论视觉设计、组件视觉基线或历史设计规则时，才按需查阅。
 
 ## 审查辅助清单
@@ -94,21 +94,22 @@
 作用：
 
 - 提供可直接贴进 PR review 的压缩版审查清单。
-- 它不是新的权威层，也不再是默认 review 热路径入口。
+- 它不是新的权威层，也不再是默认审查热路径入口。
 - 做整体升级型 review 时，可配合历史蓝图文档一起使用。
 
-## 当前仍保留的运行时补充文档
+## 当前运行时实现参考
 
-- `weapp/docs/miniprogram-prompt-system.md`
+- `weapp/miniprogram/utils/user-facing.ts`
+- `weapp/miniprogram/utils/prompt-feedback.ts`
 
 作用：
 
-- 提供小程序运行时提示系统、错误映射、Toast 去重与页面接入细节。
+- 提供小程序当前运行时的错误映射、用户文案提取、Toast/Modal 去重与全局提示守卫实现。
 
 说明：
 
-- 这份文档补充 Layer 0，但不替代 Layer 0。
-- 如果与共享前端反馈标准冲突，应以共享标准为准。
+- 规则基线仍以 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md` 为准。
+- 运行时实现用于回答“现在代码里具体怎么接”，不替代 Layer 0 到 Layer 3 的长期标准。
 
 ## 规则裁定顺序
 
@@ -117,10 +118,10 @@
 - 页面状态、任务流、弱网恢复、回退恢复、重入恢复、主次操作与结果承接：以 `.github/standards/weapp/INTERACTION_STANDARDS.md` 为准。
 - 后端字段真值、状态枚举、分页真值、鉴权恢复、异步结果 contract、请求幂等与重试语义：以 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 为准。
 - 请求时机、首屏预算、预加载边界、`onLoad` / `onShow` 重拉量控制：以 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 为准。
-- 提示守卫、Toast 去重、错误对象字段、页面接入工具、保留 success Toast 例外：以 `weapp/docs/miniprogram-prompt-system.md` 为准。
-- 视觉基础和组件视觉规则仅在任务明确要求时，按需参考 `.github/standards/weapp/DESIGN_SYSTEM.md`；它不再是默认 prompt 热路径的一部分。
+- 提示守卫、Toast 去重、错误对象字段、页面接入工具：以 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md` 为规则基线；当前实现以 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts` 为准。
+- 视觉基础和组件视觉规则仅在任务明确要求时，按需参考 `.github/standards/weapp/DESIGN_SYSTEM.md`；它不再是默认实现热路径的一部分。
 
-如果同一条规则在 standards、instructions、prompts 和运行时补充文档里都能搜到，应优先修改这里指定的主文档，再同步镜像层，而不是直接在镜像层各改一份。
+如果同一条规则在 standards、instructions、prompts 和运行时实现参考里都能搜到，应优先修改这里指定的主文档，再同步镜像层，而不是直接在镜像层各改一份。
 
 ## 历史材料说明
 
@@ -150,14 +151,15 @@
 3. `.github/standards/weapp/INTERACTION_STANDARDS.md`
 4. `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
 5. `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-6. `weapp/docs/miniprogram-prompt-system.md`
-7. `.github/standards/weapp/DESIGN_SYSTEM.md`（仅在任务明确涉及视觉设计时按需读取）
-8. `.github/standards/weapp/REVIEW_CHECKLIST.md`（仅在人工补充审查时按需读取）
+6. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）
+7. `weapp/miniprogram/utils/prompt-feedback.ts`（仅在需要核对 Toast/Modal 去重守卫时读取）
+8. `.github/standards/weapp/DESIGN_SYSTEM.md`（仅在任务明确涉及视觉设计时按需读取）
+9. `.github/standards/weapp/REVIEW_CHECKLIST.md`（仅在人工补充审查时按需读取）
 
 ## 维护规则
 
 - 新增小程序长期规则时，优先放入本目录下已有权威文档，而不是在 instructions 或 prompts 中重复复制。
 - instructions 只应保留执行约束和 Read First 入口，不应重复本目录中的完整正文。
 - prompts 只应组织任务输入和验收方式，不应承载长期标准正文。
-- 运行时补充文档只保留守卫、错误对象、接入工具、例外项和当前实现细节，不再重复页面交互或 API contract 的主规范。
+- 运行时实现参考只保留守卫、错误对象、接入工具、例外项和当前实现细节，不再重复页面交互或 API contract 的主规范。
 - 阶段性改造说明、评分计划、任务卡与迁移纪要应放在 `weapp/docs/` 或 historical 目录，不应出现在默认热路径中。

@@ -180,4 +180,4 @@
 
 - 页面状态与恢复：看 `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - API 契约与分页真值：看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-- 运行时提示与错误映射：看 `weapp/docs/miniprogram-prompt-system.md`
+- 运行时提示与错误映射：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`、`weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`

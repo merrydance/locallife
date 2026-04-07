@@ -12,6 +12,7 @@ This directory is the normalized entrypoint for AI-facing workspace rules, promp
 - `workflows/`: workflow assets and CI gate definitions used by this workspace.
 
 Cross-cutting governance lives under `standards/engineering/` and should be treated as the parent baseline for security, consistency, resilience, validation, release readiness, and incident feedback loops that span multiple product areas.
+AI-facing asset layering, Prompt gate rules, and implementation or review matrix reuse live in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md`.
 
 ## Naming Conventions
 
@@ -43,6 +44,7 @@ Prefer the smallest customization primitive that solves the routing problem.
 Practical defaults for this workspace:
 
 - Default to a prompt, not an agent.
+- Treat prompt routing as layered, not flat: protocol prompts first, then stack prompts, then domain prompts, and only then agent or workflow boundaries.
 - Use `general-` prompts only when the task spans multiple product areas or the target area is not yet clear.
 - Prefer area-specific prompts over `general-` prompts once the target is clearly `locallife/`, `web/`, or `weapp/`.
 - Prefer specialized prompts such as payment, integration-test, task-card, or Mermaid only when the request explicitly matches that workflow.
@@ -88,6 +90,7 @@ Cross-cutting engineering governance:
 
 - `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`
 - `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`
+- `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md`
 - `.github/standards/engineering/UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`
 - `.github/standards/engineering/INCIDENT_FEEDBACK_LOOP.md`
 - `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md`
@@ -102,10 +105,10 @@ Web:
 Mini Program:
 
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
+- `.github/standards/weapp/README.md`
 - `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
 - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-- `weapp/docs/miniprogram-prompt-system.md`
 
 Domain modules:
 
@@ -117,13 +120,17 @@ Domain modules:
 
 1. Start with `copilot-instructions.md`.
 2. If the task is cross-cutting, high-risk, or about governance itself, read `standards/engineering/README.md` next.
-3. Follow the matching file in `instructions/` for the current directory.
-4. Use the matching prompt template in `prompts/` when the task is implementation, review, or integration-test related.
-5. Open the linked project-owned source document such as the governance baseline, validation matrix, area standard, or domain runbook only when the task needs deeper detail.
+3. If the task changes Prompt, Agent, Instruction, or AI-facing gate behavior, read `standards/engineering/AI_PROMPT_GOVERNANCE.md` before editing routing assets.
+4. Follow the matching file in `instructions/` for the current directory.
+5. Use the matching prompt template in `prompts/` when the task is implementation, review, or integration-test related.
+6. Open the linked project-owned source document such as the governance baseline, validation matrix, area standard, or domain runbook only when the task needs deeper detail.
 
 ## Maintenance Rule
 
 When adding a new customization, update this index only if the new file changes routing behavior or introduces a new specialized workflow. If a new prompt competes with an existing one, narrow the descriptions first before adding another surface.
+
+Prompt, agent, instruction, and AI-facing README changes should pass the prompt governance gate in `.github/workflows/prompt-governance.yml` before merge.
+When repository protection rules are available, require both `Prompt Governance Lint` and `Prompt Routing Tests` on the default branch.
 
 ## Historical Material Rule
 

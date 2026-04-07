@@ -1,6 +1,7 @@
 ---
 name: "通用审查请求模板"
 description: "Use only when drafting a review request that spans multiple product areas or the target area is not yet clear. Trigger phrases: cross-area review, backend plus web review, system-wide regression review, findings first across multiple surfaces. 适用于整理跨区域或尚未明确归属的通用审查请求。"
+routing-hints: "跨区域审查|cross-area review|backend plus web review|system-wide regression review|跨多个界面审查|findings first across multiple surfaces"
 ---
 # General Review Template
 
@@ -9,6 +10,8 @@ Use this template when asking for a code review in this workspace.
 Use `general-review.prompt.md` only when the review spans multiple product areas or the target area is still ambiguous. Once the scope is clearly backend-only, web-only, or Mini Program-only, prefer the matching area-specific review prompt and let `.github/instructions/review.instructions.md` plus the area instructions carry the detailed review rules.
 
 If the change is cross-area, high-risk, or touches security, status semantics, async recovery, sensitive data, or dangerous user actions, ask the reviewer to infer the risk level (`G0`/`G1`/`G2`/`G3`) using `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` and scale the review depth accordingly, with validation expectations grounded in `.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md`.
+
+When the review spans multiple stacks, use the shared implementation and review matrix in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` so implementation push items, prohibited shortcuts, and findings-first review checks stay on the same source of truth.
 
 ## General Review
 

@@ -1,10 +1,13 @@
 ---
 name: "Web 实现请求模板"
 description: "Use when drafting a web implementation or UI change request for web/. Trigger phrases: update route, change component, add field to page, fix operator UI state, web UX adjustment. 适用于发起 Next.js Web 页面与组件实现任务。"
+routing-hints: "web 页面|web implementation|update route|change component|operator UI state|web ux adjustment"
 ---
 # Web Implementation Template
 
 Use this template when asking for a concrete web change in `web/`.
+
+Use the web row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and review-ready hand-off expectations.
 
 ## Web Page Or Component Change
 

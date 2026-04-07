@@ -16,7 +16,11 @@
 - `.github/standards/weapp/INTERACTION_STANDARDS.md`
 - `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
 - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-- `weapp/docs/miniprogram-prompt-system.md`
+
+运行时实现参考：
+
+- `weapp/miniprogram/utils/user-facing.ts`
+- `weapp/miniprogram/utils/prompt-feedback.ts`
 
 升级审计补充输入：
 

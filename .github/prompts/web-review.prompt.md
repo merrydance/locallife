@@ -1,10 +1,13 @@
 ---
 name: "Web 审查请求模板"
 description: "Use when drafting a web review request with findings-first output. Trigger phrases: review web change, inspect UI regression, check state propagation, audit operator page wiring, findings first web review. 适用于发起 Web 界面与状态传播审查。"
+routing-hints: "review web change|UI regression|state propagation|operator page wiring|web review|界面审查"
 ---
 # Web Review Template
 
 Use this template when asking for a web review in `web/`.
+
+Use the web row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for implementation push items, prohibited shortcuts, and findings-first review checks.
 
 ## Web Review
 
