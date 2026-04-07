@@ -36,8 +36,6 @@ Frontend:
 - `web-merchant-ui.instructions.md`
 - `web-shared-ui.instructions.md`
 - `weapp-mini-program.instructions.md`
-- `weapp-pages.instructions.md`
-- `weapp-components.instructions.md`
 
 Cross-cutting:
 

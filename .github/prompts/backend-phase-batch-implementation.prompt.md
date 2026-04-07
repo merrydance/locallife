@@ -1,7 +1,6 @@
 ---
 name: "后端阶段批处理实现模板"
-description: "Use when drafting a controlled backend implementation request for one phase map. Trigger phrases: implement this phase, batch backend cards by phase, follow dependency order, complete work in small slices, phase-by-phase backend rollout. 适用于按阶段图分批推进后端任务。"
-routing-hints: "阶段图|phase map|batch backend cards by phase|phase-by-phase backend rollout|implement this phase|follow dependency order"
+description: "Use when drafting a controlled backend implementation request for one phase map. Trigger phrases: implement this phase, 阶段图, phase map, batch backend cards by phase, follow dependency order, complete work in small slices, phase-by-phase backend rollout. 适用于按阶段图分批推进后端任务。"
 ---
 # Backend Phase Batch Implementation Template
 

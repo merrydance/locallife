@@ -10,15 +10,11 @@ More specific Mini Program instruction files under `.github/instructions/` take 
 
 ## Read First
 
-- `.github/standards/engineering/README.md`
-- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-- `.github/standards/weapp/README.md`
-- `.github/standards/weapp/INTERACTION_STANDARDS.md`
-- `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
-- `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+- `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 
-Use `.github/standards/engineering/README.md` as the governance index; use the Mini Program interaction, performance, and API contract docs as the default hot path for `weapp/` work.
+Use `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` as the single non-visual hot path for `weapp/` page and component work.
 When choosing components, inspect TDesign Miniprogram through the TDesign MCP component list and docs first: start from the component group that matches the task purpose, then narrow to the closest existing component before adding local UI.
+Use `.github/prompts/weapp-implementation.prompt.md` for all Mini Program implementation asks, including diagnosis-first page方案 and payment-adjacent flows. Use `.github/prompts/weapp-review.prompt.md` for all Mini Program review asks.
 
 ## Risk Classification
 
@@ -27,29 +23,34 @@ When choosing components, inspect TDesign Miniprogram through the TDesign MCP co
 - Escalate to `G2` when the change touches page lifecycle state, login recovery, realtime updates, async job polling, duplicate-tap protection, cross-page data continuity, or weak-network fallback behavior.
 - Escalate to `G3` when the change touches payment, identity, private materials, sensitive account data, authorization-sensitive surfaces, or any flow where state drift or duplicate action could create a high-impact production incident.
 
-## Must-Follow Rules
+## Always-On Rules
 
-- Treat the backend contract as the sole source of truth. Capabilities, fields, enums, permissions, pagination truth, and state semantics must come from the real backend contract, not from old page code or local assumptions.
-- Prefer TDesign Miniprogram first. Use the TDesign MCP component list and docs to find components by task purpose and group before building a local component or wrapper.
-- Keep page shell spacing consistent. The gap between page content and the top navigation must follow one stable pattern, left-right page gutters must stay consistent across pages, and bottom content or action areas must include safe-area handling.
-- Treat user-visible copy as product copy, and never expose raw backend, provider, database, or English diagnostic text to users.
-- Every data-driven surface must have clear first-screen states: loading, success, empty, and error. First-screen failure must stay visible in the page with retry.
-- One user action gets one clear primary prompt. Pick the clearest single channel for the context; Toast is allowed, including a moderately longer duration when that makes the result easier to notice.
-- Backend-affecting actions must call the real API, show visible in-flight state, prevent duplicate taps, and for `G2`/`G3` changes define timeout, retry, re-entry, refresh-after-action, and cold-start recovery behavior.
-- Keep first-screen requests controlled. Avoid per-item detail fan-out, unnecessary cross-role preload, and low-probability subpage prefetch.
+- Treat the backend contract as the sole source of truth. Do not invent fields, states, permissions, pagination conclusions, or business semantics in page code.
+- Start from the user task and current-page boundary before layout or styling. First-screen essentials come before secondary capability coverage.
+- Prefer TDesign Miniprogram first. User-facing controls should stay in the TDesign system unless a suitable component genuinely does not exist.
+- Treat TDesign MCP documentation as the sole guidance source for TDesign component usage, supported props, and allowed extension methods.
+- Do not carry consumer-side custom design language into merchant, operator, platform, rider, or other non-consumer surfaces unless a standard explicitly allows it.
+- Keep page shell rhythm consistent: stable top spacing below navbar, stable horizontal gutter, and explicit bottom safe-area handling.
+- Shared components must remain reusable and explicit. Do not hide page-level API calls, route jumps, or role-specific state machines inside shared components.
+- User-facing copy must be product copy. Do not leak raw backend, provider, SQL, or English diagnostic text.
+- Use the implementation or review prompt to carry detailed delivery structure; keep this instruction as the always-on execution baseline.
 
 ## High-Risk Anti-Patterns
 
 - Fake truth: optimistic copy, local-only `setData`, fake permission states, or filtered totals that drift from backend truth.
+- Boundary drift: stuffing future capabilities, unsupported backend gaps, or cross-role capabilities into the current page just to make it look more complete.
 - Partial delivery: UI was added but route, API, state, permissions, or render branches are not fully wired together.
 - Invisible failure: first-screen failure only uses Toast, or service failure is rendered as empty state.
 - Hidden async risk: duplicate submission remains clickable, realtime state only recovers after a second entry, or re-entry behavior is undefined.
-- First-screen request explosion: per-item fan-out or low-value preload makes weak-network behavior unstable.
+- First-screen request explosion: per-item fan-out, low-value preload, or cross-role warmup makes weak-network behavior unstable.
+- Shared-component overreach: reusable components absorb page-only orchestration or side effects.
+- Consumer-language bleed: non-consumer surfaces inherit customer-side brand colors, decorative token usage, or marketing-style visual language without explicit approval.
+- Unsupported TDesign override: internal class overrides, structure-dependent styling, or behavior changes not supported by official TDesign docs.
 - Raw leakage: untranslated backend, SQL, provider, or English diagnostic text reaches the user.
 
 ## Validation Defaults
 
 - Run commands from `weapp/`.
 - Common commands: `npm run compile`, `npm run lint`, `npm run lint:fix`, `npm run quality:check`.
-- Prefer `npm run quality:check` before handing off changes that touch multiple Mini Program files.
+- Prefer `npm run quality:check` before handing off changes that touch multiple Mini Program files or shared components.
 - In hand-off, state the risk class and any remaining weak-network, re-entry, duplicate-tap, or state-recovery risk using concrete paths.

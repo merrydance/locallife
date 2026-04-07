@@ -1,9 +1,8 @@
 ---
 name: "任务清单闭环执行"
-description: "Use when executing a task list through an implement -> review -> fix -> review -> docs sync loop until complete. Trigger phrases: run task list, handoff to review, fix findings, continue next task, close all tasks, execute task cards batch by batch. 适用于把一组任务按开发、审查、修复、复审、文档同步的闭环方式逐项完成，也适用于按任务卡或批次计划自动闭环执行。"
+description: "Use when executing a task list through an implement -> review -> fix -> review -> docs sync loop until complete. Trigger phrases: run task list, 任务清单, handoff to review, fix findings, continue next task, close all tasks, 开发 -> review -> 修复 -> review -> 文档同步, implement -> review -> fix -> review -> docs sync, execute task cards batch by batch. 适用于把一组任务按开发、审查、修复、复审、文档同步的闭环方式逐项完成，也适用于按任务卡或批次计划自动闭环执行。"
 argument-hint: "Provide target area, ordered task list or task-card links, acceptance criteria, validation scope, and any doc-sync expectations."
 agent: "Delivery Loop Orchestrator"
-routing-hints: "任务清单|run task list|开发 -> review -> 修复 -> review -> 文档同步|implement -> review -> fix -> review -> docs sync|execute task cards batch by batch|close all tasks"
 ---
 Run the provided task list through a closed delivery loop.
 

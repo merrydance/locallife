@@ -199,7 +199,6 @@ function main() {
 
     const promptName = parsed.frontmatter.name;
     const description = parsed.frontmatter.description;
-    const routingHints = parsed.frontmatter['routing-hints'];
 
     if (!promptName) {
       errors.push(`${relativePath}: missing frontmatter field 'name'`);
@@ -207,8 +206,8 @@ function main() {
     if (!description) {
       errors.push(`${relativePath}: missing frontmatter field 'description'`);
     }
-    if (!routingHints) {
-      errors.push(`${relativePath}: missing frontmatter field 'routing-hints'`);
+    if (Object.prototype.hasOwnProperty.call(parsed.frontmatter, 'routing-hints')) {
+      errors.push(`${relativePath}: unsupported frontmatter field 'routing-hints'; keep routing tokens in description 'Trigger phrases:' instead`);
     }
 
     if (promptName) {

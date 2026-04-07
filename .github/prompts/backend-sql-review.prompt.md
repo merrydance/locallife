@@ -1,7 +1,6 @@
 ---
 name: "后端 SQL 审查模板"
-description: "Use when drafting a backend review request focused on SQL queries, migrations, sqlc propagation, indexing, and persistence semantics. Trigger phrases: review SQL change, inspect query or migration, check sqlc propagation, review db/query change, review db/sqlc change. 适用于审查 SQL、migration、sqlc 与持久层传播完整性。"
-routing-hints: "db/query|migration 变更|sqlc 传播|索引遗漏|review sql change|review db/sqlc change"
+description: "Use when drafting a backend review request focused on SQL queries, migrations, sqlc propagation, indexing, and persistence semantics. Trigger phrases: review SQL change, db/query, migration 变更, sqlc 传播, 索引遗漏, inspect query or migration, check sqlc propagation, review db/query change, review db/sqlc change. 适用于审查 SQL、migration、sqlc 与持久层传播完整性。"
 ---
 # Backend SQL Review Template
 

@@ -1,7 +1,6 @@
 ---
 name: "通用实现请求模板"
-description: "Use only when drafting an implementation request that spans multiple product areas or the target area is not yet clear. Trigger phrases: cross-area implementation, one request touches backend and web, coordinate backend and Mini Program, multi-surface feature change. 适用于整理跨区域或尚未明确归属的实现型请求。"
-routing-hints: "跨区域实现|cross-area implementation|backend and web|同时改 backend 和 web|coordinate backend and mini program|multi-surface feature change"
+description: "Use only when drafting an implementation request that spans multiple product areas or the target area is not yet clear. Trigger phrases: cross-area implementation, 跨区域实现, one request touches backend and web, 同时改 backend 和 web, coordinate backend and Mini Program, multi-surface feature change. 适用于整理跨区域或尚未明确归属的实现型请求。"
 ---
 # General Implementation Template
 

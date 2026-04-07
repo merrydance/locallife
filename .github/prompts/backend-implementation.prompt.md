@@ -1,7 +1,6 @@
 ---
 name: "后端实现请求模板"
-description: "Use when drafting a normal backend implementation or bug-fix request for locallife/, outside payment-specialized or task-card-specialized flows. Trigger phrases: implement backend endpoint, fix handler logic wiring, update sqlc flow, add business rule, backend contract change. 适用于发起常规 Go 后端功能开发与缺陷修复任务。"
-routing-hints: "后端接口|implement backend endpoint|handler 到 sqlc|fix handler logic wiring|update sqlc flow|backend contract change"
+description: "Use when drafting a normal backend implementation or bug-fix request for locallife/, outside payment-specialized or task-card-specialized flows. Trigger phrases: implement backend endpoint, 后端接口, handler 到 sqlc, fix handler logic wiring, update sqlc flow, add business rule, backend contract change. 适用于发起常规 Go 后端功能开发与缺陷修复任务。"
 ---
 # Backend Implementation Template
 

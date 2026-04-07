@@ -1,7 +1,6 @@
 ---
 name: "Web 审查请求模板"
-description: "Use when drafting a web review request with findings-first output. Trigger phrases: review web change, inspect UI regression, check state propagation, audit operator page wiring, findings first web review. 适用于发起 Web 界面与状态传播审查。"
-routing-hints: "review web change|UI regression|state propagation|operator page wiring|web review|界面审查"
+description: "Use when drafting a web review request with findings-first output. Trigger phrases: review web change, inspect UI regression, check state propagation, audit operator page wiring, web review, 界面审查, findings first web review. 适用于发起 Web 界面与状态传播审查。"
 ---
 # Web Review Template
 

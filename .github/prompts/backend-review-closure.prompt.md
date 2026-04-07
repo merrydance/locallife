@@ -1,7 +1,6 @@
 ---
 name: "后端闭环审查模板"
-description: "Use when drafting a backend review request focused on end-to-end completeness. Trigger phrases: review backend closure, check handler to store propagation, inspect orphan SQL, verify generation steps, findings first backend review. 适用于强调端到端闭环与传播完整性的后端审查。"
-routing-hints: "DTO 字段|handler、logic、sqlc 和测试|review backend closure|check handler to store propagation|orphan sql|backend review"
+description: "Use when drafting a backend review request focused on end-to-end completeness. Trigger phrases: review backend closure, DTO 字段, handler、logic、sqlc 和测试, check handler to store propagation, inspect orphan SQL, verify generation steps, findings first backend review. 适用于强调端到端闭环与传播完整性的后端审查。"
 ---
 # Backend Review With Closure Checks Template
 

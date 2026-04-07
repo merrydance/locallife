@@ -4,7 +4,7 @@
 
 它不描述具体 API 列表，也不记录重构过程。它只定义页面与服务之间必须长期稳定遵守的规则。
 
-本文件只裁定后端真值、请求语义和异步结果 contract，不替代页面壳体、结果承接、提示通道或请求预算规则。页面交互与恢复体验看 `.github/standards/weapp/INTERACTION_STANDARDS.md`，请求预算与预加载边界看 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`，提示与错误反馈规则看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`，运行时错误对象字段与提示接入实现看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`。
+本文件只保留后端真值、请求语义与异步结果 contract 的专题展开，不再单独充当小程序页面交付的默认权威入口。默认页面壳体、结果承接、提示通道、请求预算和高风险路径规则，统一以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准；若需核对运行时错误对象字段与提示接入实现，再按需查看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`。
 
 ## 1. 目标
 
@@ -93,7 +93,7 @@
 - 实时订阅应在身份或关键状态准备完成后初始化，而不是仅依赖 `onShow` 二次进入。
 - 冷启动、断线重连、前后台切换后都必须验证订阅是否恢复。
 - 不允许让“第二次进入页面才有实时数据”成为默认行为。
-- 本节约束的是订阅真值恢复，不为 `onShow` 的重型刷新频率背书；`onShow` / `onLoad` 的刷新量控制看 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`。
+- 本节约束的是订阅真值恢复，不为 `onShow` 的重型刷新频率背书；`onShow` / `onLoad` 的刷新量控制默认仍以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准；如需查看旧专题展开，可按需参考 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`。
 
 ## 12. 服务层到页面层的最小闭环
 
@@ -120,6 +120,7 @@
 
 ## 14. 与其他文档的关系
 
-- 页面交互和任务流：看 `.github/standards/weapp/INTERACTION_STANDARDS.md`
-- 提示反馈基础规则：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-- 小程序运行时提示接入：看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`
+- 默认页面交付、状态恢复、请求边界与高风险路径：先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
+- 视觉与 page shell 补充：按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`
+- 小程序运行时提示接入：按需看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`
+- 若需查看旧专题拆分材料中的交互展开，可按需看 `.github/standards/weapp/INTERACTION_STANDARDS.md`

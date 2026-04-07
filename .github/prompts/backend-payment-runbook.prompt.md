@@ -1,7 +1,6 @@
 ---
 name: "后端支付变更与审查模板"
-description: "Use when drafting a WeChat payment backend implementation or review request. Trigger phrases: change payment flow, review callback handling, adjust refund path, inspect audit ledger consistency, update payment runbook. 适用于发起微信支付后端实现、审查与运维闭环相关任务。"
-routing-hints: "微信支付|payment flow|callback handling|refund path|audit ledger|payment runbook"
+description: "Use when drafting a WeChat payment backend implementation or review request. Trigger phrases: change payment flow, 微信支付, 支付回调, review callback handling, 退款链路, adjust refund path, inspect audit ledger consistency, update payment runbook. 适用于发起微信支付后端实现、审查与运维闭环相关任务。"
 ---
 # Backend Payment Runbook Template
 

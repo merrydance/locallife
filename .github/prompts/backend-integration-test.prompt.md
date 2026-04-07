@@ -1,7 +1,6 @@
 ---
 name: "后端集成测试请求模板"
-description: "Use when drafting a request for new or updated backend integration coverage. Trigger phrases: add integration test, cover cross-layer flow, guard regression end to end, validate persisted state, test worker or scheduler path. 适用于发起后端跨层集成测试任务。"
-routing-hints: "集成测试|integration test|cover cross-layer flow|guard regression end to end|validate persisted state|test worker path"
+description: "Use when drafting a request for new or updated backend integration coverage. Trigger phrases: add integration test, 集成测试, cover cross-layer flow, guard regression end to end, validate persisted state, test worker or scheduler path. 适用于发起后端跨层集成测试任务。"
 ---
 # Backend Integration Test Request Template
 

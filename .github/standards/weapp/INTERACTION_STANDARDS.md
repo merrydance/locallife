@@ -2,9 +2,9 @@
 
 本文件定义 LocalLife 小程序的页面级交互标准与任务流承接规则。
 
-它不负责视觉样式定义；相关内容如需参考，可按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`，但该文档不属于默认实现热路径。
+它不负责视觉样式定义；相关内容如需补充参考，可按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`。
 
-它也不负责后端字段真值、分页真值、请求幂等语义或异步结果 contract 的最终裁定；这些内容由 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 负责。请求预算、预加载和 `onShow` / `onLoad` 重拉量控制由 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 负责。
+默认页面交付、状态恢复、请求边界、分页真值、反馈承接和高风险路径约束，统一以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准。本文件只保留页面交互与任务流承接的专题展开；若与默认基线口径不一致，以默认基线为准。
 
 ## 1. 目标
 
@@ -57,6 +57,9 @@
 - 表单必须明确区分初始态、已修改未提交、提交中、提交失败、提交成功后的承接方式。
 - 校验提示应尽量贴近字段或明确定位，不应只在顶部或 Toast 中泛化提示。
 - 长表单应定义分段、折叠或渐进披露方式，避免把所有字段一次性堆满首屏。
+- 与当前表单强依赖、且创建字段数很少的辅助对象，例如分类、标签、分组名等，优先在当前页就地完成创建并立即回填；默认使用居中的 TDesign 对话框承接，不默认跳转子页面，也不默认扩成底部弹层流程。
+- 存在两级及以上动态重复结构的配置区，例如“组 - 项”“套餐 - 明细”“规则组 - 规则项”，默认采用“摘要列表 + 聚焦编辑 + 明确删除路径”的模式；不要把整块区域做成长串内联表单，也不要把本不该折叠的业务结构硬做成 collapse。
+- 业务真值已固定的字段，不得继续放在表单里伪装成可编辑项；如果用户当前不能修改，就不应继续占用一个可交互控件位。
 
 ### 3.5 支付与异步结果页
 
@@ -94,7 +97,7 @@
 
 ## 6. 防重复点击与动作可信度
 
-- 本节只约束用户可感知的防重入表现；请求幂等、自动重试和高风险动作的请求语义边界，以 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 为准。
+- 本节只约束用户可感知的防重入表现；请求幂等、自动重试和高风险动作的请求语义边界，默认仍以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准；如需查看旧专题展开，可按需参考 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`。
 
 - 所有会触发后端状态变更的主操作都必须有防重入策略。
 - 防重入可以通过按钮禁用、局部 loading、请求中的状态锁实现，但必须让用户可感知。
@@ -115,6 +118,8 @@
 - 页面负责任务流编排、权限与状态承接。
 - 共享组件负责稳定表达和明确事件抛出，不负责页面级路由决策或隐式业务请求。
 - 复杂页面如需拆组件，应按“复用边界清晰”拆，不应把临时页面私有结构硬塞进共享组件目录。
+- 当一个编辑区已经拥有独立的局部状态、独立的增删改流程、独立的局部校验与反馈时，应优先拆成领域组件；页面只保留后端契约映射、初始数据加载、最终提交和跨区块结果承接。
+- 拆出的领域组件仍应保持显式输入输出边界，不得在组件内部偷偷吸收页面级请求、路由跳转或角色判断逻辑。
 
 ## 9. 交互评审最低检查项
 
@@ -129,6 +134,7 @@
 
 ## 10. 与其他文档的关系
 
-- 提示与错误反馈总规则：看 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-- 运行时提示系统接入细节：看 `weapp/miniprogram/utils/prompt-feedback.ts` 和 `weapp/miniprogram/utils/user-facing.ts`
-- API 消费契约：看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+- 默认页面交付与状态恢复口径：先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
+- 视觉与 page shell 补充：按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`
+- 运行时提示系统接入细节：按需看 `weapp/miniprogram/utils/prompt-feedback.ts` 和 `weapp/miniprogram/utils/user-facing.ts`
+- 若需查看旧专题拆分材料中的 API contract 展开，可按需看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`

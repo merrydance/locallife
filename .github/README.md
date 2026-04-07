@@ -28,7 +28,7 @@ Examples:
 - `backend-api.instructions.md`
 - `backend-wechat.instructions.md`
 - `web-operator-ui.instructions.md`
-- `weapp-pages.instructions.md`
+- `weapp-mini-program.instructions.md`
 - `wechat-mini-program-audit.agent.md`
 - `backend-review-closure.prompt.md`
 - `general-review.prompt.md`
@@ -104,11 +104,8 @@ Web:
 
 Mini Program:
 
-- `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
+- `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 - `.github/standards/weapp/README.md`
-- `.github/standards/weapp/INTERACTION_STANDARDS.md`
-- `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
-- `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
 
 Domain modules:
 

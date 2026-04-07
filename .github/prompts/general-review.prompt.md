@@ -1,7 +1,6 @@
 ---
 name: "通用审查请求模板"
-description: "Use only when drafting a review request that spans multiple product areas or the target area is not yet clear. Trigger phrases: cross-area review, backend plus web review, system-wide regression review, findings first across multiple surfaces. 适用于整理跨区域或尚未明确归属的通用审查请求。"
-routing-hints: "跨区域审查|cross-area review|backend plus web review|system-wide regression review|跨多个界面审查|findings first across multiple surfaces"
+description: "Use only when drafting a review request that spans multiple product areas or the target area is not yet clear. Trigger phrases: cross-area review, 跨区域审查, backend plus web review, system-wide regression review, 跨多个界面审查, findings first across multiple surfaces. 适用于整理跨区域或尚未明确归属的通用审查请求。"
 ---
 # General Review Template
 

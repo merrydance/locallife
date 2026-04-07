@@ -1,7 +1,6 @@
 ---
 name: "业务流程 Mermaid 生成模板"
-description: "Use when turning rough business steps into a reviewable Mermaid flowchart. Trigger phrases: draw business flow, generate Mermaid process, add decision branches, model approval flow, convert notes to Mermaid. 适用于把零散业务描述整理为结构完整、带异常分支的 Mermaid 流程图。"
-routing-hints: "Mermaid|流程图|业务流程|approval flow|draw business flow|convert notes to Mermaid"
+description: "Use when turning rough business steps into a reviewable Mermaid flowchart. Trigger phrases: Mermaid, 流程图, 业务流程, draw business flow, generate Mermaid process, add decision branches, model approval flow, convert notes to Mermaid. 适用于把零散业务描述整理为结构完整、带异常分支的 Mermaid 流程图。"
 ---
 # Business Flow Mermaid Template
 

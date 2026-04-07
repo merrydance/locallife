@@ -83,8 +83,6 @@
 - `backend-integration-test.prompt.md`
 - `backend-task-card-implementation.prompt.md`
 - `backend-phase-batch-implementation.prompt.md`
-- `weapp-payment-flow.prompt.md`
-- `weapp-page-refactor-blueprint.prompt.md`
 - `business-flow-mermaid.prompt.md`
 
 要求：
@@ -113,10 +111,10 @@ Prompt 库必须接受和代码同等级的基础门禁。
 ### 2.1 Required Lint Checks
 
 - Frontmatter 完整：每个 `.prompt.md` 必须有 `name` 与 `description`。
-- Routing hints 完整：每个 `.prompt.md` 必须有 `routing-hints`，用于可执行路由断言。
 - 名称唯一：Prompt `name` 不得重复。
 - 描述唯一：Prompt `description` 不得重复，避免路由冲突。
-- Trigger phrases 明确：可路由 Prompt 的 `description` 必须声明 `Trigger phrases:`。
+- Trigger phrases 明确：可路由 Prompt 的 `description` 必须声明 `Trigger phrases:`，并作为可执行路由断言的唯一来源。
+- 不要使用不受支持的自定义 Prompt frontmatter 字段来承载路由信息，例如 `routing-hints`。
 - 协议边界明确：`general-implementation.prompt.md` 与 `general-review.prompt.md` 必须保留 `Use only when` 边界。
 - 索引一致：`.github/prompts/README.md` 中 `Current Templates` 必须与实际 Prompt 文件一一对应。
 - Agent 引用有效：Prompt frontmatter 中的 `agent` 必须指向真实存在的 Agent 名称。
@@ -171,7 +169,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 - 新 Prompt 必须先回答“为什么现有 Prompt 无法承载”。
 - 如果不能为新 Prompt 增加新的 routing test case，它通常不该存在。
-- 新 Prompt 必须补齐 `routing-hints`，否则不能进入可执行路由断言体系。
+- 新 Prompt 必须补齐 `description` 中的 `Trigger phrases:`，否则不能进入可执行路由断言体系。
 - 如果新 Prompt 只是补充技术栈或业务域细节，应优先更新现有技术栈层或业务域层 Prompt。
 - 如果新规则是长期有效的，应先落到 standards，再镜像到 Prompt。
 

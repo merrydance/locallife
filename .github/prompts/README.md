@@ -27,8 +27,6 @@ The files listed here are the active reusable prompt set for this workspace. Pro
 - `web-implementation.prompt.md`
 - `web-review.prompt.md`
 - `weapp-implementation.prompt.md`
-- `weapp-page-refactor-blueprint.prompt.md`
-- `weapp-payment-flow.prompt.md`
 - `weapp-review.prompt.md`
 
 ## Usage Rule
@@ -41,7 +39,7 @@ Treat this directory as a logical layered system even though files are stored fl
 
 - Protocol layer: `general-implementation.prompt.md`, `general-review.prompt.md`, `general-incident-followup.prompt.md`, `general-task-loop.prompt.md`
 - Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
-- Domain layer: `backend-payment-runbook.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `weapp-payment-flow.prompt.md`, `weapp-page-refactor-blueprint.prompt.md`, `business-flow-mermaid.prompt.md`
+- Domain layer: `backend-payment-runbook.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
 
 Layering rules:
 
@@ -49,7 +47,7 @@ Layering rules:
 - Stack prompts define technology-specific push and prohibit rules.
 - Domain prompts exist only when a domain has distinct failure modes or workflow needs that the stack prompt should not absorb.
 - Do not let `general-*` prompts grow until they shadow stack or domain prompts.
-- Every prompt must carry `routing-hints` frontmatter so the routing test suite can assert README test cases against deterministic hints.
+- Every routable prompt must keep specific `Trigger phrases:` in `description` so the routing test suite can assert README test cases against supported metadata.
 
 See `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` for the authoritative layering and matrix rules.
 
@@ -62,11 +60,9 @@ Use this order to avoid prompt collisions:
 3. If the request is backend SQL or migration review-focused, use `backend-sql-review.prompt.md`.
 4. If the request is backend task-card or phase-map driven, use the matching task-card or phase prompt.
 5. If the request is an ordered task list that should be completed through implement, review, fix, and doc-sync stages, use `general-task-loop.prompt.md`.
-6. If the request is a Mini Program payment flow, use `weapp-payment-flow.prompt.md`.
-7. If the request is a Mini Program refactor blueprint before implementation, use `weapp-page-refactor-blueprint.prompt.md`.
-8. If the request is about incident follow-up, escaped defect closure, or turning a postmortem into standards/gates/tests, use `general-incident-followup.prompt.md`.
-9. Otherwise use the area-specific implementation or review prompt.
-10. Use `general-implementation.prompt.md` or `general-review.prompt.md` only when the request spans multiple areas or the target area is still ambiguous.
+6. If the request is about incident follow-up, escaped defect closure, or turning a postmortem into standards/gates/tests, use `general-incident-followup.prompt.md`.
+7. Otherwise use the area-specific implementation or review prompt.
+8. Use `general-implementation.prompt.md` or `general-review.prompt.md` only when the request spans multiple areas or the target area is still ambiguous.
 
 ## Prompt Boundaries
 
@@ -77,10 +73,8 @@ Use this order to avoid prompt collisions:
 - `backend-implementation.prompt.md`: normal backend feature or bug-fix work outside payment-specialized or task-card-specialized flows.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
 - `backend-payment-runbook.prompt.md`: WeChat payment, callback, refund, runbook, or audit-ledger work.
-- `weapp-implementation.prompt.md`: generic Mini Program page or component changes outside payment-specialized flows.
-- `weapp-payment-flow.prompt.md`: Mini Program payment, login recovery after pay, result state, retry, or duplicate-tap guarding.
-- `weapp-review.prompt.md`: Mini Program review requests, including overall upgrade audits that must combine current standards with backend-truth checks, system coherence checks, and interaction-quality review.
-- `weapp-page-refactor-blueprint.prompt.md`: request generation for a diagnosis-first refactor blueprint before coding.
+- `weapp-implementation.prompt.md`: all Mini Program implementation requests, including diagnosis-first page方案, payment-adjacent flows, and normal page or component implementation.
+- `weapp-review.prompt.md`: all Mini Program review requests, including overall upgrade audits and payment-flow review.
 
 Cross-cutting governance rule:
 
@@ -103,11 +97,11 @@ Expected target: `backend-payment-runbook.prompt.md`
 4. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
 Expected target: `backend-sql-review.prompt.md`
 
-5. "给这个小程序页面做重构蓝图，先诊断 setData 热点和弱网体验，再给实施方案。"
-Expected target: `weapp-page-refactor-blueprint.prompt.md`
+5. "给这个小程序页面做页面方案，先诊断 setData 热点和弱网体验，再给实施方案。"
+Expected target: `weapp-implementation.prompt.md`
 
 6. "修一下小程序支付完成后返回页状态丢失和重复点击支付的问题。"
-Expected target: `weapp-payment-flow.prompt.md`
+Expected target: `weapp-implementation.prompt.md`
 
 7. "改一下小程序页面的列表空态和错误态。"
 Expected target: `weapp-implementation.prompt.md`

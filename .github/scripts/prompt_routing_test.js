@@ -43,6 +43,24 @@ function parseFrontmatter(filePath) {
   return frontmatter;
 }
 
+function extractTriggerPhrases(description) {
+  const marker = 'Trigger phrases:';
+  const markerIndex = description.indexOf(marker);
+  if (markerIndex === -1) {
+    return [];
+  }
+
+  const afterMarker = description.slice(markerIndex + marker.length);
+  const sentenceEnd = afterMarker.search(/[。.]/);
+  const phraseBlock = sentenceEnd === -1 ? afterMarker : afterMarker.slice(0, sentenceEnd);
+
+  return phraseBlock
+    .split(',')
+    .map((phrase) => phrase.trim().toLowerCase())
+    .map((phrase) => phrase.replace(/[;，]+$/g, ''))
+    .filter(Boolean);
+}
+
 function parseRoutingCases(readmeContent) {
   const lines = readmeContent.split(/\r?\n/);
   const cases = [];
@@ -111,13 +129,15 @@ function main() {
   const prompts = promptFiles.map((name) => {
     const filePath = path.join(promptDir, name);
     const frontmatter = parseFrontmatter(filePath);
-    const hints = (frontmatter['routing-hints'] || '')
-      .split('|')
-      .map((hint) => hint.trim())
-      .filter(Boolean);
+    const description = frontmatter.description || '';
+    const hints = extractTriggerPhrases(description);
 
     if (hints.length === 0) {
-      throw new Error(`${path.relative(repoRoot, filePath)} is missing routing-hints`);
+      throw new Error(`${path.relative(repoRoot, filePath)} description must declare Trigger phrases`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(frontmatter, 'routing-hints')) {
+      throw new Error(`${path.relative(repoRoot, filePath)} uses unsupported frontmatter field routing-hints`);
     }
 
     return {
@@ -154,7 +174,7 @@ function main() {
 
     if (best.fileName !== routingCase.expected) {
       failures.push(
-        `Routing mismatch for '${routingCase.query}': expected ${routingCase.expected}, got ${best.fileName} via hints ${best.matchedHints.join(', ')}.`
+        `Routing mismatch for '${routingCase.query}': expected ${routingCase.expected}, got ${best.fileName} via trigger phrases ${best.matchedHints.join(', ')}.`
       );
     }
   }

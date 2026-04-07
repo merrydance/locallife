@@ -6,86 +6,41 @@
 
 本目录中的文档用于回答三个问题：
 
-- 这条规则属于交互体验、性能预加载、还是 API 消费契约。
-- 这条规则的唯一权威文档是什么。
-- 这条规则是否属于长期标准，而不是阶段性改造记录。
+- 小程序页面和组件交付默认到底该以哪份标准为准。
+- 视觉与非视觉规则分别由哪份标准承担。
+- 哪些文档只是专题补充、历史背景或运行时实现参考，而不是默认权威入口。
 
-## 默认审查视角
+## 默认权威入口
 
-任何小程序页面的新建、重构或 review，默认都要从以下三个部分审查：
+- 页面与组件交付的默认主标准：`.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
+- 视觉、token、页面壳、触控热区和组件视觉模式的补充标准：`.github/standards/weapp/DESIGN_SYSTEM.md`
+- 审查时可直接复用的检查清单：`.github/standards/weapp/REVIEW_CHECKLIST.md`
 
-- 交互：主任务是否清楚、状态是否完整、反馈是否单一且清晰、弱网与重入恢复是否稳、返回与上下文保留是否合理。
-- 性能：首屏请求预算、预加载边界、`onLoad` / `onShow` 重拉量、长列表渲染负担、弱网下的退化策略是否受控。
-- 契约：后端字段真值、状态枚举、分页真值、鉴权恢复、异步结果承接、防重入与重试语义是否可信。
+默认执行规则：
 
-补充原则：
+- 不再把交互、性能、反馈、API 契约拆成多个默认必读标准。
+- `PAGE_DELIVERY_BASELINE.md` 是小程序页面与组件交付的单一默认权威来源。
+- `DESIGN_SYSTEM.md` 负责视觉与组件视觉基线，但不得削弱 `PAGE_DELIVERY_BASELINE.md` 的硬性要求。
+- 若同一问题在多份 weapp 标准中出现冲突，以 `PAGE_DELIVERY_BASELINE.md` 为准；视觉 token 和组件视觉细节以 `DESIGN_SYSTEM.md` 为准。
 
-- 后端真值、分页、鉴权恢复、异步结果 contract 仍以 API 交互契约为底线，不因交互、性能、契约三分法而被弱化。
-- 做实现时，这三部分都要被显式考虑；做 review 时，这三部分都要被显式检查。
+## 默认实现热路径
 
-## 默认实现决策
+- 页面与组件的非视觉交付，默认先读 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`。
+- 页面 UI 结构、小屏手感、TDesign-first 选型与 page shell 表达，读 `.github/standards/weapp/DESIGN_SYSTEM.md`。
+- 页面审查与复审时，配合 `.github/standards/weapp/REVIEW_CHECKLIST.md` 使用。
 
-- 后端是唯一真理来源。字段、状态、权限、分页和能力边界都以后端契约为准。
-- 组件选型优先 TDesign Miniprogram。先用 TDesign MCP 查看组件分组，再按任务用途缩小候选组件范围。
-- 页面壳体间距保持统一：页面与顶部导航之间的间距一致，所有页面左右间距一致，底部内容和操作区必须显式处理安全区。
-- 交互约束默认只抓四件事：任务是否清楚、状态是否完整、提示是否单一清晰、恢复是否可信。
-- 性能约束默认只抓两件事：首屏请求是否受控、预加载是否真的服务高概率下一步。
-
-## 权威层级
-
-### Layer 0: 共享前端反馈标准
+## 专题补充与历史参考
 
 - `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-
-适用范围：
-
-- 所有用户可见的提示、错误反馈、成功反馈、首屏失败承接。
-
-### Layer 1: 小程序交互与任务流标准
-
 - `.github/standards/weapp/INTERACTION_STANDARDS.md`
-
-适用范围：
-
-- 页面状态、任务流、弱网恢复、回退恢复、页面重入、主次操作、空态与错误态可行动性。
-对应默认审查视角：
-
-- 交互
-
-### Layer 2: 小程序性能与预加载标准
-
 - `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
-
-适用范围：
-
-- 首屏请求预算、预加载策略、角色隔离、请求扇出控制、弱网下的预热降级。
-
-对应默认审查视角：
-
-- 性能
-
-### Layer 3: 小程序 API 交互契约
-
 - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-
-适用范围：
-
-- 分页真值、鉴权失效恢复、异步作业承接、支付轮询与未知结果、重试、防重入、乐观更新边界。
-
-对应角色：
-
-- 这是交互、性能两部分都必须共同遵守的底线 contract，不是第三种平行风格意见。
-
-## 非默认热路径参考
-
-- `.github/standards/weapp/DESIGN_SYSTEM.md`
-- `.github/standards/weapp/REVIEW_CHECKLIST.md`
 
 作用：
 
-- 保留为历史设计系统参考与人工补充材料。
-- 不再作为默认实现、默认 review 或 app-wide instruction 的必读依据。
-- 只有在任务明确要求讨论视觉设计、组件视觉基线或历史设计规则时，才按需查阅。
+- 保留为分主题背景材料、历史拆分规则来源或专项深挖参考。
+- 不再作为默认实现、默认 review 或 app-wide instruction 的并行权威入口。
+- 若这些文档与 `PAGE_DELIVERY_BASELINE.md` 的执行口径冲突，以 `PAGE_DELIVERY_BASELINE.md` 为准。
 
 ## 审查辅助清单
 
@@ -108,20 +63,7 @@
 
 说明：
 
-- 规则基线仍以 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md` 为准。
-- 运行时实现用于回答“现在代码里具体怎么接”，不替代 Layer 0 到 Layer 3 的长期标准。
-
-## 规则裁定顺序
-
-当同一个话题同时出现在多份 weapp 文档中时，按下面的维度裁定主文档：
-
-- 页面状态、任务流、弱网恢复、回退恢复、重入恢复、主次操作与结果承接：以 `.github/standards/weapp/INTERACTION_STANDARDS.md` 为准。
-- 后端字段真值、状态枚举、分页真值、鉴权恢复、异步结果 contract、请求幂等与重试语义：以 `.github/standards/weapp/API_INTERACTION_CONTRACT.md` 为准。
-- 请求时机、首屏预算、预加载边界、`onLoad` / `onShow` 重拉量控制：以 `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md` 为准。
-- 提示守卫、Toast 去重、错误对象字段、页面接入工具：以 `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md` 为规则基线；当前实现以 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts` 为准。
-- 视觉基础和组件视觉规则仅在任务明确要求时，按需参考 `.github/standards/weapp/DESIGN_SYSTEM.md`；它不再是默认实现热路径的一部分。
-
-如果同一条规则在 standards、instructions、prompts 和运行时实现参考里都能搜到，应优先修改这里指定的主文档，再同步镜像层，而不是直接在镜像层各改一份。
+- 运行时实现用于回答“现在代码里具体怎么接”，不替代 `PAGE_DELIVERY_BASELINE.md` 和 `DESIGN_SYSTEM.md` 的长期标准地位。
 
 ## 历史材料说明
 
@@ -134,27 +76,22 @@
 
 这些文档主要记录 API 重构过程、文档分层蓝图、阶段性质量判断与系统升级目标。后续如需查阅历史背景、治理脉络或整体升级方向，可以继续参考；但新增长期规则不应继续落在这些文档中。
 
-## 历史蓝图在 Review 中的使用方式
+## 整体升级审计的使用方式
 
-- 常规实现 review 先按 Layer 0 到 Layer 3 的现行标准判断是否合规。
-- 如果任务目标是“整体升级”“统一体验”“把页面做得更友好更一致”，应额外把上述历史蓝图文档作为升级审计输入。
-- 历史蓝图可用于判断当前实现是否仍停留在旧问题模式，例如伪完成、弱网恢复缺失、首屏扇出过大、页面职责混乱、说明文案堆叠、跨页体验不一致。
-- 如果历史蓝图和现行标准在具体规则上出现冲突，以现行标准为准；历史蓝图只负责补充“要升级到什么水平”和“过去反复出现过哪些系统性问题”。
-- 做整体升级型 review 时，结论应同时回答两件事：当前实现有没有违反现行标准，以及它是否仍延续了历史蓝图已点名的低质量模式。
+- 常规实现和常规 review 先按 `PAGE_DELIVERY_BASELINE.md` 与 `DESIGN_SYSTEM.md` 判断是否合规。
+- 如果任务目标是“整体升级”“统一体验”“把页面做得更友好更一致”，再叠加历史蓝图材料做升级审计。
+- 历史蓝图只用于补充升级方向和旧问题模式，不再作为默认执行标准。
 
 ## 推荐阅读顺序
 
 当任务涉及 `weapp/` 时，建议按以下顺序读取：
 
-1. `.github/standards/frontend/USER_FEEDBACK_STANDARDS.md`
-2. `.github/standards/weapp/README.md`
-3. `.github/standards/weapp/INTERACTION_STANDARDS.md`
-4. `.github/standards/weapp/PERFORMANCE_PRELOAD_STANDARDS.md`
-5. `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
-6. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）
-7. `weapp/miniprogram/utils/prompt-feedback.ts`（仅在需要核对 Toast/Modal 去重守卫时读取）
-8. `.github/standards/weapp/DESIGN_SYSTEM.md`（仅在任务明确涉及视觉设计时按需读取）
-9. `.github/standards/weapp/REVIEW_CHECKLIST.md`（仅在人工补充审查时按需读取）
+1. `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
+2. `.github/standards/weapp/DESIGN_SYSTEM.md`（当任务涉及页面结构、组件视觉、触控热区、page shell 或一致性时读取）
+3. `.github/standards/weapp/REVIEW_CHECKLIST.md`（当任务是 review 或复审时读取）
+4. `.github/standards/weapp/README.md`
+5. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）
+6. `weapp/miniprogram/utils/prompt-feedback.ts`（仅在需要核对 Toast/Modal 去重守卫时读取）
 
 ## 维护规则
 
