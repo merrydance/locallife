@@ -1,6 +1,9 @@
 <custom-navbar title="运营商申请详情" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
-<view class="detail-page" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="detail-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <scroll-view class="detail-scroll" scroll-y>
     <view class="detail-container">
       <view wx:if="{{loading}}" class="section-card">
@@ -120,13 +123,13 @@
             <text class="meta-label">审核时间</text>
             <text class="meta-value">{{application.reviewed_at || '-'}}</text>
           </view>
-          <view wx:if="{{application.status === 'rejected' && application.reject_reason}}" class="meta-row">
+          <view wx:if="{{showRejectReason}}" class="meta-row">
             <text class="meta-label">驳回原因</text>
             <text class="meta-value">{{application.reject_reason || '-'}}</text>
           </view>
         </view>
 
-        <view wx:if="{{application.status === 'submitted'}}" class="section-card">
+        <view wx:if="{{canReview}}" class="section-card">
           <view class="section-title">审核操作</view>
           <view class="reject-input-wrap">
             <t-textarea

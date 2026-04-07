@@ -141,6 +141,11 @@ export interface MerchantQueryParams extends Record<string, unknown> {
     limit?: number
 }
 
+export function parseMerchantStatusFilter(status?: string): MerchantStatus | '' {
+    const validStatuses = new Set<MerchantStatus>(['approved', 'suspended', 'pending', 'rejected', 'closed'])
+    return status && validStatuses.has(status as MerchantStatus) ? (status as MerchantStatus) : ''
+}
+
 /** 商户排行查询参数 */
 export interface MerchantRankingParams extends Record<string, unknown> {
     region_id?: number
@@ -776,4 +781,29 @@ export function formatMerchantStatus(status: MerchantStatus): string {
         closed: '已关闭'
     }
     return statusMap[status] || status
+}
+
+export type MerchantStatusTheme = 'success' | 'warning' | 'default'
+
+export function getMerchantStatusDisplay(status: MerchantStatus | string) {
+    const normalizedStatus = status === 'active' ? 'approved' : status
+    const isOpen = normalizedStatus === 'approved'
+    const themeMap: Record<string, MerchantStatusTheme> = {
+        approved: 'success',
+        suspended: 'warning',
+        pending: 'default',
+        rejected: 'default',
+        closed: 'default'
+    }
+
+    return {
+        normalizedStatus,
+        label: formatMerchantStatus(normalizedStatus as MerchantStatus),
+        theme: themeMap[normalizedStatus] || 'default',
+        canSuspend: isOpen,
+        canResume: normalizedStatus === 'suspended',
+        isOpen,
+        businessStateLabel: isOpen ? '营业中' : '已打烊',
+        businessStateTheme: isOpen ? ('success' as const) : ('default' as const)
+    }
 }

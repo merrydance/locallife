@@ -60,6 +60,18 @@ export interface OrderCustomizationItem {
   value: string           // 定制项取值
 }
 
+export interface OrderPaymentContext {
+  combined_payment_id: number
+  combine_out_trade_no: string
+}
+
+const TRACKABLE_ORDER_STATUSES = new Set<OrderStatus>(['delivering', 'rider_delivered', 'picked'])
+const COMPLETED_ORDER_STATUSES = new Set<OrderStatus>(['completed'])
+const CANCELLED_ORDER_STATUSES = new Set<OrderStatus>(['cancelled'])
+const PENDING_ORDER_STATUSES = new Set<OrderStatus>(['pending'])
+const READY_ORDER_STATUSES = new Set<OrderStatus>(['ready'])
+const DELIVERING_ORDER_STATUSES = new Set<OrderStatus>(['delivering'])
+
 /** 订单响应 - 对齐swagger api.orderResponse */
 export interface OrderResponse {
   id: number
@@ -117,11 +129,36 @@ export interface OrderResponse {
   replaced_by_order_id?: number
   // 微信支付交易号，用于拉起小程序确认收货组件
   wechat_transaction_id?: string
+  payment_context?: OrderPaymentContext
 }
 
 /** 计算后的应付金额（便捷属性，total_amount - discount_amount） */
 export function getPayableAmount(order: OrderResponse): number {
   return order.total_amount - order.discount_amount
+}
+
+export function isTrackableOrderStatus(status?: string): boolean {
+  return !!status && TRACKABLE_ORDER_STATUSES.has(status as OrderStatus)
+}
+
+export function isCompletedOrderStatus(status?: string): boolean {
+  return !!status && COMPLETED_ORDER_STATUSES.has(status as OrderStatus)
+}
+
+export function isCancelledOrderStatus(status?: string): boolean {
+  return !!status && CANCELLED_ORDER_STATUSES.has(status as OrderStatus)
+}
+
+export function isPendingOrderStatus(status?: string): boolean {
+  return !!status && PENDING_ORDER_STATUSES.has(status as OrderStatus)
+}
+
+export function isReadyOrderStatus(status?: string): boolean {
+  return !!status && READY_ORDER_STATUSES.has(status as OrderStatus)
+}
+
+export function isDeliveringOrderStatus(status?: string): boolean {
+  return !!status && DELIVERING_ORDER_STATUSES.has(status as OrderStatus)
 }
 
 /** 创建订单请求 - 对齐 api.createOrderRequest */

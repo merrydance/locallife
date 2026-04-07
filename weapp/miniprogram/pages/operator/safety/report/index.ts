@@ -1,10 +1,13 @@
 import {
   operatorBasicManagementService,
-  SubmitSafetyReportRequest
+  SubmitSafetyReportRequest,
+  getSafetyReportStatusDisplay,
+  type SafetyReportStatus,
+  type SafetyReportStatusTheme
 } from '../../../../api/operator-basic-management'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-type SafetyStatusFilter = '' | 'pending' | 'resolved' | 'rejected'
+type SafetyStatusFilter = '' | SafetyReportStatus
 
 type SafetyLevel = 'low' | 'medium' | 'high' | 'critical'
 
@@ -21,8 +24,9 @@ type SafetyReportView = {
   title: string
   level: SafetyLevel
   level_label: string
-  status: 'pending' | 'resolved' | 'rejected'
+  status: SafetyReportStatus
   status_label: string
+  status_theme: SafetyReportStatusTheme
   created_at: string
 }
 
@@ -34,15 +38,6 @@ function formatSafetyLevel(level: SafetyLevel): string {
     critical: '严重'
   }
   return labels[level]
-}
-
-function formatSafetyStatus(status: 'pending' | 'resolved' | 'rejected'): string {
-  const labels = {
-    pending: '待处理',
-    resolved: '已处理',
-    rejected: '已驳回'
-  }
-  return labels[status]
 }
 
 Page({
@@ -85,11 +80,13 @@ Page({
     })
   },
 
-  adaptReport(item: { id: number, title: string, level: SafetyLevel, status: 'pending' | 'resolved' | 'rejected', created_at: string }): SafetyReportView {
+  adaptReport(item: { id: number, title: string, level: SafetyLevel, status: SafetyReportStatus, created_at: string }): SafetyReportView {
+    const statusDisplay = getSafetyReportStatusDisplay(item.status)
     return {
       ...item,
       level_label: formatSafetyLevel(item.level),
-      status_label: formatSafetyStatus(item.status)
+      status_label: statusDisplay.label,
+      status_theme: statusDisplay.theme
     }
   },
 

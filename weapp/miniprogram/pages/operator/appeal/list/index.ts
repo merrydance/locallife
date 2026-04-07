@@ -1,7 +1,7 @@
 import {
     AppealResponse,
     AppealStatus,
-    formatAppealStatus,
+    getAppealStatusDisplay,
     operatorAppealReviewService
 } from '../../../../api/appeals-customer-service'
 
@@ -9,14 +9,17 @@ type AppealListStatus = AppealStatus
 
 type AppealListItemView = AppealResponse & {
     status_label: string
+    status_theme: 'warning' | 'success' | 'danger'
     claim_amount_display: string
     summary_text: string
 }
 
 function adaptAppealItem(item: AppealResponse): AppealListItemView {
+    const statusDisplay = getAppealStatusDisplay(item.status)
     return {
         ...item,
-        status_label: formatAppealStatus(item.status),
+        status_label: statusDisplay.label,
+        status_theme: statusDisplay.theme,
         claim_amount_display: item.claim_amount ? `¥${(item.claim_amount / 100).toFixed(2)}` : '-',
         summary_text: item.order_no ? `订单 ${item.order_no}` : `索赔单 ${item.claim_id}`
     }

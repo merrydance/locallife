@@ -1,5 +1,8 @@
 <custom-navbar title="食安事件" showBack="{{true}}" bind:navheight="onNavHeight" />
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <view class="toolbar">
     <t-button theme="primary" size="small" bindtap="onToggleSubmit" shape="round">
       {{submitVisible ? '收起提交' : '新建事件'}}
@@ -42,7 +45,7 @@
     <view class="card" wx:for="{{reports}}" wx:key="id" bindtap="onDetail" data-id="{{item.id}}">
       <view class="card-header">
         <text class="title">{{item.title}}</text>
-        <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'resolved' ? 'success' : 'danger')}}" variant="dark" size="small">
+        <t-tag theme="{{item.status_theme}}" variant="dark" size="small">
           {{item.status_label}}
         </t-tag>
       </view>

@@ -1,5 +1,6 @@
 import {
   applyRegionExpansion,
+  getRegionExpansionStatusDisplay,
   listAvailableRegions,
   listRegionExpansionApplications,
   listRegions,
@@ -10,6 +11,11 @@ import { getErrorUserMessage } from '../../../utils/user-facing'
 
 type CityOption = { label: string, value: number }
 type RegionOption = { label: string, secondary: string, value: number }
+type RegionExpansionApplicationView = RegionExpansionApplication & {
+  status_label: string
+  status_theme: 'warning' | 'primary' | 'danger'
+  is_rejected: boolean
+}
 
 function formatDate(iso: string): string {
   try {
@@ -21,18 +27,12 @@ function formatDate(iso: string): string {
   }
 }
 
-const STATUS_MAP: Record<string, { label: string, theme: 'primary' | 'warning' | 'danger' | 'default' }> = {
-  pending:  { label: '审核中', theme: 'warning' },
-  approved: { label: '已通过', theme: 'primary' },
-  rejected: { label: '已拒绝', theme: 'danger' }
-}
-
 Page({
   data: {
     navBarHeight: 88,
 
     // 申请列表
-    applications: [] as RegionExpansionApplication[],
+    applications: [] as RegionExpansionApplicationView[],
     listLoading: true,
     listError: '',
 
@@ -66,7 +66,16 @@ Page({
     this.setData({ listLoading: true, listError: '' })
     try {
       const res = await listRegionExpansionApplications()
-      const apps = (res.applications || []).map((a) => ({ ...a, created_at: formatDate(a.created_at) }))
+      const apps = (res.applications || []).map((a) => {
+        const statusDisplay = getRegionExpansionStatusDisplay(a.status)
+        return {
+          ...a,
+          created_at: formatDate(a.created_at),
+          status_label: statusDisplay.label,
+          status_theme: statusDisplay.theme,
+          is_rejected: statusDisplay.isRejected
+        }
+      })
       this.setData({ applications: apps })
     } catch (e: unknown) {
       const msg = getErrorUserMessage(e, '加载申请记录失败，请稍后重试')
@@ -79,10 +88,6 @@ Page({
 
   onRetry() {
     this.loadApplications()
-  },
-
-  getStatusMeta(status: string) {
-    return STATUS_MAP[status] ?? { label: status, theme: 'default' }
   },
 
   // ─── 城市/区域选择 ────────────────────────────────────────

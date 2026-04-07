@@ -167,6 +167,14 @@ function normalizeRiderQueryParams(params: RiderQueryParams): RiderQueryParams {
     }
 }
 
+export function parseRiderStatusFilter(status?: string): RiderStatus | '' {
+    if (!status) {
+        return ''
+    }
+
+    return normalizeRiderStatus(status as RiderStatus) || ''
+}
+
 /** 骑手排行查询参数 */
 export interface RiderRankingParams extends Record<string, unknown> {
     region_id?: number
@@ -1057,6 +1065,28 @@ export function formatRiderStatus(status: RiderStatus): string {
         offline: '离线'
     }
     return statusMap[status] || status
+}
+
+export type RiderStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+
+export function getRiderStatusDisplay(status: RiderStatus) {
+    const normalizedStatus = status === 'pending' ? 'pending_approval' : status
+    const themeMap: Record<RiderStatus, RiderStatusTheme> = {
+        active: 'success',
+        pending: 'warning',
+        pending_approval: 'warning',
+        suspended: 'danger',
+        rejected: 'danger',
+        offline: 'default'
+    }
+
+    return {
+        normalizedStatus,
+        label: formatRiderStatus(normalizedStatus),
+        theme: themeMap[normalizedStatus] || 'default',
+        canSuspend: normalizedStatus === 'active',
+        canResume: normalizedStatus === 'suspended'
+    }
 }
 
 /**

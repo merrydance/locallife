@@ -1,7 +1,8 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
+  getMerchantStatusDisplay,
   operatorMerchantManagementService,
-  formatMerchantStatus,
+  parseMerchantStatusFilter,
   OperatorMerchantItem,
   MerchantQueryParams,
   MerchantStatus
@@ -20,32 +21,32 @@ interface MerchantListPageOptions {
 
 interface MerchantView extends OperatorMerchantItem {
   status_label: string
+  status_theme: 'success' | 'warning' | 'default'
   rating_display: string
   order_count_display: number
   total_gmv_display: string
   commission_amount_display: string
   region_name_display: string
   category_display: string
-}
-
-function parseMerchantStatus(status?: string): MerchantStatus | '' {
-  if (status === 'approved' || status === 'suspended' || status === 'pending' || status === 'rejected' || status === 'closed') {
-    return status
-  }
-
-  return ''
+  can_suspend: boolean
+  can_resume: boolean
 }
 
 function adaptMerchantItem(item: OperatorMerchantItem): MerchantView {
+  const statusDisplay = getMerchantStatusDisplay(item.status)
   return {
     ...item,
-    status_label: formatMerchantStatus(item.status as MerchantStatus),
+    status: statusDisplay.normalizedStatus,
+    status_label: statusDisplay.label,
+    status_theme: statusDisplay.theme,
     rating_display: Number(item.rating || 0).toFixed(1),
     order_count_display: Number(item.order_count || 0),
     total_gmv_display: `¥${(Number(item.total_gmv || 0) / 100).toFixed(2)}`,
     commission_amount_display: `¥${(Number(item.commission_amount || 0) / 100).toFixed(2)}`,
     region_name_display: item.region_name || `区域 ${item.region_id}`,
-    category_display: item.category || '未分类'
+    category_display: item.category || '未分类',
+    can_suspend: statusDisplay.canSuspend,
+    can_resume: statusDisplay.canResume
   }
 }
 
@@ -80,7 +81,7 @@ Page({
 
   onLoad(options: MerchantListPageOptions) {
     const regionId = options.region_id ? parseInt(options.region_id) : 0
-    const statusFilter = parseMerchantStatus(options.status)
+    const statusFilter = parseMerchantStatusFilter(options.status)
     this.setData({
       isLargeScreen: isLargeScreen(),
       regionId,
@@ -96,7 +97,7 @@ Page({
   },
 
   onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
-    this.setData({ navBarHeight: e.detail.navBarHeight })
+    this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
   },
 
   onRetry() {

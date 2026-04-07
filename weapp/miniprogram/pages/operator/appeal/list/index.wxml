@@ -1,6 +1,6 @@
 <custom-navbar title="申诉处理" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <t-tabs value="{{status}}" bind:change="onTabChange" t-class="sticky-tabs">
     <t-tab-panel label="待处理" value="pending" />
     <t-tab-panel label="已通过" value="approved" />
@@ -35,7 +35,7 @@
             </view>
             <view class="card-footer">
               <text class="user">申诉人ID: {{item.appellant_id}}</text>
-              <t-tag theme="{{item.status === 'pending' ? 'warning' : ((item.status === 'approved' || item.status === 'compensated') ? 'success' : 'danger')}}" size="small" variant="dark">
+              <t-tag theme="{{item.status_theme}}" size="small" variant="dark">
                 {{item.status_label}}
               </t-tag>
             </view>

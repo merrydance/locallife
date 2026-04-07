@@ -10,10 +10,17 @@ export type PaymentType = 'native' | 'miniprogram'
 export type BusinessType = 'order' | 'reservation' | 'reservation_addon' | 'membership_recharge' | 'rider_deposit' | 'claim_recovery'
 export type PaymentLedgerEntryType = 'payment' | 'refund'
 export type PaymentProcessStatus = 'paid' | 'failed' | 'unknown'
+export type CombinedPaymentResolution = 'success' | 'recreate' | 'syncing'
+export type PaymentViewTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
+
+const SUCCESS_PAYMENT_STATUSES = new Set<PaymentStatus>(['paid', 'refunded'])
+const FAILED_PAYMENT_STATUSES = new Set<PaymentStatus>(['closed', 'failed'])
+const SYNCING_COMBINED_PAYMENT_STATES = new Set(['partial', 'mixed', 'unknown'])
 
 export interface PaymentProcessResult {
   paymentId: number
   status: PaymentProcessStatus
+  payment?: PaymentOrderResponse
 }
 
 export interface MiniProgramPayParams {
@@ -63,7 +70,36 @@ export interface CombinedPaymentOrderResponse {
   prepay_id?: string
   pay_params?: MiniProgramPayParams
   expires_at?: string
+  wechat_query?: CombinedPaymentWechatQueryResponse
   sub_orders: CombinedPaymentSubOrderResponse[]
+}
+
+export interface CombinedPaymentWechatAmountResponse {
+  total_amount: number
+  payer_amount: number
+  currency: string
+  payer_currency?: string
+}
+
+export interface CombinedPaymentWechatSubOrderResponse {
+  mchid: string
+  sub_mchid?: string
+  sub_appid?: string
+  sub_openid?: string
+  out_trade_no: string
+  transaction_id?: string
+  trade_type?: string
+  trade_state: string
+  bank_type?: string
+  attach?: string
+  success_time?: string
+  amount: CombinedPaymentWechatAmountResponse
+}
+
+export interface CombinedPaymentWechatQueryResponse {
+  combine_out_trade_no: string
+  aggregate_trade_state: PaymentStatus | 'partial' | 'mixed' | 'unknown' | string
+  sub_orders: CombinedPaymentWechatSubOrderResponse[]
 }
 
 export interface CreateCombinedPaymentRequest {
@@ -89,6 +125,13 @@ export interface RefundOrder {
 }
 
 export type RefundResponse = RefundOrder
+
+export interface RefundProgressView {
+  title: string
+  time: string
+  done: boolean
+  active: boolean
+}
 
 export interface CreateRefundOrderRequest {
   payment_order_id: number
@@ -206,6 +249,251 @@ export interface CalculateDeliveryFeeRequest extends Record<string, unknown> {
   promotion_codes?: string[]
 }
 
+export function getCombinedPaymentEffectiveState(payment: CombinedPaymentOrderResponse): string {
+  return payment.wechat_query?.aggregate_trade_state || payment.status
+}
+
+export function isCombinedPaymentSuccessful(payment: CombinedPaymentOrderResponse): boolean {
+  return isPaymentStatusSuccessful(getCombinedPaymentEffectiveState(payment))
+}
+
+export function isPaymentStatusSuccessful(status?: string): boolean {
+  return !!status && SUCCESS_PAYMENT_STATUSES.has(status as PaymentStatus)
+}
+
+export function isPaymentStatusFailed(status?: string): boolean {
+  return !!status && FAILED_PAYMENT_STATUSES.has(status as PaymentStatus)
+}
+
+export function getPaymentStatusView(status?: PaymentStatus | string) {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+
+  switch (normalizedStatus) {
+    case 'paid':
+      return {
+        normalizedStatus,
+        text: '已支付',
+        icon: 'check-circle-filled',
+        className: 'paid',
+        theme: 'success' as PaymentViewTheme,
+        isPending: false,
+        showPendingTip: false
+      }
+    case 'pending':
+      return {
+        normalizedStatus,
+        text: '待支付',
+        icon: 'time-filled',
+        className: 'pending',
+        theme: 'warning' as PaymentViewTheme,
+        isPending: true,
+        showPendingTip: true
+      }
+    case 'failed':
+      return {
+        normalizedStatus,
+        text: '支付失败',
+        icon: 'close-circle-filled',
+        className: 'failed',
+        theme: 'danger' as PaymentViewTheme,
+        isPending: false,
+        showPendingTip: false
+      }
+    case 'closed':
+    case 'cancelled':
+      return {
+        normalizedStatus,
+        text: '已关闭',
+        icon: 'info-circle-filled',
+        className: 'closed',
+        theme: 'default' as PaymentViewTheme,
+        isPending: false,
+        showPendingTip: false
+      }
+    case 'refunded':
+      return {
+        normalizedStatus,
+        text: '已退款',
+        icon: 'check-circle-filled',
+        className: 'refunded',
+        theme: 'primary' as PaymentViewTheme,
+        isPending: false,
+        showPendingTip: false
+      }
+    default:
+      return {
+        normalizedStatus,
+        text: normalizedStatus || '状态更新中',
+        icon: 'info-circle-filled',
+        className: 'default',
+        theme: 'default' as PaymentViewTheme,
+        isPending: false,
+        showPendingTip: false
+      }
+  }
+}
+
+export function getRefundStatusView(status?: RefundStatus | string) {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+
+  switch (normalizedStatus) {
+    case 'success':
+      return {
+        normalizedStatus,
+        text: '退款成功',
+        icon: 'check-circle-filled',
+        className: 'success',
+        theme: 'success' as PaymentViewTheme,
+        showPendingTip: false,
+        isProcessing: false,
+        isFailed: false
+      }
+    case 'pending':
+    case 'processing':
+      return {
+        normalizedStatus,
+        text: normalizedStatus === 'pending' ? '退款申请中' : '退款处理中',
+        icon: 'time-filled',
+        className: 'processing',
+        theme: 'warning' as PaymentViewTheme,
+        showPendingTip: true,
+        isProcessing: true,
+        isFailed: false
+      }
+    case 'failed':
+      return {
+        normalizedStatus,
+        text: '退款失败',
+        icon: 'close-circle-filled',
+        className: 'failed',
+        theme: 'danger' as PaymentViewTheme,
+        showPendingTip: false,
+        isProcessing: false,
+        isFailed: true
+      }
+    case 'closed':
+      return {
+        normalizedStatus,
+        text: '退款已关闭',
+        icon: 'info-circle-filled',
+        className: 'default',
+        theme: 'default' as PaymentViewTheme,
+        showPendingTip: false,
+        isProcessing: false,
+        isFailed: false
+      }
+    default:
+      return {
+        normalizedStatus,
+        text: normalizedStatus || '状态更新中',
+        icon: 'info-circle-filled',
+        className: 'default',
+        theme: 'default' as PaymentViewTheme,
+        showPendingTip: false,
+        isProcessing: false,
+        isFailed: false
+      }
+  }
+}
+
+export function buildRefundProgress(refund: RefundOrder, formatTime: (timeStr: string) => string): RefundProgressView[] {
+  const statusView = getRefundStatusView(refund.status)
+  const isProcessing = statusView.isProcessing
+  const isFinished = statusView.isFailed || statusView.normalizedStatus === 'success'
+
+  return [
+    {
+      title: '提交申请',
+      time: formatTime(refund.created_at),
+      done: true,
+      active: statusView.normalizedStatus === 'pending'
+    },
+    {
+      title: '审核中',
+      time: '',
+      done: isProcessing || isFinished,
+      active: statusView.normalizedStatus === 'processing'
+    },
+    {
+      title: '退款处理',
+      time: '',
+      done: isFinished,
+      active: false
+    },
+    {
+      title: statusView.isFailed ? '退款失败' : '退款完成',
+      time: refund.refunded_at ? formatTime(refund.refunded_at) : '',
+      done: isFinished,
+      active: isFinished
+    }
+  ]
+}
+
+export function isPaymentProcessSuccessful(resultOrStatus: PaymentProcessResult | PaymentProcessStatus): boolean {
+  const status = typeof resultOrStatus === 'string' ? resultOrStatus : resultOrStatus.status
+  return status === 'paid'
+}
+
+export function isPaymentProcessFailed(resultOrStatus: PaymentProcessResult | PaymentProcessStatus): boolean {
+  const status = typeof resultOrStatus === 'string' ? resultOrStatus : resultOrStatus.status
+  return status === 'failed'
+}
+
+export function getPaymentProcessOutcomeMessage(
+  resultOrStatus: PaymentProcessResult | PaymentProcessStatus,
+  messages?: { failed?: string, unknown?: string }
+): string {
+  return isPaymentProcessFailed(resultOrStatus)
+    ? (messages?.failed || '支付未完成，请稍后重试')
+    : (messages?.unknown || '支付结果确认中，请稍后刷新')
+}
+
+export function getCombinedPaymentResolution(paymentOrState: CombinedPaymentOrderResponse | string): CombinedPaymentResolution {
+  const effectiveState = typeof paymentOrState === 'string'
+    ? paymentOrState
+    : getCombinedPaymentEffectiveState(paymentOrState)
+
+  if (isPaymentStatusSuccessful(effectiveState)) {
+    return 'success'
+  }
+
+  if (isPaymentStatusFailed(effectiveState)) {
+    return 'recreate'
+  }
+
+  if (SYNCING_COMBINED_PAYMENT_STATES.has(effectiveState)) {
+    return 'syncing'
+  }
+
+  return 'syncing'
+}
+
+export function shouldRecreateCombinedPayment(paymentOrState: CombinedPaymentOrderResponse | string): boolean {
+  return getCombinedPaymentResolution(paymentOrState) === 'recreate'
+}
+
+export function isCombinedPaymentSyncing(paymentOrState: CombinedPaymentOrderResponse | string): boolean {
+  return getCombinedPaymentResolution(paymentOrState) === 'syncing'
+}
+
+export function getCombinedPaymentFollowupMessage(paymentOrState: CombinedPaymentOrderResponse | string): string {
+  const resolution = getCombinedPaymentResolution(paymentOrState)
+
+  if (resolution === 'recreate') {
+    return '原合单已失效，请重新发起支付'
+  }
+
+  if (resolution === 'syncing') {
+    return '支付状态正在同步，请稍后刷新'
+  }
+
+  return '可继续完成原合单支付'
+}
+
+export async function recoverCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
+  return queryCombinedPaymentOrder(combinedPaymentId)
+}
+
 function normalizeRefundPayload(
   paymentIdOrParams: number | CreateRefundOrderRequest | LegacyRefundRequest,
   refundData?: CreateRefundRequest
@@ -282,6 +570,13 @@ export async function createCombinedPaymentOrder(payload: CreateCombinedPaymentR
 export async function getCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
   return request({
     url: `/v1/payments/combined/${combinedPaymentId}`,
+    method: 'GET'
+  })
+}
+
+export async function queryCombinedPaymentOrder(combinedPaymentId: number): Promise<CombinedPaymentOrderResponse> {
+  return request({
+    url: `/v1/payments/combined/${combinedPaymentId}/query`,
     method: 'GET'
   })
 }
@@ -364,6 +659,66 @@ export async function invokeWechatPay(paymentParams: MiniProgramPayParams): Prom
   })
 }
 
+function resolveCreatedPaymentStatus(payment: PaymentOrderResponse): PaymentProcessStatus {
+  if (isPaymentStatusSuccessful(payment.status)) {
+    return 'paid'
+  }
+
+  if (isPaymentStatusFailed(payment.status)) {
+    return 'failed'
+  }
+
+  console.warn('[payment] 支付参数缺失', {
+    paymentId: payment.id,
+    paymentStatus: payment.status,
+    businessType: payment.business_type
+  })
+  return 'failed'
+}
+
+export async function processCreatedPayment(payment: PaymentOrderResponse): Promise<PaymentProcessResult> {
+  if (!payment.pay_params) {
+    return {
+      paymentId: payment.id,
+      status: resolveCreatedPaymentStatus(payment),
+      payment
+    }
+  }
+
+  try {
+    await invokeWechatPay(payment.pay_params)
+  } catch (error: unknown) {
+    const wxError = error as { errMsg?: string }
+    if (wxError?.errMsg?.includes('cancel')) {
+      throw new PaymentCancelledError()
+    }
+
+    console.warn('[payment] 拉起支付失败', error)
+    return {
+      paymentId: payment.id,
+      status: 'failed',
+      payment
+    }
+  }
+
+  try {
+    const finalStatus = await pollPaymentStatus(payment.id, 5, 2000)
+
+    return {
+      paymentId: payment.id,
+      status: isPaymentStatusSuccessful(finalStatus) ? 'paid' : 'failed',
+      payment
+    }
+  } catch (error: unknown) {
+    console.warn('[payment] 支付结果暂未同步，按 unknown 承接', error)
+    return {
+      paymentId: payment.id,
+      status: 'unknown',
+      payment
+    }
+  }
+}
+
 export async function processPayment(orderId: number, businessType: BusinessType = 'order'): Promise<PaymentProcessResult> {
   let payment: PaymentOrderResponse
 
@@ -380,68 +735,7 @@ export async function processPayment(orderId: number, businessType: BusinessType
     }
   }
 
-  if (!payment.pay_params) {
-    if (payment.status === 'paid' || payment.status === 'refunded') {
-      return {
-        paymentId: payment.id,
-        status: 'paid'
-      }
-    }
-
-    if (payment.status === 'failed' || payment.status === 'closed') {
-      return {
-        paymentId: payment.id,
-        status: 'failed'
-      }
-    }
-
-    console.warn('[payment] 支付参数缺失', {
-      paymentId: payment.id,
-      paymentStatus: payment.status,
-      businessType
-    })
-    return {
-      paymentId: payment.id,
-      status: 'failed'
-    }
-  }
-
-  try {
-    await invokeWechatPay(payment.pay_params)
-  } catch (error: unknown) {
-    const wxError = error as { errMsg?: string }
-    if (wxError?.errMsg?.includes('cancel')) {
-      throw new PaymentCancelledError()
-    }
-
-    console.warn('[payment] 拉起支付失败', error)
-    return {
-      paymentId: payment.id,
-      status: 'failed'
-    }
-  }
-
-  try {
-    const finalStatus = await pollPaymentStatus(payment.id, 5, 2000)
-
-    if (finalStatus === 'paid' || finalStatus === 'refunded') {
-      return {
-        paymentId: payment.id,
-        status: 'paid'
-      }
-    }
-
-    return {
-      paymentId: payment.id,
-      status: 'failed'
-    }
-  } catch (error: unknown) {
-    console.warn('[payment] 支付结果暂未同步，按 unknown 承接', error)
-    return {
-      paymentId: payment.id,
-      status: 'unknown'
-    }
-  }
+  return processCreatedPayment(payment)
 }
 
 export async function checkPaymentStatus(paymentId: number): Promise<PaymentStatus> {
@@ -453,7 +747,7 @@ export async function pollPaymentStatus(paymentId: number, maxAttempts: number =
   for (let i = 0; i < maxAttempts; i++) {
     const status = await checkPaymentStatus(paymentId)
 
-    if (status === 'paid' || status === 'refunded' || status === 'closed' || status === 'failed') {
+    if (isPaymentStatusSuccessful(status) || isPaymentStatusFailed(status)) {
       return status
     }
 

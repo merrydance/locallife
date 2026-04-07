@@ -1,6 +1,6 @@
 <custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="content">
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
@@ -39,7 +39,7 @@
               data-name="{{item.name}}"
             >
               <view slot="note" class="status-tag {{item.status}}" wx:if="{{target !== 'rules'}}">
-                  <t-tag variant="dark" theme="{{item.status === 'active' ? 'primary' : 'default'}}">{{item.status === 'active' ? '运营中' : '已停用'}}</t-tag>
+                  <t-tag variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
               </view>
             </t-cell>
           </t-cell-group>

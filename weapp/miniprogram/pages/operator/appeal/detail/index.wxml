@@ -1,6 +1,6 @@
 <custom-navbar title="申诉详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 140rpx;">
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
@@ -24,7 +24,7 @@
         </view>
         <view class="row">
           <text class="label">申诉状态</text>
-          <t-tag theme="{{appeal.status === 'pending' ? 'warning' : ((appeal.status === 'approved' || appeal.status === 'compensated') ? 'success' : 'danger')}}" size="small" variant="dark">
+          <t-tag theme="{{appeal.status_theme}}" size="small" variant="dark">
             {{appeal.status_label}}
           </t-tag>
         </view>
@@ -99,18 +99,18 @@
         <view class="section-title">追偿单</view>
         <view class="row">
           <text class="label">追偿状态</text>
-          <text class="value">{{recovery.status}}</text>
+          <t-tag theme="{{recovery.status_theme}}" size="small" variant="dark">{{recovery.status_label}}</t-tag>
         </view>
         <view class="row">
           <text class="label">追偿金额</text>
-          <text class="value">{{recovery.recovery_amount}}分</text>
+          <text class="value">{{recovery.recovery_amount_display}}</text>
         </view>
         <view class="row">
           <text class="label">到期时间</text>
           <text class="value">{{recovery.due_at}}</text>
         </view>
         <t-button
-          wx:if="{{recovery.status === 'pending' || recovery.status === 'overdue'}}"
+          wx:if="{{recovery.can_waive}}"
           theme="primary"
           block
           loading="{{recoverySubmitting}}"
@@ -118,7 +118,7 @@
          shape="round">核销追偿</t-button>
       </view>
 
-      <view class="card input-card" wx:if="{{appeal.status === 'pending'}}">
+      <view class="card input-card" wx:if="{{appeal.can_review}}">
         <view class="section-title">审核处理</view>
         <t-input
           label="补偿金额(元)"
@@ -138,7 +138,7 @@
         />
       </view>
       
-      <view class="footer-actions" wx:if="{{appeal.status === 'pending'}}">
+      <view class="footer-actions" wx:if="{{appeal.can_review}}">
         <t-button theme="danger" block bind:tap="onReject" loading="{{submitting}}" shape="round">驳回申诉</t-button>
         <t-button theme="primary" block bind:tap="onApprove" loading="{{submitting}}" shape="round">审核通过</t-button>
       </view>

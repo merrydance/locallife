@@ -1,6 +1,9 @@
 <custom-navbar title="运营商管理" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
-<view class="operators-page" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="operators-page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <scroll-view
     class="list-scroll"
     scroll-y
@@ -139,9 +142,7 @@
         <view wx:for="{{regionDisplayApps}}" wx:key="id" class="section-card app-card">
           <view class="title-row">
             <view class="name">{{item.operator_name || ('运营商#' + item.operator_id)}}</view>
-            <t-tag theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'success' : 'danger')}}" variant="dark">
-              {{item.status === 'pending' ? '待审核' : (item.status === 'approved' ? '已通过' : '已驳回')}}
-            </t-tag>
+            <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
           </view>
           <view class="meta-row">
             <text class="meta-label">联系人</text>
@@ -159,11 +160,11 @@
             <text class="meta-label">申请时间</text>
             <text class="meta-value">{{item.created_at}}</text>
           </view>
-          <view wx:if="{{item.status === 'rejected' && item.reject_reason}}" class="meta-row">
+          <view wx:if="{{item.isRejected && item.reject_reason}}" class="meta-row">
             <text class="meta-label">驳回原因</text>
             <text class="meta-value meta-danger">{{item.reject_reason}}</text>
           </view>
-          <view wx:if="{{item.status === 'pending'}}" class="action-row">
+          <view wx:if="{{item.canReview}}" class="action-row">
             <t-button
               size="small" theme="primary" shape="round"
               data-id="{{item.id}}" data-name="{{item.operator_name}}" data-region="{{item.region_name}}"

@@ -3,7 +3,7 @@
  * 将OrderResponse转换为订单列表展示所需的OrderCard格式
  */
 
-import { OrderResponse, getPayableAmount } from '../api/order'
+import { OrderPaymentContext, OrderResponse, getPayableAmount } from '../api/order'
 import { getPublicImageUrl } from '../utils/image'
 
 export interface OrderCardViewModel {
@@ -22,6 +22,7 @@ export interface OrderCardViewModel {
     canCancel: boolean
     canPay: boolean
     actions?: string[]
+    paymentContext?: OrderPaymentContext
     itemCount: number
     merchantId: number
     merchantPhone?: string
@@ -42,8 +43,7 @@ export const OrderCardAdapter = {
         const status = mapStatus(order)
         const actions = order.actions || []
         const canCancel = actions.includes('cancel')
-        // 列表页不直接跳支付，统一在详情页处理
-        const canPay = actions.includes('pay') && false
+        const canPay = actions.includes('pay')
         return {
             id: order.id,
             orderNo: order.order_no,
@@ -60,6 +60,7 @@ export const OrderCardAdapter = {
             canCancel,
             canPay,
             actions,
+            paymentContext: order.payment_context,
             itemCount: order.items ? order.items.reduce((acc, item) => acc + item.quantity, 0) : 0,
             merchantId: order.merchant_id,
             merchantPhone: order.merchant_phone

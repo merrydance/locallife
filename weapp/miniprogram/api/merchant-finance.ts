@@ -300,6 +300,47 @@ export interface ApplymentStatusResponse {
   reject_reason?: string
 }
 
+export type MerchantFinanceStatusTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
+
+export function getMerchantAccountStatusView(status?: string, statusDesc?: string) {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+  return {
+    normalizedStatus,
+    isActive: normalizedStatus === 'active',
+    statusDesc: statusDesc || ''
+  }
+}
+
+export function getMerchantFinanceOrderStatusView(status?: string) {
+  switch (status) {
+    case 'finished':
+      return { text: '已完成', theme: 'success' as MerchantFinanceStatusTheme }
+    case 'processing':
+      return { text: '处理中', theme: 'primary' as MerchantFinanceStatusTheme }
+    case 'pending':
+      return { text: '待结算', theme: 'warning' as MerchantFinanceStatusTheme }
+    case 'cancelled':
+      return { text: '已取消', theme: 'danger' as MerchantFinanceStatusTheme }
+    case 'failed':
+      return { text: '失败', theme: 'danger' as MerchantFinanceStatusTheme }
+    default:
+      return { text: status || '处理中', theme: 'default' as MerchantFinanceStatusTheme }
+  }
+}
+
+export function getMerchantWithdrawStatusView(status?: string) {
+  switch (status) {
+    case 'pending':
+      return { text: '处理中', theme: 'warning' as MerchantFinanceStatusTheme }
+    case 'success':
+      return { text: '成功', theme: 'success' as MerchantFinanceStatusTheme }
+    case 'failed':
+      return { text: '失败', theme: 'danger' as MerchantFinanceStatusTheme }
+    default:
+      return { text: status || '', theme: 'default' as MerchantFinanceStatusTheme }
+  }
+}
+
 export interface MerchantBindBankRequest {
   account_type: 'ACCOUNT_TYPE_BUSINESS' | 'ACCOUNT_TYPE_PRIVATE'
   account_bank: string

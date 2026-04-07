@@ -1,4 +1,4 @@
-import { BusinessType, closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, invokeWechatPay, PaymentOrder, RefundOrder } from '../../../api/payment'
+import { BusinessType, closePayment, createPayment as createPaymentOrder, getPaymentById, getPaymentRefunds, getPayments, getPaymentStatusView, getRefundStatusView, invokeWechatPay, isPaymentStatusSuccessful, PaymentOrder, RefundOrder } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
 import Navigation from '../../../utils/navigation'
 
@@ -6,6 +6,7 @@ type RefundView = RefundOrder & {
     _amountDisplay: string
     _statusText: string
     _statusClass: string
+    _statusTheme: 'success' | 'warning' | 'danger' | 'primary' | 'default'
 }
 
 const getDatasetId = (event: WechatMiniprogram.BaseEvent): number | null => {
@@ -41,11 +42,13 @@ Page({
         amountDisplay: '',
         statusText: '',
         statusClass: '',
+        statusIcon: 'info-circle-filled',
         paymentMethodText: '',
         showCloseButton: false,
         showPayButton: false,
         paying: false,
-        showRefundList: false
+        showRefundList: false,
+        showPendingTip: false
     },
 
     onLoad(options: { id?: string, orderId?: string }) {
@@ -117,12 +120,13 @@ Page({
     },
 
     processPayment(payment: PaymentOrder) {
+        const statusView = getPaymentStatusView(payment.status)
         const amountDisplay = `¥${(payment.amount / 100).toFixed(2)}`
-        const statusText = this.getStatusText(payment.status)
-        const statusClass = payment.status
+        const statusText = statusView.text
+        const statusClass = statusView.className
         const paymentMethodText = this.getPaymentMethodText(payment.payment_type)
-        const showCloseButton = payment.status === 'pending'
-        const showPayButton = payment.status === 'pending' && !!payment.order_id && payment.payment_type === 'miniprogram'
+        const showCloseButton = statusView.isPending
+        const showPayButton = statusView.isPending && !!payment.order_id && payment.payment_type === 'miniprogram'
         const showRefundList = false
 
         this.setData({
@@ -130,10 +134,12 @@ Page({
             amountDisplay,
             statusText,
             statusClass,
+            statusIcon: statusView.icon,
             paymentMethodText,
             showCloseButton,
             showPayButton,
-            showRefundList
+            showRefundList,
+            showPendingTip: statusView.showPendingTip
         })
     },
 
@@ -166,7 +172,7 @@ Page({
                     }
                     throw error
                 }
-            } else if (latestPayment.status !== 'paid') {
+            } else if (!isPaymentStatusSuccessful(latestPayment.status)) {
                 throw new Error('支付参数缺失')
             }
 
@@ -197,26 +203,20 @@ Page({
         try {
             const refundsResponse = await getPaymentRefunds(this.data.paymentId)
             // 处理退款显示字段
-            const processedRefunds: RefundView[] = refundsResponse.refund_orders.map((refund) => ({
-                ...refund,
-                _amountDisplay: `¥${(refund.refund_amount / 100).toFixed(2)}`,
-                _statusText: this.getRefundStatusText(refund.status),
-                _statusClass: refund.status
-            }))
+            const processedRefunds: RefundView[] = refundsResponse.refund_orders.map((refund) => {
+                const statusView = getRefundStatusView(refund.status)
+                return {
+                    ...refund,
+                    _amountDisplay: `¥${(refund.refund_amount / 100).toFixed(2)}`,
+                    _statusText: statusView.text,
+                    _statusClass: statusView.className,
+                    _statusTheme: statusView.theme
+                }
+            })
             this.setData({ refunds: processedRefunds, showRefundList: processedRefunds.length > 0 })
         } catch (error) {
             logger.error('加载退款列表失败', error, 'payment-detail.loadRefunds')
         }
-    },
-
-    getStatusText(status: string): string {
-        const statusMap: Record<string, string> = {
-            'pending': '待支付',
-            'paid': '已支付',
-            'refunded': '已退款',
-            'closed': '已关闭'
-        }
-        return statusMap[status] || status
     },
 
     getPaymentMethodText(method: string): string {
@@ -225,16 +225,6 @@ Page({
             'native': '扫码支付'
         }
         return methodMap[method] || method
-    },
-
-    getRefundStatusText(status: string): string {
-        const statusMap: Record<string, string> = {
-            'pending': '退款中',
-            'processing': '处理中',
-            'success': '退款成功',
-            'failed': '退款失败'
-        }
-        return statusMap[status] || status
     },
 
     formatTime(timeStr: string): string {

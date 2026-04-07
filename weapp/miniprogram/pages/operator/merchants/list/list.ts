@@ -5,7 +5,7 @@
 
 import {
     operatorMerchantManagementService,
-    formatMerchantStatus,
+    getMerchantStatusDisplay,
     type OperatorMerchantItem,
     type MerchantQueryParams,
     type MerchantStatus
@@ -15,6 +15,25 @@ import { getErrorUserMessage } from '@/utils/user-facing'
 interface MerchantListPageDataset {
     id?: number
     name?: string
+}
+
+type MerchantListView = OperatorMerchantItem & {
+    status_label: string
+    status_theme: 'success' | 'warning' | 'default'
+    can_suspend: boolean
+    can_resume: boolean
+}
+
+function adaptMerchant(item: OperatorMerchantItem): MerchantListView {
+    const statusDisplay = getMerchantStatusDisplay(item.status)
+    return {
+        ...item,
+        status: statusDisplay.normalizedStatus,
+        status_label: statusDisplay.label,
+        status_theme: statusDisplay.theme,
+        can_suspend: statusDisplay.canSuspend,
+        can_resume: statusDisplay.canResume
+    }
 }
 
 Page({
@@ -27,7 +46,7 @@ Page({
         navBarHeight: 88,
 
         // 商户列表
-        merchants: [] as OperatorMerchantItem[],
+        merchants: [] as MerchantListView[],
 
         // 分页
         page: 1,
@@ -54,7 +73,7 @@ Page({
     },
 
     onNavHeight(e: WechatMiniprogram.CustomEvent<{ navBarHeight: number }>) {
-        this.setData({ navBarHeight: e.detail.navBarHeight })
+        this.setData({ navBarHeight: e.detail.navBarHeight || 88 })
     },
 
     onRetry() {
@@ -92,7 +111,7 @@ Page({
             }
 
             const result = await operatorMerchantManagementService.getMerchantList(params)
-            const list = result.merchants || []
+            const list = (result.merchants || []).map(adaptMerchant)
             const merchants = refresh ? list : [...this.data.merchants, ...list]
             const total = result.total || 0
             const hasMore = merchants.length < total
@@ -304,14 +323,6 @@ Page({
     stopPropagation() {
         // 阻止事件冒泡
     },
-
-    /**
-     * 格式化商户状态
-     */
-    formatStatus(status: MerchantStatus): string {
-        return formatMerchantStatus(status)
-    },
-
     /**
      * 格式化金额
      */

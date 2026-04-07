@@ -16,6 +16,8 @@ export type TableStatus =
     | 'reserved'    // 已预定
     | 'disabled'    // 已停用
 
+export type TableStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+
 /** 桌台类型枚举 */
 export type TableType =
     | 'regular'     // 普通桌台
@@ -117,6 +119,53 @@ export interface TableTagInfo {
 export interface TagResponse {
     id: number                                   // 标签ID
     name: string                                 // 标签名称
+}
+
+export function getTableStatusDisplay(status?: TableStatus | string) {
+    const normalizedStatus = String(status || 'available') as TableStatus | string
+
+    switch (normalizedStatus) {
+        case 'occupied':
+            return {
+                normalizedStatus,
+                label: '占用中',
+                theme: 'warning' as TableStatusTheme,
+                badgeClass: 'is-occupied',
+                canRelease: true,
+                canShowCode: false,
+                isAvailableLike: false
+            }
+        case 'reserved':
+            return {
+                normalizedStatus,
+                label: '已预订',
+                theme: 'danger' as TableStatusTheme,
+                badgeClass: 'is-reserved',
+                canRelease: true,
+                canShowCode: false,
+                isAvailableLike: false
+            }
+        case 'disabled':
+            return {
+                normalizedStatus,
+                label: '停用',
+                theme: 'default' as TableStatusTheme,
+                badgeClass: 'is-disabled',
+                canRelease: false,
+                canShowCode: true,
+                isAvailableLike: false
+            }
+        default:
+            return {
+                normalizedStatus: 'available' as TableStatus,
+                label: '空闲',
+                theme: 'success' as TableStatusTheme,
+                badgeClass: 'is-idle',
+                canRelease: false,
+                canShowCode: true,
+                isAvailableLike: true
+            }
+    }
 }
 
 /** 更新桌台状态请求 - 对齐 api.updateTableStatusRequest */

@@ -1,4 +1,5 @@
 import { responsiveBehavior } from '@/utils/responsive'
+import { getAdminApprovalStatusDisplay, type AdminApprovalTheme } from '@/adapters/admin-review'
 import {
   platformManagementService,
   type AdminGroupApplicationItem
@@ -15,20 +16,6 @@ type ImageTapEvent = WechatMiniprogram.CustomEvent & {
   }
 }
 
-type StatusTheme = 'success' | 'warning' | 'danger' | 'primary'
-type StatusDisplay = {
-  label: string
-  theme: StatusTheme
-}
-
-function getStatusDisplay(status: string): StatusDisplay {
-  if (status === 'approved') return { label: '已通过', theme: 'success' }
-  if (status === 'rejected') return { label: '已驳回', theme: 'danger' }
-  if (status === 'submitted') return { label: '待审核', theme: 'warning' }
-  if (status === 'draft') return { label: '草稿', theme: 'primary' }
-  return { label: status || '未知状态', theme: 'primary' }
-}
-
 Page({
   behaviors: [responsiveBehavior],
   data: {
@@ -41,7 +28,9 @@ Page({
     application: null as AdminGroupApplicationItem | null,
     licenseImageUrl: '',
     statusLabel: '',
-    statusTheme: 'primary' as StatusTheme,
+    statusTheme: 'primary' as AdminApprovalTheme,
+    showRejectReason: false,
+    canReview: false,
     showRejectDialog: false,
     rejectReason: ''
   },
@@ -71,12 +60,14 @@ Page({
         ? await getPrivateMediaUrl(detail.license_image_asset_id)
         : ''
 
-      const status = getStatusDisplay(detail.status)
+      const status = getAdminApprovalStatusDisplay(detail.status, { unknownTheme: 'primary' })
       this.setData({
         application: detail,
         licenseImageUrl,
         statusLabel: status.label,
-        statusTheme: status.theme
+        statusTheme: status.theme,
+        showRejectReason: status.isRejected && !!detail.reject_reason,
+        canReview: status.isPending
       })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '加载详情失败，请稍后重试')

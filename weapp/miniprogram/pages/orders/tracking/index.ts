@@ -1,5 +1,8 @@
 import DeliveryService, {
-  DeliveryResponse
+  buildDeliveryProgress,
+  DeliveryProgressView,
+  DeliveryResponse,
+  getDeliveryStatusDisplay
 } from '../../../api/delivery'
 import { getBicyclingDirection } from '../../../api/location'
 import { confirmOrder, getOrderDetail } from '../../../api/order'
@@ -37,13 +40,6 @@ interface Polyline {
   arrowLine?: boolean
 }
 
-interface DeliveryProgress {
-  title: string
-  time: string
-  done: boolean
-  active: boolean
-}
-
 const getErrorMessage = getErrorUserMessage
 
 Page({
@@ -62,6 +58,7 @@ Page({
     estimatedDeliveryTime: '',
     deliveryStatus: '',
     deliveryStatusText: '',
+    showConfirmReceipt: false,
     // 地图相关
     mapCenter: { latitude: 39.9, longitude: 116.4 },
     scale: 14,
@@ -69,7 +66,7 @@ Page({
     polyline: [] as Polyline[],
     includePoints: [] as MapPoint[],
     // 进度
-    progress: [] as DeliveryProgress[],
+    progress: [] as DeliveryProgressView[],
     // 位置刷新定时器
     locationTimer: null as number | null
   },
@@ -98,7 +95,7 @@ Page({
 
   onShow() {
     // 页面重新显示时恢复轮询（副作用：也刻刷新一次位置）
-    if (this.data.deliveryId) {
+    if (this.data.deliveryId && this.data.delivery && getDeliveryStatusDisplay(this.data.delivery.status).isLocationTracked) {
       this.updateRiderLocation()
       this.startLocationTracking()
     }
@@ -176,9 +173,10 @@ Page({
       const riderPhoneDisplay = riderPhone
         ? riderPhone.replace(/(\d{3})\d{4}(\d{4})/, '$1****$2')
         : ''
+      const statusDisplay = getDeliveryStatusDisplay(delivery.status)
 
       // 3. 生成配送进度
-      const progress = this.generateProgress(delivery)
+      const progress = buildDeliveryProgress(delivery, this.formatTime)
 
       // 4. 设置地图标记点
       const merchantPoint: MapPoint = {
@@ -200,7 +198,8 @@ Page({
           ? this.formatTime(delivery.estimated_delivery_at)
           : '计算中',
         deliveryStatus: delivery.status,
-        deliveryStatusText: this.getStatusText(delivery.status),
+        deliveryStatusText: statusDisplay.text,
+        showConfirmReceipt: statusDisplay.canConfirmReceipt,
         progress,
         loading: false
       })
@@ -209,7 +208,7 @@ Page({
       this.setupMap(merchantPoint, customerPoint)
 
       // 6. 开始位置追踪（配送中状态）
-      if (delivery.status === 'delivering' || delivery.status === 'picked') {
+      if (statusDisplay.isLocationTracked) {
         this.startLocationTracking()
       }
     } catch (error: unknown) {
@@ -220,57 +219,6 @@ Page({
         errorMsg: getErrorMessage(error, '获取配送信息失败') 
       })
     }
-  },
-
-  generateProgress(delivery: DeliveryResponse): DeliveryProgress[] {
-    const progress: DeliveryProgress[] = [
-      {
-        title: '商家已接单',
-        time: delivery.created_at ? this.formatTime(delivery.created_at) : '',
-        done: true,
-        active: false
-      },
-      {
-        title: '骑手已接单',
-        time: delivery.assigned_at ? this.formatTime(delivery.assigned_at) : '',
-        done: !!delivery.assigned_at,
-        active: delivery.status === 'assigned'
-      },
-      {
-        title: '骑手已取餐',
-        time: delivery.picked_at ? this.formatTime(delivery.picked_at) : '',
-        done: !!delivery.picked_at,
-        active: delivery.status === 'picked'
-      },
-      {
-        title: '配送中',
-        time: '',
-        done: delivery.status === 'delivering',
-        active: delivery.status === 'delivering'
-      },
-      {
-        title: '已送达',
-        time: delivery.delivered_at
-          ? this.formatTime(delivery.delivered_at)
-          : '',
-        done: !!delivery.delivered_at,
-        active: delivery.status === 'delivered'
-      }
-    ]
-    return progress
-  },
-
-  getStatusText(status: string): string {
-    const statusMap: Record<string, string> = {
-      pending: '等待骑手接单',
-      assigned: '骑手已接单',
-      picking: '骑手正在取餐',
-      picked: '骑手已取餐',
-      delivering: '骑手正在配送',
-      delivered: '已送达',
-      cancelled: '配送已取消'
-    }
-    return statusMap[status] || status
   },
 
   formatTime(timeStr: string): string {

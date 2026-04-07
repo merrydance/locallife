@@ -11,6 +11,7 @@ import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { logger } from '../../../../utils/logger'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
+import { AdminApprovalDisplay, getAdminApprovalStatusDisplay } from '../../../../adapters/admin-review'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 
@@ -55,6 +56,13 @@ type GroupUploadFeedback = {
 
 type GroupUploadField = 'license' | 'idFront' | 'idBack'
 
+type GroupResultStatusView = AdminApprovalDisplay & {
+  iconName: 'check-circle-filled' | 'time-filled'
+  iconColor: string
+  resultText: string
+  resultHint: string
+}
+
 type InputEvent = {
   currentTarget: {
     dataset: {
@@ -86,6 +94,20 @@ const DEFAULT_GROUP_UPLOAD_FEEDBACK: GroupUploadFeedback = {
 const CONFIG_PAGE_ROUTE = 'pages/merchant/config/index'
 
 const getErrorMessage = getErrorUserMessage
+
+const buildGroupResultStatusView = (status?: string): GroupResultStatusView => {
+  const display = getAdminApprovalStatusDisplay(status)
+  const isApproved = display.isApproved
+  return {
+    ...display,
+    iconName: isApproved ? 'check-circle-filled' : 'time-filled',
+    iconColor: isApproved ? 'var(--td-success-color)' : '#FF9800',
+    resultText: isApproved ? '申请已通过' : '申请已提交，审核中',
+    resultHint: isApproved
+      ? '平台已完成审核，可返回配置中心继续查看人员与协作相关设置。'
+      : '平台将在 24 小时内完成审核，请留意站内消息；后续可返回配置中心继续查看申请进度。'
+  }
+}
 
 const createUploadFeedback = (state: UploadFeedbackState, title = '', description = ''): UploadFeedback => ({
   state,
@@ -122,6 +144,7 @@ Page({
     currentStep: 0,
     submitting: false,
     applicationStatus: 'draft' as GroupApplicationResponse['status'],
+    resultStatusView: buildGroupResultStatusView('draft') as GroupResultStatusView,
     rejectReason: '',
     idFront: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
     idBack: { url: '', rawUrl: '', assetId: undefined } as UploadFieldValue,
@@ -237,6 +260,7 @@ Page({
   mapResponseToData(res: GroupApplicationResponse) {
     this.setData({
       applicationStatus: res.status || 'draft',
+      resultStatusView: buildGroupResultStatusView(res.status),
       rejectReason: res.reject_reason || '',
       'formData.groupName': res.group_name || '',
       'formData.contactPhone': res.contact_phone || '',
@@ -255,12 +279,14 @@ Page({
   },
 
   syncFlowWithStatus(res: GroupApplicationResponse) {
-    if (res.status === 'submitted' || res.status === 'approved') {
+    const resultStatusView = buildGroupResultStatusView(res.status)
+
+    if (resultStatusView.isPending || resultStatusView.isApproved) {
       this.setData({ currentStep: 4 })
       return
     }
 
-    if (res.status === 'rejected') {
+    if (resultStatusView.isRejected) {
       wx.showModal({
         title: '审核未通过',
         content: `原因：${res.reject_reason || '资料核验失败'}`,

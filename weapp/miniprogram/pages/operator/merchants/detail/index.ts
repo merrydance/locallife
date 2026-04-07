@@ -1,6 +1,6 @@
 import {
+  getMerchantStatusDisplay,
   operatorMerchantManagementService,
-  formatMerchantStatus,
   MerchantStatus,
   OperatorMerchantDetailResponse
 } from '../../../../api/operator-merchant-management'
@@ -17,9 +17,12 @@ type MerchantDetailView = {
   contact_phone?: string
   address: string
   status: MerchantStatus | string
+  status_theme: 'success' | 'warning' | 'default'
   category: string
   business_hours: string
   is_open: boolean
+  business_state_label: string
+  business_state_theme: 'success' | 'default'
   region_id: number
   region_name: string
   latitude: number
@@ -29,6 +32,8 @@ type MerchantDetailView = {
   updated_at: string
   last_active_at?: string
   status_label: string
+  can_suspend: boolean
+  can_resume: boolean
 }
 
 type StatsView = MerchantStatsResponse & {
@@ -46,6 +51,7 @@ function fen2yuan(fen: number): string {
 
 function adaptMerchantDetail(detail: OperatorMerchantDetailResponse & Record<string, unknown>): MerchantDetailView {
   const status = String(detail.status || 'pending') as MerchantStatus | string
+  const statusDisplay = getMerchantStatusDisplay(status)
 
   return {
     id: Number(detail.id || 0),
@@ -56,10 +62,13 @@ function adaptMerchantDetail(detail: OperatorMerchantDetailResponse & Record<str
     contact_person: detail.contact_person ? String(detail.contact_person) : '',
     contact_phone: detail.contact_phone ? String(detail.contact_phone) : '',
     address: String(detail.address || '-'),
-    status,
+    status: statusDisplay.normalizedStatus,
+    status_theme: statusDisplay.theme,
     category: String(detail.category || '未分类'),
     business_hours: String(detail.business_hours || '-'),
-    is_open: status === 'approved' || status === 'active',
+    is_open: statusDisplay.isOpen,
+    business_state_label: statusDisplay.businessStateLabel,
+    business_state_theme: statusDisplay.businessStateTheme,
     region_id: Number(detail.region_id || 0),
     region_name: String(detail.region_name || `区域 ${Number(detail.region_id || 0)}`),
     latitude: Number(detail.latitude || 0),
@@ -68,7 +77,9 @@ function adaptMerchantDetail(detail: OperatorMerchantDetailResponse & Record<str
     created_at: String(detail.created_at || ''),
     updated_at: String(detail.updated_at || ''),
     last_active_at: detail.last_active_at ? String(detail.last_active_at) : '',
-    status_label: formatMerchantStatus(status as MerchantStatus)
+    status_label: statusDisplay.label,
+    can_suspend: statusDisplay.canSuspend,
+    can_resume: statusDisplay.canResume
   }
 }
 

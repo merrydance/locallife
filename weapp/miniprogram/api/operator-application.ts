@@ -264,6 +264,30 @@ export interface RegionExpansionApplication {
   created_at: string
 }
 
+export type RegionExpansionStatus = RegionExpansionApplication['status']
+export type RegionExpansionStatusTheme = 'warning' | 'primary' | 'danger'
+
+export function getRegionExpansionStatusDisplay(status: RegionExpansionStatus) {
+  const labelMap: Record<RegionExpansionStatus, string> = {
+    pending: '审核中',
+    approved: '已通过',
+    rejected: '已拒绝'
+  }
+  const themeMap: Record<RegionExpansionStatus, RegionExpansionStatusTheme> = {
+    pending: 'warning',
+    approved: 'primary',
+    rejected: 'danger'
+  }
+
+  return {
+    label: labelMap[status] || status,
+    theme: themeMap[status] || 'warning',
+    isPending: status === 'pending',
+    isApproved: status === 'approved',
+    isRejected: status === 'rejected'
+  }
+}
+
 /**
  * 申请运营更多区域
  */

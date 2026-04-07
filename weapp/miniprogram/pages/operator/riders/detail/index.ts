@@ -1,7 +1,7 @@
 import {
+  getRiderStatusDisplay,
   operatorRiderManagementService,
   formatOnlineStatus,
-  formatRiderStatus,
   formatVehicleType,
   OperatorRiderDetailResponse,
   RiderStatus
@@ -16,8 +16,10 @@ type RiderDetailView = {
   phone: string
   id_card_no?: string
   status: RiderStatus | string
+  status_theme: 'success' | 'warning' | 'danger' | 'default'
   is_online: boolean
   online_status_label: string
+  online_status_theme: 'success' | 'default'
   region_id: number
   region_name: string
   deposit_amount: number
@@ -39,6 +41,8 @@ type RiderDetailView = {
   frozen_deposit_display: string
   total_earnings_display: string
   status_label: string
+  can_suspend: boolean
+  can_resume: boolean
 }
 
 type RiderStatsView = RiderStatsResponse & {
@@ -50,6 +54,7 @@ type RiderStatsView = RiderStatsResponse & {
 function adaptRiderDetail(detail: OperatorRiderDetailResponse & Record<string, unknown>): RiderDetailView {
   const status = String(detail.status || 'pending') as RiderStatus | string
   const onlineStatus = detail.online_status || ((detail.is_online as boolean) ? 'online' : 'offline')
+  const statusDisplay = getRiderStatusDisplay(status as RiderStatus)
   const totalOrders = Number(detail.stats?.total_deliveries || detail.total_orders || 0)
   const totalEarnings = Number(detail.stats?.total_earnings || detail.total_earnings || 0)
   const depositAmount = Number(detail.deposit_amount || 0)
@@ -64,9 +69,11 @@ function adaptRiderDetail(detail: OperatorRiderDetailResponse & Record<string, u
     real_name: String(detail.name || detail.real_name || '未命名骑手'),
     phone: String(detail.phone || '-'),
     id_card_no: detail.id_card ? String(detail.id_card) : String(detail.id_card_no || ''),
-    status,
+    status: statusDisplay.normalizedStatus,
+    status_theme: statusDisplay.theme,
     is_online: onlineStatus === 'online',
     online_status_label: formatOnlineStatus(onlineStatus as 'online' | 'offline' | 'busy' | 'break'),
+    online_status_theme: onlineStatus === 'online' ? 'success' : 'default',
     region_id: Number(detail.region_id || 0),
     region_name: String(detail.region_name || `区域 ${Number(detail.region_id || 0)}`),
     deposit_amount: depositAmount,
@@ -87,7 +94,9 @@ function adaptRiderDetail(detail: OperatorRiderDetailResponse & Record<string, u
     deposit_amount_display: (depositAmount / 100).toFixed(2),
     frozen_deposit_display: (frozenDeposit / 100).toFixed(2),
     total_earnings_display: (totalEarnings / 100).toFixed(2),
-    status_label: formatRiderStatus(status as RiderStatus)
+    status_label: statusDisplay.label,
+    can_suspend: statusDisplay.canSuspend,
+    can_resume: statusDisplay.canResume
   }
 }
 

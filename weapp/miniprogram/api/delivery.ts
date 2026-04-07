@@ -65,6 +65,87 @@ export interface DeliveryLocationPoint {
     recorded_at: string
 }
 
+export type DeliveryStatusTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
+
+export interface DeliveryProgressView {
+    title: string
+    time: string
+    done: boolean
+    active: boolean
+}
+
+export function getDeliveryStatusDisplay(status?: Delivery['status']) {
+    const isAssignedStage = status === 'assigned' || status === 'picking'
+    const isPickedStage = status === 'picked'
+    const isDeliveringStage = status === 'delivering'
+    const isDeliveredStage = status === 'delivered' || status === 'completed'
+
+    const statusMap: Record<string, { text: string, theme: DeliveryStatusTheme }> = {
+        pending: { text: '等待骑手接单', theme: 'default' },
+        assigned: { text: '骑手已接单', theme: 'primary' },
+        picking: { text: '骑手正在取餐', theme: 'primary' },
+        picked: { text: '骑手已取餐', theme: 'primary' },
+        delivering: { text: '骑手正在配送', theme: 'primary' },
+        delivered: { text: '已送达', theme: 'success' },
+        completed: { text: '已送达', theme: 'success' },
+        cancelled: { text: '配送已取消', theme: 'warning' },
+        exception: { text: '配送异常', theme: 'danger' }
+    }
+
+    const meta = statusMap[status || ''] || { text: status || '', theme: 'default' as const }
+
+    return {
+        text: meta.text,
+        theme: meta.theme,
+        isAssignedStage,
+        isPickedStage,
+        isDeliveringStage,
+        isDeliveredStage,
+        isLocationTracked: isPickedStage || isDeliveringStage,
+        canConfirmReceipt: status === 'delivered'
+    }
+}
+
+export function buildDeliveryProgress(delivery: Delivery, formatTime: (timeStr: string) => string): DeliveryProgressView[] {
+    const statusDisplay = getDeliveryStatusDisplay(delivery.status)
+    const isAtLeastAssigned = statusDisplay.isAssignedStage || statusDisplay.isPickedStage || statusDisplay.isDeliveringStage || statusDisplay.isDeliveredStage
+    const isAtLeastPicked = statusDisplay.isPickedStage || statusDisplay.isDeliveringStage || statusDisplay.isDeliveredStage
+    const isAtLeastDelivering = statusDisplay.isDeliveringStage || statusDisplay.isDeliveredStage
+
+    return [
+        {
+            title: '商家已接单',
+            time: delivery.created_at ? formatTime(delivery.created_at) : '',
+            done: true,
+            active: false
+        },
+        {
+            title: '骑手已接单',
+            time: delivery.assigned_at ? formatTime(delivery.assigned_at) : '',
+            done: !!delivery.assigned_at || isAtLeastAssigned,
+            active: statusDisplay.isAssignedStage
+        },
+        {
+            title: '骑手已取餐',
+            time: delivery.picked_at ? formatTime(delivery.picked_at) : '',
+            done: !!delivery.picked_at || isAtLeastPicked,
+            active: statusDisplay.isPickedStage
+        },
+        {
+            title: '配送中',
+            time: '',
+            done: isAtLeastDelivering,
+            active: statusDisplay.isDeliveringStage
+        },
+        {
+            title: '已送达',
+            time: delivery.delivered_at ? formatTime(delivery.delivered_at) : '',
+            done: !!delivery.delivered_at || statusDisplay.isDeliveredStage,
+            active: statusDisplay.isDeliveredStage
+        }
+    ]
+}
+
 export class DeliveryService {
     /**
      * 获取推荐接单列表 (抢单池)

@@ -1,6 +1,9 @@
 import { isLargeScreen } from '@/utils/responsive'
 import {
+  formatOnlineStatus,
+  getRiderStatusDisplay,
   operatorRiderManagementService,
+  parseRiderStatusFilter,
   RiderQueryParams,
   RiderStatus,
   OperatorRiderItem
@@ -23,6 +26,7 @@ type RiderView = {
   phone: string
   status: string
   status_label: string
+  status_theme: 'success' | 'warning' | 'danger' | 'default'
   is_online: boolean
   online_status_label: string
   region_id: number
@@ -30,33 +34,8 @@ type RiderView = {
   delivery_count: number
   rating_display: string
   total_earnings_display: string
-}
-
-const RIDER_STATUS_LABEL: Record<string, string> = {
-  active: '已审核',
-  pending: '待审核',
-  pending_approval: '待审核',
-  suspended: '已暂停',
-  rejected: '已驳回',
-  offline: '已离线'
-}
-
-function parseRiderStatus(status?: string): RiderStatus | '' {
-  if (status === 'pending') {
-    return 'pending_approval'
-  }
-
-  if (
-    status === 'active' ||
-    status === 'suspended' ||
-    status === 'pending_approval' ||
-    status === 'rejected' ||
-    status === 'offline'
-  ) {
-    return status
-  }
-
-  return ''
+  can_suspend: boolean
+  can_resume: boolean
 }
 
 function adaptRider(item: Partial<OperatorRiderItem> & Record<string, unknown>): RiderView {
@@ -64,20 +43,24 @@ function adaptRider(item: Partial<OperatorRiderItem> & Record<string, unknown>):
   const onlineStatus = String(item.online_status || ((item.is_online as boolean) ? 'online' : 'offline'))
   const isOnline = onlineStatus === 'online' || Boolean(item.is_online)
   const deliveryCount = Number(item.delivery_count || item.total_orders || 0)
+  const statusDisplay = getRiderStatusDisplay(String(item.status || 'pending') as RiderStatus)
 
   return {
     id: Number(item.id || 0),
     name,
     phone: String(item.phone || '-'),
-    status: String(item.status || 'pending'),
-    status_label: RIDER_STATUS_LABEL[String(item.status || 'pending')] || String(item.status || 'pending'),
+    status: statusDisplay.normalizedStatus,
+    status_label: statusDisplay.label,
+    status_theme: statusDisplay.theme,
     is_online: isOnline,
-    online_status_label: isOnline ? '在线' : '离线',
+    online_status_label: formatOnlineStatus(isOnline ? 'online' : 'offline'),
     region_id: Number(item.region_id || 0),
     region_name: String(item.region_name || `区域 ${Number(item.region_id || 0)}`),
     delivery_count: deliveryCount,
     rating_display: Number(item.rating || 0).toFixed(1),
-    total_earnings_display: `¥${(Number(item.total_earnings || 0) / 100).toFixed(2)}`
+    total_earnings_display: `¥${(Number(item.total_earnings || 0) / 100).toFixed(2)}`,
+    can_suspend: statusDisplay.canSuspend,
+    can_resume: statusDisplay.canResume
   }
 }
 
@@ -107,7 +90,7 @@ Page({
 
   onLoad(options: RiderListPageOptions) {
     const regionId = options.region_id ? parseInt(options.region_id) : 0
-    const statusFilter = parseRiderStatus(options.status)
+    const statusFilter = parseRiderStatusFilter(options.status)
     this.setData({
       isLargeScreen: isLargeScreen(),
       regionId,

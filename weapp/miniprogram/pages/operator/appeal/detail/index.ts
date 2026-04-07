@@ -2,7 +2,8 @@ import {
     operatorAppealReviewService,
     claimManagementService,
     ClaimRecoveryResponse,
-    formatAppealStatus,
+    getAppealStatusDisplay,
+    getClaimRecoveryStatusDisplay,
     OperatorAppealDetailResponse
 } from '../../../../api/appeals-customer-service'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -13,6 +14,8 @@ interface AppealDetailOptions {
 
 interface AppealDetailView extends OperatorAppealDetailResponse {
     status_label: string
+    status_theme: 'warning' | 'success' | 'danger'
+    can_review: boolean
     claim_amount_display: string
     compensation_amount_display: string
     approved_amount_display: string
@@ -34,11 +37,19 @@ interface AppealDetailView extends OperatorAppealDetailResponse {
     } | null
 }
 
+interface RecoveryView extends ClaimRecoveryResponse {
+    status_label: string
+    status_theme: 'warning' | 'success' | 'danger'
+    can_waive: boolean
+    recovery_amount_display: string
+}
+
 function fen2yuan(value?: number): string {
     return `¥${(Number(value || 0) / 100).toFixed(2)}`
 }
 
 function buildTimeline(detail: OperatorAppealDetailResponse) {
+    const statusDisplay = getAppealStatusDisplay(detail.status)
     const backendTimeline = Array.isArray(detail.timeline) ? detail.timeline : []
     if (backendTimeline.length > 0) {
         return backendTimeline.map((item) => ({
@@ -57,7 +68,7 @@ function buildTimeline(detail: OperatorAppealDetailResponse) {
             notes: String(detail.reason || '')
         },
         detail.reviewed_at ? {
-            title: detail.status === 'approved' ? '审核通过' : '审核驳回',
+            title: statusDisplay.isApproved || statusDisplay.isCompensated ? '审核通过' : '审核驳回',
             operator: detail.reviewer_id ? `审核人 ${detail.reviewer_id}` : '运营审核',
             timestamp: String(detail.reviewed_at),
             notes: String(detail.review_notes || '')
@@ -79,6 +90,7 @@ function buildTimeline(detail: OperatorAppealDetailResponse) {
 }
 
 function adaptAppealDetail(detail: OperatorAppealDetailResponse): AppealDetailView {
+    const statusDisplay = getAppealStatusDisplay(detail.status)
     const lookback = (detail.lookback_result as Record<string, unknown> | undefined) || {}
     const evidenceFiles = Array.isArray(detail.evidence_files)
         ? detail.evidence_files
@@ -89,7 +101,9 @@ function adaptAppealDetail(detail: OperatorAppealDetailResponse): AppealDetailVi
 
     return {
         ...detail,
-        status_label: formatAppealStatus(detail.status),
+        status_label: statusDisplay.label,
+        status_theme: statusDisplay.theme,
+        can_review: statusDisplay.isPending,
         claim_amount_display: fen2yuan(detail.claim_amount),
         compensation_amount_display: fen2yuan(detail.compensation_amount),
         approved_amount_display: fen2yuan(detail.claim_approved_amount),
@@ -107,11 +121,22 @@ function adaptAppealDetail(detail: OperatorAppealDetailResponse): AppealDetailVi
     }
 }
 
+function adaptRecovery(recovery: ClaimRecoveryResponse): RecoveryView {
+    const statusDisplay = getClaimRecoveryStatusDisplay(recovery.status)
+    return {
+        ...recovery,
+        status_label: statusDisplay.label,
+        status_theme: statusDisplay.theme,
+        can_waive: statusDisplay.canWaive,
+        recovery_amount_display: fen2yuan(recovery.recovery_amount)
+    }
+}
+
 Page({
     data: {
         id: 0,
         appeal: null as AppealDetailView | null,
-        recovery: null as ClaimRecoveryResponse | null,
+        recovery: null as RecoveryView | null,
         replyContent: '',
         compensationAmount: '',
         showRejectDialog: false,
@@ -166,7 +191,7 @@ Page({
     async loadRecovery(claimId: number) {
         try {
             const recovery = await claimManagementService.getOperatorClaimRecovery(claimId)
-            this.setData({ recovery })
+            this.setData({ recovery: adaptRecovery(recovery) })
         } catch (error) {
             this.setData({ recovery: null })
         }
@@ -195,8 +220,7 @@ Page({
     },
 
     async onApprove() {
-        // Assume 'resolved' is the success status or we have a specific approve action
-        await this.handleAppeal('approved')
+        await this.handleAppeal('approve')
     },
 
     onReject() {
@@ -204,7 +228,7 @@ Page({
     },
 
     async onRejectConfirm() {
-        await this.handleAppeal('rejected')
+        await this.handleAppeal('reject')
         this.setData({ showRejectDialog: false })
     },
 
@@ -212,7 +236,7 @@ Page({
         this.setData({ showRejectDialog: false })
     },
 
-    async handleAppeal(status: 'approved' | 'rejected') {
+    async handleAppeal(reviewAction: 'approve' | 'reject') {
         const { id, replyContent, compensationAmount, appeal } = this.data
         if (!replyContent || replyContent.trim().length < 5) {
             wx.showToast({ title: '审核备注至少5个字符', icon: 'none' })
@@ -220,7 +244,7 @@ Page({
         }
 
         let compensationFen: number | undefined
-        if (status === 'approved') {
+        if (reviewAction === 'approve') {
             const fallbackClaimAmount = Number((appeal as unknown as Record<string, unknown>)?.claim_amount || 0)
             const parsed = compensationAmount ? Math.floor(parseFloat(compensationAmount) * 100) : fallbackClaimAmount
             if (!parsed || parsed <= 0) {
@@ -234,7 +258,7 @@ Page({
             this.setData({ submitting: true })
             wx.showLoading({ title: '处理中...', mask: true })
             await operatorAppealReviewService.reviewAppeal(id, {
-                status,
+                status: reviewAction === 'approve' ? 'approved' : 'rejected',
                 review_notes: replyContent,
                 compensation_amount: compensationFen
             })

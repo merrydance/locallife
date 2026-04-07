@@ -1,6 +1,8 @@
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
+  padding-left: var(--spacer-md);
+  padding-right: var(--spacer-md);
 }
 
 .loading-center {
@@ -10,7 +12,7 @@
 }
 
 .detail-content {
-  padding: var(--spacer-md);
+  padding: var(--spacer-md) 0;
 }
 
 /* 状态卡片 */
@@ -40,7 +42,9 @@
 }
 
 .status-card.success .status-badge { background: var(--td-success-color-light); color: var(--td-success-color); }
+.status-card.processing .status-badge { background: var(--td-warning-color-light); color: var(--td-warning-color); }
 .status-card.failed .status-badge { background: var(--td-error-color-light); color: var(--td-error-color); }
+.status-card.default .status-badge { background: #eef1f6; color: var(--td-text-color-secondary); }
 
 .status-main {
   display: flex;
@@ -216,7 +220,7 @@
 
 /* 骨架屏 */
 .detail-skeleton {
-  padding: var(--spacer-md);
+  padding: var(--spacer-md) 0;
 }
 
 .skeleton-item {

@@ -10,6 +10,7 @@ import { request } from '../utils/request'
 
 /** 区域状态枚举 */
 export type RegionStatus = 'active' | 'inactive' | 'pending'
+export type RegionStatusTheme = 'primary' | 'default' | 'warning'
 
 /** 运营商状态枚举 */
 export type OperatorStatus = 'active' | 'suspended' | 'pending'
@@ -184,6 +185,43 @@ export interface ResolveSafetyReportRequest extends Record<string, unknown> {
     resolution_notes: string
     recover_merchant_ids?: number[]
     recover_reason?: string
+}
+
+export type SafetyReportStatus = SafetyReportItem['status']
+export type SafetyReportStatusTheme = 'warning' | 'success' | 'danger'
+
+export function getSafetyReportStatusLabel(status: SafetyReportStatus): string {
+    const labels: Record<SafetyReportStatus, string> = {
+        pending: '待处理',
+        resolved: '已处理',
+        rejected: '已驳回'
+    }
+    return labels[status] || status
+}
+
+export function getSafetyReportStatusTheme(status: SafetyReportStatus): SafetyReportStatusTheme {
+    const themes: Record<SafetyReportStatus, SafetyReportStatusTheme> = {
+        pending: 'warning',
+        resolved: 'success',
+        rejected: 'danger'
+    }
+    return themes[status] || 'warning'
+}
+
+export function getSafetyReportStatusDisplay(status: SafetyReportStatus): {
+    label: string
+    theme: SafetyReportStatusTheme
+    isPending: boolean
+    isResolved: boolean
+    isRejected: boolean
+} {
+    return {
+        label: getSafetyReportStatusLabel(status),
+        theme: getSafetyReportStatusTheme(status),
+        isPending: status === 'pending',
+        isResolved: status === 'resolved',
+        isRejected: status === 'rejected'
+    }
 }
 
 // ==================== 运营商基础管理服务类 ====================
@@ -556,17 +594,25 @@ export class OperatorBasicManagementAdapter {
         parentId?: number
         level: number
         status: RegionStatus
+        status_label: string
+        status_theme: RegionStatusTheme
+        is_active: boolean
         operatorId?: number
         createdAt: string
         updatedAt: string
     } {
+        const status = data.status ?? 'pending'
+        const statusDisplay = getRegionStatusDisplay(status)
         return {
             id: data.id,
             name: data.name,
             code: data.code,
             parentId: data.parent_id,
             level: data.level,
-            status: data.status ?? 'pending',
+            status,
+            status_label: statusDisplay.label,
+            status_theme: statusDisplay.theme,
+            is_active: statusDisplay.isActive,
             operatorId: data.operator_id,
             createdAt: data.created_at ?? '',
             updatedAt: data.updated_at ?? ''
@@ -757,6 +803,22 @@ export function formatRegionStatus(status: RegionStatus): string {
         pending: '待审核'
     }
     return statusMap[status] || status
+}
+
+export function getRegionStatusDisplay(status?: RegionStatus | string) {
+    const normalizedStatus = (status || 'pending') as RegionStatus
+    const themeMap: Record<RegionStatus, RegionStatusTheme> = {
+        active: 'primary',
+        inactive: 'default',
+        pending: 'warning'
+    }
+
+    return {
+        normalizedStatus,
+        label: normalizedStatus === 'active' ? '运营中' : normalizedStatus === 'inactive' ? '已停用' : '待审核',
+        theme: themeMap[normalizedStatus] || 'default',
+        isActive: normalizedStatus === 'active'
+    }
 }
 
 /**

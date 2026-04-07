@@ -153,16 +153,16 @@
           <t-cell title="进件状态">
             <view slot="note">
               <t-tag
-                theme="{{getApplymentStatusTheme(applymentStatus.status)}}"
+                theme="{{applymentView.tagTheme}}"
                 variant="dark"
-              >{{getApplymentStatusText(applymentStatus.status)}}</t-tag>
+              >{{applymentView.tagText}}</t-tag>
             </view>
           </t-cell>
-          <t-cell wx:if="{{applymentStatus.status_desc}}" title="状态说明" note="{{applymentStatus.status_desc}}" />
-          <t-cell wx:if="{{applymentStatus.sub_mch_id}}" title="子商户号" note="{{applymentStatus.sub_mch_id}}" />
+          <t-cell wx:if="{{applymentView.statusDesc}}" title="状态说明" note="{{applymentView.statusDesc}}" />
+          <t-cell wx:if="{{applymentView.subMchId !== '-'}}" title="子商户号" note="{{applymentView.subMchId}}" />
         </t-cell-group>
 
-        <view wx:if="{{applymentStatus.status === 'to_be_signed' || applymentStatus.status === 'signing'}}" class="applyment-hint applyment-warn">
+        <view wx:if="{{applymentView.needsSign}}" class="applyment-hint applyment-warn">
           <text>当前还需要完成微信签约。签约链接复制和继续提交资料已统一放到“收付通进件”页处理。</text>
           <view class="submit-wrap">
             <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
@@ -171,9 +171,9 @@
           </view>
         </view>
 
-        <view wx:if="{{applymentStatus.reject_reason}}" class="applyment-hint applyment-error">
+        <view wx:if="{{applymentView.showRejectReason}}" class="applyment-hint applyment-error">
           <text class="hint-label">拒绝原因：</text>
-          <text>{{applymentStatus.reject_reason}}</text>
+          <text>{{applymentView.rejectReason}}</text>
           <view class="submit-wrap">
             <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
               去修正资料
@@ -182,13 +182,13 @@
         </view>
 
         <view
-          wx:if="{{applymentStatus.status === 'finish' || applymentStatus.status === 'active'}}"
+          wx:if="{{applymentView.isOpened}}"
           class="applyment-hint applyment-success"
         >
           <text>✓ 收付通已开通，可正常收款和提现。</text>
         </view>
 
-        <view wx:if="{{applymentStatus.status !== 'finish' && applymentStatus.status !== 'active'}}" class="submit-wrap">
+        <view wx:if="{{!applymentView.isOpened}}" class="submit-wrap">
           <t-button theme="primary" size="medium" shape="round" bindtap="onGoApplymentSettings">
             前往进件与签约
           </t-button>

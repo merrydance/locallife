@@ -1,6 +1,9 @@
 <custom-navbar title="申请更多区域" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
 
   <!-- ── 已有申请列表 ── -->
   <view class="section">
@@ -26,11 +29,11 @@
         >
           <view slot="right-icon">
             <t-tag
-              theme="{{item.status === 'pending' ? 'warning' : (item.status === 'approved' ? 'primary' : 'danger')}}"
+              theme="{{item.status_theme}}"
               size="small"
-            >{{item.status === 'pending' ? '审核中' : (item.status === 'approved' ? '已通过' : '已拒绝')}}</t-tag>
+            >{{item.status_label}}</t-tag>
           </view>
-          <view wx:if="{{item.status === 'rejected' && item.reject_reason}}" slot="description" class="reject-reason">
+          <view wx:if="{{item.is_rejected && item.reject_reason}}" slot="description" class="reject-reason">
             拒绝原因：{{item.reject_reason}}
           </view>
         </t-cell>

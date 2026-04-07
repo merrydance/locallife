@@ -1,18 +1,17 @@
 .page-container {
   background-color: var(--td-bg-color-page);
   min-height: 100vh;
-  padding: 32rpx;
   box-sizing: border-box;
 }
 
 .skeleton-wrap {
-  padding: 32rpx;
+  padding: var(--spacer-md);
   background: #fff;
   border-radius: 16rpx;
 }
 
 .error-wrap {
-  margin-top: 100rpx;
+  margin-top: var(--spacer-xl);
 }
 
 .content-animate {

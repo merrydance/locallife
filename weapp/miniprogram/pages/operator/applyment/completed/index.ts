@@ -1,10 +1,9 @@
-import { getOperatorApplymentStatus } from '../../../../api/operator-applyment'
+import {
+  buildOperatorApplymentStatusView,
+  getOperatorApplymentStatus
+} from '../../../../api/operator-applyment'
 import { getOperatorAccountBalance } from '../../../../api/operator-finance'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
-
-function isCompletedStatus(status?: string) {
-  return status === 'finish'
-}
 
 Page({
   data: {
@@ -29,9 +28,10 @@ Page({
     this.setData({ loading: true, error: '' })
     try {
       const status = await getOperatorApplymentStatus()
+      const statusView = buildOperatorApplymentStatusView(status)
       let subMchId = status.sub_mch_id || ''
 
-      if (isCompletedStatus(status.status) && !subMchId) {
+      if (statusView.isOpened && !subMchId) {
         try {
           const balance = await getOperatorAccountBalance()
           subMchId = balance.sub_mch_id || ''
@@ -41,10 +41,10 @@ Page({
       }
 
       this.setData({
-        completed: isCompletedStatus(status.status),
+        completed: statusView.isOpened,
         applymentId: status.applyment_id ? String(status.applyment_id) : '',
         subMchId,
-        statusDesc: status.status_desc || '微信支付商户已开通'
+        statusDesc: statusView.statusDesc || '微信支付商户已开通'
       })
     } catch (error: unknown) {
       this.setData({

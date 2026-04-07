@@ -1,6 +1,9 @@
 <custom-navbar title="商户详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <view wx:if="{{loading}}" class="card">
     <card-skeleton t-class="skeleton" />
   </view>
@@ -24,16 +27,16 @@
         <view class="header-info">
           <text class="merchant-name">{{detail.name}}</text>
           <view class="tag-row">
-            <t-tag theme="{{(detail.status === 'active' || detail.status === 'approved') ? 'success' : (detail.status === 'suspended' ? 'danger' : 'warning')}}" variant="dark" size="small">{{detail.status_label}}</t-tag>
-            <t-tag theme="{{detail.is_open ? 'success' : 'default'}}" variant="light" size="small">{{detail.is_open ? '营业中' : '已打烊'}}</t-tag>
+            <t-tag theme="{{detail.status_theme}}" variant="dark" size="small">{{detail.status_label}}</t-tag>
+            <t-tag theme="{{detail.business_state_theme}}" variant="light" size="small">{{detail.business_state_label}}</t-tag>
           </view>
           <text wx:if="{{detail.description}}" class="desc">{{detail.description}}</text>
         </view>
       </view>
 
       <view class="action-row">
-        <t-button wx:if="{{detail.status === 'approved' || detail.status === 'active'}}" theme="warning" size="small" bindtap="onOpenSuspendDialog" shape="round">暂停商户</t-button>
-        <t-button wx:elif="{{detail.status === 'suspended'}}" theme="success" size="small" bindtap="onOpenResumeDialog" shape="round">恢复营业</t-button>
+        <t-button wx:if="{{detail.can_suspend}}" theme="warning" size="small" bindtap="onOpenSuspendDialog" shape="round">暂停商户</t-button>
+        <t-button wx:elif="{{detail.can_resume}}" theme="success" size="small" bindtap="onOpenResumeDialog" shape="round">恢复营业</t-button>
       </view>
 
       <view class="section-title">基本资料</view>

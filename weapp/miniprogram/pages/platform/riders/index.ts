@@ -1,4 +1,5 @@
 import { responsiveBehavior } from '@/utils/responsive'
+import { getAdminApprovalStatusDisplay, type AdminApprovalTheme } from '@/adapters/admin-review'
 import {
   platformManagementService,
   type AdminRiderItem
@@ -15,11 +16,10 @@ type TapEvent = WechatMiniprogram.CustomEvent & {
   }
 }
 
-function getRiderStatusLabel(status: string): string {
-  if (status === 'approved') return '已通过'
-  if (status === 'rejected') return '已驳回'
-  if (status === 'pending' || status === 'submitted' || status === 'reviewing') return '待审核'
-  return status || '未知'
+type AdminRiderView = AdminRiderItem & {
+  statusLabel: string
+  statusTheme: AdminApprovalTheme
+  canReview: boolean
 }
 
 Page({
@@ -35,7 +35,7 @@ Page({
     limit: 20,
     total: 0,
     hasMore: false,
-    riders: [] as AdminRiderItem[],
+    riders: [] as AdminRiderView[],
     showRejectDialog: false,
     selectedID: 0,
     selectedName: '',
@@ -79,8 +79,18 @@ Page({
         limit: this.data.limit
       })
 
+      const riders = response.riders.map((item) => {
+        const statusDisplay = getAdminApprovalStatusDisplay(item.status, { unknownTheme: 'warning' })
+        return {
+          ...item,
+          statusLabel: statusDisplay.label,
+          statusTheme: statusDisplay.theme,
+          canReview: statusDisplay.isPending
+        }
+      })
+
       this.setData({
-        riders: reset ? response.riders : this.data.riders.concat(response.riders),
+        riders: reset ? riders : this.data.riders.concat(riders),
         total: response.total,
         page: response.page,
         hasMore: response.has_more
@@ -96,11 +106,6 @@ Page({
   onRetry() {
     this.loadRiders(true)
   },
-
-  getStatusLabel(status: string) {
-    return getRiderStatusLabel(status)
-  },
-
   async onApproveTap(e: TapEvent) {
     const riderID = Number(e.currentTarget.dataset.id || 0)
     if (!riderID || this.data.submitting) return

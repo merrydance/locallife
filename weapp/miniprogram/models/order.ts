@@ -1,4 +1,4 @@
-import type { OrderStatus, OrderType, FulfillmentStatus } from '../api/order'
+import type { OrderStatus, OrderType, FulfillmentStatus, OrderPaymentContext } from '../api/order'
 
 /**
  * 订单视图模型 - 用于UI展示
@@ -17,6 +17,7 @@ export interface Order {
     statusHint?: string           // 后端提示文案
     badges?: string[]             // 徽章文本
     actions?: string[]            // 可执行动作
+    paymentContext?: OrderPaymentContext
     pickupCodeMasked?: string     // 取餐码（脱敏）
     overtime?: boolean            // 是否超时
     fulfillmentStatus?: FulfillmentStatus // 履约状态
@@ -70,6 +71,7 @@ export interface OrderDetail extends Order {
     reservationId?: number        // 预订ID
     replacedByOrderId?: number    // 被替换的新订单ID
     fulfillmentStatus?: FulfillmentStatus
+    paymentContext?: OrderPaymentContext
     reservationDate?: string
     reservationTime?: string
     guestCount?: number

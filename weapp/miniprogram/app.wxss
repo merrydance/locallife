@@ -198,6 +198,25 @@ page[data-theme="dark"] {
   box-sizing: border-box;
 }
 
+.page-shell {
+  min-height: 100vh;
+  background-color: var(--td-bg-color-page);
+  box-sizing: border-box;
+}
+
+.page-shell--with-nav {
+  padding-top: calc(var(--page-shell-nav-height, 0px) + var(--spacer-sm));
+}
+
+.page-shell--bottom-safe {
+  padding-bottom: calc(var(--page-shell-bottom-offset, 0rpx) + var(--safe-area-bottom));
+}
+
+.page-shell--page-gutter {
+  padding-left: var(--spacer-md);
+  padding-right: var(--spacer-md);
+}
+
 /* 全局收紧表单分组标题与内容间距（影响 t-cell-group） */
 .t-cell-group {
   margin: 0 !important;

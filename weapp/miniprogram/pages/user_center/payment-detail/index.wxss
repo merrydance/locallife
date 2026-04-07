@@ -1,6 +1,8 @@
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
+  padding-left: var(--spacer-md);
+  padding-right: var(--spacer-md);
 }
 
 .loading-center {
@@ -10,7 +12,7 @@
 }
 
 .detail-content {
-  padding: var(--spacer-md);
+  padding: var(--spacer-md) 0;
 }
 
 /* 状态高亮卡片 */
@@ -41,6 +43,8 @@
 .status-icon-wrap.pending { background: var(--td-warning-color-light); color: var(--td-warning-color); }
 .status-icon-wrap.failed { background: var(--td-error-color-light); color: var(--td-error-color); }
 .status-icon-wrap.refunded { background: var(--td-brand-color-light); color: var(--td-brand-color); }
+.status-icon-wrap.closed,
+.status-icon-wrap.default { background: #eef1f6; color: var(--td-text-color-secondary); }
 
 .status-info {
   display: flex;
@@ -225,7 +229,7 @@
 
 /* 骨架屏 */
 .detail-skeleton {
-  padding: var(--spacer-md);
+  padding: var(--spacer-md) 0;
 }
 
 .skeleton-item {

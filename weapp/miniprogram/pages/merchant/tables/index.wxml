@@ -56,11 +56,11 @@
             <view class="type-label">{{item.table_type === 'room' ? '包间' : '大厅'}}</view>
           </view>
 
-          <view class="table-footer" wx:if="{{item.status === 'occupied' || item.status === 'reserved'}}">
+          <view class="table-footer" wx:if="{{item.canRelease}}">
             <t-button size="extra-small" theme="primary" catchtap="onReleaseTable" data-id="{{item.id}}" data-no="{{item.table_no}}" shape="round">手动释放</t-button>
           </view>
           <view class="table-footer" wx:else>
-            <t-button size="small" theme="default" shape="round" catchtap="onShowQRCode" data-id="{{item.id}}" data-no="{{item.table_no}}" data-url="{{item.qr_code_url}}">桌台码</t-button>
+            <t-button wx:if="{{item.canShowCode}}" size="small" theme="default" shape="round" catchtap="onShowQRCode" data-id="{{item.id}}" data-no="{{item.table_no}}" data-url="{{item.qr_code_url}}">桌台码</t-button>
           </view>
         </view>
       </view>
@@ -117,19 +117,19 @@
           <text class="form-label">状态</text>
           <radio-group class="inline-options" bindchange="onStatusChange">
             <label class="inline-option">
-              <radio value="available" checked="{{formData.status === 'available'}}" color="var(--td-brand-color)" />
+              <radio value="available" checked="{{formStatusSelection.available}}" color="var(--td-brand-color)" />
               <text>空闲</text>
             </label>
             <label class="inline-option">
-              <radio value="occupied" checked="{{formData.status === 'occupied'}}" color="var(--td-brand-color)" />
+              <radio value="occupied" checked="{{formStatusSelection.occupied}}" color="var(--td-brand-color)" />
               <text>占用</text>
             </label>
             <label class="inline-option">
-              <radio value="reserved" checked="{{formData.status === 'reserved'}}" color="var(--td-brand-color)" />
+              <radio value="reserved" checked="{{formStatusSelection.reserved}}" color="var(--td-brand-color)" />
               <text>已预订</text>
             </label>
             <label class="inline-option">
-              <radio value="disabled" checked="{{formData.status === 'disabled'}}" color="var(--td-brand-color)" />
+              <radio value="disabled" checked="{{formStatusSelection.disabled}}" color="var(--td-brand-color)" />
               <text>停用</text>
             </label>
           </radio-group>

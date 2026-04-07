@@ -4,7 +4,7 @@
 }
 
 .detail-scroll {
-  height: calc(100vh - 88px);
+  height: calc(100vh - var(--page-shell-nav-height, 88px) - var(--spacer-sm));
 }
 
 .detail-container {

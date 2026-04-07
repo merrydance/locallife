@@ -8,7 +8,13 @@
     "lint": "eslint miniprogram --ext .ts",
     "lint:fix": "eslint miniprogram --ext .ts --fix",
     "lint:all": "eslint miniprogram --ext .ts -f stylish",
-    "quality:check": "npm run lint:all && npm run compile"
+    "gate:page-shell": "node scripts/check-page-shell.js",
+    "gate:component-policy": "node scripts/check-component-policy.js",
+    "gate:request-boundary": "node scripts/check-request-boundary.js",
+    "gate:role-contract": "node scripts/check-role-contract.js",
+    "gate:business-status-boundary": "node scripts/check-business-status-boundary.js",
+    "gate:weapp": "npm run gate:page-shell && npm run gate:component-policy && npm run gate:request-boundary && npm run gate:role-contract && npm run gate:business-status-boundary",
+    "quality:check": "npm run lint:all && npm run compile && npm run gate:weapp"
   },
   "keywords": [],
   "author": "",

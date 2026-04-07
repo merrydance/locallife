@@ -1,4 +1,5 @@
 import { responsiveBehavior } from '@/utils/responsive'
+import { getAdminApprovalStatusDisplay, type AdminApprovalTheme } from '@/adapters/admin-review'
 import {
   platformManagementService,
   type AdminOperatorApplicationDetail
@@ -23,25 +24,6 @@ type TapEvent = WechatMiniprogram.CustomEvent & {
   }
 }
 
-type StatusTheme = 'success' | 'warning' | 'danger' | 'primary'
-type StatusDisplay = {
-  label: string
-  theme: StatusTheme
-}
-
-function getStatusDisplay(status: string): StatusDisplay {
-  switch (status) {
-    case 'approved':
-      return { label: '已通过', theme: 'success' }
-    case 'rejected':
-      return { label: '已驳回', theme: 'danger' }
-    case 'submitted':
-      return { label: '待审核', theme: 'warning' }
-    default:
-      return { label: status || '未知状态', theme: 'primary' }
-  }
-}
-
 Page({
   behaviors: [responsiveBehavior],
   data: {
@@ -57,7 +39,9 @@ Page({
     idCardBackUrl: '',
     idCardPreviewUnavailable: false,
     statusLabel: '',
-    statusTheme: 'primary' as StatusTheme,
+    statusTheme: 'primary' as AdminApprovalTheme,
+    showRejectReason: false,
+    canReview: false,
     rejectReason: ''
   },
 
@@ -102,7 +86,7 @@ Page({
         this.resolvePrivateAssetUrl(detail.id_card_back_asset_id)
       ])
 
-      const status = getStatusDisplay(detail.status)
+      const status = getAdminApprovalStatusDisplay(detail.status, { unknownTheme: 'primary' })
       const hasIDCardAsset = Boolean(detail.id_card_front_asset_id || detail.id_card_back_asset_id)
       const idCardPreviewUnavailable = hasIDCardAsset && !idCardFrontUrl && !idCardBackUrl
 
@@ -113,7 +97,9 @@ Page({
         idCardBackUrl,
         idCardPreviewUnavailable,
         statusLabel: status.label,
-        statusTheme: status.theme
+        statusTheme: status.theme,
+        showRejectReason: status.isRejected && !!detail.reject_reason,
+        canReview: status.isPending
       })
     } catch (error: unknown) {
       const message = getErrorUserMessage(error, '加载详情失败，请稍后重试')

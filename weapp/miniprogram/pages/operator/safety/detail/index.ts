@@ -1,7 +1,20 @@
-import { operatorBasicManagementService, SafetyReportItem } from '../../../../api/operator-basic-management'
+import {
+  operatorBasicManagementService,
+  SafetyReportItem,
+  getSafetyReportStatusDisplay,
+  type SafetyReportStatusTheme
+} from '../../../../api/operator-basic-management'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
 type ResolveStatus = 'resolved' | 'rejected'
+
+type SafetyReportDetailView = SafetyReportItem & {
+  status_label: string
+  status_theme: SafetyReportStatusTheme
+  is_pending: boolean
+  is_resolved: boolean
+  is_rejected: boolean
+}
 
 interface InputDetail {
   value: string
@@ -20,7 +33,7 @@ Page({
     submitting: false,
     resumeSubmitting: false,
     error: '',
-    report: null as SafetyReportItem | null,
+    report: null as SafetyReportDetailView | null,
     resolutionStatus: 'resolved' as ResolveStatus,
     resolutionNotes: '',
     recoverMerchantIdsRaw: '',
@@ -54,9 +67,17 @@ Page({
           ? report.merchant_ids
           : []
       }
+      const statusDisplay = getSafetyReportStatusDisplay(normalizedReport.status)
       this.setData({
-        report: normalizedReport,
-        resolutionStatus: normalizedReport.status === 'rejected' ? 'rejected' : 'resolved',
+        report: {
+          ...normalizedReport,
+          status_label: statusDisplay.label,
+          status_theme: statusDisplay.theme,
+          is_pending: statusDisplay.isPending,
+          is_resolved: statusDisplay.isResolved,
+          is_rejected: statusDisplay.isRejected
+        },
+        resolutionStatus: statusDisplay.isRejected ? 'rejected' : 'resolved',
         resolutionNotes: normalizedReport.resolution_notes || '',
         loading: false,
         initialLoading: false
@@ -104,7 +125,7 @@ Page({
   },
 
   async onSubmitResolution() {
-    if (this.data.report?.status !== 'pending') {
+    if (!this.data.report?.is_pending) {
       wx.showToast({ title: '事件已处理，当前为只读状态', icon: 'none' })
       return
     }
@@ -141,7 +162,7 @@ Page({
   },
 
   async onResumeSingleMerchant() {
-    if (this.data.report?.status !== 'pending') {
+    if (!this.data.report?.is_pending) {
       wx.showToast({ title: '事件已处理，当前为只读状态', icon: 'none' })
       return
     }

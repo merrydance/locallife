@@ -1,6 +1,9 @@
 <custom-navbar title="骑手详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <view wx:if="{{loading}}" class="card">
     <card-skeleton t-class="skeleton" />
   </view>
@@ -25,15 +28,15 @@
         <view class="header-info">
           <text class="rider-name">{{detail.real_name}}</text>
           <view class="tag-row">
-            <t-tag theme="{{detail.status === 'active' ? 'success' : (detail.status === 'suspended' ? 'danger' : 'warning')}}" variant="dark" size="small">{{detail.status_label}}</t-tag>
-            <t-tag theme="{{detail.is_online ? 'success' : 'default'}}" variant="light" size="small">{{detail.is_online ? '在线' : '离线'}}</t-tag>
+            <t-tag theme="{{detail.status_theme}}" variant="dark" size="small">{{detail.status_label}}</t-tag>
+            <t-tag theme="{{detail.online_status_theme}}" variant="light" size="small">{{detail.online_status_label}}</t-tag>
           </view>
         </view>
       </view>
 
       <view class="action-row">
-        <t-button wx:if="{{detail.status === 'active'}}" theme="warning" size="small" bindtap="onOpenSuspendDialog" shape="round">暂停接单</t-button>
-        <t-button wx:elif="{{detail.status === 'suspended'}}" theme="success" size="small" bindtap="onOpenResumeDialog" shape="round">恢复接单</t-button>
+        <t-button wx:if="{{detail.can_suspend}}" theme="warning" size="small" bindtap="onOpenSuspendDialog" shape="round">暂停接单</t-button>
+        <t-button wx:elif="{{detail.can_resume}}" theme="success" size="small" bindtap="onOpenResumeDialog" shape="round">恢复接单</t-button>
       </view>
 
       <view class="section-title">基本资料</view>

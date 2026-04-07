@@ -3,7 +3,7 @@
  * 处理微信扫一扫跳转到小程序的场景
  */
 
-import { scanTable, getTableDetail, ScanTableMerchantInfo, TableStatus } from '../../../api/table'
+import { getTableDetail, getTableStatusDisplay, scanTable, ScanTableMerchantInfo, TableStatus } from '../../../api/table'
 import { transferDiningSessionTable, DiningSessionDTO } from '../../../api/dining-session'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 
@@ -13,6 +13,27 @@ interface TableInfo {
     merchant_id: number
     capacity: number
     status: TableStatus
+    status_label: string
+    status_badge_class: string
+}
+
+function adaptTableInfo(table: {
+    id: number
+    table_no: string
+    merchant_id: number
+    capacity: number
+    status: TableStatus | string
+}): TableInfo {
+    const statusDisplay = getTableStatusDisplay(table.status)
+    return {
+        id: table.id,
+        table_no: table.table_no,
+        merchant_id: table.merchant_id,
+        capacity: table.capacity,
+        status: statusDisplay.normalizedStatus as TableStatus,
+        status_label: statusDisplay.label,
+        status_badge_class: statusDisplay.badgeClass
+    }
 }
 
 Page({
@@ -139,13 +160,13 @@ Page({
 
             this.setData({
                 loading: false,
-                tableInfo: {
+                tableInfo: adaptTableInfo({
                     id: detail.id,
                     table_no: detail.table_no,
                     merchant_id: detail.merchant_id,
                     capacity: detail.capacity,
                     status: detail.status as TableStatus
-                },
+                }),
                 merchantInfo: scanResult.merchant
             })
 
@@ -171,13 +192,13 @@ Page({
 
             this.setData({
                 loading: false,
-                tableInfo: {
+                tableInfo: adaptTableInfo({
                     id: table.id,
                     table_no: table.table_no,
                     merchant_id: merchantId,
                     capacity: table.capacity,
-                    status: table.status as 'available' | 'occupied' | 'reserved'
-                },
+                    status: table.status as TableStatus
+                }),
                 merchantInfo: scanResult.merchant
             })
 

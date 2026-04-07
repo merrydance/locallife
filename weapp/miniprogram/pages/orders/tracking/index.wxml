@@ -1,6 +1,9 @@
 <custom-navbar title="配送追踪" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 80rpx;"
+>
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
@@ -117,7 +120,7 @@
     </view>
 
     <!-- 确认收货底栏 -->
-    <view wx:if="{{delivery.status === 'delivered'}}" class="confirm-card animate-slide-up" style="margin: 32rpx 24rpx; padding-bottom: calc(env(safe-area-inset-bottom) + 32rpx);">
+    <view wx:if="{{showConfirmReceipt}}" class="confirm-card animate-slide-up">
       <t-button theme="primary" size="large" shape="round" block bindtap="onConfirmReceipt">确认收货</t-button>
     </view>
 

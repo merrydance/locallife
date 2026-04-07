@@ -1,5 +1,6 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import { tableManagementService, CreateTableRequest, TableImageResponse, TableResponse, UpdateTableRequest } from '../../../api/table-device-management'
+import { getTableStatusDisplay, TableStatus } from '../../../api/table'
 import { TagService } from '../../../api/dish'
 import { getPublicImageUrl } from '../../../utils/image'
 import { logger } from '../../../utils/logger'
@@ -13,6 +14,15 @@ type TableLoadSource = 'initial' | 'retry' | 'refresh' | 'tab'
 interface TableView extends TableResponse {
   statusLabel: string
   statusTheme: string
+  canRelease: boolean
+  canShowCode: boolean
+}
+
+interface TableStatusSelection {
+  available: boolean
+  occupied: boolean
+  reserved: boolean
+  disabled: boolean
 }
 
 interface TableTagOption {
@@ -33,7 +43,7 @@ interface TableFormData {
   capacity: number
   description: string
   minimum_spend_yuan: string
-  status: 'available' | 'occupied' | 'reserved' | 'disabled'
+  status: TableStatus
   access_code: string
   tag_ids: number[]
 }
@@ -51,6 +61,22 @@ function createDefaultFormData(): TableFormData {
     access_code: '',
     tag_ids: []
   }
+}
+
+function buildTableStatusSelection(status?: TableStatus | string): TableStatusSelection {
+  const normalizedStatus = getTableStatusDisplay(status).normalizedStatus
+  const selection: TableStatusSelection = {
+    available: false,
+    occupied: false,
+    reserved: false,
+    disabled: false
+  }
+
+  if (normalizedStatus in selection) {
+    selection[normalizedStatus as keyof TableStatusSelection] = true
+  }
+
+  return selection
 }
 
 function buildTableTabLabel(tab: TableTab): string {
@@ -202,7 +228,8 @@ Page({
     formVisible: false,
     isEdit: false,
     editingTableId: 0,
-    formData: createDefaultFormData()
+    formData: createDefaultFormData(),
+    formStatusSelection: buildTableStatusSelection('available') as TableStatusSelection
   },
 
   async onLoad() {
@@ -356,18 +383,15 @@ Page({
   },
 
   formatTable(t: TableResponse) {
-    const statusMap: Record<string, { label: string, theme: string }> = {
-      'available': { label: '空闲', theme: 'success' },
-      'occupied': { label: '就餐中', theme: 'error' },
-      'reserved': { label: '已预订', theme: 'warning' },
-      'disabled': { label: '停用', theme: 'default' }
-    }
-    const statusInfo = statusMap[t.status] || { label: t.status, theme: 'default' }
-    
+    const statusInfo = getTableStatusDisplay(t.status)
+
     return {
       ...t,
+      status: statusInfo.normalizedStatus,
       statusLabel: statusInfo.label,
-      statusTheme: statusInfo.theme
+      statusTheme: statusInfo.theme,
+      canRelease: statusInfo.canRelease,
+      canShowCode: statusInfo.canShowCode
     }
   },
 
@@ -607,6 +631,7 @@ Page({
   },
 
   onAddTable() {
+    const formData = createDefaultFormData()
     this.setData({
       formVisible: true,
       isEdit: false,
@@ -615,7 +640,8 @@ Page({
       uploadFiles: [],
       pendingMediaIds: [],
       pendingImagePreviews: [],
-      formData: createDefaultFormData()
+      formData,
+      formStatusSelection: buildTableStatusSelection(formData.status)
     })
   },
 
@@ -625,6 +651,8 @@ Page({
 
     const table = this.data.tables.find((item) => item.id === id)
     if (!table) return
+
+    const normalizedStatus = getTableStatusDisplay(table.status).normalizedStatus as TableStatus
 
     this.setData({
       formVisible: true,
@@ -639,16 +667,11 @@ Page({
         capacity: table.capacity,
         description: table.description || '',
         minimum_spend_yuan: typeof table.minimum_spend === 'number' ? (table.minimum_spend / 100).toFixed(2) : '',
-        status: table.status === 'occupied'
-          ? 'occupied'
-          : table.status === 'reserved'
-            ? 'reserved'
-            : table.status === 'disabled'
-              ? 'disabled'
-              : 'available',
+        status: normalizedStatus,
         access_code: '',
         tag_ids: Array.isArray(table.tags) ? table.tags.map((tag) => tag.id) : []
-      }
+      },
+      formStatusSelection: buildTableStatusSelection(normalizedStatus)
     })
 
     this.loadTableImages(id)
@@ -808,6 +831,7 @@ Page({
   },
 
   resetFormState() {
+    const formData = createDefaultFormData()
     this.setData({
       formVisible: false,
       isEdit: false,
@@ -816,7 +840,8 @@ Page({
       uploadFiles: [],
       pendingMediaIds: [],
       pendingImagePreviews: [],
-      formData: createDefaultFormData()
+      formData,
+      formStatusSelection: buildTableStatusSelection(formData.status)
     })
   },
 
@@ -867,10 +892,13 @@ Page({
     this.setData({ 'formData.table_type': value })
   },
 
-  onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: 'available' | 'occupied' | 'reserved' | 'disabled' }>) {
+  onStatusChange(e: WechatMiniprogram.CustomEvent<{ value: TableStatus }>) {
     const value = e.detail?.value
     if (!value) return
-    this.setData({ 'formData.status': value })
+    this.setData({
+      'formData.status': value,
+      formStatusSelection: buildTableStatusSelection(value)
+    })
   },
 
   onTagChange(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> }>) {

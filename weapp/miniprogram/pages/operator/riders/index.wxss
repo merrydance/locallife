@@ -21,7 +21,7 @@
 }
 
 .search-bar {
-  padding: var(--spacer-md) 32rpx var(--spacer-sm);
+  padding: var(--spacer-md) var(--spacer-md) var(--spacer-sm);
 }
 
 .filter-tabs {
@@ -36,7 +36,7 @@
 .content {
   flex: 1;
   min-height: 0;
-  padding: var(--spacer-md) 32rpx;
+  padding: var(--spacer-md);
 }
 
 .riders-scroll {

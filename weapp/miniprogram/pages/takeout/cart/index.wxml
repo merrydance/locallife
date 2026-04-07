@@ -1,6 +1,9 @@
 <custom-navbar title="购物车" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 140rpx;">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 140rpx;"
+>
   <!-- 骨架屏加载状态 (App Shell + Skeleton) -->
   <view wx:if="{{loading && merchantGroups.length === 0}}" class="cart-skeleton">
     <view wx:for="{{[1,2]}}" wx:key="*this" class="merchant-skeleton-group card">

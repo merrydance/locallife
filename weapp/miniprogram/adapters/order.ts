@@ -61,6 +61,7 @@ export class OrderAdapter {
       statusHint: statusHint || undefined,
       badges: badgeTexts,
       actions: dto.actions,
+      paymentContext: dto.payment_context,
       pickupCodeMasked: dto.pickup_code_masked,
       overtime: dto.overtime,
       fulfillmentStatus: dto.fulfillment_status,
@@ -121,6 +122,7 @@ export class OrderAdapter {
       reservationId: dto.reservation_id,
       replacedByOrderId: dto.replaced_by_order_id,
       fulfillmentStatus: dto.fulfillment_status,
+      paymentContext: dto.payment_context,
       timeline: dto.fulfillment_status ? [{
         time: dto.updated_at || dto.created_at,
         title: FULFILLMENT_STATUS_TEXT[dto.fulfillment_status] || dto.fulfillment_status

@@ -1,6 +1,6 @@
 <custom-navbar title="退款详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(40rpx + env(safe-area-inset-bottom));">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 40rpx;">
   <!-- 错误状态 -->
   <view wx:if="{{error && !initialLoading}}" class="error-container">
     <t-empty icon="info-circle" description="{{error}}">
@@ -20,9 +20,7 @@
       <view class="status-card {{statusClass}}">
         <view class="status-content">
           <view class="status-badge">
-            <t-icon wx:if="{{refund.status === 'success'}}" name="check-circle-filled" size="48rpx" />
-            <t-icon wx:elif="{{refund.status === 'pending' || refund.status === 'processing'}}" name="time-filled" size="48rpx" />
-            <t-icon wx:elif="{{refund.status === 'failed'}}" name="close-circle-filled" size="48rpx" />
+            <t-icon name="{{statusIcon}}" size="48rpx" />
           </view>
           <view class="status-main">
             <text class="status-text">{{statusText}}</text>
@@ -108,7 +106,7 @@
       </view>
 
       <!-- 温馨提示 -->
-      <view class="tips-box" wx:if="{{refund.status === 'pending' || refund.status === 'processing'}}">
+      <view class="tips-box" wx:if="{{showPendingTip}}">
         <t-icon name="info-circle" size="32rpx" color="var(--td-warning-color)" />
         <text class="tips-text">钱款将原路退回您的支付账户，预计 1-3 个工作日到账</text>
       </view>

@@ -1,12 +1,5 @@
-import { getRefundById, getRefundReturns, ProfitSharingReturn, RefundOrder } from '../../../api/payment'
+import { buildRefundProgress, getRefundById, getRefundReturns, getRefundStatusView, ProfitSharingReturn, RefundOrder, RefundProgressView } from '../../../api/payment'
 import { logger } from '../../../utils/logger'
-
-interface RefundProgress {
-    title: string
-    time: string
-    done: boolean
-    active: boolean
-}
 
 Page({
     data: {
@@ -20,9 +13,11 @@ Page({
         amountDisplay: '',
         statusText: '',
         statusClass: '',
+        statusIcon: 'info-circle-filled',
         refundTypeText: '',
-        progress: [] as RefundProgress[],
-        profitSharingReturns: [] as ProfitSharingReturn[]
+        progress: [] as RefundProgressView[],
+        profitSharingReturns: [] as ProfitSharingReturn[],
+        showPendingTip: false
     },
 
     onLoad(options: { id?: string }) {
@@ -60,60 +55,23 @@ Page({
     },
 
     processRefund(refund: RefundOrder) {
+        const statusView = getRefundStatusView(refund.status)
         const amountDisplay = `¥${(refund.refund_amount / 100).toFixed(2)}`
-        const statusText = this.getStatusText(refund.status)
-        const statusClass = refund.status
+        const statusText = statusView.text
+        const statusClass = statusView.className
         const refundTypeText = refund.refund_type === 'full' ? '全额退款' : '部分退款'
-        const progress = this.generateProgress(refund)
+        const progress = buildRefundProgress(refund, this.formatTime)
 
         this.setData({
             refund,
             amountDisplay,
             statusText,
             statusClass,
+            statusIcon: statusView.icon,
             refundTypeText,
-            progress
+            progress,
+            showPendingTip: statusView.showPendingTip
         })
-    },
-
-    getStatusText(status: string): string {
-        const statusMap: Record<string, string> = {
-            'pending': '退款申请中',
-            'processing': '退款处理中',
-            'success': '退款成功',
-            'failed': '退款失败'
-        }
-        return statusMap[status] || status
-    },
-
-    generateProgress(refund: RefundOrder): RefundProgress[] {
-        const progress: RefundProgress[] = [
-            {
-                title: '提交申请',
-                time: this.formatTime(refund.created_at),
-                done: true,
-                active: refund.status === 'pending'
-            },
-            {
-                title: '审核中',
-                time: '',
-                done: ['processing', 'success', 'failed'].includes(refund.status),
-                active: refund.status === 'processing'
-            },
-            {
-                title: '退款处理',
-                time: '',
-                done: ['success', 'failed'].includes(refund.status),
-                active: false
-            },
-            {
-                title: refund.status === 'failed' ? '退款失败' : '退款完成',
-                time: refund.refunded_at ? this.formatTime(refund.refunded_at) : '',
-                done: ['success', 'failed'].includes(refund.status),
-                active: ['success', 'failed'].includes(refund.status)
-            }
-        ]
-        return progress
     },
 
     formatTime(timeStr: string): string {

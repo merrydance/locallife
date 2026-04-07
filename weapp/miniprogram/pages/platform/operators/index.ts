@@ -1,5 +1,12 @@
 import { responsiveBehavior } from '@/utils/responsive'
 import {
+  buildAdminApprovalStats,
+  getAdminApprovalStatusDisplay,
+  getAdminApprovalStatusPriority,
+  matchesAdminApprovalFilter,
+  type AdminApprovalTheme
+} from '@/adapters/admin-review'
+import {
   platformManagementService,
   type AdminOperatorApplicationItem,
   type AdminRegionExpansionApplicationItem
@@ -15,10 +22,16 @@ type SortBy =
   | 'approved_first'
   | 'rejected_first'
   | 'submitted_first'
-type OperatorStatusTheme = 'warning' | 'success' | 'danger' | 'default'
 type OperatorApplicationDisplayItem = AdminOperatorApplicationItem & {
   statusLabel: string
-  statusTheme: OperatorStatusTheme
+  statusTheme: AdminApprovalTheme
+}
+
+type RegionApplicationDisplayItem = AdminRegionExpansionApplicationItem & {
+  statusLabel: string
+  statusTheme: AdminApprovalTheme
+  isRejected: boolean
+  canReview: boolean
 }
 
 type NavHeightEvent = WechatMiniprogram.CustomEvent<{ navBarHeight?: number }>
@@ -58,8 +71,8 @@ Page({
 
     // ── 区域扩展申请 tab ──────────────────────────────────────
     activeTab: 'onboarding',
-    regionApps:        [] as AdminRegionExpansionApplicationItem[],
-    regionDisplayApps: [] as AdminRegionExpansionApplicationItem[],
+    regionApps:        [] as RegionApplicationDisplayItem[],
+    regionDisplayApps: [] as RegionApplicationDisplayItem[],
     regionStatusFilter: 'all' as 'all' | 'pending' | 'approved' | 'rejected',
     regionFilterStats: { all: 0, pending: 0, approved: 0, rejected: 0 },
     regionPage: 1,
@@ -174,13 +187,23 @@ Page({
     this.setData({ regionLoading: true, regionError: null })
     try {
       const res = await platformManagementService.getAdminRegionExpansionApplications({ page, limit: 20 })
-      const incoming = res.applications || []
+      const incoming = (res.applications || []).map((item) => {
+        const statusDisplay = getAdminApprovalStatusDisplay(item.status, { unknownTheme: 'default' })
+        return {
+          ...item,
+          statusLabel: statusDisplay.label,
+          statusTheme: statusDisplay.theme,
+          isRejected: statusDisplay.isRejected,
+          canReview: statusDisplay.isPending
+        }
+      })
       const merged = reset ? incoming : this._mergeRegion(this.data.regionApps, incoming)
+      const stats = buildAdminApprovalStats(merged, (item) => item.status)
       const regionFilterStats = {
-        all:      merged.length,
-        pending:  merged.filter((i) => i.status === 'pending').length,
-        approved: merged.filter((i) => i.status === 'approved').length,
-        rejected: merged.filter((i) => i.status === 'rejected').length
+        all: merged.length,
+        pending: stats.pending,
+        approved: stats.approved,
+        rejected: stats.rejected
       }
       const regionDisplayApps = this._filterRegion(merged, this.data.regionStatusFilter)
       this.setData({
@@ -207,17 +230,17 @@ Page({
   },
 
   _mergeRegion(
-    existing: AdminRegionExpansionApplicationItem[],
-    incoming: AdminRegionExpansionApplicationItem[]
-  ): AdminRegionExpansionApplicationItem[] {
-    const map = new Map<number, AdminRegionExpansionApplicationItem>()
+    existing: RegionApplicationDisplayItem[],
+    incoming: RegionApplicationDisplayItem[]
+  ): RegionApplicationDisplayItem[] {
+    const map = new Map<number, RegionApplicationDisplayItem>()
     existing.forEach((i) => map.set(i.id, i))
     incoming.forEach((i) => map.set(i.id, i))
     return Array.from(map.values())
   },
 
-  _filterRegion(list: AdminRegionExpansionApplicationItem[], status: string) {
-    return status === 'all' ? list : list.filter((i) => i.status === status)
+  _filterRegion(list: RegionApplicationDisplayItem[], status: string) {
+    return status === 'all' ? list : list.filter((i) => matchesAdminApprovalFilter(i.status, status as 'pending' | 'approved' | 'rejected'))
   },
 
   // ── 区域扩展审批 ──────────────────────────────────────────────────────────
@@ -289,26 +312,13 @@ Page({
   },
 
   buildFilterStats(list: AdminOperatorApplicationItem[]) {
+    const stats = buildAdminApprovalStats(list, (item) => item.status)
     return {
       all: list.length,
-      submitted: list.filter((item) => item.status === 'submitted').length,
-      approved: list.filter((item) => item.status === 'approved').length,
-      rejected: list.filter((item) => item.status === 'rejected').length
+      submitted: stats.pending,
+      approved: stats.approved,
+      rejected: stats.rejected
     }
-  },
-
-  getStatusLabel(status: string): string {
-    if (status === 'submitted') return '待审核'
-    if (status === 'approved') return '已通过'
-    if (status === 'rejected') return '已驳回'
-    return status || '未知状态'
-  },
-
-  getStatusTheme(status: string): 'warning' | 'success' | 'danger' | 'default' {
-    if (status === 'submitted') return 'warning'
-    if (status === 'approved') return 'success'
-    if (status === 'rejected') return 'danger'
-    return 'default'
   },
 
   getSortTime(item: AdminOperatorApplicationItem): number {
@@ -318,23 +328,8 @@ Page({
   },
 
   getStatusPriority(status: string, sortBy: SortBy): number {
-    if (sortBy === 'approved_first') {
-      if (status === 'approved') return 0
-      if (status === 'submitted') return 1
-      if (status === 'rejected') return 2
-      return 3
-    }
-    if (sortBy === 'rejected_first') {
-      if (status === 'rejected') return 0
-      if (status === 'submitted') return 1
-      if (status === 'approved') return 2
-      return 3
-    }
-    if (sortBy === 'submitted_first') {
-      if (status === 'submitted') return 0
-      if (status === 'approved') return 1
-      if (status === 'rejected') return 2
-      return 3
+    if (sortBy === 'approved_first' || sortBy === 'rejected_first' || sortBy === 'submitted_first') {
+      return getAdminApprovalStatusPriority(status, sortBy)
     }
     return 0
   },
@@ -346,7 +341,7 @@ Page({
   ): OperatorApplicationDisplayItem[] {
     let list = source
     if (statusFilter !== 'all') {
-      list = list.filter((item) => item.status === statusFilter)
+      list = list.filter((item) => matchesAdminApprovalFilter(item.status, statusFilter))
     }
 
     const sorted = [...list]
@@ -366,11 +361,14 @@ Page({
       return nameB.localeCompare(nameA, 'zh-CN')
     })
 
-    return sorted.map((item) => ({
-      ...item,
-      statusLabel: this.getStatusLabel(item.status),
-      statusTheme: this.getStatusTheme(item.status)
-    }))
+    return sorted.map((item) => {
+      const statusDisplay = getAdminApprovalStatusDisplay(item.status, { unknownTheme: 'default' })
+      return {
+        ...item,
+        statusLabel: statusDisplay.label,
+        statusTheme: statusDisplay.theme
+      }
+    })
   },
 
   onFilterChange(e: TapEvent) {

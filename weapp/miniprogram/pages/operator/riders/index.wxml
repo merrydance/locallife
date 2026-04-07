@@ -1,6 +1,9 @@
 <custom-navbar title="骑手管理" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe {{isLargeScreen ? 'large-screen' : ''}}"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <view class="header-tools">
     <view class="search-bar">
       <t-search
@@ -54,7 +57,7 @@
               <text class="title">{{item.name}}</text>
               <text class="region-text">{{item.region_name}}</text>
             </view>
-            <t-tag theme="{{item.status === 'active' ? 'success' : (item.status === 'pending' ? 'warning' : 'danger')}}" variant="dark">{{item.status_label}}</t-tag>
+            <t-tag theme="{{item.status_theme}}" variant="dark">{{item.status_label}}</t-tag>
           </view>
 
           <view class="meta-row">
@@ -79,7 +82,7 @@
 
           <view class="action-row">
             <t-button
-              wx:if="{{item.status === 'active'}}"
+              wx:if="{{item.can_suspend}}"
               theme="warning"
               size="small"
               bindtap="onSuspendTap"
@@ -91,7 +94,7 @@
               暂停接单
             </t-button>
             <t-button
-              wx:elif="{{item.status === 'suspended'}}"
+              wx:elif="{{item.can_resume}}"
               theme="success"
               size="small"
               bindtap="onResumeTap"

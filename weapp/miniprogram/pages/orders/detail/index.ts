@@ -1,8 +1,33 @@
 import Navigation from '../../../utils/navigation'
 import { logger } from '../../../utils/logger'
 import CartService from '../../../services/cart'
-import { getOrderDetail, confirmOrder, cancelOrder, urgeOrder, OrderResponse, OrderType } from '../../../api/order'
-import { processPayment, PaymentCancelledError } from '../../../api/payment'
+import {
+  getOrderDetail,
+  confirmOrder,
+  cancelOrder,
+  urgeOrder,
+  isCancelledOrderStatus,
+  isDeliveringOrderStatus,
+  OrderResponse,
+  OrderType,
+  isCompletedOrderStatus,
+  isPendingOrderStatus,
+  isReadyOrderStatus,
+  isTrackableOrderStatus
+} from '../../../api/order'
+import {
+  createOrderPayment,
+  getCombinedPaymentFollowupMessage,
+  getPaymentProcessOutcomeMessage,
+  isCombinedPaymentSuccessful,
+  isPaymentProcessSuccessful,
+  PaymentCancelledError,
+  processCreatedPayment,
+  recoverCombinedPaymentOrder,
+  shouldRecreateCombinedPayment,
+  invokeWechatPay,
+  processPayment
+} from '../../../api/payment'
 import { OrderAdapter } from '../../../adapters/order'
 import { OrderDetail } from '../../../models/order'
 import { generateOrderTimeline } from '../../../utils/timeline'
@@ -43,8 +68,12 @@ Page({
     showUrgeButton: false,
     showContactButton: true, // 总是显示联系客服/商家
     showReviewButton: false,
+    showPickupConfirmButton: false,
+    showReorderButton: false,
     isReviewed: false,
     paying: false,
+    statusHeaderDesc: '',
+    statusHeaderIcon: 'time',
     
     lastUrgeTime: 0,  // 上次催单时间
     urgeCountdown: 0  // 催单倒计时（秒）
@@ -95,13 +124,34 @@ Page({
       const actions = orderDTO.actions || []
 
       // 按钮显示逻辑
-      const showTrackingButton = orderDTO.order_type === 'takeout' &&
-        ['delivering', 'rider_delivered', 'picked'].includes(orderDTO.status)
+      const showTrackingButton = orderDTO.order_type === 'takeout' && isTrackableOrderStatus(orderDTO.status)
 
       const showConfirmButton = actions.includes('confirm')
       const showPayButton = actions.includes('pay')
       const showCancelButton = actions.includes('cancel')
       const showUrgeButton = actions.includes('urge')
+      const showPickupConfirmButton = orderDTO.order_type === 'takeaway' && isReadyOrderStatus(orderDTO.status)
+      const showReorderButton = isCompletedOrderStatus(orderDTO.status)
+
+      let statusHeaderDesc = `订单编号: ${order.orderNo}`
+      if (order.expectDeliverTime) {
+        statusHeaderDesc = `预计 ${order.expectDeliverTime} 送达`
+      } else if (isCompletedOrderStatus(orderDTO.status)) {
+        statusHeaderDesc = `感谢您对${order.merchantName}的信任`
+      } else if (isCancelledOrderStatus(orderDTO.status)) {
+        statusHeaderDesc = orderDTO.cancel_reason || '订单已取消'
+      }
+
+      let statusHeaderIcon = 'time'
+      if (isCompletedOrderStatus(orderDTO.status)) {
+        statusHeaderIcon = 'check-circle'
+      } else if (isCancelledOrderStatus(orderDTO.status)) {
+        statusHeaderIcon = 'close-circle'
+      } else if (isDeliveringOrderStatus(orderDTO.status)) {
+        statusHeaderIcon = 'cart'
+      } else if (isPendingOrderStatus(orderDTO.status)) {
+        statusHeaderIcon = 'timer'
+      }
 
       // 生成订单时间线 (如果需要展示详细Timeline)
       const timeline = generateOrderTimeline(orderDTO)
@@ -116,11 +166,15 @@ Page({
         showCancelButton,
         showPayButton,
         showUrgeButton,
-        showReviewButton: orderDTO.status === 'completed'
+        showReviewButton: isCompletedOrderStatus(orderDTO.status),
+        showPickupConfirmButton,
+        showReorderButton,
+        statusHeaderDesc,
+        statusHeaderIcon
       })
 
       // 检查评价状态
-      if (orderDTO.status === 'completed') {
+      if (isCompletedOrderStatus(orderDTO.status)) {
         this.checkReviewStatus()
       }
 
@@ -324,17 +378,100 @@ Page({
   },
 
   async onPayOrder() {
-    const { orderId, paying } = this.data
+    const { orderId, paying, orderDTO } = this.data
     if (!orderId || paying) return
 
     this.setData({ paying: true })
     try {
+      const combinedPaymentID = orderDTO?.payment_context?.combined_payment_id
+      if (combinedPaymentID) {
+        let combinedPayment = await recoverCombinedPaymentOrder(combinedPaymentID)
+
+        if (combinedPayment.pay_params) {
+          try {
+            await invokeWechatPay(combinedPayment.pay_params)
+          } catch (error) {
+            if (error instanceof PaymentCancelledError) {
+              wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
+              return
+            }
+
+            const wxError = error as { errMsg?: string }
+            if (wxError?.errMsg?.includes('cancel')) {
+              wx.showToast({ title: '已取消支付，可继续完成原合单支付', icon: 'none' })
+              return
+            }
+
+            combinedPayment = await recoverCombinedPaymentOrder(combinedPayment.id)
+            if (isCombinedPaymentSuccessful(combinedPayment)) {
+              Navigation.toPaymentSuccess({
+                orderId,
+                orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
+                amount: (combinedPayment.total_amount / 100).toFixed(2),
+                isCombined: true,
+                orderCount: combinedPayment.sub_orders.length
+              })
+              return
+            }
+
+            if (!shouldRecreateCombinedPayment(combinedPayment)) {
+              wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
+              return
+            }
+          }
+        } else if (isCombinedPaymentSuccessful(combinedPayment)) {
+          Navigation.toPaymentSuccess({
+            orderId,
+            orderNo: combinedPayment.combine_out_trade_no || this.data.order?.orderNo || orderId,
+            amount: (combinedPayment.total_amount / 100).toFixed(2),
+            isCombined: true,
+            orderCount: combinedPayment.sub_orders.length
+          })
+          return
+        } else {
+          if (!shouldRecreateCombinedPayment(combinedPayment)) {
+            wx.showToast({ title: `${getCombinedPaymentFollowupMessage(combinedPayment)}，订单详情稍后会自动同步。`, icon: 'none' })
+            return
+          }
+        }
+
+        const fallbackResult = await processCreatedPayment(await createOrderPayment(parseInt(orderId, 10)))
+        if (!isPaymentProcessSuccessful(fallbackResult)) {
+          await this.loadOrderDetail()
+          wx.showToast({
+            title: getPaymentProcessOutcomeMessage(fallbackResult, {
+              failed: '支付未完成，请稍后重试',
+              unknown: '支付结果确认中，请稍后刷新订单详情'
+            }),
+            icon: 'none'
+          })
+          return
+        }
+
+        const fallbackPayment = fallbackResult.payment
+        if (!fallbackPayment) {
+          await this.loadOrderDetail()
+          wx.showToast({ title: '支付结果确认中，请稍后刷新订单详情', icon: 'none' })
+          return
+        }
+
+        Navigation.toPaymentSuccess({
+          orderId,
+          orderNo: fallbackPayment.out_trade_no || this.data.order?.orderNo || orderId,
+          amount: (fallbackPayment.amount / 100).toFixed(2)
+        })
+        return
+      }
+
       const paymentResult = await processPayment(parseInt(orderId, 10), 'order')
 
-      if (paymentResult.status !== 'paid') {
+      if (!isPaymentProcessSuccessful(paymentResult)) {
         await this.loadOrderDetail()
         wx.showToast({
-          title: paymentResult.status === 'failed' ? '支付未完成，请重新发起' : '支付结果确认中，请稍后刷新',
+          title: getPaymentProcessOutcomeMessage(paymentResult, {
+            failed: '支付未完成，请重新发起',
+            unknown: '支付结果确认中，请稍后刷新'
+          }),
           icon: 'none'
         })
         return

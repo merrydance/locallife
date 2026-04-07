@@ -1,10 +1,18 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
+  buildOperatorApplymentStatusView,
+  DEFAULT_OPERATOR_APPLYMENT_STATUS_VIEW,
+  OperatorApplymentStatusView
+} from '../../../api/operator-applyment'
+import {
   createMerchantWithdraw,
+  getMerchantAccountStatusView,
   getMerchantDailyFinance,
+  getMerchantFinanceOrderStatusView,
   getMerchantFinanceOverview,
   getMerchantAccountBalance,
   getMerchantApplymentStatus,
+  getMerchantWithdrawStatusView,
   getMerchantWithdrawal,
   getMerchantPromotionExpenses,
   getMerchantServiceFees,
@@ -201,10 +209,6 @@ function buildRefreshErrorMessage(messages: string[]) {
   return Array.from(new Set(normalized)).join('；')
 }
 
-function hasExistingApplyment(status?: string) {
-  return Boolean(status && status !== 'not_applied' && status !== 'pending')
-}
-
 const getErrorMessage = getErrorUserMessage
 
 Page({
@@ -265,6 +269,7 @@ Page({
     applymentError: false,
     applymentErrorMessage: '',
     applymentStatus: emptyApplyment as ApplymentStatusResponse | null,
+    applymentView: DEFAULT_OPERATOR_APPLYMENT_STATUS_VIEW as OperatorApplymentStatusView,
     hasApplyment: false
   },
 
@@ -460,16 +465,16 @@ Page({
 
       const accountStatus = balance.account_status || records.account_status || ''
       const statusDesc = balance.status_desc || records.status_desc || ''
-      const isActive = accountStatus === 'active'
+      const accountStatusView = getMerchantAccountStatusView(accountStatus, statusDesc)
 
       this.setData({
         balance,
-        notConfigured: !isActive,
-        withdrawals: isActive ? (records.withdrawals || []) : [],
+        notConfigured: !accountStatusView.isActive,
+        withdrawals: accountStatusView.isActive ? (records.withdrawals || []) : [],
         balanceLoaded: true,
         balanceError: false,
         balanceErrorMessage: '',
-        balanceStatusDesc: statusDesc
+        balanceStatusDesc: accountStatusView.statusDesc
       })
     } catch (error: unknown) {
       const msg = getErrorDebugMessage(error)
@@ -497,9 +502,15 @@ Page({
     this.setData({ loadingApplyment: true, applymentError: false, applymentErrorMessage: '' })
     try {
       const data = await getMerchantApplymentStatus()
+      const applymentView = buildOperatorApplymentStatusView({
+        ...data,
+        created_at: '',
+        updated_at: ''
+      })
       this.setData({
         applymentStatus: data,
-        hasApplyment: hasExistingApplyment(data.status),
+        applymentView,
+        hasApplyment: applymentView.hasExistingApplyment,
         applymentLoaded: true,
         applymentError: false,
         applymentErrorMessage: ''
@@ -509,6 +520,7 @@ Page({
       if (msg.includes('404')) {
         this.setData({
           applymentStatus: null,
+          applymentView: DEFAULT_OPERATOR_APPLYMENT_STATUS_VIEW,
           hasApplyment: false,
           applymentLoaded: true,
           applymentError: false,
@@ -518,6 +530,7 @@ Page({
         logger.error('Load applyment status failed', error, 'merchant-finance')
         this.setData({
           applymentStatus: null,
+          applymentView: DEFAULT_OPERATOR_APPLYMENT_STATUS_VIEW,
           hasApplyment: false,
           applymentLoaded: true,
           applymentError: true,
@@ -704,34 +717,11 @@ Page({
   },
 
   getFinanceOrderStatusText(status?: string): string {
-    switch (status) {
-      case 'finished':
-        return '已完成'
-      case 'pending':
-        return '待结算'
-      case 'cancelled':
-        return '已取消'
-      case 'failed':
-        return '失败'
-      default:
-        return status || '处理中'
-    }
+    return getMerchantFinanceOrderStatusView(status).text
   },
 
   getFinanceOrderStatusTheme(status?: string): string {
-    switch (status) {
-      case 'finished':
-        return 'success'
-      case 'processing':
-        return 'primary'
-      case 'pending':
-        return 'warning'
-      case 'cancelled':
-      case 'failed':
-        return 'danger'
-      default:
-        return 'default'
-    }
+    return getMerchantFinanceOrderStatusView(status).theme
   },
 
   getTimelineRecordTypeText(recordType?: string): string {
@@ -763,56 +753,11 @@ Page({
     return this.formatAmountText(item.merchant_amount)
   },
 
-  getApplymentStatusText(status: string): string {
-    const map: Record<string, string> = {
-      not_applied: '尚未提交进件资料',
-      pending: '尚未提交进件资料',
-      submitted: '已提交',
-      bindbank_submitted: '进件审核中',
-      auditing: '审核中',
-      to_be_signed: '待签约',
-      signing: '签约中',
-      finish: '已开通',
-      active: '已开通',
-      rejected: '已拒绝',
-      rejected_sign: '签约被拒绝',
-      frozen: '已冻结'
-    }
-    return map[status] || '状态更新中'
-  },
-
-  getApplymentStatusTheme(status: string): string {
-    switch (status) {
-      case 'finish':
-      case 'active':
-        return 'success'
-      case 'rejected':
-      case 'rejected_sign':
-      case 'frozen':
-        return 'danger'
-      case 'to_be_signed':
-      case 'signing':
-        return 'primary'
-      default:
-        return 'warning'
-    }
-  },
-
   getStatusText(status: string): string {
-    switch (status) {
-      case 'pending': return '处理中'
-      case 'success': return '成功'
-      case 'failed': return '失败'
-      default: return status
-    }
+    return getMerchantWithdrawStatusView(status).text
   },
 
   getStatusTheme(status: string): string {
-    switch (status) {
-      case 'pending': return 'warning'
-      case 'success': return 'success'
-      case 'failed': return 'danger'
-      default: return 'default'
-    }
+    return getMerchantWithdrawStatusView(status).theme
   }
 })

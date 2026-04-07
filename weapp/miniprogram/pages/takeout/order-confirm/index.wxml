@@ -1,6 +1,9 @@
 <custom-navbar title="确认订单" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 200rpx;"
+>
   <!-- 1. 骨架屏状态 (App Shell + Skeleton) -->
   <view wx:if="{{initLoading}}" class="skeleton-content">
     <view class="address-skeleton card skeleton-shimmer"></view>

@@ -659,9 +659,40 @@ Page({
       }
     }
 
-    // 跳转到订单确认页，传递选中的 cart_ids
+    const checkoutCarts = merchantGroups
+      .filter((group) => selectedCartIds.includes(group.cartId))
+      .map((group) => ({
+        cartId: group.cartId,
+        merchantId: group.merchantId,
+        merchantName: group.merchantName,
+        orderType: group.orderType || 'takeout',
+        tableId: group.tableId,
+        reservationId: group.reservationId,
+        subtotal: group.subtotal,
+        totalCount: group.itemCount,
+        items: group.items.map((item) => ({
+          id: item.id,
+          dishId: item.dishId,
+          comboId: item.comboId,
+          name: item.name,
+          imageUrl: item.imageUrl,
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+          subtotal: item.subtotal,
+          specText: item.specDisplay,
+          customizations: item.customizations,
+          dishImages: item.dishImages || []
+        }))
+      }))
+
     wx.navigateTo({
-      url: `/pages/takeout/order-confirm/index?cart_ids=${selectedCartIds.join(',')}`
+      url: `/pages/takeout/order-confirm/index?cart_ids=${selectedCartIds.join(',')}`,
+      success: (res) => {
+        res.eventChannel.emit('checkoutContext', {
+          cartIds: selectedCartIds,
+          carts: checkoutCarts
+        })
+      }
     })
   },
 

@@ -1,4 +1,5 @@
 import { responsiveBehavior } from '@/utils/responsive'
+import { getAdminApprovalStatusDisplay, type AdminApprovalTheme } from '@/adapters/admin-review'
 import {
   platformManagementService,
   type AdminGroupApplicationItem
@@ -14,12 +15,9 @@ type TapEvent = WechatMiniprogram.CustomEvent & {
   }
 }
 
-function getGroupStatusLabel(status: string): string {
-  if (status === 'approved') return '已通过'
-  if (status === 'rejected') return '已驳回'
-  if (status === 'submitted') return '待审核'
-  if (status === 'draft') return '草稿'
-  return status || '未知'
+type AdminGroupApplicationView = AdminGroupApplicationItem & {
+  statusLabel: string
+  statusTheme: AdminApprovalTheme
 }
 
 Page({
@@ -34,7 +32,7 @@ Page({
     limit: 20,
     total: 0,
     hasMore: false,
-    applications: [] as AdminGroupApplicationItem[]
+    applications: [] as AdminGroupApplicationView[]
   },
 
   onLoad() {
@@ -71,7 +69,14 @@ Page({
         limit: this.data.limit
       })
 
-      const tagged = response.applications.map((a) => ({ ...a, statusLabel: getGroupStatusLabel(a.status) }))
+      const tagged = response.applications.map((a) => {
+        const statusDisplay = getAdminApprovalStatusDisplay(a.status, { unknownTheme: 'primary' })
+        return {
+          ...a,
+          statusLabel: statusDisplay.label,
+          statusTheme: statusDisplay.theme
+        }
+      })
       this.setData({
         applications: reset ? tagged : this.data.applications.concat(tagged),
         total: response.total,

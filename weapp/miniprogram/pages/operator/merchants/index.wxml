@@ -1,6 +1,9 @@
 <custom-navbar title="商户管理" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe {{isLargeScreen ? 'large-screen' : ''}}"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <view class="header-tools">
     <view class="search-bar">
       <t-search
@@ -64,7 +67,7 @@
                 <view class="merchant-info">
                   <text class="merchant-name">{{item.name}}</text>
                   <t-tag
-                    theme="{{(item.status === 'active' || item.status === 'approved') ? 'success' : item.status === 'suspended' ? 'warning' : 'default'}}"
+                    theme="{{item.status_theme}}"
                     size="small"
                     variant="dark"
                   >
@@ -109,7 +112,7 @@
 
               <view class="merchant-actions">
                 <t-button
-                  wx:if="{{item.status === 'approved'}}"
+                  wx:if="{{item.can_suspend}}"
                   theme="warning"
                   size="small"
                   bindtap="onSuspendTap"
@@ -121,7 +124,7 @@
                   暂停商户
                 </t-button>
                 <t-button
-                  wx:elif="{{item.status === 'suspended'}}"
+                  wx:elif="{{item.can_resume}}"
                   theme="success"
                   size="small"
                   bindtap="onResumeTap"

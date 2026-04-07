@@ -35,6 +35,8 @@ export type ApprovalType = 'full' | 'partial' | 'rejected'
 
 /** 追偿单状态枚举 */
 export type ClaimRecoveryStatus = 'pending' | 'paid' | 'overdue' | 'waived' | 'appealed'
+export type AppealStatusTheme = 'warning' | 'success' | 'danger'
+export type ClaimRecoveryStatusTheme = 'warning' | 'success' | 'danger'
 
 // ==================== 申诉管理相关类型 ====================
 
@@ -1046,6 +1048,50 @@ export function formatAppealStatus(status: AppealStatus): string {
         compensated: '已赔付'
     }
     return statusMap[status] || status
+}
+
+export function getAppealStatusDisplay(status: AppealStatus | string) {
+    const normalizedStatus = String(status || 'pending') as AppealStatus | string
+
+    if (normalizedStatus === 'pending') {
+        return { label: '待审核', theme: 'warning' as AppealStatusTheme, isPending: true, isClosed: false, isApproved: false, isRejected: false, isCompensated: false }
+    }
+
+    if (normalizedStatus === 'approved') {
+        return { label: '已通过', theme: 'success' as AppealStatusTheme, isPending: false, isClosed: true, isApproved: true, isRejected: false, isCompensated: false }
+    }
+
+    if (normalizedStatus === 'compensated') {
+        return { label: '已赔付', theme: 'success' as AppealStatusTheme, isPending: false, isClosed: true, isApproved: false, isRejected: false, isCompensated: true }
+    }
+
+    return { label: normalizedStatus === 'rejected' ? '已拒绝' : formatAppealStatus(normalizedStatus as AppealStatus), theme: 'danger' as AppealStatusTheme, isPending: false, isClosed: true, isApproved: false, isRejected: normalizedStatus === 'rejected', isCompensated: false }
+}
+
+export function getClaimRecoveryStatusDisplay(status: ClaimRecoveryStatus | string) {
+    const normalizedStatus = String(status || 'pending') as ClaimRecoveryStatus | string
+
+    if (normalizedStatus === 'pending' || normalizedStatus === 'overdue') {
+        return {
+            label: normalizedStatus === 'overdue' ? '已逾期' : '待追偿',
+            theme: 'warning' as ClaimRecoveryStatusTheme,
+            canWaive: true
+        }
+    }
+
+    if (normalizedStatus === 'paid' || normalizedStatus === 'waived') {
+        return {
+            label: normalizedStatus === 'paid' ? '已支付' : '已核销',
+            theme: 'success' as ClaimRecoveryStatusTheme,
+            canWaive: false
+        }
+    }
+
+    return {
+        label: normalizedStatus === 'appealed' ? '已申诉' : normalizedStatus,
+        theme: 'danger' as ClaimRecoveryStatusTheme,
+        canWaive: false
+    }
 }
 
 /**

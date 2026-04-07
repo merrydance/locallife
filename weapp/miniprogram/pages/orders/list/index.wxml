@@ -1,6 +1,9 @@
 <custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px">
+<view
+  class="page page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <!-- 顶部状态栏 -->
   <view class="tabs-wrapper">
     <t-tabs value="{{currentStatus}}" bind:change="onStatusChange" theme="tag" space-evenly="{{false}}" split="{{false}}">

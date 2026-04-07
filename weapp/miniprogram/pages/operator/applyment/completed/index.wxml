@@ -1,6 +1,9 @@
 <custom-navbar title="开户完成" showBack="{{false}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view
+  class="page page-shell page-shell--with-nav"
+  style="--page-shell-nav-height: {{navBarHeight}}px"
+>
   <view wx:if="{{loading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载开户结果中..." vertical />
   </view>
