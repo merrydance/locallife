@@ -170,7 +170,17 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
+       AND t.type = 'merchant'
+       AND t.status = 'active'
     ), '[]'::json) AS tags,
+  COALESCE(
+    (SELECT json_agg(t.name ORDER BY t.sort_order ASC, t.name ASC)
+     FROM tags t
+     INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
+     WHERE msl.merchant_id = m.id
+       AND t.type = 'system'
+       AND t.status = 'active'
+    ), '[]'::json) AS system_labels,
   ma.storefront_images,
   COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d
@@ -579,7 +589,17 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
+       AND t.type = 'merchant'
+       AND t.status = 'active'
     ), '[]'::json) AS tags,
+  COALESCE(
+    (SELECT json_agg(t.name ORDER BY t.sort_order ASC, t.name ASC)
+     FROM tags t
+     INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
+     WHERE msl.merchant_id = m.id
+       AND t.type = 'system'
+       AND t.status = 'active'
+    ), '[]'::json) AS system_labels,
   ma.storefront_images,
   COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d

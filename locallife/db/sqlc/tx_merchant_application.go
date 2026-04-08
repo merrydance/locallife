@@ -102,6 +102,14 @@ func (store *SQLStore) ApproveMerchantApplicationTx(ctx context.Context, arg App
 			return fmt.Errorf("set merchant closed: %w", err)
 		}
 
+		catalog, err := LoadMerchantSystemLabelCatalog(ctx, q)
+		if err != nil {
+			return fmt.Errorf("load merchant system label catalog: %w", err)
+		}
+		if err := ReconcileMerchantSystemLabels(ctx, q, result.Merchant.ID, catalog, MerchantSystemLabelSourceReconciler); err != nil {
+			return fmt.Errorf("reconcile merchant system labels: %w", err)
+		}
+
 		// Step 3: 确保老板在 merchant_staff 中有 owner 记录。
 		staff, err := q.GetMerchantStaff(ctx, GetMerchantStaffParams{
 			MerchantID: result.Merchant.ID,

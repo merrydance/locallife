@@ -355,6 +355,10 @@ func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
 		Times(1).
 		Return([]db.Tag{}, nil)
 	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{{Name: db.SystemTagNoOpenKitchen}}, nil)
+	store.EXPECT().
 		GetMerchantProfile(gomock.Any(), merchant.ID).
 		Times(1).
 		Return(db.GetMerchantProfileRow{}, nil)
@@ -394,6 +398,7 @@ func TestGetPublicMerchantDetail_RewritesCoverImageInLocalMode(t *testing.T) {
 	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 	require.NotNil(t, resp.CoverImage)
 	require.Equal(t, "/dev/uploads/merchants/12/storefront/cover.jpg", *resp.CoverImage)
+	require.Equal(t, []string{db.SystemTagNoOpenKitchen}, resp.SystemLabels)
 }
 
 func TestGetPublicMerchantDetail_ReturnsOrderingSuspendedFlag(t *testing.T) {
@@ -409,6 +414,10 @@ func TestGetPublicMerchantDetail_ReturnsOrderingSuspendedFlag(t *testing.T) {
 		Return(merchant, nil)
 	store.EXPECT().
 		ListMerchantTags(gomock.Any(), merchant.ID).
+		Times(1).
+		Return([]db.Tag{}, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
 		Times(1).
 		Return([]db.Tag{}, nil)
 	store.EXPECT().

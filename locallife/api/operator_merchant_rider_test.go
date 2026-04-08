@@ -1,6 +1,9 @@
 package api
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -278,6 +281,146 @@ func TestGetOperatorMerchantAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestGetOperatorMerchantCapabilitiesAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	merchant := randomMerchantInRegionForOp(operator.RegionID)
+	capability := db.MerchantCapability{
+		MerchantID:        merchant.ID,
+		OpenKitchenStatus: db.MerchantCapabilityStatusUnknown,
+		DineInStatus:      db.MerchantCapabilityStatusNo,
+		Source:            db.MerchantCapabilitySourceManualReview,
+	}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	expectOperatorManagesRegion(store, operator, merchant.RegionID, true)
+	store.EXPECT().
+		GetMerchantCapabilities(gomock.Any(), merchant.ID).
+		Return(capability, nil)
+	store.EXPECT().
+		ListMerchantSystemLabels(gomock.Any(), merchant.ID).
+		Return([]db.Tag{{Name: db.SystemTagNoOpenKitchen}, {Name: db.SystemTagNoDineIn}}, nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/operator/merchants/%d/capabilities", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantCapabilitiesResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, merchant.ID, resp.MerchantID)
+	require.Equal(t, db.MerchantCapabilityStatusUnknown, resp.OpenKitchenStatus)
+	require.Equal(t, db.MerchantCapabilityStatusNo, resp.DineInStatus)
+	require.Equal(t, []string{db.SystemTagNoOpenKitchen, db.SystemTagNoDineIn}, resp.SystemLabels)
+}
+
+func TestGetOperatorMerchantCapabilitiesAPI_FallsBackToDerivedDefaultsWhenCapabilityMissing(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	merchant := randomMerchantInRegionForOp(operator.RegionID)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	expectOperatorManagesRegion(store, operator, merchant.RegionID, true)
+	store.EXPECT().
+		GetMerchantCapabilities(gomock.Any(), merchant.ID).
+		Return(db.MerchantCapability{}, db.ErrRecordNotFound)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, fmt.Sprintf("/v1/operator/merchants/%d/capabilities", merchant.ID), nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantCapabilitiesResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, merchant.ID, resp.MerchantID)
+	require.Equal(t, db.MerchantCapabilityStatusUnknown, resp.OpenKitchenStatus)
+	require.Equal(t, db.MerchantCapabilityStatusUnknown, resp.DineInStatus)
+	require.Equal(t, db.MerchantCapabilitySourceSystemDefault, resp.Source)
+	require.Empty(t, resp.UpdatedAt)
+	require.Equal(t, []string{db.SystemTagNoOpenKitchen}, resp.SystemLabels)
+}
+
+func TestUpdateOperatorMerchantCapabilitiesAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	operator := randomOperator(user.ID)
+	merchant := randomMerchantInRegionForOp(operator.RegionID)
+	updatedCapability := db.MerchantCapability{
+		MerchantID:        merchant.ID,
+		OpenKitchenStatus: db.MerchantCapabilityStatusYes,
+		DineInStatus:      db.MerchantCapabilityStatusNo,
+		Source:            db.MerchantCapabilitySourceManualReview,
+	}
+	body, err := json.Marshal(updateMerchantCapabilitiesRequest{
+		OpenKitchenStatus: stringPtr(db.MerchantCapabilityStatusYes),
+		DineInStatus:      stringPtr(db.MerchantCapabilityStatusNo),
+	})
+	require.NoError(t, err)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectActiveOperatorAuth(store, user.ID, operator)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchant.ID).
+		Return(merchant, nil)
+	expectOperatorManagesRegion(store, operator, merchant.RegionID, true)
+	store.EXPECT().
+		UpdateMerchantCapabilitiesTx(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, arg db.UpdateMerchantCapabilitiesTxParams) (db.UpdateMerchantCapabilitiesTxResult, error) {
+			require.Equal(t, merchant.ID, arg.MerchantID)
+			require.True(t, arg.OpenKitchenStatus.Valid)
+			require.Equal(t, db.MerchantCapabilityStatusYes, arg.OpenKitchenStatus.String)
+			require.True(t, arg.DineInStatus.Valid)
+			require.Equal(t, db.MerchantCapabilityStatusNo, arg.DineInStatus.String)
+			return db.UpdateMerchantCapabilitiesTxResult{
+				Capability:   updatedCapability,
+				SystemLabels: []db.Tag{{Name: db.SystemTagHasOpenKitchen}, {Name: db.SystemTagNoDineIn}},
+			}, nil
+		})
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodPatch, fmt.Sprintf("/v1/operator/merchants/%d/capabilities", merchant.ID), bytes.NewReader(body))
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp merchantCapabilitiesResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.Equal(t, []string{db.SystemTagHasOpenKitchen, db.SystemTagNoDineIn}, resp.SystemLabels)
+	require.Equal(t, db.MerchantCapabilityStatusYes, resp.OpenKitchenStatus)
+	require.Equal(t, db.MerchantCapabilityStatusNo, resp.DineInStatus)
+}
+
+func stringPtr(value string) *string {
+	return &value
 }
 
 // ============================================================================

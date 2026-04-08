@@ -184,11 +184,11 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 				PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
 				PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
 			},
-			SpMchID:          config.WechatEcommerceSpMchID,
-			SpAppID:          config.WechatEcommerceSpAppID,
-			SpMchName:        config.WechatEcommerceSpName,
-			PartnerNotifyURL: config.EffectiveWechatEcommercePaymentNotifyURL(),
-			CombineNotifyURL: config.EffectiveWechatEcommerceCombineNotifyURL(),
+			SpMchID:           config.WechatEcommerceSpMchID,
+			SpAppID:           config.WechatEcommerceSpAppID,
+			SpMchName:         config.WechatEcommerceSpName,
+			PartnerNotifyURL:  config.EffectiveWechatEcommercePaymentNotifyURL(),
+			CombineNotifyURL:  config.EffectiveWechatEcommerceCombineNotifyURL(),
 			WithdrawNotifyURL: config.EffectiveWechatEcommerceWithdrawNotifyURL(),
 		})
 		if err != nil {
@@ -1268,6 +1268,8 @@ func (server *Server) setupRouter() {
 		operatorStatsGroup.GET("/merchants", server.listOperatorMerchants)
 		operatorStatsGroup.GET("/merchants/summary", server.getOperatorMerchantSummary)
 		operatorStatsGroup.GET("/merchants/:id", server.getOperatorMerchant)
+		operatorStatsGroup.GET("/merchants/:id/capabilities", server.getOperatorMerchantCapabilities)
+		operatorStatsGroup.PATCH("/merchants/:id/capabilities", server.updateOperatorMerchantCapabilities)
 		operatorStatsGroup.GET("/merchants/:id/stats", server.getOperatorMerchantStats)
 		operatorStatsGroup.POST("/merchants/:id/resume", server.ResumeMerchant)
 

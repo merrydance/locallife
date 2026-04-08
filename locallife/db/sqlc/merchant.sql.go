@@ -1892,7 +1892,17 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latit
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
+       AND t.type = 'merchant'
+       AND t.status = 'active'
     ), '[]'::json) AS tags,
+  COALESCE(
+    (SELECT json_agg(t.name ORDER BY t.sort_order ASC, t.name ASC)
+     FROM tags t
+     INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
+     WHERE msl.merchant_id = m.id
+       AND t.type = 'system'
+       AND t.status = 'active'
+    ), '[]'::json) AS system_labels,
   ma.storefront_images,
   COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d
@@ -1959,6 +1969,7 @@ type SearchMerchantsRow struct {
 	AutoOpenByBusinessHours bool               `json:"auto_open_by_business_hours"`
 	TotalOrders             int32              `json:"total_orders"`
 	Tags                    interface{}        `json:"tags"`
+	SystemLabels            interface{}        `json:"system_labels"`
 	StorefrontImages        []byte             `json:"storefront_images"`
 	AvgRepurchaseRate       float64            `json:"avg_repurchase_rate"`
 }
@@ -2006,6 +2017,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.AutoOpenByBusinessHours,
 			&i.TotalOrders,
 			&i.Tags,
+			&i.SystemLabels,
 			&i.StorefrontImages,
 			&i.AvgRepurchaseRate,
 		); err != nil {
@@ -2026,7 +2038,17 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latit
      FROM tags t
      INNER JOIN merchant_tags mt ON t.id = mt.tag_id
      WHERE mt.merchant_id = m.id
+       AND t.type = 'merchant'
+       AND t.status = 'active'
     ), '[]'::json) AS tags,
+  COALESCE(
+    (SELECT json_agg(t.name ORDER BY t.sort_order ASC, t.name ASC)
+     FROM tags t
+     INNER JOIN merchant_system_labels msl ON t.id = msl.tag_id
+     WHERE msl.merchant_id = m.id
+       AND t.type = 'system'
+       AND t.status = 'active'
+    ), '[]'::json) AS system_labels,
   ma.storefront_images,
   COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d
@@ -2091,6 +2113,7 @@ type SearchMerchantsByTagRow struct {
 	AutoOpenByBusinessHours bool               `json:"auto_open_by_business_hours"`
 	TotalOrders             int32              `json:"total_orders"`
 	Tags                    interface{}        `json:"tags"`
+	SystemLabels            interface{}        `json:"system_labels"`
 	StorefrontImages        []byte             `json:"storefront_images"`
 	AvgRepurchaseRate       float64            `json:"avg_repurchase_rate"`
 }
@@ -2139,6 +2162,7 @@ func (q *Queries) SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsB
 			&i.AutoOpenByBusinessHours,
 			&i.TotalOrders,
 			&i.Tags,
+			&i.SystemLabels,
 			&i.StorefrontImages,
 			&i.AvgRepurchaseRate,
 		); err != nil {

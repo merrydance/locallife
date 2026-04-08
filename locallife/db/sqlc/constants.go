@@ -88,4 +88,20 @@ const (
 
 	CloudPrinterReconciliationStatusPending  = "pending"
 	CloudPrinterReconciliationStatusResolved = "resolved"
+
+	MerchantCapabilityStatusUnknown = "unknown"
+	MerchantCapabilityStatusYes     = "yes"
+	MerchantCapabilityStatusNo      = "no"
+
+	MerchantCapabilitySourceSystemDefault   = "system_default"
+	MerchantCapabilitySourceManualReview    = "manual_review"
+	MerchantCapabilitySourceMerchantClaim   = "merchant_claim"
+	MerchantCapabilitySourceMigration       = "migration_backfill"
+	MerchantSystemLabelSourceReconciler     = "capability_reconciler"
+	MerchantSystemLabelSourceManualOverride = "manual_override"
+	MerchantSystemLabelSourceMigration      = "migration_backfill"
+
+	SystemTagHasOpenKitchen = "有明厨亮灶"
+	SystemTagNoOpenKitchen  = "无明厨亮灶"
+	SystemTagNoDineIn       = "无堂食"
 )

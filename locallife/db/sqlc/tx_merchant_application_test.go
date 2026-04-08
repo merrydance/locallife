@@ -75,4 +75,15 @@ func TestApproveMerchantApplicationTx_AssignsMerchantOwnerRoleAndOwnerStaff(t *t
 	merchantByOwner, err := testStore.GetMerchantByOwner(context.Background(), user.ID)
 	require.NoError(t, err)
 	require.Equal(t, result.Merchant.ID, merchantByOwner.ID)
+
+	capability, err := testStore.GetMerchantCapabilities(context.Background(), result.Merchant.ID)
+	require.NoError(t, err)
+	require.Equal(t, MerchantCapabilityStatusUnknown, capability.OpenKitchenStatus)
+	require.Equal(t, MerchantCapabilityStatusUnknown, capability.DineInStatus)
+	require.Equal(t, MerchantCapabilitySourceSystemDefault, capability.Source)
+
+	labels, err := testStore.ListMerchantSystemLabels(context.Background(), result.Merchant.ID)
+	require.NoError(t, err)
+	require.Len(t, labels, 1)
+	require.Equal(t, SystemTagNoOpenKitchen, labels[0].Name)
 }

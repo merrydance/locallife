@@ -2,6 +2,7 @@ package autotag
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -79,6 +80,9 @@ func (s *Scheduler) runOnce(ctx context.Context) {
 	if err := s.RefreshDishStats(ctx); err != nil {
 		log.Error().Err(err).Msg("failed to refresh auto tags")
 	}
+	if err := s.RefreshMerchantSystemLabels(ctx); err != nil {
+		log.Error().Err(err).Msg("failed to refresh merchant system labels")
+	}
 }
 
 // RefreshDishStats 刷新所有菜品统计数据（销量、复购率）
@@ -124,6 +128,62 @@ func (s *Scheduler) RefreshDishStats(ctx context.Context) error {
 	log.Info().Msg("dish stats updated successfully")
 
 	log.Info().Msg("RefreshDishStats completed")
+	return nil
+}
+
+// RefreshMerchantSystemLabels 刷新商户能力派生系统标签。
+func (s *Scheduler) RefreshMerchantSystemLabels(ctx context.Context) error {
+	log.Info().Msg("starting RefreshMerchantSystemLabels...")
+
+	catalog, err := db.LoadMerchantSystemLabelCatalog(ctx, s.store)
+	if err != nil {
+		return err
+	}
+
+	const pageSize = int32(200)
+	var offset int32
+	var failureCount int
+	var firstErr error
+
+	for {
+		merchants, err := s.store.ListAllMerchants(ctx, db.ListAllMerchantsParams{
+			Limit:  pageSize,
+			Offset: offset,
+		})
+		if err != nil {
+			return err
+		}
+		if len(merchants) == 0 {
+			break
+		}
+
+		for _, merchant := range merchants {
+			switch merchant.Status {
+			case "approved", "active", "suspended":
+			default:
+				continue
+			}
+
+			if err := db.ReconcileMerchantSystemLabels(ctx, s.store, merchant.ID, catalog, db.MerchantSystemLabelSourceReconciler); err != nil {
+				if firstErr == nil {
+					firstErr = err
+				}
+				failureCount++
+				log.Error().Err(err).Int64("merchant_id", merchant.ID).Msg("failed to reconcile merchant system labels")
+			}
+		}
+
+		if int32(len(merchants)) < pageSize {
+			break
+		}
+		offset += pageSize
+	}
+
+	if failureCount > 0 {
+		return fmt.Errorf("refresh merchant system labels failed for %d merchants: %w", failureCount, firstErr)
+	}
+
+	log.Info().Msg("RefreshMerchantSystemLabels completed")
 	return nil
 }
 

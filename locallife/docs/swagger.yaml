@@ -4191,6 +4191,25 @@ definitions:
         description: 状态
         type: string
     type: object
+  api.merchantCapabilitiesResponse:
+    properties:
+      dine_in_status:
+        type: string
+      merchant_id:
+        type: integer
+      note:
+        type: string
+      open_kitchen_status:
+        type: string
+      source:
+        type: string
+      system_labels:
+        items:
+          type: string
+        type: array
+      updated_at:
+        type: string
+    type: object
   api.merchantCartResponse:
     properties:
       all_available:
@@ -6186,6 +6205,11 @@ definitions:
         type: string
       region_id:
         type: integer
+      system_labels:
+        description: 商户系统标签（如：无明厨亮灶）
+        items:
+          type: string
+        type: array
       tags:
         description: 商户标签（如：快餐、川菜）
         items:
@@ -7462,6 +7486,10 @@ definitions:
         type: integer
       status:
         type: string
+      system_labels:
+        items:
+          type: string
+        type: array
       tags:
         items:
           type: string
@@ -8163,6 +8191,24 @@ definitions:
         type: string
       region_id:
         type: integer
+    type: object
+  api.updateMerchantCapabilitiesRequest:
+    properties:
+      dine_in_status:
+        enum:
+        - unknown
+        - "yes"
+        - "no"
+        type: string
+      note:
+        maxLength: 500
+        type: string
+      open_kitchen_status:
+        enum:
+        - unknown
+        - "yes"
+        - "no"
+        type: string
     type: object
   api.updateMerchantImagesRequest:
     properties:
@@ -20992,6 +21038,97 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取商户详情
+      tags:
+      - 运营商-商户骑手管理
+  /v1/operator/merchants/{id}/capabilities:
+    get:
+      consumes:
+      - application/json
+      description: 运营商获取其管辖区域内商户的能力真值及派生系统标签
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.merchantCapabilitiesResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "404":
+          description: 商户不存在
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 获取商户能力标签
+      tags:
+      - 运营商-商户骑手管理
+    patch:
+      consumes:
+      - application/json
+      description: 运营商更新其管辖区域内商户的能力真值，并同步派生系统标签
+      parameters:
+      - description: 商户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 能力更新请求
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/api.updateMerchantCapabilitiesRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.merchantCapabilitiesResponse'
+        "400":
+          description: 请求参数错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "404":
+          description: 商户不存在
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.errorMessage'
+      security:
+      - BearerAuth: []
+      summary: 更新商户能力标签
       tags:
       - 运营商-商户骑手管理
   /v1/operator/merchants/{id}/stats:

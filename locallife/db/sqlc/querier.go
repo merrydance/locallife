@@ -754,6 +754,7 @@ type Querier interface {
 	// 获取用户关联的商户（支持店主和员工）
 	// 优先返回 owner_user_id 匹配的商户，其次返回 merchant_staff 关联的商户
 	GetMerchantByOwner(ctx context.Context, ownerUserID int64) (Merchant, error)
+	GetMerchantCapabilities(ctx context.Context, merchantID int64) (MerchantCapability, error)
 	// 商户查看索赔详情
 	GetMerchantClaimDetailForMerchant(ctx context.Context, arg GetMerchantClaimDetailForMerchantParams) (GetMerchantClaimDetailForMerchantRow, error)
 	// 顾客消费分析: 实时计算每个顾客的消费统计
@@ -1255,6 +1256,8 @@ type Querier interface {
 	ListMerchantSpecialHours(ctx context.Context, merchantID int64) ([]MerchantBusinessHour, error)
 	// 显示所有员工，包括离职员工（软删除），按状态和角色排序
 	ListMerchantStaffByMerchant(ctx context.Context, merchantID int64) ([]ListMerchantStaffByMerchantRow, error)
+	ListMerchantSystemLabelLinks(ctx context.Context, merchantID int64) ([]MerchantSystemLabel, error)
+	ListMerchantSystemLabels(ctx context.Context, merchantID int64) ([]Tag, error)
 	ListMerchantTags(ctx context.Context, merchantID int64) ([]Tag, error)
 	ListMerchantVouchers(ctx context.Context, arg ListMerchantVouchersParams) ([]Voucher, error)
 	ListMerchants(ctx context.Context, arg ListMerchantsParams) ([]Merchant, error)
@@ -1481,6 +1484,7 @@ type Querier interface {
 	RemoveFavoriteDish(ctx context.Context, arg RemoveFavoriteDishParams) error
 	RemoveFavoriteMerchant(ctx context.Context, arg RemoveFavoriteMerchantParams) error
 	RemoveFromDeliveryPool(ctx context.Context, orderID int64) error
+	RemoveMerchantSystemLabel(ctx context.Context, arg RemoveMerchantSystemLabelParams) error
 	RemoveMerchantTag(ctx context.Context, arg RemoveMerchantTagParams) error
 	// 移除运营商的管理区域
 	RemoveOperatorRegion(ctx context.Context, arg RemoveOperatorRegionParams) error
@@ -1790,8 +1794,11 @@ type Querier interface {
 	UpsertDishTag(ctx context.Context, arg UpsertDishTagParams) error
 	// Group policies
 	UpsertGroupPolicies(ctx context.Context, arg UpsertGroupPoliciesParams) (GroupPolicy, error)
+	UpsertMerchantCapabilities(ctx context.Context, arg UpsertMerchantCapabilitiesParams) (MerchantCapability, error)
+	UpsertMerchantCapabilitiesDefaults(ctx context.Context, merchantID int64) error
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
 	UpsertMerchantPackagingPolicy(ctx context.Context, arg UpsertMerchantPackagingPolicyParams) (MerchantPackagingPolicy, error)
+	UpsertMerchantSystemLabel(ctx context.Context, arg UpsertMerchantSystemLabelParams) error
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)
 	UpsertPlatformConfig(ctx context.Context, arg UpsertPlatformConfigParams) (PlatformConfig, error)

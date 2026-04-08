@@ -156,6 +156,7 @@ type searchMerchantResponse struct {
 	Distance             *int      `json:"distance,omitempty"`               // 距离（米），需要传入用户位置
 	EstimatedDeliveryFee *int64    `json:"estimated_delivery_fee,omitempty"` // 预估配送费（分），需要传入用户位置
 	Tags                 []string  `json:"tags,omitempty"`
+	SystemLabels         []string  `json:"system_labels,omitempty"`
 	CreatedAt            time.Time `json:"created_at"`      // 入驻时间，前端用于判断新店
 	Label                string    `json:"label,omitempty"` // 推荐 或 热销
 }
@@ -218,6 +219,29 @@ func resolveRegionID(ctx *gin.Context, server *Server, reqRegionID *int64, userL
 	}
 
 	return pgtype.Int8{}, errors.New("region_id is required")
+}
+
+func decodeStringJSONArray(raw any) []string {
+	if raw == nil {
+		return nil
+	}
+	if payload, ok := raw.([]byte); ok {
+		var values []string
+		if err := json.Unmarshal(payload, &values); err == nil {
+			return values
+		}
+		return nil
+	}
+	if values, ok := raw.([]interface{}); ok {
+		result := make([]string, 0, len(values))
+		for _, value := range values {
+			if str, ok := value.(string); ok {
+				result = append(result, str)
+			}
+		}
+		return result
+	}
+	return nil
 }
 
 func isRegionUnavailableError(err error) bool {
@@ -853,20 +877,8 @@ func (server *Server) newSearchMerchantResponseFromTagRow(merchant db.SearchMerc
 	if cover := server.extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover
 	}
-	if merchant.Tags != nil {
-		if tagsBytes, ok := merchant.Tags.([]byte); ok {
-			var tags []string
-			if err := json.Unmarshal(tagsBytes, &tags); err == nil {
-				resp.Tags = tags
-			}
-		} else if tagsStrs, ok := merchant.Tags.([]interface{}); ok {
-			for _, t := range tagsStrs {
-				if s, ok := t.(string); ok {
-					resp.Tags = append(resp.Tags, s)
-				}
-			}
-		}
-	}
+	resp.Tags = decodeStringJSONArray(merchant.Tags)
+	resp.SystemLabels = decodeStringJSONArray(merchant.SystemLabels)
 	if merchant.Latitude.Valid {
 		lat, _ := merchant.Latitude.Float64Value()
 		resp.Latitude = lat.Float64
@@ -893,23 +905,8 @@ func (server *Server) newSearchMerchantResponseFromRow(merchant db.SearchMerchan
 	if cover := server.extractCoverImageFromStorefrontImages(merchant.StorefrontImages); cover != "" {
 		resp.CoverImage = cover
 	}
-
-	// 处理标签
-	if merchant.Tags != nil {
-		if tagsBytes, ok := merchant.Tags.([]byte); ok {
-			var tags []string
-			if err := json.Unmarshal(tagsBytes, &tags); err == nil {
-				resp.Tags = tags
-			}
-		} else if tagsStrs, ok := merchant.Tags.([]interface{}); ok {
-			// 如果 sqlc 返回了解构后的数组
-			for _, t := range tagsStrs {
-				if s, ok := t.(string); ok {
-					resp.Tags = append(resp.Tags, s)
-				}
-			}
-		}
-	}
+	resp.Tags = decodeStringJSONArray(merchant.Tags)
+	resp.SystemLabels = decodeStringJSONArray(merchant.SystemLabels)
 
 	// 转换 pgtype.Numeric 到 float64
 	if merchant.Latitude.Valid {

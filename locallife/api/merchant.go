@@ -1079,6 +1079,7 @@ type publicMerchantDetailResponse struct {
 	IsOpen                  bool                      `json:"is_open"`
 	IsOrderingSuspended     bool                      `json:"is_ordering_suspended"`
 	Tags                    []string                  `json:"tags"`                                 // 商户标签（如：快餐、川菜）
+	SystemLabels            []string                  `json:"system_labels,omitempty"`              // 商户系统标签（如：无明厨亮灶）
 	MonthlySales            int32                     `json:"monthly_sales"`                        // 近30天订单量
 	AvgPrepMinutes          int32                     `json:"avg_prep_minutes"`                     // 平均出餐时间（分钟）
 	BusinessLicenseImageURL *string                   `json:"business_license_image_url,omitempty"` // 营业执照
@@ -1216,6 +1217,13 @@ func (server *Server) getPublicMerchantDetail(ctx *gin.Context) {
 		resp.Tags = make([]string, len(tags))
 		for i, tag := range tags {
 			resp.Tags[i] = tag.Name
+		}
+	}
+	systemLabels, err := server.store.ListMerchantSystemLabels(ctx, merchant.ID)
+	if err == nil && len(systemLabels) > 0 {
+		resp.SystemLabels = make([]string, len(systemLabels))
+		for i, label := range systemLabels {
+			resp.SystemLabels[i] = label.Name
 		}
 	}
 

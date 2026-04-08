@@ -18451,6 +18451,147 @@
                 }
             }
         },
+        "/v1/operator/merchants/{id}/capabilities": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商获取其管辖区域内商户的能力真值及派生系统标签",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商-商户骑手管理"
+                ],
+                "summary": "获取商户能力标签",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCapabilitiesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "运营商更新其管辖区域内商户的能力真值，并同步派生系统标签",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "运营商-商户骑手管理"
+                ],
+                "summary": "更新商户能力标签",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "能力更新请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.updateMerchantCapabilitiesRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantCapabilitiesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "404": {
+                        "description": "商户不存在",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.errorMessage"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/operator/merchants/{id}/stats": {
             "get": {
                 "security": [
@@ -36573,6 +36714,35 @@
                 }
             }
         },
+        "api.merchantCapabilitiesResponse": {
+            "type": "object",
+            "properties": {
+                "dine_in_status": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "open_kitchen_status": {
+                    "type": "string"
+                },
+                "source": {
+                    "type": "string"
+                },
+                "system_labels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
         "api.merchantCartResponse": {
             "type": "object",
             "properties": {
@@ -39497,6 +39667,13 @@
                 "region_id": {
                     "type": "integer"
                 },
+                "system_labels": {
+                    "description": "商户系统标签（如：无明厨亮灶）",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "tags": {
                     "description": "商户标签（如：快餐、川菜）",
                     "type": "array",
@@ -41399,6 +41576,12 @@
                 "status": {
                     "type": "string"
                 },
+                "system_labels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "tags": {
                     "type": "array",
                     "items": {
@@ -42427,6 +42610,31 @@
                 },
                 "region_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.updateMerchantCapabilitiesRequest": {
+            "type": "object",
+            "properties": {
+                "dine_in_status": {
+                    "type": "string",
+                    "enum": [
+                        "unknown",
+                        "yes",
+                        "no"
+                    ]
+                },
+                "note": {
+                    "type": "string",
+                    "maxLength": 500
+                },
+                "open_kitchen_status": {
+                    "type": "string",
+                    "enum": [
+                        "unknown",
+                        "yes",
+                        "no"
+                    ]
                 }
             }
         },

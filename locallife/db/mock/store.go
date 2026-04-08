@@ -7679,6 +7679,21 @@ func (mr *MockStoreMockRecorder) GetMerchantByOwner(ctx, ownerUserID any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantByOwner", reflect.TypeOf((*MockStore)(nil).GetMerchantByOwner), ctx, ownerUserID)
 }
 
+// GetMerchantCapabilities mocks base method.
+func (m *MockStore) GetMerchantCapabilities(ctx context.Context, merchantID int64) (db.MerchantCapability, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMerchantCapabilities", ctx, merchantID)
+	ret0, _ := ret[0].(db.MerchantCapability)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMerchantCapabilities indicates an expected call of GetMerchantCapabilities.
+func (mr *MockStoreMockRecorder) GetMerchantCapabilities(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMerchantCapabilities", reflect.TypeOf((*MockStore)(nil).GetMerchantCapabilities), ctx, merchantID)
+}
+
 // GetMerchantClaimDetailForMerchant mocks base method.
 func (m *MockStore) GetMerchantClaimDetailForMerchant(ctx context.Context, arg db.GetMerchantClaimDetailForMerchantParams) (db.GetMerchantClaimDetailForMerchantRow, error) {
 	m.ctrl.T.Helper()
@@ -12924,6 +12939,36 @@ func (mr *MockStoreMockRecorder) ListMerchantStaffByMerchant(ctx, merchantID any
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantStaffByMerchant", reflect.TypeOf((*MockStore)(nil).ListMerchantStaffByMerchant), ctx, merchantID)
 }
 
+// ListMerchantSystemLabelLinks mocks base method.
+func (m *MockStore) ListMerchantSystemLabelLinks(ctx context.Context, merchantID int64) ([]db.MerchantSystemLabel, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantSystemLabelLinks", ctx, merchantID)
+	ret0, _ := ret[0].([]db.MerchantSystemLabel)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantSystemLabelLinks indicates an expected call of ListMerchantSystemLabelLinks.
+func (mr *MockStoreMockRecorder) ListMerchantSystemLabelLinks(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantSystemLabelLinks", reflect.TypeOf((*MockStore)(nil).ListMerchantSystemLabelLinks), ctx, merchantID)
+}
+
+// ListMerchantSystemLabels mocks base method.
+func (m *MockStore) ListMerchantSystemLabels(ctx context.Context, merchantID int64) ([]db.Tag, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListMerchantSystemLabels", ctx, merchantID)
+	ret0, _ := ret[0].([]db.Tag)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListMerchantSystemLabels indicates an expected call of ListMerchantSystemLabels.
+func (mr *MockStoreMockRecorder) ListMerchantSystemLabels(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListMerchantSystemLabels", reflect.TypeOf((*MockStore)(nil).ListMerchantSystemLabels), ctx, merchantID)
+}
+
 // ListMerchantTags mocks base method.
 func (m *MockStore) ListMerchantTags(ctx context.Context, merchantID int64) ([]db.Tag, error) {
 	m.ctrl.T.Helper()
@@ -15752,6 +15797,20 @@ func (mr *MockStoreMockRecorder) RemoveFromDeliveryPool(ctx, orderID any) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveFromDeliveryPool", reflect.TypeOf((*MockStore)(nil).RemoveFromDeliveryPool), ctx, orderID)
 }
 
+// RemoveMerchantSystemLabel mocks base method.
+func (m *MockStore) RemoveMerchantSystemLabel(ctx context.Context, arg db.RemoveMerchantSystemLabelParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveMerchantSystemLabel", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RemoveMerchantSystemLabel indicates an expected call of RemoveMerchantSystemLabel.
+func (mr *MockStoreMockRecorder) RemoveMerchantSystemLabel(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveMerchantSystemLabel", reflect.TypeOf((*MockStore)(nil).RemoveMerchantSystemLabel), ctx, arg)
+}
+
 // RemoveMerchantTag mocks base method.
 func (m *MockStore) RemoveMerchantTag(ctx context.Context, arg db.RemoveMerchantTagParams) error {
 	m.ctrl.T.Helper()
@@ -17946,6 +18005,21 @@ func (mr *MockStoreMockRecorder) UpdateMerchantBossStatus(ctx, arg any) *gomock.
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantBossStatus", reflect.TypeOf((*MockStore)(nil).UpdateMerchantBossStatus), ctx, arg)
 }
 
+// UpdateMerchantCapabilitiesTx mocks base method.
+func (m *MockStore) UpdateMerchantCapabilitiesTx(ctx context.Context, arg db.UpdateMerchantCapabilitiesTxParams) (db.UpdateMerchantCapabilitiesTxResult, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantCapabilitiesTx", ctx, arg)
+	ret0, _ := ret[0].(db.UpdateMerchantCapabilitiesTxResult)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateMerchantCapabilitiesTx indicates an expected call of UpdateMerchantCapabilitiesTx.
+func (mr *MockStoreMockRecorder) UpdateMerchantCapabilitiesTx(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantCapabilitiesTx", reflect.TypeOf((*MockStore)(nil).UpdateMerchantCapabilitiesTx), ctx, arg)
+}
+
 // UpdateMerchantDishCategoryOrder mocks base method.
 func (m *MockStore) UpdateMerchantDishCategoryOrder(ctx context.Context, arg db.UpdateMerchantDishCategoryOrderParams) (db.MerchantDishCategory, error) {
 	m.ctrl.T.Helper()
@@ -19621,6 +19695,35 @@ func (mr *MockStoreMockRecorder) UpsertGroupPolicies(ctx, arg any) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertGroupPolicies", reflect.TypeOf((*MockStore)(nil).UpsertGroupPolicies), ctx, arg)
 }
 
+// UpsertMerchantCapabilities mocks base method.
+func (m *MockStore) UpsertMerchantCapabilities(ctx context.Context, arg db.UpsertMerchantCapabilitiesParams) (db.MerchantCapability, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantCapabilities", ctx, arg)
+	ret0, _ := ret[0].(db.MerchantCapability)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertMerchantCapabilities indicates an expected call of UpsertMerchantCapabilities.
+func (mr *MockStoreMockRecorder) UpsertMerchantCapabilities(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantCapabilities", reflect.TypeOf((*MockStore)(nil).UpsertMerchantCapabilities), ctx, arg)
+}
+
+// UpsertMerchantCapabilitiesDefaults mocks base method.
+func (m *MockStore) UpsertMerchantCapabilitiesDefaults(ctx context.Context, merchantID int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantCapabilitiesDefaults", ctx, merchantID)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpsertMerchantCapabilitiesDefaults indicates an expected call of UpsertMerchantCapabilitiesDefaults.
+func (mr *MockStoreMockRecorder) UpsertMerchantCapabilitiesDefaults(ctx, merchantID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantCapabilitiesDefaults", reflect.TypeOf((*MockStore)(nil).UpsertMerchantCapabilitiesDefaults), ctx, merchantID)
+}
+
 // UpsertMerchantMembershipSettings mocks base method.
 func (m *MockStore) UpsertMerchantMembershipSettings(ctx context.Context, arg db.UpsertMerchantMembershipSettingsParams) (db.MerchantMembershipSetting, error) {
 	m.ctrl.T.Helper()
@@ -19649,6 +19752,20 @@ func (m *MockStore) UpsertMerchantPackagingPolicy(ctx context.Context, arg db.Up
 func (mr *MockStoreMockRecorder) UpsertMerchantPackagingPolicy(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantPackagingPolicy", reflect.TypeOf((*MockStore)(nil).UpsertMerchantPackagingPolicy), ctx, arg)
+}
+
+// UpsertMerchantSystemLabel mocks base method.
+func (m *MockStore) UpsertMerchantSystemLabel(ctx context.Context, arg db.UpsertMerchantSystemLabelParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertMerchantSystemLabel", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpsertMerchantSystemLabel indicates an expected call of UpsertMerchantSystemLabel.
+func (mr *MockStoreMockRecorder) UpsertMerchantSystemLabel(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertMerchantSystemLabel", reflect.TypeOf((*MockStore)(nil).UpsertMerchantSystemLabel), ctx, arg)
 }
 
 // UpsertOCRJob mocks base method.

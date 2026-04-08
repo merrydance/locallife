@@ -294,6 +294,199 @@ type merchantDetailResponse struct {
 	UpdatedAt   string  `json:"updated_at"`
 }
 
+type merchantCapabilitiesResponse struct {
+	MerchantID        int64    `json:"merchant_id"`
+	OpenKitchenStatus string   `json:"open_kitchen_status"`
+	DineInStatus      string   `json:"dine_in_status"`
+	SystemLabels      []string `json:"system_labels,omitempty"`
+	Source            string   `json:"source"`
+	Note              string   `json:"note,omitempty"`
+	UpdatedAt         string   `json:"updated_at,omitempty"`
+}
+
+type updateMerchantCapabilitiesRequest struct {
+	OpenKitchenStatus *string `json:"open_kitchen_status" binding:"omitempty,oneof=unknown yes no"`
+	DineInStatus      *string `json:"dine_in_status" binding:"omitempty,oneof=unknown yes no"`
+	Note              *string `json:"note" binding:"omitempty,max=500"`
+}
+
+func deriveMerchantSystemLabelNames(capability db.MerchantCapability) []string {
+	labels := make([]string, 0, 2)
+
+	switch capability.OpenKitchenStatus {
+	case db.MerchantCapabilityStatusYes:
+		labels = append(labels, db.SystemTagHasOpenKitchen)
+	case db.MerchantCapabilityStatusUnknown, db.MerchantCapabilityStatusNo:
+		labels = append(labels, db.SystemTagNoOpenKitchen)
+	}
+
+	if capability.DineInStatus == db.MerchantCapabilityStatusNo {
+		labels = append(labels, db.SystemTagNoDineIn)
+	}
+
+	return labels
+}
+
+func merchantCapabilitiesResponseFromModel(merchantID int64, capability db.MerchantCapability, labels []db.Tag) merchantCapabilitiesResponse {
+	resp := merchantCapabilitiesResponse{
+		MerchantID:        merchantID,
+		OpenKitchenStatus: capability.OpenKitchenStatus,
+		DineInStatus:      capability.DineInStatus,
+		Source:            capability.Source,
+	}
+	if !capability.UpdatedAt.IsZero() {
+		resp.UpdatedAt = capability.UpdatedAt.Format("2006-01-02 15:04:05")
+	}
+	if capability.Note.Valid {
+		resp.Note = capability.Note.String
+	}
+	if len(labels) > 0 {
+		resp.SystemLabels = make([]string, len(labels))
+		for i, label := range labels {
+			resp.SystemLabels[i] = label.Name
+		}
+	} else {
+		resp.SystemLabels = deriveMerchantSystemLabelNames(capability)
+	}
+	return resp
+}
+
+// getOperatorMerchantCapabilities 获取商户能力与系统标签
+// @Summary 获取商户能力标签
+// @Description 运营商获取其管辖区域内商户的能力真值及派生系统标签
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Success 200 {object} merchantCapabilitiesResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 404 {object} errorMessage "商户不存在"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/merchants/{id}/capabilities [get]
+func (server *Server) getOperatorMerchantCapabilities(ctx *gin.Context) {
+	var req getOperatorMerchantRequest
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	merchant, err := server.store.GetMerchant(ctx, req.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
+	capabilityFound := true
+	capability, err := server.store.GetMerchantCapabilities(ctx, merchant.ID)
+	if err != nil {
+		if !isNotFoundError(err) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		capabilityFound = false
+		capability = db.MerchantCapability{
+			MerchantID:        merchant.ID,
+			OpenKitchenStatus: db.MerchantCapabilityStatusUnknown,
+			DineInStatus:      db.MerchantCapabilityStatusUnknown,
+			Source:            db.MerchantCapabilitySourceSystemDefault,
+		}
+	}
+
+	var labels []db.Tag
+	if capabilityFound {
+		labels, err = server.store.ListMerchantSystemLabels(ctx, merchant.ID)
+		if err != nil && !isNotFoundError(err) {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+	}
+
+	ctx.JSON(http.StatusOK, merchantCapabilitiesResponseFromModel(merchant.ID, capability, labels))
+}
+
+// updateOperatorMerchantCapabilities 更新商户能力与系统标签
+// @Summary 更新商户能力标签
+// @Description 运营商更新其管辖区域内商户的能力真值，并同步派生系统标签
+// @Tags 运营商-商户骑手管理
+// @Accept json
+// @Produce json
+// @Param id path int true "商户ID"
+// @Param request body updateMerchantCapabilitiesRequest true "能力更新请求"
+// @Success 200 {object} merchantCapabilitiesResponse
+// @Failure 400 {object} errorMessage "请求参数错误"
+// @Failure 401 {object} errorMessage "未授权"
+// @Failure 403 {object} errorMessage "无权限"
+// @Failure 404 {object} errorMessage "商户不存在"
+// @Failure 500 {object} errorMessage "服务器错误"
+// @Security BearerAuth
+// @Router /v1/operator/merchants/{id}/capabilities [patch]
+func (server *Server) updateOperatorMerchantCapabilities(ctx *gin.Context) {
+	var uriReq getOperatorMerchantRequest
+	if err := ctx.ShouldBindUri(&uriReq); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	var req updateMerchantCapabilitiesRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.OpenKitchenStatus == nil && req.DineInStatus == nil && req.Note == nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("at least one capability field is required")))
+		return
+	}
+
+	merchant, err := server.store.GetMerchant(ctx, uriReq.ID)
+	if err != nil {
+		if isNotFoundError(err) {
+			ctx.JSON(http.StatusNotFound, errorResponse(ErrMerchantNotFound))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+	if _, err := server.checkOperatorManagesRegion(ctx, merchant.RegionID); err != nil {
+		ctx.JSON(http.StatusForbidden, errorResponse(err))
+		return
+	}
+
+	params := db.UpdateMerchantCapabilitiesTxParams{
+		MerchantID:        uriReq.ID,
+		Source:            db.MerchantCapabilitySourceManualReview,
+		OpenKitchenStatus: pgtype.Text{Valid: false},
+		DineInStatus:      pgtype.Text{Valid: false},
+		Note:              pgtype.Text{Valid: false},
+	}
+	if req.OpenKitchenStatus != nil {
+		params.OpenKitchenStatus = pgtype.Text{String: *req.OpenKitchenStatus, Valid: true}
+	}
+	if req.DineInStatus != nil {
+		params.DineInStatus = pgtype.Text{String: *req.DineInStatus, Valid: true}
+	}
+	if req.Note != nil {
+		params.Note = pgtype.Text{String: *req.Note, Valid: true}
+	}
+
+	result, err := server.store.UpdateMerchantCapabilitiesTx(ctx, params)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, merchantCapabilitiesResponseFromModel(uriReq.ID, result.Capability, result.SystemLabels))
+}
+
 // getOperatorMerchant 获取商户详情
 // @Summary 获取商户详情
 // @Description 运营商获取其管辖区域内指定商户的详细信息

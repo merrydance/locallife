@@ -935,6 +935,20 @@ type MerchantBusinessHour struct {
 	UpdatedAt   time.Time   `json:"updated_at"`
 }
 
+// 商户能力真值表；系统标签由此表派生，不与经营类目混用
+type MerchantCapability struct {
+	MerchantID int64 `json:"merchant_id"`
+	// 明厨亮灶状态：unknown/yes/no
+	OpenKitchenStatus string `json:"open_kitchen_status"`
+	// 堂食能力状态：unknown/yes/no
+	DineInStatus string `json:"dine_in_status"`
+	// 最后一次能力确认来源
+	Source    string      `json:"source"`
+	Note      pgtype.Text `json:"note"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
+}
+
 // 商户运费满返促销表，门槛式阶梯取最优
 type MerchantDeliveryPromotion struct {
 	ID         int64  `json:"id"`
@@ -1149,6 +1163,15 @@ type MerchantStaff struct {
 	InvitedBy pgtype.Int8        `json:"invited_by"`
 	CreatedAt time.Time          `json:"created_at"`
 	UpdatedAt pgtype.Timestamptz `json:"updated_at"`
+}
+
+// 商户系统展示标签关联表；仅存储派生或运营维护的系统标签
+type MerchantSystemLabel struct {
+	MerchantID int64     `json:"merchant_id"`
+	TagID      int64     `json:"tag_id"`
+	Source     string    `json:"source"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type MerchantTag struct {
