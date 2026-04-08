@@ -1,6 +1,6 @@
 <custom-navbar title="商家信息" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view class="page" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm)); padding-bottom: env(safe-area-inset-bottom);">
   <!-- 1. 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">
     <t-empty icon="info-circle" description="{{errorMsg}}" />
@@ -28,8 +28,8 @@
           <t-tag size="small" variant="dark" theme="default" shape="round" class="hero-static-tag">约 {{restaurant.avg_prep_minutes || 15}} 分钟出餐</t-tag>
           <t-tag wx:if="{{restaurant.is_ordering_suspended}}" size="small" variant="dark" theme="danger" shape="round" class="hero-static-tag">暂停接单</t-tag>
         </view>
-        <view class="hero-tags" wx:if="{{restaurant.tags.length > 0}}">
-          <t-tag wx:for="{{restaurant.tags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round" class="hero-static-tag">{{item}}</t-tag>
+        <view class="hero-tags" wx:if="{{restaurant.displayTags.length > 0}}">
+          <t-tag wx:for="{{restaurant.displayTags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round" class="hero-static-tag">{{item}}</t-tag>
         </view>
       </view>
     </view>

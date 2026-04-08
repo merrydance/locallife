@@ -24,6 +24,8 @@ interface MerchantFeedData {
   promoText: string
   subsidyText: string
   tags: string[]
+  systemLabels: string[]
+  displayTags: string[]
   featuredDishes: FeaturedDish[]
   dishesLoading: boolean
   avgPrepMinutes: number

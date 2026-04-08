@@ -6,7 +6,7 @@
 }
 
 .content-section {
-  padding: var(--spacer-md);
+  padding: 0 var(--spacer-md) var(--spacer-md);
   display: flex;
   flex-direction: column;
 }

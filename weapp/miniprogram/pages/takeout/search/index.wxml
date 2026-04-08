@@ -1,6 +1,6 @@
 <custom-navbar title="搜索" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm)); padding-bottom: env(safe-area-inset-bottom)">
 
   <!-- 搜索框 -->
   <view class="search-bar">
@@ -167,8 +167,8 @@
               <t-tag wx:if="{{item.is_open === false}}" size="small" variant="dark" theme="warning" shape="round">休息中</t-tag>
             </view>
             <view class="merchant-meta">{{item.address}}</view>
-            <view class="tag-row">
-              <t-tag wx:for="{{item.tags}}" wx:for-item="tag" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{tag}}</t-tag>
+            <view class="tag-row" wx:if="{{item.displayTags.length > 0}}">
+              <t-tag wx:for="{{item.displayTags}}" wx:for-item="tag" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{tag}}</t-tag>
             </view>
           </view>
         </view>

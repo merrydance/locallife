@@ -9,8 +9,8 @@
 
 /* ========== 搜索区域 ========== */
 .search-section {
-  padding: var(--spacer-md) var(--spacer-md);
-  background: var(--td-bg-color-container);
+  padding: 0 var(--spacer-md) var(--spacer-md);
+  background: var(--td-bg-color-page);
   position: sticky;
   top: 0;
   z-index: var(--z-index-sticky);
@@ -131,8 +131,8 @@
 
 /* ========== 菜系品类网格 ========== */
 .cuisine-grid-section {
-  background: var(--td-bg-color-container);
-  padding: 24rpx 16rpx 20rpx;
+  background: transparent;
+  padding: 0 var(--spacer-md) var(--spacer-md);
   margin-bottom: var(--spacer-sm);
 }
 

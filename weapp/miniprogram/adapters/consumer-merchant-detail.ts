@@ -1,5 +1,6 @@
 import { getPublicImageUrl } from '../utils/image'
 import type { PublicMerchantDetail } from '../api/merchant'
+import { buildMerchantDisplayTags } from './merchant-labels'
 
 export type BusinessHoursView = NonNullable<PublicMerchantDetail['business_hours']>[number] & {
   day_name: string
@@ -15,6 +16,8 @@ export interface ConsumerMerchantDetailViewModel {
   latitude: number
   longitude: number
   tags: string[]
+  systemLabels: string[]
+  displayTags: string[]
   monthly_sales: number
   avg_prep_minutes: number
   biz_status: 'OPEN' | 'CLOSED'
@@ -59,6 +62,8 @@ export class ConsumerMerchantDetailAdapter {
       latitude: merchant.latitude,
       longitude: merchant.longitude,
       tags: merchant.tags || [],
+      systemLabels: merchant.system_labels || [],
+      displayTags: buildMerchantDisplayTags(merchant.system_labels || [], merchant.tags || []),
       monthly_sales: merchant.monthly_sales || 0,
       avg_prep_minutes: merchant.avg_prep_minutes || 15,
       biz_status: merchant.is_open ? 'OPEN' : 'CLOSED',

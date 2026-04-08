@@ -26,6 +26,7 @@ export interface MerchantSummary {
   status?: string                              // 商户状态
   is_open?: boolean                            // 是否营业（仅部分接口）
   tags?: string[]                              // 商户标签（仅部分接口）
+  system_labels?: string[]                     // 商户系统标签（如：无明厨亮灶）
   created_at?: string                          // 入驻时间（用于判断新店）
   label?: string                               // 推荐 / 热销
 }
@@ -46,6 +47,7 @@ export interface SearchMerchantItem {
   distance?: number
   estimated_delivery_fee?: number
   tags?: string[]
+  system_labels?: string[]
   created_at?: string  // 入驻时间，用于前端判断"新店"
   label?: string       // 推荐 / 热销
 }
@@ -90,6 +92,7 @@ function normalizeMerchantSummary(item: SearchMerchantItem): MerchantSummary {
     status: item.status,
     is_open: item.is_open,
     tags: item.tags || [],
+    system_labels: item.system_labels || [],
     created_at: item.created_at,
     label: item.label
   }
@@ -230,6 +233,7 @@ export interface PublicMerchantDetail {
   is_open: boolean
   is_ordering_suspended: boolean
   tags: string[]
+  system_labels?: string[]
   monthly_sales: number
   avg_prep_minutes: number
   business_license_image_url?: string

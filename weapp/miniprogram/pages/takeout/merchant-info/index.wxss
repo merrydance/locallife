@@ -5,7 +5,7 @@
 }
 
 .content {
-  padding: 24rpx;
+  padding: var(--spacer-md);
   box-sizing: border-box;
 }
 

@@ -39,7 +39,7 @@ Page({
     const windowInfo = wx.getWindowInfo()
     this.setData({
       navBarHeight,
-      scrollViewHeight: windowInfo.windowHeight - navBarHeight
+      scrollViewHeight: windowInfo.windowHeight
     })
   },
 

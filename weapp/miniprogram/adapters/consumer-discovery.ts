@@ -2,6 +2,7 @@ import type { MerchantSummary } from '../api/merchant'
 import type { RoomSearchResult } from '../api/search'
 import { getPublicImageUrl } from '../utils/image'
 import { DishAdapter } from './dish'
+import { buildMerchantDisplayTags } from './merchant-labels'
 
 export interface MerchantDiscoverySummary {
   id: number
@@ -10,6 +11,8 @@ export interface MerchantDiscoverySummary {
   address: string
   distanceDisplay: string
   tags: string[]
+  systemLabels: string[]
+  displayTags: string[]
   monthlySales: number
   deliveryFee?: number
   deliveryFeeDisplay: string
@@ -42,6 +45,8 @@ export class ConsumerDiscoveryAdapter {
       address: source.address || '',
       distanceDisplay: source.distance !== undefined ? DishAdapter.formatDistance(source.distance) : '',
       tags: source.tags || [],
+      systemLabels: source.system_labels || [],
+      displayTags: buildMerchantDisplayTags(source.system_labels || [], source.tags || []),
       monthlySales: source.total_orders ?? source.monthly_sales ?? 0,
       deliveryFee,
       deliveryFeeDisplay: deliveryFee !== undefined

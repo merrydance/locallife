@@ -159,8 +159,8 @@ Page({
     // 计算导航栏高度和滚动区域高度
     const { navBarHeight } = getStableBarHeights()
     const windowInfo = wx.getWindowInfo()
-    // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
-    const scrollViewHeight = windowInfo.windowHeight - navBarHeight
+    // 自定义导航栏为 fixed，顶部避让交给 shared page-shell 处理
+    const scrollViewHeight = windowInfo.windowHeight
 
     this.setData({ navBarHeight, scrollViewHeight })
     this.initUserInfo()

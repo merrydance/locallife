@@ -35,14 +35,14 @@
     </view>
 
     <!-- 第3行: 促销标签（满减、券、免运费、活动标签） -->
-    <view class="row-3" wx:if="{{merchant.discountPromoText || merchant.voucherText || merchant.deliveryPromoText || merchant.promoText || merchant.subsidyText || (merchant.tags && merchant.tags.length > 0)}}">
+    <view class="row-3" wx:if="{{merchant.discountPromoText || merchant.voucherText || merchant.deliveryPromoText || merchant.promoText || merchant.subsidyText || (merchant.displayTags && merchant.displayTags.length > 0)}}">
       <t-tag wx:if="{{merchant.discountPromoText}}" size="small" variant="dark" theme="warning">{{merchant.discountPromoText}}</t-tag>
       <t-tag wx:if="{{merchant.voucherText}}" size="small" variant="light" theme="warning">{{merchant.voucherText}}</t-tag>
       <t-tag wx:if="{{merchant.deliveryPromoText}}" size="small" variant="dark" theme="default">{{merchant.deliveryPromoText}}</t-tag>
       <t-tag wx:if="{{merchant.promoText}}" size="small" variant="dark" theme="warning">{{merchant.promoText}}</t-tag>
       <t-tag wx:if="{{merchant.subsidyText}}" size="small" variant="dark" theme="default">{{merchant.subsidyText}}</t-tag>
       <t-tag
-        wx:for="{{merchant.tags}}"
+        wx:for="{{merchant.displayTags}}"
         wx:for-index="ti"
         wx:key="ti"
         size="small"

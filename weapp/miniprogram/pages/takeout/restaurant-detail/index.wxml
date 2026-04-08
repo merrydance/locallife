@@ -1,7 +1,9 @@
 <custom-navbar title="{{restaurant.name || '餐厅详情'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
+<view class="page-shell-anchor" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm)); height: 0; overflow: hidden;"></view>
+
 <!-- 1. 餐厅头图 (App Shell) -->
-<view class="header-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: {{navBarHeight}}px;">
+<view class="header-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: calc({{navBarHeight}}px + var(--spacer-sm));">
   <!-- 背景图：使用 t-image 支持 lazy 和 fallback -->
   <t-image
     class="header-bg-image"
@@ -35,6 +37,9 @@
       </view>
     </view>
     <view wx:if="{{restaurant.is_ordering_suspended && !headerCollapsed}}" class="suspension-chip">暂停接单</view>
+    <view wx:if="{{restaurant.displayTags.length > 0 && !headerCollapsed}}" class="restaurant-tags">
+      <t-tag wx:for="{{restaurant.displayTags}}" wx:key="*this" size="small" variant="dark" theme="default" shape="round">{{item}}</t-tag>
+    </view>
     <view class="header-share-row">
       <button class="share-btn-reset header-share-btn" open-type="share">
         <t-icon name="share" size="28rpx" color="rgba(255,255,255,0.85)" />
@@ -46,7 +51,7 @@
 <!-- header-section closing handled below -->
 
 <!-- 2. Tab 导航 (App Shell) -->
-<view class="tabs-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: calc({{navBarHeight}}px + {{headerCollapsed ? '100rpx' : '320rpx'}});">
+<view class="tabs-section {{headerCollapsed ? 'collapsed' : ''}}" style="top: calc({{navBarHeight}}px + var(--spacer-sm) + {{headerCollapsed ? '100rpx' : '320rpx'}});">
   <t-tabs value="{{activeTab}}" bind:change="onTabChange" list-style="border-bottom: none;">
     <t-tab-panel label="菜品" value="dishes" />
     <t-tab-panel label="套餐" value="combos" />
@@ -55,7 +60,7 @@
 </view>
 
 <!-- 3. 内容区域 (App Shell with Skeletons) -->
-<view class="content-area {{headerCollapsed ? 'collapsed' : ''}} {{activeTab === 'rooms' ? 'no-cart' : ''}}" style="top: calc({{navBarHeight}}px + {{headerCollapsed ? '100rpx' : '320rpx'}} + 96rpx);">
+<view class="content-area {{headerCollapsed ? 'collapsed' : ''}} {{activeTab === 'rooms' ? 'no-cart' : ''}}" style="top: calc({{navBarHeight}}px + var(--spacer-sm) + {{headerCollapsed ? '100rpx' : '320rpx'}} + 96rpx);">
   
   <!-- 错误状态 -->
   <view wx:if="{{isError}}" class="error-container">

@@ -9,7 +9,7 @@
 .content-section {
   display: flex;
   flex-direction: column;
-  padding: var(--spacer-sm) var(--spacer-md) var(--spacer-lg);
+  padding: 0 var(--spacer-md) var(--spacer-lg);
   gap: var(--spacer-sm);
 }
 

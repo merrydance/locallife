@@ -9,8 +9,9 @@ import {
   PopularKeyword,
   SearchSuggestion
 } from '../../../api/search'
+import ConsumerDiscoveryAdapter from '../../../adapters/consumer-discovery'
 import { getPublicImageUrl } from '../../../utils/image'
-import { settleAll } from '../../../utils/promise'
+import { isSettledFulfilled, isSettledRejected, settleAll } from '../../../utils/promise'
 import { formatPriceNoSymbol } from '../../../utils/util'
 
 const DEBOUNCE_MS = 300
@@ -32,6 +33,7 @@ interface MerchantResult {
   address: string
   is_open: boolean
   tags: string[]
+  displayTags: string[]
 }
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null
@@ -87,9 +89,11 @@ Page({
         getPopularKeywords('dish')
       ] as const)
 
-      const history = historyResult.status === 'fulfilled' ? historyResult.value : []
-      const hotWords = hotWordsResult.status === 'fulfilled' ? hotWordsResult.value : []
-      const initialError = historyResult.status === 'rejected' && hotWordsResult.status === 'rejected'
+      const history = isSettledFulfilled(historyResult) ? historyResult.value : []
+      const hotWords = isSettledFulfilled(hotWordsResult) ? hotWordsResult.value : []
+      const historyFailed = isSettledRejected(historyResult)
+      const hotWordsFailed = isSettledRejected(hotWordsResult)
+      const initialError = historyFailed && hotWordsFailed
 
       this.setData({
         history,
@@ -101,8 +105,8 @@ Page({
 
       if (initialError) {
         console.warn('加载搜索初始数据失败', {
-          historyError: historyResult.status === 'rejected' ? historyResult.reason : undefined,
-          hotWordsError: hotWordsResult.status === 'rejected' ? hotWordsResult.reason : undefined
+          historyError: historyFailed ? historyResult.reason : undefined,
+          hotWordsError: hotWordsFailed ? hotWordsResult.reason : undefined
         })
       }
     } catch (err) {
@@ -199,14 +203,19 @@ Page({
         merchant_is_open: d.merchant_is_open ?? true
       }))
 
-      const merchants: MerchantResult[] = (result.merchants || []).map((m) => ({
-        id: m.id,
-        name: m.name,
-        logo_url: m.logo_url || '',
-        address: m.address || '',
-        is_open: m.is_open ?? true,
-        tags: m.tags ? m.tags.slice(0, 3) : []
-      }))
+      const merchants: MerchantResult[] = (result.merchants || []).map((m) => {
+        const merchant = ConsumerDiscoveryAdapter.toMerchantSummaryViewModel(m)
+
+        return {
+          id: m.id,
+          name: m.name,
+          logo_url: merchant.imageUrl || getPublicImageUrl(m.logo_url || ''),
+          address: m.address || '',
+          is_open: m.is_open ?? true,
+          tags: merchant.tags.slice(0, 3),
+          displayTags: merchant.displayTags.slice(0, 3)
+        }
+      })
 
       this.setData({
         resultDishes: dishes,

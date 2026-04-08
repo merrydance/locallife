@@ -8,7 +8,7 @@
 .content-section {
   display: flex;
   flex-direction: column;
-  padding: var(--spacer-sm) var(--spacer-md) calc(var(--spacer-lg) + var(--safe-area-bottom));
+  padding: 0 var(--spacer-md) var(--spacer-lg);
 }
 
 .loading-state {

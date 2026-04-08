@@ -13,6 +13,7 @@ import { getStableBarHeights } from '../../utils/responsive'
 import { getPublicImageUrl } from '../../utils/image'
 import { settleAll } from '../../utils/promise'
 import { formatPrice } from '../../utils/util'
+import { buildMerchantDisplayTags } from '../../adapters/merchant-labels'
 
 const PAGE_CONTEXT = 'takeout_index'
 const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
@@ -45,6 +46,8 @@ interface MerchantFeedViewModel {
   promoText: string
   subsidyText: string
   tags: string[]
+  systemLabels: string[]
+  displayTags: string[]
   featuredDishes: FeaturedDish[]
   dishesLoading: boolean
   // 详情接口补充字段（异步填充）
@@ -124,11 +127,10 @@ Page({
       menus: ['shareAppMessage', 'shareTimeline']
     })
 
-    // 设置导航栏高度和滚动区域高度
+    // custom-navbar 是 fixed，scroll-view 用整屏高度，顶部避让交给内层 padding-top。
     const { navBarHeight } = getStableBarHeights()
     const windowInfo = wx.getWindowInfo()
-    // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
-    const scrollViewHeight = windowInfo.windowHeight - navBarHeight
+    const scrollViewHeight = windowInfo.windowHeight
 
     this.setData({
       navBarHeight,
@@ -564,7 +566,9 @@ Page({
           distance: merchantSummary.distanceDisplay,
           monthlySales: merchantSummary.monthlySales,
           deliveryFeeDisplay: merchantSummary.deliveryFeeDisplay,
-          tags: merchantSummary.tags.slice(0, 3),
+          tags: merchantSummary.tags,
+          systemLabels: merchantSummary.systemLabels,
+          displayTags: merchantSummary.displayTags.slice(0, 3),
           featuredDishes: [],
           dishesLoading: true,
           avgPrepMinutes: DEFAULT_AVG_PREP_MINUTES,
@@ -711,6 +715,13 @@ Page({
         (detail.avg_prep_minutes && detail.avg_prep_minutes > 0)
           ? detail.avg_prep_minutes
           : DEFAULT_AVG_PREP_MINUTES
+      updates[`merchantFeed[${feedIndex}].tags`] = detail.tags || []
+      updates[`merchantFeed[${feedIndex}].systemLabels`] = detail.system_labels || []
+      updates[`merchantFeed[${feedIndex}].displayTags`] = buildMerchantDisplayTags(
+        detail.system_labels || [],
+        detail.tags || [],
+        3
+      )
       updates[`merchantFeed[${feedIndex}].isOrderingSuspended`] = !!detail.is_ordering_suspended
       updates[`merchantFeed[${feedIndex}].discountPromoText`] = this.buildDiscountPromoText(detail.discount_rules)
       updates[`merchantFeed[${feedIndex}].voucherText`] = this.buildVoucherText(detail.vouchers)

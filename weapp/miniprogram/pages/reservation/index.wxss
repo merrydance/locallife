@@ -9,8 +9,8 @@
 .top-bar {
   display: flex;
   align-items: center;
-  padding: var(--spacer-sm) var(--spacer-md);
-  background: var(--td-bg-color-container);
+  padding: 0 var(--spacer-md) var(--spacer-sm);
+  background: var(--td-bg-color-page);
   gap: var(--spacer-sm);
   position: sticky;
   top: 0;
@@ -27,7 +27,7 @@
 
 /* 选项卡区域 */
 .tabs-section {
-  background: var(--td-bg-color-container);
+  background: var(--td-bg-color-page);
   margin-bottom: var(--spacer-xs);
 }
 

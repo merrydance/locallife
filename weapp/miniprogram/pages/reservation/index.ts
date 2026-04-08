@@ -21,6 +21,7 @@ type RestaurantItemView = {
   distance: string
   address: string
   tags: string[]
+  displayTags: string[]
 }
 
 type ReservationListItem = RoomItemView | RestaurantItemView
@@ -102,8 +103,8 @@ Page({
     // 计算导航栏高度和滚动区域高度
     const navBarHeight = globalStore.get('navBarHeight') || 88
     const windowInfo = wx.getWindowInfo()
-    // windowHeight 已扣除原生 tabBar，只需扣除自定义导航栏
-    const scrollViewHeight = windowInfo.windowHeight - navBarHeight
+    // 自定义导航栏为 fixed，顶部避让由 scroll-view 自身 padding-top 负责
+    const scrollViewHeight = windowInfo.windowHeight
 
     this.setData({ navBarHeight, scrollViewHeight })
     this.generateDateOptions()
@@ -226,6 +227,7 @@ Page({
           distance: merchant.distanceDisplay,
           address: merchant.address,
           tags: merchant.tags.slice(0, 3),
+          displayTags: merchant.displayTags.slice(0, 3),
           type: 'restaurant'
         }
         })

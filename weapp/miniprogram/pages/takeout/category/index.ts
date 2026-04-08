@@ -23,6 +23,7 @@ interface RestaurantViewModel {
   availableRooms: number
   availableRoomsBadge: string
   tags: string[]
+  displayTags: string[]
   monthlySales: number
   deliveryFee?: number
   deliveryFeeDisplay: string
@@ -68,7 +69,7 @@ Page({
 
     const { navBarHeight } = getStableBarHeights()
     const windowInfo = wx.getWindowInfo()
-    const scrollViewHeight = windowInfo.windowHeight - navBarHeight
+    const scrollViewHeight = windowInfo.windowHeight
 
     this.setData({ tagId, categoryName: name, navBarHeight, scrollViewHeight })
 
@@ -94,7 +95,7 @@ Page({
   onNavHeight(e: WechatMiniprogram.CustomEvent) {
     const navBarHeight: number = e.detail.navBarHeight
     const windowInfo = wx.getWindowInfo()
-    const scrollViewHeight = windowInfo.windowHeight - navBarHeight
+    const scrollViewHeight = windowInfo.windowHeight
     this.setData({ navBarHeight, scrollViewHeight })
   },
 
@@ -141,6 +142,7 @@ Page({
           availableRooms: 0,
           availableRoomsBadge: '',
           tags: merchant.tags.slice(0, 3),
+          displayTags: merchant.displayTags.slice(0, 3),
           monthlySales: merchant.monthlySales,
           deliveryFee: merchant.deliveryFee,
           deliveryFeeDisplay: merchant.deliveryFeeDisplay,

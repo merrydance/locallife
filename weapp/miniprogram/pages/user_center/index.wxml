@@ -17,8 +17,8 @@
 <!-- Skyline 需要用 scroll-view 实现页面滚动 -->
 <scroll-view 
   scroll-y 
-  class="page-scroll" 
-  style="height: {{scrollViewHeight}}px; margin-top: {{navBarHeight}}px;"
+  class="page-scroll page-shell page-shell--with-nav page-shell--bottom-safe"
+  style="height: {{scrollViewHeight}}px; --page-shell-nav-height: {{navBarHeight}}px;"
   enhanced="{{true}}"
   show-scrollbar="{{false}}"
 >
