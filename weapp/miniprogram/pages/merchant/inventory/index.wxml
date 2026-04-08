@@ -1,46 +1,124 @@
 <custom-navbar title="库存设置" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view class="toolbar">
-    <picker mode="date" value="{{date}}" bindchange="onDateChange">
-      <view class="date-trigger">{{date}}</view>
-    </picker>
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
-  <view wx:if="{{loading && !hasInventories}}" class="loading-state">加载中...</view>
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
 
-  <view wx:elif="{{!loading && !hasInventories}}" class="empty-state">暂无上架菜品</view>
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载库存中..." vertical />
+  </view>
 
-  <view wx:else class="inventory-list">
-    <view class="inventory-card" wx:for="{{inventories}}" wx:key="id">
-      <view class="dish-name">{{item.dish_name}}</view>
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '库存加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
 
-      <view class="row actions">
-        <view class="unlimited-wrap">
-          <text class="unlimited-label">无限</text>
-          <switch
-            class="unlimited-switch"
-            checked="{{item.draft_total_quantity === -1}}"
-            data-index="{{index}}"
-            bindchange="onUnlimitedChange"
-            color="var(--td-brand-color)"
-          />
+  <block wx:else>
+    <view class="date-card">
+      <view class="date-card__body">
+        <view class="date-entry-wrap">
+          <t-button
+            t-class="date-entry-button"
+            size="medium"
+            theme="light"
+            shape="round"
+            bind:tap="onOpenDatePicker"
+          >{{date}}</t-button>
         </view>
-        <view class="input-wrap">
-          <view class="input-label">库存</view>
-          <input
-            class="qty-input"
-            type="number"
-            placeholder="数量"
-            value="{{item.draft_total_quantity === -1 ? '' : item.draft_total_quantity}}"
-            disabled="{{item.draft_total_quantity === -1}}"
-            data-index="{{index}}"
-            bindblur="onQuantityInput"
-            confirm-type="done"
-          />
-        </view>
-        <t-button size="small" theme="primary" loading="{{item.submitting}}" data-index="{{index}}" bind:tap="onSave" shape="round">保存</t-button>
       </view>
     </view>
-  </view>
+
+    <view wx:if="{{refreshErrorMessage}}" class="refresh-banner">
+      <text class="refresh-banner__text">{{refreshErrorMessage}}</text>
+      <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重试</t-button>
+    </view>
+
+    <view wx:if="{{loading && !hasInventories}}" class="loading-state">
+      <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
+    </view>
+
+    <view wx:elif="{{!loading && !hasInventories}}" class="empty-state">
+      <t-empty icon="info-circle" description="当前日期暂无库存菜品" />
+    </view>
+
+    <view wx:else class="inventory-list">
+      <view class="inventory-card" wx:for="{{inventories}}" wx:key="id">
+        <view class="inventory-head">
+          <view class="dish-name">{{item.dish_name}}</view>
+          <text class="inventory-total">{{item.draft_total_quantity === -1 ? '今日限售 不限' : '今日限售 ' + item.draft_total_quantity + ' 份'}}</text>
+        </view>
+
+        <view class="inventory-stats">
+          <text class="inventory-stat">可用 {{item.draft_total_quantity === -1 ? '无限' : item.draft_available}}</text>
+          <text class="inventory-stat">已售 {{item.sold_quantity}}</text>
+          <text class="inventory-stat">预留 {{item.reserved_quantity}}</text>
+        </view>
+
+        <view class="row actions">
+          <view class="unlimited-wrap">
+            <text class="unlimited-label">无限</text>
+            <t-switch
+              size="small"
+              value="{{item.draft_total_quantity === -1}}"
+              disabled="{{item.submitting}}"
+              data-index="{{index}}"
+              bind:change="onUnlimitedChange"
+            />
+          </view>
+          <view class="actions__middle">
+            <view wx:if="{{item.draft_total_quantity !== -1}}" class="input-wrap">
+              <view class="input-label">库存</view>
+              <t-input
+                t-class="qty-input"
+                t-class-input="qty-input__inner"
+                custom-style="--td-input-vertical-padding: 14rpx; --td-input-bg-color: var(--td-bg-color-page); --td-input-border-color: var(--td-brand-color-2, var(--td-component-border)); --td-input-border-left-space: 20rpx; --td-input-border-right-space: 20rpx;"
+                size="small"
+                borderless="{{false}}"
+                type="number"
+                align="right"
+                placeholder="数量"
+                suffix="份"
+                value="{{item.draft_total_quantity_text}}"
+                disabled="{{item.draft_total_quantity === -1 || item.submitting}}"
+                data-index="{{index}}"
+                bind:input="onQuantityDraftChange"
+                bind:change="onQuantityDraftChange"
+                bind:blur="onQuantityInput"
+                bind:enter="onQuantityInput"
+              />
+            </view>
+          </view>
+          <view class="actions__save">
+            <t-button
+              size="small"
+              theme="{{item.save_disabled ? 'default' : 'primary'}}"
+              loading="{{item.submitting}}"
+              disabled="{{item.save_disabled}}"
+              data-index="{{index}}"
+              bind:tap="onSave"
+              shape="round"
+            >保存</t-button>
+          </view>
+        </view>
+      </view>
+    </view>
+
+    <t-date-time-picker
+      title="选择日期"
+      visible="{{datePickerVisible}}"
+      mode="date"
+      format="YYYY-MM-DD"
+      defaultValue="{{date}}"
+      bind:confirm="onDateConfirm"
+      bind:cancel="onCloseDatePicker"
+    />
+
+    <t-message id="t-message" />
+  </block>
 </view>
