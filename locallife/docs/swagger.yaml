@@ -1584,6 +1584,9 @@ definitions:
     type: object
   api.comboDishInput:
     properties:
+      customizations:
+        additionalProperties: true
+        type: object
       dish_id:
         description: 菜品ID
         minimum: 1
@@ -3006,6 +3009,13 @@ definitions:
     type: object
   api.dishInComboResponse:
     properties:
+      customization_extra_price:
+        type: integer
+      customization_summary:
+        type: string
+      customizations:
+        additionalProperties: true
+        type: object
       dish_id:
         type: integer
       dish_name:
@@ -7889,7 +7899,7 @@ definitions:
         maxLength: 500
         type: string
       dishes:
-        description: 可选：更新套餐菜品列表
+        description: 可选：更新套餐菜品列表（带固定规格）
         items:
           $ref: '#/definitions/api.comboDishInput'
         maxItems: 50

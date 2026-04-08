@@ -27,9 +27,12 @@ SELECT
       jsonb_build_object(
         'dish_id', cd.dish_id,
         'dish_name', d.name,
-        'dish_price', d.price,
+        'dish_price', d.price + COALESCE(cd.customization_extra_price, 0),
         'dish_image_media_asset_id', d.image_media_asset_id,
-        'quantity', cd.quantity
+        'quantity', cd.quantity,
+        'customizations', COALESCE(cd.customizations, '{}'::jsonb),
+        'customization_extra_price', COALESCE(cd.customization_extra_price, 0),
+        'customization_summary', COALESCE(cd.customizations ->> 'meta_specs', '')
       )
     ) FILTER (WHERE d.id IS NOT NULL),
     '[]'
@@ -132,15 +135,19 @@ WHERE
 INSERT INTO combo_dishes (
   combo_id,
   dish_id,
-  quantity
+  quantity,
+  customizations,
+  customization_extra_price
 ) VALUES (
-  $1, $2, $3
+  $1, $2, $3, $4, $5
 ) RETURNING *;
 
 -- name: ListComboDishes :many
 SELECT 
   d.*,
-  cd.quantity
+  cd.quantity,
+  cd.customizations,
+  cd.customization_extra_price
 FROM dishes d
 JOIN combo_dishes cd ON d.id = cd.dish_id
 WHERE cd.combo_id = $1 AND d.deleted_at IS NULL

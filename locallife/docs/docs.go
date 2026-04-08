@@ -32919,6 +32919,10 @@ const docTemplate = `{
                 "dish_id"
             ],
             "properties": {
+                "customizations": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
                 "dish_id": {
                     "description": "菜品ID",
                     "type": "integer",
@@ -34944,6 +34948,16 @@ const docTemplate = `{
         "api.dishInComboResponse": {
             "type": "object",
             "properties": {
+                "customization_extra_price": {
+                    "type": "integer"
+                },
+                "customization_summary": {
+                    "type": "string"
+                },
+                "customizations": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
                 "dish_id": {
                     "type": "integer"
                 },
@@ -42181,7 +42195,7 @@ const docTemplate = `{
                     "maxLength": 500
                 },
                 "dishes": {
-                    "description": "可选：更新套餐菜品列表",
+                    "description": "可选：更新套餐菜品列表（带固定规格）",
                     "type": "array",
                     "maxItems": 50,
                     "items": {

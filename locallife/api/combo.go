@@ -20,8 +20,9 @@ import (
 
 // comboDishInput 表示套餐中的菜品及其数量
 type comboDishInput struct {
-	DishID   int64 `json:"dish_id" binding:"required,min=1"` // 菜品ID
-	Quantity int32 `json:"quantity" binding:"min=1,max=99"`  // 数量，1-99
+	DishID         int64                  `json:"dish_id" binding:"required,min=1"` // 菜品ID
+	Quantity       int32                  `json:"quantity" binding:"min=1,max=99"`  // 数量，1-99
+	Customizations map[string]interface{} `json:"customizations"`
 }
 
 type createComboSetRequest struct {
@@ -55,40 +56,39 @@ type comboSetSummary struct {
 	DishTotalQuantity int64
 }
 
-func buildComboDishSelections(legacyDishIDs []int64, requestedDishes []comboDishInput) ([]db.DishWithQuantity, error) {
-	var dishesWithQty []db.DishWithQuantity
+func buildComboDishSelections(legacyDishIDs []int64, requestedDishes []comboDishInput) ([]comboDishInput, error) {
+	var dishesWithQty []comboDishInput
 	seenDishIDs := make(map[int64]struct{})
 
-	addDish := func(dishID int64, quantity int32) error {
+	addDish := func(dish comboDishInput) error {
+		dishID := dish.DishID
 		if _, exists := seenDishIDs[dishID]; exists {
 			return fmt.Errorf("dish %d duplicated in combo", dishID)
 		}
 		seenDishIDs[dishID] = struct{}{}
 
-		qty := quantity
+		qty := dish.Quantity
 		if qty <= 0 {
 			qty = 1
 		}
+		dish.Quantity = qty
 
-		dishesWithQty = append(dishesWithQty, db.DishWithQuantity{
-			DishID:   dishID,
-			Quantity: qty,
-		})
+		dishesWithQty = append(dishesWithQty, dish)
 		return nil
 	}
 
 	switch {
 	case requestedDishes != nil:
-		dishesWithQty = make([]db.DishWithQuantity, 0, len(requestedDishes))
+		dishesWithQty = make([]comboDishInput, 0, len(requestedDishes))
 		for _, dish := range requestedDishes {
-			if err := addDish(dish.DishID, dish.Quantity); err != nil {
+			if err := addDish(dish); err != nil {
 				return nil, err
 			}
 		}
 	case len(legacyDishIDs) > 0:
-		dishesWithQty = make([]db.DishWithQuantity, 0, len(legacyDishIDs))
+		dishesWithQty = make([]comboDishInput, 0, len(legacyDishIDs))
 		for _, dishID := range legacyDishIDs {
-			if err := addDish(dishID, 1); err != nil {
+			if err := addDish(comboDishInput{DishID: dishID, Quantity: 1}); err != nil {
 				return nil, err
 			}
 		}
@@ -97,6 +97,36 @@ func buildComboDishSelections(legacyDishIDs []int64, requestedDishes []comboDish
 	}
 
 	return dishesWithQty, nil
+}
+
+func (server *Server) normalizeComboDishSelections(ctx context.Context, requestedDishes []comboDishInput) ([]db.DishWithQuantity, error) {
+	if requestedDishes == nil {
+		return nil, nil
+	}
+
+	normalizer := apiDishCustomizationNormalizer{server: server}
+	dishes := make([]db.DishWithQuantity, 0, len(requestedDishes))
+	for _, dish := range requestedDishes {
+		var customizations []byte
+		var customizationExtraPrice int64
+		if len(dish.Customizations) > 0 {
+			normalized, extraPrice, err := normalizer.Normalize(ctx, dish.DishID, dish.Customizations)
+			if err != nil {
+				return nil, fmt.Errorf("normalize customizations for dish %d: %w", dish.DishID, err)
+			}
+			customizations = normalized
+			customizationExtraPrice = extraPrice
+		}
+
+		dishes = append(dishes, db.DishWithQuantity{
+			DishID:                  dish.DishID,
+			Quantity:                dish.Quantity,
+			Customizations:          customizations,
+			CustomizationExtraPrice: customizationExtraPrice,
+		})
+	}
+
+	return dishes, nil
 }
 
 func (server *Server) getMerchantFromContextOrAssociation(ctx *gin.Context, userID int64) (db.Merchant, error) {
@@ -215,13 +245,18 @@ func (server *Server) resolveComboSummary(
 	legacyDishIDs []int64,
 	requestedDishes []comboDishInput,
 ) (comboSetSummary, int, error) {
-	dishesWithQty, err := buildComboDishSelections(legacyDishIDs, requestedDishes)
+	requestedSelections, err := buildComboDishSelections(legacyDishIDs, requestedDishes)
 	if err != nil {
 		return comboSetSummary{}, http.StatusBadRequest, err
 	}
 
-	if dishesWithQty == nil {
+	if requestedSelections == nil {
 		return comboSetSummary{}, 0, nil
+	}
+
+	dishesWithQty, err := server.normalizeComboDishSelections(ctx, requestedSelections)
+	if err != nil {
+		return comboSetSummary{}, http.StatusBadRequest, err
 	}
 
 	originalPrice := int64(0)
@@ -237,7 +272,7 @@ func (server *Server) resolveComboSummary(
 			return comboSetSummary{}, http.StatusForbidden, fmt.Errorf("dish %d does not belong to this merchant", dish.DishID)
 		}
 
-		originalPrice += resolvedDish.Price * int64(dish.Quantity)
+		originalPrice += (resolvedDish.Price + dish.CustomizationExtraPrice) * int64(dish.Quantity)
 	}
 
 	return buildComboSetSummaryFromDishes(dishesWithQty, originalPrice), 0, nil
@@ -341,10 +376,13 @@ type comboSetWithDetailsResponse struct {
 }
 
 type dishInComboResponse struct {
-	ID       int64  `json:"dish_id"`
-	Name     string `json:"dish_name"`
-	Price    int64  `json:"dish_price,omitempty"`
-	Quantity int32  `json:"quantity,omitempty"`
+	ID                      int64                  `json:"dish_id"`
+	Name                    string                 `json:"dish_name"`
+	Price                   int64                  `json:"dish_price,omitempty"`
+	Quantity                int32                  `json:"quantity,omitempty"`
+	Customizations          map[string]interface{} `json:"customizations,omitempty"`
+	CustomizationExtraPrice int64                  `json:"customization_extra_price,omitempty"`
+	CustomizationSummary    string                 `json:"customization_summary,omitempty"`
 }
 
 type tagResponse struct {
@@ -610,7 +648,7 @@ type updateComboSetRequest struct {
 	Description *string          `json:"description" binding:"omitempty,max=500"`            // 描述，最大500字符
 	ComboPrice  *int64           `json:"combo_price" binding:"omitempty,gt=0,max=100000000"` // 套餐价格（分）
 	IsOnline    *bool            `json:"is_online"`                                          // 是否上架
-	Dishes      []comboDishInput `json:"dishes" binding:"omitempty,max=50"`                  // 可选：更新套餐菜品列表
+	Dishes      []comboDishInput `json:"dishes" binding:"omitempty,max=50"`                  // 可选：更新套餐菜品列表（带固定规格）
 	TagIDs      []int64          `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`      // 可选：更新属性标签列表
 }
 
@@ -978,9 +1016,11 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 
 	// 添加关联
 	_, err = server.store.AddComboDish(ctx, db.AddComboDishParams{
-		ComboID:  uriReq.ComboID,
-		DishID:   bodyReq.DishID,
-		Quantity: 1, // 默认数量为1
+		ComboID:                 uriReq.ComboID,
+		DishID:                  bodyReq.DishID,
+		Quantity:                1, // 默认数量为1
+		Customizations:          nil,
+		CustomizationExtraPrice: 0,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))

@@ -244,11 +244,14 @@ func TestAddComboDish(t *testing.T) {
 	category := createRandomDishCategory(t)
 	dish := createRandomDish(t, merchant.ID, category.ID)
 	combo := createRandomComboSet(t, merchant.ID)
+	customizations := []byte(`{"12":34,"meta_specs":"大杯 / 少冰"}`)
 
 	arg := AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish.ID,
-		Quantity: int16(util.RandomInt(1, 5)),
+		ComboID:                 combo.ID,
+		DishID:                  dish.ID,
+		Quantity:                int16(util.RandomInt(1, 5)),
+		Customizations:          customizations,
+		CustomizationExtraPrice: 300,
 	}
 
 	comboDish, err := testStore.AddComboDish(context.Background(), arg)
@@ -256,6 +259,8 @@ func TestAddComboDish(t *testing.T) {
 	require.NotEmpty(t, comboDish)
 	require.Equal(t, combo.ID, comboDish.ComboID)
 	require.Equal(t, dish.ID, comboDish.DishID)
+	require.JSONEq(t, string(customizations), string(comboDish.Customizations))
+	require.Equal(t, int64(300), comboDish.CustomizationExtraPrice)
 
 	// 验证关联
 	dishes, err := testStore.ListComboDishes(context.Background(), combo.ID)
@@ -266,6 +271,8 @@ func TestAddComboDish(t *testing.T) {
 	for _, d := range dishes {
 		if d.ID == dish.ID {
 			found = true
+			require.JSONEq(t, string(customizations), string(d.Customizations))
+			require.Equal(t, int64(300), d.CustomizationExtraPrice)
 			break
 		}
 	}

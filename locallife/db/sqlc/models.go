@@ -378,10 +378,12 @@ type CombinedPaymentSubOrder struct {
 }
 
 type ComboDish struct {
-	ID       int64 `json:"id"`
-	ComboID  int64 `json:"combo_id"`
-	DishID   int64 `json:"dish_id"`
-	Quantity int16 `json:"quantity"`
+	ID                      int64  `json:"id"`
+	ComboID                 int64  `json:"combo_id"`
+	DishID                  int64  `json:"dish_id"`
+	Quantity                int16  `json:"quantity"`
+	Customizations          []byte `json:"customizations"`
+	CustomizationExtraPrice int64  `json:"customization_extra_price"`
 }
 
 type ComboSet struct {

@@ -9,8 +9,10 @@ import (
 
 // DishWithQuantity represents a dish with its quantity in a combo set
 type DishWithQuantity struct {
-	DishID   int64
-	Quantity int32
+	DishID                  int64
+	Quantity                int32
+	Customizations          []byte
+	CustomizationExtraPrice int64
 }
 
 // CreateComboSetTxParams contains input parameters for creating a combo set with dishes
@@ -81,9 +83,11 @@ func (store *SQLStore) CreateComboSetTx(ctx context.Context, arg CreateComboSetT
 				qty = 1 // 默认数量为1
 			}
 			cd, err := q.AddComboDish(ctx, AddComboDishParams{
-				ComboID:  result.ComboSet.ID,
-				DishID:   dish.DishID,
-				Quantity: int16(qty),
+				ComboID:                 result.ComboSet.ID,
+				DishID:                  dish.DishID,
+				Quantity:                int16(qty),
+				Customizations:          dish.Customizations,
+				CustomizationExtraPrice: dish.CustomizationExtraPrice,
 			})
 			if err != nil {
 				return fmt.Errorf("add combo dish %d: %w", dish.DishID, err)
@@ -144,9 +148,11 @@ func (store *SQLStore) UpdateComboSetTx(ctx context.Context, arg UpdateComboSetT
 				}
 
 				comboDish, err := q.AddComboDish(ctx, AddComboDishParams{
-					ComboID:  arg.ID,
-					DishID:   dish.DishID,
-					Quantity: int16(qty),
+					ComboID:                 arg.ID,
+					DishID:                  dish.DishID,
+					Quantity:                int16(qty),
+					Customizations:          dish.Customizations,
+					CustomizationExtraPrice: dish.CustomizationExtraPrice,
 				})
 				if err != nil {
 					return fmt.Errorf("add combo dish %d: %w", dish.DishID, err)

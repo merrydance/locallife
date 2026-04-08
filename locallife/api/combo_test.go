@@ -216,7 +216,10 @@ func TestGetComboSetAPI(t *testing.T) {
 	combo := randomComboSet(util.RandomInt(1, 100))
 
 	// 模拟GetComboSetWithDetails返回的数据
-	dishesJSON := []byte(`[{"id":1,"name":"菜品1"},{"id":2,"name":"菜品2"}]`)
+	dishesJSON := []byte(`[
+		{"dish_id":1,"dish_name":"菜品1","dish_price":1800,"quantity":1,"customizations":{"12":34,"meta_specs":"大杯 / 少冰"},"customization_extra_price":300,"customization_summary":"大杯 / 少冰"},
+		{"dish_id":2,"dish_name":"菜品2","dish_price":2200,"quantity":2}
+	]`)
 	tagsJSON := []byte(`[{"id":1,"name":"标签1"}]`)
 
 	// 创建一个商户用于测试
@@ -291,6 +294,9 @@ func TestGetComboSetAPI(t *testing.T) {
 				require.Equal(t, combo.ID, response.ID)
 				require.Equal(t, combo.Name, response.Name)
 				require.Len(t, response.Dishes, 2)
+				require.Equal(t, "大杯 / 少冰", response.Dishes[0].CustomizationSummary)
+				require.Equal(t, int64(300), response.Dishes[0].CustomizationExtraPrice)
+				require.Equal(t, float64(34), response.Dishes[0].Customizations["12"])
 				require.Len(t, response.Tags, 1)
 				require.Len(t, response.DishImageURLs, 1)
 				require.Contains(t, response.DishImageURLs[0], "merchant/combo/31/member.jpg")
