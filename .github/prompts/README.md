@@ -106,19 +106,22 @@ Expected target: `weapp-implementation.prompt.md`
 7. "改一下小程序页面的列表空态和错误态。"
 Expected target: `weapp-implementation.prompt.md`
 
-8. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
+8. "把这个小程序页面完全用 TDesign 重构，整页重新布局成极简风格，复杂区块拆成组件，新增删除改成图标按钮。"
+Expected target: `weapp-implementation.prompt.md`
+
+9. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
 Expected target: `weapp-review.prompt.md`
 
-9. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
+10. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
 Expected target: `general-implementation.prompt.md`
 
-10. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
+11. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
 Expected target: `business-flow-mermaid.prompt.md`
 
-11. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
+12. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
 Expected target: `general-task-loop.prompt.md`
 
-12. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
+13. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
 Expected target: `general-incident-followup.prompt.md`
 
 ## Maintenance Rule

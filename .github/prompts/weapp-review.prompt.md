@@ -13,7 +13,7 @@ Use the Mini Program row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.
 Request:
 
 - Review this change with findings first, ordered by severity
-- Check it against `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`; use `.github/standards/weapp/DESIGN_SYSTEM.md` only when the task explicitly involves visual-system drift or component visual baseline
+- Check it against `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`; when the task explicitly involves visual-system drift or component visual baseline, use the role-matched design document: consumer surfaces use `.github/standards/weapp/DESIGN_SYSTEM.md`; non-consumer surfaces use `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - Use `.github/standards/weapp/REVIEW_CHECKLIST.md` as the compact PR review checklist so the review covers both baseline conformance and user-facing coherence
 
 Review must prioritize:
@@ -55,6 +55,7 @@ Review must check:
 - Request parameters, response fields, enums, and types stay aligned with the real backend contract instead of drifting from page-local assumptions
 - Backend semantics are treated as the only source of truth; if the code is guessing around missing or ambiguous backend meaning, call that out as a finding or residual risk
 - App Shell structure remains stable during loading and error states
+- Page shell, outer gutter, nav gap, safe-area handling, and content-container spacing are established outside the inner TDesign controls rather than scattered across local wrappers
 - TDesign component choice matches the task and can be justified by TDesign MCP-based component discovery rather than habit alone
 - TDesign styling changes use only officially supported customization methods; internal class overrides or structure-dependent hacks are treated as findings unless explicitly approved
 - Popup forms use a stable bottom action area instead of leaving action buttons inside scroll content tails
@@ -62,6 +63,7 @@ Review must check:
 - Buttons and tags do not fall back to forbidden outline-style defaults unless an explicit exception is documented
 - TDesign internals are not overridden for page-local visual preference when tokens, theme props, and shared layout patterns would suffice
 - Non-consumer pages do not inherit consumer-side custom design language, branding colors, or decorative styling by default
+- The review names the correct role-side design document when visual-system assertions depend on it rather than treating one design document as universal
 - Sibling pages in the same task scope still read as one coherent system rather than a mix of competing local patterns
 - User-facing copy and affordances are clear in weak-network and empty-data scenarios
 - Primary and secondary actions remain visually and behaviorally clear
