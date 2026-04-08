@@ -262,7 +262,7 @@ SELECT
         'dish_image_media_asset_id', d.image_media_asset_id,
         'quantity', cd.quantity
       )
-    ) FILTER (WHERE cd.dish_id IS NOT NULL),
+    ) FILTER (WHERE d.id IS NOT NULL),
     '[]'
   ) as dishes,
   COALESCE(
@@ -635,9 +635,10 @@ SELECT
 FROM combo_sets cs
 LEFT JOIN LATERAL (
   SELECT
-    COUNT(*)::bigint AS dish_count,
+    COUNT(d.id)::bigint AS dish_count,
     COALESCE(SUM(cd.quantity), 0)::bigint AS dish_total_quantity
   FROM combo_dishes cd
+  JOIN dishes d ON d.id = cd.dish_id AND d.deleted_at IS NULL
   WHERE cd.combo_id = cs.id
 ) AS dish_stats ON TRUE
 LEFT JOIN LATERAL (

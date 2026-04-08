@@ -36,12 +36,43 @@ func randomComboSet(merchantID int64) db.ComboSet {
 	}
 }
 
+func comboDetailsRow(combo db.ComboSet, dishesJSON, tagsJSON []byte) db.GetComboSetWithDetailsRow {
+	return db.GetComboSetWithDetailsRow{
+		ID:                combo.ID,
+		MerchantID:        combo.MerchantID,
+		Name:              combo.Name,
+		Description:       combo.Description,
+		ImageMediaAssetID: combo.ImageMediaAssetID,
+		OriginalPrice:     combo.OriginalPrice,
+		ComboPrice:        combo.ComboPrice,
+		IsOnline:          combo.IsOnline,
+		CreatedAt:         combo.CreatedAt,
+		UpdatedAt:         combo.UpdatedAt,
+		Dishes:            dishesJSON,
+		Tags:              tagsJSON,
+	}
+}
+
+func expectComboSummaryReload(store *mockdb.MockStore, combo db.ComboSet, dishesJSON, tagsJSON []byte) {
+	store.EXPECT().
+		GetComboSetWithDetails(gomock.Any(), gomock.Eq(combo.ID)).
+		Times(1).
+		Return(comboDetailsRow(combo, dishesJSON, tagsJSON), nil)
+
+	store.EXPECT().
+		GetComboMemberImagesByCombos(gomock.Any(), gomock.Eq([]int64{combo.ID})).
+		Times(1).
+		Return(nil, nil)
+}
+
 // ==================== 套餐创建测试 ====================
 
 func TestCreateComboSetAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	combo := randomComboSet(merchant.ID)
+	responseDishesJSON := []byte(`[{"dish_id":101,"dish_name":"菜品1","dish_price":1200,"quantity":2}]`)
+	responseTagsJSON := []byte(`[{"id":11,"name":"招牌"}]`)
 
 	testCases := []struct {
 		name          string
@@ -68,6 +99,8 @@ func TestCreateComboSetAPI(t *testing.T) {
 					CreateComboSetTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.CreateComboSetTxResult{ComboSet: combo}, nil)
+
+				expectComboSummaryReload(store, combo, responseDishesJSON, responseTagsJSON)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
@@ -75,6 +108,29 @@ func TestCreateComboSetAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, combo.Name, response.Name)
 				require.Equal(t, combo.ComboPrice, response.ComboPrice)
+				require.Equal(t, int64(1), response.DishCount)
+				require.Equal(t, int64(2), response.DishTotalQuantity)
+				require.Len(t, response.Tags, 1)
+			},
+		},
+		{
+			name: "DuplicateDishes",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"dishes": []gin.H{
+					{"dish_id": 88, "quantity": 1},
+					{"dish_id": 88, "quantity": 2},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -557,6 +613,8 @@ func TestUpdateComboSetAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	combo := randomComboSet(merchant.ID)
+	responseDishesJSON := []byte(`[{"dish_id":201,"dish_name":"菜品A","dish_price":1800,"quantity":1},{"dish_id":202,"dish_name":"菜品B","dish_price":2200,"quantity":3}]`)
+	responseTagsJSON := []byte(`[{"id":21,"name":"午市推荐"}]`)
 
 	newName := "Updated Combo"
 	newPrice := int64(8888)
@@ -594,6 +652,8 @@ func TestUpdateComboSetAPI(t *testing.T) {
 					UpdateComboSetTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.UpdateComboSetTxResult{ComboSet: updatedCombo}, nil)
+
+				expectComboSummaryReload(store, updatedCombo, responseDishesJSON, responseTagsJSON)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -601,6 +661,33 @@ func TestUpdateComboSetAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Equal(t, newName, response.Name)
 				require.Equal(t, newPrice, response.ComboPrice)
+				require.Equal(t, int64(2), response.DishCount)
+				require.Equal(t, int64(4), response.DishTotalQuantity)
+				require.Len(t, response.Tags, 1)
+			},
+		},
+		{
+			name: "DuplicateDishes",
+			body: gin.H{
+				"id": combo.ID,
+				"dishes": []gin.H{
+					{"dish_id": 99, "quantity": 1},
+					{"dish_id": 99, "quantity": 2},
+				},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -954,6 +1041,10 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 	merchant := randomMerchant(user.ID)
 	combo := randomComboSet(merchant.ID)
 	combo.IsOnline = false
+	updatedCombo := combo
+	updatedCombo.IsOnline = true
+	responseDishesJSON := []byte(`[{"dish_id":301,"dish_name":"热销菜","dish_price":3200,"quantity":2}]`)
+	responseTagsJSON := []byte(`[{"id":31,"name":"热卖"}]`)
 
 	testCases := []struct {
 		name          string
@@ -984,9 +1075,17 @@ func TestToggleComboOnlineAPI(t *testing.T) {
 					UpdateComboSetOnlineStatus(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(nil)
+
+				expectComboSummaryReload(store, updatedCombo, responseDishesJSON, responseTagsJSON)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response comboSetResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.True(t, response.IsOnline)
+				require.Equal(t, int64(1), response.DishCount)
+				require.Equal(t, int64(2), response.DishTotalQuantity)
+				require.Len(t, response.Tags, 1)
 			},
 		},
 		{

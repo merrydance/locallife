@@ -55,6 +55,50 @@ type comboSetSummary struct {
 	DishTotalQuantity int64
 }
 
+func buildComboDishSelections(legacyDishIDs []int64, requestedDishes []comboDishInput) ([]db.DishWithQuantity, error) {
+	var dishesWithQty []db.DishWithQuantity
+	seenDishIDs := make(map[int64]struct{})
+
+	addDish := func(dishID int64, quantity int32) error {
+		if _, exists := seenDishIDs[dishID]; exists {
+			return fmt.Errorf("dish %d duplicated in combo", dishID)
+		}
+		seenDishIDs[dishID] = struct{}{}
+
+		qty := quantity
+		if qty <= 0 {
+			qty = 1
+		}
+
+		dishesWithQty = append(dishesWithQty, db.DishWithQuantity{
+			DishID:   dishID,
+			Quantity: qty,
+		})
+		return nil
+	}
+
+	switch {
+	case requestedDishes != nil:
+		dishesWithQty = make([]db.DishWithQuantity, 0, len(requestedDishes))
+		for _, dish := range requestedDishes {
+			if err := addDish(dish.DishID, dish.Quantity); err != nil {
+				return nil, err
+			}
+		}
+	case len(legacyDishIDs) > 0:
+		dishesWithQty = make([]db.DishWithQuantity, 0, len(legacyDishIDs))
+		for _, dishID := range legacyDishIDs {
+			if err := addDish(dishID, 1); err != nil {
+				return nil, err
+			}
+		}
+	default:
+		return nil, nil
+	}
+
+	return dishesWithQty, nil
+}
+
 func (server *Server) getMerchantFromContextOrAssociation(ctx *gin.Context, userID int64) (db.Merchant, error) {
 	merchant, err := server.resolveMerchantForUser(ctx, userID)
 	if err != nil {
@@ -96,19 +140,6 @@ func unmarshalJSONField(value any, dest any) error {
 	}
 }
 
-func buildComboSetResponse(combo db.ComboSet, summary comboSetSummary) comboSetResponse {
-	return comboSetResponse{
-		ID:                combo.ID,
-		Name:              combo.Name,
-		Description:       stringPtrFromPgText(combo.Description),
-		OriginalPrice:     combo.OriginalPrice,
-		ComboPrice:        combo.ComboPrice,
-		IsOnline:          combo.IsOnline,
-		DishCount:         summary.DishCount,
-		DishTotalQuantity: summary.DishTotalQuantity,
-	}
-}
-
 func buildComboSetSummaryFromDishes(dishes []db.DishWithQuantity, originalPrice int64) comboSetSummary {
 	totalQuantity := int64(0)
 	for _, dish := range dishes {
@@ -123,33 +154,73 @@ func buildComboSetSummaryFromDishes(dishes []db.DishWithQuantity, originalPrice 
 	}
 }
 
+func decodeComboSetDetailsFields(result db.GetComboSetWithDetailsRow) ([]dishInComboResponse, []tagResponse, error) {
+	var dishes []dishInComboResponse
+	var tags []tagResponse
+
+	if err := unmarshalJSONField(result.Dishes, &dishes); err != nil {
+		return nil, nil, err
+	}
+
+	if err := unmarshalJSONField(result.Tags, &tags); err != nil {
+		return nil, nil, err
+	}
+
+	return dishes, tags, nil
+}
+
+func buildComboSetResponseFromDetails(result db.GetComboSetWithDetailsRow) (comboSetResponse, error) {
+	dishes, tags, err := decodeComboSetDetailsFields(result)
+	if err != nil {
+		return comboSetResponse{}, err
+	}
+
+	totalQuantity := int64(0)
+	for _, dish := range dishes {
+		totalQuantity += int64(dish.Quantity)
+	}
+
+	return comboSetResponse{
+		ID:                result.ID,
+		Name:              result.Name,
+		Description:       stringPtrFromPgText(result.Description),
+		OriginalPrice:     result.OriginalPrice,
+		ComboPrice:        result.ComboPrice,
+		IsOnline:          result.IsOnline,
+		DishCount:         int64(len(dishes)),
+		DishTotalQuantity: totalQuantity,
+		Tags:              tags,
+	}, nil
+}
+
+func (server *Server) loadComboSetResponse(ctx context.Context, comboID int64) (comboSetResponse, error) {
+	details, err := server.store.GetComboSetWithDetails(ctx, comboID)
+	if err != nil {
+		return comboSetResponse{}, err
+	}
+
+	resp, err := buildComboSetResponseFromDetails(details)
+	if err != nil {
+		return comboSetResponse{}, err
+	}
+
+	responses := []comboSetResponse{resp}
+	server.enrichComboSetImages(ctx, responses)
+	return responses[0], nil
+}
+
 func (server *Server) resolveComboSummary(
 	ctx context.Context,
 	merchantID int64,
 	legacyDishIDs []int64,
 	requestedDishes []comboDishInput,
 ) (comboSetSummary, int, error) {
-	dishesWithQty := make([]db.DishWithQuantity, 0)
-	switch {
-	case requestedDishes != nil:
-		for _, dish := range requestedDishes {
-			qty := dish.Quantity
-			if qty <= 0 {
-				qty = 1
-			}
-			dishesWithQty = append(dishesWithQty, db.DishWithQuantity{
-				DishID:   dish.DishID,
-				Quantity: qty,
-			})
-		}
-	case len(legacyDishIDs) > 0:
-		for _, dishID := range legacyDishIDs {
-			dishesWithQty = append(dishesWithQty, db.DishWithQuantity{
-				DishID:   dishID,
-				Quantity: 1,
-			})
-		}
-	default:
+	dishesWithQty, err := buildComboDishSelections(legacyDishIDs, requestedDishes)
+	if err != nil {
+		return comboSetSummary{}, http.StatusBadRequest, err
+	}
+
+	if dishesWithQty == nil {
 		return comboSetSummary{}, 0, nil
 	}
 
@@ -241,7 +312,13 @@ func (server *Server) createComboSet(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusCreated, buildComboSetResponse(result.ComboSet, buildComboSetSummaryFromDishes(comboSummary.Dishes, originalPrice)))
+	response, err := server.loadComboSetResponse(ctx, result.ComboSet.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusCreated, response)
 }
 
 type getComboSetRequest struct {
@@ -322,16 +399,8 @@ func (server *Server) getComboSet(ctx *gin.Context) {
 		return
 	}
 
-	// 解析JSON字段
-	var dishes []dishInComboResponse
-	var tags []tagResponse
-
-	if err := unmarshalJSONField(result.Dishes, &dishes); err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
-	}
-
-	if err := unmarshalJSONField(result.Tags, &tags); err != nil {
+	dishes, tags, err := decodeComboSetDetailsFields(result)
+	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
@@ -397,42 +466,10 @@ func (server *Server) getPublicComboDetail(ctx *gin.Context) {
 		return
 	}
 
-	// 解析JSON字段
-	var dishes []dishInComboResponse
-	var tags []tagResponse
-
-	if result.Dishes != nil {
-		switch v := result.Dishes.(type) {
-		case []byte:
-			if len(v) > 2 {
-				_ = json.Unmarshal(v, &dishes)
-			}
-		case string:
-			if len(v) > 2 {
-				_ = json.Unmarshal([]byte(v), &dishes)
-			}
-		default:
-			if jsonBytes, err := json.Marshal(v); err == nil {
-				_ = json.Unmarshal(jsonBytes, &dishes)
-			}
-		}
-	}
-
-	if result.Tags != nil {
-		switch v := result.Tags.(type) {
-		case []byte:
-			if len(v) > 2 {
-				_ = json.Unmarshal(v, &tags)
-			}
-		case string:
-			if len(v) > 2 {
-				_ = json.Unmarshal([]byte(v), &tags)
-			}
-		default:
-			if jsonBytes, err := json.Marshal(v); err == nil {
-				_ = json.Unmarshal(jsonBytes, &tags)
-			}
-		}
+	dishes, tags, err := decodeComboSetDetailsFields(result)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
 	// 获取商户状态
@@ -677,7 +714,6 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		}
 	}
 
-	comboSummary := comboSetSummary{}
 	var dishesWithQty *[]db.DishWithQuantity
 	if req.Dishes != nil {
 		resolvedSummary, statusCode, err := server.resolveComboSummary(ctx, merchant.ID, nil, req.Dishes)
@@ -689,7 +725,6 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 			ctx.JSON(statusCode, errorResponse(err))
 			return
 		}
-		comboSummary = resolvedSummary
 		dishesWithQty = &resolvedSummary.Dishes
 		params.OriginalPrice = pgtype.Int8{Int64: resolvedSummary.OriginalPrice, Valid: true}
 	}
@@ -715,7 +750,13 @@ func (server *Server) updateComboSet(ctx *gin.Context) {
 		return
 	}
 
-	ctx.JSON(http.StatusOK, buildComboSetResponse(updated.ComboSet, comboSummary))
+	response, err := server.loadComboSetResponse(ctx, updated.ComboSet.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 type toggleComboOnlineBodyRequest struct {
@@ -788,8 +829,13 @@ func (server *Server) toggleComboOnline(ctx *gin.Context) {
 		return
 	}
 
-	combo.IsOnline = *bodyReq.IsOnline
-	ctx.JSON(http.StatusOK, buildComboSetResponse(combo, comboSetSummary{}))
+	response, err := server.loadComboSetResponse(ctx, combo.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, response)
 }
 
 type deleteComboSetRequest struct {

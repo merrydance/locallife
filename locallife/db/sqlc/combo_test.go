@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -97,6 +98,50 @@ func TestListComboSetsByMerchant(t *testing.T) {
 		require.GreaterOrEqual(t, combo.DishTotalQuantity, int64(2))
 		require.NotNil(t, combo.Tags)
 	}
+}
+
+func TestListComboSetsByMerchantExcludesDeletedDishes(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	combo := createRandomComboSet(t, merchant.ID)
+
+	activeDish := createRandomDish(t, merchant.ID, category.ID)
+	deletedDish := createRandomDish(t, merchant.ID, category.ID)
+
+	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
+		ComboID:  combo.ID,
+		DishID:   activeDish.ID,
+		Quantity: 2,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AddComboDish(context.Background(), AddComboDishParams{
+		ComboID:  combo.ID,
+		DishID:   deletedDish.ID,
+		Quantity: 3,
+	})
+	require.NoError(t, err)
+
+	err = testStore.DeleteDish(context.Background(), deletedDish.ID)
+	require.NoError(t, err)
+
+	rows, err := testStore.ListComboSetsByMerchant(context.Background(), ListComboSetsByMerchantParams{
+		MerchantID: merchant.ID,
+		Limit:      10,
+		Offset:     0,
+	})
+	require.NoError(t, err)
+
+	var target *ListComboSetsByMerchantRow
+	for i := range rows {
+		if rows[i].ID == combo.ID {
+			target = &rows[i]
+			break
+		}
+	}
+	require.NotNil(t, target)
+	require.Equal(t, int64(1), target.DishCount)
+	require.Equal(t, int64(2), target.DishTotalQuantity)
 }
 
 func TestListComboSetsByMerchantWithFilter(t *testing.T) {
@@ -428,6 +473,46 @@ func TestGetComboSetWithDetails(t *testing.T) {
 	// 验证JSON字段不为空（具体解析在API层）
 	require.NotEmpty(t, comboDetails.Dishes)
 	require.NotEmpty(t, comboDetails.Tags)
+}
+
+func TestGetComboSetWithDetailsExcludesDeletedDishes(t *testing.T) {
+	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	combo := createRandomComboSet(t, merchant.ID)
+
+	activeDish := createRandomDish(t, merchant.ID, category.ID)
+	deletedDish := createRandomDish(t, merchant.ID, category.ID)
+
+	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
+		ComboID:  combo.ID,
+		DishID:   activeDish.ID,
+		Quantity: 1,
+	})
+	require.NoError(t, err)
+
+	_, err = testStore.AddComboDish(context.Background(), AddComboDishParams{
+		ComboID:  combo.ID,
+		DishID:   deletedDish.ID,
+		Quantity: 2,
+	})
+	require.NoError(t, err)
+
+	err = testStore.DeleteDish(context.Background(), deletedDish.ID)
+	require.NoError(t, err)
+
+	comboDetails, err := testStore.GetComboSetWithDetails(context.Background(), combo.ID)
+	require.NoError(t, err)
+
+	payload, err := json.Marshal(comboDetails.Dishes)
+	require.NoError(t, err)
+
+	var dishes []struct {
+		DishID int64 `json:"dish_id"`
+	}
+	err = json.Unmarshal(payload, &dishes)
+	require.NoError(t, err)
+	require.Len(t, dishes, 1)
+	require.Equal(t, activeDish.ID, dishes[0].DishID)
 }
 
 // ============================================
