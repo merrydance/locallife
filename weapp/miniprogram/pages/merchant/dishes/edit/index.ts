@@ -48,8 +48,36 @@ interface CustomizationGroupDraft {
   options: CustomizationOptionDraft[]
 }
 
+interface CurrencyInputState {
+  cents: number
+  hasValue: boolean
+  isValid: boolean
+}
+
 type CreatePopupMode = 'category' | 'tag' | ''
 const FEATURED_TAG_NAMES = new Set(['推荐', '热卖'])
+
+function parseCurrencyInput(value: string): CurrencyInputState {
+  const trimmedValue = value.trim()
+  if (!trimmedValue) {
+    return { cents: 0, hasValue: false, isValid: false }
+  }
+
+  if (!/^-?\d+(\.\d{0,2})?$/.test(trimmedValue)) {
+    return { cents: 0, hasValue: true, isValid: false }
+  }
+
+  const parsedValue = Number(trimmedValue)
+  if (!Number.isFinite(parsedValue)) {
+    return { cents: 0, hasValue: true, isValid: false }
+  }
+
+  return {
+    cents: Math.round(parsedValue * 100),
+    hasValue: true,
+    isValid: true
+  }
+}
 
 function mapCustomizationGroupsToDrafts(groups?: CustomizationGroup[] | null): CustomizationGroupDraft[] {
   if (!Array.isArray(groups) || groups.length === 0) {
@@ -183,6 +211,7 @@ Page({
       member_price: 0,
       is_online: true,
       is_available: true,
+      is_packaging: false,
       sort_order: 0,
       prepare_time: 15,
       image_asset_id: 0,
@@ -309,6 +338,7 @@ Page({
           member_price: detail?.member_price || 0,
           is_online: detail?.is_online ?? true,
           is_available: true,
+          is_packaging: detail?.is_packaging ?? false,
           sort_order: detail?.sort_order || 0,
           prepare_time: detail?.prepare_time || 15,
           image_asset_id: detail?.image_asset_id || 0,
@@ -481,6 +511,21 @@ Page({
       return
     }
 
+    if (field === 'is_packaging') {
+      const isPackaging = !!e.detail.value
+      this.setData({
+        'formData.is_packaging': isPackaging,
+        'formData.is_online': isPackaging ? true : this.data.formData.is_online,
+        'formData.is_available': true
+      })
+      return
+    }
+
+    if (field === 'is_online' && this.data.formData.is_packaging) {
+      this.setData({ 'formData.is_online': true })
+      return
+    }
+
     this.setData({ [`formData.${field}`]: !!e.detail.value })
   },
 
@@ -549,19 +594,19 @@ Page({
 
   onPriceChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
     const value = e.detail.value.trim()
-    const parsedPrice = Number.parseFloat(value)
+    const parsedPrice = parseCurrencyInput(value)
     this.setData({
       displayPrice: value,
-      'formData.price': Number.isFinite(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice * 100) : 0
+      'formData.price': parsedPrice.isValid ? parsedPrice.cents : 0
     })
   },
 
   onMemberPriceChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
     const value = e.detail.value.trim()
-    const parsedPrice = Number.parseFloat(value)
+    const parsedPrice = parseCurrencyInput(value)
     this.setData({
       displayMemberPrice: value,
-      'formData.member_price': Number.isFinite(parsedPrice) && parsedPrice > 0 ? Math.round(parsedPrice * 100) : 0
+      'formData.member_price': parsedPrice.isValid ? parsedPrice.cents : 0
     })
   },
 
@@ -794,20 +839,35 @@ Page({
 
   validateBeforeSubmit(): string {
     const { formData, categoryOptions } = this.data
+    const priceInput = parseCurrencyInput(this.data.displayPrice)
+    const memberPriceInput = parseCurrencyInput(this.data.displayMemberPrice)
+
     if (!formData.name.trim()) {
       return '请输入菜品名称'
     }
     if (formData.category_id <= 0) {
       return categoryOptions.length > 0 ? '请选择菜品分类' : '请先创建菜品分类'
     }
-    if (formData.price <= 0) {
+    if (!priceInput.hasValue || !priceInput.isValid) {
       return '请输入正确价格'
     }
-    if (formData.member_price > 0 && formData.member_price >= formData.price) {
+    if (priceInput.cents < 0) {
+      return '价格不能为负数'
+    }
+    if (memberPriceInput.hasValue && !memberPriceInput.isValid) {
+      return '请输入正确会员价'
+    }
+    if (memberPriceInput.isValid && memberPriceInput.cents < 0) {
+      return '会员价不能为负数'
+    }
+    if (memberPriceInput.isValid && memberPriceInput.cents > 0 && memberPriceInput.cents >= priceInput.cents) {
       return '会员价需小于售价'
     }
     if (formData.prepare_time < 1 || formData.prepare_time > 120) {
       return '出餐时间需在1-120分钟'
+    }
+    if (formData.is_packaging && !formData.is_online) {
+      return '包装菜品必须保持上架'
     }
     if (this.data.imageUploading) {
       return '请等待图片上传完成'
@@ -824,6 +884,7 @@ Page({
       price: this.data.formData.price,
       is_online: this.data.formData.is_online,
       is_available: true,
+      is_packaging: this.data.formData.is_packaging,
       prepare_time: this.data.formData.prepare_time
     }
 

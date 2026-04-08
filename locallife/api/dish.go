@@ -379,10 +379,11 @@ type createDishRequest struct {
 	CategoryID          *int64                    `json:"category_id" binding:"omitempty,min=1"`
 	Name                string                    `json:"name" binding:"required,min=1,max=50"`
 	Description         string                    `json:"description" binding:"omitempty,max=500"`
-	Price               int64                     `json:"price" binding:"required,min=1,max=9999900"` // 最高99999元
-	MemberPrice         *int64                    `json:"member_price" binding:"omitempty,min=1,max=9999900"`
+	Price               *int64                    `json:"price" binding:"required,min=0,max=9999900"` // 最高99999元
+	MemberPrice         *int64                    `json:"member_price" binding:"omitempty,min=0,max=9999900"`
 	IsAvailable         bool                      `json:"is_available"`
 	IsOnline            bool                      `json:"is_online"`
+	IsPackaging         bool                      `json:"is_packaging"`
 	SortOrder           int16                     `json:"sort_order" binding:"min=0,max=999"`
 	PrepareTime         int16                     `json:"prepare_time" binding:"omitempty,min=0,max=120"`       // 预估制作时间（分钟），0表示使用默认值10分钟
 	IngredientIDs       []int64                   `json:"ingredient_ids" binding:"omitempty,max=20,dive,min=1"` // 最多20个食材
@@ -405,11 +406,47 @@ type dishResponse struct {
 	MemberPrice         *int64               `json:"member_price"`
 	IsAvailable         bool                 `json:"is_available"`
 	IsOnline            bool                 `json:"is_online"`
+	IsPackaging         bool                 `json:"is_packaging"`
 	SortOrder           int16                `json:"sort_order"`
 	PrepareTime         int16                `json:"prepare_time"` // 预估制作时间（分钟）
 	Ingredients         []ingredient         `json:"ingredients,omitempty"`
 	Tags                []tagInfo            `json:"tags,omitempty"`
 	CustomizationGroups []customizationGroup `json:"customization_groups,omitempty"`
+}
+
+func normalizePackagingDishCreate(req createDishRequest) (bool, bool, bool) {
+	isPackaging := req.IsPackaging
+	isAvailable := req.IsAvailable
+	isOnline := req.IsOnline
+	if isPackaging {
+		isAvailable = true
+		isOnline = true
+	}
+	return isPackaging, isAvailable, isOnline
+}
+
+func resolvePackagingDishUpdate(current db.Dish, req updateDishRequest) (bool, bool, bool) {
+	nextIsPackaging := current.IsPackaging
+	if req.IsPackaging != nil {
+		nextIsPackaging = *req.IsPackaging
+	}
+
+	nextIsAvailable := current.IsAvailable
+	if req.IsAvailable != nil {
+		nextIsAvailable = *req.IsAvailable
+	}
+
+	nextIsOnline := current.IsOnline
+	if req.IsOnline != nil {
+		nextIsOnline = *req.IsOnline
+	}
+
+	if nextIsPackaging {
+		nextIsAvailable = true
+		nextIsOnline = true
+	}
+
+	return nextIsPackaging, nextIsAvailable, nextIsOnline
 }
 
 type ingredient struct {
@@ -543,6 +580,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 	if prepareTime <= 0 {
 		prepareTime = defaultPrepareTime
 	}
+	isPackaging, isAvailable, isOnline := normalizePackagingDishCreate(req)
 
 	// 使用事务创建菜品+食材+标签，保证原子性
 	txResult, err := server.store.CreateDishTx(ctx, db.CreateDishTxParams{
@@ -551,10 +589,11 @@ func (server *Server) createDish(ctx *gin.Context) {
 		Name:                req.Name,
 		Description:         pgtype.Text{String: req.Description, Valid: req.Description != ""},
 		ImageMediaAssetID:   imageMediaAssetID,
-		Price:               req.Price,
+		Price:               *req.Price,
 		MemberPrice:         memberPrice,
-		IsAvailable:         req.IsAvailable,
-		IsOnline:            req.IsOnline,
+		IsAvailable:         isAvailable,
+		IsOnline:            isOnline,
+		IsPackaging:         isPackaging,
 		SortOrder:           req.SortOrder,
 		PrepareTime:         prepareTime,
 		IngredientIDs:       req.IngredientIDs,
@@ -601,6 +640,7 @@ func (server *Server) createDish(ctx *gin.Context) {
 		MemberPrice:         toPtrInt64(txResult.Dish.MemberPrice),
 		IsAvailable:         txResult.Dish.IsAvailable,
 		IsOnline:            txResult.Dish.IsOnline,
+		IsPackaging:         txResult.Dish.IsPackaging,
 		SortOrder:           txResult.Dish.SortOrder,
 		PrepareTime:         txResult.Dish.PrepareTime,
 		CustomizationGroups: customizationGroups,
@@ -614,10 +654,11 @@ func (server *Server) createDish(ctx *gin.Context) {
 		TargetID:    &txResult.Dish.ID,
 		RegionID:    &merchant.RegionID,
 		Metadata: map[string]any{
-			"merchant_id": txResult.Dish.MerchantID,
-			"name":        txResult.Dish.Name,
-			"price":       txResult.Dish.Price,
-			"is_online":   txResult.Dish.IsOnline,
+			"merchant_id":  txResult.Dish.MerchantID,
+			"name":         txResult.Dish.Name,
+			"price":        txResult.Dish.Price,
+			"is_online":    txResult.Dish.IsOnline,
+			"is_packaging": txResult.Dish.IsPackaging,
 		},
 	})
 }
@@ -746,6 +787,7 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 			MemberPrice:   toPtrInt64(dish.MemberPrice),
 			IsAvailable:   dish.IsAvailable,
 			IsOnline:      dish.IsOnline,
+			IsPackaging:   dish.IsPackaging,
 			SortOrder:     dish.SortOrder,
 		}
 	}
@@ -861,6 +903,7 @@ func (server *Server) getDish(ctx *gin.Context) {
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
 		IsAvailable:         dish.IsAvailable,
 		IsOnline:            dish.IsOnline,
+		IsPackaging:         dish.IsPackaging,
 		SortOrder:           dish.SortOrder,
 		Ingredients:         ingredients,
 		Tags:                tags,
@@ -937,6 +980,7 @@ func (server *Server) getPublicDishDetail(ctx *gin.Context) {
 		MemberPrice:         toPtrInt64(dish.MemberPrice),
 		IsAvailable:         dish.IsAvailable,
 		IsOnline:            dish.IsOnline,
+		IsPackaging:         dish.IsPackaging,
 		SortOrder:           dish.SortOrder,
 		PrepareTime:         dish.PrepareTime,
 		Ingredients:         ingredients,
@@ -950,10 +994,11 @@ type updateDishRequest struct {
 	Name         string  `json:"name" binding:"omitempty,min=1,max=100"`        // 菜品名称，最大100字符
 	Description  string  `json:"description" binding:"omitempty,max=1000"`      // 描述，最大1000字符
 	ImageAssetID *int64  `json:"image_asset_id" binding:"omitempty,min=1"`      // 图片媒体资产ID
-	Price        *int64  `json:"price" binding:"omitempty,min=1,max=100000000"` // 价格（分），最大100万元
+	Price        *int64  `json:"price" binding:"omitempty,min=0,max=100000000"` // 价格（分），最大100万元
 	MemberPrice  *int64  `json:"member_price" binding:"omitempty,min=0,max=100000000"`
 	IsAvailable  *bool   `json:"is_available"`
 	IsOnline     *bool   `json:"is_online"`
+	IsPackaging  *bool   `json:"is_packaging"`
 	SortOrder    *int16  `json:"sort_order" binding:"omitempty,min=0"`
 	PrepareTime  *int16  `json:"prepare_time" binding:"omitempty,min=1,max=120"` // 预估制作时间（分钟），1-120分钟
 	TagIDs       []int64 `json:"tag_ids" binding:"omitempty,max=10,dive,min=1"`  // 标签ID列表（最多10个）
@@ -1063,13 +1108,17 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	}
 
 	var isAvailable pgtype.Bool
-	if req.IsAvailable != nil {
-		isAvailable = pgtype.Bool{Bool: *req.IsAvailable, Valid: true}
-	}
-
 	var isOnline pgtype.Bool
-	if req.IsOnline != nil {
-		isOnline = pgtype.Bool{Bool: *req.IsOnline, Valid: true}
+	var isPackaging pgtype.Bool
+	nextIsPackaging, nextIsAvailable, nextIsOnline := resolvePackagingDishUpdate(dish, req)
+	if req.IsAvailable != nil || nextIsPackaging != dish.IsPackaging {
+		isAvailable = pgtype.Bool{Bool: nextIsAvailable, Valid: true}
+	}
+	if req.IsOnline != nil || nextIsPackaging != dish.IsPackaging {
+		isOnline = pgtype.Bool{Bool: nextIsOnline, Valid: true}
+	}
+	if req.IsPackaging != nil {
+		isPackaging = pgtype.Bool{Bool: nextIsPackaging, Valid: true}
 	}
 
 	var sortOrder pgtype.Int2
@@ -1099,6 +1148,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		MemberPrice:       memberPrice,
 		IsAvailable:       isAvailable,
 		IsOnline:          isOnline,
+		IsPackaging:       isPackaging,
 		SortOrder:         sortOrder,
 		PrepareTime:       prepareTime,
 		TagIDs:            tagIDs,
@@ -1143,6 +1193,9 @@ func (server *Server) updateDish(ctx *gin.Context) {
 	if req.IsOnline != nil {
 		updatedFields["is_online"] = *req.IsOnline
 	}
+	if req.IsPackaging != nil {
+		updatedFields["is_packaging"] = *req.IsPackaging
+	}
 	if req.SortOrder != nil {
 		updatedFields["sort_order"] = *req.SortOrder
 	}
@@ -1166,6 +1219,7 @@ func (server *Server) updateDish(ctx *gin.Context) {
 		MemberPrice:  toPtrInt64(txResult.Dish.MemberPrice),
 		IsAvailable:  txResult.Dish.IsAvailable,
 		IsOnline:     txResult.Dish.IsOnline,
+		IsPackaging:  txResult.Dish.IsPackaging,
 		SortOrder:    txResult.Dish.SortOrder,
 		PrepareTime:  txResult.Dish.PrepareTime,
 		Tags:         tags,
@@ -1400,6 +1454,10 @@ func (server *Server) updateDishStatus(ctx *gin.Context) {
 		ctx.JSON(http.StatusForbidden, errorResponse(errors.New("dish does not belong to this merchant")))
 		return
 	}
+	if dish.IsPackaging && !*req.IsOnline {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("packaging dishes must stay online and available")))
+		return
+	}
 
 	// 更新菜品状态
 	err = server.store.UpdateDishOnlineStatus(ctx, db.UpdateDishOnlineStatusParams{
@@ -1498,6 +1556,33 @@ func (server *Server) batchUpdateDishStatus(ctx *gin.Context) {
 
 	var updated []int64
 	if len(validDishIDs) > 0 {
+		if !*req.IsOnline {
+			filteredDishIDs := make([]int64, 0, len(validDishIDs))
+			for _, dishID := range validDishIDs {
+				dish, err := server.store.GetDish(ctx, dishID)
+				if err != nil {
+					failed = append(failed, dishID)
+					continue
+				}
+				if dish.IsPackaging {
+					failed = append(failed, dishID)
+					continue
+				}
+				filteredDishIDs = append(filteredDishIDs, dishID)
+			}
+			validDishIDs = filteredDishIDs
+		}
+
+		if len(validDishIDs) == 0 {
+			message := "批量下架完成"
+			ctx.JSON(http.StatusOK, batchDishStatusResponse{
+				Updated: updated,
+				Failed:  failed,
+				Message: message,
+			})
+			return
+		}
+
 		// 批量更新菜品状态
 		rowsAffected, err := server.store.BatchUpdateDishOnlineStatus(ctx, db.BatchUpdateDishOnlineStatusParams{
 			IsOnline:   *req.IsOnline,

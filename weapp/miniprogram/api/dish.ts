@@ -25,6 +25,7 @@ export interface DishResponse {
     category_name?: string                       // 分类名称
     is_online: boolean                           // 是否上架
     is_available: boolean                        // 是否可用
+    is_packaging?: boolean                       // 是否为包装菜品
     prepare_time?: number                        // 预估制作时间（分钟）
     sort_order: number                           // 排序
     customization_groups?: CustomizationGroup[]  // 定制化分组
@@ -127,6 +128,7 @@ export interface CreateDishRequest extends Record<string, unknown> {
     ingredient_ids?: number[]                    // 食材ID列表（最多20个）
     is_available?: boolean                       // 是否可用
     is_online?: boolean                          // 是否上架
+    is_packaging?: boolean                       // 是否为包装菜品
     member_price?: number                        // 会员价（分）
     name: string                                 // 菜品名称（必填）
     prepare_time?: number                        // 预估制作时间（分钟）
@@ -150,6 +152,7 @@ export interface UpdateDishRequest extends Record<string, unknown> {
     sort_order?: number                          // 排序
     is_online?: boolean                          // 是否上架
     is_available?: boolean                       // 是否可用
+    is_packaging?: boolean                       // 是否为包装菜品
     tag_ids?: number[]                           // 标签ID列表（最多10个）
 }
 
@@ -194,6 +197,9 @@ export interface DishInComboResponse {
     dish_price?: number                          // 菜品价格（分）
     dish_image_url?: string                      // 菜品图片
     quantity?: number                            // 数量
+    customizations?: Record<string, number | string>
+    customization_extra_price?: number
+    customization_summary?: string
 }
 
 /**
@@ -221,6 +227,7 @@ export interface ComboSetWithDetailsResponse {
 export interface ComboDishInput {
     dish_id: number                              // 菜品ID（必填）
     quantity: number                             // 数量，1-99
+    customizations?: Record<string, number | string>
 }
 
 export interface UpdateComboSetRequest extends Record<string, unknown> {

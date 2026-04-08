@@ -44,24 +44,21 @@ func TestValidatePackagingPolicy(t *testing.T) {
 			}},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantPackagingPolicy(gomock.Any(), merchantID).
+					CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
 					Times(1).
-					Return(db.MerchantPackagingPolicy{
-						MerchantID:           merchantID,
-						ApplicableOrderTypes: []string{db.OrderTypeTakeout},
-						CandidateDishIds:     []int64{packagingDishID},
-					}, nil)
+					Return(int64(1), nil)
 
 				store.EXPECT().
-					GetDishesByIDsAll(gomock.Any(), []int64{packagingDishID}).
+					GetDish(gomock.Any(), foodDishID).
 					Times(1).
-					Return([]db.GetDishesByIDsAllRow{{
-						ID:          packagingDishID,
+					Return(db.Dish{
+						ID:          foodDishID,
 						MerchantID:  merchantID,
-						Name:        "包装盒",
+						Name:        "米饭",
 						IsAvailable: true,
 						IsOnline:    true,
-					}}, nil)
+						IsPackaging: false,
+					}, nil)
 			},
 			check: func(t *testing.T, err error) {
 				require.EqualError(t, err, "请先选择包装方式")
@@ -79,24 +76,33 @@ func TestValidatePackagingPolicy(t *testing.T) {
 			}},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantPackagingPolicy(gomock.Any(), merchantID).
+					CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
 					Times(1).
-					Return(db.MerchantPackagingPolicy{
-						MerchantID:           merchantID,
-						ApplicableOrderTypes: []string{"takeaway"},
-						CandidateDishIds:     []int64{packagingDishID},
+					Return(int64(1), nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), foodDishID).
+					Times(1).
+					Return(db.Dish{
+						ID:          foodDishID,
+						MerchantID:  merchantID,
+						Name:        "米饭",
+						IsAvailable: true,
+						IsOnline:    true,
+						IsPackaging: false,
 					}, nil)
 
 				store.EXPECT().
-					GetDishesByIDsAll(gomock.Any(), []int64{packagingDishID}).
+					GetDish(gomock.Any(), packagingDishID).
 					Times(1).
-					Return([]db.GetDishesByIDsAllRow{{
+					Return(db.Dish{
 						ID:          packagingDishID,
 						MerchantID:  merchantID,
 						Name:        "包装盒",
 						IsAvailable: true,
 						IsOnline:    true,
-					}}, nil)
+						IsPackaging: true,
+					}, nil)
 			},
 			check: func(t *testing.T, err error) {
 				require.NoError(t, err)
@@ -111,27 +117,41 @@ func TestValidatePackagingPolicy(t *testing.T) {
 			}},
 			buildStubs: func(store *mockdb.MockStore) {
 				store.EXPECT().
-					GetMerchantPackagingPolicy(gomock.Any(), merchantID).
+					CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
 					Times(1).
-					Return(db.MerchantPackagingPolicy{
-						MerchantID:           merchantID,
-						ApplicableOrderTypes: []string{db.OrderTypeTakeout},
-						CandidateDishIds:     []int64{packagingDishID},
-					}, nil)
+					Return(int64(1), nil)
 
 				store.EXPECT().
-					GetDishesByIDsAll(gomock.Any(), []int64{packagingDishID}).
+					GetDish(gomock.Any(), packagingDishID).
 					Times(1).
-					Return([]db.GetDishesByIDsAllRow{{
+					Return(db.Dish{
 						ID:          packagingDishID,
 						MerchantID:  merchantID,
 						Name:        "包装盒",
 						IsAvailable: true,
 						IsOnline:    true,
-					}}, nil)
+						IsPackaging: true,
+					}, nil)
 			},
 			check: func(t *testing.T, err error) {
 				require.EqualError(t, err, "只能选择一种包装方式")
+			},
+		},
+		{
+			name:      "SkipWhenNoActivePackagingDish",
+			orderType: db.OrderTypeTakeout,
+			items: []db.CreateOrderItemParams{{
+				DishID:   pgtype.Int8{Int64: foodDishID, Valid: true},
+				Quantity: 1,
+			}},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					CountActivePackagingDishesByMerchant(gomock.Any(), merchantID).
+					Times(1).
+					Return(int64(0), nil)
+			},
+			check: func(t *testing.T, err error) {
+				require.NoError(t, err)
 			},
 		},
 	}

@@ -44,8 +44,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
       { id: 'profile', title: '店铺资料', desc: '维护店铺名称、联系电话、地址与介绍', path: '/pages/merchant/settings/profile/index' },
       { id: 'profile-images', title: '店铺图片管理', desc: '维护 Logo、门头照和环境照', path: '/pages/merchant/profile-images/index' },
       { id: 'merchant-categories', title: '经营类目设置', desc: '维护店铺经营类目与平台分类归属', path: '/pages/merchant/merchant-categories/index' },
-      { id: 'business-hours', title: '营业时间', desc: '维护营业时段与特殊日期安排', path: '/pages/merchant/settings/business-hours/index' },
-      { id: 'packaging-policy', title: '包装费策略', desc: '配置外卖与自取订单的包装费规则', path: '/pages/merchant/settings/packaging-policy/index' }
+      { id: 'business-hours', title: '营业时间', desc: '维护营业时段与特殊日期安排', path: '/pages/merchant/settings/business-hours/index' }
     ]
   },
   {
@@ -75,7 +74,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     title: '设备与展示',
     desc: '维护显示、打印和门店设备设置。',
     items: [
-      { id: 'display-config', title: '显示与打印设置', desc: '统一维护打印、语音播报和 KDS 分发开关', path: '/pages/merchant/settings/display-config/index' },
+      { id: 'display-config', title: '打印与提醒设置', desc: '统一维护打印与语音播报配置', path: '/pages/merchant/settings/display-config/index' },
       { id: 'printers', title: '打印机管理', desc: '添加、配置和维护云打印机设备', path: '/pages/merchant/printers/index' }
     ]
   },

@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -390,6 +391,115 @@ func TestCreateDishAPI(t *testing.T) {
 			},
 		},
 		{
+			name: "PackagingForcesOnlineAndAvailable",
+			body: gin.H{
+				"category_id":  category.ID,
+				"name":         dish.Name,
+				"price":        dish.Price,
+				"is_available": false,
+				"is_online":    false,
+				"is_packaging": true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+						MerchantID: merchant.ID,
+						CategoryID: category.ID,
+					})).
+					Times(1).
+					Return(db.MerchantDishCategory{}, nil)
+
+				store.EXPECT().
+					CreateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateDishTxParams) (db.CreateDishTxResult, error) {
+						require.True(t, arg.IsPackaging)
+						require.True(t, arg.IsOnline)
+						require.True(t, arg.IsAvailable)
+
+						createdDish := dish
+						createdDish.IsPackaging = true
+						createdDish.IsOnline = true
+						createdDish.IsAvailable = true
+
+						return db.CreateDishTxResult{
+							Dish:        createdDish,
+							Ingredients: []db.DishIngredient{},
+							Tags:        []db.DishTag{},
+						}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var resp struct {
+					Data dishResponse `json:"data"`
+				}
+				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
+				require.NoError(t, err)
+				require.True(t, resp.Data.IsPackaging)
+				require.True(t, resp.Data.IsOnline)
+				require.True(t, resp.Data.IsAvailable)
+			},
+		},
+		{
+			name: "ZeroPriceAllowed",
+			body: gin.H{
+				"category_id":  category.ID,
+				"name":         dish.Name,
+				"price":        0,
+				"is_available": true,
+				"is_online":    true,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetMerchantDishCategory(gomock.Any(), gomock.Eq(db.GetMerchantDishCategoryParams{
+						MerchantID: merchant.ID,
+						CategoryID: category.ID,
+					})).
+					Times(1).
+					Return(db.MerchantDishCategory{}, nil)
+
+				store.EXPECT().
+					CreateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateDishTxParams) (db.CreateDishTxResult, error) {
+						require.Equal(t, int64(0), arg.Price)
+
+						createdDish := dish
+						createdDish.Price = 0
+						createdDish.MemberPrice = pgtype.Int8{}
+
+						return db.CreateDishTxResult{
+							Dish:        createdDish,
+							Ingredients: []db.DishIngredient{},
+							Tags:        []db.DishTag{},
+						}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var resp struct {
+					Data dishResponse `json:"data"`
+				}
+				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
+				require.NoError(t, err)
+				require.Equal(t, int64(0), resp.Data.Price)
+				require.Nil(t, resp.Data.MemberPrice)
+			},
+		},
+		{
 			name: "InvalidPrice",
 			body: gin.H{
 				"name":  dish.Name,
@@ -709,6 +819,57 @@ func TestUpdateDishAPI(t *testing.T) {
 			},
 		},
 		{
+			name:   "ZeroPriceAllowed",
+			dishID: dish.ID,
+			body: gin.H{
+				"price":        0,
+				"member_price": 0,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				currentDish := dish
+				currentDish.ImageMediaAssetID = pgtype.Int8{}
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(currentDish, nil)
+
+				store.EXPECT().
+					UpdateDishTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateDishTxParams) (db.UpdateDishTxResult, error) {
+						require.True(t, arg.Price.Valid)
+						require.Equal(t, int64(0), arg.Price.Int64)
+						require.True(t, arg.MemberPrice.Valid)
+						require.Equal(t, int64(0), arg.MemberPrice.Int64)
+
+						updatedDish := currentDish
+						updatedDish.Price = 0
+						updatedDish.MemberPrice = pgtype.Int8{Int64: 0, Valid: true}
+						return db.UpdateDishTxResult{
+							Dish: updatedDish,
+							Tags: []db.DishTag{},
+						}, nil
+					})
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp struct {
+					Data dishResponse `json:"data"`
+				}
+				err := json.Unmarshal(recorder.Body.Bytes(), &resp)
+				require.NoError(t, err)
+				require.Equal(t, int64(0), resp.Data.Price)
+				require.NotNil(t, resp.Data.MemberPrice)
+				require.Equal(t, int64(0), *resp.Data.MemberPrice)
+			},
+		},
+		{
 			name:   "NotFound",
 			dishID: dish.ID,
 			body: gin.H{
@@ -749,6 +910,70 @@ func TestUpdateDishAPI(t *testing.T) {
 
 			url := fmt.Sprintf("/v1/dishes/%d", tc.dishID)
 			request, err := http.NewRequest(http.MethodPut, url, bytes.NewReader(data))
+			require.NoError(t, err)
+
+			tc.setupAuth(t, request, server.tokenMaker)
+			server.router.ServeHTTP(recorder, request)
+			tc.checkResponse(t, recorder)
+		})
+	}
+}
+
+func TestUpdateDishStatusAPI(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	dish := randomDish(merchant.ID, nil)
+	dish.IsPackaging = true
+
+	testCases := []struct {
+		name          string
+		dishID        int64
+		body          gin.H
+		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs    func(store *mockdb.MockStore)
+		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+	}{
+		{
+			name:   "RejectOfflinePackagingDish",
+			dishID: dish.ID,
+			body: gin.H{
+				"is_online": false,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(dish.ID)).
+					Times(1).
+					Return(dish, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+			},
+		},
+	}
+
+	for i := range testCases {
+		tc := testCases[i]
+
+		t.Run(tc.name, func(t *testing.T) {
+			ctrl := gomock.NewController(t)
+			defer ctrl.Finish()
+
+			store := mockdb.NewMockStore(ctrl)
+			tc.buildStubs(store)
+
+			server := newTestServer(t, store)
+			recorder := httptest.NewRecorder()
+
+			data, err := json.Marshal(tc.body)
+			require.NoError(t, err)
+
+			url := fmt.Sprintf("/v1/dishes/%d/status", tc.dishID)
+			request, err := http.NewRequest(http.MethodPatch, url, bytes.NewReader(data))
 			require.NoError(t, err)
 
 			tc.setupAuth(t, request, server.tokenMaker)

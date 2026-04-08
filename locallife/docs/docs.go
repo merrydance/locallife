@@ -14142,122 +14142,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/v1/merchants/me/packaging-policy": {
-            "get": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "获取当前商户的订单级包装策略配置",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户"
-                ],
-                "summary": "获取商户包装策略",
-                "responses": {
-                    "200": {
-                        "description": "包装策略",
-                        "schema": {
-                            "$ref": "#/definitions/api.packagingPolicyResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未认证",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "仅老板可操作",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "商户不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "BearerAuth": []
-                    }
-                ],
-                "description": "覆盖更新当前商户的订单级包装策略配置",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "商户"
-                ],
-                "summary": "更新商户包装策略",
-                "parameters": [
-                    {
-                        "description": "包装策略",
-                        "name": "request",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api.updatePackagingPolicyRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "更新成功",
-                        "schema": {
-                            "$ref": "#/definitions/api.packagingPolicyResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "参数错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "401": {
-                        "description": "未认证",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "403": {
-                        "description": "仅老板可操作",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "404": {
-                        "description": "商户不存在",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "服务器错误",
-                        "schema": {
-                            "$ref": "#/definitions/api.ErrorResponse"
-                        }
-                    }
-                }
-            }
-        },
         "/v1/merchants/me/shop-images": {
             "patch": {
                 "security": [
@@ -33432,10 +33316,13 @@ const docTemplate = `{
                 "is_online": {
                     "type": "boolean"
                 },
+                "is_packaging": {
+                    "type": "boolean"
+                },
                 "member_price": {
                     "type": "integer",
                     "maximum": 9999900,
-                    "minimum": 1
+                    "minimum": 0
                 },
                 "name": {
                     "type": "string",
@@ -33452,7 +33339,7 @@ const docTemplate = `{
                     "description": "最高99999元",
                     "type": "integer",
                     "maximum": 9999900,
-                    "minimum": 1
+                    "minimum": 0
                 },
                 "sort_order": {
                     "type": "integer",
@@ -35009,6 +34896,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "is_online": {
+                    "type": "boolean"
+                },
+                "is_packaging": {
                     "type": "boolean"
                 },
                 "member_price": {
@@ -38788,52 +38678,6 @@ const docTemplate = `{
                 }
             }
         },
-        "api.packagingPolicyCandidateDishResponse": {
-            "type": "object",
-            "properties": {
-                "id": {
-                    "type": "integer"
-                },
-                "is_available": {
-                    "type": "boolean"
-                },
-                "is_online": {
-                    "type": "boolean"
-                },
-                "name": {
-                    "type": "string"
-                },
-                "price": {
-                    "type": "integer"
-                }
-            }
-        },
-        "api.packagingPolicyResponse": {
-            "type": "object",
-            "properties": {
-                "applicable_order_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "candidate_dish_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
-                },
-                "candidate_dishes": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/api.packagingPolicyCandidateDishResponse"
-                    }
-                },
-                "merchant_id": {
-                    "type": "integer"
-                }
-            }
-        },
         "api.paymentLedgerEntryResponse": {
             "type": "object",
             "properties": {
@@ -42409,6 +42253,9 @@ const docTemplate = `{
                 "is_online": {
                     "type": "boolean"
                 },
+                "is_packaging": {
+                    "type": "boolean"
+                },
                 "member_price": {
                     "type": "integer",
                     "maximum": 100000000,
@@ -42430,7 +42277,7 @@ const docTemplate = `{
                     "description": "价格（分），最大100万元",
                     "type": "integer",
                     "maximum": 100000000,
-                    "minimum": 1
+                    "minimum": 0
                 },
                 "sort_order": {
                     "type": "integer",
@@ -42805,23 +42652,6 @@ const docTemplate = `{
             "properties": {
                 "region_id": {
                     "type": "integer"
-                }
-            }
-        },
-        "api.updatePackagingPolicyRequest": {
-            "type": "object",
-            "properties": {
-                "applicable_order_types": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "candidate_dish_ids": {
-                    "type": "array",
-                    "items": {
-                        "type": "integer"
-                    }
                 }
             }
         },

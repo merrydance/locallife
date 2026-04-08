@@ -673,8 +673,6 @@ func (server *Server) setupRouter() {
 	authGroup.PUT("/merchants/me/tags", server.setMerchantTags) // 设置商户经营类目
 	authGroup.GET("/merchants/me/membership-settings", server.getMerchantMembershipSettings)
 	authGroup.PUT("/merchants/me/membership-settings", server.updateMerchantMembershipSettings)
-	authGroup.GET("/merchants/me/packaging-policy", server.getMerchantPackagingPolicy)
-	authGroup.PUT("/merchants/me/packaging-policy", server.updateMerchantPackagingPolicy)
 
 	// M3.1: 商户入驻申请（新版 - 自动审核）
 	merchantAppGroup := authGroup.Group("/merchant/application")

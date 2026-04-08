@@ -857,51 +857,6 @@ export function deleteMerchantDiscountRule(merchantId: number, ruleId: number) {
   })
 }
 
-export type PackagingPolicyOrderType = 'takeout' | 'takeaway'
-
-export interface PackagingPolicyCandidateDish {
-  id: number
-  name: string
-  price: number
-  is_available: boolean
-  is_online: boolean
-}
-
-export interface MerchantPackagingPolicyResponse {
-  merchant_id: number
-  applicable_order_types: PackagingPolicyOrderType[]
-  candidate_dish_ids: number[]
-  candidate_dishes: PackagingPolicyCandidateDish[]
-}
-
-export interface UpdateMerchantPackagingPolicyRequest {
-  applicable_order_types?: PackagingPolicyOrderType[]
-  candidate_dish_ids?: number[]
-}
-
-/**
- * 获取当前商户包装费策略
- * GET /v1/merchants/me/packaging-policy
- */
-export function getMyMerchantPackagingPolicy() {
-  return request<MerchantPackagingPolicyResponse>({
-    url: '/v1/merchants/me/packaging-policy',
-    method: 'GET'
-  })
-}
-
-/**
- * 更新当前商户包装费策略
- * PUT /v1/merchants/me/packaging-policy
- */
-export function updateMyMerchantPackagingPolicy(data: UpdateMerchantPackagingPolicyRequest) {
-  return request<MerchantPackagingPolicyResponse>({
-    url: '/v1/merchants/me/packaging-policy',
-    method: 'PUT',
-    data
-  })
-}
-
 // ==================== 商户经营类目 ====================
 
 export interface MerchantCategoryTag {

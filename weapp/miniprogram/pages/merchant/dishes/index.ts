@@ -306,6 +306,10 @@ Page({
     if (!targetDish || targetDish.statusPending || targetDish.deletePending) {
       return
     }
+    if (targetDish.is_packaging) {
+      wx.showToast({ title: '包装菜品必须保持上架', icon: 'none' })
+      return
+    }
 
     const targetStatus = !!e.detail?.value
     if (targetStatus === targetDish.is_online) {

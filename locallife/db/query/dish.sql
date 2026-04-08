@@ -74,10 +74,11 @@ INSERT INTO dishes (
   member_price,
   is_available,
   is_online,
+  is_packaging,
   sort_order,
   prepare_time
 ) VALUES (
-  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+  $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 ) RETURNING *;
 
 -- name: GetDish :one
@@ -125,6 +126,7 @@ WHERE
   AND (sqlc.narg('category_id')::bigint IS NULL OR category_id = sqlc.narg('category_id'))
   AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'))
   AND (sqlc.narg('is_available')::boolean IS NULL OR is_available = sqlc.narg('is_available'))
+  AND (sqlc.narg('is_packaging')::boolean IS NULL OR is_packaging = sqlc.narg('is_packaging'))
 ORDER BY sort_order ASC, created_at DESC
 LIMIT $2 OFFSET $3;
 
@@ -271,6 +273,7 @@ SET
   member_price = COALESCE(sqlc.narg('member_price'), member_price),
   is_available = COALESCE(sqlc.narg('is_available'), is_available),
   is_online = COALESCE(sqlc.narg('is_online'), is_online),
+  is_packaging = COALESCE(sqlc.narg('is_packaging'), is_packaging),
   sort_order = COALESCE(sqlc.narg('sort_order'), sort_order),
   prepare_time = COALESCE(sqlc.narg('prepare_time'), prepare_time),
   updated_at = now()
@@ -300,7 +303,16 @@ SELECT COUNT(*) FROM dishes
 WHERE 
   merchant_id = $1
   AND deleted_at IS NULL
-  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'));
+  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'))
+  AND (sqlc.narg('is_packaging')::boolean IS NULL OR is_packaging = sqlc.narg('is_packaging'));
+
+-- name: CountActivePackagingDishesByMerchant :one
+SELECT COUNT(*) FROM dishes
+WHERE merchant_id = $1
+  AND deleted_at IS NULL
+  AND is_packaging = true
+  AND is_online = true
+  AND is_available = true;
 
 -- ============================================
 -- 菜品食材关联查询 (Dish Ingredient Queries)
@@ -606,7 +618,8 @@ SELECT
     price,
     member_price,
     is_available,
-    is_online
+  is_online,
+  is_packaging
 FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL
@@ -658,7 +671,8 @@ SELECT
     price,
     member_price,
     is_available,
-    is_online
+  is_online,
+  is_packaging
 FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL;

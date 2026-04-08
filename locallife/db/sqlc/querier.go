@@ -133,6 +133,7 @@ type Querier interface {
 	ConsumeRiderDepositCredit(ctx context.Context, arg ConsumeRiderDepositCreditParams) (RiderDepositCredit, error)
 	ConsumeWebLoginSession(ctx context.Context, id int64) (WebLoginSession, error)
 	CountActiveDiscountRules(ctx context.Context, merchantID int64) (int64, error)
+	CountActivePackagingDishesByMerchant(ctx context.Context, merchantID int64) (int64, error)
 	// 管理后台：统计区域扩展申请数量（支持状态过滤，NULL 表示不过滤）
 	CountAllRegionApplicationsAdmin(ctx context.Context, status pgtype.Text) (int64, error)
 	// 商户查看所有评价数量（包含不可见的）
@@ -788,8 +789,6 @@ type Querier interface {
 	GetMerchantOrderSourceStats(ctx context.Context, arg GetMerchantOrderSourceStatsParams) ([]GetMerchantOrderSourceStatsRow, error)
 	// 商户概览: 指定日期范围的汇总统计
 	GetMerchantOverview(ctx context.Context, arg GetMerchantOverviewParams) (GetMerchantOverviewRow, error)
-	// 商户包装策略查询
-	GetMerchantPackagingPolicy(ctx context.Context, merchantID int64) (MerchantPackagingPolicy, error)
 	GetMerchantPaymentConfig(ctx context.Context, merchantID int64) (MerchantPaymentConfig, error)
 	GetMerchantPaymentConfigBySubMchID(ctx context.Context, subMchID string) (MerchantPaymentConfig, error)
 	GetMerchantProfile(ctx context.Context, merchantID int64) (GetMerchantProfileRow, error)
@@ -1797,7 +1796,6 @@ type Querier interface {
 	UpsertMerchantCapabilities(ctx context.Context, arg UpsertMerchantCapabilitiesParams) (MerchantCapability, error)
 	UpsertMerchantCapabilitiesDefaults(ctx context.Context, merchantID int64) error
 	UpsertMerchantMembershipSettings(ctx context.Context, arg UpsertMerchantMembershipSettingsParams) (MerchantMembershipSetting, error)
-	UpsertMerchantPackagingPolicy(ctx context.Context, arg UpsertMerchantPackagingPolicyParams) (MerchantPackagingPolicy, error)
 	UpsertMerchantSystemLabel(ctx context.Context, arg UpsertMerchantSystemLabelParams) error
 	UpsertOCRJob(ctx context.Context, arg UpsertOCRJobParams) (OcrJob, error)
 	UpsertOrderDisplayConfig(ctx context.Context, arg UpsertOrderDisplayConfigParams) (OrderDisplayConfig, error)

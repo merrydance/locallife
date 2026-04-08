@@ -51,9 +51,9 @@ func dishWithCustomizationsFromDish(dish db.Dish) db.GetDishWithCustomizationsRo
 
 func expectNoPackagingPolicy(store *mockdb.MockStore) {
 	store.EXPECT().
-		GetMerchantPackagingPolicy(gomock.Any(), gomock.Any()).
+		CountActivePackagingDishesByMerchant(gomock.Any(), gomock.Any()).
 		AnyTimes().
-		Return(db.MerchantPackagingPolicy{}, db.ErrRecordNotFound)
+		Return(int64(0), nil)
 }
 
 func orderWithDetailsFromOrder(order db.Order) db.GetOrderWithDetailsRow {

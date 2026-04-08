@@ -91,7 +91,7 @@
                         label="{{onlineSwitchLabels}}"
                         size="small"
                         loading="{{item.statusPending}}"
-                        disabled="{{item.deletePending}}"
+                        disabled="{{item.deletePending || item.is_packaging}}"
                         bind:change="onSwitchStatusChange"
                         data-id="{{item.id}}"
                       />
@@ -102,6 +102,7 @@
                     <view class="dish-price-row">
                       <text class="price-value">¥{{item.price / 100}}</text>
                       <t-tag wx:if="{{item.member_price}}" theme="warning" variant="dark" size="small">会员价 ¥{{item.member_price / 100}}</t-tag>
+                      <t-tag wx:if="{{item.is_packaging}}" theme="primary" variant="light" size="small">包装</t-tag>
                     </view>
                     <view wx:if="{{item.category_name}}" class="dish-category-row">
                       <t-tag theme="default" variant="light" size="small">{{item.category_name}}</t-tag>

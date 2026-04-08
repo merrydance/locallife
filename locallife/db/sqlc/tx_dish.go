@@ -18,6 +18,7 @@ type CreateDishTxParams struct {
 	MemberPrice         pgtype.Int8
 	IsAvailable         bool
 	IsOnline            bool
+	IsPackaging         bool
 	SortOrder           int16
 	PrepareTime         int16 // 预估制作时间（分钟）
 	IngredientIDs       []int64
@@ -51,6 +52,7 @@ func (store *SQLStore) CreateDishTx(ctx context.Context, arg CreateDishTxParams)
 			MemberPrice: arg.MemberPrice,
 			IsAvailable: arg.IsAvailable,
 			IsOnline:    arg.IsOnline,
+			IsPackaging: arg.IsPackaging,
 			SortOrder:   arg.SortOrder,
 			PrepareTime: arg.PrepareTime,
 		})
@@ -120,6 +122,7 @@ type UpdateDishTxParams struct {
 	MemberPrice       pgtype.Int8
 	IsAvailable       pgtype.Bool
 	IsOnline          pgtype.Bool
+	IsPackaging       pgtype.Bool
 	SortOrder         pgtype.Int2
 	PrepareTime       pgtype.Int2
 	IngredientIDs     *[]int64 // nil means don't update, empty slice means clear all
@@ -151,6 +154,7 @@ func (store *SQLStore) UpdateDishTx(ctx context.Context, arg UpdateDishTxParams)
 			MemberPrice:       arg.MemberPrice,
 			IsAvailable:       arg.IsAvailable,
 			IsOnline:          arg.IsOnline,
+			IsPackaging:       arg.IsPackaging,
 			SortOrder:         arg.SortOrder,
 			PrepareTime:       arg.PrepareTime,
 		})

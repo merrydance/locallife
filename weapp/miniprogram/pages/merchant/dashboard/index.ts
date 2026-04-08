@@ -114,7 +114,6 @@ const DASHBOARD_SECTIONS: DashboardSectionDefinition[] = [
       { id: 'tables', title: '桌台房间', icon: createIcon('table', 'var(--td-success-color)'), path: '/pages/merchant/tables/index' },
       { id: 'combos', title: '套餐管理', icon: createIcon('combination', 'var(--td-success-color)'), path: '/pages/merchant/combos/index' },
       { id: 'inventory', title: '库存管理', icon: createIcon('system-storage', 'var(--td-success-color)'), path: '/pages/merchant/inventory/index' },
-      { id: 'packaging-policy', title: '包装策略', icon: createIcon('task-setting', 'var(--td-success-color)'), path: '/pages/merchant/settings/packaging-policy/index' },
       { id: 'display-config', title: '展示配置', icon: createIcon('setting', 'var(--td-success-color)'), path: '/pages/merchant/settings/display-config/index' },
       { id: 'printers', title: '打印设备', icon: createIcon('print', 'var(--td-success-color)'), path: '/pages/merchant/printers/index' },
       { id: 'group-join', title: '申请加入集团', icon: createIcon('cooperate', 'var(--td-success-color)'), path: '/pages/merchant/group/join/index' }
