@@ -308,6 +308,14 @@ WHERE id = $1;
 DELETE FROM merchant_business_hours
 WHERE merchant_id = $1;
 
+-- name: UpdateMerchantAutoOpenByBusinessHours :exec
+UPDATE merchants
+SET
+  auto_open_by_business_hours = $2,
+  auto_close_at = CASE WHEN $2 THEN NULL ELSE auto_close_at END,
+  updated_at = now()
+WHERE id = $1;
+
 -- ==================== 高级查询（使用JOIN和聚合）====================
 
 -- name: GetMerchantWithTags :one
@@ -421,7 +429,7 @@ RETURNING *;
 
 -- name: GetMerchantIsOpen :one
 -- 获取商户营业状态
-SELECT id, is_open, auto_close_at FROM merchants
+SELECT id, is_open, auto_close_at, auto_open_by_business_hours FROM merchants
 WHERE id = $1;
 
 -- name: ListOpenMerchants :many
@@ -443,6 +451,78 @@ WHERE is_open = true
   AND auto_close_at IS NOT NULL
   AND auto_close_at <= now()
 RETURNING id;
+
+-- name: SyncMerchantOpenStatusByBusinessHours :many
+WITH merchants_with_hours AS (
+  SELECT DISTINCT merchant_id
+  FROM merchant_business_hours
+),
+today_rows AS (
+  SELECT
+    mbh.merchant_id,
+    mbh.is_closed,
+    mbh.open_time,
+    mbh.close_time,
+    mbh.special_date
+  FROM merchant_business_hours mbh
+  JOIN merchants_with_hours mwh ON mwh.merchant_id = mbh.merchant_id
+  WHERE mbh.special_date = CURRENT_DATE
+     OR (mbh.special_date IS NULL AND mbh.day_of_week = EXTRACT(DOW FROM CURRENT_DATE)::int)
+),
+mode_by_merchant AS (
+  SELECT
+    merchant_id,
+    BOOL_OR(special_date IS NOT NULL) AS has_special
+  FROM today_rows
+  GROUP BY merchant_id
+),
+effective_rows AS (
+  SELECT tr.*
+  FROM today_rows tr
+  JOIN mode_by_merchant mm ON mm.merchant_id = tr.merchant_id
+  WHERE (mm.has_special AND tr.special_date IS NOT NULL)
+     OR (NOT mm.has_special AND tr.special_date IS NULL)
+),
+desired_state AS (
+  SELECT
+    mwh.merchant_id,
+    CASE
+      WHEN COUNT(er.*) = 0 THEN false
+      WHEN BOOL_OR(er.is_closed) THEN false
+      WHEN BOOL_OR((NOT er.is_closed) AND (LOCALTIME >= er.open_time AND LOCALTIME < er.close_time)) THEN true
+      ELSE false
+    END AS should_open
+  FROM merchants_with_hours mwh
+  LEFT JOIN effective_rows er ON er.merchant_id = mwh.merchant_id
+  GROUP BY mwh.merchant_id
+),
+updated AS (
+  UPDATE merchants m
+  SET
+    is_open = CASE
+      WHEN ds.should_open
+        AND COALESCE(mpc.sub_mch_id, '') <> ''
+        AND mpc.status = 'active' THEN true
+      ELSE false
+    END,
+    auto_close_at = NULL,
+    updated_at = now()
+  FROM desired_state ds
+  LEFT JOIN merchant_payment_configs mpc ON mpc.merchant_id = ds.merchant_id
+  WHERE m.id = ds.merchant_id
+    AND m.status = 'active'
+    AND m.auto_open_by_business_hours = true
+    AND m.is_open IS DISTINCT FROM CASE
+      WHEN ds.should_open
+        AND COALESCE(mpc.sub_mch_id, '') <> ''
+        AND mpc.status = 'active' THEN true
+      ELSE false
+    END
+  RETURNING m.id
+)
+SELECT id
+FROM updated
+ORDER BY id;
 
 -- ==================== 运营商管理商户 ====================
 

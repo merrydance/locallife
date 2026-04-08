@@ -32120,6 +32120,9 @@ const docTemplate = `{
         "api.businessHoursListResponse": {
             "type": "object",
             "properties": {
+                "auto_open_by_business_hours": {
+                    "type": "boolean"
+                },
                 "hours": {
                     "type": "array",
                     "items": {
@@ -41507,6 +41510,9 @@ const docTemplate = `{
                 "hours"
             ],
             "properties": {
+                "auto_open_by_business_hours": {
+                    "type": "boolean"
+                },
                 "hours": {
                     "description": "营业时间",
                     "type": "array",

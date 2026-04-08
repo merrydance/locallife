@@ -153,6 +153,10 @@ export function isPendingOrderStatus(status?: string): boolean {
   return !!status && PENDING_ORDER_STATUSES.has(status as OrderStatus)
 }
 
+export function isPreparingOrderStatus(status?: string): boolean {
+  return status === 'preparing'
+}
+
 export function isReadyOrderStatus(status?: string): boolean {
   return !!status && READY_ORDER_STATUSES.has(status as OrderStatus)
 }

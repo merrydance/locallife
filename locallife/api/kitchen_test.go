@@ -18,6 +18,7 @@ import (
 func TestListKitchenOrdersAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
 
 	testCases := []struct {
 		name          string
@@ -146,6 +147,7 @@ func TestListKitchenOrdersAPI(t *testing.T) {
 func TestStartPreparingAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
 	order := randomKitchenOrder(merchant.ID, user.ID)
 	order.Status = "paid" // 已支付状态
 
@@ -302,6 +304,7 @@ func TestStartPreparingAPI(t *testing.T) {
 func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
 	order := randomKitchenOrder(merchant.ID, user.ID)
 	order.Status = "preparing" // 制作中状态
 
@@ -441,6 +444,7 @@ func TestMarkKitchenOrderReadyAPI(t *testing.T) {
 func TestGetKitchenOrderDetailsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
+	merchant.IsOpen = true
 	order := randomKitchenOrder(merchant.ID, user.ID)
 	dish := db.Dish{
 		ID:                1,

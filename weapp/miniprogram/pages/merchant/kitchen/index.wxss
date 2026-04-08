@@ -1,8 +1,12 @@
 .page-container {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding: 24rpx;
-  box-sizing: border-box;
+}
+
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
 }
 
 .state-block {
@@ -20,7 +24,6 @@
   justify-content: space-between;
   gap: var(--spacer-sm);
   padding: var(--spacer-sm) var(--spacer-md);
-  margin-bottom: 24rpx;
   border-radius: var(--radius-md);
   background: var(--td-error-color-1);
   color: var(--td-text-color-primary);
@@ -36,7 +39,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20rpx;
-  margin-bottom: 24rpx;
 }
 
 .summary-card {
@@ -75,7 +77,6 @@
   flex-direction: column;
   gap: 12rpx;
   padding: 20rpx 24rpx;
-  margin-bottom: 24rpx;
   border-radius: 18rpx;
   background: var(--td-bg-color-container);
 }

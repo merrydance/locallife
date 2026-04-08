@@ -1,6 +1,7 @@
 import { getToken } from './auth'
 import { logger } from './logger'
 import { EventBus } from './event-bus'
+import { mapBackendMessageToUserMessage } from './user-facing'
 
 /**
  * WebSocket 消息类型定义
@@ -10,6 +11,7 @@ export enum WSMessageType {
   NOTIFICATION = 'notification',
   PING = 'ping',
   PONG = 'pong',
+  CONNECTION_BLOCKED = 'connection_blocked',
   
   // 配送业务相关 (与后端 websocket/message_types.go 保持同步)
   DELIVERY_POOL_NEW = 'delivery_pool_new',   // 配送池新增订单
@@ -30,6 +32,44 @@ class WebSocketManager {
   private isConnecting = false
   private lastSequence = 0 // 记录最后收到的消息序号，断线重连时带给服务端以触发消息回放
   private readonly eventBus = new EventBus()
+
+  private isConnectionBlocked(detail: string): boolean {
+    const normalized = detail.toLowerCase()
+    return (
+      normalized.includes('merchant is closed') ||
+      normalized.includes('403') ||
+      normalized.includes('forbidden') ||
+      normalized.includes('401') ||
+      normalized.includes('unauthorized') ||
+      normalized.includes('token')
+    )
+  }
+
+  private buildConnectionBlockedMessage(detail: string): string {
+    const normalized = detail.toLowerCase()
+
+    if (normalized.includes('merchant is closed')) {
+      return '当前门店已打烊，实时连接已暂停'
+    }
+
+    if (normalized.includes('403') || normalized.includes('forbidden')) {
+      return '当前账号暂不可建立实时连接'
+    }
+
+    if (normalized.includes('401') || normalized.includes('unauthorized') || normalized.includes('token')) {
+      return '登录状态已失效，请重新进入后再试'
+    }
+
+    return mapBackendMessageToUserMessage(detail, '实时连接暂不可用，请稍后再试')
+  }
+
+  private notifyConnectionBlocked(detail: string) {
+    const message = this.buildConnectionBlockedMessage(detail)
+    this.eventBus.emit(WSMessageType.CONNECTION_BLOCKED, {
+      message,
+      detail
+    })
+  }
 
   private clearReconnectTimer() {
     if (this.reconnectTimer) {
@@ -92,7 +132,17 @@ class WebSocketManager {
         }
         this.isConnecting = false
         logger.error('WebSocket: Failed to request connection', err, 'WS')
+        const errMsg = typeof err?.errMsg === 'string' ? err.errMsg : ''
+        if (errMsg && this.isConnectionBlocked(errMsg)) {
+          this.notifyConnectionBlocked(errMsg)
+        }
         this.socket = null
+
+        if (errMsg && this.isConnectionBlocked(errMsg)) {
+          logger.warn('WebSocket: Connection blocked by server, skip auto reconnect', { errMsg }, 'WS')
+          return
+        }
+
         this.scheduleReconnect()
       }
     })
@@ -195,9 +245,19 @@ class WebSocketManager {
       }
 
       logger.error('WebSocket: Connection error', err, 'WS')
+      const errMsg = typeof err?.errMsg === 'string' ? err.errMsg : ''
+      if (errMsg && this.isConnectionBlocked(errMsg)) {
+        this.notifyConnectionBlocked(errMsg)
+      }
       this.isConnected = false
       this.isConnecting = false
       this.socket = null
+
+      if (errMsg && this.isConnectionBlocked(errMsg)) {
+        logger.warn('WebSocket: Connection blocked by server, skip auto reconnect', { errMsg }, 'WS')
+        return
+      }
+
       if (!this.forcedClose) {
         this.scheduleReconnect()
       }

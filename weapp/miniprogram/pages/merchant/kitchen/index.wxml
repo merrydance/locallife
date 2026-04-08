@@ -1,6 +1,9 @@
 <custom-navbar title="后厨看板" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载后厨订单中..." vertical />
   </view>
@@ -11,6 +14,7 @@
   </view>
 
   <block wx:else>
+    <view class="page-content">
     <view wx:if="{{refreshErrorMessage}}" class="refresh-banner">
       <text class="refresh-banner-text">{{refreshErrorMessage}}</text>
       <t-button size="small" theme="primary" variant="outline" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
@@ -177,5 +181,6 @@
         </view>
       </view>
     </block>
+    </view>
   </block>
 </view>

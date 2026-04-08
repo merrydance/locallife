@@ -160,7 +160,7 @@ func (q *Queries) ListBossesByMerchant(ctx context.Context, merchantID int64) ([
 }
 
 const listMerchantsByBoss = `-- name: ListMerchantsByBoss :many
-SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id FROM merchants m
+SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latitude, m.longitude, m.status, m.application_data, m.created_at, m.updated_at, m.version, m.region_id, m.is_open, m.auto_close_at, m.deleted_at, m.pending_owner_bind, m.bind_code, m.bind_code_expires_at, m.group_id, m.brand_id, m.logo_media_asset_id, m.auto_open_by_business_hours FROM merchants m
 JOIN merchant_bosses mb ON m.id = mb.merchant_id
 WHERE mb.user_id = $1 AND mb.status = 'active' AND m.deleted_at IS NULL
 ORDER BY m.created_at
@@ -200,6 +200,7 @@ func (q *Queries) ListMerchantsByBoss(ctx context.Context, userID int64) ([]Merc
 			&i.GroupID,
 			&i.BrandID,
 			&i.LogoMediaAssetID,
+			&i.AutoOpenByBusinessHours,
 		); err != nil {
 			return nil, err
 		}

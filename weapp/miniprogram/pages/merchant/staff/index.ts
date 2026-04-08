@@ -1,6 +1,12 @@
 import { getUserInfo, type UserResponse } from '../../../api/auth'
 import {
+  getMerchantStaffRoleMeta,
+  getMerchantStaffStatusMeta,
   generateMerchantStaffInviteCode,
+  isMerchantStaffActiveStatus,
+  isMerchantStaffManagerRole,
+  isMerchantStaffOwnerRole,
+  isMerchantStaffPendingRole,
   listMerchantStaff,
   MerchantStaffItem,
   MerchantStaffRole,
@@ -35,37 +41,9 @@ function buildInviteQRCodeValue(inviteCode: string) {
   return inviteCode ? `invite-merchant:${inviteCode}` : ''
 }
 
-function getRoleMeta(role: MerchantStaffRole) {
-  switch (role) {
-    case 'owner':
-      return { label: '老板', theme: 'primary' }
-    case 'manager':
-      return { label: '店长', theme: 'success' }
-    case 'chef':
-      return { label: '后厨', theme: 'warning' }
-    case 'cashier':
-      return { label: '收银', theme: 'primary' }
-    case 'pending':
-      return { label: '待分配', theme: 'danger' }
-    default:
-      return { label: role, theme: 'default' }
-  }
-}
-
-function getStatusMeta(status: string) {
-  switch (status) {
-    case 'active':
-      return { label: '在职', theme: 'success' }
-    case 'disabled':
-      return { label: '已移除', theme: 'default' }
-    default:
-      return { label: status || '未知', theme: 'default' }
-  }
-}
-
 function normalizeUserRole(staff: MerchantStaffItem[], currentUserId: number, roles: string[]) {
-  const matched = staff.find((item) => item.user_id === currentUserId && item.status === 'active')
-  if (matched?.role === 'manager') {
+  const matched = staff.find((item) => item.user_id === currentUserId && isMerchantStaffActiveStatus(item.status))
+  if (matched && isMerchantStaffManagerRole(matched.role)) {
     return {
       currentUserRoleLabel: '店长',
       canGenerateInvite: true,
@@ -85,7 +63,7 @@ function normalizeUserRole(staff: MerchantStaffItem[], currentUserId: number, ro
 
   if (matched) {
     return {
-      currentUserRoleLabel: getRoleMeta(matched.role).label,
+      currentUserRoleLabel: getMerchantStaffRoleMeta(matched.role).label,
       canGenerateInvite: false,
       canManageRoles: false
     }
@@ -103,8 +81,8 @@ function buildStaffView(items: MerchantStaffItem[], canManageRoles: boolean): St
 }
 
 function toStaffView(item: MerchantStaffItem, canManageRoles: boolean): StaffView {
-  const roleMeta = getRoleMeta(item.role)
-  const statusMeta = getStatusMeta(item.status)
+  const roleMeta = getMerchantStaffRoleMeta(item.role)
+  const statusMeta = getMerchantStaffStatusMeta(item.status)
   return {
     ...item,
     displayName: item.full_name || `用户 #${item.user_id}`,
@@ -113,8 +91,8 @@ function toStaffView(item: MerchantStaffItem, canManageRoles: boolean): StaffVie
     statusLabel: statusMeta.label,
     statusTheme: statusMeta.theme,
     joinedAtLabel: item.created_at ? item.created_at.replace('T', ' ').slice(0, 16) : '--',
-    canEditRole: canManageRoles && item.role !== 'owner' && item.status === 'active',
-    canRemove: canManageRoles && item.role !== 'owner' && item.status === 'active'
+    canEditRole: canManageRoles && !isMerchantStaffOwnerRole(item.role) && isMerchantStaffActiveStatus(item.status),
+    canRemove: canManageRoles && !isMerchantStaffOwnerRole(item.role) && isMerchantStaffActiveStatus(item.status)
   }
 }
 
@@ -215,7 +193,7 @@ Page({
       this.setData({
         staff,
         staffCount: response.count || staff.length,
-        pendingCount: staff.filter((item) => item.role === 'pending' && item.status === 'active').length,
+        pendingCount: staff.filter((item) => isMerchantStaffPendingRole(item.role) && isMerchantStaffActiveStatus(item.status)).length,
         currentUserId,
         currentUserRoles,
         currentUserRoleLabel: roleState.currentUserRoleLabel,
@@ -313,7 +291,7 @@ Page({
       rolePopupVisible: true,
       editingStaffId: id,
       editingStaffName: target.displayName,
-      editingRole: (target.role === 'pending' ? 'manager' : target.role) as EditableMerchantStaffRole
+      editingRole: (isMerchantStaffPendingRole(target.role) ? 'manager' : target.role) as EditableMerchantStaffRole
     })
   },
 
@@ -332,8 +310,19 @@ Page({
     this.setData({ editingRole: value })
   },
 
-  async onSubmitRole() {
-    if (this.data.roleSubmitting || !this.data.editingStaffId) return
+  resetRolePopup() {
+    this.setData({
+      rolePopupVisible: false,
+      editingStaffId: 0,
+      editingStaffName: '',
+      editingRole: 'manager'
+    })
+  },
+
+  async submitRoleChange() {
+    if (this.data.roleSubmitting || !this.data.editingStaffId) {
+      return
+    }
 
     this.setData({ roleSubmitting: true })
     wx.showLoading({ title: '保存中...' })
@@ -345,7 +334,7 @@ Page({
         role: updatedStaff.role,
         status: updatedStaff.status
       }, this.data.canManageRoles))
-      this.onCloseRolePopup()
+      this.resetRolePopup()
       await this.loadStaff(false)
     } catch (err: unknown) {
       logger.error('Update merchant staff role failed', err)
@@ -355,6 +344,32 @@ Page({
       wx.hideLoading()
       this.setData({ roleSubmitting: false })
     }
+  },
+
+  onSubmitRole() {
+    if (this.data.roleSubmitting || !this.data.editingStaffId) return
+
+    const target = this.data.staff.find((item) => item.id === this.data.editingStaffId)
+    if (!target) return
+
+    if (target.role === this.data.editingRole) {
+      this.onCloseRolePopup()
+      return
+    }
+
+    const fromLabel = getMerchantStaffRoleMeta(target.role).label
+    const toLabel = getMerchantStaffRoleMeta(this.data.editingRole).label
+
+    wx.showModal({
+      title: '确认调整岗位',
+      content: `确认将 ${target.displayName} 的岗位从“${fromLabel}”调整为“${toLabel}”吗？`,
+      confirmText: '确认调整',
+      cancelText: '取消',
+      success: async (res) => {
+        if (!res.confirm) return
+        await this.submitRoleChange()
+      }
+    })
   },
 
   onRemoveStaff(e: WechatMiniprogram.TouchEvent) {
@@ -417,7 +432,7 @@ Page({
     this.setData({
       staff,
       staffCount: staff.length,
-      pendingCount: staff.filter((item) => item.role === 'pending' && item.status === 'active').length
+      pendingCount: staff.filter((item) => isMerchantStaffPendingRole(item.role) && isMerchantStaffActiveStatus(item.status)).length
     })
   },
 

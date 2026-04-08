@@ -3,6 +3,16 @@ import { API_BASE, request } from '../utils/request'
 export type MerchantStaffRole = 'owner' | 'manager' | 'chef' | 'cashier' | 'pending'
 export type MerchantStaffStatus = 'active' | 'disabled'
 
+export interface MerchantStaffRoleMeta {
+  label: string
+  theme: 'primary' | 'success' | 'warning' | 'danger' | 'default'
+}
+
+export interface MerchantStaffStatusMeta {
+  label: string
+  theme: 'success' | 'default'
+}
+
 export interface MerchantStaffItem {
   id: number
   merchant_id: number
@@ -79,4 +89,48 @@ export function removeMerchantStaff(staffId: number) {
     url: `/v1/merchant/staff/${staffId}`,
     method: 'DELETE'
   })
+}
+
+export function isMerchantStaffOwnerRole(role: MerchantStaffRole): boolean {
+  return role === 'owner'
+}
+
+export function isMerchantStaffManagerRole(role: MerchantStaffRole): boolean {
+  return role === 'manager'
+}
+
+export function isMerchantStaffPendingRole(role: MerchantStaffRole): boolean {
+  return role === 'pending'
+}
+
+export function isMerchantStaffActiveStatus(status: MerchantStaffStatus): boolean {
+  return status === 'active'
+}
+
+export function getMerchantStaffRoleMeta(role: MerchantStaffRole): MerchantStaffRoleMeta {
+  switch (role) {
+    case 'owner':
+      return { label: '老板', theme: 'primary' }
+    case 'manager':
+      return { label: '店长', theme: 'success' }
+    case 'chef':
+      return { label: '后厨', theme: 'warning' }
+    case 'cashier':
+      return { label: '收银', theme: 'primary' }
+    case 'pending':
+      return { label: '待分配', theme: 'danger' }
+    default:
+      return { label: role, theme: 'default' }
+  }
+}
+
+export function getMerchantStaffStatusMeta(status: MerchantStaffStatus): MerchantStaffStatusMeta {
+  switch (status) {
+    case 'active':
+      return { label: '在职', theme: 'success' }
+    case 'disabled':
+      return { label: '已移除', theme: 'default' }
+    default:
+      return { label: status || '未知', theme: 'default' }
+  }
 }

@@ -1569,6 +1569,7 @@ type Querier interface {
 	SuspendMerchantTakeout(ctx context.Context, arg SuspendMerchantTakeoutParams) error
 	SuspendRegion(ctx context.Context, id int64) error
 	SuspendRider(ctx context.Context, arg SuspendRiderParams) error
+	SyncMerchantOpenStatusByBusinessHours(ctx context.Context) ([]int64, error)
 	TouchRiderDepositCreditReminder(ctx context.Context, arg TouchRiderDepositCreditReminderParams) (RiderDepositCredit, error)
 	// 解冻用户余额（提现失败时）
 	UnfreezeUserBalance(ctx context.Context, arg UnfreezeUserBalanceParams) (UserBalance, error)
@@ -1649,6 +1650,7 @@ type Querier interface {
 	// 更新门头照和环境照（商户已审核通过后也可以更新）
 	UpdateMerchantApplicationShopImages(ctx context.Context, arg UpdateMerchantApplicationShopImagesParams) (MerchantApplication, error)
 	UpdateMerchantApplicationStatus(ctx context.Context, arg UpdateMerchantApplicationStatusParams) (MerchantApplication, error)
+	UpdateMerchantAutoOpenByBusinessHours(ctx context.Context, arg UpdateMerchantAutoOpenByBusinessHoursParams) error
 	// 更新商户邀请码
 	UpdateMerchantBindCode(ctx context.Context, arg UpdateMerchantBindCodeParams) (Merchant, error)
 	UpdateMerchantBossStatus(ctx context.Context, arg UpdateMerchantBossStatusParams) (MerchantBoss, error)

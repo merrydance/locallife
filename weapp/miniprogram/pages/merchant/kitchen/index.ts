@@ -1,5 +1,6 @@
 import dayjs from 'dayjs'
 import { KitchenDisplayService, KitchenOrderResponse, KitchenOrdersResponse, OrderManagementAdapter } from '../../../api/order-management'
+import { isPreparingOrderStatus, isReadyOrderStatus } from '../../../api/order'
 import { getMyMerchantOpenStatus } from '../../../api/merchant'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
@@ -151,7 +152,19 @@ Page({
       }
     })
 
-    this.data._wsListeners = [sub]
+    const blockedSub = wsManager.on(WSMessageType.CONNECTION_BLOCKED, (payload) => {
+      const message = typeof payload === 'object' && payload !== null && 'message' in payload
+        ? String((payload as { message?: unknown }).message || '')
+        : ''
+      if (!message) {
+        return
+      }
+
+      this.setData({ refreshErrorMessage: message })
+      wx.showToast({ title: message, icon: 'none' })
+    })
+
+    this.data._wsListeners = [sub, blockedSub]
   },
 
   cleanupWebSocket() {
@@ -258,9 +271,9 @@ Page({
     const preparingOrders = this.data.preparingOrders.filter((item) => item.id !== order.id)
     const readyOrders = this.data.readyOrders.filter((item) => item.id !== order.id)
 
-    if (order.status === 'preparing') {
+    if (isPreparingOrderStatus(order.status)) {
       preparingOrders.unshift(formattedOrder)
-    } else if (order.status === 'ready') {
+    } else if (isReadyOrderStatus(order.status)) {
       readyOrders.unshift(formattedOrder)
     } else {
       newOrders.unshift(formattedOrder)

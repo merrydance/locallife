@@ -436,6 +436,7 @@ export interface MerchantBusinessHour {
 
 export interface MerchantBusinessHoursResponse {
   hours: MerchantBusinessHour[]
+  auto_open_by_business_hours: boolean
 }
 
 export interface UpdateMyMerchantProfileRequest {
@@ -451,6 +452,7 @@ export interface UpdateMyMerchantProfileRequest {
 }
 
 export interface UpdateMerchantBusinessHoursRequest {
+  auto_open_by_business_hours: boolean
   hours: Array<{
     day_of_week: number
     open_time: string

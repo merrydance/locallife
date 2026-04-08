@@ -208,6 +208,7 @@ func main() {
 		log.Warn().Msg("claim payout recovery scheduler disabled: payment client not configured")
 	}
 	schedulerManager.Register("claim-recovery", worker.NewClaimRecoveryScheduler(store))
+	schedulerManager.Register("merchant-open-status", scheduler.NewMerchantOpenStatusScheduler(store))
 	schedulerManager.Register("order-timeout", scheduler.NewOrderTimeoutScheduler(store))
 	schedulerManager.Register("takeout-auto-complete", scheduler.NewTakeoutAutoCompleteScheduler(store, taskDistributor))
 	schedulerManager.Register("data-cleanup", scheduler.NewDataCleanupScheduler(store, taskDistributor, reconciliationPublisher))
@@ -285,11 +286,11 @@ func buildEcommerceClient(config util.Config) wechat.EcommerceClientInterface {
 			PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
 			PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
 		},
-		SpMchID:          config.WechatEcommerceSpMchID,
-		SpAppID:          config.WechatEcommerceSpAppID,
-		SpMchName:        config.WechatEcommerceSpName,
-		PartnerNotifyURL: config.EffectiveWechatEcommercePaymentNotifyURL(),
-		CombineNotifyURL: config.EffectiveWechatEcommerceCombineNotifyURL(),
+		SpMchID:           config.WechatEcommerceSpMchID,
+		SpAppID:           config.WechatEcommerceSpAppID,
+		SpMchName:         config.WechatEcommerceSpName,
+		PartnerNotifyURL:  config.EffectiveWechatEcommercePaymentNotifyURL(),
+		CombineNotifyURL:  config.EffectiveWechatEcommerceCombineNotifyURL(),
 		WithdrawNotifyURL: config.EffectiveWechatEcommerceWithdrawNotifyURL(),
 	})
 	if err != nil {

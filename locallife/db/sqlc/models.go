@@ -849,6 +849,8 @@ type Merchant struct {
 	BrandID           pgtype.Int8        `json:"brand_id"`
 	// 商户 Logo 媒体资产 ID，取代 logo_url 字段
 	LogoMediaAssetID pgtype.Int8 `json:"logo_media_asset_id"`
+	// 是否按营业时间自动切换营业状态
+	AutoOpenByBusinessHours bool `json:"auto_open_by_business_hours"`
 }
 
 type MerchantApplication struct {

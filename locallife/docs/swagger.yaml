@@ -1130,6 +1130,8 @@ definitions:
     type: object
   api.businessHoursListResponse:
     properties:
+      auto_open_by_business_hours:
+        type: boolean
       hours:
         items:
           $ref: '#/definitions/api.businessHourResponse'
@@ -7527,6 +7529,8 @@ definitions:
     type: object
   api.setBusinessHoursRequest:
     properties:
+      auto_open_by_business_hours:
+        type: boolean
       hours:
         description: 营业时间
         items:

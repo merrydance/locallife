@@ -16742,6 +16742,21 @@ func (mr *MockStoreMockRecorder) SuspendRider(ctx, arg any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SuspendRider", reflect.TypeOf((*MockStore)(nil).SuspendRider), ctx, arg)
 }
 
+// SyncMerchantOpenStatusByBusinessHours mocks base method.
+func (m *MockStore) SyncMerchantOpenStatusByBusinessHours(ctx context.Context) ([]int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SyncMerchantOpenStatusByBusinessHours", ctx)
+	ret0, _ := ret[0].([]int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SyncMerchantOpenStatusByBusinessHours indicates an expected call of SyncMerchantOpenStatusByBusinessHours.
+func (mr *MockStoreMockRecorder) SyncMerchantOpenStatusByBusinessHours(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SyncMerchantOpenStatusByBusinessHours", reflect.TypeOf((*MockStore)(nil).SyncMerchantOpenStatusByBusinessHours), ctx)
+}
+
 // SyncReservationInventoryTx mocks base method.
 func (m *MockStore) SyncReservationInventoryTx(ctx context.Context, arg db.SyncReservationInventoryTxParams) (db.SyncReservationInventoryTxResult, error) {
 	m.ctrl.T.Helper()
@@ -17885,6 +17900,20 @@ func (m *MockStore) UpdateMerchantApplicationStatus(ctx context.Context, arg db.
 func (mr *MockStoreMockRecorder) UpdateMerchantApplicationStatus(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantApplicationStatus", reflect.TypeOf((*MockStore)(nil).UpdateMerchantApplicationStatus), ctx, arg)
+}
+
+// UpdateMerchantAutoOpenByBusinessHours mocks base method.
+func (m *MockStore) UpdateMerchantAutoOpenByBusinessHours(ctx context.Context, arg db.UpdateMerchantAutoOpenByBusinessHoursParams) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateMerchantAutoOpenByBusinessHours", ctx, arg)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateMerchantAutoOpenByBusinessHours indicates an expected call of UpdateMerchantAutoOpenByBusinessHours.
+func (mr *MockStoreMockRecorder) UpdateMerchantAutoOpenByBusinessHours(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMerchantAutoOpenByBusinessHours", reflect.TypeOf((*MockStore)(nil).UpdateMerchantAutoOpenByBusinessHours), ctx, arg)
 }
 
 // UpdateMerchantBindCode mocks base method.

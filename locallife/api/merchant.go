@@ -541,6 +541,23 @@ func (server *Server) updateMerchantOpenStatus(ctx *gin.Context) {
 		return
 	}
 
+	if *req.IsOpen {
+		paymentConfig, err := server.store.GetMerchantPaymentConfig(ctx, merchant.ID)
+		if err != nil {
+			if isNotFoundError(err) {
+				ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("尚未开通收付通账户，请先完成进件流程")))
+				return
+			}
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+
+		if paymentConfig.SubMchID == "" || paymentConfig.Status != "active" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("收付通账户未激活，请先完成进件签约后再开业")))
+			return
+		}
+	}
+
 	// 解析自动打烊时间
 	var autoCloseAt pgtype.Timestamptz
 	if req.AutoCloseAt != "" && *req.IsOpen {
@@ -653,7 +670,8 @@ type businessHourItem struct {
 }
 
 type setBusinessHoursRequest struct {
-	Hours []businessHourItem `json:"hours" binding:"required,min=0,max=50,dive"` // 营业时间
+	Hours                   []businessHourItem `json:"hours" binding:"required,min=0,max=50,dive"` // 营业时间
+	AutoOpenByBusinessHours bool               `json:"auto_open_by_business_hours"`
 }
 
 type businessHourResponse struct {
@@ -667,7 +685,8 @@ type businessHourResponse struct {
 }
 
 type businessHoursListResponse struct {
-	Hours []businessHourResponse `json:"hours"`
+	Hours                   []businessHourResponse `json:"hours"`
+	AutoOpenByBusinessHours bool                   `json:"auto_open_by_business_hours"`
 }
 
 // getDayName 获取星期名称
@@ -786,8 +805,9 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 
 	// 使用事务设置营业时间（原子操作）
 	result, err := server.store.SetBusinessHoursTx(ctx, db.SetBusinessHoursTxParams{
-		MerchantID: merchant.ID,
-		Hours:      hoursInput,
+		MerchantID:              merchant.ID,
+		Hours:                   hoursInput,
+		AutoOpenByBusinessHours: req.AutoOpenByBusinessHours,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
@@ -812,7 +832,10 @@ func (server *Server) setMerchantBusinessHours(ctx *gin.Context) {
 		})
 	}
 
-	ctx.JSON(http.StatusOK, businessHoursListResponse{Hours: results})
+	ctx.JSON(http.StatusOK, businessHoursListResponse{
+		Hours:                   results,
+		AutoOpenByBusinessHours: result.AutoOpenByBusinessHours,
+	})
 }
 
 // getMerchantBusinessHours godoc
@@ -873,7 +896,10 @@ func (server *Server) getMerchantBusinessHours(ctx *gin.Context) {
 		})
 	}
 
-	ctx.JSON(http.StatusOK, businessHoursListResponse{Hours: results})
+	ctx.JSON(http.StatusOK, businessHoursListResponse{
+		Hours:                   results,
+		AutoOpenByBusinessHours: merchant.AutoOpenByBusinessHours,
+	})
 }
 
 // ==================== 餐厅优惠活动 API ====================

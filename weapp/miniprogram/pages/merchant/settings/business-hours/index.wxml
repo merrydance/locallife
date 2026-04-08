@@ -1,6 +1,9 @@
 <custom-navbar title="营业时间" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 176rpx;"
+>
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
     <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
@@ -17,44 +20,58 @@
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '营业时间加载失败，请重试'}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
-    </view>
-
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
-    </view>
-
-    <business-hours-weekly-editor
-      weeklyHours="{{weeklyHours}}"
-      bind:toggleclosed="onToggleClosed"
-      bind:changetime="onTimeChange"
-      bind:addslot="onAddSlot"
-      bind:removeslot="onRemoveSlot"
-      bind:pickervisibilitychange="onTimePickerVisibilityChange"
-    />
-
-    <view wx:if="{{specialHours.length}}" class="section-block">
-      <view class="special-header">
-        <text class="section-title">已保留的特殊日期</text>
+    <view class="page-content">
+      <view wx:if="{{actionNoticeMessage}}" class="notice-card notice-card--success">
+        <text class="notice-text">{{actionNoticeMessage}}</text>
       </view>
-      <view class="special-list">
-        <view class="special-card" wx:for="{{specialHours}}" wx:key="key" wx:for-item="special">
-          <view class="special-row">
-            <text class="special-date">{{special.special_date}}</text>
-            <text class="special-day">{{special.day_name}}</text>
+
+      <view wx:if="{{refreshErrorMessage}}" class="notice-card notice-card--warning notice-card--split">
+        <view class="notice-copy">
+          <text class="notice-text">{{refreshErrorMessage}}</text>
+        </view>
+        <text class="notice-action" bind:tap="onRetryRefresh">重新同步</text>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <view class="section-copy">
+            <text class="section-title">自动营业</text>
+            <text class="section-note">开启后，系统会按营业时间自动切换营业与打烊；关闭后完全依赖手动开店和打烊。</text>
           </view>
-          <text class="special-time">{{special.is_closed ? '休息' : special.open_time + ' - ' + special.close_time}}</text>
+          <t-switch value="{{autoOpenByBusinessHours}}" size="medium" bind:change="onAutoOpenSwitchChange" />
+        </view>
+      </view>
+
+      <business-hours-weekly-editor
+        weeklyHours="{{weeklyHours}}"
+        bind:toggleclosed="onToggleClosed"
+        bind:changetime="onTimeChange"
+        bind:addslot="onAddSlot"
+        bind:removeslot="onRemoveSlot"
+        bind:pickervisibilitychange="onTimePickerVisibilityChange"
+      />
+
+      <view wx:if="{{specialHours.length}}" class="section-panel">
+        <view class="special-header">
+          <text class="section-title">已保留的特殊日期</text>
+        </view>
+        <view class="special-list">
+          <view class="special-card" wx:for="{{specialHours}}" wx:key="key" wx:for-item="special">
+            <view class="special-row">
+              <text class="special-date">{{special.special_date}}</text>
+              <text class="special-day">{{special.day_name}}</text>
+            </view>
+            <text class="special-time">{{special.is_closed ? '休息' : special.open_time + ' - ' + special.close_time}}</text>
+          </view>
         </view>
       </view>
     </view>
 
-    <view class="save-wrap">
+    <view class="footer-bar">
       <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || initialLoading || timePickerVisible}}" bind:tap="onSave">保存营业时间</t-button>
     </view>
   </block>

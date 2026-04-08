@@ -114,11 +114,20 @@ function hasWeeklyHoursChanged(current: WeeklyBusinessHour[], initial: WeeklyBus
   return JSON.stringify(current) !== JSON.stringify(initial)
 }
 
+function hasBusinessHoursPageChanges(
+  currentWeekly: WeeklyBusinessHour[],
+  initialWeekly: WeeklyBusinessHour[],
+  autoOpenByBusinessHours: boolean,
+  initialAutoOpenByBusinessHours: boolean
+) {
+  return hasWeeklyHoursChanged(currentWeekly, initialWeekly) || autoOpenByBusinessHours !== initialAutoOpenByBusinessHours
+}
+
 function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
 }
 
-function buildPayload(weekly: WeeklyBusinessHour[], special: SpecialBusinessHour[]) {
+function buildPayload(weekly: WeeklyBusinessHour[], special: SpecialBusinessHour[], autoOpenByBusinessHours: boolean) {
   const hours = weekly.reduce<Array<Pick<MerchantBusinessHour, 'day_of_week' | 'open_time' | 'close_time' | 'is_closed'>>>((accumulator, day) => {
     if (day.is_closed) {
       const firstSlot = day.slots[0] || createSlot('00:00', '00:00')
@@ -143,6 +152,7 @@ function buildPayload(weekly: WeeklyBusinessHour[], special: SpecialBusinessHour
   }, [])
 
   return {
+    auto_open_by_business_hours: autoOpenByBusinessHours,
     hours: [
       ...hours,
       ...special.map((item) => ({
@@ -172,6 +182,8 @@ Page({
     loading: false,
     saving: false,
     timePickerVisible: false,
+    autoOpenByBusinessHours: false,
+    initialAutoOpenByBusinessHours: false,
     lastLoadedAt: 0,
     weeklyHours: createDefaultWeek() as WeeklyBusinessHour[],
     initialWeeklyHours: createDefaultWeek() as WeeklyBusinessHour[],
@@ -263,6 +275,8 @@ Page({
       this.setData({
         weeklyHours,
         initialWeeklyHours: cloneWeeklyHours(normalized.weekly),
+        autoOpenByBusinessHours: !!response.auto_open_by_business_hours,
+        initialAutoOpenByBusinessHours: !!response.auto_open_by_business_hours,
         specialHours: normalized.special,
         actionNoticeMessage: '',
         hasChanges: false,
@@ -310,7 +324,12 @@ Page({
       actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
-      hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
+      hasChanges: hasBusinessHoursPageChanges(
+        weeklyHours,
+        this.data.initialWeeklyHours,
+        this.data.autoOpenByBusinessHours,
+        this.data.initialAutoOpenByBusinessHours
+      )
     })
   },
 
@@ -337,7 +356,12 @@ Page({
       actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
-      hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
+      hasChanges: hasBusinessHoursPageChanges(
+        weeklyHours,
+        this.data.initialWeeklyHours,
+        this.data.autoOpenByBusinessHours,
+        this.data.initialAutoOpenByBusinessHours
+      )
     })
   },
 
@@ -364,7 +388,12 @@ Page({
       actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
-      hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
+      hasChanges: hasBusinessHoursPageChanges(
+        weeklyHours,
+        this.data.initialWeeklyHours,
+        this.data.autoOpenByBusinessHours,
+        this.data.initialAutoOpenByBusinessHours
+      )
     })
   },
 
@@ -381,7 +410,27 @@ Page({
       actionNoticeMessage: '',
       refreshErrorMessage: '',
       weeklyHours,
-      hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
+      hasChanges: hasBusinessHoursPageChanges(
+        weeklyHours,
+        this.data.initialWeeklyHours,
+        this.data.autoOpenByBusinessHours,
+        this.data.initialAutoOpenByBusinessHours
+      )
+    })
+  },
+
+  onAutoOpenSwitchChange(e: WechatMiniprogram.CustomEvent<{ value?: boolean }>) {
+    const value = !!e.detail?.value
+    this.setData({
+      actionNoticeMessage: '',
+      refreshErrorMessage: '',
+      autoOpenByBusinessHours: value,
+      hasChanges: hasBusinessHoursPageChanges(
+        this.data.weeklyHours,
+        this.data.initialWeeklyHours,
+        value,
+        this.data.initialAutoOpenByBusinessHours
+      )
     })
   },
 
@@ -441,12 +490,18 @@ Page({
     wx.showLoading({ title: '保存中...' })
 
     try {
-      const response = await updateMyMerchantBusinessHours(buildPayload(this.data.weeklyHours, this.data.specialHours))
+      const response = await updateMyMerchantBusinessHours(buildPayload(
+        this.data.weeklyHours,
+        this.data.specialHours,
+        this.data.autoOpenByBusinessHours
+      ))
       const normalized = normalizeBusinessHours(response.hours || [])
       const weeklyHours = cloneWeeklyHours(normalized.weekly)
       this.setData({
         weeklyHours,
         initialWeeklyHours: cloneWeeklyHours(normalized.weekly),
+        autoOpenByBusinessHours: !!response.auto_open_by_business_hours,
+        initialAutoOpenByBusinessHours: !!response.auto_open_by_business_hours,
         specialHours: normalized.special,
         actionNoticeMessage: '',
         hasChanges: false,
