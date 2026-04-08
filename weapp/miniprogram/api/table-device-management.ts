@@ -67,6 +67,7 @@ export interface TableResponse {
     description?: string
     minimum_spend?: number
     qr_code_url?: string
+    image_url?: string
     status: string
     tags?: TagInfo[]
     current_reservation_id?: number

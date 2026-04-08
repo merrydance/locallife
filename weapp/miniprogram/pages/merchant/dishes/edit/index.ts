@@ -151,6 +151,10 @@ function buildSelectedDishTagState(selectedDishTagIds: number[]): Record<string,
   }, {})
 }
 
+function cloneUploadFileList(fileList: UploadFileItem[]): UploadFileItem[] {
+  return (Array.isArray(fileList) ? fileList : []).map((item) => ({ ...item }))
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -609,6 +613,10 @@ Page({
       return
     }
 
+    const previousFileList = cloneUploadFileList(this.data.fileList)
+    const previousImageAssetId = this.data.formData.image_asset_id
+    const previousImagePreviewUrl = this.data.formData.image_preview_url
+
     this.setData({
       imageUploading: true,
       fileList: [{ url: localPath, status: 'loading' }]
@@ -629,8 +637,12 @@ Page({
       }
     } catch (err) {
       logger.error('Upload image failed', err)
-      this.setData({ fileList: [] })
-      wx.showToast({ title: '上传失败', icon: 'none' })
+      this.setData({
+        fileList: previousFileList.length ? previousFileList : buildDishFileList(previousImagePreviewUrl),
+        'formData.image_asset_id': previousImageAssetId,
+        'formData.image_preview_url': previousImagePreviewUrl
+      })
+      wx.showToast({ title: getErrorUserMessage(err, '上传失败，请重试'), icon: 'none' })
     } finally {
       this.setData({ imageUploading: false })
     }
@@ -712,12 +724,14 @@ Page({
       .map((group) => ({
         name: group.name.trim(),
         is_required: group.is_required,
-        options: group.options
-          .map((option) => ({
-            name: option.name.trim(),
-            extraPriceYuan: option.extraPriceYuan.trim()
-          }))
-          .filter((option) => option.name)
+        options: group.options.map((option) => ({
+          name: option.name.trim(),
+          extraPriceYuan: option.extraPriceYuan.trim()
+        }))
+      }))
+      .map((group) => ({
+        ...group,
+        options: group.options.filter((option) => option.name || option.extraPriceYuan)
       }))
       .filter((group) => group.name || group.options.length > 0)
 
@@ -734,6 +748,9 @@ Page({
       }
 
       for (const option of group.options) {
+        if (!option.name) {
+          throw new Error(`规格组“${group.name}”存在未填写名称的规格项`)
+        }
         if (option.extraPriceYuan) {
           const extraPrice = Number(option.extraPriceYuan)
           if (!Number.isFinite(extraPrice) || extraPrice < 0) {
@@ -849,16 +866,16 @@ Page({
     }
 
     this.setData({ submitting: true })
+    const startedAsEdit = this.data.isEdit
     let currentDishId = this.data.dishId
     let baseDishSaved = false
 
     try {
       const categoryId = this.data.formData.category_id
-      const customizationGroups = await this.buildCustomizationPayload()
       const featuredTags = this.buildFeaturedTags()
       const payload = this.buildSubmitPayload(categoryId)
 
-      if (this.data.isEdit) {
+      if (startedAsEdit) {
         const updatedDish = await DishManagementService.updateDish(this.data.dishId, payload as UpdateDishRequest)
         currentDishId = this.data.dishId
         baseDishSaved = true
@@ -874,7 +891,8 @@ Page({
         await DishManagementService.setDishFeaturedTags(currentDishId, featuredTags)
       }
 
-      if (currentDishId > 0 && (this.data.isEdit || customizationGroups.length > 0)) {
+      const customizationGroups = await this.buildCustomizationPayload()
+      if (currentDishId > 0 && (startedAsEdit || customizationGroups.length > 0)) {
         await DishManagementService.setDishCustomizations(currentDishId, { groups: customizationGroups })
       }
 

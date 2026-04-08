@@ -31,6 +31,12 @@ interface TableQRCodeContext {
   qrCodeUrl: string
 }
 
+interface FormInputDetail {
+  value: string
+}
+
+type TableImageRole = 'cover' | 'gallery'
+
 function buildSelectedTagState(tagIds: number[]): Record<string, boolean> {
   return tagIds.reduce<Record<string, boolean>>((result, id) => {
     result[String(id)] = true
@@ -54,6 +60,63 @@ function mergeSelectableTableTags(primaryTags: TableTagOption[], fallbackTags: T
   }
 
   return mergedTags
+}
+
+function removeWarningMessageSegment(source: string, target: string): string {
+  return source
+    .split('；')
+    .map((item) => item.trim())
+    .filter((item) => item && item !== target)
+    .join('；')
+}
+
+function mapTableImageToUploadFile(image: TableImageResponse): TableUploadFile | null {
+  if (typeof image.image_url !== 'string' || !image.image_url) {
+    return null
+  }
+
+  return {
+    url: image.image_url,
+    status: TABLE_UPLOAD_FILE_STATUS.done,
+    mediaId: typeof image.media_asset_id === 'number' ? image.media_asset_id : undefined,
+    imageId: typeof image.id === 'number' ? image.id : undefined,
+    isPersisted: true
+  }
+}
+
+function splitTableImageFiles(tableImages: TableImageResponse[]) {
+  const coverFiles: TableUploadFile[] = []
+  const galleryFiles: TableUploadFile[] = []
+
+  for (const image of ensureArray(tableImages)) {
+    const file = mapTableImageToUploadFile(image)
+    if (!file) {
+      continue
+    }
+
+    if (image.is_primary && coverFiles.length === 0) {
+      coverFiles.push(file)
+      continue
+    }
+
+    galleryFiles.push(file)
+  }
+
+  return { coverFiles, galleryFiles }
+}
+
+function pickPendingBoundFiles(files: TableUploadFile[]): TableUploadFile[] {
+  return ensureArray(files).filter((file) => typeof file.mediaId === 'number' && file.mediaId > 0 && !file.imageId)
+}
+
+function buildPersistedUploadFile(savedImage: TableImageResponse | null | undefined, fallbackUrl: string, mediaId: number): TableUploadFile {
+  return {
+    url: (typeof savedImage?.image_url === 'string' && savedImage.image_url) ? savedImage.image_url : fallbackUrl,
+    status: TABLE_UPLOAD_FILE_STATUS.done,
+    mediaId,
+    imageId: typeof savedImage?.id === 'number' ? savedImage.id : undefined,
+    isPersisted: true
+  }
 }
 
 function mapTableDetailToFormData(table: TableResponse): TableFormData {
@@ -111,7 +174,6 @@ Page({
     submitting: false,
     imageUploading: false,
     imageMutating: false,
-    imageMutatingImageId: 0,
     qrCodeVisible: false,
     qrCodeLoading: false,
     qrCodeDownloading: false,
@@ -121,8 +183,11 @@ Page({
     qrCodeTableNo: '',
     availableTags: [] as TableTagOption[],
     selectedTagState: {} as Record<string, boolean>,
-    tableImages: [] as TableImageResponse[],
-    uploadFiles: [] as TableUploadFile[],
+    createTagDialogVisible: false,
+    createTagInputValue: '',
+    tagSubmitting: false,
+    coverUploadFiles: [] as TableUploadFile[],
+    galleryUploadFiles: [] as TableUploadFile[],
     formData: createDefaultTableFormData(),
     statusOptions: [
       { label: '空闲', value: 'available' },
@@ -187,6 +252,7 @@ Page({
       const tableImages = isSettledFulfilled(imagesResult)
         ? toSafeTableImages(imagesResult.value?.images)
         : []
+      const { coverFiles, galleryFiles } = splitTableImageFiles(tableImages)
 
       const warningMessages: string[] = []
       if (!isSettledFulfilled(tagsResult)) {
@@ -204,8 +270,8 @@ Page({
         loadWarningMessage: warningMessages.filter(Boolean).join('；'),
         availableTags,
         selectedTagState: buildSelectedTagState(formData.tag_ids),
-        tableImages,
-        uploadFiles: [],
+        coverUploadFiles: coverFiles,
+        galleryUploadFiles: galleryFiles,
         formData,
         qrCodeImageUrl: detail ? normalizeQRCodeUrl(detail.qr_code_url) : '',
         qrCodeTableNo: detail?.table_no || ''
@@ -240,7 +306,77 @@ Page({
   },
 
   onManageTags() {
-    wx.navigateTo({ url: '/pages/merchant/tables/tags/index' })
+    if (this.data.tagSubmitting) {
+      return
+    }
+
+    this.setData({
+      createTagDialogVisible: true,
+      createTagInputValue: ''
+    })
+  },
+
+  onCloseCreateTagDialog() {
+    if (this.data.tagSubmitting) {
+      return
+    }
+
+    this.setData({
+      createTagDialogVisible: false,
+      createTagInputValue: ''
+    })
+  },
+
+  onCreateTagInputChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
+    this.setData({ createTagInputValue: (e.detail?.value || '').replace(/^\s+/, '') })
+  },
+
+  hasTagName(name: string): boolean {
+    const normalizedName = name.trim()
+    return ensureArray(this.data.availableTags).some((tag) => (tag.name || '').trim() === normalizedName)
+  },
+
+  async onConfirmCreateTagDialog() {
+    if (this.data.tagSubmitting) {
+      return
+    }
+
+    const name = this.data.createTagInputValue.trim()
+    if (!name) {
+      wx.showToast({ title: '标签名称不能为空', icon: 'none' })
+      return
+    }
+
+    if (this.hasTagName(name)) {
+      wx.showToast({ title: '标签名称已存在', icon: 'none' })
+      return
+    }
+
+    this.setData({ tagSubmitting: true })
+
+    try {
+      const created = await TagService.createTag({ name, type: 'table' })
+      const availableTags = this.data.availableTags.some((tag) => tag.id === created.id)
+        ? this.data.availableTags
+        : [...this.data.availableTags, { id: created.id, name: created.name }]
+      const nextTagIds = this.data.formData.tag_ids.includes(created.id)
+        ? this.data.formData.tag_ids
+        : [...this.data.formData.tag_ids, created.id]
+
+      this.setData({
+        createTagDialogVisible: false,
+        createTagInputValue: '',
+        availableTags,
+        selectedTagState: buildSelectedTagState(nextTagIds),
+        loadWarningMessage: removeWarningMessageSegment(this.data.loadWarningMessage, '桌台标签暂未同步，仍可继续编辑基础信息'),
+        'formData.tag_ids': nextTagIds
+      })
+    } catch (err) {
+      logger.error('Create table tag failed', err)
+      wx.showToast({ title: getErrorUserMessage(err, '创建标签失败，请稍后重试'), icon: 'none' })
+    } finally {
+      this.setData({ tagSubmitting: false })
+    }
   },
 
   onInputChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -294,7 +430,25 @@ Page({
     })
   },
 
-  async onImageAdd(e: WechatMiniprogram.CustomEvent<{ files?: Array<{ url?: string }> }>) {
+  getRoleUploadFiles(role: TableImageRole): TableUploadFile[] {
+    return toSafeUploadFiles(role === 'cover' ? this.data.coverUploadFiles : this.data.galleryUploadFiles)
+  },
+
+  setRoleUploadFiles(role: TableImageRole, files: TableUploadFile[]) {
+    this.setData(role === 'cover'
+      ? { coverUploadFiles: files }
+      : { galleryUploadFiles: files })
+  },
+
+  onCoverAdd(e: WechatMiniprogram.CustomEvent<{ files?: Array<{ url?: string }> }>) {
+    void this.handleImageAdd('cover', e)
+  },
+
+  onGalleryAdd(e: WechatMiniprogram.CustomEvent<{ files?: Array<{ url?: string }> }>) {
+    void this.handleImageAdd('gallery', e)
+  },
+
+  async handleImageAdd(role: TableImageRole, e: WechatMiniprogram.CustomEvent<{ files?: Array<{ url?: string }> }>) {
     if (this.data.imageUploading || this.data.imageMutating) {
       return
     }
@@ -306,22 +460,28 @@ Page({
       return
     }
 
-    let uploadFiles = [...toSafeUploadFiles(this.data.uploadFiles)]
-    uploadFiles.push(...selectedFiles.map((file) => ({
+    let uploadFiles = this.getRoleUploadFiles(role)
+    const pendingFiles = selectedFiles.slice(0, role === 'cover' ? 1 : selectedFiles.length).map((file) => ({
       url: file.url,
       localPath: file.url,
       status: TABLE_UPLOAD_FILE_STATUS.loading
-    })))
+    }))
+
+    uploadFiles = role === 'cover'
+      ? pendingFiles
+      : [...uploadFiles, ...pendingFiles]
 
     this.setData({
       imageUploading: true,
-      uploadFiles
+      ...(role === 'cover'
+        ? { coverUploadFiles: uploadFiles }
+        : { galleryUploadFiles: uploadFiles })
     })
 
     try {
       wx.showLoading({ title: '上传图片中...' })
 
-      for (const file of selectedFiles) {
+      for (const file of pendingFiles) {
         const pendingIndex = findUploadFileIndex(uploadFiles, file.url)
         if (pendingIndex < 0) {
           continue
@@ -337,16 +497,29 @@ Page({
             url: uploaded.displayUrl || file.url,
             localPath: file.url,
             mediaId: uploaded.mediaId,
-            status: this.data.isEdit ? TABLE_UPLOAD_FILE_STATUS.loading : TABLE_UPLOAD_FILE_STATUS.done
+            status: TABLE_UPLOAD_FILE_STATUS.done
           })
-          this.setData({ uploadFiles })
+          this.setRoleUploadFiles(role, uploadFiles)
 
           if (this.data.isEdit && this.data.tableId > 0) {
-            await tableManagementService.uploadTableImage(this.data.tableId, { media_asset_id: uploaded.mediaId })
-            await this.loadTableImages(this.data.tableId)
+            const savedImage = await tableManagementService.uploadTableImage(this.data.tableId, {
+              media_asset_id: uploaded.mediaId,
+              is_primary: role === 'cover' ? true : undefined
+            })
 
-            uploadFiles = removeUploadFileAt(uploadFiles, pendingIndex)
-            this.setData({ uploadFiles })
+            const persistedFile = buildPersistedUploadFile(savedImage, uploaded.displayUrl || file.url, uploaded.mediaId)
+            if (role === 'cover') {
+              const currentGalleryFiles = this.getRoleUploadFiles('gallery')
+              const demotedCoverFiles = this.getRoleUploadFiles('cover').filter((coverFile, coverIndex) => coverIndex !== pendingIndex && !!coverFile.imageId)
+
+              this.setData({
+                coverUploadFiles: [persistedFile],
+                galleryUploadFiles: [...currentGalleryFiles, ...demotedCoverFiles]
+              })
+            } else {
+              uploadFiles = replaceUploadFileAt(uploadFiles, pendingIndex, persistedFile)
+              this.setRoleUploadFiles(role, uploadFiles)
+            }
           }
         } catch (err) {
           logger.error('Upload table image failed', err)
@@ -355,7 +528,7 @@ Page({
             localPath: file.url,
             status: TABLE_UPLOAD_FILE_STATUS.failed
           })
-          this.setData({ uploadFiles })
+          this.setRoleUploadFiles(role, uploadFiles)
           wx.showToast({ title: getErrorUserMessage(err, '图片上传失败，请稍后重试'), icon: 'none' })
         }
       }
@@ -365,78 +538,47 @@ Page({
     }
   },
 
-  onUploadFileRemove(e: WechatMiniprogram.CustomEvent<{ index?: number }>) {
+  onCoverRemove(e: WechatMiniprogram.CustomEvent<{ index?: number }>) {
+    void this.handleUploadFileRemove('cover', e)
+  },
+
+  onGalleryRemove(e: WechatMiniprogram.CustomEvent<{ index?: number }>) {
+    void this.handleUploadFileRemove('gallery', e)
+  },
+
+  async handleUploadFileRemove(role: TableImageRole, e: WechatMiniprogram.CustomEvent<{ index?: number }>) {
     const index = Number(e.detail?.index)
     if (!Number.isInteger(index) || index < 0) {
       return
     }
 
-    this.setData({
-      uploadFiles: removeUploadFileAt(toSafeUploadFiles(this.data.uploadFiles), index)
-    })
-  },
-
-  async loadTableImages(tableId: number) {
-    try {
-      const response = await tableManagementService.getTableImages(tableId)
-      this.setData({ tableImages: toSafeTableImages(response?.images) })
-    } catch (err) {
-      logger.error('Load table images failed', err)
-      this.setData({ tableImages: [] })
-    }
-  },
-
-  async onSetPrimaryImage(e: WechatMiniprogram.TouchEvent) {
-    const { imageId } = e.currentTarget.dataset as { imageId?: number }
-    if (!this.data.isEdit || !this.data.tableId || !imageId || this.data.imageMutating || this.data.imageUploading) {
+    const uploadFiles = this.getRoleUploadFiles(role)
+    const targetFile = uploadFiles[index]
+    if (!targetFile) {
       return
     }
 
-    this.setData({ imageMutating: true, imageMutatingImageId: imageId })
-    wx.showLoading({ title: '设置主图中...' })
+    if (this.data.isEdit && this.data.tableId > 0 && typeof targetFile.imageId === 'number' && targetFile.imageId > 0) {
+      const nextFiles = removeUploadFileAt(uploadFiles, index)
+      this.setRoleUploadFiles(role, nextFiles)
+      this.setData({ imageMutating: true })
+      wx.showLoading({ title: '删除图片中...' })
 
-    try {
-      await tableManagementService.setPrimaryTableImage(this.data.tableId, imageId)
-      await this.loadTableImages(this.data.tableId)
-    } catch (err) {
-      logger.error('Set primary table image failed', err)
-      wx.showToast({ title: getErrorUserMessage(err, '设置主图失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-      this.setData({ imageMutating: false, imageMutatingImageId: 0 })
-    }
-  },
-
-  async onDeleteImage(e: WechatMiniprogram.TouchEvent) {
-    const { imageId } = e.currentTarget.dataset as { imageId?: number }
-    if (!this.data.isEdit || !this.data.tableId || !imageId || this.data.imageMutating || this.data.imageUploading) {
+      try {
+        await tableManagementService.deleteTableImage(this.data.tableId, targetFile.imageId)
+      } catch (err) {
+        logger.error('Delete table image failed', err)
+        this.setRoleUploadFiles(role, uploadFiles)
+        wx.showToast({ title: getErrorUserMessage(err, '删除图片失败，请稍后重试'), icon: 'none' })
+      } finally {
+        wx.hideLoading()
+        this.setData({ imageMutating: false })
+      }
       return
     }
 
-    this.setData({ imageMutating: true, imageMutatingImageId: imageId })
-    wx.showLoading({ title: '删除图片中...' })
-
-    try {
-      await tableManagementService.deleteTableImage(this.data.tableId, imageId)
-      await this.loadTableImages(this.data.tableId)
-    } catch (err) {
-      logger.error('Delete table image failed', err)
-      wx.showToast({ title: getErrorUserMessage(err, '删除图片失败，请稍后重试'), icon: 'none' })
-    } finally {
-      wx.hideLoading()
-      this.setData({ imageMutating: false, imageMutatingImageId: 0 })
-    }
+    this.setRoleUploadFiles(role, removeUploadFileAt(uploadFiles, index))
   },
-
-  onPreviewImage(e: WechatMiniprogram.TouchEvent) {
-    const { url } = e.currentTarget.dataset as { url?: string }
-    if (!url) {
-      return
-    }
-
-    wx.previewImage({ urls: [url], current: url })
-  },
-
   getTableQRCodeContext(): TableQRCodeContext {
     return {
       tableNo: this.data.formData.table_no || this.data.qrCodeTableNo || '',
@@ -574,7 +716,10 @@ Page({
   validateBeforeSubmit(): string {
     const formData = this.data.formData
     const tableNo = (formData.table_no || '').trim()
-    const uploadFiles = toSafeUploadFiles(this.data.uploadFiles)
+    const uploadFiles = [
+      ...this.getRoleUploadFiles('cover'),
+      ...this.getRoleUploadFiles('gallery')
+    ]
 
     if (!tableNo) {
       return '请填写桌号或包间名'
@@ -619,26 +764,37 @@ Page({
   },
 
   async uploadPendingImages(tableId: number) {
-    const pendingFiles = toSafeUploadFiles(this.data.uploadFiles).filter((file) => typeof file.mediaId === 'number' && file.mediaId > 0)
     let failedCount = 0
 
-    for (const file of pendingFiles) {
+    for (const file of pickPendingBoundFiles(this.getRoleUploadFiles('cover')).slice(0, 1)) {
+      try {
+        await tableManagementService.uploadTableImage(tableId, {
+          media_asset_id: Number(file.mediaId),
+          is_primary: true
+        })
+      } catch (err) {
+        failedCount += 1
+        logger.error('Bind pending table cover failed', err)
+      }
+    }
+
+    for (const file of pickPendingBoundFiles(this.getRoleUploadFiles('gallery'))) {
       try {
         await tableManagementService.uploadTableImage(tableId, { media_asset_id: Number(file.mediaId) })
       } catch (err) {
         failedCount += 1
-        logger.error('Bind pending table image failed', err)
+        logger.error('Bind pending table gallery image failed', err)
       }
     }
 
     return { failedCount }
   },
 
-  notifyPreviousPage() {
+  async notifyPreviousPage() {
     const pages = getCurrentPages()
     const prevPage = pages[pages.length - 2] as { refreshAll?: (showLoading?: boolean) => Promise<void> | void } | undefined
     if (prevPage?.refreshAll) {
-      void prevPage.refreshAll(false)
+      await prevPage.refreshAll(false)
     }
   },
 
@@ -673,7 +829,7 @@ Page({
         }
       }
 
-      this.notifyPreviousPage()
+  await this.notifyPreviousPage()
       wx.navigateBack()
     } catch (err) {
       logger.error('Submit table failed', err)

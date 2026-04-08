@@ -1,4 +1,4 @@
-import { getMyMerchantOpenStatus, getMyMerchantProfile, MerchantOperatorResponse, updateMyMerchantProfile } from '../../../../api/merchant'
+import { getMyMerchantProfile, MerchantOperatorResponse, updateMyMerchantProfile } from '../../../../api/merchant'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -13,6 +13,20 @@ interface MerchantProfileForm {
   longitude: string
 }
 
+interface LocationViewState {
+  hasLocation: boolean
+  addressDisplay: string
+  latitudeDisplay: string
+  longitudeDisplay: string
+  coordinateSummary: string
+  locationHint: string
+}
+
+interface RequestErrorWithStatus {
+  statusCode?: unknown
+  code?: unknown
+}
+
 const EMPTY_FORM: MerchantProfileForm = {
   name: '',
   phone: '',
@@ -24,25 +38,19 @@ const EMPTY_FORM: MerchantProfileForm = {
 
 const PROFILE_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
-function buildLocationLabel(address: string, latitude?: string | null, longitude?: string | null) {
-  if (address.trim()) return address.trim()
-  if (latitude && longitude) return `坐标 ${latitude}, ${longitude}`
-  return '未选择经营位置'
-}
-
 function buildLocationHint(address: string, latitude?: string | null, longitude?: string | null) {
   const hasAddress = address.trim().length > 0
   const hasCoordinates = !!latitude && !!longitude
 
   if (hasAddress && hasCoordinates) {
-    return '地址与坐标会在保存时一并提交。'
+    return '地图选点会同步更新经营地址、纬度和经度。'
   }
 
   if (hasAddress || hasCoordinates) {
-    return '当前位置信息不完整，请重新选择经营位置。'
+    return '当前只保存了部分位置字段，请重新选择经营位置补齐。'
   }
 
-  return '请选择经营位置，系统会同步更新地址与坐标。'
+  return '当前还没有经营位置，请通过地图选点写入地址和坐标。'
 }
 
 function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSuccessCallbackResult) {
@@ -65,6 +73,20 @@ function buildForm(profile: MerchantOperatorResponse): MerchantProfileForm {
   }
 }
 
+function buildLocationViewState(form: MerchantProfileForm): LocationViewState {
+  const hasLocation = hasCompleteLocation(form)
+  const hasPartial = hasPartialLocation(form)
+
+  return {
+    hasLocation,
+    addressDisplay: form.address.trim() || '未设置经营地址',
+    latitudeDisplay: form.latitude.trim() || '--',
+    longitudeDisplay: form.longitude.trim() || '--',
+    coordinateSummary: `${form.latitude.trim() || '--'} / ${form.longitude.trim() || '--'}`,
+    locationHint: buildLocationHint(form.address, form.latitude, form.longitude)
+  }
+}
+
 function hasFormChanged(current: MerchantProfileForm, initial: MerchantProfileForm) {
   return current.name !== initial.name
     || current.phone !== initial.phone
@@ -72,6 +94,78 @@ function hasFormChanged(current: MerchantProfileForm, initial: MerchantProfileFo
     || current.description !== initial.description
     || current.latitude !== initial.latitude
     || current.longitude !== initial.longitude
+}
+
+function validateName(name: string) {
+  const trimmed = name.trim()
+
+  if (!trimmed) {
+    return '请输入店铺名称'
+  }
+
+  if (trimmed.length < 2) {
+    return '店铺名称至少 2 个字'
+  }
+
+  if (trimmed.length > 50) {
+    return '店铺名称最多 50 字'
+  }
+
+  return ''
+}
+
+function validatePhone(phone: string, initialPhone: string) {
+  const trimmed = phone.trim()
+
+  if (!trimmed) {
+    return initialPhone.trim() ? '当前版本仅支持修改为 11 位手机号，不支持直接清空' : ''
+  }
+
+  if (!/^1[3-9]\d{9}$/.test(trimmed)) {
+    return '请输入 11 位手机号'
+  }
+
+  return ''
+}
+
+function validateDescription(description: string) {
+  if (description.trim().length > 500) {
+    return '店铺介绍最多 500 字'
+  }
+
+  return ''
+}
+
+function validateLocation(form: MerchantProfileForm) {
+  const address = form.address.trim()
+  const latitude = form.latitude.trim()
+  const longitude = form.longitude.trim()
+
+  if (hasPartialLocation(form) && !hasCompleteLocation(form)) {
+    return '请通过“选择经营位置”补齐地址和坐标'
+  }
+
+  if (address && address.length < 5) {
+    return '请选择更准确的经营位置'
+  }
+
+  if (latitude && !isCoordinateInRange(latitude, 3, 54)) {
+    return '纬度需在 3.0 到 54.0 之间'
+  }
+
+  if (longitude && !isCoordinateInRange(longitude, 73, 135)) {
+    return '经度需在 73.0 到 135.0 之间'
+  }
+
+  return ''
+}
+
+function validateBeforeSubmit(form: MerchantProfileForm, initialForm: MerchantProfileForm) {
+  return validateName(form.name)
+    || validatePhone(form.phone, initialForm.phone)
+    || validateDescription(form.description)
+    || validateLocation(form)
+    || ''
 }
 
 function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
@@ -91,6 +185,28 @@ function hasPartialLocation(form: MerchantProfileForm) {
   return !!form.address.trim() || !!form.latitude.trim() || !!form.longitude.trim()
 }
 
+function getErrorStatusCode(error: unknown): number | undefined {
+  if (!error || typeof error !== 'object') {
+    return undefined
+  }
+
+  const knownError = error as RequestErrorWithStatus
+  const candidates = [knownError.statusCode, knownError.code]
+
+  for (const candidate of candidates) {
+    const numericCode = typeof candidate === 'number' ? candidate : Number(candidate)
+    if (Number.isFinite(numericCode)) {
+      return numericCode >= 40900 && numericCode < 41000 ? 409 : numericCode
+    }
+  }
+
+  return undefined
+}
+
+function isVersionConflictError(error: unknown): boolean {
+  return getErrorStatusCode(error) === 409
+}
+
 const getErrorMessage = getErrorUserMessage
 
 Page({
@@ -102,17 +218,17 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
-    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     saving: false,
     lastLoadedAt: 0,
-    isOpen: false,
-    merchantId: 0,
     version: 0,
-    updatedAtLabel: '--',
-    locationLabel: '未选择经营位置',
-    locationHint: '请选择经营位置，系统会同步更新地址与坐标。',
+    hasLocation: false,
+    addressDisplay: '未设置经营地址',
+    latitudeDisplay: '--',
+    longitudeDisplay: '--',
+    coordinateSummary: '未设置',
+    locationHint: '当前还没有经营位置，请通过地图选点写入地址和坐标。',
     form: { ...EMPTY_FORM } as MerchantProfileForm,
     initialForm: { ...EMPTY_FORM } as MerchantProfileForm,
     hasChanges: false
@@ -196,18 +312,12 @@ Page({
     })
 
     try {
-      const [profile, status] = await Promise.all([
-        getMyMerchantProfile(),
-        getMyMerchantOpenStatus().catch(() => null)
-      ])
+      const profile = await getMyMerchantProfile()
       const form = buildForm(profile)
+      const locationView = buildLocationViewState(form)
       this.setData({
-        merchantId: profile.id,
         version: profile.version,
-        updatedAtLabel: profile.updated_at ? profile.updated_at.replace('T', ' ').slice(0, 16) : '--',
-        isOpen: status?.is_open ?? profile.is_open,
-        locationLabel: buildLocationLabel(form.address, form.latitude, form.longitude),
-        locationHint: buildLocationHint(form.address, form.latitude, form.longitude),
+        ...locationView,
         form,
         initialForm: { ...form },
         hasChanges: false,
@@ -247,7 +357,6 @@ Page({
       [field]: e.detail.value
     }
     this.setData({
-      actionNoticeMessage: '',
       refreshErrorMessage: '',
       form: nextForm,
       hasChanges: hasFormChanged(nextForm, this.data.initialForm)
@@ -255,40 +364,10 @@ Page({
   },
 
   validateForm() {
-    const { name, phone, address, description, latitude, longitude } = this.data.form
-    if (name.trim().length < 2) {
-      wx.showToast({ title: '店铺名称至少 2 个字', icon: 'none' })
-      return false
-    }
-    if (phone.trim() && phone.trim().length !== 11) {
-      wx.showToast({ title: '联系电话需为 11 位手机号', icon: 'none' })
-      return false
-    }
-    if (description.trim().length > 500) {
-      wx.showToast({ title: '店铺介绍最多 500 字', icon: 'none' })
-      return false
-    }
+    const validationMessage = validateBeforeSubmit(this.data.form, this.data.initialForm)
 
-    const latitudeValue = latitude.trim()
-    const longitudeValue = longitude.trim()
-
-    if (hasPartialLocation(this.data.form) && !hasCompleteLocation(this.data.form)) {
-      wx.showToast({ title: '请通过“选择经营位置”更新完整位置', icon: 'none' })
-      return false
-    }
-
-    if (address.trim() && address.trim().length < 5) {
-      wx.showToast({ title: '请选择更准确的经营位置', icon: 'none' })
-      return false
-    }
-
-    if (latitudeValue && !isCoordinateInRange(latitudeValue, 3, 54)) {
-      wx.showToast({ title: '纬度需在 3.0 到 54.0 之间', icon: 'none' })
-      return false
-    }
-
-    if (longitudeValue && !isCoordinateInRange(longitudeValue, 73, 135)) {
-      wx.showToast({ title: '经度需在 73.0 到 135.0 之间', icon: 'none' })
+    if (validationMessage) {
+      wx.showToast({ title: validationMessage, icon: 'none' })
       return false
     }
 
@@ -302,20 +381,24 @@ Page({
 
     wx.chooseLocation({
       success: (result) => {
-        const fullAddress = buildChosenLocationAddress(result)
+        const fullAddress = buildChosenLocationAddress(result).trim()
+        if (!fullAddress) {
+          wx.showToast({ title: '未获取到完整地址，请重新选择', icon: 'none' })
+          return
+        }
+
         const nextForm = {
           ...this.data.form,
-          address: fullAddress || this.data.form.address,
+          address: fullAddress,
           latitude: String(result.latitude),
           longitude: String(result.longitude)
         }
+        const locationView = buildLocationViewState(nextForm)
 
         this.setData({
-          actionNoticeMessage: '',
           refreshErrorMessage: '',
+          ...locationView,
           form: nextForm,
-          locationLabel: buildLocationLabel(nextForm.address, nextForm.latitude, nextForm.longitude),
-          locationHint: buildLocationHint(nextForm.address, nextForm.latitude, nextForm.longitude),
           hasChanges: hasFormChanged(nextForm, this.data.initialForm)
         })
       },
@@ -343,8 +426,25 @@ Page({
     })
   },
 
+  async navigateBackToPreviousPage(shouldRefreshPrevious = false) {
+    const pages = getCurrentPages()
+    const prevPage = pages[pages.length - 2] as { refreshAll?: (showLoading?: boolean) => Promise<void> | void } | undefined
+
+    if (shouldRefreshPrevious && prevPage?.refreshAll) {
+      await prevPage.refreshAll(false)
+    }
+
+    wx.navigateBack()
+  },
+
   async onSave() {
-    if (this.data.saving || !this.data.hasChanges) return
+    if (this.data.saving || this.data.initialLoading) return
+
+    if (!this.data.hasChanges) {
+      await this.navigateBackToPreviousPage(false)
+      return
+    }
+
     if (!this.validateForm()) return
 
     this.setData({ saving: true })
@@ -353,23 +453,23 @@ Page({
     try {
       const latitude = this.data.form.latitude.trim()
       const longitude = this.data.form.longitude.trim()
+
       const payload = {
         version: this.data.version,
         name: this.data.form.name.trim(),
         phone: this.data.form.phone.trim() || undefined,
-        address: this.data.form.address.trim() || undefined,
-        description: this.data.form.description.trim() || undefined,
+        address: this.data.form.address.trim(),
+        description: this.data.form.description.trim(),
         latitude: latitude || undefined,
         longitude: longitude || undefined
       }
       const updated = await updateMyMerchantProfile(payload)
       const form = buildForm(updated)
+      const locationView = buildLocationViewState(form)
       this.setData({
         version: updated.version,
-        updatedAtLabel: updated.updated_at ? updated.updated_at.replace('T', ' ').slice(0, 16) : '--',
-        actionNoticeMessage: '店铺资料已保存。',
-        locationLabel: buildLocationLabel(form.address, form.latitude, form.longitude),
-        locationHint: buildLocationHint(form.address, form.latitude, form.longitude),
+        refreshErrorMessage: '',
+        ...locationView,
         form,
         initialForm: { ...form },
         hasChanges: false,
@@ -387,7 +487,15 @@ Page({
       } catch (storageErr) {
         logger.warn('Sync merchant profile cache failed', storageErr)
       }
+
+      await this.navigateBackToPreviousPage(true)
     } catch (err: unknown) {
+      if (isVersionConflictError(err)) {
+        await this.loadProfile(false, true)
+        wx.showToast({ title: '资料已被其他操作更新，已刷新到最新内容', icon: 'none' })
+        return
+      }
+
       logger.error('Save merchant profile settings failed', err)
       const message = getErrorMessage(err, '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
@@ -395,30 +503,6 @@ Page({
       wx.hideLoading()
       this.setData({ saving: false })
     }
-  },
-
-  onGoProfileImages() {
-    wx.navigateTo({ url: '/pages/merchant/profile-images/index' })
-  },
-
-  onGoMerchantCategories() {
-    wx.navigateTo({ url: '/pages/merchant/merchant-categories/index' })
-  },
-
-  onGoBusinessHours() {
-    wx.navigateTo({ url: '/pages/merchant/settings/business-hours/index' })
-  },
-
-  onGoMembership() {
-    wx.navigateTo({ url: '/pages/merchant/settings/membership/index' })
-  },
-
-  onGoApplication() {
-    wx.navigateTo({ url: '/pages/merchant/settings/application/index' })
-  },
-
-  onGoApplyment() {
-    wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
   },
 
   onRetry() {

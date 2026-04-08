@@ -41,6 +41,8 @@
 .spec-group-card__actions {
   align-items: center;
   gap: var(--spacer-xs);
+  align-self: flex-start;
+  padding-top: 4rpx;
 }
 
 .spec-group-card__name-input {
@@ -52,4 +54,8 @@
 
 .spec-group-card__actions {
   flex-shrink: 0;
+}
+
+.spec-group-card__action-button {
+  box-shadow: var(--shadow-sm);
 }

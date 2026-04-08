@@ -17,7 +17,15 @@
         bind:change="onGroupNameChange"
       />
       <view class="spec-group-card__actions">
-        <t-button size="small" shape="circle" theme="danger" icon="delete" data-group-index="{{groupIndex}}" bind:tap="onRemoveGroup" />
+        <t-button
+          t-class="spec-group-card__action-button"
+          size="small"
+          shape="circle"
+          theme="danger"
+          icon="remove"
+          data-group-index="{{groupIndex}}"
+          bind:tap="onRemoveGroup"
+        />
       </view>
     </view>
 

@@ -71,6 +71,7 @@
         "operators/detail",
         "operational-configs/index",
         "riders/index",
+        "tables/tags/index",
         "groups/index",
         "groups/detail"
       ],
@@ -202,7 +203,6 @@
         "orders/print-anomalies/index",
         "tables/index",
         "tables/edit/index",
-        "tables/tags/index",
         "printers/index",
         "profile-images/index",
         "discount-rules/index",

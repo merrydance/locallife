@@ -28,4 +28,15 @@
   align-items: center;
   gap: var(--spacer-xs);
   flex-shrink: 0;
+  padding: 8rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.option-editor__action-button {
+  opacity: 0.92;
+}
+
+.option-editor__action-button--remove {
+  opacity: 0.82;
 }

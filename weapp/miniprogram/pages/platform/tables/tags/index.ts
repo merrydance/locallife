@@ -56,7 +56,7 @@ Page({
         tags
       })
     } catch (err) {
-      logger.error('Load table tags page failed', err)
+      logger.error('Load platform table tags page failed', err)
       const message = getErrorUserMessage(err, '桌台标签加载失败，请重试')
 
       if (showInitialState || !this.data.tags.length) {
@@ -119,7 +119,7 @@ Page({
           await TagService.createTag({ name, type: 'table' })
           await this.loadData(false)
         } catch (err) {
-          logger.error('Create table tag failed', err)
+          logger.error('Create platform table tag failed', err)
           wx.showToast({ title: getErrorUserMessage(err, '创建标签失败，请稍后重试'), icon: 'none' })
         } finally {
           this.setData({ submitting: false })
@@ -151,7 +151,7 @@ Page({
           await TagService.deleteTag(id)
           await this.loadData(false)
         } catch (err) {
-          logger.error('Delete table tag failed', err)
+          logger.error('Delete platform table tag failed', err)
           wx.showToast({ title: getErrorUserMessage(err, '删除标签失败，请稍后重试'), icon: 'none' })
         } finally {
           this.setData({ pendingDeleteId: 0 })

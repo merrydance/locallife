@@ -23,6 +23,8 @@ export interface TableUploadFile {
   status?: TableUploadFileStatus
   mediaId?: number
   localPath?: string
+  imageId?: number
+  isPersisted?: boolean
 }
 
 export interface TableFormData {
@@ -169,7 +171,9 @@ export function toSafeUploadFiles(value: unknown): TableUploadFile[] {
       url: candidate.url,
       status: candidate.status,
       mediaId: typeof candidate.mediaId === 'number' ? candidate.mediaId : undefined,
-      localPath: typeof candidate.localPath === 'string' ? candidate.localPath : undefined
+      localPath: typeof candidate.localPath === 'string' ? candidate.localPath : undefined,
+      imageId: typeof candidate.imageId === 'number' ? candidate.imageId : undefined,
+      isPersisted: !!candidate.isPersisted
     })
   }
 
@@ -238,7 +242,7 @@ export function formatTableView(table: TableResponse): TableListItem {
     visibleTags,
     tagSummaryText: visibleTags.length ? visibleTags.join(' / ') : '未配置桌台标签',
     qrCodeUrl: normalizeQRCodeUrl(table.qr_code_url),
-    coverImageUrl: ''
+    coverImageUrl: getPublicImageUrl(table.image_url || '')
   }
 }
 

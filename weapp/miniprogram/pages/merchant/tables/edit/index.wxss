@@ -97,6 +97,26 @@
   gap: var(--spacer-sm);
 }
 
+.image-upload-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--spacer-md);
+}
+
+.image-upload-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  min-width: 0;
+}
+
+.image-upload-title {
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
 .inline-note-card {
   display: flex;
   flex-direction: column;
@@ -113,47 +133,6 @@
   display: flex;
   align-items: center;
   gap: var(--spacer-xs);
-}
-
-.image-list {
-  display: flex;
-  flex-direction: column;
-  gap: 12rpx;
-}
-
-.image-item {
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-  background: var(--td-bg-color-secondarycontainer);
-  border: 1rpx solid var(--td-component-stroke);
-  border-radius: 12rpx;
-  padding: 10rpx;
-}
-
-.image-thumb {
-  width: 120rpx;
-  height: 120rpx;
-  border-radius: 8rpx;
-  background: var(--td-bg-color-page);
-}
-
-.image-meta {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 8rpx;
-}
-
-.image-primary {
-  color: var(--td-success-color);
-  font-size: 24rpx;
-  font-weight: 600;
-}
-
-.image-link {
-  color: var(--td-brand-color);
-  font-size: 24rpx;
 }
 
 .image-action-row,
@@ -197,6 +176,12 @@
   gap: var(--spacer-xs);
 }
 
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
 .qr-popup-state {
   min-height: 360rpx;
 }
@@ -219,6 +204,7 @@
 }
 
 @media (max-width: 420px) {
+  .image-upload-grid,
   .section-top,
   .section-top-action,
   .popup-actions,

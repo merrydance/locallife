@@ -21,7 +21,7 @@
       </view>
 
       <view class="action-strip">
-        <text class="action-strip-copy">标签会在桌台编辑页中用于筛选和快速识别。</text>
+        <text class="action-strip-copy">平台统一维护桌台标签，商户侧编辑页只负责选择与快速新增。</text>
         <t-button block size="medium" theme="primary" shape="round" bind:tap="onCreateTag">新建标签</t-button>
       </view>
 
@@ -42,7 +42,7 @@
                 <text class="tag-name">{{item.name}}</text>
                 <view class="tag-meta-row">
                   <text class="tag-meta">用于桌台识别与筛选</text>
-                  <t-tag size="small" theme="default" variant="light">桌台可选</t-tag>
+                  <t-tag size="small" theme="default" variant="light">平台统一维护</t-tag>
                 </view>
               </view>
 

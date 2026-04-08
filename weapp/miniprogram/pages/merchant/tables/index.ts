@@ -12,7 +12,6 @@ import {
   isUserCancelledError,
   normalizeQRCodeUrl,
   TABLE_STATUS_FILTER_OPTIONS,
-  toSafeTableImages,
   type TableListItem,
   type TableStatusFilterKey,
   type TableTypeFilterKey
@@ -82,31 +81,6 @@ Page({
       currentStatus: this.data.currentStatus
     })
   },
-
-  async attachTableCoverImages(tables: TableListItem[]) {
-    if (!tables.length) {
-      return tables
-    }
-
-    const enrichedTables = await Promise.all(tables.map(async (table) => {
-      try {
-        const response = await tableManagementService.getTableImages(table.id)
-        const images = toSafeTableImages(response?.images)
-        const coverImageUrl = images.find((image) => image.is_primary)?.image_url || images[0]?.image_url || ''
-
-        return {
-          ...table,
-          coverImageUrl
-        }
-      } catch (err) {
-        logger.warn(`Load table cover failed for table ${table.id}`, err)
-        return table
-      }
-    }))
-
-    return enrichedTables
-  },
-
   async refreshAll(showLoading = true) {
     if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage || this.data.loading) {
       return
@@ -132,11 +106,10 @@ Page({
       const loadedTables = Array.isArray(response?.tables)
         ? response.tables.filter((table): table is Parameters<typeof formatTableView>[0] => !!table).map(formatTableView)
         : []
-      const tablesWithCoverImages = await this.attachTableCoverImages(loadedTables)
 
       this.setData({
-        loadedTables: tablesWithCoverImages,
-        ...this.buildPresentationUpdate(tablesWithCoverImages),
+        loadedTables,
+        ...this.buildPresentationUpdate(loadedTables),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',

@@ -24,45 +24,32 @@
           <text class="section-title">桌台图片</text>
         </view>
 
-        <t-upload
-          mediaType="{{['image']}}"
-          files="{{uploadFiles}}"
-          gridConfig="{{ { column: 3, width: 180, height: 180 } }}"
-          disabled="{{imageUploading || imageMutating || submitting}}"
-          bind:add="onImageAdd"
-          bind:remove="onUploadFileRemove"
-        />
-
-        <view wx:if="{{imageUploading}}" class="uploading-row">
-          <t-loading theme="dots" size="28rpx" />
-          <text class="uploading-text">图片上传中...</text>
-        </view>
-
-        <view wx:if="{{!isEdit && uploadFiles.length}}" class="inline-note-card">
-          当前已上传 {{uploadFiles.length}} 张图片，保存桌台后会自动关联。
-        </view>
-
-        <block wx:if="{{isEdit}}">
-          <text wx:if="{{tableImages.length}}" class="section-caption">已上传图片</text>
-
-          <view wx:if="{{tableImages.length}}" class="image-list">
-            <view class="image-item" wx:for="{{tableImages}}" wx:key="id">
-              <image class="image-thumb" src="{{item.image_url}}" mode="aspectFill" data-url="{{item.image_url}}" bindtap="onPreviewImage" />
-
-              <view class="image-meta">
-                <text class="image-primary" wx:if="{{item.is_primary}}">当前主图</text>
-                <text class="image-link" wx:if="{{imageMutating && imageMutatingImageId === item.id}}">处理中...</text>
-
-                <view wx:else class="image-action-row">
-                  <t-button wx:if="{{!item.is_primary}}" size="small" theme="primary" shape="round" data-image-id="{{item.id}}" bind:tap="onSetPrimaryImage">设为主图</t-button>
-                  <t-button size="small" theme="danger" shape="round" data-image-id="{{item.id}}" bind:tap="onDeleteImage">删除</t-button>
-                </view>
-              </view>
-            </view>
+        <view class="image-upload-grid">
+          <view class="image-upload-panel">
+            <text class="image-upload-title">封面（主图）</text>
+            <t-upload
+              mediaType="{{['image']}}"
+              files="{{coverUploadFiles}}"
+              max="{{1}}"
+              gridConfig="{{ { column: 1, width: 180, height: 180 } }}"
+              disabled="{{imageUploading || imageMutating || submitting}}"
+              bind:add="onCoverAdd"
+              bind:remove="onCoverRemove"
+            />
           </view>
 
-          <view wx:else class="inline-note-card">当前还没有已保存图片，可直接上传。</view>
-        </block>
+          <view class="image-upload-panel">
+            <text class="image-upload-title">配图</text>
+            <t-upload
+              mediaType="{{['image']}}"
+              files="{{galleryUploadFiles}}"
+              gridConfig="{{ { column: 2, width: 120, height: 120 } }}"
+              disabled="{{imageUploading || imageMutating || submitting}}"
+              bind:add="onGalleryAdd"
+              bind:remove="onGalleryRemove"
+            />
+          </view>
+        </view>
       </view>
 
       <view class="section-panel">
@@ -144,7 +131,7 @@
             <text class="section-caption">已选 {{formData.tag_ids.length}} 个，用于列表识别与筛选</text>
           </view>
           <view class="section-top-button">
-            <t-button size="small" shape="circle" theme="primary" icon="add" bind:tap="onManageTags" />
+            <t-button size="small" shape="circle" theme="primary" icon="add" loading="{{tagSubmitting}}" bind:tap="onManageTags" />
           </view>
         </view>
 
@@ -160,7 +147,7 @@
           />
         </view>
 
-        <view wx:else class="inline-note-card">暂无桌台标签，可先去标签管理页新增。</view>
+        <view wx:else class="inline-note-card">暂无桌台标签，可直接新增后立即选择。</view>
       </view>
 
       <view wx:if="{{isEdit}}" class="section-panel">
@@ -207,5 +194,23 @@
         </view>
       </view>
     </t-popup>
+
+    <t-dialog
+      visible="{{createTagDialogVisible}}"
+      title="新增桌台标签"
+      confirm-btn="{{ { content: '确定', loading: tagSubmitting } }}"
+      cancel-btn="取消"
+      bind:confirm="onConfirmCreateTagDialog"
+      bind:cancel="onCloseCreateTagDialog"
+    >
+      <view slot="content" class="dialog-form">
+        <t-input
+          label="标签名称"
+          placeholder="请输入标签名称"
+          value="{{createTagInputValue}}"
+          bind:change="onCreateTagInputChange"
+        />
+      </view>
+    </t-dialog>
   </block>
 </view>
