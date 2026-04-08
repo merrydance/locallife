@@ -1611,16 +1611,26 @@ definitions:
         type: integer
       description:
         type: string
+      dish_count:
+        type: integer
       dish_image_urls:
         items:
           type: string
         type: array
+      dish_total_quantity:
+        type: integer
       id:
         type: integer
       is_online:
         type: boolean
       name:
         type: string
+      original_price:
+        type: integer
+      tags:
+        items:
+          $ref: '#/definitions/api.tagResponse'
+        type: array
     type: object
   api.comboSetWithDetailsResponse:
     properties:
@@ -10801,11 +10811,9 @@ paths:
       - application/json
       responses:
         "200":
-          description: 'message: combo set online status updated'
+          description: 更新成功
           schema:
-            additionalProperties:
-              type: string
-            type: object
+            $ref: '#/definitions/api.comboSetResponse'
         "400":
           description: 参数错误
           schema:

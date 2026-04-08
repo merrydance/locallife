@@ -1155,7 +1155,7 @@ type Querier interface {
 	ListCombinedPaymentSubOrders(ctx context.Context, combinedPaymentID int64) ([]CombinedPaymentSubOrder, error)
 	ListCombinedPaymentSubOrdersWithMerchant(ctx context.Context, combinedPaymentID int64) ([]ListCombinedPaymentSubOrdersWithMerchantRow, error)
 	ListComboDishes(ctx context.Context, comboID int64) ([]ListComboDishesRow, error)
-	ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ComboSet, error)
+	ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ListComboSetsByMerchantRow, error)
 	ListComboTags(ctx context.Context, comboID int64) ([]Tag, error)
 	ListCompletedOrdersMissingProfitSharing(ctx context.Context, limit int32) ([]ListCompletedOrdersMissingProfitSharingRow, error)
 	ListDailyInventoryByDate(ctx context.Context, date pgtype.Date) ([]DailyInventory, error)

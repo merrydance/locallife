@@ -381,12 +381,30 @@ func TestListComboSetsAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore) {
 				const comboImageAssetID int64 = 41
+				listRows := make([]db.ListComboSetsByMerchantRow, 0, len(combos))
+				for index, combo := range combos {
+					row := db.ListComboSetsByMerchantRow{
+						ID:                combo.ID,
+						Name:              combo.Name,
+						Description:       combo.Description,
+						OriginalPrice:     combo.OriginalPrice,
+						ComboPrice:        combo.ComboPrice,
+						IsOnline:          combo.IsOnline,
+						DishCount:         2,
+						DishTotalQuantity: 3,
+					}
+					if index == 0 {
+						row.Tags = []byte(`[{"id":11,"name":"招牌"}]`)
+					}
+					listRows = append(listRows, row)
+				}
+
 				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
 
 				store.EXPECT().
 					ListComboSetsByMerchant(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(combos, nil)
+					Return(listRows, nil)
 
 				store.EXPECT().
 					CountComboSetsByMerchant(gomock.Any(), gomock.Eq(db.CountComboSetsByMerchantParams{
@@ -419,6 +437,10 @@ func TestListComboSetsAPI(t *testing.T) {
 				var response listComboSetsResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response.ComboSets, n)
+				require.Equal(t, combos[0].OriginalPrice, response.ComboSets[0].OriginalPrice)
+				require.Equal(t, int64(2), response.ComboSets[0].DishCount)
+				require.Equal(t, int64(3), response.ComboSets[0].DishTotalQuantity)
+				require.Len(t, response.ComboSets[0].Tags, 1)
 				require.Len(t, response.ComboSets[0].DishImageURLs, 1)
 				require.Contains(t, response.ComboSets[0].DishImageURLs[0], "merchant/combo/41/list.jpg")
 			},
@@ -706,6 +728,10 @@ func TestDeleteComboSetAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+				var response comboSetResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.True(t, response.IsOnline)
+				require.Equal(t, combo.OriginalPrice, response.OriginalPrice)
 			},
 		},
 		{

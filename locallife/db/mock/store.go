@@ -11845,10 +11845,10 @@ func (mr *MockStoreMockRecorder) ListComboDishes(ctx, comboID any) *gomock.Call 
 }
 
 // ListComboSetsByMerchant mocks base method.
-func (m *MockStore) ListComboSetsByMerchant(ctx context.Context, arg db.ListComboSetsByMerchantParams) ([]db.ComboSet, error) {
+func (m *MockStore) ListComboSetsByMerchant(ctx context.Context, arg db.ListComboSetsByMerchantParams) ([]db.ListComboSetsByMerchantRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListComboSetsByMerchant", ctx, arg)
-	ret0, _ := ret[0].([]db.ComboSet)
+	ret0, _ := ret[0].([]db.ListComboSetsByMerchantRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

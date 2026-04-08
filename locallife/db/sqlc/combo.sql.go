@@ -622,12 +622,44 @@ func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListCom
 }
 
 const listComboSetsByMerchant = `-- name: ListComboSetsByMerchant :many
-SELECT id, merchant_id, name, description, original_price, combo_price, is_online, created_at, updated_at, deleted_at, image_media_asset_id FROM combo_sets
+SELECT
+  cs.id,
+  cs.name,
+  cs.description,
+  cs.original_price,
+  cs.combo_price,
+  cs.is_online,
+  COALESCE(dish_stats.dish_count, 0)::bigint AS dish_count,
+  COALESCE(dish_stats.dish_total_quantity, 0)::bigint AS dish_total_quantity,
+  COALESCE(tag_stats.tags, '[]'::json) AS tags
+FROM combo_sets cs
+LEFT JOIN LATERAL (
+  SELECT
+    COUNT(*)::bigint AS dish_count,
+    COALESCE(SUM(cd.quantity), 0)::bigint AS dish_total_quantity
+  FROM combo_dishes cd
+  WHERE cd.combo_id = cs.id
+) AS dish_stats ON TRUE
+LEFT JOIN LATERAL (
+  SELECT COALESCE(
+    json_agg(
+      jsonb_build_object(
+        'id', t.id,
+        'name', t.name
+      )
+      ORDER BY t.sort_order ASC, t.id ASC
+    ),
+    '[]'::json
+  ) AS tags
+  FROM combo_tags ct
+  JOIN tags t ON t.id = ct.tag_id
+  WHERE ct.combo_id = cs.id
+) AS tag_stats ON TRUE
 WHERE 
-  merchant_id = $1
-  AND deleted_at IS NULL
-  AND ($4::boolean IS NULL OR is_online = $4)
-ORDER BY created_at DESC
+  cs.merchant_id = $1
+  AND cs.deleted_at IS NULL
+  AND ($4::boolean IS NULL OR cs.is_online = $4)
+ORDER BY cs.created_at DESC
 LIMIT $2 OFFSET $3
 `
 
@@ -638,7 +670,19 @@ type ListComboSetsByMerchantParams struct {
 	IsOnline   pgtype.Bool `json:"is_online"`
 }
 
-func (q *Queries) ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ComboSet, error) {
+type ListComboSetsByMerchantRow struct {
+	ID                int64       `json:"id"`
+	Name              string      `json:"name"`
+	Description       pgtype.Text `json:"description"`
+	OriginalPrice     int64       `json:"original_price"`
+	ComboPrice        int64       `json:"combo_price"`
+	IsOnline          bool        `json:"is_online"`
+	DishCount         int64       `json:"dish_count"`
+	DishTotalQuantity int64       `json:"dish_total_quantity"`
+	Tags              interface{} `json:"tags"`
+}
+
+func (q *Queries) ListComboSetsByMerchant(ctx context.Context, arg ListComboSetsByMerchantParams) ([]ListComboSetsByMerchantRow, error) {
 	rows, err := q.db.Query(ctx, listComboSetsByMerchant,
 		arg.MerchantID,
 		arg.Limit,
@@ -649,21 +693,19 @@ func (q *Queries) ListComboSetsByMerchant(ctx context.Context, arg ListComboSets
 		return nil, err
 	}
 	defer rows.Close()
-	items := []ComboSet{}
+	items := []ListComboSetsByMerchantRow{}
 	for rows.Next() {
-		var i ComboSet
+		var i ListComboSetsByMerchantRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.MerchantID,
 			&i.Name,
 			&i.Description,
 			&i.OriginalPrice,
 			&i.ComboPrice,
 			&i.IsOnline,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.DeletedAt,
-			&i.ImageMediaAssetID,
+			&i.DishCount,
+			&i.DishTotalQuantity,
+			&i.Tags,
 		); err != nil {
 			return nil, err
 		}

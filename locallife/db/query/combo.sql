@@ -52,12 +52,44 @@ WHERE cs.id = $1 AND cs.deleted_at IS NULL
 GROUP BY cs.id;
 
 -- name: ListComboSetsByMerchant :many
-SELECT * FROM combo_sets
+SELECT
+  cs.id,
+  cs.name,
+  cs.description,
+  cs.original_price,
+  cs.combo_price,
+  cs.is_online,
+  COALESCE(dish_stats.dish_count, 0)::bigint AS dish_count,
+  COALESCE(dish_stats.dish_total_quantity, 0)::bigint AS dish_total_quantity,
+  COALESCE(tag_stats.tags, '[]'::json) AS tags
+FROM combo_sets cs
+LEFT JOIN LATERAL (
+  SELECT
+    COUNT(*)::bigint AS dish_count,
+    COALESCE(SUM(cd.quantity), 0)::bigint AS dish_total_quantity
+  FROM combo_dishes cd
+  WHERE cd.combo_id = cs.id
+) AS dish_stats ON TRUE
+LEFT JOIN LATERAL (
+  SELECT COALESCE(
+    json_agg(
+      jsonb_build_object(
+        'id', t.id,
+        'name', t.name
+      )
+      ORDER BY t.sort_order ASC, t.id ASC
+    ),
+    '[]'::json
+  ) AS tags
+  FROM combo_tags ct
+  JOIN tags t ON t.id = ct.tag_id
+  WHERE ct.combo_id = cs.id
+) AS tag_stats ON TRUE
 WHERE 
-  merchant_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'))
-ORDER BY created_at DESC
+  cs.merchant_id = $1
+  AND cs.deleted_at IS NULL
+  AND (sqlc.narg('is_online')::boolean IS NULL OR cs.is_online = sqlc.narg('is_online'))
+ORDER BY cs.created_at DESC
 LIMIT $2 OFFSET $3;
 
 -- name: UpdateComboSet :one

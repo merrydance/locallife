@@ -2595,12 +2595,9 @@ const docTemplate = `{
                 ],
                 "responses": {
                     "200": {
-                        "description": "message: combo set online status updated",
+                        "description": "更新成功",
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
+                            "$ref": "#/definitions/api.comboSetResponse"
                         }
                     },
                     "400": {
@@ -32958,11 +32955,17 @@ const docTemplate = `{
                 "description": {
                     "type": "string"
                 },
+                "dish_count": {
+                    "type": "integer"
+                },
                 "dish_image_urls": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "dish_total_quantity": {
+                    "type": "integer"
                 },
                 "id": {
                     "type": "integer"
@@ -32972,6 +32975,15 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                },
+                "original_price": {
+                    "type": "integer"
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.tagResponse"
+                    }
                 }
             }
         },

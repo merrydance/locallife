@@ -60,10 +60,24 @@ func TestGetComboSet(t *testing.T) {
 
 func TestListComboSetsByMerchant(t *testing.T) {
 	merchant := createRandomMerchantForDish(t)
+	category := createRandomDishCategory(t)
+	tag := createRandomTag(t, "combo")
 
 	// 创建多个套餐
 	for i := 0; i < 3; i++ {
-		createRandomComboSet(t, merchant.ID)
+		combo := createRandomComboSet(t, merchant.ID)
+		dish := createRandomDish(t, merchant.ID, category.ID)
+		_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
+			ComboID:  combo.ID,
+			DishID:   dish.ID,
+			Quantity: 2,
+		})
+		require.NoError(t, err)
+		_, err = testStore.AddComboTag(context.Background(), AddComboTagParams{
+			ComboID: combo.ID,
+			TagID:   tag.ID,
+		})
+		require.NoError(t, err)
 	}
 
 	arg := ListComboSetsByMerchantParams{
@@ -77,7 +91,11 @@ func TestListComboSetsByMerchant(t *testing.T) {
 	require.GreaterOrEqual(t, len(combos), 3)
 
 	for _, combo := range combos {
-		require.Equal(t, merchant.ID, combo.MerchantID)
+		require.NotZero(t, combo.ID)
+		require.NotEmpty(t, combo.Name)
+		require.GreaterOrEqual(t, combo.DishCount, int64(1))
+		require.GreaterOrEqual(t, combo.DishTotalQuantity, int64(2))
+		require.NotNil(t, combo.Tags)
 	}
 }
 
@@ -98,6 +116,7 @@ func TestListComboSetsByMerchantWithFilter(t *testing.T) {
 
 	for _, combo := range combos {
 		require.True(t, combo.IsOnline)
+		require.NotZero(t, combo.ID)
 	}
 }
 
