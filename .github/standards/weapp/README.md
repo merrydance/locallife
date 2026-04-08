@@ -70,11 +70,10 @@
 以下文档仍可作为历史参考，但不再应被视为当前长期标准的首选入口：
 
 - `.github/standards/weapp/api/README.md`
-- `weapp/docs/WEAPP_DOCUMENTATION_ARCHITECTURE_2026-04-04.md`
-- `weapp/docs/WEAPP_DOCUMENT_REWRITE_BLUEPRINTS_2026-04-04.md`
-- `weapp/docs/WEAPP_95_SCORE_IMPROVEMENT_PLAN_2026-03-27.md`
+- `weapp/docs/MERCHANT_BACKEND_WEAPP_MAPPING_MATRIX_2026-04-06.md`
+- `weapp/docs/RIDER_BACKEND_WEAPP_MAPPING_MATRIX_2026-04-07.md`
 
-这些文档主要记录 API 重构过程、文档分层蓝图、阶段性质量判断与系统升级目标。后续如需查阅历史背景、治理脉络或整体升级方向，可以继续参考；但新增长期规则不应继续落在这些文档中。
+这些文档主要记录 API 结构说明、角色侧映射关系与阶段性治理背景。后续如需查阅历史背景、治理脉络或角色到后端契约的映射，可以继续参考；但新增长期规则不应继续落在这些文档中。
 
 ## 整体升级审计的使用方式
 

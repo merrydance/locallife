@@ -45,7 +45,7 @@
 
 ## 二、TypeScript 类型定义
 
-新建文件：`web/src/types/wechat-complaint.ts`
+建议新增独立的投诉/补差类型模块，放在 web/src/types/ 下；当前仓库尚未落地本文档里的示例文件名。
 
 ```typescript
 /**
@@ -146,7 +146,7 @@ export const SUBSIDY_STATUS_COLORS: Record<SubsidyStatus, string> = {
 ### 3.1 投诉接口
 
 ```typescript
-// web/src/lib/api/complaint.ts
+// 建议放在独立的 complaint API 模块中
 
 const BASE = '/v1';
 
@@ -177,7 +177,7 @@ export const completeComplaintByMerchant = (id: number) =>
 ### 3.2 补差接口
 
 ```typescript
-// web/src/lib/api/subsidy.ts
+// 建议放在独立的 subsidy API 模块中
 
 // 运营商：为收付通支付订单发起补差
 export const createSubsidy = (paymentOrderId: number, body: {
@@ -218,7 +218,7 @@ export const cancelSubsidy = (paymentOrderId: number, subsidyId: number) =>
 
 **路由**：`/operator/complaints`（新建页面）
 
-**文件**：`web/src/app/operator/complaints/page.tsx`
+**实现说明**：建议新增运营商 complaints 页面；当前仓库尚未落地本文档中的示例页面文件名。
 
 **页面结构**：
 

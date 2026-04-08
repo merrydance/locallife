@@ -69,7 +69,7 @@ Use this order to avoid prompt collisions:
 - `general-implementation.prompt.md`: multi-area or not-yet-scoped implementation requests.
 - `general-incident-followup.prompt.md`: cross-area incident/postmortem follow-up that must convert findings into standards, prompts, workflows, tests, or runbooks.
 - `general-review.prompt.md`: multi-area or not-yet-scoped review requests.
-- `general-task-loop.prompt.md`: ordered task lists that should be executed through an implement-review-fix-doc loop until complete.
+- `general-task-loop.prompt.md`: ordered task lists or autopilot loops that should be executed through an implement-review-fix-doc loop until complete.
 - `backend-implementation.prompt.md`: normal backend feature or bug-fix work outside payment-specialized or task-card-specialized flows.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
 - `backend-payment-runbook.prompt.md`: WeChat payment, callback, refund, runbook, or audit-ledger work.

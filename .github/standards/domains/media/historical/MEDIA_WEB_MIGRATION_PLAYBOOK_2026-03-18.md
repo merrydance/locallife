@@ -91,10 +91,10 @@ Web 改造分两条主线：
 
 ### 6.1 新增媒体上传 SDK
 
-新增文件建议：
+以当前仓库落地为准：
 
-1. web/src/lib/media.ts
-2. web/src/types/media.ts
+1. 已落地的媒体上传 SDK：web/src/lib/media.ts
+2. 如需补充独立类型文件，优先与现有 SDK 同步维护，不要把旧施工单中的未落地拆分视为当前事实
 
 ### 6.2 新增能力列表
 
@@ -199,9 +199,9 @@ export function getPreferredImageUrl(asset: MediaAssetLike | undefined, variant:
 
 ### 8.2 新增组件建议
 
-建议新增：
+以当前仓库落地为准：
 
-1. web/src/components/shared/media-image.tsx
+1. 已落地的通用媒体图片组件：web/src/components/ui/media-image.tsx
 
 建议参数：
 

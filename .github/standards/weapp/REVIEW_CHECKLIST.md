@@ -22,9 +22,9 @@
 
 升级审计补充输入：
 
-- `weapp/docs/WEAPP_DOCUMENTATION_ARCHITECTURE_2026-04-04.md`
-- `weapp/docs/WEAPP_DOCUMENT_REWRITE_BLUEPRINTS_2026-04-04.md`
-- `weapp/docs/WEAPP_95_SCORE_IMPROVEMENT_PLAN_2026-03-27.md`
+- `weapp/docs/MERCHANT_BACKEND_WEAPP_MAPPING_MATRIX_2026-04-06.md`
+- `weapp/docs/RIDER_BACKEND_WEAPP_MAPPING_MATRIX_2026-04-07.md`
+- 需要做整体升级审计时，直接补充对应页面与接口的当前实现证据，不再依赖已删除的旧蓝图文档
 
 ## Copyable Review Checklist
 

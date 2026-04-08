@@ -89,11 +89,11 @@
 
 ### 5.1 新增文件建议
 
-建议新增：
+以当前仓库落地为准：
 
-1. weapp/miniprogram/api/media.ts
-2. weapp/miniprogram/types/media.ts
-3. weapp/miniprogram/utils/media.ts
+1. 已落地的媒体工具入口：weapp/miniprogram/utils/media.ts
+2. 通用 API 类型当前集中在 weapp/miniprogram/api/types.ts
+3. 若后续需要继续拆分媒体专用 API 或类型文件，应基于现状增量演进，不要把本施工单中的旧规划文件名视为已存在事实
 
 ### 5.2 新增核心函数
 
@@ -308,7 +308,7 @@ export function getMediaDisplayUrl(input: MediaLike | string | undefined, varian
 文件：
 
 1. weapp/miniprogram/api/onboarding.ts
-2. 历史上还存在 weapp/miniprogram/api/merchant-application.ts，现已删除并收敛到 onboarding.ts
+2. 历史上还存在独立的 merchant-application API 模块，现已删除并收敛到 weapp/miniprogram/api/onboarding.ts
 3. weapp/miniprogram/api/ocr.ts
 
 目标改造：
@@ -539,7 +539,7 @@ images: Array<{
 5. weapp/miniprogram/api/review.ts
 6. weapp/miniprogram/api/table-device-management.ts
 7. weapp/miniprogram/api/onboarding.ts
-8. 历史旧封装 weapp/miniprogram/api/merchant-application.ts（现已删除）
+8. 历史旧封装中的 merchant-application API 模块（现已删除）
 9. weapp/miniprogram/adapters/dish.ts
 10. weapp/miniprogram/adapters/order.ts
 11. weapp/miniprogram/adapters/order-card.ts
