@@ -171,6 +171,7 @@ Page({
     refreshErrorMessage: '',
     loading: false,
     saving: false,
+    timePickerVisible: false,
     lastLoadedAt: 0,
     weeklyHours: createDefaultWeek() as WeeklyBusinessHour[],
     initialWeeklyHours: createDefaultWeek() as WeeklyBusinessHour[],
@@ -292,13 +293,15 @@ Page({
     }
   },
 
-  onToggleClosed(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
-    const { day } = e.currentTarget.dataset as { day: number }
+  onToggleClosed(e: WechatMiniprogram.CustomEvent<{ day: number, value: boolean }>) {
+    const { day, value } = e.detail || { day: -1, value: false }
+    if (typeof day !== 'number') return
+
     const weeklyHours = cloneWeeklyHours(this.data.weeklyHours)
     const target = weeklyHours.find((item) => item.day_of_week === day)
     if (!target) return
 
-    target.is_closed = e.detail.value
+    target.is_closed = !value
     if (!target.slots.length) {
       target.slots = [createSlot()]
     }
@@ -311,18 +314,21 @@ Page({
     })
   },
 
-  onTimeChange(e: WechatMiniprogram.PickerChange) {
-    const { day, slotIndex, field } = e.currentTarget.dataset as {
-      day: number
-      slotIndex: number
-      field: 'open_time' | 'close_time'
+  onTimeChange(e: WechatMiniprogram.CustomEvent<{ day: number, slotIndex: number, field: 'open_time' | 'close_time', value: string }>) {
+    const { day, slotIndex, field, value } = e.detail || {
+      day: -1,
+      slotIndex: -1,
+      field: 'open_time' as 'open_time' | 'close_time',
+      value: ''
     }
+    if (typeof day !== 'number' || typeof slotIndex !== 'number') return
+
     const weeklyHours = cloneWeeklyHours(this.data.weeklyHours)
     const target = weeklyHours.find((item) => item.day_of_week === day)
     if (!target || !target.slots[slotIndex]) return
-    if (typeof e.detail.value !== 'string') return
+    if (typeof value !== 'string' || !value) return
 
-    target.slots[slotIndex][field] = e.detail.value
+    target.slots[slotIndex][field] = value
     if (!target.is_closed) {
       target.slots = sortSlots(target.slots)
     }
@@ -335,8 +341,10 @@ Page({
     })
   },
 
-  onAddSlot(e: WechatMiniprogram.TouchEvent) {
-    const { day } = e.currentTarget.dataset as { day: number }
+  onAddSlot(e: WechatMiniprogram.CustomEvent<{ day: number, slotIndex?: number }>) {
+    const { day, slotIndex } = e.detail || { day: -1, slotIndex: undefined }
+    if (typeof day !== 'number') return
+
     const weeklyHours = cloneWeeklyHours(this.data.weeklyHours)
     const target = weeklyHours.find((item) => item.day_of_week === day)
     if (!target) return
@@ -346,7 +354,11 @@ Page({
     }
 
     target.is_closed = false
-    target.slots.push(createSlot())
+    if (typeof slotIndex === 'number' && slotIndex >= 0 && slotIndex < target.slots.length) {
+      target.slots.splice(slotIndex + 1, 0, createSlot())
+    } else {
+      target.slots.push(createSlot())
+    }
     target.slots = sortSlots(target.slots)
     this.setData({
       actionNoticeMessage: '',
@@ -356,8 +368,10 @@ Page({
     })
   },
 
-  onRemoveSlot(e: WechatMiniprogram.TouchEvent) {
-    const { day, slotIndex } = e.currentTarget.dataset as { day: number, slotIndex: number }
+  onRemoveSlot(e: WechatMiniprogram.CustomEvent<{ day: number, slotIndex: number }>) {
+    const { day, slotIndex } = e.detail || { day: -1, slotIndex: -1 }
+    if (typeof day !== 'number' || typeof slotIndex !== 'number') return
+
     const weeklyHours = cloneWeeklyHours(this.data.weeklyHours)
     const target = weeklyHours.find((item) => item.day_of_week === day)
     if (!target || target.slots.length <= 1) return
@@ -369,6 +383,10 @@ Page({
       weeklyHours,
       hasChanges: hasWeeklyHoursChanged(weeklyHours, this.data.initialWeeklyHours)
     })
+  },
+
+  onTimePickerVisibilityChange(e: WechatMiniprogram.CustomEvent<{ visible?: boolean }>) {
+    this.setData({ timePickerVisible: !!e.detail?.visible })
   },
 
   validateForm() {
@@ -398,8 +416,25 @@ Page({
     return true
   },
 
+  async navigateBackToPreviousPage(shouldRefreshPrevious = false) {
+    const pages = getCurrentPages()
+    const prevPage = pages[pages.length - 2] as { refreshAll?: (showLoading?: boolean) => Promise<void> | void } | undefined
+
+    if (shouldRefreshPrevious && prevPage?.refreshAll) {
+      await prevPage.refreshAll(false)
+    }
+
+    wx.navigateBack()
+  },
+
   async onSave() {
-    if (this.data.saving || !this.data.hasChanges) return
+    if (this.data.saving || this.data.initialLoading) return
+
+    if (!this.data.hasChanges) {
+      await this.navigateBackToPreviousPage(false)
+      return
+    }
+
     if (!this.validateForm()) return
 
     this.setData({ saving: true })
@@ -413,9 +448,12 @@ Page({
         weeklyHours,
         initialWeeklyHours: cloneWeeklyHours(normalized.weekly),
         specialHours: normalized.special,
-        actionNoticeMessage: '营业时间已保存。',
-        hasChanges: false
+        actionNoticeMessage: '',
+        hasChanges: false,
+        lastLoadedAt: Date.now()
       })
+
+      await this.navigateBackToPreviousPage(true)
     } catch (err: unknown) {
       logger.error('Save merchant business hours failed', err)
       const message = getErrorMessage(err, '保存失败，请稍后重试')

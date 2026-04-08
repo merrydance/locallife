@@ -27,51 +27,21 @@
 
     <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
       <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
+      <t-button size="small" theme="default" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
     </view>
 
-    <view class="section-block" wx:for="{{weeklyHours}}" wx:key="day_of_week" wx:for-item="day">
-      <view class="day-header">
-        <view>
-          <text class="day-title">{{day.day_name}}</text>
-          <text class="day-subtitle">{{day.is_closed ? '当天休息，不接单' : '按配置时段接单'}}</text>
-        </view>
-        <t-switch value="{{day.is_closed}}" data-day="{{day.day_of_week}}" bind:change="onToggleClosed" size="large" />
-      </view>
-
-      <view wx:if="{{day.is_closed}}" class="closed-tip">当前设置为休息日。重新打开后可继续编辑时段。</view>
-
-      <view wx:else class="slot-list">
-        <view class="slot-card" wx:for="{{day.slots}}" wx:key="key" wx:for-item="slot" wx:for-index="slotIndex">
-          <view class="slot-head">
-            <text class="slot-title">时段 {{slotIndex + 1}}</text>
-            <view wx:if="{{day.slots.length > 1}}" class="slot-remove" data-day="{{day.day_of_week}}" data-slot-index="{{slotIndex}}" catchtap="onRemoveSlot">删除</view>
-          </view>
-          <view class="time-row">
-            <picker mode="time" value="{{slot.open_time}}" data-day="{{day.day_of_week}}" data-slot-index="{{slotIndex}}" data-field="open_time" bindchange="onTimeChange">
-              <view class="time-field">
-                <text class="time-label">开始</text>
-                <text class="time-value">{{slot.open_time}}</text>
-              </view>
-            </picker>
-            <text class="time-separator">-</text>
-            <picker mode="time" value="{{slot.close_time}}" data-day="{{day.day_of_week}}" data-slot-index="{{slotIndex}}" data-field="close_time" bindchange="onTimeChange">
-              <view class="time-field">
-                <text class="time-label">结束</text>
-                <text class="time-value">{{slot.close_time}}</text>
-              </view>
-            </picker>
-          </view>
-        </view>
-
-        <t-button size="medium" theme="default" shape="round" data-day="{{day.day_of_week}}" bindtap="onAddSlot">新增营业时段</t-button>
-      </view>
-    </view>
+    <business-hours-weekly-editor
+      weeklyHours="{{weeklyHours}}"
+      bind:toggleclosed="onToggleClosed"
+      bind:changetime="onTimeChange"
+      bind:addslot="onAddSlot"
+      bind:removeslot="onRemoveSlot"
+      bind:pickervisibilitychange="onTimePickerVisibilityChange"
+    />
 
     <view wx:if="{{specialHours.length}}" class="section-block">
       <view class="special-header">
         <text class="section-title">已保留的特殊日期</text>
-        <text class="special-note">当前仅展示，保存时会原样保留</text>
       </view>
       <view class="special-list">
         <view class="special-card" wx:for="{{specialHours}}" wx:key="key" wx:for-item="special">
@@ -85,7 +55,7 @@
     </view>
 
     <view class="save-wrap">
-      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存营业时间</t-button>
+      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || initialLoading || timePickerVisible}}" bind:tap="onSave">保存营业时间</t-button>
     </view>
   </block>
   </block>

@@ -1,0 +1,99 @@
+.weekly-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+}
+
+.section-block {
+  background: var(--td-bg-color-container);
+  border-radius: 20rpx;
+  box-shadow: var(--shadow-sm);
+  padding: 24rpx;
+}
+
+.day-header,
+.slot-head,
+.time-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.day-title,
+.slot-title {
+  font-size: 30rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.closed-tip {
+  font-size: 24rpx;
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.closed-tip {
+  margin-top: 20rpx;
+  padding: 16rpx 0;
+  border-radius: 18rpx;
+  background: transparent;
+}
+
+.slot-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  margin-top: 20rpx;
+}
+
+.slot-card {
+  padding: 22rpx;
+  border-radius: 18rpx;
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.time-row {
+  justify-content: flex-start;
+  margin-top: 16rpx;
+  gap: 12rpx;
+}
+
+.slot-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--spacer-xs);
+  flex-shrink: 0;
+  padding: 8rpx;
+  border-radius: var(--radius-md);
+  background: var(--td-bg-color-secondarycontainer);
+}
+
+.slot-action-button {
+  opacity: 0.92;
+}
+
+.slot-action-button--remove {
+  opacity: 0.82;
+}
+
+.time-field {
+  flex: 1;
+  min-width: 140rpx;
+  padding: 12rpx 14rpx;
+  border-radius: 16rpx;
+  background: var(--td-bg-color-container);
+}
+
+.time-value {
+  display: block;
+  font-size: 26rpx;
+  font-weight: 600;
+  color: var(--td-text-color-primary);
+}
+
+.time-separator {
+  font-size: 24rpx;
+  font-weight: 600;
+  color: var(--td-text-color-secondary);
+}

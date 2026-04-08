@@ -39,14 +39,6 @@
   color: var(--td-text-color-primary);
 }
 
-.inline-banner-action {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  line-height: 1.6;
-  color: var(--td-brand-color);
-  font-weight: 600;
-}
-
 .hero-card,
 .section-block {
   background: var(--td-bg-color-container);

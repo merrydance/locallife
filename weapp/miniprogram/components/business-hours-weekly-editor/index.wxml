@@ -1,0 +1,87 @@
+<view class="weekly-list">
+  <view class="section-block" wx:for="{{weeklyHours}}" wx:key="day_of_week" wx:for-item="day">
+    <view class="day-header">
+      <view>
+        <text class="day-title">{{day.day_name}}</text>
+      </view>
+      <t-switch value="{{!day.is_closed}}" data-day="{{day.day_of_week}}" bind:change="onToggleOpenState" size="large" />
+    </view>
+
+    <view wx:if="{{day.is_closed}}" class="closed-tip">
+      <t-tag theme="warning" variant="light" size="small">休息日</t-tag>
+    </view>
+
+    <view wx:else class="slot-list">
+      <view class="slot-card" wx:for="{{day.slots}}" wx:key="key" wx:for-item="slot" wx:for-index="slotIndex">
+        <view class="slot-head">
+          <text class="slot-title">时段 {{slotIndex + 1}}</text>
+        </view>
+
+        <view class="time-row">
+          <view
+            class="time-field"
+            data-day="{{day.day_of_week}}"
+            data-slot-index="{{slotIndex}}"
+            data-field="open_time"
+            data-value="{{slot.open_time}}"
+            bind:tap="onOpenTimePicker"
+          >
+            <text class="time-value">{{slot.open_time}}</text>
+          </view>
+
+          <text class="time-separator">-</text>
+
+          <view
+            class="time-field"
+            data-day="{{day.day_of_week}}"
+            data-slot-index="{{slotIndex}}"
+            data-field="close_time"
+            data-value="{{slot.close_time}}"
+            bind:tap="onOpenTimePicker"
+          >
+            <text class="time-value">{{slot.close_time}}</text>
+          </view>
+
+          <view class="slot-actions">
+            <t-button
+              t-class="slot-action-button slot-action-button--add"
+              size="extra-small"
+              shape="circle"
+              theme="light"
+              icon="add"
+              disabled="{{day.slots.length >= 3}}"
+              data-day="{{day.day_of_week}}"
+              data-slot-index="{{slotIndex}}"
+              bind:tap="onAddAfter"
+            />
+            <t-button
+              t-class="slot-action-button slot-action-button--remove"
+              size="extra-small"
+              shape="circle"
+              theme="default"
+              icon="remove"
+              disabled="{{day.slots.length <= 1}}"
+              data-day="{{day.day_of_week}}"
+              data-slot-index="{{slotIndex}}"
+              bind:tap="onRemoveAt"
+            />
+          </view>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <t-picker
+    visible="{{pickerVisible}}"
+    use-popup="{{true}}"
+    popup-props="{{pickerPopupProps}}"
+    title="{{pickerTitle}}"
+    value="{{pickerValue}}"
+    bind:confirm="onPickerConfirm"
+    bind:cancel="onPickerCancel"
+    bind:visible-change="onPickerVisibleChange"
+  >
+    <t-picker-item options="{{hourOptions}}" />
+    <t-picker-item options="{{minuteOptions}}" />
+  </t-picker>
+</view>
