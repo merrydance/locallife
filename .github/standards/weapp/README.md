@@ -13,20 +13,22 @@
 ## 默认权威入口
 
 - 页面与组件交付的默认主标准：`.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-- 视觉、token、页面壳、触控热区和组件视觉模式的补充标准：`.github/standards/weapp/DESIGN_SYSTEM.md`
+- 顾客侧视觉、token、页面壳、触控热区和组件视觉模式：`.github/standards/weapp/DESIGN_SYSTEM.md`
+- 非顾客侧视觉、page shell、克制型 TDesign-first 表达与组件视觉模式：`.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - 审查时可直接复用的检查清单：`.github/standards/weapp/REVIEW_CHECKLIST.md`
 
 默认执行规则：
 
 - 不再把交互、性能、反馈、API 契约拆成多个默认必读标准。
 - `PAGE_DELIVERY_BASELINE.md` 是小程序页面与组件交付的单一默认权威来源。
-- `DESIGN_SYSTEM.md` 负责视觉与组件视觉基线，但不得削弱 `PAGE_DELIVERY_BASELINE.md` 的硬性要求。
-- 若同一问题在多份 weapp 标准中出现冲突，以 `PAGE_DELIVERY_BASELINE.md` 为准；视觉 token 和组件视觉细节以 `DESIGN_SYSTEM.md` 为准。
+- `DESIGN_SYSTEM.md` 负责顾客侧视觉与组件视觉基线；`NON_CONSUMER_DESIGN_SYSTEM.md` 负责非顾客侧视觉与组件视觉基线；两者都不得削弱 `PAGE_DELIVERY_BASELINE.md` 的硬性要求。
+- 若同一问题在多份 weapp 标准中出现冲突，以 `PAGE_DELIVERY_BASELINE.md` 为准；视觉 token 和组件视觉细节按页面角色侧选择对应设计文档。
 
 ## 默认实现热路径
 
 - 页面与组件的非视觉交付，默认先读 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`。
-- 页面 UI 结构、小屏手感、TDesign-first 选型与 page shell 表达，读 `.github/standards/weapp/DESIGN_SYSTEM.md`。
+- 顾客侧页面 UI 结构、小屏手感、品牌化视觉与组件视觉基线，读 `.github/standards/weapp/DESIGN_SYSTEM.md`。
+- 商户、运营、平台、骑手等非顾客侧页面的 UI 结构、小屏手感、page shell 与克制型 TDesign-first 表达，读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
 - 页面审查与复审时，配合 `.github/standards/weapp/REVIEW_CHECKLIST.md` 使用。
 
 ## 专题补充与历史参考
@@ -63,7 +65,7 @@
 
 说明：
 
-- 运行时实现用于回答“现在代码里具体怎么接”，不替代 `PAGE_DELIVERY_BASELINE.md` 和 `DESIGN_SYSTEM.md` 的长期标准地位。
+- 运行时实现用于回答“现在代码里具体怎么接”，不替代 `PAGE_DELIVERY_BASELINE.md`、`DESIGN_SYSTEM.md` 和 `NON_CONSUMER_DESIGN_SYSTEM.md` 的长期标准地位。
 
 ## 历史材料说明
 
@@ -77,7 +79,7 @@
 
 ## 整体升级审计的使用方式
 
-- 常规实现和常规 review 先按 `PAGE_DELIVERY_BASELINE.md` 与 `DESIGN_SYSTEM.md` 判断是否合规。
+- 常规实现和常规 review 先按 `PAGE_DELIVERY_BASELINE.md` 与角色侧对应的设计文档判断是否合规。
 - 如果任务目标是“整体升级”“统一体验”“把页面做得更友好更一致”，再叠加历史蓝图材料做升级审计。
 - 历史蓝图只用于补充升级方向和旧问题模式，不再作为默认执行标准。
 
@@ -86,7 +88,7 @@
 当任务涉及 `weapp/` 时，建议按以下顺序读取：
 
 1. `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-2. `.github/standards/weapp/DESIGN_SYSTEM.md`（当任务涉及页面结构、组件视觉、触控热区、page shell 或一致性时读取）
+2. 顾客侧任务读 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧任务读 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 3. `.github/standards/weapp/REVIEW_CHECKLIST.md`（当任务是 review 或复审时读取）
 4. `.github/standards/weapp/README.md`
 5. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）

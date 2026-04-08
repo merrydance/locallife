@@ -2,7 +2,7 @@
 
 本文件定义 LocalLife 小程序的页面级交互标准与任务流承接规则。
 
-它不负责视觉样式定义；相关内容如需补充参考，可按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`。
+它不负责视觉样式定义；相关内容如需补充参考，顾客侧按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`，非顾客侧按需查看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
 
 默认页面交付、状态恢复、请求边界、分页真值、反馈承接和高风险路径约束，统一以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准。本文件只保留页面交互与任务流承接的专题展开；若与默认基线口径不一致，以默认基线为准。
 
@@ -135,6 +135,6 @@
 ## 10. 与其他文档的关系
 
 - 默认页面交付与状态恢复口径：先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-- 视觉与 page shell 补充：按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`
+- 视觉与 page shell 补充：顾客侧按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧按需看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - 运行时提示系统接入细节：按需看 `weapp/miniprogram/utils/prompt-feedback.ts` 和 `weapp/miniprogram/utils/user-facing.ts`
 - 若需查看旧专题拆分材料中的 API contract 展开，可按需看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`

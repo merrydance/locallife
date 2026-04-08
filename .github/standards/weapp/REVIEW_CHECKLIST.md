@@ -5,7 +5,7 @@
 使用方式：
 
 - 先用本清单识别必须修复的问题，再补充残余风险。
-- 常规 review 先以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 判断 baseline violations；只有任务明确涉及视觉系统漂移、组件视觉基线或角色侧视觉边界时，才把 `.github/standards/weapp/DESIGN_SYSTEM.md` 作为补充输入。
+- 常规 review 先以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 判断 baseline violations；只有任务明确涉及视觉系统漂移、组件视觉基线或角色侧视觉边界时，才按角色把 `.github/standards/weapp/DESIGN_SYSTEM.md` 或 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md` 作为补充输入。
 - 如果任务目标是“整体升级”“统一体验”“提高用户友好度”，再叠加历史蓝图文档做升级审计。
 - 若同一条判断和现行 standards 冲突，以现行 standards 为准。
 
@@ -13,6 +13,7 @@
 
 - `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 - `.github/standards/weapp/DESIGN_SYSTEM.md`
+- `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md`
 
 运行时实现参考：

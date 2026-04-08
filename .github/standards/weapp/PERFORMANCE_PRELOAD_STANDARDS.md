@@ -2,7 +2,7 @@
 
 本文件定义 LocalLife 小程序在入口页、聚合页、首屏性能、预加载、请求预算、弱网韧性和跨角色数据拉取上的长期标准。
 
-它不负责视觉设计。默认页面交付与非视觉规则仍以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准；视觉内容如需补充查看，可按需参考 `.github/standards/weapp/DESIGN_SYSTEM.md`。
+它不负责视觉设计。默认页面交付与非视觉规则仍以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准；视觉内容如需补充查看，顾客侧按需参考 `.github/standards/weapp/DESIGN_SYSTEM.md`，非顾客侧按需参考 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
 
 本文件只作为性能、预加载、请求预算与弱网退化的专题展开，不再单独充当小程序页面交付的默认权威入口。若本文件与 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 口径不一致，以后者为准。
 
@@ -179,5 +179,5 @@
 ## 13. 与其他文档的关系
 
 - 默认页面交付、状态恢复、分页真值、提示承接与请求边界，先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-- 视觉与 page shell 补充：按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`
+- 视觉与 page shell 补充：顾客侧按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧按需看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - 运行时错误映射与提示接入实现：按需看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`

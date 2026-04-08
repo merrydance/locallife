@@ -121,6 +121,6 @@
 ## 14. 与其他文档的关系
 
 - 默认页面交付、状态恢复、请求边界与高风险路径：先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-- 视觉与 page shell 补充：按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`
+- 视觉与 page shell 补充：顾客侧按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧按需看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 - 小程序运行时提示接入：按需看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`
 - 若需查看旧专题拆分材料中的交互展开，可按需看 `.github/standards/weapp/INTERACTION_STANDARDS.md`

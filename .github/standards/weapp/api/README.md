@@ -6,7 +6,8 @@
 >
 > - `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
 > - `.github/standards/weapp/INTERACTION_STANDARDS.md`
-> - `.github/standards/weapp/DESIGN_SYSTEM.md`
+> - 顾客侧视觉看 `.github/standards/weapp/DESIGN_SYSTEM.md`
+> - 非顾客侧视觉看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
 
 ## 重构概述
 
