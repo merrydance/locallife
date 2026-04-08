@@ -769,6 +769,12 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 	// 转换响应
 	result := make([]dishResponse, len(dishes))
 	for i, dish := range dishes {
+		var customizationGroups []customizationGroup
+		if err := parseJSON(dish.CustomizationGroups, &customizationGroups); err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("failed to parse customization_groups: %w", err)))
+			return
+		}
+
 		assetID := int64PtrFromPgInt8(dish.ImageMediaAssetID)
 		var imgURL string
 		if assetID != nil {
@@ -789,6 +795,7 @@ func (server *Server) listDishesByMerchant(ctx *gin.Context) {
 			IsOnline:      dish.IsOnline,
 			IsPackaging:   dish.IsPackaging,
 			SortOrder:     dish.SortOrder,
+			CustomizationGroups: customizationGroups,
 		}
 	}
 

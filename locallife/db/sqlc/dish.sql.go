@@ -950,7 +950,7 @@ SELECT
     price,
     member_price,
     is_available,
-    is_online
+		is_online
 FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL
@@ -1553,14 +1553,45 @@ func (q *Queries) ListDishTags(ctx context.Context, dishID int64) ([]Tag, error)
 }
 
 const listDishesByMerchant = `-- name: ListDishesByMerchant :many
-SELECT id, merchant_id, category_id, name, description, price, member_price, is_available, is_online, sort_order, created_at, updated_at, prepare_time, deleted_at, monthly_sales, repurchase_rate, image_media_asset_id, is_packaging FROM dishes
+SELECT 
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', dcg.id,
+          'name', dcg.name,
+          'is_required', dcg.is_required,
+          'sort_order', dcg.sort_order,
+          'options', (
+            SELECT json_agg(
+              json_build_object(
+                'id', dco.id,
+                'tag_id', dco.tag_id,
+                'tag_name', opt_tag.name,
+                'extra_price', dco.extra_price,
+                'sort_order', dco.sort_order
+              ) ORDER BY dco.sort_order
+            )
+            FROM dish_customization_options dco
+            JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+            WHERE dco.group_id = dcg.id
+          )
+        ) ORDER BY dcg.sort_order
+      )
+      FROM dish_customization_groups dcg
+      WHERE dcg.dish_id = d.id
+    ),
+    '[]'
+  ) as customization_groups
+FROM dishes d
 WHERE 
-  merchant_id = $1
-  AND deleted_at IS NULL
-  AND ($4::bigint IS NULL OR category_id = $4)
-  AND ($5::boolean IS NULL OR is_online = $5)
-  AND ($6::boolean IS NULL OR is_available = $6)
-  AND ($7::boolean IS NULL OR is_packaging = $7)
+  d.merchant_id = $1
+  AND d.deleted_at IS NULL
+  AND ($4::bigint IS NULL OR d.category_id = $4)
+  AND ($5::boolean IS NULL OR d.is_online = $5)
+  AND ($6::boolean IS NULL OR d.is_available = $6)
+  AND ($7::boolean IS NULL OR d.is_packaging = $7)
 ORDER BY sort_order ASC, created_at DESC
 LIMIT $2 OFFSET $3
 `
@@ -1575,7 +1606,29 @@ type ListDishesByMerchantParams struct {
 	IsPackaging pgtype.Bool `json:"is_packaging"`
 }
 
-func (q *Queries) ListDishesByMerchant(ctx context.Context, arg ListDishesByMerchantParams) ([]Dish, error) {
+type ListDishesByMerchantRow struct {
+	ID                  int64              `json:"id"`
+	MerchantID          int64              `json:"merchant_id"`
+	CategoryID          pgtype.Int8        `json:"category_id"`
+	Name                string             `json:"name"`
+	Description         pgtype.Text        `json:"description"`
+	Price               int64              `json:"price"`
+	MemberPrice         pgtype.Int8        `json:"member_price"`
+	IsAvailable         bool               `json:"is_available"`
+	IsOnline            bool               `json:"is_online"`
+	SortOrder           int16              `json:"sort_order"`
+	CreatedAt           time.Time          `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	PrepareTime         int16              `json:"prepare_time"`
+	DeletedAt           pgtype.Timestamptz `json:"deleted_at"`
+	MonthlySales        int32              `json:"monthly_sales"`
+	RepurchaseRate      pgtype.Numeric     `json:"repurchase_rate"`
+	ImageMediaAssetID   pgtype.Int8        `json:"image_media_asset_id"`
+	IsPackaging         bool               `json:"is_packaging"`
+	CustomizationGroups interface{}        `json:"customization_groups"`
+}
+
+func (q *Queries) ListDishesByMerchant(ctx context.Context, arg ListDishesByMerchantParams) ([]ListDishesByMerchantRow, error) {
 	rows, err := q.db.Query(ctx, listDishesByMerchant,
 		arg.MerchantID,
 		arg.Limit,
@@ -1589,9 +1642,9 @@ func (q *Queries) ListDishesByMerchant(ctx context.Context, arg ListDishesByMerc
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Dish{}
+	items := []ListDishesByMerchantRow{}
 	for rows.Next() {
-		var i Dish
+		var i ListDishesByMerchantRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MerchantID,
@@ -1611,6 +1664,7 @@ func (q *Queries) ListDishesByMerchant(ctx context.Context, arg ListDishesByMerc
 			&i.RepurchaseRate,
 			&i.ImageMediaAssetID,
 			&i.IsPackaging,
+			&i.CustomizationGroups,
 		); err != nil {
 			return nil, err
 		}

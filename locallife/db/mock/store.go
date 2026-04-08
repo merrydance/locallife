@@ -12130,10 +12130,10 @@ func (mr *MockStoreMockRecorder) ListDishTags(ctx, dishID any) *gomock.Call {
 }
 
 // ListDishesByMerchant mocks base method.
-func (m *MockStore) ListDishesByMerchant(ctx context.Context, arg db.ListDishesByMerchantParams) ([]db.Dish, error) {
+func (m *MockStore) ListDishesByMerchant(ctx context.Context, arg db.ListDishesByMerchantParams) ([]db.ListDishesByMerchantRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListDishesByMerchant", ctx, arg)
-	ret0, _ := ret[0].([]db.Dish)
+	ret0, _ := ret[0].([]db.ListDishesByMerchantRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

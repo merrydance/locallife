@@ -677,9 +677,30 @@ func TestListDishesByMerchantAPI(t *testing.T) {
 	merchant := randomMerchant(user.ID)
 
 	n := 5
-	dishes := make([]db.Dish, n)
+	dishes := make([]db.ListDishesByMerchantRow, n)
 	for i := 0; i < n; i++ {
-		dishes[i] = randomDish(merchant.ID, nil)
+		rawDish := randomDish(merchant.ID, nil)
+		dishes[i] = db.ListDishesByMerchantRow{
+			ID:                rawDish.ID,
+			MerchantID:        rawDish.MerchantID,
+			CategoryID:        rawDish.CategoryID,
+			Name:              rawDish.Name,
+			Description:       rawDish.Description,
+			Price:             rawDish.Price,
+			MemberPrice:       rawDish.MemberPrice,
+			IsAvailable:       rawDish.IsAvailable,
+			IsOnline:          rawDish.IsOnline,
+			SortOrder:         rawDish.SortOrder,
+			CreatedAt:         rawDish.CreatedAt,
+			UpdatedAt:         rawDish.UpdatedAt,
+			PrepareTime:       rawDish.PrepareTime,
+			DeletedAt:         rawDish.DeletedAt,
+			MonthlySales:      rawDish.MonthlySales,
+			RepurchaseRate:    rawDish.RepurchaseRate,
+			ImageMediaAssetID: rawDish.ImageMediaAssetID,
+			IsPackaging:       rawDish.IsPackaging,
+			CustomizationGroups: []byte(`[]`),
+		}
 	}
 
 	type Query struct {

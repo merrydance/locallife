@@ -119,14 +119,45 @@ WHERE d.id = $1 AND d.deleted_at IS NULL
 GROUP BY d.id, dc.name;
 
 -- name: ListDishesByMerchant :many
-SELECT * FROM dishes
+SELECT 
+  d.*,
+  COALESCE(
+    (
+      SELECT json_agg(
+        json_build_object(
+          'id', dcg.id,
+          'name', dcg.name,
+          'is_required', dcg.is_required,
+          'sort_order', dcg.sort_order,
+          'options', (
+            SELECT json_agg(
+              json_build_object(
+                'id', dco.id,
+                'tag_id', dco.tag_id,
+                'tag_name', opt_tag.name,
+                'extra_price', dco.extra_price,
+                'sort_order', dco.sort_order
+              ) ORDER BY dco.sort_order
+            )
+            FROM dish_customization_options dco
+            JOIN tags opt_tag ON dco.tag_id = opt_tag.id
+            WHERE dco.group_id = dcg.id
+          )
+        ) ORDER BY dcg.sort_order
+      )
+      FROM dish_customization_groups dcg
+      WHERE dcg.dish_id = d.id
+    ),
+    '[]'
+  ) as customization_groups
+FROM dishes d
 WHERE 
-  merchant_id = $1
-  AND deleted_at IS NULL
-  AND (sqlc.narg('category_id')::bigint IS NULL OR category_id = sqlc.narg('category_id'))
-  AND (sqlc.narg('is_online')::boolean IS NULL OR is_online = sqlc.narg('is_online'))
-  AND (sqlc.narg('is_available')::boolean IS NULL OR is_available = sqlc.narg('is_available'))
-  AND (sqlc.narg('is_packaging')::boolean IS NULL OR is_packaging = sqlc.narg('is_packaging'))
+  d.merchant_id = $1
+  AND d.deleted_at IS NULL
+  AND (sqlc.narg('category_id')::bigint IS NULL OR d.category_id = sqlc.narg('category_id'))
+  AND (sqlc.narg('is_online')::boolean IS NULL OR d.is_online = sqlc.narg('is_online'))
+  AND (sqlc.narg('is_available')::boolean IS NULL OR d.is_available = sqlc.narg('is_available'))
+  AND (sqlc.narg('is_packaging')::boolean IS NULL OR d.is_packaging = sqlc.narg('is_packaging'))
 ORDER BY sort_order ASC, created_at DESC
 LIMIT $2 OFFSET $3;
 

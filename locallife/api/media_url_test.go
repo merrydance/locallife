@@ -481,13 +481,14 @@ func TestListDishesByMerchantWithImageURLs(t *testing.T) {
 	merchant := randomMerchant(user.ID)
 	assetID := int64(55)
 
-	dish := db.Dish{
+	dish := db.ListDishesByMerchantRow{
 		ID:                1,
 		MerchantID:        merchant.ID,
 		Name:              "测试菜品",
 		ImageMediaAssetID: pgtype.Int8{Int64: assetID, Valid: true},
 		IsAvailable:       true,
 		IsOnline:          true,
+		CustomizationGroups: []byte(`[]`),
 	}
 
 	ctrl := gomock.NewController(t)
@@ -495,7 +496,7 @@ func TestListDishesByMerchantWithImageURLs(t *testing.T) {
 
 	store := mockdb.NewMockStore(ctrl)
 	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
-	store.EXPECT().ListDishesByMerchant(gomock.Any(), gomock.Any()).Times(1).Return([]db.Dish{dish}, nil)
+	store.EXPECT().ListDishesByMerchant(gomock.Any(), gomock.Any()).Times(1).Return([]db.ListDishesByMerchantRow{dish}, nil)
 	store.EXPECT().CountDishesByMerchant(gomock.Any(), gomock.Any()).Times(1).Return(int64(1), nil)
 	store.EXPECT().
 		ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{assetID})).

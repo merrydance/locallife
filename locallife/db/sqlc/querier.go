@@ -1178,7 +1178,7 @@ type Querier interface {
 	ListDishCustomizationOptions(ctx context.Context, groupID int64) ([]ListDishCustomizationOptionsRow, error)
 	ListDishIngredients(ctx context.Context, dishID int64) ([]Ingredient, error)
 	ListDishTags(ctx context.Context, dishID int64) ([]Tag, error)
-	ListDishesByMerchant(ctx context.Context, arg ListDishesByMerchantParams) ([]Dish, error)
+	ListDishesByMerchant(ctx context.Context, arg ListDishesByMerchantParams) ([]ListDishesByMerchantRow, error)
 	// 获取商户上架菜品（用于扫码点餐菜单展示）
 	ListDishesForMenu(ctx context.Context, merchantID int64) ([]ListDishesForMenuRow, error)
 	ListDueClaimRecoveries(ctx context.Context, arg ListDueClaimRecoveriesParams) ([]ClaimRecovery, error)
