@@ -382,9 +382,9 @@ type ComboDish struct {
 	ComboID                 int64  `json:"combo_id"`
 	DishID                  int64  `json:"dish_id"`
 	Quantity                int16  `json:"quantity"`
-	DishBasePriceSnapshot   int64  `json:"dish_base_price_snapshot"`
 	Customizations          []byte `json:"customizations"`
 	CustomizationExtraPrice int64  `json:"customization_extra_price"`
+	DishBasePriceSnapshot   int64  `json:"dish_base_price_snapshot"`
 }
 
 type ComboSet struct {

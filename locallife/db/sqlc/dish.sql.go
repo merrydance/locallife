@@ -950,7 +950,8 @@ SELECT
     price,
     member_price,
     is_available,
-		is_online
+  is_online,
+  is_packaging
 FROM dishes
 WHERE id = ANY($1::bigint[])
   AND deleted_at IS NULL
@@ -966,6 +967,7 @@ type GetDishesByIDsAllRow struct {
 	MemberPrice       pgtype.Int8 `json:"member_price"`
 	IsAvailable       bool        `json:"is_available"`
 	IsOnline          bool        `json:"is_online"`
+	IsPackaging       bool        `json:"is_packaging"`
 }
 
 // 批量获取菜品（不过滤上下架状态，用于权限验证等）
@@ -988,6 +990,7 @@ func (q *Queries) GetDishesByIDsAll(ctx context.Context, dollar_1 []int64) ([]Ge
 			&i.MemberPrice,
 			&i.IsAvailable,
 			&i.IsOnline,
+			&i.IsPackaging,
 		); err != nil {
 			return nil, err
 		}

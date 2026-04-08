@@ -18,12 +18,12 @@ INSERT INTO combo_dishes (
   combo_id,
   dish_id,
   quantity,
-	dish_base_price_snapshot,
+  dish_base_price_snapshot,
   customizations,
   customization_extra_price
 ) VALUES (
-	$1, $2, $3, $4, $5, $6
-) RETURNING id, combo_id, dish_id, quantity, dish_base_price_snapshot, customizations, customization_extra_price
+  $1, $2, $3, $4, $5, $6
+) RETURNING id, combo_id, dish_id, quantity, customizations, customization_extra_price, dish_base_price_snapshot
 `
 
 type AddComboDishParams struct {
@@ -53,9 +53,9 @@ func (q *Queries) AddComboDish(ctx context.Context, arg AddComboDishParams) (Com
 		&i.ComboID,
 		&i.DishID,
 		&i.Quantity,
-		&i.DishBasePriceSnapshot,
 		&i.Customizations,
 		&i.CustomizationExtraPrice,
+		&i.DishBasePriceSnapshot,
 	)
 	return i, err
 }
@@ -274,7 +274,7 @@ SELECT
       jsonb_build_object(
         'dish_id', cd.dish_id,
         'dish_name', d.name,
-	'dish_price', COALESCE(cd.dish_base_price_snapshot, d.price) + COALESCE(cd.customization_extra_price, 0),
+        'dish_price', COALESCE(cd.dish_base_price_snapshot, d.price) + COALESCE(cd.customization_extra_price, 0),
         'dish_image_media_asset_id', d.image_media_asset_id,
         'quantity', cd.quantity,
         'customizations', COALESCE(cd.customizations, '{}'::jsonb),
@@ -574,7 +574,7 @@ const listComboDishes = `-- name: ListComboDishes :many
 SELECT 
   d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   cd.quantity,
-	cd.dish_base_price_snapshot,
+  cd.dish_base_price_snapshot,
   cd.customizations,
   cd.customization_extra_price
 FROM dishes d
