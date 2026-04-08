@@ -54,6 +54,44 @@ func randomRoom(merchantID int64) db.Table {
 	}
 }
 
+func tableToListTablesByMerchantRow(table db.Table, primaryImageAssetID int64) db.ListTablesByMerchantRow {
+	return db.ListTablesByMerchantRow{
+		ID:                   table.ID,
+		MerchantID:           table.MerchantID,
+		TableNo:              table.TableNo,
+		TableType:            table.TableType,
+		Capacity:             table.Capacity,
+		Description:          table.Description,
+		MinimumSpend:         table.MinimumSpend,
+		QrCodeUrl:            table.QrCodeUrl,
+		Status:               table.Status,
+		CurrentReservationID: table.CurrentReservationID,
+		CreatedAt:            table.CreatedAt,
+		UpdatedAt:            table.UpdatedAt,
+		AccessCodeHash:       table.AccessCodeHash,
+		PrimaryImageAssetID:  primaryImageAssetID,
+	}
+}
+
+func tableToListTablesByMerchantAndTypeRow(table db.Table, primaryImageAssetID int64) db.ListTablesByMerchantAndTypeRow {
+	return db.ListTablesByMerchantAndTypeRow{
+		ID:                   table.ID,
+		MerchantID:           table.MerchantID,
+		TableNo:              table.TableNo,
+		TableType:            table.TableType,
+		Capacity:             table.Capacity,
+		Description:          table.Description,
+		MinimumSpend:         table.MinimumSpend,
+		QrCodeUrl:            table.QrCodeUrl,
+		Status:               table.Status,
+		CurrentReservationID: table.CurrentReservationID,
+		CreatedAt:            table.CreatedAt,
+		UpdatedAt:            table.UpdatedAt,
+		AccessCodeHash:       table.AccessCodeHash,
+		PrimaryImageAssetID:  primaryImageAssetID,
+	}
+}
+
 func TestNewTableResponse_RewritesLegacyQRCodeURLInOSSMode(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -366,8 +404,12 @@ func TestListTablesAPI(t *testing.T) {
 
 	n := 5
 	tables := make([]db.Table, n)
+	tableRows := make([]db.ListTablesByMerchantRow, n)
+	tableTypeRows := make([]db.ListTablesByMerchantAndTypeRow, n)
 	for i := 0; i < n; i++ {
 		tables[i] = randomTable(merchant.ID)
+		tableRows[i] = tableToListTablesByMerchantRow(tables[i], 0)
+		tableTypeRows[i] = tableToListTablesByMerchantAndTypeRow(tables[i], 0)
 	}
 
 	testCases := []struct {
@@ -389,11 +431,11 @@ func TestListTablesAPI(t *testing.T) {
 				store.EXPECT().
 					ListTablesByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
 					Times(1).
-					Return(tables, nil)
+					Return(tableRows, nil)
 
 				store.EXPECT().
 					ListTableTags(gomock.Any(), gomock.Any()).
-					Times(len(tables)).
+					Times(len(tableRows)).
 					Return([]db.ListTableTagsRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -412,11 +454,11 @@ func TestListTablesAPI(t *testing.T) {
 				store.EXPECT().
 					ListTablesByMerchantAndType(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(tables, nil)
+					Return(tableTypeRows, nil)
 
 				store.EXPECT().
 					ListTableTags(gomock.Any(), gomock.Any()).
-					Times(len(tables)).
+					Times(len(tableTypeRows)).
 					Return([]db.ListTableTagsRow{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -460,6 +502,53 @@ func TestListTablesAPI(t *testing.T) {
 			tc.checkResponse(t, recorder)
 		})
 	}
+}
+
+func TestListTablesAPI_IncludesImageURL(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID)
+	table := randomTable(merchant.ID)
+	assetID := int64(42)
+	rows := []db.ListTablesByMerchantRow{tableToListTablesByMerchantRow(table, assetID)}
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+	store.EXPECT().
+		ListTablesByMerchant(gomock.Any(), gomock.Eq(merchant.ID)).
+		Times(1).
+		Return(rows, nil)
+	store.EXPECT().
+		ListMediaAssetsByIDs(gomock.Any(), gomock.Eq([]int64{assetID})).
+		Times(1).
+		Return([]db.ListMediaAssetsByIDsRow{approvedAssetRow(assetID, "merchant/table/cover.jpg")}, nil)
+	store.EXPECT().
+		ListTableTags(gomock.Any(), gomock.Eq(table.ID)).
+		Times(1).
+		Return([]db.ListTableTagsRow{}, nil)
+
+	server, _ := newTestServerForMedia(t, store)
+	recorder := httptest.NewRecorder()
+	request, err := http.NewRequest(http.MethodGet, "/v1/tables", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+
+	server.router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp struct {
+		Code    int                `json:"code"`
+		Message string             `json:"message"`
+		Data    listTablesResponse `json:"data"`
+	}
+	err = json.Unmarshal(recorder.Body.Bytes(), &resp)
+	require.NoError(t, err)
+	require.Len(t, resp.Data.Tables, 1)
+	require.NotEmpty(t, resp.Data.Tables[0].ImageURL)
+	require.Contains(t, resp.Data.Tables[0].ImageURL, "cdn.test.example.com")
+	require.Contains(t, resp.Data.Tables[0].ImageURL, "merchant/table/cover.jpg")
 }
 
 // ==================== 更新桌台测试 ====================

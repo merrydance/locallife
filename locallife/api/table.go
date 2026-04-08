@@ -38,6 +38,8 @@ type tableResponse struct {
 	Description          *string           `json:"description,omitempty"`
 	MinimumSpend         *int64            `json:"minimum_spend,omitempty"`
 	QrCodeUrl            *string           `json:"qr_code_url,omitempty"`
+	PrimaryImageAssetID  *int64            `json:"-"`
+	ImageURL             string            `json:"image_url,omitempty"`
 	Status               string            `json:"status"`
 	CurrentReservationID *int64            `json:"current_reservation_id,omitempty"`
 	CurrentReservation   *reservationBrief `json:"current_reservation,omitempty"` // 当前预订信息
@@ -80,6 +82,82 @@ func (server *Server) newTableResponse(t db.Table) tableResponse {
 		Capacity:   t.Capacity,
 		Status:     t.Status,
 		CreatedAt:  t.CreatedAt,
+	}
+
+	if t.Description.Valid {
+		resp.Description = &t.Description.String
+	}
+	if t.MinimumSpend.Valid {
+		resp.MinimumSpend = &t.MinimumSpend.Int64
+	}
+	if t.QrCodeUrl.Valid {
+		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
+		resp.QrCodeUrl = &qrCodeURL
+	}
+	if t.CurrentReservationID.Valid {
+		resp.CurrentReservationID = &t.CurrentReservationID.Int64
+	}
+	if t.UpdatedAt.Valid {
+		resp.UpdatedAt = &t.UpdatedAt.Time
+	}
+
+	return resp
+}
+
+func primaryImageAssetIDFromValue(value interface{}) *int64 {
+	if value == nil {
+		return nil
+	}
+
+	if id, ok := value.(int64); ok && id > 0 {
+		return &id
+	}
+
+	return nil
+}
+
+func (server *Server) newTableResponseFromListRow(t db.ListTablesByMerchantRow) tableResponse {
+	resp := tableResponse{
+		ID:                  t.ID,
+		MerchantID:          t.MerchantID,
+		TableNo:             t.TableNo,
+		TableType:           t.TableType,
+		Capacity:            t.Capacity,
+		Status:              t.Status,
+		CreatedAt:           t.CreatedAt,
+		PrimaryImageAssetID: primaryImageAssetIDFromValue(t.PrimaryImageAssetID),
+	}
+
+	if t.Description.Valid {
+		resp.Description = &t.Description.String
+	}
+	if t.MinimumSpend.Valid {
+		resp.MinimumSpend = &t.MinimumSpend.Int64
+	}
+	if t.QrCodeUrl.Valid {
+		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
+		resp.QrCodeUrl = &qrCodeURL
+	}
+	if t.CurrentReservationID.Valid {
+		resp.CurrentReservationID = &t.CurrentReservationID.Int64
+	}
+	if t.UpdatedAt.Valid {
+		resp.UpdatedAt = &t.UpdatedAt.Time
+	}
+
+	return resp
+}
+
+func (server *Server) newTableResponseFromListTypeRow(t db.ListTablesByMerchantAndTypeRow) tableResponse {
+	resp := tableResponse{
+		ID:                  t.ID,
+		MerchantID:          t.MerchantID,
+		TableNo:             t.TableNo,
+		TableType:           t.TableType,
+		Capacity:            t.Capacity,
+		Status:              t.Status,
+		CreatedAt:           t.CreatedAt,
+		PrimaryImageAssetID: primaryImageAssetIDFromValue(t.PrimaryImageAssetID),
 	}
 
 	if t.Description.Valid {
@@ -314,32 +392,56 @@ func (server *Server) listTables(ctx *gin.Context) {
 		return
 	}
 
-	var tables []db.Table
+	var respTables []tableResponse
 
 	if req.TableType != "" {
-		tables, err = server.store.ListTablesByMerchantAndType(ctx, db.ListTablesByMerchantAndTypeParams{
+		tables, listErr := server.store.ListTablesByMerchantAndType(ctx, db.ListTablesByMerchantAndTypeParams{
 			MerchantID: merchant.ID,
 			TableType:  req.TableType,
 		})
-	} else {
-		tables, err = server.store.ListTablesByMerchant(ctx, merchant.ID)
-	}
+		if listErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, listErr))
+			return
+		}
 
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		respTables = make([]tableResponse, len(tables))
+		for i, t := range tables {
+			respTables[i] = server.newTableResponseFromListTypeRow(t)
+		}
+	} else {
+		tables, listErr := server.store.ListTablesByMerchant(ctx, merchant.ID)
+		if listErr != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, listErr))
+			return
+		}
+
+		respTables = make([]tableResponse, len(tables))
+		for i, t := range tables {
+			respTables[i] = server.newTableResponseFromListRow(t)
+		}
 	}
 
 	resp := listTablesResponse{
-		Tables: make([]tableResponse, len(tables)),
-		Count:  int64(len(tables)),
-		Total:  int64(len(tables)),
+		Tables: respTables,
+		Count:  int64(len(respTables)),
+		Total:  int64(len(respTables)),
 	}
-	for i, t := range tables {
-		resp.Tables[i] = server.newTableResponse(t)
+
+	imageAssetIDs := make([]int64, 0, len(resp.Tables))
+	for _, table := range resp.Tables {
+		if table.PrimaryImageAssetID != nil {
+			imageAssetIDs = append(imageAssetIDs, *table.PrimaryImageAssetID)
+		}
+	}
+	imageURLs := server.batchPublicImageURLs(ctx, imageAssetIDs, media.VariantCard)
+
+	for i := range resp.Tables {
+		if resp.Tables[i].PrimaryImageAssetID != nil {
+			resp.Tables[i].ImageURL = imageURLs[*resp.Tables[i].PrimaryImageAssetID]
+		}
 
 		// 加载每个桌台的标签
-		tags, err := server.store.ListTableTags(ctx, t.ID)
+		tags, err := server.store.ListTableTags(ctx, resp.Tables[i].ID)
 		if err == nil && len(tags) > 0 {
 			resp.Tables[i].Tags = make([]tagInfo, len(tags))
 			for j, tag := range tags {
@@ -351,8 +453,8 @@ func (server *Server) listTables(ctx *gin.Context) {
 		}
 
 		// 加载当前预订信息
-		if t.CurrentReservationID.Valid {
-			reservation, err := server.store.GetTableReservation(ctx, t.CurrentReservationID.Int64)
+		if resp.Tables[i].CurrentReservationID != nil {
+			reservation, err := server.store.GetTableReservation(ctx, *resp.Tables[i].CurrentReservationID)
 			if err == nil {
 				var notes *string
 				if reservation.Notes.Valid {

@@ -27,15 +27,53 @@ SELECT * FROM tables
 WHERE merchant_id = $1 AND table_no = $2 LIMIT 1;
 
 -- name: ListTablesByMerchant :many
-SELECT * FROM tables
-WHERE merchant_id = $1
-ORDER BY table_type, table_no;
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+ORDER BY t.table_type, t.table_no;
 
 -- name: ListTablesByMerchantAndType :many
-SELECT * FROM tables
-WHERE merchant_id = $1 
-  AND table_type = $2
-ORDER BY table_no;
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+  AND t.table_type = $2
+ORDER BY t.table_no;
 
 -- name: ListAvailableRooms :many
 SELECT * FROM tables

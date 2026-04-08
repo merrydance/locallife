@@ -14650,10 +14650,10 @@ func (mr *MockStoreMockRecorder) ListTableTags(ctx, tableID any) *gomock.Call {
 }
 
 // ListTablesByMerchant mocks base method.
-func (m *MockStore) ListTablesByMerchant(ctx context.Context, merchantID int64) ([]db.Table, error) {
+func (m *MockStore) ListTablesByMerchant(ctx context.Context, merchantID int64) ([]db.ListTablesByMerchantRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListTablesByMerchant", ctx, merchantID)
-	ret0, _ := ret[0].([]db.Table)
+	ret0, _ := ret[0].([]db.ListTablesByMerchantRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -14665,10 +14665,10 @@ func (mr *MockStoreMockRecorder) ListTablesByMerchant(ctx, merchantID any) *gomo
 }
 
 // ListTablesByMerchantAndType mocks base method.
-func (m *MockStore) ListTablesByMerchantAndType(ctx context.Context, arg db.ListTablesByMerchantAndTypeParams) ([]db.Table, error) {
+func (m *MockStore) ListTablesByMerchantAndType(ctx context.Context, arg db.ListTablesByMerchantAndTypeParams) ([]db.ListTablesByMerchantAndTypeRow, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListTablesByMerchantAndType", ctx, arg)
-	ret0, _ := ret[0].([]db.Table)
+	ret0, _ := ret[0].([]db.ListTablesByMerchantAndTypeRow)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

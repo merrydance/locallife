@@ -41744,6 +41744,9 @@ const docTemplate = `{
                 "id": {
                     "type": "integer"
                 },
+                "image_url": {
+                    "type": "string"
+                },
                 "merchant_id": {
                     "type": "integer"
                 },

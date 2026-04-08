@@ -831,20 +831,56 @@ func (q *Queries) ListTableTags(ctx context.Context, tableID int64) ([]ListTable
 }
 
 const listTablesByMerchant = `-- name: ListTablesByMerchant :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
-WHERE merchant_id = $1
-ORDER BY table_type, table_no
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+ORDER BY t.table_type, t.table_no
 `
 
-func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([]Table, error) {
+type ListTablesByMerchantRow struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	TableNo              string             `json:"table_no"`
+	TableType            string             `json:"table_type"`
+	Capacity             int16              `json:"capacity"`
+	Description          pgtype.Text        `json:"description"`
+	MinimumSpend         pgtype.Int8        `json:"minimum_spend"`
+	QrCodeUrl            pgtype.Text        `json:"qr_code_url"`
+	Status               string             `json:"status"`
+	CurrentReservationID pgtype.Int8        `json:"current_reservation_id"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	AccessCodeHash       pgtype.Text        `json:"access_code_hash"`
+	PrimaryImageAssetID  interface{}        `json:"primary_image_asset_id"`
+}
+
+func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([]ListTablesByMerchantRow, error) {
 	rows, err := q.db.Query(ctx, listTablesByMerchant, merchantID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Table{}
+	items := []ListTablesByMerchantRow{}
 	for rows.Next() {
-		var i Table
+		var i ListTablesByMerchantRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MerchantID,
@@ -859,6 +895,7 @@ func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AccessCodeHash,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}
@@ -871,10 +908,29 @@ func (q *Queries) ListTablesByMerchant(ctx context.Context, merchantID int64) ([
 }
 
 const listTablesByMerchantAndType = `-- name: ListTablesByMerchantAndType :many
-SELECT id, merchant_id, table_no, table_type, capacity, description, minimum_spend, qr_code_url, status, current_reservation_id, created_at, updated_at, access_code_hash FROM tables
-WHERE merchant_id = $1 
-  AND table_type = $2
-ORDER BY table_no
+SELECT
+    t.id,
+    t.merchant_id,
+    t.table_no,
+    t.table_type,
+    t.capacity,
+    t.description,
+    t.minimum_spend,
+    t.qr_code_url,
+    t.status,
+    t.current_reservation_id,
+    t.created_at,
+    t.updated_at,
+    t.access_code_hash,
+    COALESCE(
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id AND ti.is_primary = TRUE LIMIT 1),
+        (SELECT ti.media_asset_id FROM table_images ti WHERE ti.table_id = t.id ORDER BY ti.sort_order ASC, ti.created_at ASC LIMIT 1),
+        0
+    ) AS primary_image_asset_id
+FROM tables t
+WHERE t.merchant_id = $1
+  AND t.table_type = $2
+ORDER BY t.table_no
 `
 
 type ListTablesByMerchantAndTypeParams struct {
@@ -882,15 +938,32 @@ type ListTablesByMerchantAndTypeParams struct {
 	TableType  string `json:"table_type"`
 }
 
-func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]Table, error) {
+type ListTablesByMerchantAndTypeRow struct {
+	ID                   int64              `json:"id"`
+	MerchantID           int64              `json:"merchant_id"`
+	TableNo              string             `json:"table_no"`
+	TableType            string             `json:"table_type"`
+	Capacity             int16              `json:"capacity"`
+	Description          pgtype.Text        `json:"description"`
+	MinimumSpend         pgtype.Int8        `json:"minimum_spend"`
+	QrCodeUrl            pgtype.Text        `json:"qr_code_url"`
+	Status               string             `json:"status"`
+	CurrentReservationID pgtype.Int8        `json:"current_reservation_id"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	AccessCodeHash       pgtype.Text        `json:"access_code_hash"`
+	PrimaryImageAssetID  interface{}        `json:"primary_image_asset_id"`
+}
+
+func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]ListTablesByMerchantAndTypeRow, error) {
 	rows, err := q.db.Query(ctx, listTablesByMerchantAndType, arg.MerchantID, arg.TableType)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	items := []Table{}
+	items := []ListTablesByMerchantAndTypeRow{}
 	for rows.Next() {
-		var i Table
+		var i ListTablesByMerchantAndTypeRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.MerchantID,
@@ -905,6 +978,7 @@ func (q *Queries) ListTablesByMerchantAndType(ctx context.Context, arg ListTable
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.AccessCodeHash,
+			&i.PrimaryImageAssetID,
 		); err != nil {
 			return nil, err
 		}

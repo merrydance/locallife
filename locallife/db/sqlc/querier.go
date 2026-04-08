@@ -1407,8 +1407,8 @@ type Querier interface {
 	ListSuspendedRegions(ctx context.Context) ([]WeatherCoefficient, error)
 	ListTableImages(ctx context.Context, tableID int64) ([]TableImage, error)
 	ListTableTags(ctx context.Context, tableID int64) ([]ListTableTagsRow, error)
-	ListTablesByMerchant(ctx context.Context, merchantID int64) ([]Table, error)
-	ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]Table, error)
+	ListTablesByMerchant(ctx context.Context, merchantID int64) ([]ListTablesByMerchantRow, error)
+	ListTablesByMerchantAndType(ctx context.Context, arg ListTablesByMerchantAndTypeParams) ([]ListTablesByMerchantAndTypeRow, error)
 	ListTablesByTag(ctx context.Context, tagID int64) ([]Table, error)
 	ListTags(ctx context.Context, arg ListTagsParams) ([]Tag, error)
 	// 获取已送达但未完成超过一定时间的外卖订单（用于自动完成）
