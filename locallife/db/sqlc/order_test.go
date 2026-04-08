@@ -412,6 +412,8 @@ func TestGetOrderWithDetails_PrefersDeliverySnapshot(t *testing.T) {
 	require.Equal(t, address.ContactName, details.DeliveryContactName)
 	require.Equal(t, address.ContactPhone, details.DeliveryContactPhone)
 	require.Equal(t, address.DetailAddress, details.DeliveryAddress)
+	require.False(t, details.CombinedPaymentID.Valid)
+	require.Empty(t, details.CombineOutTradeNo)
 	require.True(t, details.DeliveryAddressSnapshot.Valid)
 	require.Equal(t, address.DetailAddress, details.DeliveryAddressSnapshot.String)
 }

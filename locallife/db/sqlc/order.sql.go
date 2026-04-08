@@ -881,7 +881,7 @@ SELECT
     COALESCE(o.delivery_contact_phone_snapshot, ua.contact_phone) as delivery_contact_phone,
     COALESCE(o.delivery_address_snapshot, ua.detail_address) as delivery_address,
     pending_combined_payment.combined_payment_id,
-    pending_combined_payment.combine_out_trade_no
+    COALESCE(pending_combined_payment.combine_out_trade_no, '') as combine_out_trade_no
 FROM orders o
 INNER JOIN merchants m ON o.merchant_id = m.id
 LEFT JOIN user_addresses ua ON o.address_id = ua.id
