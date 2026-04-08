@@ -3,6 +3,7 @@ import {
   ComboDishInput,
   ComboManagementService,
   ComboSetWithDetailsResponse,
+  CustomizationGroup,
   DishManagementService,
   DishResponse,
   TagInfo,
@@ -10,32 +11,45 @@ import {
 } from '../../../../api/dish'
 import { getPublicImageUrl } from '../../../../utils/image'
 import { logger } from '../../../../utils/logger'
+import { settleAll } from '../../../../utils/promise'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-type PricingMode = 'sum' | 'off_90' | 'off_80' | 'keep'
+type CreatePopupMode = 'tag' | ''
 
 interface DishOption {
   id: number
   name: string
   price: number
+  is_available: boolean
   is_online: boolean
   image_url: string
   checked: boolean
   quantity: number
+  customization_groups: CustomizationGroup[]
+  customization_error_message: string
+  customizations: Record<string, number | string>
+  customization_summary: string
+  customization_extra_price: number
 }
 
 interface ComboEditOptions {
   id?: string
 }
 
-const getErrorMessage = getErrorUserMessage
+interface FormInputDetail {
+  value: string
+}
 
-const PRICING_MODE_OPTIONS = [
-  { label: '原价合计', value: 'sum' },
-  { label: '9折', value: 'off_90' },
-  { label: '8折', value: 'off_80' },
-  { label: '保持当前价(仅编辑)', value: 'keep' }
-]
+type SelectedSpecState = Record<string, string>
+
+interface SelectedComboDishState {
+  quantity: number
+  customizations: Record<string, string>
+  customizationSummary: string
+  customizationExtraPrice: number
+}
+
+const getErrorMessage = getErrorUserMessage
 
 function normalizeDishQuantity(quantity?: number): number {
   if (!Number.isFinite(quantity) || !quantity) {
@@ -55,10 +69,144 @@ function normalizeDishQuantity(quantity?: number): number {
 function buildSelectedComboDishes(dishes: DishOption[]): ComboDishInput[] {
   return dishes
     .filter((dish) => dish.checked)
-    .map((dish) => ({
-      dish_id: dish.id,
-      quantity: normalizeDishQuantity(dish.quantity)
-    }))
+    .map((dish) => {
+      const comboDish: ComboDishInput = {
+        dish_id: dish.id,
+        quantity: normalizeDishQuantity(dish.quantity)
+      }
+
+      if (Object.keys(dish.customizations || {}).length > 0) {
+        comboDish.customizations = dish.customizations
+      }
+
+      return comboDish
+    })
+}
+
+function normalizeComboCustomizations(customizations?: Record<string, unknown> | null): Record<string, string> {
+  const normalized: Record<string, string> = {}
+
+  if (!customizations || typeof customizations !== 'object') {
+    return normalized
+  }
+
+  Object.entries(customizations).forEach(([key, value]) => {
+    if (key === 'meta_specs') {
+      if (typeof value === 'string' && value.trim()) {
+        normalized[key] = value.trim()
+      }
+      return
+    }
+
+    if (typeof value === 'number' || typeof value === 'string') {
+      normalized[key] = String(value)
+    }
+  })
+
+  return normalized
+}
+
+function buildSelectedSpecState(groups: CustomizationGroup[], customizations: Record<string, number | string>) {
+  const selectedSpecs: SelectedSpecState = {}
+  let hasInvalidSelection = false
+
+  groups.forEach((group) => {
+    const rawValue = customizations[String(group.id)]
+    const existingSpecId = rawValue ? String(rawValue) : ''
+    const matchedOption = (group.options || []).find((option) => String(option.id) === existingSpecId)
+
+    if (matchedOption) {
+      selectedSpecs[String(group.id)] = String(matchedOption.id)
+      return
+    }
+
+    if (existingSpecId) {
+      hasInvalidSelection = true
+    }
+
+    if (group.is_required && Array.isArray(group.options) && group.options.length > 0) {
+      selectedSpecs[String(group.id)] = String(group.options[0].id)
+    }
+  })
+
+  return { selectedSpecs, hasInvalidSelection }
+}
+
+function buildDishCustomizationPayload(groups: CustomizationGroup[], selectedSpecs: SelectedSpecState) {
+  const customizations: Record<string, number | string> = {}
+  const specNames: string[] = []
+  let extraPrice = 0
+
+  groups.forEach((group) => {
+    const selectedSpecId = selectedSpecs[String(group.id)]
+    if (!selectedSpecId) {
+      return
+    }
+
+    const option = (group.options || []).find((candidate) => String(candidate.id) === selectedSpecId)
+    if (!option) {
+      return
+    }
+
+    customizations[String(group.id)] = String(option.id)
+    specNames.push(option.tag_name)
+    extraPrice += option.extra_price || 0
+  })
+
+  const summary = specNames.join(' / ')
+  if (summary) {
+    customizations.meta_specs = summary
+  }
+
+  return {
+    customizations,
+    summary,
+    extraPrice
+  }
+}
+
+function syncDishCustomizationSelection(dish: DishOption): DishOption {
+  if (!dish.checked || !Array.isArray(dish.customization_groups) || dish.customization_groups.length === 0) {
+    return {
+      ...dish,
+      customization_error_message: ''
+    }
+  }
+
+  const { selectedSpecs, hasInvalidSelection } = buildSelectedSpecState(dish.customization_groups, dish.customizations || {})
+  const payload = buildDishCustomizationPayload(dish.customization_groups, selectedSpecs)
+
+  return {
+    ...dish,
+    customizations: payload.customizations,
+    customization_summary: payload.summary,
+    customization_extra_price: payload.extraPrice,
+    customization_error_message: hasInvalidSelection ? '已保存规格已变化，已按当前规格重置。' : ''
+  }
+}
+
+function buildSelectedTagState(selectedTagIds: number[]): Record<string, boolean> {
+  return selectedTagIds.reduce<Record<string, boolean>>((result, id) => {
+    result[String(id)] = true
+    return result
+  }, {})
+}
+
+function formatFenToYuanInput(value?: number): string {
+  if (!Number.isFinite(value) || !value) {
+    return ''
+  }
+
+  return (Number(value) / 100).toFixed(2)
+}
+
+function parsePriceInputToFen(value: string): number {
+  const parsed = Number.parseFloat((value || '').trim())
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return 0
+  }
+
+  return Math.round(parsed * 100)
 }
 
 Page({
@@ -67,6 +215,7 @@ Page({
     loading: true,
     initialError: false,
     initialErrorMessage: '',
+    loadWarningMessage: '',
     submitting: false,
     isEdit: false,
     comboId: 0,
@@ -77,20 +226,23 @@ Page({
     comboNameCustomized: false,
     availableTags: [] as TagInfo[],
     selectedTagIds: [] as number[],
+    selectedTagState: {} as Record<string, boolean>,
     tagSubmitting: false,
+    createPopupVisible: false,
+    createPopupMode: '' as CreatePopupMode,
+    createInputValue: '',
     selectedDishIds: [] as number[],
     allDishes: [] as DishOption[],
     dishes: [] as DishOption[],
-    showOnlineOnly: false,
-    pricingModeOptions: PRICING_MODE_OPTIONS,
-    pricingMode: 'off_90' as PricingMode,
-    onlineChoice: 'online' as 'online' | 'offline',
+    customPriceValue: '',
+    comboPriceCustomized: false,
+    isComboOnline: true,
     autoName: '精选套餐',
     originalTotal: 0,
     comboPricePreview: 0,
     selectedDishQuantityTotal: 0,
     selectedDishPreviews: [] as string[],
-    dishEmptyDescription: '暂无可选菜品，请先创建菜品'
+    dishEmptyDescription: '暂无上架且可售的菜品，请先去上架可售菜品'
   },
 
   applyPersistedComboState(combo: Pick<ComboSetWithDetailsResponse, 'id' | 'name' | 'combo_price' | 'is_online'>, selectedDishes: ComboDishInput[]) {
@@ -109,8 +261,10 @@ Page({
         existingPrice: combo.combo_price,
         comboName: combo.name,
         comboNameCustomized: true,
-        onlineChoice: combo.is_online ? 'online' : 'offline',
-        allDishes
+        customPriceValue: formatFenToYuanInput(combo.combo_price),
+        comboPriceCustomized: true,
+        isComboOnline: !!combo.is_online,
+        allDishes: allDishes.map((dish) => syncDishCustomizationSelection(dish))
       },
       () => {
         this.syncSelectedDishState()
@@ -134,8 +288,7 @@ Page({
     this.setData({
       navBarHeight,
       isEdit: comboId > 0,
-      comboId,
-      pricingMode: comboId > 0 ? 'keep' : 'off_90'
+      comboId
     })
     this.loadData()
   },
@@ -169,38 +322,70 @@ Page({
     this.setData({
       loading: true,
       initialError: false,
-      initialErrorMessage: ''
+      initialErrorMessage: '',
+      loadWarningMessage: ''
     })
     try {
-      const [allDishesResponse, comboRes, availableTags] = await Promise.all([
+      const [allDishesResult, comboResult, tagsResult] = await settleAll([
         this.fetchAllDishes(),
         this.data.isEdit
           ? ComboManagementService.getComboDetail(this.data.comboId)
           : Promise.resolve(null as ComboSetWithDetailsResponse | null),
-        TagService.listTags('combo').catch(() => [] as TagInfo[])
-      ])
+        TagService.listTags('combo')
+      ] as const)
+
+      if (allDishesResult.status !== 'fulfilled') {
+        throw allDishesResult.reason
+      }
+      if (this.data.isEdit && comboResult.status !== 'fulfilled') {
+        throw comboResult.reason
+      }
+
+      const allDishesResponse = allDishesResult.value
+      const comboRes = comboResult.status === 'fulfilled' ? comboResult.value : null
+      const availableTags = tagsResult.status === 'fulfilled' ? tagsResult.value : []
+      const loadWarningMessage = tagsResult.status === 'rejected'
+        ? '套餐标签未同步，仍可继续编辑套餐内容'
+        : ''
 
       const dishes = allDishesResponse.map((dish: DishResponse) => ({
         id: dish.id,
         name: dish.name,
         price: dish.price,
+        is_available: dish.is_available,
         is_online: dish.is_online,
         image_url: getPublicImageUrl(dish.image_url || ''),
         checked: false,
-        quantity: 1
+        quantity: 1,
+        customization_groups: Array.isArray(dish.customization_groups) ? dish.customization_groups : [],
+        customization_error_message: '',
+        customizations: {},
+        customization_summary: '',
+        customization_extra_price: 0
       }))
 
-      const quantityByDishId = new Map(
-        (comboRes?.dishes || []).map((dish) => [dish.dish_id, normalizeDishQuantity(dish.quantity)])
+      const selectedDishMap = new Map<number, SelectedComboDishState>(
+        (comboRes?.dishes || []).map((dish: ComboSetWithDetailsResponse['dishes'][number]) => [dish.dish_id, {
+          quantity: normalizeDishQuantity(dish.quantity),
+          customizations: normalizeComboCustomizations(dish.customizations),
+          customizationSummary: dish.customization_summary || '',
+          customizationExtraPrice: dish.customization_extra_price || 0
+        }])
       )
-      const selectedDishIds = Array.from(quantityByDishId.keys())
+      const selectedDishIds = Array.from(selectedDishMap.keys()) as number[]
 
       const selectedSet = new Set(selectedDishIds)
-      const dishOptions = dishes.map((dish) => ({
-        ...dish,
-        checked: selectedSet.has(dish.id),
-        quantity: quantityByDishId.get(dish.id) || 1
-      }))
+      const dishOptions = dishes.map((dish) => {
+        const selectedDishState = selectedDishMap.get(dish.id)
+        return syncDishCustomizationSelection({
+          ...dish,
+          checked: selectedSet.has(dish.id),
+          quantity: selectedDishState?.quantity || 1,
+          customizations: selectedDishState?.customizations || {},
+          customization_summary: selectedDishState?.customizationSummary || '',
+          customization_extra_price: selectedDishState?.customizationExtraPrice || 0
+        })
+      })
 
       this.setData({
         allDishes: dishOptions,
@@ -213,10 +398,20 @@ Page({
         availableTags,
         selectedTagIds: Array.isArray(comboRes?.tags)
           ? comboRes.tags
-            .map((tag) => Number(tag.id))
-            .filter((id) => Number.isFinite(id) && id > 0)
+            .map((tag: TagInfo) => Number(tag.id))
+            .filter((id: number) => Number.isFinite(id) && id > 0)
           : [],
-        onlineChoice: comboRes?.is_online === false ? 'offline' : 'online',
+        selectedTagState: buildSelectedTagState(
+          Array.isArray(comboRes?.tags)
+            ? comboRes.tags
+              .map((tag: TagInfo) => Number(tag.id))
+              .filter((id: number) => Number.isFinite(id) && id > 0)
+            : []
+        ),
+        customPriceValue: formatFenToYuanInput(comboRes?.combo_price || 0),
+        comboPriceCustomized: !!comboRes?.combo_price,
+        isComboOnline: comboRes?.is_online !== false,
+        loadWarningMessage,
         initialError: false,
         initialErrorMessage: ''
       })
@@ -242,11 +437,11 @@ Page({
     const values = (e.detail.value || []) as string[]
     const selectedDishIds = values.map((value) => Number(value)).filter((id) => id > 0)
     const selectedSet = new Set(selectedDishIds)
-    const allDishes = this.data.allDishes.map((dish) => ({
-      ...dish,
-      checked: selectedSet.has(dish.id),
-      quantity: dish.quantity || 1
-    }))
+  const allDishes = this.data.allDishes.map((dish) => syncDishCustomizationSelection({
+    ...dish,
+    checked: selectedSet.has(dish.id),
+    quantity: dish.quantity || 1
+  }))
     this.setData({ allDishes }, () => {
       this.syncSelectedDishState()
       this.syncVisibleDishes()
@@ -279,14 +474,31 @@ Page({
     )
   },
 
-  onShowOnlineOnlyChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
-    this.setData({ showOnlineOnly: !!e.detail?.value })
-    this.syncVisibleDishes()
+  applyDishCustomizationPayload(index: number, selectedSpecs: SelectedSpecState, errorMessage = '') {
+    const dish = this.data.allDishes[index]
+    if (!dish) {
+      return
+    }
+
+    const payload = buildDishCustomizationPayload(dish.customization_groups || [], selectedSpecs)
+    this.setData({
+      [`allDishes[${index}].customizations`]: payload.customizations,
+      [`allDishes[${index}].customization_summary`]: payload.summary,
+      [`allDishes[${index}].customization_extra_price`]: payload.extraPrice,
+      [`allDishes[${index}].customization_error_message`]: errorMessage
+    }, () => {
+      this.syncVisibleDishes()
+      this.recomputePreview()
+    })
   },
 
-  onPricingModeChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ pricingMode: e.detail.value as PricingMode })
-    this.recomputePreview()
+  onComboPriceChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
+    this.setData({
+      customPriceValue: (e.detail.value || '').trim(),
+      comboPriceCustomized: true
+    }, () => {
+      this.recomputePreview()
+    })
   },
 
   onComboNameChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -302,13 +514,27 @@ Page({
     })
   },
 
-  onTagChange(e: WechatMiniprogram.CustomEvent<{ value: string[] }>) {
-    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
-    const selectedTagIds = values
-      .map((value) => Number(value))
-      .filter((id) => Number.isFinite(id) && id > 0)
+  onTagToggle(e: WechatMiniprogram.CustomEvent) {
+    const { tagId } = e.currentTarget.dataset as { tagId?: number }
+    if (typeof tagId !== 'number') {
+      return
+    }
 
-    this.setData({ selectedTagIds })
+    const detail = e.detail as boolean | { checked?: boolean } | undefined
+    const nextChecked = typeof detail === 'boolean'
+      ? detail
+      : !!detail?.checked
+
+    const selectedTagIds = nextChecked
+      ? (this.data.selectedTagIds.includes(tagId)
+        ? this.data.selectedTagIds
+        : [...this.data.selectedTagIds, tagId])
+      : this.data.selectedTagIds.filter((id) => id !== tagId)
+
+    this.setData({
+      selectedTagIds,
+      selectedTagState: buildSelectedTagState(selectedTagIds)
+    })
   },
 
   onCreateTag() {
@@ -316,47 +542,105 @@ Page({
       return
     }
 
-    wx.showModal({
-      title: '新增套餐标签',
-      editable: true,
-      placeholderText: '请输入标签名称',
-      success: async (res) => {
-        if (!res.confirm) {
-          return
-        }
-
-        const name = (res.content || '').trim()
-        if (!name) {
-          wx.showToast({ title: '标签名称不能为空', icon: 'none' })
-          return
-        }
-
-        this.setData({ tagSubmitting: true })
-        try {
-          const created = await TagService.createTag({ name, type: 'combo' })
-          const availableTags = this.data.availableTags.some((tag) => tag.id === created.id)
-            ? this.data.availableTags
-            : [...this.data.availableTags, created]
-          const selectedTagIds = this.data.selectedTagIds.includes(created.id)
-            ? this.data.selectedTagIds
-            : [...this.data.selectedTagIds, created.id]
-
-          this.setData({
-            availableTags,
-            selectedTagIds
-          })
-        } catch (err) {
-          logger.error('Create combo tag failed', err)
-          wx.showToast({ title: getErrorMessage(err, '新增标签失败，请稍后重试'), icon: 'none' })
-        } finally {
-          this.setData({ tagSubmitting: false })
-        }
-      }
+    this.setData({
+      createPopupVisible: true,
+      createPopupMode: 'tag',
+      createInputValue: ''
     })
   },
 
-  onOnlineChoiceChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ onlineChoice: e.detail.value as 'online' | 'offline' })
+  onCloseCreatePopup() {
+    if (this.data.tagSubmitting) {
+      return
+    }
+
+    this.setData({
+      createPopupVisible: false,
+      createPopupMode: '',
+      createInputValue: ''
+    })
+  },
+
+  onCreateInputChange(e: WechatMiniprogram.CustomEvent<FormInputDetail>) {
+    this.setData({ createInputValue: (e.detail.value || '').replace(/^\s+/, '') })
+  },
+
+  async onConfirmCreatePopup() {
+    if (this.data.tagSubmitting || this.data.createPopupMode !== 'tag') {
+      return
+    }
+
+    const name = this.data.createInputValue.trim()
+    if (!name) {
+      wx.showToast({ title: '标签名称不能为空', icon: 'none' })
+      return
+    }
+
+    this.setData({ tagSubmitting: true })
+    try {
+      const created = await TagService.createTag({ name, type: 'combo' })
+      const availableTags = this.data.availableTags.some((tag) => tag.id === created.id)
+        ? this.data.availableTags
+        : [...this.data.availableTags, created]
+      const selectedTagIds = this.data.selectedTagIds.includes(created.id)
+        ? this.data.selectedTagIds
+        : [...this.data.selectedTagIds, created.id]
+
+      this.setData({
+        createPopupVisible: false,
+        createPopupMode: '',
+        createInputValue: '',
+        availableTags,
+        selectedTagIds,
+        selectedTagState: buildSelectedTagState(selectedTagIds),
+        loadWarningMessage: ''
+      })
+    } catch (err) {
+      logger.error('Create combo tag failed', err)
+      wx.showToast({ title: getErrorMessage(err, '新增标签失败，请稍后重试'), icon: 'none' })
+    } finally {
+      this.setData({ tagSubmitting: false })
+    }
+  },
+
+  onComboOnlineSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    this.setData({ isComboOnline: !!e.detail?.value })
+  },
+
+  onDishSpecTagToggle(
+    e: WechatMiniprogram.CustomEvent & {
+      currentTarget: { dataset: { id?: number, groupId?: string | number, specId?: string | number, required?: string | number | boolean } }
+    }
+  ) {
+    const dishId = Number(e.currentTarget.dataset?.id || 0)
+    const groupId = String(e.currentTarget.dataset?.groupId || '')
+    const specId = String(e.currentTarget.dataset?.specId || '')
+    const requiredFlag = e.currentTarget.dataset?.required
+    const isRequired = requiredFlag === true || requiredFlag === '1' || requiredFlag === 1
+    if (!dishId || !groupId || !specId) {
+      return
+    }
+
+    const index = this.data.allDishes.findIndex((dish) => dish.id === dishId)
+    if (index < 0) {
+      return
+    }
+
+    const dish = this.data.allDishes[index]
+
+    const detail = e.detail as boolean | { checked?: boolean } | undefined
+    const nextChecked = typeof detail === 'boolean'
+      ? detail
+      : !!detail?.checked
+
+    const { selectedSpecs } = buildSelectedSpecState(dish.customization_groups || [], dish.customizations || {})
+    if (nextChecked) {
+      selectedSpecs[groupId] = specId
+    } else if (!isRequired) {
+      delete selectedSpecs[groupId]
+    }
+
+    this.applyDishCustomizationPayload(index, selectedSpecs)
   },
 
   calcOriginalTotal() {
@@ -364,26 +648,21 @@ Page({
       if (!dish.checked) {
         return sum
       }
-      return sum + dish.price * normalizeDishQuantity(dish.quantity)
+      return sum + (dish.price + (dish.customization_extra_price || 0)) * normalizeDishQuantity(dish.quantity)
     }, 0)
   },
 
   calcComboPrice(originalTotal: number) {
-    if (this.data.isEdit && this.data.pricingMode === 'keep') {
-      return this.data.existingPrice
+    const parsedComboPrice = parsePriceInputToFen(this.data.customPriceValue)
+    if (parsedComboPrice > 0) {
+      return parsedComboPrice
     }
 
-    if (this.data.pricingMode === 'sum') {
+    if (!this.data.comboPriceCustomized) {
       return originalTotal
     }
-    if (this.data.pricingMode === 'off_90') {
-      return Math.round(originalTotal * 0.9)
-    }
-    if (this.data.pricingMode === 'off_80') {
-      return Math.round(originalTotal * 0.8)
-    }
 
-    return originalTotal
+    return 0
   },
 
   buildAutoName() {
@@ -426,10 +705,15 @@ Page({
     }
 
     const comboPrice = this.calcComboPrice(originalTotal)
-  const autoName = this.buildAutoName()
-  const name = this.buildComboName(autoName)
-  const description = this.data.comboDescription.trim()
-    const isOnline = this.data.onlineChoice === 'online'
+    if (comboPrice <= 0) {
+      wx.showToast({ title: '套餐价必须大于0', icon: 'none' })
+      return
+    }
+
+    const autoName = this.buildAutoName()
+    const name = this.buildComboName(autoName)
+    const description = this.data.comboDescription.trim()
+    const isOnline = this.data.isComboOnline
     const selectedDishes = buildSelectedComboDishes(this.data.allDishes)
 
     this.setData({ submitting: true })
@@ -493,6 +777,10 @@ Page({
       selectedDishPreviews
     }
 
+    if (!this.data.comboPriceCustomized) {
+      updates.customPriceValue = formatFenToYuanInput(originalTotal)
+    }
+
     if (!this.data.comboNameCustomized) {
       updates.comboName = autoName
     }
@@ -501,13 +789,12 @@ Page({
   },
 
   syncVisibleDishes() {
-    const dishes = this.data.showOnlineOnly
-      ? this.data.allDishes.filter((dish) => dish.is_online || dish.checked)
-      : this.data.allDishes
+    const dishes = this.data.allDishes.filter((dish) => (dish.is_online && dish.is_available) || dish.checked)
+    const activeDishCount = this.data.allDishes.filter((dish) => dish.is_online && dish.is_available).length
     const dishEmptyDescription = this.data.allDishes.length === 0
       ? '暂无可选菜品，请先创建菜品'
-      : this.data.showOnlineOnly
-        ? '当前没有已上架菜品，可先关闭筛选或先去上架菜品'
+      : activeDishCount === 0
+        ? '暂无上架且可售的菜品，请先去上架可售菜品'
         : '暂无可选菜品，请先创建菜品'
     this.setData({ dishes, dishEmptyDescription })
   }

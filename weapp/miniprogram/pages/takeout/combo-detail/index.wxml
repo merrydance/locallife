@@ -83,19 +83,17 @@
             </t-tag>
           </view>
 
-          <!-- 规格选择 (直接列出 tags) -->
+          <!-- 套餐标签 -->
           <view class="spec-section" wx:if="{{combo.tags.length > 0}}">
-            <view class="spec-title">规格/标签</view>
+            <view class="spec-title">套餐标签</view>
             <view class="spec-list">
               <t-tag 
                 wx:for="{{combo.tags}}" 
                 wx:key="*this" 
                 size="medium"
-                variant="{{combo.selectedTags[item] ? 'base' : 'light-outline'}}" 
-                theme="{{combo.selectedTags[item] ? 'primary' : 'default'}}"
-                class="spec-tag {{combo.selectedTags[item] ? 'selected' : ''}}"
-                bindtap="onTagTap"
-                data-tag="{{item}}"
+                variant="light-outline" 
+                theme="default"
+                class="spec-tag"
               >
                 {{item}}
               </t-tag>
@@ -131,6 +129,9 @@
                 </view>
                 <view class="dish-price-row">
                   <text class="dish-price" wx:if="{{item.dishPriceDisplay}}">单价 ¥{{item.dishPriceDisplay}}</text>
+                </view>
+                <view class="dish-price-row" wx:if="{{item.customization_summary}}">
+                  <text class="dish-price">固定规格：{{item.customization_summary}}</text>
                 </view>
               </view>
               <t-icon name="chevron-right" size="32rpx" color="rgba(0,0,0,0.26)" />

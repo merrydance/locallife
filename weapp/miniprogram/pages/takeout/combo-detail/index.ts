@@ -36,6 +36,7 @@ type ComboViewModel = {
     dishPriceDisplay?: string
     dish_image_url?: string
     quantity: number
+    customization_summary?: string
   }>
   tags: string[]
   // 额外展示字段
@@ -47,7 +48,6 @@ type ComboViewModel = {
   estimated_delivery_time: number
   estimated_delivery_time_display: string
   dish_images: string[] // 用于拼图展示
-  selectedTags: Record<string, string> // 用于模拟规格选择
   is_open: boolean
   status_display: string
 }
@@ -144,7 +144,6 @@ Page({
       const dishImages = (comboData.dish_images && comboData.dish_images.length > 0)
         ? comboData.dish_images.map((url) => getPublicImageUrl(url))
         : (comboData.dishes || []).map((d) => getPublicImageUrl(d.dish_image_url || '')).filter(Boolean)
-      const selectedTags: Record<string, string> = {}
 
       const combo: ComboViewModel = {
         id: comboData.id,
@@ -160,7 +159,8 @@ Page({
           ...d,
           quantity: d.quantity || 1,
           dish_image_url: getPublicImageUrl(d.dish_image_url || ''),
-          dishPriceDisplay: d.dish_price ? formatPriceNoSymbol(d.dish_price) : undefined
+          dishPriceDisplay: d.dish_price ? formatPriceNoSymbol(d.dish_price) : undefined,
+          customization_summary: d.customization_summary || undefined
         })),
         tags: comboData.tags?.map((t) => t.name) || [],
         merchant_name: extraInfo.merchantName || '商家',
@@ -171,7 +171,6 @@ Page({
         estimated_delivery_time: extraInfo.estimatedDeliveryTime || 0,
         estimated_delivery_time_display: estimatedDeliveryDisplay,
         dish_images: dishImages,
-        selectedTags,
         is_open: comboData.is_open ?? true,
         status_display: comboData.is_open === false ? '商户休息中' : ''
       }
@@ -210,46 +209,22 @@ Page({
     })
   },
 
-  onTagTap(e: WechatMiniprogram.TouchEvent) {
-    const tag = (e.currentTarget.dataset as { tag?: string }).tag
-    const { combo } = this.data
-    if (!combo || !tag) return
-
-    const selectedTags = { ...combo.selectedTags }
-    if (selectedTags[tag]) {
-      delete selectedTags[tag]
-    } else {
-      selectedTags[tag] = tag
-    }
-
-    this.setData({
-      'combo.selectedTags': selectedTags
-    })
-  },
-
   async onAddToCart(options?: { silentSuccess?: boolean }) {
     const { combo, quantity, totalPrice } = this.data
     if (!combo) return false
 
     const CartService = require('../../../services/cart').default
-    
-    // 构造规格描述字符串
-    const tagsDesc = Object.values(combo.selectedTags).join(',')
-    const finalRemark = this.data.remark ? `备注: ${this.data.remark}` : ''
-    const specDesc = [tagsDesc, finalRemark].filter(Boolean).join('; ')
-    
+
     console.log('[ComboDetail] Adding item to cart:', {
       merchantId: combo.merchant_id,
       comboId: combo.id,
-      quantity,
-      specs: specDesc
+      quantity
     })
 
     const success = await CartService.addItem({
       merchantId: combo.merchant_id,
       comboId: combo.id,
-      quantity,
-      customizations: specDesc ? { selected_options: specDesc } : undefined
+      quantity
     })
 
     if (!success) return false
@@ -258,8 +233,7 @@ Page({
       is_combo: true,
       shop_id: combo.merchant_id, // Keep shop_id for tracker for now, as it might be an external system requirement
       quantity,
-      price: totalPrice,
-      specs: specDesc
+      price: totalPrice
     })
 
     if (!options?.silentSuccess) {
