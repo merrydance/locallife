@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -65,6 +66,41 @@ func expectComboSummaryReload(store *mockdb.MockStore, combo db.ComboSet, dishes
 		Return(nil, nil)
 }
 
+func comboCustomizationGroupsFixture() []map[string]interface{} {
+	return []map[string]interface{}{
+		{
+			"id":          int64(501),
+			"name":        "杯型",
+			"sort_order":  int32(1),
+			"is_required": true,
+			"options": []map[string]interface{}{
+				{
+					"id":          int64(601),
+					"tag_id":      int64(701),
+					"tag_name":    "大杯",
+					"extra_price": int64(300),
+					"sort_order":  int32(1),
+				},
+			},
+		},
+		{
+			"id":          int64(502),
+			"name":        "冰量",
+			"sort_order":  int32(2),
+			"is_required": true,
+			"options": []map[string]interface{}{
+				{
+					"id":          int64(602),
+					"tag_id":      int64(702),
+					"tag_name":    "少冰",
+					"extra_price": int64(0),
+					"sort_order":  int32(1),
+				},
+			},
+		},
+	}
+}
+
 // ==================== 套餐创建测试 ====================
 
 func TestCreateComboSetAPI(t *testing.T) {
@@ -73,6 +109,9 @@ func TestCreateComboSetAPI(t *testing.T) {
 	combo := randomComboSet(merchant.ID)
 	responseDishesJSON := []byte(`[{"dish_id":101,"dish_name":"菜品1","dish_price":1200,"quantity":2}]`)
 	responseTagsJSON := []byte(`[{"id":11,"name":"招牌"}]`)
+	normalizedDishID := int64(101)
+	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品1", Price: 1200}
+	customizationGroups := comboCustomizationGroupsFixture()
 
 	testCases := []struct {
 		name          string
@@ -111,6 +150,92 @@ func TestCreateComboSetAPI(t *testing.T) {
 				require.Equal(t, int64(1), response.DishCount)
 				require.Equal(t, int64(2), response.DishTotalQuantity)
 				require.Len(t, response.Tags, 1)
+			},
+		},
+		{
+			name: "NormalizeFixedCustomizations",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 2,
+					"customizations": gin.H{
+						"501":        601,
+						"502":        602,
+						"meta_specs": "客户端伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(normalizedDish, nil)
+
+				store.EXPECT().
+					CreateComboSetTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.CreateComboSetTxParams) (db.CreateComboSetTxResult, error) {
+						require.Len(t, arg.Dishes, 1)
+						require.Equal(t, normalizedDish.Price, arg.Dishes[0].DishBasePriceSnapshot)
+						require.Equal(t, int64(300), arg.Dishes[0].CustomizationExtraPrice)
+						require.JSONEq(t, `{"501":601,"502":602,"meta_specs":"大杯 / 少冰"}`, string(arg.Dishes[0].Customizations))
+						return db.CreateComboSetTxResult{ComboSet: combo}, nil
+					})
+
+				expectComboSummaryReload(store, combo, responseDishesJSON, responseTagsJSON)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusCreated, recorder.Code)
+			},
+		},
+		{
+			name: "RejectMetaOnlyCustomizations",
+			body: gin.H{
+				"name":        combo.Name,
+				"combo_price": combo.ComboPrice,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 1,
+					"customizations": gin.H{
+						"meta_specs": "伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -621,6 +746,9 @@ func TestUpdateComboSetAPI(t *testing.T) {
 	combo := randomComboSet(merchant.ID)
 	responseDishesJSON := []byte(`[{"dish_id":201,"dish_name":"菜品A","dish_price":1800,"quantity":1},{"dish_id":202,"dish_name":"菜品B","dish_price":2200,"quantity":3}]`)
 	responseTagsJSON := []byte(`[{"id":21,"name":"午市推荐"}]`)
+	normalizedDishID := int64(201)
+	normalizedDish := db.Dish{ID: normalizedDishID, MerchantID: merchant.ID, Name: "菜品A", Price: 1500}
+	customizationGroups := comboCustomizationGroupsFixture()
 
 	newName := "Updated Combo"
 	newPrice := int64(8888)
@@ -670,6 +798,100 @@ func TestUpdateComboSetAPI(t *testing.T) {
 				require.Equal(t, int64(2), response.DishCount)
 				require.Equal(t, int64(4), response.DishTotalQuantity)
 				require.Len(t, response.Tags, 1)
+			},
+		},
+		{
+			name: "NormalizeFixedCustomizations",
+			body: gin.H{
+				"id": combo.ID,
+				"dishes": []gin.H{{
+					"dish_id":  normalizedDishID,
+					"quantity": 2,
+					"customizations": gin.H{
+						"501":        601,
+						"502":        602,
+						"meta_specs": "伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+
+				store.EXPECT().
+					GetDish(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(normalizedDish, nil)
+
+				store.EXPECT().
+					UpdateComboSetTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					DoAndReturn(func(_ context.Context, arg db.UpdateComboSetTxParams) (db.UpdateComboSetTxResult, error) {
+						require.NotNil(t, arg.Dishes)
+						require.Len(t, *arg.Dishes, 1)
+						require.Equal(t, normalizedDish.Price, (*arg.Dishes)[0].DishBasePriceSnapshot)
+						require.Equal(t, int64(300), (*arg.Dishes)[0].CustomizationExtraPrice)
+						require.JSONEq(t, `{"501":601,"502":602,"meta_specs":"大杯 / 少冰"}`, string((*arg.Dishes)[0].Customizations))
+						return db.UpdateComboSetTxResult{ComboSet: updatedCombo}, nil
+					})
+
+				expectComboSummaryReload(store, updatedCombo, responseDishesJSON, responseTagsJSON)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "RejectMetaOnlyCustomizations",
+			body: gin.H{
+				"id": combo.ID,
+				"dishes": []gin.H{{
+					"dish_id": normalizedDishID,
+					"customizations": gin.H{
+						"meta_specs": "伪造摘要",
+					},
+				}},
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetComboSet(gomock.Any(), gomock.Eq(combo.ID)).
+					Times(1).
+					Return(combo, nil)
+
+				store.EXPECT().
+					GetDishWithCustomizations(gomock.Any(), gomock.Eq(normalizedDishID)).
+					Times(1).
+					Return(db.GetDishWithCustomizationsRow{
+						ID:                  normalizedDish.ID,
+						MerchantID:          merchant.ID,
+						Price:               normalizedDish.Price,
+						CustomizationGroups: customizationGroups,
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
 			},
 		},
 		{
@@ -901,10 +1123,11 @@ func TestAddComboDishAPI(t *testing.T) {
 	}
 
 	comboDish := db.ComboDish{
-		ID:       util.RandomInt(1, 1000),
-		ComboID:  combo.ID,
-		DishID:   dishID,
-		Quantity: 1,
+		ID:                    util.RandomInt(1, 1000),
+		ComboID:               combo.ID,
+		DishID:                dishID,
+		Quantity:              1,
+		DishBasePriceSnapshot: dish.Price,
 	}
 
 	testCases := []struct {
@@ -941,7 +1164,10 @@ func TestAddComboDishAPI(t *testing.T) {
 				store.EXPECT().
 					AddComboDish(gomock.Any(), gomock.Any()).
 					Times(1).
-					Return(comboDish, nil)
+					DoAndReturn(func(_ context.Context, arg db.AddComboDishParams) (db.ComboDish, error) {
+						require.Equal(t, dish.Price, arg.DishBasePriceSnapshot)
+						return comboDish, nil
+					})
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

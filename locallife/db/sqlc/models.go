@@ -382,6 +382,7 @@ type ComboDish struct {
 	ComboID                 int64  `json:"combo_id"`
 	DishID                  int64  `json:"dish_id"`
 	Quantity                int16  `json:"quantity"`
+	DishBasePriceSnapshot   int64  `json:"dish_base_price_snapshot"`
 	Customizations          []byte `json:"customizations"`
 	CustomizationExtraPrice int64  `json:"customization_extra_price"`
 }
@@ -570,6 +571,8 @@ type Dish struct {
 	RepurchaseRate pgtype.Numeric     `json:"repurchase_rate"`
 	// 菜品图片媒体资产 ID，取代 image_url 字段
 	ImageMediaAssetID pgtype.Int8 `json:"image_media_asset_id"`
+	// 是否为包装菜品；包装菜品仅用于外卖与自取订单的包装方式选择
+	IsPackaging bool `json:"is_packaging"`
 }
 
 type DishCategory struct {
@@ -1072,18 +1075,6 @@ type MerchantMembershipSetting struct {
 	MaxDeductionPercent int32              `json:"max_deduction_percent"`
 	CreatedAt           time.Time          `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-}
-
-// 商户订单级包装策略配置
-type MerchantPackagingPolicy struct {
-	ID         int64 `json:"id"`
-	MerchantID int64 `json:"merchant_id"`
-	// 触发包装策略的订单类型，当前仅允许 takeout 与 takeaway
-	ApplicableOrderTypes []string `json:"applicable_order_types"`
-	// 可选包装菜品 ID 列表，命中场景时订单中必须恰选 1 个
-	CandidateDishIds []int64            `json:"candidate_dish_ids"`
-	CreatedAt        time.Time          `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 }
 
 // 商户微信支付配置（平台收付通）

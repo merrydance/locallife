@@ -260,7 +260,8 @@ func (server *Server) resolveComboSummary(
 	}
 
 	originalPrice := int64(0)
-	for _, dish := range dishesWithQty {
+	for index := range dishesWithQty {
+		dish := &dishesWithQty[index]
 		resolvedDish, err := server.store.GetDish(ctx, dish.DishID)
 		if err != nil {
 			if isNotFoundError(err) {
@@ -272,7 +273,8 @@ func (server *Server) resolveComboSummary(
 			return comboSetSummary{}, http.StatusForbidden, fmt.Errorf("dish %d does not belong to this merchant", dish.DishID)
 		}
 
-		originalPrice += (resolvedDish.Price + dish.CustomizationExtraPrice) * int64(dish.Quantity)
+		dish.DishBasePriceSnapshot = resolvedDish.Price
+		originalPrice += (dish.DishBasePriceSnapshot + dish.CustomizationExtraPrice) * int64(dish.Quantity)
 	}
 
 	return buildComboSetSummaryFromDishes(dishesWithQty, originalPrice), 0, nil
@@ -1019,6 +1021,7 @@ func (server *Server) addComboDish(ctx *gin.Context) {
 		ComboID:                 uriReq.ComboID,
 		DishID:                  bodyReq.DishID,
 		Quantity:                1, // 默认数量为1
+		DishBasePriceSnapshot:   dish.Price,
 		Customizations:          nil,
 		CustomizationExtraPrice: 0,
 	})

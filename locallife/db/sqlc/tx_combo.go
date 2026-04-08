@@ -11,6 +11,7 @@ import (
 type DishWithQuantity struct {
 	DishID                  int64
 	Quantity                int32
+	DishBasePriceSnapshot   int64
 	Customizations          []byte
 	CustomizationExtraPrice int64
 }
@@ -86,6 +87,7 @@ func (store *SQLStore) CreateComboSetTx(ctx context.Context, arg CreateComboSetT
 				ComboID:                 result.ComboSet.ID,
 				DishID:                  dish.DishID,
 				Quantity:                int16(qty),
+				DishBasePriceSnapshot:   dish.DishBasePriceSnapshot,
 				Customizations:          dish.Customizations,
 				CustomizationExtraPrice: dish.CustomizationExtraPrice,
 			})
@@ -151,6 +153,7 @@ func (store *SQLStore) UpdateComboSetTx(ctx context.Context, arg UpdateComboSetT
 					ComboID:                 arg.ID,
 					DishID:                  dish.DishID,
 					Quantity:                int16(qty),
+					DishBasePriceSnapshot:   dish.DishBasePriceSnapshot,
 					Customizations:          dish.Customizations,
 					CustomizationExtraPrice: dish.CustomizationExtraPrice,
 				})

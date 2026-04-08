@@ -37,6 +37,15 @@ func createRandomComboSet(t *testing.T, merchantID int64) ComboSet {
 	return combo
 }
 
+func newComboDishParams(comboID int64, dish Dish, quantity int16) AddComboDishParams {
+	return AddComboDishParams{
+		ComboID:               comboID,
+		DishID:                dish.ID,
+		Quantity:              quantity,
+		DishBasePriceSnapshot: dish.Price,
+	}
+}
+
 // ============================================
 // 套餐测试
 // ============================================
@@ -68,11 +77,7 @@ func TestListComboSetsByMerchant(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		combo := createRandomComboSet(t, merchant.ID)
 		dish := createRandomDish(t, merchant.ID, category.ID)
-		_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-			ComboID:  combo.ID,
-			DishID:   dish.ID,
-			Quantity: 2,
-		})
+		_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 2))
 		require.NoError(t, err)
 		_, err = testStore.AddComboTag(context.Background(), AddComboTagParams{
 			ComboID: combo.ID,
@@ -108,18 +113,10 @@ func TestListComboSetsByMerchantExcludesDeletedDishes(t *testing.T) {
 	activeDish := createRandomDish(t, merchant.ID, category.ID)
 	deletedDish := createRandomDish(t, merchant.ID, category.ID)
 
-	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   activeDish.ID,
-		Quantity: 2,
-	})
+	_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, activeDish, 2))
 	require.NoError(t, err)
 
-	_, err = testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   deletedDish.ID,
-		Quantity: 3,
-	})
+	_, err = testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, deletedDish, 3))
 	require.NoError(t, err)
 
 	err = testStore.DeleteDish(context.Background(), deletedDish.ID)
@@ -250,6 +247,7 @@ func TestAddComboDish(t *testing.T) {
 		ComboID:                 combo.ID,
 		DishID:                  dish.ID,
 		Quantity:                int16(util.RandomInt(1, 5)),
+		DishBasePriceSnapshot:   dish.Price,
 		Customizations:          customizations,
 		CustomizationExtraPrice: 300,
 	}
@@ -259,6 +257,7 @@ func TestAddComboDish(t *testing.T) {
 	require.NotEmpty(t, comboDish)
 	require.Equal(t, combo.ID, comboDish.ComboID)
 	require.Equal(t, dish.ID, comboDish.DishID)
+	require.Equal(t, dish.Price, comboDish.DishBasePriceSnapshot)
 	require.JSONEq(t, string(customizations), string(comboDish.Customizations))
 	require.Equal(t, int64(300), comboDish.CustomizationExtraPrice)
 
@@ -271,6 +270,7 @@ func TestAddComboDish(t *testing.T) {
 	for _, d := range dishes {
 		if d.ID == dish.ID {
 			found = true
+			require.Equal(t, dish.Price, d.DishBasePriceSnapshot)
 			require.JSONEq(t, string(customizations), string(d.Customizations))
 			require.Equal(t, int64(300), d.CustomizationExtraPrice)
 			break
@@ -287,11 +287,7 @@ func TestListComboDishes(t *testing.T) {
 	// 添加多个菜品到套餐
 	for i := 0; i < 3; i++ {
 		dish := createRandomDish(t, merchant.ID, category.ID)
-		_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-			ComboID:  combo.ID,
-			DishID:   dish.ID,
-			Quantity: int16(1),
-		})
+		_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 1))
 		require.NoError(t, err)
 	}
 
@@ -307,11 +303,7 @@ func TestRemoveComboDish(t *testing.T) {
 	combo := createRandomComboSet(t, merchant.ID)
 
 	// 先添加
-	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish.ID,
-		Quantity: 1,
-	})
+	_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 1))
 	require.NoError(t, err)
 
 	// 再移除
@@ -339,11 +331,7 @@ func TestRemoveAllComboDishes(t *testing.T) {
 	// 添加多个菜品
 	for i := 0; i < 3; i++ {
 		dish := createRandomDish(t, merchant.ID, category.ID)
-		_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-			ComboID:  combo.ID,
-			DishID:   dish.ID,
-			Quantity: 1,
-		})
+		_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish, 1))
 		require.NoError(t, err)
 	}
 
@@ -443,17 +431,13 @@ func TestGetComboSetWithDetails(t *testing.T) {
 	// 添加菜品
 	dish1 := createRandomDish(t, merchant.ID, category.ID)
 	dish2 := createRandomDish(t, merchant.ID, category.ID)
-	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish1.ID,
-		Quantity: 1,
-	})
+	arg1 := newComboDishParams(combo.ID, dish1, 1)
+	arg1.DishBasePriceSnapshot = dish1.Price + 500
+	arg1.Customizations = []byte(`{"12":34,"meta_specs":"大杯"}`)
+	arg1.CustomizationExtraPrice = 300
+	_, err := testStore.AddComboDish(context.Background(), arg1)
 	require.NoError(t, err)
-	_, err = testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   dish2.ID,
-		Quantity: 2,
-	})
+	_, err = testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, dish2, 2))
 	require.NoError(t, err)
 
 	// 添加标签
@@ -480,6 +464,22 @@ func TestGetComboSetWithDetails(t *testing.T) {
 	// 验证JSON字段不为空（具体解析在API层）
 	require.NotEmpty(t, comboDetails.Dishes)
 	require.NotEmpty(t, comboDetails.Tags)
+
+	payload, err := json.Marshal(comboDetails.Dishes)
+	require.NoError(t, err)
+
+	var dishes []struct {
+		DishID    int64 `json:"dish_id"`
+		DishPrice int64 `json:"dish_price"`
+	}
+	err = json.Unmarshal(payload, &dishes)
+	require.NoError(t, err)
+	require.Len(t, dishes, 2)
+	dishPriceByID := make(map[int64]int64, len(dishes))
+	for _, dish := range dishes {
+		dishPriceByID[dish.DishID] = dish.DishPrice
+	}
+	require.Equal(t, arg1.DishBasePriceSnapshot+arg1.CustomizationExtraPrice, dishPriceByID[dish1.ID])
 }
 
 func TestGetComboSetWithDetailsExcludesDeletedDishes(t *testing.T) {
@@ -490,18 +490,10 @@ func TestGetComboSetWithDetailsExcludesDeletedDishes(t *testing.T) {
 	activeDish := createRandomDish(t, merchant.ID, category.ID)
 	deletedDish := createRandomDish(t, merchant.ID, category.ID)
 
-	_, err := testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   activeDish.ID,
-		Quantity: 1,
-	})
+	_, err := testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, activeDish, 1))
 	require.NoError(t, err)
 
-	_, err = testStore.AddComboDish(context.Background(), AddComboDishParams{
-		ComboID:  combo.ID,
-		DishID:   deletedDish.ID,
-		Quantity: 2,
-	})
+	_, err = testStore.AddComboDish(context.Background(), newComboDishParams(combo.ID, deletedDish, 2))
 	require.NoError(t, err)
 
 	err = testStore.DeleteDish(context.Background(), deletedDish.ID)

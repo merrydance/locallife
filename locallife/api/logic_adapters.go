@@ -211,6 +211,9 @@ func (n apiDishCustomizationNormalizer) Normalize(ctx context.Context, dishID in
 	if err != nil {
 		return nil, 0, err
 	}
+	if len(customizations) > 0 && len(selections) == 0 {
+		return nil, 0, fmt.Errorf("customizations must include at least one valid selection")
+	}
 
 	selectedByGroup := make(map[int64]int64, len(selections))
 	for _, selection := range selections {
@@ -243,10 +246,8 @@ func (n apiDishCustomizationNormalizer) Normalize(ctx context.Context, dishID in
 		extraPrice += option.ExtraPrice
 	}
 
-	if val, ok := customizations["meta_specs"]; ok {
-		if strVal, ok := val.(string); ok {
-			normalized["meta_specs"] = strVal
-		}
+	if summary := buildCustomizationSummary(groups, selectedByGroup); summary != "" {
+		normalized["meta_specs"] = summary
 	}
 
 	if len(normalized) == 0 {
@@ -293,11 +294,13 @@ func (server *Server) loadDishCustomizationMetaFromContext(ctx context.Context, 
 				TagID:      option.TagID,
 				TagName:    option.TagName,
 				ExtraPrice: option.ExtraPrice,
+				SortOrder:  option.SortOrder,
 			}
 		}
 		meta[group.ID] = customizationGroupMeta{
 			ID:         group.ID,
 			Name:       group.Name,
+			SortOrder:  group.SortOrder,
 			IsRequired: group.IsRequired,
 			Options:    options,
 		}

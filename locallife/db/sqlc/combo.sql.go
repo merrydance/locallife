@@ -18,17 +18,19 @@ INSERT INTO combo_dishes (
   combo_id,
   dish_id,
   quantity,
+	dish_base_price_snapshot,
   customizations,
   customization_extra_price
 ) VALUES (
-  $1, $2, $3, $4, $5
-) RETURNING id, combo_id, dish_id, quantity, customizations, customization_extra_price
+	$1, $2, $3, $4, $5, $6
+) RETURNING id, combo_id, dish_id, quantity, dish_base_price_snapshot, customizations, customization_extra_price
 `
 
 type AddComboDishParams struct {
 	ComboID                 int64  `json:"combo_id"`
 	DishID                  int64  `json:"dish_id"`
 	Quantity                int16  `json:"quantity"`
+	DishBasePriceSnapshot   int64  `json:"dish_base_price_snapshot"`
 	Customizations          []byte `json:"customizations"`
 	CustomizationExtraPrice int64  `json:"customization_extra_price"`
 }
@@ -41,6 +43,7 @@ func (q *Queries) AddComboDish(ctx context.Context, arg AddComboDishParams) (Com
 		arg.ComboID,
 		arg.DishID,
 		arg.Quantity,
+		arg.DishBasePriceSnapshot,
 		arg.Customizations,
 		arg.CustomizationExtraPrice,
 	)
@@ -50,6 +53,7 @@ func (q *Queries) AddComboDish(ctx context.Context, arg AddComboDishParams) (Com
 		&i.ComboID,
 		&i.DishID,
 		&i.Quantity,
+		&i.DishBasePriceSnapshot,
 		&i.Customizations,
 		&i.CustomizationExtraPrice,
 	)
@@ -270,7 +274,7 @@ SELECT
       jsonb_build_object(
         'dish_id', cd.dish_id,
         'dish_name', d.name,
-        'dish_price', d.price + COALESCE(cd.customization_extra_price, 0),
+	'dish_price', COALESCE(cd.dish_base_price_snapshot, d.price) + COALESCE(cd.customization_extra_price, 0),
         'dish_image_media_asset_id', d.image_media_asset_id,
         'quantity', cd.quantity,
         'customizations', COALESCE(cd.customizations, '{}'::jsonb),
@@ -568,8 +572,9 @@ func (q *Queries) GetPopularCombos(ctx context.Context, arg GetPopularCombosPara
 
 const listComboDishes = `-- name: ListComboDishes :many
 SELECT 
-  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id,
+  d.id, d.merchant_id, d.category_id, d.name, d.description, d.price, d.member_price, d.is_available, d.is_online, d.sort_order, d.created_at, d.updated_at, d.prepare_time, d.deleted_at, d.monthly_sales, d.repurchase_rate, d.image_media_asset_id, d.is_packaging,
   cd.quantity,
+	cd.dish_base_price_snapshot,
   cd.customizations,
   cd.customization_extra_price
 FROM dishes d
@@ -596,7 +601,9 @@ type ListComboDishesRow struct {
 	MonthlySales            int32              `json:"monthly_sales"`
 	RepurchaseRate          pgtype.Numeric     `json:"repurchase_rate"`
 	ImageMediaAssetID       pgtype.Int8        `json:"image_media_asset_id"`
+	IsPackaging             bool               `json:"is_packaging"`
 	Quantity                int16              `json:"quantity"`
+	DishBasePriceSnapshot   int64              `json:"dish_base_price_snapshot"`
 	Customizations          []byte             `json:"customizations"`
 	CustomizationExtraPrice int64              `json:"customization_extra_price"`
 }
@@ -628,7 +635,9 @@ func (q *Queries) ListComboDishes(ctx context.Context, comboID int64) ([]ListCom
 			&i.MonthlySales,
 			&i.RepurchaseRate,
 			&i.ImageMediaAssetID,
+			&i.IsPackaging,
 			&i.Quantity,
+			&i.DishBasePriceSnapshot,
 			&i.Customizations,
 			&i.CustomizationExtraPrice,
 		); err != nil {
