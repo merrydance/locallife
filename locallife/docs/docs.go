@@ -34595,6 +34595,15 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "status_code": {
+                    "type": "string"
+                },
+                "status_label": {
+                    "type": "string"
+                },
+                "status_theme": {
+                    "type": "string"
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -37401,6 +37410,38 @@ const docTemplate = `{
                 },
                 "total_users": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.merchantReservationActionStateResponse": {
+            "type": "object",
+            "properties": {
+                "can_cancel": {
+                    "type": "boolean"
+                },
+                "can_check_in": {
+                    "type": "boolean"
+                },
+                "can_complete": {
+                    "type": "boolean"
+                },
+                "can_confirm": {
+                    "type": "boolean"
+                },
+                "can_edit": {
+                    "type": "boolean"
+                },
+                "can_no_show": {
+                    "type": "boolean"
+                },
+                "can_start_cooking": {
+                    "type": "boolean"
+                },
+                "primary_action_key": {
+                    "type": "string"
+                },
+                "show_more_actions": {
+                    "type": "boolean"
                 }
             }
         },
@@ -40509,6 +40550,9 @@ const docTemplate = `{
                 "cancelled_at": {
                     "type": "string"
                 },
+                "checked_in_at": {
+                    "type": "string"
+                },
                 "completed_at": {
                     "type": "string"
                 },
@@ -40519,6 +40563,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "contact_phone": {
+                    "type": "string"
+                },
+                "cooking_started_at": {
                     "type": "string"
                 },
                 "created_at": {
@@ -40538,6 +40585,9 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/api.reservationItemResponse"
                     }
+                },
+                "merchant_action_state": {
+                    "$ref": "#/definitions/api.merchantReservationActionStateResponse"
                 },
                 "merchant_address": {
                     "type": "string"

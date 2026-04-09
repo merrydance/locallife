@@ -92,7 +92,7 @@
 | 桌台 | `pages/merchant/tables/index` | `table-device-management.ts` `dish.ts` | `/v1/tables*` `/v1/tables/{id}/qrcode` `/v1/tables/{id}/images*` `/v1/tables/{id}/tags*` | 桌台/包间、二维码、图片、标签 |
 | 预订 | `pages/merchant/reservations/index` | `reservation.ts` `table-device-management.ts` | `/v1/reservations/merchant*` `/v1/reservations/{id}/*` `/v1/tables` | 预订列表、确认、改菜、爽约、代客创建 |
 | 打印机 | `pages/merchant/printers/index` | `table-device-management.ts` | `/v1/merchant/devices*` `/v1/merchant/devices/reconciliation-jobs*` | 打印机 CRUD、测试、状态、同步恢复 |
-| 展示配置 | `pages/merchant/settings/display-config/index` | `table-device-management.ts` | `/v1/merchant/display-config` | 打印、语音、KDS 展示配置 |
+| 展示配置 | `pages/merchant/settings/display-config/index` | `table-device-management.ts` | `/v1/merchant/display-config` | 打印与语音协同配置 |
 | 门店资料 | `pages/merchant/settings/profile/index` `pages/merchant/profile-images/index` | `merchant.ts` `onboarding.ts` | `/v1/merchants/me` `/v1/merchants/me/shop-images` `/v1/merchant/application` `/v1/media/{id}` | 基础资料、Logo 与门头图资产 |
 | 营业时间 | `pages/merchant/settings/business-hours/index` | `merchant.ts` | `/v1/merchants/me/business-hours` | 营业时间维护 |
 | 收付通开户 | `pages/merchant/settings/applyment/index` `pages/merchant/settings/applyment/completed/index` | `merchant-finance.ts` `applyment-bank.ts` | `/v1/merchant/applyment/status` `/v1/merchant/applyment/bindbank` `/v1/merchant/applyment/banks*` `/v1/merchant/applyment/areas/provinces*` | 开户状态、绑卡、银行目录查询 |

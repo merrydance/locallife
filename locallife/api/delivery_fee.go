@@ -736,11 +736,32 @@ type deliveryPromotionResponse struct {
 	ValidFrom      time.Time  `json:"valid_from"`
 	ValidUntil     time.Time  `json:"valid_until"`
 	IsActive       bool       `json:"is_active"`
+	StatusCode     string     `json:"status_code"`
+	StatusLabel    string     `json:"status_label"`
+	StatusTheme    string     `json:"status_theme"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
 
+func buildDeliveryPromotionStatusResponse(promo db.MerchantDeliveryPromotion, now time.Time) (string, string, string) {
+	if !promo.IsActive {
+		return "inactive", "已停用", "default"
+	}
+
+	if now.After(promo.ValidUntil) {
+		return "expired", "已过期", "danger"
+	}
+
+	if now.Before(promo.ValidFrom) {
+		return "scheduled", "未开始", "warning"
+	}
+
+	return "active", "生效中", "success"
+}
+
 func newDeliveryPromotionResponse(promo db.MerchantDeliveryPromotion) deliveryPromotionResponse {
+	statusCode, statusLabel, statusTheme := buildDeliveryPromotionStatusResponse(promo, time.Now())
+
 	rsp := deliveryPromotionResponse{
 		ID:             promo.ID,
 		MerchantID:     promo.MerchantID,
@@ -750,6 +771,9 @@ func newDeliveryPromotionResponse(promo db.MerchantDeliveryPromotion) deliveryPr
 		ValidFrom:      promo.ValidFrom,
 		ValidUntil:     promo.ValidUntil,
 		IsActive:       promo.IsActive,
+		StatusCode:     statusCode,
+		StatusLabel:    statusLabel,
+		StatusTheme:    statusTheme,
 		CreatedAt:      promo.CreatedAt,
 	}
 

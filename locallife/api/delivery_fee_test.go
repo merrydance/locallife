@@ -55,6 +55,7 @@ func randomDeliveryPromotion(merchantID int64) db.MerchantDeliveryPromotion {
 	return db.MerchantDeliveryPromotion{
 		ID:             util.RandomInt(1, 1000),
 		MerchantID:     merchantID,
+		Name:           util.RandomString(10),
 		MinOrderAmount: 2000,
 		DiscountAmount: 200,
 		ValidFrom:      time.Now(),
@@ -62,6 +63,71 @@ func randomDeliveryPromotion(merchantID int64) db.MerchantDeliveryPromotion {
 		IsActive:       true,
 		CreatedAt:      time.Now(),
 		UpdatedAt:      pgtype.Timestamptz{},
+	}
+}
+
+func TestNewDeliveryPromotionResponseStatus(t *testing.T) {
+	now := time.Now()
+	testCases := []struct {
+		name      string
+		promo     db.MerchantDeliveryPromotion
+		wantCode  string
+		wantLabel string
+		wantTheme string
+	}{
+		{
+			name: "Inactive",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   false,
+				ValidFrom:  now.Add(-time.Hour),
+				ValidUntil: now.Add(time.Hour),
+			},
+			wantCode:  "inactive",
+			wantLabel: "已停用",
+			wantTheme: "default",
+		},
+		{
+			name: "Expired",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   true,
+				ValidFrom:  now.Add(-2 * time.Hour),
+				ValidUntil: now.Add(-time.Hour),
+			},
+			wantCode:  "expired",
+			wantLabel: "已过期",
+			wantTheme: "danger",
+		},
+		{
+			name: "Scheduled",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   true,
+				ValidFrom:  now.Add(time.Hour),
+				ValidUntil: now.Add(2 * time.Hour),
+			},
+			wantCode:  "scheduled",
+			wantLabel: "未开始",
+			wantTheme: "warning",
+		},
+		{
+			name: "Active",
+			promo: db.MerchantDeliveryPromotion{
+				IsActive:   true,
+				ValidFrom:  now.Add(-time.Hour),
+				ValidUntil: now.Add(time.Hour),
+			},
+			wantCode:  "active",
+			wantLabel: "生效中",
+			wantTheme: "success",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			statusCode, statusLabel, statusTheme := buildDeliveryPromotionStatusResponse(tc.promo, now)
+			require.Equal(t, tc.wantCode, statusCode)
+			require.Equal(t, tc.wantLabel, statusLabel)
+			require.Equal(t, tc.wantTheme, statusTheme)
+		})
 	}
 }
 
@@ -159,6 +225,12 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
+
+				var response deliveryPromotionResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Equal(t, "active", response.StatusCode)
+				require.Equal(t, "生效中", response.StatusLabel)
+				require.Equal(t, "success", response.StatusTheme)
 			},
 		},
 		{
@@ -1066,6 +1138,9 @@ func TestListDeliveryPromotionsAPI(t *testing.T) {
 				var response []deliveryPromotionResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
 				require.Len(t, response, 2)
+				require.Equal(t, "active", response[0].StatusCode)
+				require.Equal(t, "生效中", response[0].StatusLabel)
+				require.Equal(t, "success", response[0].StatusTheme)
 			},
 		},
 		{
