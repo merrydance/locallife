@@ -1,265 +1,187 @@
-<custom-navbar title="预订订单日汇总" showBack="{{true}}" />
+<custom-navbar title="预订管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view wx:if="{{initialLoading}}" class="state-block">
-    <t-loading theme="circular" text="加载预订数据中..." vertical />
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter reservations-page"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
+  <view wx:if="{{initialLoading && !listAvailable}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="正在加载预订列表..." vertical />
   </view>
 
-  <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty description="{{initialErrorMessage || '预订数据加载失败，请重试'}}" />
-    <view class="retry-button" bindtap="onRetry">重新加载</view>
+  <view wx:elif="{{accessDenied || accessErrorMessage || initialError}}" class="state-block">
+    <t-empty
+      image="error-circle"
+      description="{{accessDenied ? '当前账号暂无预订管理权限' : accessErrorMessage || initialErrorMessage || '预订页暂时无法打开'}}"
+    />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">
+      {{accessDenied ? '重新校验权限' : '重新加载'}}
+    </t-button>
   </view>
 
   <block wx:else>
-    <view class="toolbar">
-      <picker mode="date" value="{{date}}" bindchange="onDateChange">
-        <view class="date-trigger">汇总日期：{{date}}</view>
-      </picker>
-      <view class="toolbar-actions">
-        <t-button size="small" theme="primary" variant="outline" bind:tap="onOpenCreatePopup" shape="round">代客建预订</t-button>
-        <t-button size="small" theme="primary" bind:tap="onGoOrderList" shape="round">查看订单流转</t-button>
-      </view>
-    </view>
+    <view class="page-content reservations-page__content">
+      <t-notice-bar
+        wx:if="{{listRefreshErrorMessage}}"
+        visible="{{true}}"
+        theme="warning"
+        prefix-icon="info-circle"
+        content="{{listRefreshErrorMessage}}"
+      />
 
-    <view wx:if="{{reservationsError && reservationsAvailable}}" class="section-error-hint section-error-hint-spaced">
-      <text>{{reservationsErrorMessage}}</text>
-      <text class="section-error-action" bindtap="onRetryReservations">重新同步</text>
-    </view>
-
-    <view wx:if="{{reservationsAvailable}}" class="summary-card">
-      <view class="summary-item">
-        <text class="label">预订单数</text>
-        <text class="value">{{summary.reservationCount}}</text>
-      </view>
-      <view class="summary-item">
-        <text class="label">待确认</text>
-        <text class="value">{{summary.pendingCount}}</text>
-      </view>
-      <view class="summary-item">
-        <text class="label">已到店</text>
-        <text class="value">{{summary.checkedInCount}}</text>
-      </view>
-      <view class="summary-item">
-        <text class="label">已完成</text>
-        <text class="value">{{summary.completedCount}}</text>
-      </view>
-    </view>
-
-    <view wx:else class="section-state-block section-state-block-spaced">
-      <t-empty description="{{reservationsErrorMessage || '预订列表加载失败，请重试'}}" />
-      <view class="retry-button" bindtap="onRetryReservations">重新加载预订列表</view>
-    </view>
-
-    <t-tabs value="{{currentTab}}" bind:change="onTabChange" t-class="reservation-tabs">
-      <t-tab-panel label="全部" value="all"><view /></t-tab-panel>
-      <t-tab-panel label="待确认" value="paid"><view /></t-tab-panel>
-      <t-tab-panel label="已确认" value="confirmed"><view /></t-tab-panel>
-      <t-tab-panel label="已到店" value="checked_in"><view /></t-tab-panel>
-      <t-tab-panel label="已完成" value="completed"><view /></t-tab-panel>
-      <t-tab-panel label="异常" value="no_show"><view /></t-tab-panel>
-    </t-tabs>
-
-    <view wx:if="{{loading}}" class="loading-state">
-      <t-loading theme="circular" text="刷新预订中..." vertical />
-    </view>
-
-    <view class="section">
-      <view class="section-head">
-        <view class="section-title">备菜明细</view>
-        <view class="section-subtitle">涉及桌台 {{summary.tableCount}} · SKU {{summary.dishKinds}} · 总量 {{summary.dishTotalQuantity}}</view>
-      </view>
-
-      <view wx:if="{{dishSummaryError && dishSummaryAvailable}}" class="section-error-hint section-error-hint-spaced">
-        <text>{{dishSummaryErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryDishSummary">重新同步</text>
-      </view>
-
-      <view wx:if="{{dishSummaryAvailable}}">
-        <t-empty wx:if="{{!dishSummary.length && !loading}}" icon="info-circle" description="当前日期暂无备菜数据" />
-        <view wx:else class="dish-list">
-          <view class="dish-card" wx:for="{{dishSummary}}" wx:key="name">
-            <view class="dish-header">
-              <text class="dish-name">{{item.name}}</text>
-              <text class="dish-total">x{{item.total_quantity}}</text>
-            </view>
-            <view class="dish-meta">{{item.type === 'combo' ? '套餐' : '菜品'}} · 覆盖 {{item.reservation_count}} 个预订</view>
+      <t-sticky offset-top="{{navBarHeight}}">
+        <view class="control-panel reservations-control-panel">
+          <view class="tabs-shell tabs-shell--compact">
+            <t-tabs value="{{currentTab}}" bind:change="onTabChange">
+              <t-tab-panel wx:for="{{tabOptions}}" wx:key="key" value="{{item.key}}" label="{{item.label}}"></t-tab-panel>
+            </t-tabs>
           </view>
-        </view>
-      </view>
 
-      <view wx:else class="section-state-block">
-        <t-empty icon="info-circle" description="{{dishSummaryErrorMessage || '备菜明细加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryDishSummary">重新加载备菜明细</view>
-      </view>
-    </view>
-
-    <view class="section">
-      <view class="section-head">
-        <view class="section-title">预订列表</view>
-        <view class="section-subtitle">已加载 {{filteredReservations.length}} / {{totalReservations}}</view>
-      </view>
-
-      <view wx:if="{{reservationsAvailable}}">
-        <t-empty wx:if="{{!filteredReservations.length && !loading}}" icon="info-circle" description="当前筛选下暂无预订" />
-        <view wx:else class="reservation-list">
-          <view class="reservation-card" wx:for="{{filteredReservations}}" wx:key="id">
-            <view class="row">
-              <view class="reservation-main">
-                <text class="table">{{item.tableLabel}}</text>
-                <text class="time">{{item.reservation_time}}</text>
+          <view class="filter-panel filter-panel--single reservations-filter-panel">
+            <view class="date-filter-combo" bindtap="onOpenDatePicker">
+              <view class="date-filter-label-group">
+                <text class="date-filter-label">营业日期</text>
+                <text class="date-filter-value">{{date}}</text>
               </view>
-              <t-tag size="small" variant="dark" theme="{{item.statusTheme}}">{{item.statusLabel}}</t-tag>
-            </view>
-            <view class="row secondary">
-              <text>{{item.contactLabel}}</text>
-              <text>{{item.guest_count}} 人 · {{item.paymentLabel}}</text>
-            </view>
-            <view class="reservation-items">{{item.itemPreview}}</view>
-            <view wx:if="{{item.cookingStartedNotice}}" class="notice-banner">{{item.cookingStartedNotice}}</view>
-            <view wx:if="{{item.canEdit || item.canCancel || item.canConfirm || item.canCheckIn || item.canStartCooking || item.canNoShow || item.canComplete}}" class="reservation-actions">
-              <t-button
-                wx:if="{{item.canEdit}}"
-                size="small"
-                theme="default"
-                variant="outline"
-                shape="round"
-                data-id="{{item.id}}"
-                catchtap="onOpenEditPopup"
-              >编辑</t-button>
-              <t-button
-                wx:if="{{item.canCancel}}"
-                size="small"
-                theme="danger"
-                variant="outline"
-                shape="round"
-                data-id="{{item.id}}"
-                loading="{{actionSubmittingKey === ('cancel:' + item.id)}}"
-                catchtap="onCancelReservation"
-              >取消预订</t-button>
-              <t-button
-                wx:if="{{item.canConfirm}}"
-                size="small"
-                theme="primary"
-                variant="outline"
-                shape="round"
-                data-id="{{item.id}}"
-                data-contact="{{item.contact_name}}"
-                loading="{{actionSubmittingKey === ('confirm:' + item.id)}}"
-                catchtap="onConfirmReservation"
-              >确认预订</t-button>
-              <t-button
-                wx:if="{{item.canCheckIn}}"
-                size="small"
-                theme="primary"
-                variant="outline"
-                shape="round"
-                data-id="{{item.id}}"
-                data-contact="{{item.contact_name}}"
-                loading="{{actionSubmittingKey === ('check_in:' + item.id)}}"
-                catchtap="onCheckInReservation"
-              >登记到店</t-button>
-              <t-button
-                wx:if="{{item.canStartCooking}}"
-                size="small"
-                theme="primary"
-                variant="outline"
-                shape="round"
-                data-id="{{item.id}}"
-                data-contact="{{item.contact_name}}"
-                loading="{{actionSubmittingKey === ('start_cooking:' + item.id)}}"
-                catchtap="onStartCookingReservation"
-              >通知后厨起菜</t-button>
-              <t-button
-                wx:if="{{item.canNoShow}}"
-                size="small"
-                theme="danger"
-                variant="outline"
-                shape="round"
-                data-id="{{item.id}}"
-                data-contact="{{item.contact_name}}"
-                loading="{{actionSubmittingKey === ('no_show:' + item.id)}}"
-                catchtap="onMarkNoShow"
-              >标记未到店</t-button>
-              <t-button
-                wx:if="{{item.canComplete}}"
-                size="small"
-                theme="primary"
-                shape="round"
-                data-id="{{item.id}}"
-                data-contact="{{item.contact_name}}"
-                loading="{{actionSubmittingKey === ('complete:' + item.id)}}"
-                catchtap="onCompleteReservation"
-              >完成预订</t-button>
+              <view class="date-filter-actions" catchtap="onActionsCatch">
+                <view class="date-filter-divider"></view>
+                <view class="date-filter-icon-button" bindtap="onManualRefresh">
+                  <t-icon name="refresh" size="36rpx" />
+                </view>
+              </view>
             </view>
           </view>
         </view>
+      </t-sticky>
+
+      <view class="result-bar">
+        <text class="result-bar__text">{{listSummaryText}}</text>
       </view>
 
-      <view wx:else class="section-state-block">
-        <t-empty icon="info-circle" description="{{reservationsErrorMessage || '预订列表加载失败，请重试'}}" />
-        <view class="retry-button" bindtap="onRetryReservations">重新加载预订列表</view>
+      <view wx:if="{{listLoading && !reservations.length}}" class="state-block state-block--inline">
+        <t-loading theme="circular" size="40rpx" text="正在加载预订列表..." vertical />
+      </view>
+
+      <view wx:elif="{{!listLoading && listInitialError && !reservations.length}}" class="state-block state-block--inline">
+        <t-empty image="error-circle" description="{{listInitialErrorMessage || '预订列表加载失败'}}" />
+        <t-button theme="primary" size="small" shape="round" bind:tap="onRetryList">重试加载</t-button>
+      </view>
+
+      <t-empty wx:elif="{{!listLoading && !reservations.length}}" icon="info-circle" description="当前筛选条件下暂无预订" />
+
+      <view wx:else class="reservation-list">
+        <t-cell-group theme="card">
+          <view wx:for="{{reservations}}" wx:key="id" class="reservation-card card-surface">
+            <view class="reservation-card__main" data-id="{{item.id}}" bindtap="onReservationCardTap">
+              <view class="reservation-card__header">
+                <view class="reservation-card__title-group">
+                  <text class="reservation-card__title">{{item.titleText}}</text>
+                  <text class="reservation-card__subtitle">{{item.subtitleText}}</text>
+                </view>
+                <t-tag theme="{{item.statusTheme}}" variant="dark">{{item.statusLabel}}</t-tag>
+              </view>
+
+              <view class="reservation-card__meta-list">
+                <view class="reservation-card__meta-item">
+                  <text class="reservation-card__meta-label">来源</text>
+                  <text class="reservation-card__meta-value">{{item.sourceLabel}}</text>
+                </view>
+                <view class="reservation-card__meta-item">
+                  <text class="reservation-card__meta-label">支付方式</text>
+                  <text class="reservation-card__meta-value">{{item.paymentLabel}}</text>
+                </view>
+                <view class="reservation-card__meta-item">
+                  <text class="reservation-card__meta-label">人数</text>
+                  <text class="reservation-card__meta-value">{{item.guest_count}} 人</text>
+                </view>
+              </view>
+
+              <view class="reservation-card__info-block">
+                <text class="reservation-card__info-label">预点菜</text>
+                <text class="reservation-card__info-text">{{item.itemPreview}}</text>
+              </view>
+
+              <view wx:if="{{item.notes}}" class="reservation-card__info-block reservation-card__info-block--notes">
+                <text class="reservation-card__info-label">备注</text>
+                <text class="reservation-card__info-text">{{item.notes}}</text>
+              </view>
+
+              <view wx:if="{{item.cookingStartedNotice}}" class="reservation-card__notice">
+                <text>{{item.cookingStartedNotice}}</text>
+              </view>
+            </view>
+
+            <view class="card-divider"></view>
+
+            <view class="reservation-card__actions" catchtap="onActionsCatch">
+              <view class="reservation-card__action" data-id="{{item.id}}" bindtap="onOpenEditPage">{{item.canEdit ? '编辑' : '查看'}}</view>
+              <view wx:if="{{item.primaryActionKey}}" class="card-action-divider"></view>
+              <view
+                wx:if="{{item.primaryActionKey}}"
+                class="reservation-card__action reservation-card__action--primary"
+                data-id="{{item.id}}"
+                data-action="{{item.primaryActionKey}}"
+                data-contact="{{item.contact_name}}"
+                bindtap="onPrimaryAction"
+              >
+                {{item.primaryActionLabel}}
+              </view>
+              <view wx:if="{{item.showMoreActions}}" class="card-action-divider"></view>
+              <view wx:if="{{item.showMoreActions}}" class="reservation-card__action" data-id="{{item.id}}" bindtap="onOpenMoreActions">更多</view>
+            </view>
+          </view>
+        </t-cell-group>
+
+        <view wx:if="{{listLoading && reservations.length}}" class="list-loading-more">
+          <t-loading size="32rpx" text="正在加载更多..." />
+        </view>
+
+        <view wx:elif="{{listHasMore}}" class="load-more-trigger">
+          <t-button variant="text" theme="primary" bind:tap="onLoadMore">加载更多</t-button>
+        </view>
+
+        <view wx:else class="list-end-text">已经到底了</view>
       </view>
     </view>
+
   </block>
 
-  <t-popup wx:if="{{createPopupVisible}}" visible="{{createPopupVisible}}" placement="bottom" bind:visible-change="onCreatePopupVisibleChange">
-    <view class="popup-sheet">
-      <view class="popup-title">{{formMode === 'edit' ? '编辑预订' : '代客创建预订'}}</view>
-      <text class="popup-subtitle">{{formMode === 'edit' ? '支持调整桌台、时间、联系人与备注。提交后会刷新当前日期列表。' : '适用于电话预订和现场预订。创建后会刷新当前日期列表，请以后端返回状态为准继续确认、取消或标记未到店。'}}</text>
-
-      <view class="form-item">
-        <text class="form-label">选择桌台</text>
-        <picker mode="selector" range="{{tableOptions}}" range-key="label" value="{{selectedTableIndex}}" bindchange="onCreateTableChange">
-          <view class="picker-trigger {{tableOptions.length ? '' : 'picker-trigger-disabled'}}">
-            {{tableOptionsLoading ? '加载桌台中...' : (tableOptions.length ? tableOptions[selectedTableIndex].label : '暂无可用桌台')}}
-          </view>
-        </picker>
-        <text class="form-tip">仅隐藏已停用桌台，具体时间冲突由后端校验。</text>
-      </view>
-
-      <view class="form-grid">
-        <view class="form-item">
-          <text class="form-label">预订日期</text>
-          <picker mode="date" value="{{createForm.date}}" bindchange="onCreateDateFieldChange">
-            <view class="picker-trigger">{{createForm.date}}</view>
-          </picker>
-        </view>
-        <view class="form-item">
-          <text class="form-label">预订时间</text>
-          <picker mode="time" value="{{createForm.time}}" bindchange="onCreateTimeFieldChange">
-            <view class="picker-trigger">{{createForm.time}}</view>
-          </picker>
-        </view>
-      </view>
-
-      <t-input label="联系人" value="{{createForm.contact_name}}" data-field="contact_name" placeholder="请输入联系人姓名" bindchange="onCreateFieldChange" />
-      <t-input label="联系电话" type="number" value="{{createForm.contact_phone}}" data-field="contact_phone" placeholder="请输入联系电话" bindchange="onCreateFieldChange" />
-      <t-input label="到店人数" type="number" value="{{createForm.guest_count}}" data-field="guest_count" placeholder="1-50 人" bindchange="onCreateFieldChange" />
-
-      <view class="form-item" wx:if="{{formMode === 'create'}}">
-        <text class="form-label">预订来源</text>
-        <radio-group class="source-options" bindchange="onCreateSourceChange">
-          <label class="source-option">
-            <radio value="merchant" checked="{{createForm.source === 'merchant'}}" color="var(--td-brand-color)" />
-            <text>商户代录</text>
-          </label>
-          <label class="source-option">
-            <radio value="phone" checked="{{createForm.source === 'phone'}}" color="var(--td-brand-color)" />
-            <text>电话预订</text>
-          </label>
-          <label class="source-option">
-            <radio value="walkin" checked="{{createForm.source === 'walkin'}}" color="var(--td-brand-color)" />
-            <text>现场预订</text>
-          </label>
-        </radio-group>
-      </view>
-
-      <t-textarea value="{{createForm.notes}}" data-field="notes" placeholder="备注顾客偏好、到店说明或包间要求" maxlength="500" indicator bindchange="onCreateFieldChange" />
-
-      <view class="popup-actions">
-        <t-button theme="primary" variant="outline" size="medium" shape="round" bindtap="onCloseCreatePopup">取消</t-button>
-        <t-button theme="primary" size="medium" shape="round" loading="{{createSubmitting}}" bindtap="onSubmitCreateReservation">{{formMode === 'edit' ? '保存修改' : '创建预订'}}</t-button>
-      </view>
-    </view>
-  </t-popup>
+  <t-fab icon="add" bind:click="onOpenCreatePage" />
 </view>
+
+<t-action-sheet
+  visible="{{actionSheetVisible}}"
+  description="{{actionSheetDescription}}"
+  items="{{actionSheetItems}}"
+  using-custom-navbar="{{true}}"
+  bind:selected="onActionSheetSelected"
+  bind:cancel="onActionSheetCancel"
+  bind:close="onActionSheetClose"
+/>
+
+<t-dialog
+  visible="{{confirmDialogVisible}}"
+  title="{{confirmDialogTitle}}"
+  using-custom-navbar="{{true}}"
+  confirm-btn="{{ { content: confirmDialogConfirmText, theme: confirmDialogConfirmTheme, loading: confirmDialogSubmitting } }}"
+  cancel-btn="取消"
+  bind:confirm="onConfirmDialogAction"
+  bind:cancel="onCancelConfirmDialog"
+  bind:close="onCancelConfirmDialog"
+>
+  <view slot="content" class="confirm-dialog__content">
+    <text>{{confirmDialogContent}}</text>
+  </view>
+</t-dialog>
+
+<t-toast id="t-toast" />
+
+<t-date-time-picker
+  visible="{{datePickerVisible}}"
+  mode="date"
+  value="{{date}}"
+  title="选择营业日期"
+  format="YYYY-MM-DD"
+  bind:confirm="onDateConfirm"
+  bind:cancel="onCloseDatePicker"
+  bind:close="onCloseDatePicker"
+/>

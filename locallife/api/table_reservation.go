@@ -57,36 +57,39 @@ type reservationItem struct {
 }
 
 type reservationResponse struct {
-	ID              int64                     `json:"id"`
-	TableID         int64                     `json:"table_id"`
-	TableNo         string                    `json:"table_no,omitempty"`
-	TableType       string                    `json:"table_type,omitempty"`
-	UserID          int64                     `json:"user_id"`
-	MerchantID      int64                     `json:"merchant_id"`
-	MerchantName    string                    `json:"merchant_name,omitempty"`
-	MerchantAddress string                    `json:"merchant_address,omitempty"`
-	MerchantPhone   string                    `json:"merchant_phone,omitempty"`
-	ReservationDate string                    `json:"reservation_date"`
-	ReservationTime string                    `json:"reservation_time"`
-	GuestCount      int16                     `json:"guest_count"`
-	ContactName     string                    `json:"contact_name"`
-	ContactPhone    string                    `json:"contact_phone"`
-	Source          string                    `json:"source,omitempty"`
-	PaymentMode     string                    `json:"payment_mode"`
-	DepositAmount   int64                     `json:"deposit_amount"`
-	PrepaidAmount   int64                     `json:"prepaid_amount"`
-	RefundDeadline  time.Time                 `json:"refund_deadline"`
-	PaymentDeadline time.Time                 `json:"payment_deadline"`
-	Status          string                    `json:"status"`
-	Notes           *string                   `json:"notes,omitempty"`
-	PaidAt          *time.Time                `json:"paid_at,omitempty"`
-	ConfirmedAt     *time.Time                `json:"confirmed_at,omitempty"`
-	CompletedAt     *time.Time                `json:"completed_at,omitempty"`
-	CancelledAt     *time.Time                `json:"cancelled_at,omitempty"`
-	CancelReason    *string                   `json:"cancel_reason,omitempty"`
-	CreatedAt       time.Time                 `json:"created_at"`
-	UpdatedAt       *time.Time                `json:"updated_at,omitempty"`
-	Items           []reservationItemResponse `json:"items,omitempty"`
+	ID                  int64                                   `json:"id"`
+	TableID             int64                                   `json:"table_id"`
+	TableNo             string                                  `json:"table_no,omitempty"`
+	TableType           string                                  `json:"table_type,omitempty"`
+	UserID              int64                                   `json:"user_id"`
+	MerchantID          int64                                   `json:"merchant_id"`
+	MerchantName        string                                  `json:"merchant_name,omitempty"`
+	MerchantAddress     string                                  `json:"merchant_address,omitempty"`
+	MerchantPhone       string                                  `json:"merchant_phone,omitempty"`
+	ReservationDate     string                                  `json:"reservation_date"`
+	ReservationTime     string                                  `json:"reservation_time"`
+	GuestCount          int16                                   `json:"guest_count"`
+	ContactName         string                                  `json:"contact_name"`
+	ContactPhone        string                                  `json:"contact_phone"`
+	Source              string                                  `json:"source,omitempty"`
+	PaymentMode         string                                  `json:"payment_mode"`
+	DepositAmount       int64                                   `json:"deposit_amount"`
+	PrepaidAmount       int64                                   `json:"prepaid_amount"`
+	RefundDeadline      time.Time                               `json:"refund_deadline"`
+	PaymentDeadline     time.Time                               `json:"payment_deadline"`
+	Status              string                                  `json:"status"`
+	Notes               *string                                 `json:"notes,omitempty"`
+	PaidAt              *time.Time                              `json:"paid_at,omitempty"`
+	ConfirmedAt         *time.Time                              `json:"confirmed_at,omitempty"`
+	CheckedInAt         *time.Time                              `json:"checked_in_at,omitempty"`
+	CookingStartedAt    *time.Time                              `json:"cooking_started_at,omitempty"`
+	CompletedAt         *time.Time                              `json:"completed_at,omitempty"`
+	CancelledAt         *time.Time                              `json:"cancelled_at,omitempty"`
+	CancelReason        *string                                 `json:"cancel_reason,omitempty"`
+	CreatedAt           time.Time                               `json:"created_at"`
+	UpdatedAt           *time.Time                              `json:"updated_at,omitempty"`
+	MerchantActionState *merchantReservationActionStateResponse `json:"merchant_action_state,omitempty"`
+	Items               []reservationItemResponse               `json:"items,omitempty"`
 }
 
 type reservationItemResponse struct {
@@ -199,6 +202,12 @@ func newReservationResponse(r db.TableReservation) reservationResponse {
 	if r.ConfirmedAt.Valid {
 		resp.ConfirmedAt = &r.ConfirmedAt.Time
 	}
+	if r.CheckedInAt.Valid {
+		resp.CheckedInAt = &r.CheckedInAt.Time
+	}
+	if r.CookingStartedAt.Valid {
+		resp.CookingStartedAt = &r.CookingStartedAt.Time
+	}
 	if r.CompletedAt.Valid {
 		resp.CompletedAt = &r.CompletedAt.Time
 	}
@@ -252,6 +261,12 @@ func newReservationWithTableResponse(r db.GetTableReservationWithTableRow) reser
 	}
 	if r.ConfirmedAt.Valid {
 		resp.ConfirmedAt = &r.ConfirmedAt.Time
+	}
+	if r.CheckedInAt.Valid {
+		resp.CheckedInAt = &r.CheckedInAt.Time
+	}
+	if r.CookingStartedAt.Valid {
+		resp.CookingStartedAt = &r.CookingStartedAt.Time
 	}
 	if r.CompletedAt.Valid {
 		resp.CompletedAt = &r.CompletedAt.Time
@@ -499,10 +514,19 @@ func (server *Server) getReservation(ctx *gin.Context) {
 	// 权限验证：用户查看自己的预定，或商户查看自己商户的预定
 	isOwner := reservation.UserID == authPayload.UserID
 	isMerchant := false
-	if !isOwner {
-		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
-		if err == nil && merchant.ID == reservation.MerchantID {
+	merchantStaffRole := ""
+	if cachedMerchant, ok := GetMerchantFromContext(ctx); ok && cachedMerchant.ID == reservation.MerchantID {
+		isMerchant = true
+		if staffRole, ok := GetMerchantStaffRoleFromContext(ctx); ok {
+			merchantStaffRole = staffRole
+		} else if cachedMerchant.OwnerUserID == authPayload.UserID {
+			merchantStaffRole = "owner"
+		}
+	} else {
+		viewerMerchant, staffRole, err := server.resolveMerchantStaffIdentity(ctx, authPayload.UserID)
+		if err == nil && viewerMerchant.ID == reservation.MerchantID {
 			isMerchant = true
+			merchantStaffRole = staffRole
 		}
 	}
 
@@ -515,6 +539,16 @@ func (server *Server) getReservation(ctx *gin.Context) {
 	resp.MerchantName = merchant.Name
 	resp.MerchantAddress = merchant.Address
 	resp.MerchantPhone = merchant.Phone
+	if isMerchant && merchantStaffRole != "" {
+		resp.MerchantActionState = buildMerchantReservationActionStateResponse(
+			reservation.Status,
+			reservation.ReservationDate,
+			reservation.ReservationTime,
+			reservation.CookingStartedAt,
+			merchantStaffRole,
+			time.Now(),
+		)
+	}
 
 	orders, err := server.store.ListOrdersByUserWithFilters(ctx, db.ListOrdersByUserWithFiltersParams{
 		UserID: reservation.UserID,
@@ -908,6 +942,12 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 		return
 	}
 
+	staffRole, ok := GetMerchantStaffRoleFromContext(ctx)
+	if !ok && merchant.OwnerUserID == authPayload.UserID {
+		staffRole = "owner"
+	}
+	now := time.Now()
+
 	var reservations []db.ListReservationsByMerchantRow
 
 	if req.Date != "" {
@@ -947,62 +987,40 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 		// 转换类型
 		for _, r := range filteredReservations[start:end] {
 			reservations = append(reservations, db.ListReservationsByMerchantRow{
-				ID:              r.ID,
-				TableID:         r.TableID,
-				UserID:          r.UserID,
-				MerchantID:      r.MerchantID,
-				ReservationDate: r.ReservationDate,
-				ReservationTime: r.ReservationTime,
-				GuestCount:      r.GuestCount,
-				ContactName:     r.ContactName,
-				ContactPhone:    r.ContactPhone,
-				Source:          r.Source,
-				PaymentMode:     r.PaymentMode,
-				DepositAmount:   r.DepositAmount,
-				PrepaidAmount:   r.PrepaidAmount,
-				RefundDeadline:  r.RefundDeadline,
-				Status:          r.Status,
-				PaymentDeadline: r.PaymentDeadline,
-				Notes:           r.Notes,
-				PaidAt:          r.PaidAt,
-				ConfirmedAt:     r.ConfirmedAt,
-				CompletedAt:     r.CompletedAt,
-				CancelledAt:     r.CancelledAt,
-				CancelReason:    r.CancelReason,
-				CreatedAt:       r.CreatedAt,
-				UpdatedAt:       r.UpdatedAt,
-				TableNo:         r.TableNo,
-				TableType:       r.TableType,
+				ID:               r.ID,
+				TableID:          r.TableID,
+				UserID:           r.UserID,
+				MerchantID:       r.MerchantID,
+				ReservationDate:  r.ReservationDate,
+				ReservationTime:  r.ReservationTime,
+				GuestCount:       r.GuestCount,
+				ContactName:      r.ContactName,
+				ContactPhone:     r.ContactPhone,
+				Source:           r.Source,
+				PaymentMode:      r.PaymentMode,
+				DepositAmount:    r.DepositAmount,
+				PrepaidAmount:    r.PrepaidAmount,
+				RefundDeadline:   r.RefundDeadline,
+				Status:           r.Status,
+				PaymentDeadline:  r.PaymentDeadline,
+				Notes:            r.Notes,
+				PaidAt:           r.PaidAt,
+				ConfirmedAt:      r.ConfirmedAt,
+				CheckedInAt:      r.CheckedInAt,
+				CookingStartedAt: r.CookingStartedAt,
+				CompletedAt:      r.CompletedAt,
+				CancelledAt:      r.CancelledAt,
+				CancelReason:     r.CancelReason,
+				CreatedAt:        r.CreatedAt,
+				UpdatedAt:        r.UpdatedAt,
+				TableNo:          r.TableNo,
+				TableType:        r.TableType,
 			})
 		}
 
 		resp := make([]reservationResponse, len(reservations))
 		for i, r := range reservations {
-			resp[i] = reservationResponse{
-				ID:              r.ID,
-				TableID:         r.TableID,
-				TableNo:         r.TableNo,
-				TableType:       r.TableType,
-				UserID:          r.UserID,
-				MerchantID:      r.MerchantID,
-				ReservationDate: r.ReservationDate.Time.Format("2006-01-02"),
-				GuestCount:      r.GuestCount,
-				ContactName:     r.ContactName,
-				ContactPhone:    r.ContactPhone,
-				Source:          r.Source.String,
-				PaymentMode:     r.PaymentMode,
-				DepositAmount:   r.DepositAmount,
-				PrepaidAmount:   r.PrepaidAmount,
-				RefundDeadline:  r.RefundDeadline,
-				PaymentDeadline: r.PaymentDeadline,
-				Status:          r.Status,
-				CreatedAt:       r.CreatedAt,
-			}
-			if r.ReservationTime.Valid {
-				hours := r.ReservationTime.Microseconds / 1000000 / 3600
-				minutes := (r.ReservationTime.Microseconds / 1000000 % 3600) / 60
-				resp[i].ReservationTime = time.Date(0, 1, 1, int(hours), int(minutes), 0, 0, time.UTC).Format("15:04")
-			}
+			resp[i] = newMerchantListReservationResponse(r, staffRole, now)
 
 			items, err := server.store.ListReservationItems(ctx, r.ID)
 			if err == nil && len(items) > 0 {
@@ -1064,31 +1082,34 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 		// 转换类型
 		for _, r := range statusReservations {
 			reservations = append(reservations, db.ListReservationsByMerchantRow{
-				ID:              r.ID,
-				TableID:         r.TableID,
-				UserID:          r.UserID,
-				MerchantID:      r.MerchantID,
-				ReservationDate: r.ReservationDate,
-				ReservationTime: r.ReservationTime,
-				GuestCount:      r.GuestCount,
-				ContactName:     r.ContactName,
-				ContactPhone:    r.ContactPhone,
-				PaymentMode:     r.PaymentMode,
-				DepositAmount:   r.DepositAmount,
-				PrepaidAmount:   r.PrepaidAmount,
-				RefundDeadline:  r.RefundDeadline,
-				Status:          r.Status,
-				PaymentDeadline: r.PaymentDeadline,
-				Notes:           r.Notes,
-				PaidAt:          r.PaidAt,
-				ConfirmedAt:     r.ConfirmedAt,
-				CompletedAt:     r.CompletedAt,
-				CancelledAt:     r.CancelledAt,
-				CancelReason:    r.CancelReason,
-				CreatedAt:       r.CreatedAt,
-				UpdatedAt:       r.UpdatedAt,
-				TableNo:         r.TableNo,
-				TableType:       r.TableType,
+				ID:               r.ID,
+				TableID:          r.TableID,
+				UserID:           r.UserID,
+				MerchantID:       r.MerchantID,
+				ReservationDate:  r.ReservationDate,
+				ReservationTime:  r.ReservationTime,
+				GuestCount:       r.GuestCount,
+				ContactName:      r.ContactName,
+				ContactPhone:     r.ContactPhone,
+				PaymentMode:      r.PaymentMode,
+				DepositAmount:    r.DepositAmount,
+				PrepaidAmount:    r.PrepaidAmount,
+				RefundDeadline:   r.RefundDeadline,
+				Status:           r.Status,
+				PaymentDeadline:  r.PaymentDeadline,
+				Notes:            r.Notes,
+				PaidAt:           r.PaidAt,
+				ConfirmedAt:      r.ConfirmedAt,
+				CheckedInAt:      r.CheckedInAt,
+				CookingStartedAt: r.CookingStartedAt,
+				CompletedAt:      r.CompletedAt,
+				CancelledAt:      r.CancelledAt,
+				CancelReason:     r.CancelReason,
+				CreatedAt:        r.CreatedAt,
+				UpdatedAt:        r.UpdatedAt,
+				Source:           r.Source,
+				TableNo:          r.TableNo,
+				TableType:        r.TableType,
 			})
 		}
 	} else {
@@ -1106,31 +1127,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 
 	resp := make([]reservationResponse, len(reservations))
 	for i, r := range reservations {
-		resp[i] = reservationResponse{
-			ID:              r.ID,
-			TableID:         r.TableID,
-			TableNo:         r.TableNo,
-			TableType:       r.TableType,
-			UserID:          r.UserID,
-			MerchantID:      r.MerchantID,
-			ReservationDate: r.ReservationDate.Time.Format("2006-01-02"),
-			GuestCount:      r.GuestCount,
-			ContactName:     r.ContactName,
-			ContactPhone:    r.ContactPhone,
-			Source:          r.Source.String,
-			PaymentMode:     r.PaymentMode,
-			DepositAmount:   r.DepositAmount,
-			PrepaidAmount:   r.PrepaidAmount,
-			RefundDeadline:  r.RefundDeadline,
-			PaymentDeadline: r.PaymentDeadline,
-			Status:          r.Status,
-			CreatedAt:       r.CreatedAt,
-		}
-		if r.ReservationTime.Valid {
-			hours := r.ReservationTime.Microseconds / 1000000 / 3600
-			minutes := (r.ReservationTime.Microseconds / 1000000 % 3600) / 60
-			resp[i].ReservationTime = time.Date(0, 1, 1, int(hours), int(minutes), 0, 0, time.UTC).Format("15:04")
-		}
+		resp[i] = newMerchantListReservationResponse(r, staffRole, now)
 
 		// 填充预订菜品
 		items, err := server.store.ListReservationItems(ctx, r.ID)

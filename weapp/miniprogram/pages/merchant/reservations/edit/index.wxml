@@ -1,0 +1,150 @@
+<custom-navbar title="{{isEdit ? '编辑预订' : '新建预订'}}" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载预订编辑信息中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty image="error-circle" description="{{initialErrorMessage || '预订编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view wx:if="{{loadWarningMessage}}" class="notice-card notice-card--warning">
+        <text class="notice-text">{{loadWarningMessage}}</text>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top-action">
+          <view class="section-top-main">
+            <text class="section-title">基础信息</text>
+            <text wx:if="{{isEdit}}" class="section-caption">当前状态：{{statusLabel}}</text>
+          </view>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-cell title="预订桌台" arrow bind:tap="showTablePicker" note="{{selectedTableLabel || '请选择桌台'}}" />
+          <t-cell title="到店日期" arrow bind:tap="onOpenDatePicker" note="{{formData.date || '请选择到店日期'}}" />
+          <t-cell title="到店时间" arrow bind:tap="onOpenTimePicker" note="{{formData.time || '请选择到店时间'}}" />
+          <t-input
+            label="到店人数"
+            type="number"
+            placeholder="请输入到店人数"
+            value="{{formData.guest_count}}"
+            bind:change="onGuestCountChange"
+            required
+          />
+        </t-cell-group>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">联系人信息</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-input
+            label="联系人"
+            placeholder="请输入联系人姓名"
+            value="{{formData.contact_name}}"
+            data-field="contact_name"
+            bind:change="onInputChange"
+            required
+          />
+          <t-input
+            label="联系电话"
+            type="number"
+            placeholder="请输入 11 位手机号"
+            value="{{formData.contact_phone}}"
+            data-field="contact_phone"
+            bind:change="onInputChange"
+            required
+          />
+        </t-cell-group>
+      </view>
+
+      <view wx:if="{{!isEdit}}" class="section-panel">
+        <view class="section-top">
+          <text class="section-title">登记方式</text>
+          <text class="section-caption">按实际来源记录，方便后续复盘预订渠道</text>
+        </view>
+
+        <view class="source-radio-group">
+          <t-radio-group value="{{formData.source}}" borderless="{{true}}" bind:change="onSourceChange">
+            <t-radio value="merchant" label="店内代录" />
+            <t-radio value="phone" label="电话预订" />
+            <t-radio value="walkin" label="到店预订" />
+          </t-radio-group>
+        </view>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">补充说明</text>
+          <text class="section-caption">记录口味偏好、特殊布置、到店提醒等信息</text>
+        </view>
+
+        <t-textarea
+          placeholder="请输入备注信息..."
+          value="{{formData.notes}}"
+          data-field="notes"
+          bind:change="onInputChange"
+          bordered
+          maxlength="200"
+          indicator
+        />
+      </view>
+    </view>
+
+    <view class="footer-bar">
+      <t-button
+        block
+        size="large"
+        shape="round"
+        theme="primary"
+        loading="{{submitting}}"
+        disabled="{{isEdit && !isEditable}}"
+        bind:tap="onSubmit"
+      >{{isEdit ? (isEditable ? '保存预订' : '当前状态不可修改') : '创建预订'}}</t-button>
+    </view>
+
+    <t-picker
+      visible="{{tablePickerVisible}}"
+      value="{{[selectedTableValue || (tableOptions.length ? tableOptions[0].value : '')]}}"
+      title="选择预订桌台"
+      cancelBtn="取消"
+      confirmBtn="确定"
+      bind:confirm="onTableConfirm"
+      bind:cancel="onTableCancel"
+    >
+      <t-picker-item options="{{tableOptions}}" />
+    </t-picker>
+
+    <t-date-time-picker
+      visible="{{datePickerVisible}}"
+      mode="date"
+      value="{{formData.date}}"
+      title="选择到店日期"
+      format="YYYY-MM-DD"
+      bind:confirm="onDateConfirm"
+      bind:cancel="onCloseDatePicker"
+      bind:close="onCloseDatePicker"
+    />
+
+    <t-date-time-picker
+      visible="{{timePickerVisible}}"
+      mode="time"
+      value="{{formData.time}}"
+      title="选择到店时间"
+      format="HH:mm"
+      bind:confirm="onTimeConfirm"
+      bind:cancel="onCloseTimePicker"
+      bind:close="onCloseTimePicker"
+    />
+  </block>
+</view>

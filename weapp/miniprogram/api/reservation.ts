@@ -4,6 +4,7 @@
  * 对应后端 /v1/reservations 路由组
  */
 
+import dayjs from 'dayjs'
 import { request, API_BASE } from '../utils/request'
 
 interface RoomTagItem {
@@ -35,6 +36,227 @@ export type ReservationStatus =
   | 'cancelled'   // 已取消
   | 'expired'     // 已过期
   | 'no_show'     // 未到店
+
+export type MerchantReservationFilterStatus = ReservationStatus | 'exception'
+export type ReservationStatusTheme = 'primary' | 'warning' | 'success' | 'danger' | 'default'
+export type MerchantReservationActionKey = 'cancel' | 'confirm' | 'check_in' | 'start_cooking' | 'no_show' | 'complete'
+
+export interface MerchantReservationActionStatePayload {
+  can_edit: boolean
+  can_cancel: boolean
+  can_confirm: boolean
+  can_check_in: boolean
+  can_start_cooking: boolean
+  can_no_show: boolean
+  can_complete: boolean
+  primary_action_key: MerchantReservationActionKey | ''
+  show_more_actions: boolean
+}
+
+export interface MerchantReservationActionState {
+  canEdit: boolean
+  canCancel: boolean
+  canConfirm: boolean
+  canCheckIn: boolean
+  canStartCooking: boolean
+  canNoShow: boolean
+  canComplete: boolean
+  primaryActionKey: MerchantReservationActionKey | ''
+  primaryActionLabel: string
+  showMoreActions: boolean
+}
+
+function formatMerchantReservationActionLabel(actionKey: MerchantReservationActionKey | ''): string {
+  switch (actionKey) {
+    case 'confirm':
+      return '确认预订'
+    case 'check_in':
+      return '登记到店'
+    case 'start_cooking':
+      return '通知后厨起菜'
+    case 'complete':
+      return '完成预订'
+    case 'no_show':
+      return '标记未到店'
+    case 'cancel':
+      return '取消预订'
+    default:
+      return ''
+  }
+}
+
+const RESERVATION_STATUS_LABEL_MAP: Record<ReservationStatus, string> = {
+  pending: '待支付',
+  paid: '待确认',
+  confirmed: '已确认',
+  checked_in: '已到店',
+  completed: '已完成',
+  cancelled: '已取消',
+  expired: '已过期',
+  no_show: '未到店'
+}
+
+const RESERVATION_STATUS_THEME_MAP: Record<ReservationStatus, ReservationStatusTheme> = {
+  pending: 'warning',
+  paid: 'warning',
+  confirmed: 'primary',
+  checked_in: 'primary',
+  completed: 'success',
+  cancelled: 'danger',
+  expired: 'danger',
+  no_show: 'danger'
+}
+
+const MERCHANT_RESERVATION_NON_EDITABLE_STATUSES = new Set<ReservationStatus>(['completed', 'cancelled', 'expired'])
+const MERCHANT_RESERVATION_CANCELABLE_STATUSES = new Set<ReservationStatus>(['pending', 'paid', 'confirmed'])
+const MERCHANT_RESERVATION_CHECK_IN_STATUSES = new Set<ReservationStatus>(['paid', 'confirmed'])
+const MERCHANT_RESERVATION_COOKING_READY_STATUSES = new Set<ReservationStatus>(['confirmed', 'checked_in'])
+const MERCHANT_RESERVATION_CHECK_IN_EARLY_MINUTES = 30
+const MERCHANT_RESERVATION_CHECK_IN_LATE_MINUTES = 30
+
+function getReservationScheduledAt(
+  reservation: Pick<ReservationResponse, 'reservation_date' | 'reservation_time'>
+) {
+  if (!reservation.reservation_date || !reservation.reservation_time) {
+    return null
+  }
+
+  const scheduledAt = dayjs(`${reservation.reservation_date}T${reservation.reservation_time}:00`)
+  if (!scheduledAt.isValid()) {
+    return null
+  }
+
+  return scheduledAt
+}
+
+export function formatReservationStatus(status: ReservationStatus): string {
+  return RESERVATION_STATUS_LABEL_MAP[status] || status
+}
+
+export function getReservationStatusTheme(status: ReservationStatus): ReservationStatusTheme {
+  return RESERVATION_STATUS_THEME_MAP[status] || 'default'
+}
+
+export function isMerchantReservationEditable(status: ReservationStatus): boolean {
+  return !MERCHANT_RESERVATION_NON_EDITABLE_STATUSES.has(status)
+}
+
+export function canMerchantCancelReservation(status: ReservationStatus): boolean {
+  return MERCHANT_RESERVATION_CANCELABLE_STATUSES.has(status)
+}
+
+export function canMerchantConfirmReservation(status: ReservationStatus): boolean {
+  return status === 'paid'
+}
+
+export function isReservationPendingPayment(status: ReservationStatus): boolean {
+  return status === 'pending'
+}
+
+export function canMerchantCheckInReservation(
+  reservation: Pick<ReservationResponse, 'status' | 'reservation_date' | 'reservation_time'>,
+  now = dayjs()
+): boolean {
+  if (!MERCHANT_RESERVATION_CHECK_IN_STATUSES.has(reservation.status)) {
+    return false
+  }
+
+  const scheduledAt = getReservationScheduledAt(reservation)
+  if (!scheduledAt) {
+    return true
+  }
+
+  const earlyLimit = scheduledAt.subtract(MERCHANT_RESERVATION_CHECK_IN_EARLY_MINUTES, 'minute')
+  const lateLimit = scheduledAt.add(MERCHANT_RESERVATION_CHECK_IN_LATE_MINUTES, 'minute')
+
+  return !now.isBefore(earlyLimit) && !now.isAfter(lateLimit)
+}
+
+export function canMerchantStartCookingReservation(status: ReservationStatus, cookingStartedAt?: string): boolean {
+  return MERCHANT_RESERVATION_COOKING_READY_STATUSES.has(status) && !cookingStartedAt
+}
+
+export function canMerchantMarkReservationNoShow(status: ReservationStatus): boolean {
+  return MERCHANT_RESERVATION_CHECK_IN_STATUSES.has(status)
+}
+
+export function canMerchantCompleteReservation(status: ReservationStatus): boolean {
+  return MERCHANT_RESERVATION_COOKING_READY_STATUSES.has(status)
+}
+
+export function getMerchantReservationPrimaryAction(
+  reservation: Pick<ReservationResponse, 'status' | 'cooking_started_at' | 'reservation_date' | 'reservation_time'>
+): { key: MerchantReservationActionKey | '', label: string } {
+  if (canMerchantConfirmReservation(reservation.status)) {
+    return { key: 'confirm', label: '确认预订' }
+  }
+
+  if (reservation.status === 'confirmed' && canMerchantCheckInReservation(reservation)) {
+    return { key: 'check_in', label: '登记到店' }
+  }
+
+  if (reservation.status === 'checked_in') {
+    if (canMerchantStartCookingReservation(reservation.status, reservation.cooking_started_at)) {
+      return { key: 'start_cooking', label: '通知后厨起菜' }
+    }
+
+    return { key: 'complete', label: '完成预订' }
+  }
+
+  return { key: '', label: '' }
+}
+
+export function getMerchantReservationActionState(
+  reservation: Pick<ReservationResponse, 'status' | 'cooking_started_at' | 'reservation_date' | 'reservation_time' | 'merchant_action_state'>
+): MerchantReservationActionState {
+  if (reservation.merchant_action_state) {
+    const backendState = reservation.merchant_action_state
+    const primaryActionKey = backendState.primary_action_key || ''
+
+    return {
+      canEdit: backendState.can_edit,
+      canCancel: backendState.can_cancel,
+      canConfirm: backendState.can_confirm,
+      canCheckIn: backendState.can_check_in,
+      canStartCooking: backendState.can_start_cooking,
+      canNoShow: backendState.can_no_show,
+      canComplete: backendState.can_complete,
+      primaryActionKey,
+      primaryActionLabel: formatMerchantReservationActionLabel(primaryActionKey),
+      showMoreActions: backendState.show_more_actions
+    }
+  }
+
+  const canEdit = isMerchantReservationEditable(reservation.status)
+  const canCancel = canMerchantCancelReservation(reservation.status)
+  const canConfirm = canMerchantConfirmReservation(reservation.status)
+  const canCheckIn = canMerchantCheckInReservation(reservation)
+  const canStartCooking = canMerchantStartCookingReservation(reservation.status, reservation.cooking_started_at)
+  const canNoShow = canMerchantMarkReservationNoShow(reservation.status)
+  const canComplete = canMerchantCompleteReservation(reservation.status)
+  const primaryAction = getMerchantReservationPrimaryAction(reservation)
+
+  return {
+    canEdit,
+    canCancel,
+    canConfirm,
+    canCheckIn,
+    canStartCooking,
+    canNoShow,
+    canComplete,
+    primaryActionKey: primaryAction.key,
+    primaryActionLabel: primaryAction.label,
+    showMoreActions: [
+      canCancel,
+      canNoShow,
+      canConfirm && primaryAction.key !== 'confirm',
+      canCheckIn && primaryAction.key !== 'check_in',
+      canStartCooking && primaryAction.key !== 'start_cooking',
+      canComplete && primaryAction.key !== 'complete',
+      canEdit
+    ].some(Boolean)
+  }
+}
 
 // 用餐会话 DTO（与 /v1/dining-sessions 接口对齐）
 export interface DiningSessionDTO {
@@ -165,6 +387,7 @@ export interface ReservationResponse {
   guest_count: number
   contact_name: string
   contact_phone: string
+  source?: ReservationSource
   payment_mode: PaymentMode
   deposit_amount: number
   prepaid_amount: number
@@ -179,6 +402,7 @@ export interface ReservationResponse {
   completed_at?: string
   cancelled_at?: string
   cancel_reason?: string
+  merchant_action_state?: MerchantReservationActionStatePayload
   items?: ReservationItem[]
   created_at: string
   updated_at?: string
@@ -190,7 +414,7 @@ export interface ReservationResponse {
 export interface ReservationListParams {
   page_id: number
   page_size: number
-  status?: ReservationStatus
+  status?: MerchantReservationFilterStatus
   date?: string  // YYYY-MM-DD
 }
 
@@ -237,6 +461,38 @@ export interface MerchantReservationDishSummaryItem {
 export interface MerchantReservationDishesSummaryResponse {
   date: string
   items: MerchantReservationDishSummaryItem[]
+}
+
+export interface MerchantReservationWorkbenchSummary {
+  reservation_count: number
+  active_table_count: number
+}
+
+export interface MerchantReservationWorkbenchStatusTotals {
+  all: number
+  pending: number
+  paid: number
+  confirmed: number
+  checked_in: number
+  completed: number
+  cancelled: number
+  expired: number
+  no_show: number
+  exception: number
+}
+
+export interface MerchantReservationPrepSummary {
+  table_count: number
+  dish_kinds: number
+  total_quantity: number
+  items: MerchantReservationDishSummaryItem[]
+}
+
+export interface MerchantReservationWorkbenchResponse {
+  date: string
+  summary: MerchantReservationWorkbenchSummary
+  status_totals: MerchantReservationWorkbenchStatusTotals
+  prep_summary: MerchantReservationPrepSummary
 }
 
 // ==================== 预订服务 ====================
@@ -413,6 +669,18 @@ export class ReservationService {
   }
 
   /**
+   * 商户获取预订工作台汇总
+   * GET /v1/reservations/merchant/workbench
+   */
+  static async getMerchantReservationWorkbench(date: string): Promise<MerchantReservationWorkbenchResponse> {
+    return await request({
+      url: '/v1/reservations/merchant/workbench',
+      method: 'GET',
+      data: { date }
+    })
+  }
+
+  /**
    * 商户代客创建预订
    * POST /v1/reservations/merchant/create
    */
@@ -489,6 +757,7 @@ export const getMerchantReservations = ReservationService.getMerchantReservation
 export const getTodayReservations = ReservationService.getTodayReservations
 export const getReservationStats = ReservationService.getReservationStats
 export const getMerchantReservationDishes = ReservationService.getMerchantReservationDishes
+export const getMerchantReservationWorkbench = ReservationService.getMerchantReservationWorkbench
 export const merchantCreateReservation = ReservationService.merchantCreateReservation
 export const updateReservation = ReservationService.updateReservation
 export const confirmReservationByMerchant = ReservationService.confirmReservation

@@ -1,16 +1,21 @@
 {
+  "navigationStyle": "custom",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
+    "t-action-sheet": "tdesign-miniprogram/action-sheet/action-sheet",
     "t-button": "tdesign-miniprogram/button/button",
+    "t-cell-group": "tdesign-miniprogram/cell-group/cell-group",
+    "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
+    "t-dialog": "tdesign-miniprogram/dialog/dialog",
     "t-empty": "tdesign-miniprogram/empty/empty",
+    "t-fab": "tdesign-miniprogram/fab/fab",
+    "t-icon": "tdesign-miniprogram/icon/icon",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-tabs": "tdesign-miniprogram/tabs/tabs",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
+    "t-sticky": "tdesign-miniprogram/sticky/sticky",
     "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+    "t-tabs": "tdesign-miniprogram/tabs/tabs",
     "t-tag": "tdesign-miniprogram/tag/tag",
-    "t-popup": "tdesign-miniprogram/popup/popup",
-    "t-input": "tdesign-miniprogram/input/input",
-    "t-textarea": "tdesign-miniprogram/textarea/textarea"
-  },
-  "navigationStyle": "custom",
-  "enablePullDownRefresh": true
+    "t-toast": "tdesign-miniprogram/toast/toast"
+  }
 }
