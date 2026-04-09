@@ -34903,6 +34903,15 @@ const docTemplate = `{
                 "stacking_group": {
                     "type": "string"
                 },
+                "status_code": {
+                    "type": "string"
+                },
+                "status_label": {
+                    "type": "string"
+                },
+                "status_theme": {
+                    "type": "string"
+                },
                 "valid_from": {
                     "type": "string"
                 },
@@ -40059,6 +40068,15 @@ const docTemplate = `{
                 "recharge_amount": {
                     "type": "integer"
                 },
+                "status_code": {
+                    "type": "string"
+                },
+                "status_label": {
+                    "type": "string"
+                },
+                "status_theme": {
+                    "type": "string"
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -43632,6 +43650,15 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "status_code": {
+                    "type": "string"
+                },
+                "status_label": {
+                    "type": "string"
+                },
+                "status_theme": {
                     "type": "string"
                 },
                 "total_quantity": {

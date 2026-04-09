@@ -40,6 +40,9 @@ type discountRuleResponse struct {
 	ValidFrom              time.Time `json:"valid_from"`
 	ValidUntil             time.Time `json:"valid_until"`
 	IsActive               bool      `json:"is_active"`
+	StatusCode             string    `json:"status_code"`
+	StatusLabel            string    `json:"status_label"`
+	StatusTheme            string    `json:"status_theme"`
 	CreatedAt              time.Time `json:"created_at"`
 }
 
@@ -159,10 +162,10 @@ type listMerchantDiscountRulesQueryRequest struct {
 }
 
 type listMerchantDiscountRulesResponse struct {
-	Rules      []discountRuleResponse `json:"rules"`
-	Total      int64                  `json:"total"`
-	PageID     int32                  `json:"page_id"`
-	PageSize   int32                  `json:"page_size"`
+	Rules    []discountRuleResponse `json:"rules"`
+	Total    int64                  `json:"total"`
+	PageID   int32                  `json:"page_id"`
+	PageSize int32                  `json:"page_size"`
 }
 
 // listMerchantDiscountRules 获取商户满减规则列表
@@ -220,10 +223,10 @@ func (server *Server) listMerchantDiscountRules(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantDiscountRulesResponse{
-		Rules:      rsp,
-		Total:      int64(len(rsp)),
-		PageID:     queryReq.PageID,
-		PageSize:   queryReq.PageSize,
+		Rules:    rsp,
+		Total:    int64(len(rsp)),
+		PageID:   queryReq.PageID,
+		PageSize: queryReq.PageSize,
 	})
 }
 
@@ -521,8 +524,26 @@ func (server *Server) deleteDiscountRule(ctx *gin.Context) {
 
 // ==================== 辅助函数 ====================
 
+func buildDiscountRuleStatusResponse(rule db.DiscountRule, now time.Time) (string, string, string) {
+	if !rule.IsActive {
+		return "inactive", "已停用", "default"
+	}
+
+	if now.After(rule.ValidUntil) {
+		return "expired", "已过期", "danger"
+	}
+
+	if now.Before(rule.ValidFrom) {
+		return "scheduled", "未开始", "warning"
+	}
+
+	return "active", "生效中", "success"
+}
+
 // convertDiscountRuleResponse 转换满减规则为响应格式
 func convertDiscountRuleResponse(rule db.DiscountRule) discountRuleResponse {
+	statusCode, statusLabel, statusTheme := buildDiscountRuleStatusResponse(rule, time.Now())
+
 	rsp := discountRuleResponse{
 		ID:                     rule.ID,
 		MerchantID:             rule.MerchantID,
@@ -534,6 +555,9 @@ func convertDiscountRuleResponse(rule db.DiscountRule) discountRuleResponse {
 		ValidFrom:              rule.ValidFrom,
 		ValidUntil:             rule.ValidUntil,
 		IsActive:               rule.IsActive,
+		StatusCode:             statusCode,
+		StatusLabel:            statusLabel,
+		StatusTheme:            statusTheme,
 		CreatedAt:              rule.CreatedAt,
 	}
 

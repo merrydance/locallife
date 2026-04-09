@@ -257,6 +257,9 @@ type rechargeRuleResponse struct {
 	IsActive       bool       `json:"is_active"`
 	ValidFrom      time.Time  `json:"valid_from"`
 	ValidUntil     time.Time  `json:"valid_until"`
+	StatusCode     string     `json:"status_code"`
+	StatusLabel    string     `json:"status_label"`
+	StatusTheme    string     `json:"status_theme"`
 	CreatedAt      time.Time  `json:"created_at"`
 	UpdatedAt      *time.Time `json:"updated_at,omitempty"`
 }
@@ -547,6 +550,8 @@ func convertUserMembershipResponse(m db.ListUserMembershipsRow) membershipRespon
 }
 
 func convertRechargeRuleResponse(rule db.RechargeRule) rechargeRuleResponse {
+	statusCode, statusLabel, statusTheme := buildRechargeRuleStatusResponse(rule, time.Now())
+
 	return rechargeRuleResponse{
 		ID:             rule.ID,
 		MerchantID:     rule.MerchantID,
@@ -555,9 +560,28 @@ func convertRechargeRuleResponse(rule db.RechargeRule) rechargeRuleResponse {
 		IsActive:       rule.IsActive,
 		ValidFrom:      rule.ValidFrom,
 		ValidUntil:     rule.ValidUntil,
+		StatusCode:     statusCode,
+		StatusLabel:    statusLabel,
+		StatusTheme:    statusTheme,
 		CreatedAt:      rule.CreatedAt,
 		UpdatedAt:      pgTimeToPtr(rule.UpdatedAt),
 	}
+}
+
+func buildRechargeRuleStatusResponse(rule db.RechargeRule, now time.Time) (string, string, string) {
+	if !rule.IsActive {
+		return "inactive", "已停用", "default"
+	}
+
+	if now.After(rule.ValidUntil) {
+		return "expired", "已过期", "danger"
+	}
+
+	if now.Before(rule.ValidFrom) {
+		return "scheduled", "未开始", "warning"
+	}
+
+	return "active", "生效中", "success"
 }
 
 // deleteRechargeRuleURIRequest 删除充值规则路径参数

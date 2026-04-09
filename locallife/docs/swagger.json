@@ -34897,6 +34897,15 @@
                 "stacking_group": {
                     "type": "string"
                 },
+                "status_code": {
+                    "type": "string"
+                },
+                "status_label": {
+                    "type": "string"
+                },
+                "status_theme": {
+                    "type": "string"
+                },
                 "valid_from": {
                     "type": "string"
                 },
@@ -40053,6 +40062,15 @@
                 "recharge_amount": {
                     "type": "integer"
                 },
+                "status_code": {
+                    "type": "string"
+                },
+                "status_label": {
+                    "type": "string"
+                },
+                "status_theme": {
+                    "type": "string"
+                },
                 "updated_at": {
                     "type": "string"
                 },
@@ -43626,6 +43644,15 @@
                     "type": "integer"
                 },
                 "name": {
+                    "type": "string"
+                },
+                "status_code": {
+                    "type": "string"
+                },
+                "status_label": {
+                    "type": "string"
+                },
+                "status_theme": {
                     "type": "string"
                 },
                 "total_quantity": {

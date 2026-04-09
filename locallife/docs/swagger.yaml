@@ -2981,6 +2981,12 @@ definitions:
         type: string
       stacking_group:
         type: string
+      status_code:
+        type: string
+      status_label:
+        type: string
+      status_theme:
+        type: string
       valid_from:
         type: string
       valid_until:
@@ -6467,6 +6473,12 @@ definitions:
         type: integer
       recharge_amount:
         type: integer
+      status_code:
+        type: string
+      status_label:
+        type: string
+      status_theme:
+        type: string
       updated_at:
         type: string
       valid_from:
@@ -8890,6 +8902,12 @@ definitions:
       min_order_amount:
         type: integer
       name:
+        type: string
+      status_code:
+        type: string
+      status_label:
+        type: string
+      status_theme:
         type: string
       total_quantity:
         type: integer

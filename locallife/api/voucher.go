@@ -44,6 +44,9 @@ type voucherResponse struct {
 	ValidFrom         time.Time `json:"valid_from"`
 	ValidUntil        time.Time `json:"valid_until"`
 	IsActive          bool      `json:"is_active"`
+	StatusCode        string    `json:"status_code"`
+	StatusLabel       string    `json:"status_label"`
+	StatusTheme       string    `json:"status_theme"`
 	AllowedOrderTypes []string  `json:"allowed_order_types"` // 允许的订单类型
 	CreatedAt         time.Time `json:"created_at"`
 }
@@ -147,10 +150,10 @@ type listMerchantVouchersQueryRequest struct {
 }
 
 type listMerchantVouchersResponse struct {
-	Vouchers   []voucherResponse `json:"vouchers"`
-	Total      int64             `json:"total"`
-	PageID     int32             `json:"page_id"`
-	PageSize   int32             `json:"page_size"`
+	Vouchers []voucherResponse `json:"vouchers"`
+	Total    int64             `json:"total"`
+	PageID   int32             `json:"page_id"`
+	PageSize int32             `json:"page_size"`
 }
 
 // listMerchantVouchers godoc
@@ -202,10 +205,10 @@ func (server *Server) listMerchantVouchers(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listMerchantVouchersResponse{
-		Vouchers:   rsp,
-		Total:      int64(len(rsp)),
-		PageID:     queryReq.PageID,
-		PageSize:   queryReq.PageSize,
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   queryReq.PageID,
+		PageSize: queryReq.PageSize,
 	})
 }
 
@@ -217,10 +220,10 @@ type listActiveVouchersRequest struct {
 }
 
 type listActiveVouchersResponse struct {
-	Vouchers   []voucherResponse `json:"vouchers"`
-	Total      int64             `json:"total"`
-	PageID     int32             `json:"page_id"`
-	PageSize   int32             `json:"page_size"`
+	Vouchers []voucherResponse `json:"vouchers"`
+	Total    int64             `json:"total"`
+	PageID   int32             `json:"page_id"`
+	PageSize int32             `json:"page_size"`
 }
 
 // listActiveVouchers godoc
@@ -271,10 +274,10 @@ func (server *Server) listActiveVouchers(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listActiveVouchersResponse{
-		Vouchers:   rsp,
-		Total:      int64(len(rsp)),
-		PageID:     req.PageID,
-		PageSize:   req.PageSize,
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -586,10 +589,10 @@ type listUserVouchersRequest struct {
 }
 
 type listUserVouchersResponse struct {
-	Vouchers   []userVoucherResponse `json:"vouchers"`
-	Total      int64                 `json:"total"`
-	PageID     int32                 `json:"page_id"`
-	PageSize   int32                 `json:"page_size"`
+	Vouchers []userVoucherResponse `json:"vouchers"`
+	Total    int64                 `json:"total"`
+	PageID   int32                 `json:"page_id"`
+	PageSize int32                 `json:"page_size"`
 }
 
 // listUserVouchers godoc
@@ -631,10 +634,10 @@ func (server *Server) listUserVouchers(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listUserVouchersResponse{
-		Vouchers:   rsp,
-		Total:      int64(len(rsp)),
-		PageID:     req.PageID,
-		PageSize:   req.PageSize,
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -645,10 +648,10 @@ type listUserAvailableVouchersRequest struct {
 }
 
 type listUserAvailableVouchersResponse struct {
-	Vouchers   []userVoucherResponse `json:"vouchers"`
-	Total      int64                 `json:"total"`
-	PageID     int32                 `json:"page_id"`
-	PageSize   int32                 `json:"page_size"`
+	Vouchers []userVoucherResponse `json:"vouchers"`
+	Total    int64                 `json:"total"`
+	PageID   int32                 `json:"page_id"`
+	PageSize int32                 `json:"page_size"`
 }
 
 // listUserAvailableVouchers godoc
@@ -690,10 +693,10 @@ func (server *Server) listUserAvailableVouchers(ctx *gin.Context) {
 	}
 
 	ctx.JSON(http.StatusOK, listUserAvailableVouchersResponse{
-		Vouchers:   rsp,
-		Total:      int64(len(rsp)),
-		PageID:     req.PageID,
-		PageSize:   req.PageSize,
+		Vouchers: rsp,
+		Total:    int64(len(rsp)),
+		PageID:   req.PageID,
+		PageSize: req.PageSize,
 	})
 }
 
@@ -750,8 +753,30 @@ func (server *Server) listUserAvailableVouchersForMerchant(ctx *gin.Context) {
 
 // ==================== 辅助函数 ====================
 
+func buildVoucherStatusResponse(v db.Voucher, now time.Time) (string, string, string) {
+	if !v.IsActive {
+		return "inactive", "已停用", "default"
+	}
+
+	if now.After(v.ValidUntil) {
+		return "expired", "已过期", "danger"
+	}
+
+	if now.Before(v.ValidFrom) {
+		return "scheduled", "未开始", "warning"
+	}
+
+	if v.ClaimedQuantity >= v.TotalQuantity {
+		return "depleted", "已领完", "warning"
+	}
+
+	return "active", "发放中", "success"
+}
+
 // convertVoucherResponse 转换代金券为响应格式
 func convertVoucherResponse(v db.Voucher) voucherResponse {
+	statusCode, statusLabel, statusTheme := buildVoucherStatusResponse(v, time.Now())
+
 	rsp := voucherResponse{
 		ID:                v.ID,
 		MerchantID:        v.MerchantID,
@@ -765,6 +790,9 @@ func convertVoucherResponse(v db.Voucher) voucherResponse {
 		ValidFrom:         v.ValidFrom,
 		ValidUntil:        v.ValidUntil,
 		IsActive:          v.IsActive,
+		StatusCode:        statusCode,
+		StatusLabel:       statusLabel,
+		StatusTheme:       statusTheme,
 		AllowedOrderTypes: v.AllowedOrderTypes,
 		CreatedAt:         v.CreatedAt,
 	}

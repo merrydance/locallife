@@ -18,6 +18,62 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func TestBuildVoucherStatusResponse(t *testing.T) {
+	now := time.Now()
+	testCases := []struct {
+		name      string
+		voucher   db.Voucher
+		wantCode  string
+		wantLabel string
+		wantTheme string
+	}{
+		{
+			name:      "Inactive",
+			voucher:   db.Voucher{IsActive: false, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "inactive",
+			wantLabel: "已停用",
+			wantTheme: "default",
+		},
+		{
+			name:      "Expired",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(-2 * time.Hour), ValidUntil: now.Add(-time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "expired",
+			wantLabel: "已过期",
+			wantTheme: "danger",
+		},
+		{
+			name:      "Scheduled",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(time.Hour), ValidUntil: now.Add(2 * time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "scheduled",
+			wantLabel: "未开始",
+			wantTheme: "warning",
+		},
+		{
+			name:      "Depleted",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), TotalQuantity: 10, ClaimedQuantity: 10},
+			wantCode:  "depleted",
+			wantLabel: "已领完",
+			wantTheme: "warning",
+		},
+		{
+			name:      "Active",
+			voucher:   db.Voucher{IsActive: true, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour), TotalQuantity: 10, ClaimedQuantity: 1},
+			wantCode:  "active",
+			wantLabel: "发放中",
+			wantTheme: "success",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			statusCode, statusLabel, statusTheme := buildVoucherStatusResponse(tc.voucher, now)
+			require.Equal(t, tc.wantCode, statusCode)
+			require.Equal(t, tc.wantLabel, statusLabel)
+			require.Equal(t, tc.wantTheme, statusTheme)
+		})
+	}
+}
+
 func TestCreateVoucherAPI(t *testing.T) {
 	merchantOwner, _ := randomUser(t)
 	merchant := randomMerchant(merchantOwner.ID)

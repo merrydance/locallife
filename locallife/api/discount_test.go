@@ -16,6 +16,55 @@ import (
 	"go.uber.org/mock/gomock"
 )
 
+func TestBuildDiscountRuleStatusResponse(t *testing.T) {
+	now := time.Now()
+	testCases := []struct {
+		name      string
+		rule      db.DiscountRule
+		wantCode  string
+		wantLabel string
+		wantTheme string
+	}{
+		{
+			name:      "Inactive",
+			rule:      db.DiscountRule{IsActive: false, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+			wantCode:  "inactive",
+			wantLabel: "已停用",
+			wantTheme: "default",
+		},
+		{
+			name:      "Expired",
+			rule:      db.DiscountRule{IsActive: true, ValidFrom: now.Add(-2 * time.Hour), ValidUntil: now.Add(-time.Hour)},
+			wantCode:  "expired",
+			wantLabel: "已过期",
+			wantTheme: "danger",
+		},
+		{
+			name:      "Scheduled",
+			rule:      db.DiscountRule{IsActive: true, ValidFrom: now.Add(time.Hour), ValidUntil: now.Add(2 * time.Hour)},
+			wantCode:  "scheduled",
+			wantLabel: "未开始",
+			wantTheme: "warning",
+		},
+		{
+			name:      "Active",
+			rule:      db.DiscountRule{IsActive: true, ValidFrom: now.Add(-time.Hour), ValidUntil: now.Add(time.Hour)},
+			wantCode:  "active",
+			wantLabel: "生效中",
+			wantTheme: "success",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			statusCode, statusLabel, statusTheme := buildDiscountRuleStatusResponse(tc.rule, now)
+			require.Equal(t, tc.wantCode, statusCode)
+			require.Equal(t, tc.wantLabel, statusLabel)
+			require.Equal(t, tc.wantTheme, statusTheme)
+		})
+	}
+}
+
 func TestCreateDiscountRuleAPI(t *testing.T) {
 	merchantOwner, _ := randomUser(t)
 	merchant := randomMerchant(merchantOwner.ID)
