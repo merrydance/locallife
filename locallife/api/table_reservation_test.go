@@ -877,6 +877,10 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 	user, _ := randomUser(t)
 	merchant := randomMerchant(user.ID)
 	room := randomRoom(merchant.ID)
+	dateFilteredReservation := randomReservation(room.ID, user.ID+100, merchant.ID)
+	dateFilteredReservation.Source = pgtype.Text{String: ReservationSourcePhone, Valid: true}
+	dateFilteredReservation.ReservationDate = pgtype.Date{Time: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC), Valid: true}
+	dateFilteredReservation.ReservationTime = pgtype.Time{Microseconds: int64((11 * 3600) * 1000000), Valid: true}
 
 	n := 5
 	reservations := make([]db.ListReservationsByMerchantRow, n)
@@ -974,6 +978,66 @@ func TestListMerchantReservationsAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:  "WithDateFilterPreservesSource",
+			query: "page_id=1&page_size=10&date=2026-04-02",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					ListReservationsByMerchantAndDate(gomock.Any(), gomock.Eq(db.ListReservationsByMerchantAndDateParams{
+						MerchantID:      merchant.ID,
+						ReservationDate: pgtype.Date{Time: time.Date(2026, 4, 2, 0, 0, 0, 0, time.UTC), Valid: true},
+					})).
+					Times(1).
+					Return([]db.ListReservationsByMerchantAndDateRow{
+						{
+							ID:              dateFilteredReservation.ID,
+							TableID:         dateFilteredReservation.TableID,
+							UserID:          dateFilteredReservation.UserID,
+							MerchantID:      dateFilteredReservation.MerchantID,
+							ReservationDate: dateFilteredReservation.ReservationDate,
+							ReservationTime: dateFilteredReservation.ReservationTime,
+							GuestCount:      dateFilteredReservation.GuestCount,
+							ContactName:     dateFilteredReservation.ContactName,
+							ContactPhone:    dateFilteredReservation.ContactPhone,
+							Source:          dateFilteredReservation.Source,
+							PaymentMode:     dateFilteredReservation.PaymentMode,
+							DepositAmount:   dateFilteredReservation.DepositAmount,
+							PrepaidAmount:   dateFilteredReservation.PrepaidAmount,
+							RefundDeadline:  dateFilteredReservation.RefundDeadline,
+							PaymentDeadline: dateFilteredReservation.PaymentDeadline,
+							Status:          dateFilteredReservation.Status,
+							Notes:           dateFilteredReservation.Notes,
+							PaidAt:          dateFilteredReservation.PaidAt,
+							ConfirmedAt:     dateFilteredReservation.ConfirmedAt,
+							CompletedAt:     dateFilteredReservation.CompletedAt,
+							CancelledAt:     dateFilteredReservation.CancelledAt,
+							CancelReason:    dateFilteredReservation.CancelReason,
+							CreatedAt:       dateFilteredReservation.CreatedAt,
+							UpdatedAt:       dateFilteredReservation.UpdatedAt,
+							TableNo:         room.TableNo,
+							TableType:       room.TableType,
+						},
+					}, nil)
+
+				store.EXPECT().
+					ListReservationItems(gomock.Any(), gomock.Eq(dateFilteredReservation.ID)).
+					Times(1).
+					Return([]db.ListReservationItemsRow{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp reservationListResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Len(t, resp.Reservations, 1)
+				require.Equal(t, ReservationSourcePhone, resp.Reservations[0].Source)
 			},
 		},
 		{

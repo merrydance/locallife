@@ -956,6 +956,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 				GuestCount:      r.GuestCount,
 				ContactName:     r.ContactName,
 				ContactPhone:    r.ContactPhone,
+				Source:          r.Source,
 				PaymentMode:     r.PaymentMode,
 				DepositAmount:   r.DepositAmount,
 				PrepaidAmount:   r.PrepaidAmount,
