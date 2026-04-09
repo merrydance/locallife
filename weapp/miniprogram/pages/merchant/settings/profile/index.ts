@@ -1,4 +1,12 @@
-import { getMyMerchantProfile, MerchantOperatorResponse, updateMyMerchantProfile } from '../../../../api/merchant'
+import {
+  getAvailableMerchantTags,
+  getMyMerchantProfile,
+  getMyMerchantTags,
+  MerchantCategoryTag,
+  MerchantOperatorResponse,
+  setMyMerchantTags,
+  updateMyMerchantProfile
+} from '../../../../api/merchant'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -22,6 +30,15 @@ interface LocationViewState {
   locationHint: string
 }
 
+interface TagItem extends MerchantCategoryTag {
+  selected: boolean
+}
+
+interface CategoryPickerOption {
+  label: string
+  value: string
+}
+
 interface RequestErrorWithStatus {
   statusCode?: unknown
   code?: unknown
@@ -37,6 +54,92 @@ const EMPTY_FORM: MerchantProfileForm = {
 }
 
 const PROFILE_AUTO_REFRESH_WINDOW_MS = 60 * 1000
+
+function buildCategorySelectionState(allTags: MerchantCategoryTag[], selectedTags: MerchantCategoryTag[]) {
+  const selectedIds = new Set((selectedTags || []).map((tag) => tag.id))
+
+  return {
+    tags: (allTags || []).map((tag) => ({
+      ...tag,
+      selected: selectedIds.has(tag.id)
+    })),
+    selectedCount: selectedIds.size,
+    persistedTagIds: [...selectedIds]
+  }
+}
+
+function getSelectedCategoryIds(tags: TagItem[]) {
+  return tags
+    .filter((tag) => tag.selected)
+    .map((tag) => tag.id)
+}
+
+function hasCategorySelectionChanged(currentTags: TagItem[], persistedTagIds: number[]) {
+  const currentSelectedIds = getSelectedCategoryIds(currentTags).sort((left, right) => left - right)
+  const lastSavedIds = [...persistedTagIds].sort((left, right) => left - right)
+
+  if (currentSelectedIds.length !== lastSavedIds.length) {
+    return true
+  }
+
+  return currentSelectedIds.some((id, index) => id !== lastSavedIds[index])
+}
+
+function normalizeCategoryIds(values: Array<string | number>) {
+  return values
+    .map((value) => Number(value))
+    .filter((value) => Number.isInteger(value) && value > 0)
+}
+
+function buildCategorySelectionPatch(tags: TagItem[], selectedIds: number[], persistedTagIds: number[]) {
+  const selectedIdSet = new Set(selectedIds)
+  const nextTags = tags.map((tag) => ({
+    ...tag,
+    selected: selectedIdSet.has(tag.id)
+  }))
+  const nextSelectedIds = getSelectedCategoryIds(nextTags)
+  const hasCategoryChanges = hasCategorySelectionChanged(nextTags, persistedTagIds)
+
+  return {
+    tags: nextTags,
+    selectedCategoryIds: nextSelectedIds,
+    selectedCategoryCount: nextSelectedIds.length,
+    hasCategoryChanges
+  }
+}
+
+function buildCategoryPickerOptions(tags: TagItem[]): CategoryPickerOption[] {
+  return tags
+    .filter((tag) => !tag.selected)
+    .map((tag) => ({
+      label: tag.name,
+      value: String(tag.id)
+    }))
+}
+
+function buildCategoryViewState(tags: TagItem[], persistedTagIds: number[]) {
+  const selectedCategoryTags = tags.filter((tag) => tag.selected)
+  const selectedCategoryIds = selectedCategoryTags.map((tag) => tag.id)
+  const categoryPickerOptions = buildCategoryPickerOptions(tags)
+  const hasCategoryChanges = hasCategorySelectionChanged(tags, persistedTagIds)
+
+  return {
+    tags,
+    selectedCategoryTags,
+    selectedCategoryIds,
+    selectedCategoryCount: selectedCategoryIds.length,
+    categoryPickerOptions,
+    categoryPickerValue: categoryPickerOptions[0]?.value || '',
+    categoryPickerTriggerText: selectedCategoryIds.length >= 5
+      ? '已选满 5 项'
+      : categoryPickerOptions.length
+        ? '选择类目'
+        : selectedCategoryIds.length
+          ? '无更多可选项'
+          : '暂无可选类目',
+    hasCategoryChanges
+  }
+}
 
 function buildLocationHint(address: string, latitude?: string | null, longitude?: string | null) {
   const hasAddress = address.trim().length > 0
@@ -75,7 +178,6 @@ function buildForm(profile: MerchantOperatorResponse): MerchantProfileForm {
 
 function buildLocationViewState(form: MerchantProfileForm): LocationViewState {
   const hasLocation = hasCompleteLocation(form)
-  const hasPartial = hasPartialLocation(form)
 
   return {
     hasLocation,
@@ -207,6 +309,19 @@ function isVersionConflictError(error: unknown): boolean {
   return getErrorStatusCode(error) === 409
 }
 
+function confirmClearMerchantCategories() {
+  return new Promise<boolean>((resolve) => {
+    wx.showModal({
+      title: '确认清除类目？',
+      content: '未选择任何类目将导致店铺不出现在分类筛选中，继续吗？',
+      confirmText: '确认清除',
+      cancelText: '取消',
+      success: (result) => resolve(!!result.confirm),
+      fail: () => resolve(false)
+    })
+  })
+}
+
 const getErrorMessage = getErrorUserMessage
 
 Page({
@@ -221,6 +336,7 @@ Page({
     refreshErrorMessage: '',
     loading: false,
     saving: false,
+    categoryLoading: false,
     lastLoadedAt: 0,
     version: 0,
     hasLocation: false,
@@ -229,8 +345,20 @@ Page({
     longitudeDisplay: '--',
     coordinateSummary: '未设置',
     locationHint: '当前还没有经营位置，请通过地图选点写入地址和坐标。',
+    categoryErrorMessage: '',
+    tags: [] as TagItem[],
+    selectedCategoryTags: [] as TagItem[],
+    selectedCategoryIds: [] as number[],
+    selectedCategoryCount: 0,
+    persistedCategoryIds: [] as number[],
+    categoryPickerVisible: false,
+    categoryPickerOptions: [] as CategoryPickerOption[],
+    categoryPickerValue: '',
+    categoryPickerTriggerText: '暂无可选类目',
     form: { ...EMPTY_FORM } as MerchantProfileForm,
     initialForm: { ...EMPTY_FORM } as MerchantProfileForm,
+    hasProfileChanges: false,
+    hasCategoryChanges: false,
     hasChanges: false
   },
 
@@ -241,7 +369,6 @@ Page({
     const accessResult = await ensureMerchantConsoleAccess()
     this.setData({
       accessReady: true,
-      accessDenied: accessResult.status === 'denied',
       accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
     })
     if (accessResult.status !== 'granted') {
@@ -250,6 +377,7 @@ Page({
     }
 
     this.loadProfile(true, true)
+    this.loadCategories()
   },
 
   onShow() {
@@ -257,6 +385,7 @@ Page({
     if (!this.data.initialLoading && !this.data.saving && !this.data.hasChanges) {
       if (shouldAutoRefresh(this.data.lastLoadedAt, PROFILE_AUTO_REFRESH_WINDOW_MS)) {
         this.loadProfile(false)
+        this.loadCategories()
       }
     }
   },
@@ -272,11 +401,13 @@ Page({
       return
     }
     this.loadProfile(false, true)
+    this.loadCategories()
   },
 
   onRetryRefresh() {
     if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
     this.loadProfile(false, true)
+    this.loadCategories(true)
   },
 
   onRetryAccess() {
@@ -320,7 +451,8 @@ Page({
         ...locationView,
         form,
         initialForm: { ...form },
-        hasChanges: false,
+        hasProfileChanges: false,
+        hasChanges: this.data.hasCategoryChanges,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
@@ -348,6 +480,52 @@ Page({
     }
   },
 
+  async loadCategories(showToastOnError = false) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
+    if (this.data.categoryLoading) {
+      return
+    }
+
+    this.setData({
+      categoryLoading: true,
+      categoryErrorMessage: ''
+    })
+
+    try {
+      const [currentRes, allRes] = await Promise.all([
+        getMyMerchantTags(),
+        getAvailableMerchantTags()
+      ])
+
+      const nextState = buildCategorySelectionState(allRes.tags || [], currentRes.tags || [])
+      const nextViewState = buildCategoryViewState(nextState.tags, nextState.persistedTagIds)
+      this.setData({
+        ...nextViewState,
+        persistedCategoryIds: nextState.persistedTagIds,
+        categoryPickerVisible: false,
+        categoryErrorMessage: '',
+        hasCategoryChanges: false,
+        hasChanges: this.data.hasProfileChanges
+      })
+    } catch (err: unknown) {
+      logger.error('Load merchant profile categories failed', err)
+      const message = getErrorMessage(err, '经营类目加载失败，请重试')
+
+      this.setData({
+        categoryErrorMessage: this.data.tags.length > 0 ? `${message}，当前已保留上次同步结果` : message
+      })
+
+      if (showToastOnError && !this.data.initialLoading) {
+        wx.showToast({ title: message, icon: 'none' })
+      }
+    } finally {
+      this.setData({ categoryLoading: false })
+    }
+  },
+
   onInputChange(
     e: WechatMiniprogram.CustomEvent<{ value: string }> & { currentTarget: { dataset: { field: keyof MerchantProfileForm } } }
   ) {
@@ -356,11 +534,97 @@ Page({
       ...this.data.form,
       [field]: e.detail.value
     }
+    const hasProfileChanges = hasFormChanged(nextForm, this.data.initialForm)
     this.setData({
       refreshErrorMessage: '',
       form: nextForm,
-      hasChanges: hasFormChanged(nextForm, this.data.initialForm)
+      hasProfileChanges,
+      hasChanges: hasProfileChanges || this.data.hasCategoryChanges
     })
+  },
+
+  onOpenCategoryPicker() {
+    if (this.data.categoryLoading || this.data.loading || this.data.saving) {
+      return
+    }
+
+    if (this.data.selectedCategoryCount >= 5) {
+      wx.showToast({ title: '最多选 5 个类目', icon: 'none' })
+      return
+    }
+
+    if (!this.data.categoryPickerOptions.length) {
+      wx.showToast({ title: this.data.selectedCategoryCount ? '没有更多可选类目' : '暂无可选类目', icon: 'none' })
+      return
+    }
+
+    this.setData({
+      categoryPickerVisible: true,
+      categoryPickerValue: this.data.categoryPickerOptions[0]?.value || ''
+    })
+  },
+
+  onCloseCategoryPicker() {
+    this.setData({ categoryPickerVisible: false })
+  },
+
+  onCategoryPickerConfirm(
+    e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null, label: string[] | null }>
+  ) {
+    if (this.data.categoryLoading || this.data.loading || this.data.saving) {
+      return
+    }
+
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const pickedId = normalizeCategoryIds(values)[0]
+    if (!pickedId) {
+      this.setData({ categoryPickerVisible: false })
+      return
+    }
+
+    const nextSelectedIds = [...this.data.selectedCategoryIds]
+    if (!nextSelectedIds.includes(pickedId)) {
+      if (nextSelectedIds.length >= 5) {
+        wx.showToast({ title: '最多选 5 个类目', icon: 'none' })
+        this.setData({ categoryPickerVisible: false })
+        return
+      }
+      nextSelectedIds.push(pickedId)
+    }
+
+    const nextPatch = buildCategorySelectionPatch(this.data.tags, nextSelectedIds, this.data.persistedCategoryIds)
+    const nextViewState = buildCategoryViewState(nextPatch.tags, this.data.persistedCategoryIds)
+    this.setData({
+      categoryErrorMessage: '',
+      categoryPickerVisible: false,
+      ...nextViewState,
+      hasChanges: this.data.hasProfileChanges || nextViewState.hasCategoryChanges
+    })
+  },
+
+  onRemoveCategory(e: WechatMiniprogram.TouchEvent) {
+    if (this.data.categoryLoading || this.data.loading || this.data.saving) {
+      return
+    }
+
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) {
+      return
+    }
+
+    const nextSelectedIds = this.data.selectedCategoryIds.filter((selectedId) => selectedId !== id)
+    const nextPatch = buildCategorySelectionPatch(this.data.tags, nextSelectedIds, this.data.persistedCategoryIds)
+    const nextViewState = buildCategoryViewState(nextPatch.tags, this.data.persistedCategoryIds)
+    this.setData({
+      categoryErrorMessage: '',
+      ...nextViewState,
+      hasChanges: this.data.hasProfileChanges || nextViewState.hasCategoryChanges
+    })
+  },
+
+  onRetryCategories() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+    this.loadCategories(true)
   },
 
   validateForm() {
@@ -394,12 +658,14 @@ Page({
           longitude: String(result.longitude)
         }
         const locationView = buildLocationViewState(nextForm)
+        const hasProfileChanges = hasFormChanged(nextForm, this.data.initialForm)
 
         this.setData({
           refreshErrorMessage: '',
           ...locationView,
           form: nextForm,
-          hasChanges: hasFormChanged(nextForm, this.data.initialForm)
+          hasProfileChanges,
+          hasChanges: hasProfileChanges || this.data.hasCategoryChanges
         })
       },
       fail: (error) => {
@@ -447,57 +713,97 @@ Page({
 
     if (!this.validateForm()) return
 
+    const hadProfileChanges = this.data.hasProfileChanges
+    const hadCategoryChanges = this.data.hasCategoryChanges
+    const selectedCategoryIds = getSelectedCategoryIds(this.data.tags)
+
+    if (hadCategoryChanges && selectedCategoryIds.length === 0) {
+      const shouldContinue = await confirmClearMerchantCategories()
+      if (!shouldContinue) {
+        return
+      }
+    }
+
     this.setData({ saving: true })
     wx.showLoading({ title: '保存中...' })
 
+    let profileSaved = false
+
     try {
-      const latitude = this.data.form.latitude.trim()
-      const longitude = this.data.form.longitude.trim()
+      if (hadProfileChanges) {
+        const latitude = this.data.form.latitude.trim()
+        const longitude = this.data.form.longitude.trim()
 
-      const payload = {
-        version: this.data.version,
-        name: this.data.form.name.trim(),
-        phone: this.data.form.phone.trim() || undefined,
-        address: this.data.form.address.trim(),
-        description: this.data.form.description.trim(),
-        latitude: latitude || undefined,
-        longitude: longitude || undefined
-      }
-      const updated = await updateMyMerchantProfile(payload)
-      const form = buildForm(updated)
-      const locationView = buildLocationViewState(form)
-      this.setData({
-        version: updated.version,
-        refreshErrorMessage: '',
-        ...locationView,
-        form,
-        initialForm: { ...form },
-        hasChanges: false,
-        lastLoadedAt: Date.now()
-      })
-
-      try {
-        const currentMerchant = wx.getStorageSync('current_merchant') || {}
-        wx.setStorageSync('current_merchant', {
-          ...currentMerchant,
-          id: updated.id,
-          merchant_id: updated.id,
-          name: updated.name
+        const payload = {
+          version: this.data.version,
+          name: this.data.form.name.trim(),
+          phone: this.data.form.phone.trim() || undefined,
+          address: this.data.form.address.trim(),
+          description: this.data.form.description.trim(),
+          latitude: latitude || undefined,
+          longitude: longitude || undefined
+        }
+        const updated = await updateMyMerchantProfile(payload)
+        const form = buildForm(updated)
+        const locationView = buildLocationViewState(form)
+        this.setData({
+          version: updated.version,
+          refreshErrorMessage: '',
+          ...locationView,
+          form,
+          initialForm: { ...form },
+          hasProfileChanges: false,
+          hasCategoryChanges: hadCategoryChanges,
+          hasChanges: hadCategoryChanges,
+          lastLoadedAt: Date.now()
         })
-      } catch (storageErr) {
-        logger.warn('Sync merchant profile cache failed', storageErr)
+
+        try {
+          const currentMerchant = wx.getStorageSync('current_merchant') || {}
+          wx.setStorageSync('current_merchant', {
+            ...currentMerchant,
+            id: updated.id,
+            merchant_id: updated.id,
+            name: updated.name
+          })
+        } catch (storageErr) {
+          logger.warn('Sync merchant profile cache failed', storageErr)
+        }
+
+        profileSaved = true
+      }
+
+      if (hadCategoryChanges) {
+        const response = await setMyMerchantTags(selectedCategoryIds)
+        const nextCategoryState = buildCategorySelectionState(this.data.tags, response.tags || [])
+        const nextViewState = buildCategoryViewState(nextCategoryState.tags, nextCategoryState.persistedTagIds)
+        this.setData({
+          ...nextViewState,
+          persistedCategoryIds: nextCategoryState.persistedTagIds,
+          categoryPickerVisible: false,
+          categoryErrorMessage: '',
+          hasCategoryChanges: false,
+          hasChanges: false,
+          lastLoadedAt: Date.now()
+        })
       }
 
       await this.navigateBackToPreviousPage(true)
     } catch (err: unknown) {
-      if (isVersionConflictError(err)) {
+      if (hadProfileChanges && isVersionConflictError(err)) {
         await this.loadProfile(false, true)
         wx.showToast({ title: '资料已被其他操作更新，已刷新到最新内容', icon: 'none' })
         return
       }
 
+      if (profileSaved && hadCategoryChanges) {
+        logger.error('Save merchant profile categories failed after profile update', err)
+        wx.showToast({ title: '基础资料已保存，经营类目保存失败，请重试', icon: 'none' })
+        return
+      }
+
       logger.error('Save merchant profile settings failed', err)
-      const message = getErrorMessage(err, '保存失败，请稍后重试')
+      const message = getErrorMessage(err, hadCategoryChanges ? '经营类目保存失败，请稍后重试' : '保存失败，请稍后重试')
       wx.showToast({ title: message, icon: 'none' })
     } finally {
       wx.hideLoading()
@@ -513,5 +819,6 @@ Page({
 
     if (!this.data.accessReady || this.data.accessDenied) return
     this.loadProfile(true, true)
+    this.loadCategories(true)
   }
 })

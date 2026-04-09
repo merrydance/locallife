@@ -40,7 +40,13 @@ type ApplymentBankViewOption = ApplymentBankOption & {
   display_label: string
 }
 
+type ApplymentPickerOption = {
+  label: string
+  value: number
+}
+
 type ApplymentPickerVisibleChangeEvent = WechatMiniprogram.CustomEvent<{ visible?: boolean }>
+type ApplymentPickerChangeEvent = WechatMiniprogram.CustomEvent<{ value?: Array<string | number> }>
 type ApplymentBankFormInstance = WechatMiniprogram.Component.TrivialInstance & {
   draftForm?: ApplymentBindBankDraft
 }
@@ -138,16 +144,30 @@ function decorateBankOptions(banks: ApplymentBankOption[]): ApplymentBankViewOpt
   return banks.map((bank) => decorateBankOption(bank))
 }
 
+function buildProvincePickerOptions(provinces: ApplymentProvinceOption[]): ApplymentPickerOption[] {
+  return provinces.map((province) => ({
+    label: province.province_name,
+    value: province.province_code
+  }))
+}
+
+function buildCityPickerOptions(cities: ApplymentCityOption[]): ApplymentPickerOption[] {
+  return cities.map((city) => ({
+    label: city.city_name,
+    value: city.city_code
+  }))
+}
+
+function buildPickerValue(value?: number): number[] {
+  return value && value > 0 ? [value] : []
+}
+
 function buildSelectedBankLabel(form: ApplymentBindBankDraft): string {
   return form.bank_alias || form.account_bank
 }
 
 function hasSelectedBank(form: ApplymentBindBankDraft): boolean {
   return Boolean(form.bank_alias || form.account_bank)
-}
-
-function shouldShowSelectedBankCard(form: ApplymentBindBankDraft): boolean {
-  return hasSelectedBank(form) && (form.account_bank !== form.bank_alias || form.need_bank_branch)
 }
 
 function findSelectedBankIndex(banks: ApplymentBankOption[], form: ApplymentBindBankDraft): number {
@@ -237,6 +257,10 @@ Component({
     provinces: [] as ApplymentProvinceOption[],
     cities: [] as ApplymentCityOption[],
     branches: [] as ApplymentBranchOption[],
+    provincePickerOptions: [] as ApplymentPickerOption[],
+    cityPickerOptions: [] as ApplymentPickerOption[],
+    provincePickerValue: [] as number[],
+    cityPickerValue: [] as number[],
     filteredBranches: [] as ApplymentBranchOption[],
     loadingProvinces: false,
     loadingCities: false,
@@ -251,11 +275,12 @@ Component({
     selectedBranchIndex: 0,
     selectedProvinceCode: 0,
     selectedCityCode: 0,
+    selectedProvinceLabel: '',
+    selectedCityLabel: '',
     branchKeyword: '',
     canSubmit: false,
     selectedBankLabel: '',
-    hasSelectedBank: false,
-    showSelectedBankCard: false
+    hasSelectedBank: false
   },
 
   lifetimes: {
@@ -280,8 +305,7 @@ Component({
       this.setData(Object.assign({
         form: nextForm,
         selectedBankLabel: buildSelectedBankLabel(nextForm),
-        hasSelectedBank: hasSelectedBank(nextForm),
-        showSelectedBankCard: shouldShowSelectedBankCard(nextForm)
+        hasSelectedBank: hasSelectedBank(nextForm)
       }, extraData))
 
       if (options?.syncSubmit !== false) {
@@ -359,7 +383,9 @@ Component({
       if (provinceCode > 0 && selectedProvinceIndex >= 0) {
         this.setData({
           selectedProvinceCode: provinceCode,
-          selectedProvinceIndex
+          selectedProvinceIndex,
+          selectedProvinceLabel: provinces[selectedProvinceIndex]?.province_name || '',
+          provincePickerValue: buildPickerValue(provinceCode)
         })
         await this.loadCities(provinceCode)
       }
@@ -370,7 +396,9 @@ Component({
       if (cityCode > 0 && selectedCityIndex >= 0) {
         this.setData({
           selectedCityCode: cityCode,
-          selectedCityIndex
+          selectedCityIndex,
+          selectedCityLabel: cities[selectedCityIndex]?.city_name || '',
+          cityPickerValue: buildPickerValue(cityCode)
         })
         await this.loadBranches(draft.bank_alias_code, cityCode)
       }
@@ -447,6 +475,11 @@ Component({
         selectedBranchIndex: 0,
         selectedProvinceCode: 0,
         selectedCityCode: 0,
+        selectedProvinceLabel: '',
+        selectedCityLabel: '',
+        provincePickerValue: [],
+        cityPickerValue: [],
+        cityPickerOptions: [],
         cities: [],
         branches: [],
         filteredBranches: [],
@@ -489,7 +522,10 @@ Component({
       this.setData({ loadingProvinces: true })
       try {
         const response = await listApplymentProvinces(this.getApiBasePath())
-        this.setData({ provinces: response.provinces })
+        this.setData({
+          provinces: response.provinces,
+          provincePickerOptions: buildProvincePickerOptions(response.provinces)
+        })
       } catch (error: unknown) {
         wx.showToast({
           title: getErrorUserMessage(error, '加载省份失败，请稍后重试'),
@@ -506,8 +542,11 @@ Component({
         const response = await listApplymentCities(this.getApiBasePath(), provinceCode)
         this.setData({
           cities: response.cities,
+          cityPickerOptions: buildCityPickerOptions(response.cities),
+          cityPickerValue: [],
           selectedCityIndex: 0,
           selectedCityCode: 0,
+          selectedCityLabel: '',
           branches: [],
           filteredBranches: [],
           selectedBranchIndex: 0,
@@ -588,12 +627,19 @@ Component({
         selectedCityIndex: 0,
         selectedProvinceCode: 0,
         selectedCityCode: 0,
+        selectedProvinceLabel: '',
+        selectedCityLabel: '',
+        provincePickerOptions: [],
+        cityPickerOptions: [],
+        provincePickerValue: [],
+        cityPickerValue: [],
         branchKeyword: ''
       })
     },
 
     async applySelectedBank(bank: ApplymentBankViewOption) {
       const currentForm = this.readForm()
+      const selectedCityCode = Number(currentForm.bank_address_code || this.data.selectedCityCode || 0)
       const nextForm: ApplymentBindBankDraft = {
         ...currentForm,
         account_bank: bank.account_bank,
@@ -602,8 +648,8 @@ Component({
         bank_alias_code: bank.bank_alias_code,
         need_bank_branch: bank.need_bank_branch,
         bank_address_code: bank.need_bank_branch ? currentForm.bank_address_code : '',
-        bank_branch_id: bank.need_bank_branch ? currentForm.bank_branch_id : '',
-        bank_name: bank.need_bank_branch ? currentForm.bank_name : ''
+        bank_branch_id: '',
+        bank_name: ''
       }
       const nextBankKeyword = bankMatchesKeyword(bank, this.data.bankKeyword) ? this.data.bankKeyword : ''
       let filteredBanks = this.getBanksForType(nextForm.account_type)
@@ -621,6 +667,9 @@ Component({
 
       if (bank.need_bank_branch) {
         await this.ensureProvincesLoaded()
+        if (selectedCityCode > 0) {
+          await this.loadBranches(bank.bank_alias_code, selectedCityCode)
+        }
       } else {
         this.setData({
           selectedBankIndex: 0,
@@ -629,6 +678,11 @@ Component({
           selectedBranchIndex: 0,
           selectedProvinceCode: 0,
           selectedCityCode: 0,
+          selectedProvinceLabel: '',
+          selectedCityLabel: '',
+          provincePickerValue: [],
+          cityPickerValue: [],
+          cityPickerOptions: [],
           cities: [],
           branches: [],
           filteredBranches: [],
@@ -673,6 +727,11 @@ Component({
           selectedBranchIndex: 0,
           selectedProvinceCode: 0,
           selectedCityCode: 0,
+          selectedProvinceLabel: '',
+          selectedCityLabel: '',
+          provincePickerValue: [],
+          cityPickerValue: [],
+          cityPickerOptions: [],
           cities: [],
           branches: [],
           filteredBranches: [],
@@ -685,8 +744,13 @@ Component({
       this.setFormState(nextForm)
     },
 
-    async onAccountTypeChange(e: WechatMiniprogram.CustomEvent<{ value: ApplymentAccountType }>) {
-      const accountType = e.detail.value as ApplymentAccountType
+    async onAccountTypeSelect(e: WechatMiniprogram.TouchEvent) {
+      const { value } = e.currentTarget.dataset as { value?: ApplymentAccountType }
+      const accountType = value
+      if (!accountType || accountType === this.readForm().account_type) {
+        return
+      }
+
       this.resetBankSelection(accountType)
       const properties = this.properties as unknown as ApplymentBankFormProperties
       if (properties.preloadCatalogs) {
@@ -788,21 +852,29 @@ Component({
 
     async onOpenProvincePicker() {
       await this.ensureProvincesLoaded()
-      if (!(this.data.provinces as ApplymentProvinceOption[]).length) {
+      const provinces = this.data.provinces as ApplymentProvinceOption[]
+      if (!provinces.length) {
         return
       }
-      this.setData({ showProvincePicker: true })
+      this.setData({
+        showProvincePicker: true,
+        provincePickerValue: buildPickerValue(this.data.selectedProvinceCode || provinces[0]?.province_code)
+      })
     },
 
     onCloseProvincePicker() {
       this.setData({ showProvincePicker: false })
     },
 
-    async onSelectProvinceOption(e: WechatMiniprogram.BaseEvent) {
-      const selectedIndex = Number(e.currentTarget.dataset.index)
-      const province = (this.data.provinces as ApplymentProvinceOption[])[selectedIndex]
+    async applySelectedProvince(provinceCode: number) {
+      if (provinceCode === this.data.selectedProvinceCode && this.data.selectedCityCode) {
+        return
+      }
+
+      const provinces = this.data.provinces as ApplymentProvinceOption[]
+      const selectedIndex = provinces.findIndex((province) => province.province_code === provinceCode)
+      const province = provinces[selectedIndex]
       if (!province) {
-        this.onCloseProvincePicker()
         return
       }
 
@@ -816,8 +888,13 @@ Component({
       this.setFormState(nextForm, {
         selectedProvinceIndex: selectedIndex,
         selectedProvinceCode: province.province_code,
+        selectedProvinceLabel: province.province_name,
+        provincePickerValue: buildPickerValue(province.province_code),
         selectedCityIndex: 0,
         selectedCityCode: 0,
+        selectedCityLabel: '',
+        cityPickerValue: [],
+        cityPickerOptions: [],
         selectedBranchIndex: 0,
         cities: [],
         branches: [],
@@ -825,31 +902,46 @@ Component({
         branchKeyword: ''
       })
       await this.loadCities(province.province_code)
-      this.onCloseProvincePicker()
     },
 
-    onProvincePickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
-      if (e.detail?.visible === false) {
-        this.onCloseProvincePicker()
+    onProvincePickerPick(e: ApplymentPickerChangeEvent) {
+      this.setData({
+        provincePickerValue: Array.isArray(e.detail?.value) ? e.detail.value.map((value) => Number(value)) : []
+      })
+    },
+
+    async onProvincePickerConfirm(e: ApplymentPickerChangeEvent) {
+      const provinceCode = Number(e.detail?.value?.[0] || 0)
+      if (provinceCode > 0) {
+        await this.applySelectedProvince(provinceCode)
       }
+      this.onCloseProvincePicker()
     },
 
     onOpenCityPicker() {
       if (!this.data.selectedProvinceCode || !(this.data.cities as ApplymentCityOption[]).length) {
         return
       }
-      this.setData({ showCityPicker: true })
+      const cities = this.data.cities as ApplymentCityOption[]
+      this.setData({
+        showCityPicker: true,
+        cityPickerValue: buildPickerValue(this.data.selectedCityCode || cities[0]?.city_code)
+      })
     },
 
     onCloseCityPicker() {
       this.setData({ showCityPicker: false })
     },
 
-    async onSelectCityOption(e: WechatMiniprogram.BaseEvent) {
-      const selectedIndex = Number(e.currentTarget.dataset.index)
-      const city = (this.data.cities as ApplymentCityOption[])[selectedIndex]
+    async applySelectedCity(cityCode: number) {
+      if (cityCode === this.data.selectedCityCode && this.readForm().bank_name) {
+        return
+      }
+
+      const cities = this.data.cities as ApplymentCityOption[]
+      const selectedIndex = cities.findIndex((city) => city.city_code === cityCode)
+      const city = cities[selectedIndex]
       if (!city) {
-        this.onCloseCityPicker()
         return
       }
 
@@ -863,6 +955,8 @@ Component({
       this.setFormState(nextForm, {
         selectedCityIndex: selectedIndex,
         selectedCityCode: city.city_code,
+        selectedCityLabel: city.city_name,
+        cityPickerValue: buildPickerValue(city.city_code),
         branches: [],
         filteredBranches: [],
         selectedBranchIndex: 0,
@@ -872,13 +966,20 @@ Component({
       if (nextForm.bank_alias_code) {
         await this.loadBranches(nextForm.bank_alias_code, city.city_code)
       }
-      this.onCloseCityPicker()
     },
 
-    onCityPickerVisibleChange(e: ApplymentPickerVisibleChangeEvent) {
-      if (e.detail?.visible === false) {
-        this.onCloseCityPicker()
+    onCityPickerPick(e: ApplymentPickerChangeEvent) {
+      this.setData({
+        cityPickerValue: Array.isArray(e.detail?.value) ? e.detail.value.map((value) => Number(value)) : []
+      })
+    },
+
+    async onCityPickerConfirm(e: ApplymentPickerChangeEvent) {
+      const cityCode = Number(e.detail?.value?.[0] || 0)
+      if (cityCode > 0) {
+        await this.applySelectedCity(cityCode)
       }
+      this.onCloseCityPicker()
     },
 
     onOpenBranchPicker() {

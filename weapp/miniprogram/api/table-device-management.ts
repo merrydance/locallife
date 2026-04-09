@@ -24,6 +24,50 @@ export type PrinterRole = 'front' | 'kitchen'
 /** 打印机异常对账任务状态 */
 export type PrinterReconciliationJobStatus = 'pending' | 'resolved'
 
+export type PrinterReconciliationStatusTheme = 'success' | 'warning' | 'default'
+
+export interface PrinterReconciliationJobStatusView {
+    statusCode: string
+    label: string
+    theme: PrinterReconciliationStatusTheme
+    isResolved: boolean
+    isPending: boolean
+}
+
+export function buildPrinterReconciliationJobStatusView(
+    status?: PrinterReconciliationJobStatus | string
+): PrinterReconciliationJobStatusView {
+    const normalizedStatus = String(status || '').trim().toLowerCase()
+
+    if (normalizedStatus === 'resolved') {
+        return {
+            statusCode: normalizedStatus,
+            label: '已恢复',
+            theme: 'success',
+            isResolved: true,
+            isPending: false
+        }
+    }
+
+    if (normalizedStatus === 'pending') {
+        return {
+            statusCode: normalizedStatus,
+            label: '待恢复',
+            theme: 'warning',
+            isResolved: false,
+            isPending: true
+        }
+    }
+
+    return {
+        statusCode: normalizedStatus,
+        label: '同步中',
+        theme: 'default',
+        isResolved: false,
+        isPending: false
+    }
+}
+
 // ==================== 桌台管理相关类型 ====================
 
 /** 创建桌台请求 - 基于swagger api.createTableRequest */
@@ -152,6 +196,16 @@ export interface PrinterLiveStatusResponse {
     scan_switch?: boolean
     checked_at: string
     info_status?: string
+}
+
+/** 商户设备管理能力响应 */
+export interface MerchantDeviceAccessResponse {
+    merchant_id: number
+    merchant_name: string
+    staff_role: string
+    can_manage: boolean
+    allowed_roles: string[]
+    block_reason?: string
 }
 
 /** 打印机异常对账任务响应 */
@@ -472,6 +526,16 @@ export class DeviceManagementService {
     }
 
     /**
+     * 获取设备管理能力
+     */
+    async getMerchantDeviceAccess(): Promise<MerchantDeviceAccessResponse> {
+        return request({
+            url: '/v1/merchant/devices/access',
+            method: 'GET'
+        })
+    }
+
+    /**
      * 注册打印机
      * @param printerData 打印机数据
      */
@@ -718,6 +782,7 @@ export class TableDeviceAdapter {
 export const tableManagementService = new TableManagementService()
 export const deviceManagementService = new DeviceManagementService()
 export const displayConfigService = new DisplayConfigService()
+export const getMerchantDeviceAccess = () => deviceManagementService.getMerchantDeviceAccess()
 
 // ==================== 便捷函数 ====================
 

@@ -1,245 +1,167 @@
-<custom-navbar title="打印机管理" showBack="{{true}}" />
+<custom-navbar title="打印设备" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
-  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
-    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
+  <view wx:if="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验设备管理权限中..." vertical />
   </view>
 
-  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
-    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <view class="state-block-actions">
-      <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{accessBlockDescription || '打印设备和后厨协同设置仅支持老板或店长管理'}}" />
+    <view class="state-meta" wx:if="{{merchantName || accessRoleLabel !== '--'}}">
+      <text wx:if="{{merchantName}}">当前门店：{{merchantName}}</text>
+      <text wx:if="{{accessRoleLabel !== '--'}}">当前身份：{{accessRoleLabel}}</text>
     </view>
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
-  <view wx:elif="{{initialLoading}}" class="loading-state">
-    <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载设备中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty description="{{initialErrorMessage || '打印机数据加载失败，请重试'}}" />
-    <view class="state-block-actions">
-      <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
-    </view>
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '设备加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
   </view>
 
-  <view wx:else class="page-content">
-    <view wx:if="{{refreshErrorMessage}}" class="section-error-hint">
-      <text class="section-error-text">{{refreshErrorMessage}}</text>
-      <text class="section-error-action" bindtap="onRetryRefresh">重新同步</text>
-    </view>
+  <block wx:else>
+    <view class="page-content">
+      <t-notice-bar
+        wx:if="{{refreshErrorMessage}}"
+        visible="{{true}}"
+        theme="warning"
+        content="{{refreshErrorMessage}}"
+        prefixIcon="error-circle"
+        t-class="page-notice"
+      />
 
-    <view class="section-card">
-      <view class="section-header">
-        <view>
-          <view class="section-title">已接入打印机</view>
-          <view class="section-desc">维护打印机基础配置、打印场景与测试动作。</view>
-        </view>
+      <view class="result-bar">
+        <text class="result-summary">{{resultSummaryText}}</text>
       </view>
 
-      <view wx:if="{{printersError && !printers.length}}" class="section-state-block">
-        <t-empty icon="error-circle" description="{{printersErrorMessage || '打印机列表加载失败，请稍后重试'}}" />
-        <t-button theme="primary" size="small" shape="round" bind:tap="onRetryRefresh">重新加载</t-button>
+      <view wx:if="{{loading && !printers.length}}" class="loading-state">
+        <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
       </view>
 
-      <t-empty wx:elif="{{!(printers && printers.length)}}" icon="info-circle" description="暂无打印机，点击右下角添加" />
+      <t-empty wx:elif="{{!loading && !printers.length}}" icon="info-circle" description="当前还没有打印设备，先添加一台" />
 
       <view wx:else class="printer-list">
-        <view class="printer-card" wx:for="{{printers}}" wx:key="id" bindtap="onPrinterClick" data-id="{{item.id}}">
-          <view class="printer-header">
-            <view class="printer-name-row">
-              <t-icon name="print" size="36rpx" color="var(--td-brand-color)" />
-              <text class="printer-name">{{item.printer_name}}</text>
-            </view>
-            <t-tag size="extra-small" variant="dark" theme="{{item.is_active ? 'success' : 'default'}}">
-              {{item.is_active ? '启用' : '停用'}}
-            </t-tag>
-          </view>
+        <block wx:for="{{printers}}" wx:key="id">
+          <t-cell-group class="printer-card" theme="card">
+            <view class="printer-card-main" bindtap="onOpenEditPrinter" data-id="{{item.id}}">
+              <view class="printer-card__header">
+                <view class="printer-card__heading">
+                  <view class="printer-card__title-row">
+                    <text class="printer-card__title">{{item.printer_name}}</text>
+                    <t-tag size="small" theme="{{item.is_active ? 'success' : 'default'}}" variant="light">{{item.active_label}}</t-tag>
+                  </view>
+                  <text class="printer-card__subtitle">设备 ID {{item.id}} · 门店 ID {{item.merchant_id}}</text>
+                </view>
+              </view>
 
-          <view class="printer-info">
-            <view class="info-row">
-              <text class="info-label">类型</text>
-              <text class="info-value">{{item.printer_type === 'feieyun' ? '飞鹅云' : item.printer_type === 'yilianyun' ? '易联云' : '其他'}}</text>
-            </view>
-            <view class="info-row">
-              <text class="info-label">角色</text>
-              <text class="info-value">{{item.printer_role === 'kitchen' ? '后厨' : '前台'}}</text>
-            </view>
-            <view class="info-row">
-              <text class="info-label">序列号</text>
-              <text class="info-value sn">{{item.printer_sn}}</text>
-            </view>
-            <view class="info-row">
-              <text class="info-label">打印场景</text>
-              <view class="scene-tags">
-                <t-tag wx:if="{{item.print_takeout}}" size="extra-small" variant="dark" theme="primary" shape="round">外卖</t-tag>
-                <t-tag wx:if="{{item.print_dine_in}}" size="extra-small" variant="dark" theme="primary" shape="round">堂食</t-tag>
-                <t-tag wx:if="{{item.print_reservation}}" size="extra-small" variant="dark" theme="primary" shape="round">预约</t-tag>
-                <text wx:if="{{!item.print_takeout && !item.print_dine_in && !item.print_reservation}}" class="no-scene">未配置</text>
+              <view class="printer-card__tag-row">
+                <t-tag size="small" theme="default" variant="light">{{item.printer_type_label}}</t-tag>
+                <t-tag size="small" theme="default" variant="light">{{item.printer_role_label}}</t-tag>
+                <t-tag size="small" theme="primary" variant="light">SN {{item.printer_sn}}</t-tag>
+              </view>
+
+              <view class="printer-detail-list">
+                <view class="printer-detail-row">
+                  <text class="printer-detail-label">设备类型</text>
+                  <text class="printer-detail-value">{{item.printer_type}}</text>
+                </view>
+                <view class="printer-detail-row">
+                  <text class="printer-detail-label">设备角色</text>
+                  <text class="printer-detail-value">{{item.printer_role}}</text>
+                </view>
+                <view class="printer-detail-row">
+                  <text class="printer-detail-label">外卖打印</text>
+                  <text class="printer-detail-value">{{item.print_takeout_label}}</text>
+                </view>
+                <view class="printer-detail-row">
+                  <text class="printer-detail-label">堂食打印</text>
+                  <text class="printer-detail-value">{{item.print_dine_in_label}}</text>
+                </view>
+                <view class="printer-detail-row">
+                  <text class="printer-detail-label">预订打印</text>
+                  <text class="printer-detail-value">{{item.print_reservation_label}}</text>
+                </view>
+                <view class="printer-detail-row">
+                  <text class="printer-detail-label">创建时间</text>
+                  <text class="printer-detail-value">{{item.created_at_label || '--'}}</text>
+                </view>
+                <view class="printer-detail-row">
+                  <text class="printer-detail-label">更新时间</text>
+                  <text class="printer-detail-value">{{item.updated_at_label || '--'}}</text>
+                </view>
               </view>
             </view>
-          </view>
 
-          <view class="printer-actions" catchtap="onActionsCatch">
-            <t-button size="extra-small" theme="primary" shape="round" loading="{{statusLoading && statusPrinterId === item.id}}" disabled="{{testingPrinterId === item.id || deletingPrinterId === item.id || (statusLoading && statusPrinterId === item.id)}}" catchtap="onViewPrinterStatus" data-id="{{item.id}}">状态</t-button>
-            <t-button size="extra-small" theme="default" shape="round" loading="{{testingPrinterId === item.id}}" disabled="{{testingPrinterId === item.id || deletingPrinterId === item.id}}" catchtap="onTestPrinter" data-id="{{item.id}}" data-name="{{item.printer_name}}">测试</t-button>
-            <t-button size="extra-small" theme="danger" shape="round" loading="{{deletingPrinterId === item.id}}" disabled="{{testingPrinterId === item.id || deletingPrinterId === item.id}}" catchtap="onDeletePrinter" data-id="{{item.id}}" data-name="{{item.printer_name}}">删除</t-button>
-          </view>
-        </view>
+            <t-divider />
+
+            <view class="printer-action-bar" catchtap="onActionsCatch">
+              <view class="printer-action-slot">
+                <t-button class="printer-action-button" variant="text" theme="default" size="small" data-id="{{item.id}}" bind:tap="onOpenEditPrinter">编辑</t-button>
+              </view>
+              <t-divider layout="vertical" />
+              <view class="printer-action-slot">
+                <t-button class="printer-action-button" variant="text" theme="primary" size="small" loading="{{statusLoading && statusPrinterId === item.id}}" disabled="{{deletingPrinterId === item.id || testingPrinterId === item.id}}" data-id="{{item.id}}" bind:tap="onViewPrinterStatus">状态</t-button>
+              </view>
+              <t-divider layout="vertical" />
+              <view class="printer-action-slot">
+                <t-button class="printer-action-button" variant="text" theme="default" size="small" loading="{{testingPrinterId === item.id}}" disabled="{{deletingPrinterId === item.id || testingPrinterId === item.id}}" data-id="{{item.id}}" data-name="{{item.printer_name}}" bind:tap="onRequestTestPrinter">测试</t-button>
+              </view>
+              <t-divider layout="vertical" />
+              <view class="printer-action-slot">
+                <t-button class="printer-action-button" variant="text" theme="danger" size="small" loading="{{deletingPrinterId === item.id}}" disabled="{{deletingPrinterId === item.id || testingPrinterId === item.id}}" data-id="{{item.id}}" data-name="{{item.printer_name}}" bind:tap="onRequestDeletePrinter">删除</t-button>
+              </view>
+            </view>
+          </t-cell-group>
+        </block>
       </view>
+
+      <t-fab icon="add" bind:click="onCreatePrinter" />
     </view>
+  </block>
 
-    <view class="section-card">
-      <view class="section-header">
-        <view>
-          <view class="section-title">设备同步恢复</view>
-          <view class="section-desc">这里仅处理云端补偿未完成的设备恢复任务，不影响当前打印机列表使用。</view>
-        </view>
-        <t-button size="small" theme="default" shape="round" loading="{{reconciliationJobsLoading && reconciliationJobsLoaded}}" disabled="{{retryingReconciliationJobId > 0}}" bind:tap="onRetryReconciliationJobs">刷新</t-button>
-      </view>
-
-      <view wx:if="{{reconciliationJobsErrorMessage}}" class="section-error-hint">
-        <text class="section-error-text">{{reconciliationJobsErrorMessage}}</text>
-        <text class="section-error-action" bindtap="onRetryReconciliationJobs">重新同步</text>
-      </view>
-
-      <view wx:if="{{reconciliationJobsLoading && !reconciliationJobsLoaded}}" class="section-loading">
-        <t-loading theme="circular" size="32rpx" text="加载恢复任务中..." vertical />
-      </view>
-
-      <view wx:elif="{{reconciliationJobs && reconciliationJobs.length}}" class="recovery-job-list">
-        <view class="recovery-job-card" wx:for="{{reconciliationJobs}}" wx:key="id">
-          <view class="recovery-job-header">
-            <view class="recovery-job-heading">
-              <view class="recovery-job-title">{{item.title}}</view>
-              <view class="recovery-job-meta-line">来源：{{item.source_action_label}}</view>
-            </view>
-            <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
-          </view>
-
-          <view class="recovery-job-summary">{{item.summary}}</view>
-
-          <view class="recovery-job-details">
-            <view class="recovery-job-detail-row">
-              <text class="recovery-job-detail-label">恢复动作</text>
-              <text class="recovery-job-detail-value">{{item.desired_action_label}}</text>
-            </view>
-            <view class="recovery-job-detail-row">
-              <text class="recovery-job-detail-label">最近同步</text>
-              <text class="recovery-job-detail-value">{{item.updated_at_label || '--'}}</text>
-            </view>
-            <view class="recovery-job-detail-row">
-              <text class="recovery-job-detail-label">重试情况</text>
-              <text class="recovery-job-detail-value">{{item.retry_hint}}</text>
-            </view>
-          </view>
-
-          <view wx:if="{{item.can_retry}}" class="recovery-job-actions">
-            <t-button size="small" theme="primary" shape="round" loading="{{retryingReconciliationJobId === item.id}}" disabled="{{retryingReconciliationJobId === item.id}}" bind:tap="onRetryReconciliationJob" data-id="{{item.id}}" data-title="{{item.title}}">重试同步</t-button>
-          </view>
-        </view>
-      </view>
-
-      <view wx:else class="section-empty-hint">当前没有待处理的设备同步恢复任务。</view>
-    </view>
-
-    <t-fab icon="add" bind:click="onAddPrinter" />
-  </view>
-
-  <t-popup wx:if="{{formVisible}}" visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
-    <view class="form-popup">
-      <scroll-view scroll-y class="form-scroll">
-        <view class="form-title">{{isEdit ? '编辑打印机' : '添加打印机'}}</view>
-
-        <view class="form-item">
-          <text class="form-label">打印机名称 <text class="required">*</text></text>
-          <input class="form-input" value="{{formData.printer_name}}" data-field="printer_name" placeholder="如 前台打印机" bindinput="onTextInput" />
-        </view>
-
-        <view class="form-item" wx:if="{{!isEdit}}">
-          <text class="form-label">序列号 <text class="required">*</text></text>
-          <input class="form-input" value="{{formData.printer_sn}}" data-field="printer_sn" placeholder="打印机机身序列号" bindinput="onTextInput" />
-        </view>
-
-        <view class="form-item">
-          <text class="form-label">密钥{{isEdit ? '（留空不修改）' : ''}} <text class="required" wx:if="{{!isEdit}}">*</text></text>
-          <input class="form-input" value="{{formData.printer_key}}" data-field="printer_key" placeholder="打印机密钥" bindinput="onTextInput" />
-        </view>
-
-        <view class="form-item" wx:if="{{!isEdit}}">
-          <text class="form-label">打印机品牌 <text class="required">*</text></text>
-          <view class="form-helper">当前商户侧新增接入仅支持飞鹅云，历史设备仍会按原类型展示。</view>
-          <radio-group class="inline-options" bindchange="onTypeChange">
-            <label class="inline-option" wx:for="{{printerTypeOptions}}" wx:key="value">
-              <radio value="{{item.value}}" checked="{{formData.printer_type === item.value}}" color="var(--td-brand-color)" />
-              <text>{{item.label}}</text>
-            </label>
-          </radio-group>
-        </view>
-
-        <view class="form-item">
-          <text class="form-label">打印机角色 <text class="required">*</text></text>
-          <radio-group class="inline-options" bindchange="onRoleChange">
-            <label class="inline-option" wx:for="{{printerRoleOptions}}" wx:key="value">
-              <radio value="{{item.value}}" checked="{{formData.printer_role === item.value}}" color="var(--td-brand-color)" />
-              <text>{{item.label}}</text>
-            </label>
-          </radio-group>
-        </view>
-
-        <view class="form-item form-item-switch">
-          <text class="form-label">打印外卖订单</text>
-          <t-switch value="{{formData.print_takeout}}" data-field="print_takeout" bind:change="onSwitchChange" size="large" />
-        </view>
-
-        <view class="form-item form-item-switch">
-          <text class="form-label">打印堂食订单</text>
-          <t-switch value="{{formData.print_dine_in}}" data-field="print_dine_in" bind:change="onSwitchChange" size="large" />
-        </view>
-
-        <view class="form-item form-item-switch">
-          <text class="form-label">打印预约订单</text>
-          <t-switch value="{{formData.print_reservation}}" data-field="print_reservation" bind:change="onSwitchChange" size="large" />
-        </view>
-
-        <view class="form-item form-item-switch" wx:if="{{isEdit}}">
-          <text class="form-label">启用打印机</text>
-          <t-switch value="{{formData.is_active}}" data-field="is_active" bind:change="onSwitchChange" size="large" />
-        </view>
-
-      </scroll-view>
-      <view class="form-actions">
-        <t-button block theme="default" size="large" bind:tap="onCloseForm" shape="round">取消</t-button>
-        <t-button block theme="primary" size="large" loading="{{formSubmitting}}" bind:tap="onSubmitForm" shape="round">保存</t-button>
-      </view>
-    </view>
-  </t-popup>
-
-  <t-popup wx:if="{{statusPopupVisible}}" visible="{{statusPopupVisible}}" placement="bottom" bind:visible-change="onCloseStatusPopup">
+  <t-popup visible="{{statusPopupVisible}}" placement="bottom" bind:visible-change="onStatusPopupVisibleChange">
     <view class="status-popup">
-      <view class="status-popup-title">打印机实时状态</view>
-      <view class="status-popup-subtitle">{{statusPrinterName || '打印机'}}</view>
+      <view class="status-popup__header">
+        <text class="status-popup__title">打印机实时状态</text>
+        <text class="status-popup__subtitle">{{statusPrinterName || '打印机'}}</text>
+      </view>
 
-      <view wx:if="{{statusLoading}}" class="status-popup-loading">
+      <view wx:if="{{statusLoading}}" class="status-popup__state">
         <t-loading theme="circular" size="36rpx" text="查询云端状态中..." vertical />
+      </view>
+
+      <view wx:elif="{{statusErrorMessage}}" class="status-popup__state">
+        <t-empty icon="error-circle" description="{{statusErrorMessage}}" />
       </view>
 
       <view wx:elif="{{liveStatus}}" class="status-panel">
         <view class="status-row">
           <text class="status-label">在线状态</text>
-          <t-tag size="small" theme="{{liveStatus.online ? 'success' : 'warning'}}" variant="dark">{{liveStatus.online_label}}</t-tag>
+          <t-tag size="small" theme="{{liveStatus.online ? 'success' : 'warning'}}" variant="light">{{liveStatus.online_label}}</t-tag>
         </view>
         <view class="status-row">
           <text class="status-label">工作状态</text>
-          <t-tag size="small" theme="{{liveStatus.working ? 'success' : 'warning'}}" variant="dark">{{liveStatus.working_label}}</t-tag>
+          <t-tag size="small" theme="{{liveStatus.working ? 'success' : 'warning'}}" variant="light">{{liveStatus.working_label}}</t-tag>
         </view>
         <view class="status-row">
-          <text class="status-label">打印机角色</text>
+          <text class="status-label">设备角色</text>
           <text class="status-value">{{liveStatus.role_label}}</text>
         </view>
         <view class="status-row">
           <text class="status-label">云端返回</text>
-          <text class="status-value status-multiline">{{liveStatus.provider_status || '暂无返回'}}</text>
+          <text class="status-value status-value--multiline">{{liveStatus.provider_status || '暂无返回'}}</text>
         </view>
         <view class="status-row" wx:if="{{liveStatus.model}}">
           <text class="status-label">设备型号</text>
@@ -263,11 +185,25 @@
         </view>
       </view>
 
-      <view class="status-popup-actions">
-        <t-button block theme="default" size="large" shape="round" bind:tap="onCloseStatusPopup">关闭</t-button>
+      <view class="status-popup__actions">
+        <t-button block theme="default" size="large" shape="round" bind:tap="closeStatusPopup">关闭</t-button>
         <t-button block theme="primary" size="large" shape="round" loading="{{statusLoading}}" bind:tap="onRefreshPrinterStatus">重新查询</t-button>
       </view>
     </view>
   </t-popup>
 
+  <t-dialog
+    visible="{{confirmDialogVisible}}"
+    title="{{confirmDialogTitle}}"
+    using-custom-navbar="{{true}}"
+    confirm-btn="{{ { content: confirmDialogConfirmText, theme: confirmDialogConfirmTheme, loading: confirmDialogSubmitting } }}"
+    cancel-btn="取消"
+    bind:confirm="onConfirmDialogAction"
+    bind:cancel="onCancelConfirmDialog"
+    bind:close="onCancelConfirmDialog"
+  >
+    <view slot="content" class="confirm-dialog__content">
+      <text>{{confirmDialogContent}}</text>
+    </view>
+  </t-dialog>
 </view>

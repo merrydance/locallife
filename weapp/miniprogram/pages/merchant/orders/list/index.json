@@ -8,6 +8,7 @@
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-badge": "tdesign-miniprogram/badge/badge",
     "t-image": "tdesign-miniprogram/image/image",
+    "t-sticky": "tdesign-miniprogram/sticky/sticky",
     "t-tag": "tdesign-miniprogram/tag/tag",
     "custom-navbar": "/components/custom-navbar/index"
   },

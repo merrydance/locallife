@@ -1,74 +1,171 @@
 <custom-navbar title="套餐管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view class="filter-bar">
-    <view
-      wx:for="{{filterOptions}}"
-      wx:key="key"
-      class="filter-chip {{currentFilter === item.key ? 'filter-chip-active' : ''}}"
-      data-key="{{item.key}}"
-      bindtap="onSelectFilter"
-    >
-      {{item.label}}
-    </view>
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
-  <view wx:if="{{loading && !combos.length}}" class="loading-state">
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" text="加载套餐中..." vertical />
   </view>
 
-  <t-empty wx:elif="{{!loading && !combos.length}}" icon="info-circle" description="{{currentFilter === 'all' ? '暂无套餐' : (currentFilter === 'online' ? '暂无已上架套餐' : '暂无未上架套餐')}}" />
-
-  <view wx:else class="combo-list">
-    <view class="combo-card" wx:for="{{combos}}" wx:key="id" bindtap="onEditCombo" data-id="{{item.id}}">
-      <view class="combo-cover" wx:if="{{item.coverImageUrl}}">
-        <image class="combo-cover-image" src="{{item.coverImageUrl}}" mode="aspectFill" />
-        <view class="combo-cover-badge" wx:if="{{item.imageCount > 1}}">{{item.imageCount}} 图</view>
-      </view>
-      <view class="combo-main">
-        <view class="combo-name">{{item.name}}</view>
-        <view class="combo-desc">{{item.description || '无描述'}}</view>
-      </view>
-      <view class="combo-side">
-        <view class="combo-price-wrap">
-          <view class="combo-price-row">
-            <text class="combo-price">¥{{item.combo_price / 100}}</text>
-            <text wx:if="{{item.hasDiscount}}" class="combo-original-price">¥{{item.original_price / 100}}</text>
-          </view>
-          <text wx:if="{{item.hasDiscount}}" class="combo-savings">比原价省 ¥{{item.savingsAmount / 100}}</text>
-        </view>
-        <t-tag theme="{{item.is_online ? 'success' : 'default'}}" variant="dark" size="small">
-          {{item.is_online ? '已上架' : '未上架'}}
-        </t-tag>
-      </view>
-      <view class="combo-actions">
-        <t-button
-          size="small"
-          theme="danger"
-          shape="round"
-          data-id="{{item.id}}"
-          catch:tap="onDeleteCombo"
-        >
-          删除
-        </t-button>
-        <t-button
-          size="small"
-          theme="primary"
-          variant="base"
-          shape="round"
-          loading="{{item.submitting}}"
-          data-id="{{item.id}}"
-          catch:tap="onToggleOnline"
-        >
-          {{item.is_online ? '下架' : '上架'}}
-        </t-button>
-      </view>
-    </view>
-
-    <view wx:if="{{hasMore}}" class="load-more" bindtap="loadCombos">
-      <text>{{loading ? '正在加载...' : '加载更多'}}</text>
-    </view>
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '套餐加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
   </view>
 
-  <t-fab icon="add" bind:click="onCreateCombo" />
+  <block wx:else>
+    <view class="page-content">
+      <t-notice-bar
+        wx:if="{{refreshErrorMessage}}"
+        visible="{{true}}"
+        theme="warning"
+        content="{{refreshErrorMessage}}"
+        prefixIcon="error-circle"
+        t-class="page-notice"
+      />
+
+      <t-sticky offset-top="{{navBarHeight}}" z-index="40">
+        <view class="control-panel">
+          <view class="filter-panel">
+            <view class="filter-block">
+              <text class="filter-label">上架状态</text>
+              <view class="filter-tags">
+                <t-check-tag
+                  wx:for="{{filterOptions}}"
+                  wx:key="key"
+                  checked="{{currentFilter === item.key}}"
+                  content="{{item.label}}"
+                  size="small"
+                  shape="round"
+                  data-key="{{item.key}}"
+                  bind:change="onSelectFilter"
+                />
+              </view>
+            </view>
+          </view>
+        </view>
+      </t-sticky>
+
+      <view class="result-bar">
+        <text class="result-summary">{{resultSummaryText}}</text>
+      </view>
+
+      <view wx:if="{{loading && !combos.length}}" class="loading-state">
+        <t-loading theme="circular" text="加载套餐中..." vertical />
+      </view>
+
+      <t-empty wx:elif="{{!loading && !combos.length}}" icon="info-circle" description="{{emptyDescription}}" />
+
+      <block wx:else>
+        <view class="combo-list">
+          <block wx:for="{{combos}}" wx:key="id">
+            <t-cell-group class="combo-card" theme="card">
+              <view class="combo-card-main" bindtap="onEditCombo" data-id="{{item.id}}">
+                <t-image
+                  t-class="combo-cover"
+                  src="{{item.coverImageUrl || '/assets/icons/empty.svg'}}"
+                  mode="aspectFill"
+                  width="100%"
+                  height="280rpx"
+                  shape="square"
+                  bind:error="onComboImageError"
+                  data-id="{{item.id}}"
+                />
+
+                <view class="combo-content">
+                  <view class="combo-header">
+                    <view class="combo-header-main">
+                      <text class="combo-name">{{item.name}}</text>
+                      <text class="combo-desc">{{item.description || '暂无描述'}}</text>
+                    </view>
+                    <view class="combo-switch-wrap" catchtap="onActionsCatch">
+                      <t-switch
+                        value="{{item.is_online}}"
+                        size="small"
+                        loading="{{item.statusPending}}"
+                        disabled="{{item.deletePending}}"
+                        bind:change="onToggleOnline"
+                        data-id="{{item.id}}"
+                      />
+                    </view>
+                  </view>
+
+                  <view class="combo-meta-row">
+                    <view class="combo-price-row">
+                      <text class="price-value">¥{{item.combo_price / 100}}</text>
+                      <text wx:if="{{item.hasDiscount}}" class="combo-original-price">¥{{item.original_price / 100}}</text>
+                      <t-tag wx:if="{{item.hasDiscount}}" theme="warning" variant="dark" size="small">省 ¥{{item.savingsAmount / 100}}</t-tag>
+                    </view>
+                    <view class="combo-tag-row">
+                      <t-tag theme="{{item.is_online ? 'success' : 'default'}}" variant="light" size="small">
+                        {{item.is_online ? '已上架' : '未上架'}}
+                      </t-tag>
+                      <t-tag wx:if="{{item.imageCount > 0}}" theme="default" variant="light" size="small">
+                        {{item.imageCount}} 张菜品图
+                      </t-tag>
+                    </view>
+                  </view>
+                </view>
+              </view>
+
+              <t-divider />
+
+              <view class="combo-action-bar" catchtap="onActionsCatch">
+                <view class="combo-action-slot">
+                  <t-button class="combo-action-button" variant="text" theme="default" size="small" bind:tap="onEditCombo" data-id="{{item.id}}">编辑</t-button>
+                </view>
+                <t-divider layout="vertical" />
+                <view class="combo-action-slot">
+                  <t-button
+                    class="combo-action-button"
+                    variant="text"
+                    theme="danger"
+                    size="small"
+                    loading="{{item.deletePending}}"
+                    disabled="{{item.deletePending || item.statusPending}}"
+                    bind:tap="onRequestDeleteCombo"
+                    data-id="{{item.id}}"
+                  >删除</t-button>
+                </view>
+              </view>
+            </t-cell-group>
+          </block>
+        </view>
+
+        <view wx:if="{{loading && combos.length}}" class="load-more">
+          <t-loading theme="dots" size="32rpx" text="加载更多套餐中..." />
+        </view>
+
+        <view wx:elif="{{!hasMore && combos.length > 0}}" class="list-end">
+          <text class="list-end__text">已加载全部套餐，共 {{combos.length}} 项</text>
+        </view>
+      </block>
+    </view>
+
+    <t-fab icon="add" bind:click="onCreateCombo" />
+  </block>
+
+  <t-dialog
+    visible="{{deleteDialogVisible}}"
+    title="确认删除套餐"
+    using-custom-navbar="{{true}}"
+    confirm-btn="{{ { content: '确认删除', theme: 'danger', loading: deleteDialogSubmitting } }}"
+    cancel-btn="取消"
+    bind:confirm="onConfirmDeleteCombo"
+    bind:cancel="onCancelDeleteDialog"
+    bind:close="onCancelDeleteDialog"
+  >
+    <view slot="content" class="dialog-content">
+      <text>删除后无法恢复，确定要删除“{{deleteDialogComboName}}”吗？</text>
+    </view>
+  </t-dialog>
 </view>

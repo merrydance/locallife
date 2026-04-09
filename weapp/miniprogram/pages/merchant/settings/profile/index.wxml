@@ -78,6 +78,80 @@
           />
         </view>
 
+        <view class="section-panel section-panel--plain">
+          <view class="section-top">
+            <text class="section-title">经营类目</text>
+            <text class="section-count">已选 {{selectedCategoryCount}}/5</text>
+          </view>
+
+          <view wx:if="{{categoryLoading && !tags.length}}" class="section-state section-state--embedded">
+            <t-loading theme="circular" size="40rpx" text="加载经营类目中..." vertical />
+          </view>
+
+          <view wx:elif="{{categoryErrorMessage && !tags.length}}" class="section-state section-state--embedded">
+            <t-empty description="{{categoryErrorMessage}}" />
+            <t-button theme="primary" size="small" shape="round" bind:tap="onRetryCategories">重新加载</t-button>
+          </view>
+
+          <view wx:elif="{{!tags.length}}" class="section-state section-state--embedded">
+            <t-empty description="暂无可选经营类目" />
+          </view>
+
+          <block wx:else>
+            <t-cell-group theme="card">
+              <t-cell
+                title="添加经营类目"
+                note="{{categoryPickerTriggerText}}"
+                hover
+                arrow
+                bordered="{{selectedCategoryTags.length > 0}}"
+                bind:click="onOpenCategoryPicker"
+              />
+
+              <t-cell
+                wx:if="{{selectedCategoryTags.length}}"
+                wx:for="{{selectedCategoryTags}}"
+                wx:key="id"
+                title="{{item.name}}"
+                bordered="{{index !== selectedCategoryTags.length - 1}}"
+                t-class="category-list-item category-list-item--selected {{saving || categoryLoading ? 'category-list-item--disabled' : ''}}"
+              >
+                <view slot="note" class="category-note-action">
+                  <t-button
+                    t-class="category-note-action__button"
+                    size="extra-small"
+                    theme="danger"
+                    variant="text"
+                    shape="circle"
+                    icon="remove"
+                    disabled="{{saving || categoryLoading}}"
+                    data-id="{{item.id}}"
+                    bind:tap="onRemoveCategory"
+                  />
+                </view>
+              </t-cell>
+            </t-cell-group>
+
+            <view wx:if="{{categoryErrorMessage}}" class="inline-feedback">
+              <text class="inline-feedback__text">{{categoryErrorMessage}}</text>
+              <text class="inline-feedback__action" bind:tap="onRetryCategories">重新同步</text>
+            </view>
+
+            <t-picker
+              visible="{{categoryPickerVisible}}"
+              value="{{[categoryPickerValue || (categoryPickerOptions.length ? categoryPickerOptions[0].value : '')]}}"
+              title="选择经营类目"
+              cancelBtn="取消"
+              confirmBtn="确定"
+              bind:confirm="onCategoryPickerConfirm"
+              bind:cancel="onCloseCategoryPicker"
+              bind:close="onCloseCategoryPicker"
+            >
+              <t-picker-item options="{{categoryPickerOptions}}" />
+            </t-picker>
+          </block>
+        </view>
+
         <view class="section-panel">
           <view class="section-top">
             <text class="section-title">经营位置</text>

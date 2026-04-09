@@ -1,18 +1,20 @@
+import dayjs from 'dayjs'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
   deviceManagementService,
-  CreatePrinterRequest,
-  PrinterLiveStatusResponse,
-  PrinterReconciliationJobResponse,
-  PrinterRole,
-  PrinterResponse,
-  PrinterType,
-  UpdatePrinterRequest
+  type PrinterLiveStatusResponse,
+  type PrinterRole,
+  type PrinterResponse,
+  type PrinterType
 } from '../../../api/table-device-management'
+import {
+  ensureMerchantDeviceManagementAccess,
+  getMerchantDeviceManagementErrorMessage,
+  isMerchantDeviceManagementDenied,
+  isMerchantDeviceManagementGranted
+} from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
-import dayjs from 'dayjs'
 
 const PRINTERS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
@@ -27,16 +29,23 @@ const PRINTER_ROLE_LABELS: Record<PrinterRole, string> = {
   kitchen: '后厨'
 }
 
-interface PrinterFormData {
-  printer_name: string
-  printer_sn: string
-  printer_key: string
-  printer_type: PrinterType
-  printer_role: PrinterRole
-  print_takeout: boolean
-  print_dine_in: boolean
-  print_reservation: boolean
-  is_active: boolean
+const DEVICE_MANAGE_ROLE_LABELS: Record<string, string> = {
+  owner: '老板',
+  manager: '店长',
+  chef: '后厨',
+  cashier: '收银'
+}
+
+type ConfirmActionKind = '' | 'delete' | 'test'
+interface PrinterView extends PrinterResponse {
+  printer_type_label: string
+  printer_role_label: string
+  active_label: string
+  print_takeout_label: string
+  print_dine_in_label: string
+  print_reservation_label: string
+  created_at_label: string
+  updated_at_label: string
 }
 
 interface PrinterLiveStatusView extends PrinterLiveStatusResponse {
@@ -46,45 +55,12 @@ interface PrinterLiveStatusView extends PrinterLiveStatusResponse {
   working_label: string
 }
 
-type PrinterReconciliationStatusTheme = 'success' | 'warning' | 'default'
-
-interface PrinterReconciliationJobView extends PrinterReconciliationJobResponse {
-  title: string
-  summary: string
-  status_label: string
-  status_theme: PrinterReconciliationStatusTheme
-  desired_action_label: string
-  source_action_label: string
-  updated_at_label: string
-  retry_hint: string
-}
-
-function createDefaultFormData(): PrinterFormData {
-  return {
-    printer_name: '',
-    printer_sn: '',
-    printer_key: '',
-    printer_type: 'feieyun',
-    printer_role: 'front',
-    print_takeout: true,
-    print_dine_in: true,
-    print_reservation: true,
-    is_active: true
-  }
-}
-
 function ensureArray<T>(value: T[] | null | undefined): T[] {
   return Array.isArray(value) ? value : []
 }
 
-function buildRefreshErrorMessage(messages: string[]) {
-  const normalized = messages.filter((message) => typeof message === 'string' && message.trim())
-  if (!normalized.length) return ''
-  return Array.from(new Set(normalized)).join('；')
-}
-
-function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
-  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+function shouldAutoRefresh(lastLoadedAt: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= PRINTERS_AUTO_REFRESH_WINDOW_MS
 }
 
 function formatTimeLabel(value?: string) {
@@ -92,9 +68,33 @@ function formatTimeLabel(value?: string) {
   return dayjs(value).format('MM-DD HH:mm')
 }
 
+function printerTypeLabel(type?: string) {
+  if (!type) return '未设置'
+  return PRINTER_TYPE_LABELS[type as PrinterType] || type
+}
+
 function printerRoleLabel(role?: string) {
   if (!role) return '前台'
   return PRINTER_ROLE_LABELS[role as PrinterRole] || role
+}
+
+function buildPrinterView(printer: PrinterResponse): PrinterView {
+  return {
+    ...printer,
+    printer_type_label: printerTypeLabel(printer.printer_type),
+    printer_role_label: printerRoleLabel(printer.printer_role),
+    active_label: printer.is_active ? '启用中' : '已停用',
+    print_takeout_label: printer.print_takeout ? '已开启' : '未开启',
+    print_dine_in_label: printer.print_dine_in ? '已开启' : '未开启',
+    print_reservation_label: printer.print_reservation ? '已开启' : '未开启',
+    created_at_label: formatTimeLabel(printer.created_at),
+    updated_at_label: formatTimeLabel(printer.updated_at)
+  }
+}
+
+function deviceManageRoleLabel(role?: string) {
+  if (!role) return '--'
+  return DEVICE_MANAGE_ROLE_LABELS[role] || role
 }
 
 function buildPrinterLiveStatusView(status: PrinterLiveStatusResponse, role?: string): PrinterLiveStatusView {
@@ -107,65 +107,56 @@ function buildPrinterLiveStatusView(status: PrinterLiveStatusResponse, role?: st
   }
 }
 
-function getReconciliationDesiredActionLabel(action: string) {
-  if (action === 'register') return '补注册云端设备'
-  if (action === 'remove') return '补移除云端设备'
-  return '补做设备同步'
+function buildRefreshErrorMessage(messages: string[]) {
+  const normalized = messages.filter((message) => typeof message === 'string' && message.trim())
+  if (!normalized.length) return ''
+  return Array.from(new Set(normalized)).join('；')
 }
 
-function getReconciliationSourceActionLabel(action: string) {
-  if (action === 'create') return '添加打印机'
-  if (action === 'delete') return '删除打印机'
-  return '设备变更'
+function buildPrinterResultSummary(count: number) {
+  return `当前共 ${count} 台设备`
 }
 
-function getReconciliationStatusLabel(status: string) {
-  if (status === 'resolved') return '已恢复'
-  if (status === 'pending') return '待恢复'
-  return '同步中'
-}
-
-function getReconciliationStatusTheme(status: string): PrinterReconciliationStatusTheme {
-  if (status === 'resolved') return 'success'
-  if (status === 'pending') return 'warning'
-  return 'default'
-}
-
-function getReconciliationJobSummary(job: PrinterReconciliationJobResponse) {
-  const sourceActionLabel = getReconciliationSourceActionLabel(job.source_action)
-  const desiredActionLabel = getReconciliationDesiredActionLabel(job.desired_action)
-
-  if (job.status === 'resolved') {
-    return `设备恢复已完成，本次${sourceActionLabel}对应的${desiredActionLabel}已经同步到云端。`
+function resolvePopupVisible(detail: unknown) {
+  if (typeof detail === 'boolean') {
+    return detail
   }
 
-  if (job.retry_count > 0) {
-    return `此前${sourceActionLabel}后的云端同步未完成，请重试${desiredActionLabel}以恢复设备一致性。`
+  if (detail && typeof detail === 'object' && 'visible' in (detail as Record<string, unknown>)) {
+    return Boolean((detail as { visible?: boolean }).visible)
   }
 
-  return `检测到${sourceActionLabel}后的云端同步未完成，请执行一次${desiredActionLabel}。`
+  return false
 }
 
-function buildPrinterReconciliationJobView(job: PrinterReconciliationJobResponse): PrinterReconciliationJobView {
-  const desiredActionLabel = getReconciliationDesiredActionLabel(job.desired_action)
-  return {
-    ...job,
-    title: `${job.printer_name || '打印机'} · ${desiredActionLabel}`,
-    summary: getReconciliationJobSummary(job),
-    status_label: getReconciliationStatusLabel(job.status),
-    status_theme: getReconciliationStatusTheme(job.status),
-    desired_action_label: desiredActionLabel,
-    source_action_label: getReconciliationSourceActionLabel(job.source_action),
-    updated_at_label: formatTimeLabel(job.updated_at),
-    retry_hint: job.retry_count > 0 ? `已尝试 ${job.retry_count} 次` : '等待首次恢复'
+function resolveConfirmDialog(action: ConfirmActionKind, targetName: string) {
+  switch (action) {
+    case 'delete':
+      return {
+        title: '确认删除打印机',
+        content: `删除后会停止该设备的后续打印分发，确定删除“${targetName || '该打印机'}”吗？`,
+        confirmText: '确认删除',
+        confirmTheme: 'danger'
+      }
+    case 'test':
+      return {
+        title: '发送测试打印',
+        content: `确认向“${targetName || '该打印机'}”发送测试打印命令吗？`,
+        confirmText: '发送测试',
+        confirmTheme: 'primary'
+      }
+    default:
+      return {
+        title: '',
+        content: '',
+        confirmText: '确认',
+        confirmTheme: 'primary'
+      }
   }
-}
-
-function settlePromises(tasks: Array<Promise<unknown>>) {
-  return Promise.all(tasks.map((task) => task.catch(() => undefined)))
 }
 
 const getErrorMessage = getErrorUserMessage
+let printerStatusRequestToken = 0
 
 Page({
   data: {
@@ -173,409 +164,305 @@ Page({
     accessReady: false,
     accessDenied: false,
     accessErrorMessage: '',
+    accessBlockTitle: '当前身份暂不支持管理设备',
+    accessBlockDescription: '',
+    accessRoleLabel: '--',
+    merchantName: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
-    refreshErrorMessage: '',
+    hasLoadedOnce: false,
     loading: false,
+    refreshErrorMessage: '',
+    resultSummaryText: '当前共 0 台设备',
     lastLoadedAt: 0,
-    printersAvailable: false,
-    printersError: false,
-    printersErrorMessage: '',
-    reconciliationJobsLoading: false,
-    reconciliationJobsLoaded: false,
-    reconciliationJobsErrorMessage: '',
-    reconciliationLastLoadedAt: 0,
-    retryingReconciliationJobId: 0,
-    reconciliationJobs: [] as PrinterReconciliationJobView[],
-    formSubmitting: false,
+    pageDirty: false,
+    needsReloadOnShow: false,
+    printers: [] as PrinterView[],
     deletingPrinterId: 0,
     testingPrinterId: 0,
-    statusLoading: false,
+    confirmDialogVisible: false,
+    confirmDialogTitle: '',
+    confirmDialogContent: '',
+    confirmDialogConfirmText: '确认',
+    confirmDialogConfirmTheme: 'primary',
+    confirmDialogSubmitting: false,
+    confirmDialogAction: '' as ConfirmActionKind,
+    confirmTargetId: 0,
+    confirmTargetName: '',
     statusPopupVisible: false,
+    statusLoading: false,
+    statusErrorMessage: '',
     statusPrinterId: 0,
     statusPrinterName: '',
-    liveStatus: null as PrinterLiveStatusView | null,
-    printers: [] as PrinterResponse[],
-    formVisible: false,
-    isEdit: false,
-    editingPrinterId: 0,
-    formData: createDefaultFormData(),
-    printerTypeOptions: [
-      { label: '飞鹅云', value: 'feieyun' }
-    ],
-    printerRoleOptions: [
-      { label: '前台打印机', value: 'front' },
-      { label: '后厨打印机', value: 'kitchen' }
-    ]
+    liveStatus: null as PrinterLiveStatusView | null
   },
 
   async onLoad() {
     const { navBarHeight } = getStableBarHeights()
     this.setData({ navBarHeight })
+    await this.bootstrapPage(true)
+  },
 
-    const accessResult = await ensureMerchantConsoleAccess()
-    this.setData({
-      accessReady: true,
-      accessDenied: accessResult.status === 'denied',
-      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
-    })
-    if (accessResult.status !== 'granted') {
-      this.setData({ initialLoading: false })
+  async onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage || this.data.initialLoading) {
       return
     }
 
-    this.loadPrinters(true, true)
-    void this.loadReconciliationJobs(true)
-  },
-
-  onShow() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-
-    this.setData({
-      printers: ensureArray(this.data.printers)
-    })
-    if (!this.data.initialLoading && !this.data.loading && shouldAutoRefresh(this.data.lastLoadedAt, PRINTERS_AUTO_REFRESH_WINDOW_MS)) {
-      this.loadPrinters(false)
+    if (!this.data.pageDirty && !this.data.needsReloadOnShow && !shouldAutoRefresh(this.data.lastLoadedAt)) {
+      return
     }
-    if (!this.data.reconciliationJobsLoading && shouldAutoRefresh(this.data.reconciliationLastLoadedAt, PRINTERS_AUTO_REFRESH_WINDOW_MS)) {
-      void this.loadReconciliationJobs()
-    }
+
+    this.setData({ needsReloadOnShow: false })
+    await this.loadPageData(false, true)
   },
 
   async onPullDownRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    await settlePromises([
-      this.loadPrinters(false, true),
-      this.loadReconciliationJobs(true)
-    ])
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    await this.loadPageData(false, true)
   },
 
-  onRetryAccess() {
-    this.setData({ accessReady: false, accessDenied: false, accessErrorMessage: '', initialLoading: true })
-    this.onLoad()
+  async bootstrapPage(forceAccess = false) {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      accessBlockTitle: '当前身份暂不支持管理设备',
+      accessBlockDescription: '',
+      accessRoleLabel: '--',
+      merchantName: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: forceAccess ? '' : this.data.refreshErrorMessage
+    })
+
+    const accessResult = await ensureMerchantDeviceManagementAccess({ force: forceAccess })
+    if (!isMerchantDeviceManagementGranted(accessResult)) {
+      const deniedResult = isMerchantDeviceManagementDenied(accessResult) ? accessResult : null
+      const capability = deniedResult?.capability
+      this.setData({
+        accessReady: true,
+        accessDenied: Boolean(deniedResult),
+        accessErrorMessage: getMerchantDeviceManagementErrorMessage(accessResult),
+        accessRoleLabel: deviceManageRoleLabel(capability?.staff_role),
+        merchantName: capability?.merchant_name || '',
+        accessBlockDescription: deniedResult ? deniedResult.message : '',
+        initialLoading: false
+      })
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    this.setData({
+      accessReady: true,
+      accessDenied: false,
+      accessErrorMessage: '',
+      accessRoleLabel: deviceManageRoleLabel(accessResult.capability.staff_role),
+      merchantName: accessResult.capability.merchant_name || '',
+      accessBlockDescription: ''
+    })
+
+    await this.loadPageData(true, true)
   },
 
-  async loadPrinters(showLoading = true, force = false) {
+  async loadPageData(showLoading = true, force = false) {
     if (this.data.loading) return
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
-    const hasExistingPrinters = this.data.printersAvailable
-    const isSilentRefresh = !showLoading && hasExistingPrinters
+    const hasTrustedData = this.data.hasLoadedOnce
 
-    if (!force && hasExistingPrinters && !shouldAutoRefresh(this.data.lastLoadedAt, PRINTERS_AUTO_REFRESH_WINDOW_MS)) {
+    if (!force && hasTrustedData && !this.data.pageDirty && !shouldAutoRefresh(this.data.lastLoadedAt)) {
       wx.stopPullDownRefresh()
       return
     }
 
     this.setData({
       loading: true,
-      ...(showLoading
-        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
-        : isSilentRefresh
-          ? { refreshErrorMessage: '' }
-          : {})
+      ...(showLoading && !hasTrustedData
+        ? {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          }
+        : {
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          })
     })
 
     try {
       const response = await deviceManagementService.listPrinters()
-      const list = Array.isArray(response?.printers) ? response.printers : []
+      const printers = ensureArray(response?.printers).map(buildPrinterView)
       this.setData({
-        printers: list,
-        printersAvailable: true,
-        printersError: false,
-        printersErrorMessage: '',
+        printers,
+        resultSummaryText: buildPrinterResultSummary(printers.length),
+        hasLoadedOnce: true,
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
         refreshErrorMessage: '',
-        lastLoadedAt: Date.now()
+        lastLoadedAt: Date.now(),
+        pageDirty: false
       })
     } catch (err) {
       logger.error('Load printers failed', err)
-      const message = getErrorMessage(err, '打印机列表加载失败，请稍后重试')
-
-      if (this.data.initialLoading || !hasExistingPrinters) {
+      const message = getErrorMessage(err, '设备列表加载失败，请稍后重试')
+      if (!hasTrustedData) {
         this.setData({
           initialLoading: false,
           initialError: true,
-          initialErrorMessage: message,
-          printers: [],
-          printersAvailable: false,
-          printersError: true,
-          printersErrorMessage: message,
-          refreshErrorMessage: ''
+          initialErrorMessage: message
         })
-      } else if (isSilentRefresh || hasExistingPrinters) {
+      } else {
         this.setData({
-          refreshErrorMessage: buildRefreshErrorMessage([`${message}，当前已保留打印机列表`])
+          refreshErrorMessage: buildRefreshErrorMessage([`${message}，当前已保留上次同步结果`])
         })
       }
     } finally {
-      this.setData({ loading: false })
+      this.setData({ loading: false, initialLoading: false })
       wx.stopPullDownRefresh()
     }
   },
 
-  async loadReconciliationJobs(force = false) {
-    if (this.data.reconciliationJobsLoading) return
-
-    const hasLoadedJobs = this.data.reconciliationJobsLoaded
-    const hasExistingJobs = this.data.reconciliationJobs.length > 0
-
-    if (!force && hasLoadedJobs && !shouldAutoRefresh(this.data.reconciliationLastLoadedAt, PRINTERS_AUTO_REFRESH_WINDOW_MS)) {
-      return
-    }
-
-    this.setData({
-      reconciliationJobsLoading: true,
-      reconciliationJobsErrorMessage: hasExistingJobs ? this.data.reconciliationJobsErrorMessage : ''
-    })
-
-    try {
-      const response = await deviceManagementService.listPrinterReconciliationJobs('pending')
-      const jobs = Array.isArray(response?.jobs)
-        ? response.jobs.map(buildPrinterReconciliationJobView)
-        : []
-      this.setData({
-        reconciliationJobs: jobs,
-        reconciliationJobsLoaded: true,
-        reconciliationJobsErrorMessage: '',
-        reconciliationLastLoadedAt: Date.now()
-      })
-    } catch (err) {
-      logger.error('Load printer reconciliation jobs failed', err)
-      const message = getErrorMessage(err, '设备同步恢复任务加载失败，请稍后重试')
-      this.setData({
-        reconciliationJobsLoaded: true,
-        reconciliationJobsErrorMessage: hasExistingJobs ? `${message}，当前已保留上次结果` : message
-      })
-    } finally {
-      this.setData({ reconciliationJobsLoading: false })
-    }
+  onRetryAccess() {
+    void this.bootstrapPage(true)
   },
 
   onRetry() {
-    if (this.data.accessErrorMessage) {
-      this.onRetryAccess()
+    void this.loadPageData(true, true)
+  },
+
+  onCreatePrinter() {
+    if (this.data.initialLoading || this.data.initialError) return
+    this.setData({ needsReloadOnShow: true })
+    wx.navigateTo({ url: '/pages/merchant/printers/edit/index' })
+  },
+
+  onOpenEditPrinter(e: WechatMiniprogram.TouchEvent) {
+    const { id } = e.currentTarget.dataset as { id?: number }
+    if (!id) return
+    this.setData({ needsReloadOnShow: true })
+    wx.navigateTo({ url: `/pages/merchant/printers/edit/index?id=${id}` })
+  },
+
+  async handleMutationFailure(err: unknown, fallbackMessage: string) {
+    await this.loadPageData(false, true)
+    wx.showToast({ title: getErrorMessage(err, fallbackMessage), icon: 'none' })
+  },
+
+  openConfirmDialog(action: ConfirmActionKind, targetId: number, targetName: string) {
+    const dialog = resolveConfirmDialog(action, targetName)
+    this.setData({
+      confirmDialogVisible: true,
+      confirmDialogTitle: dialog.title,
+      confirmDialogContent: dialog.content,
+      confirmDialogConfirmText: dialog.confirmText,
+      confirmDialogConfirmTheme: dialog.confirmTheme,
+      confirmDialogSubmitting: false,
+      confirmDialogAction: action,
+      confirmTargetId: targetId,
+      confirmTargetName: targetName
+    })
+  },
+
+  resetConfirmDialogState() {
+    this.setData({
+      confirmDialogVisible: false,
+      confirmDialogTitle: '',
+      confirmDialogContent: '',
+      confirmDialogConfirmText: '确认',
+      confirmDialogConfirmTheme: 'primary',
+      confirmDialogSubmitting: false,
+      confirmDialogAction: '',
+      confirmTargetId: 0,
+      confirmTargetName: ''
+    })
+  },
+
+  onCancelConfirmDialog() {
+    if (this.data.confirmDialogSubmitting) return
+    this.resetConfirmDialogState()
+  },
+
+  onRequestDeletePrinter(e: WechatMiniprogram.TouchEvent) {
+    const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
+    if (!id || this.data.deletingPrinterId) return
+    this.openConfirmDialog('delete', id, name || '该打印机')
+  },
+
+  onRequestTestPrinter(e: WechatMiniprogram.TouchEvent) {
+    const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
+    if (!id || this.data.testingPrinterId) return
+    this.openConfirmDialog('test', id, name || '该打印机')
+  },
+
+  async onConfirmDialogAction() {
+    const targetId = Number(this.data.confirmTargetId || 0)
+    if (!targetId || !this.data.confirmDialogAction) {
+      this.onCancelConfirmDialog()
       return
     }
 
-    if (!this.data.accessReady || this.data.accessDenied) return
-    this.loadPrinters(true, true)
-  },
+    this.setData({ confirmDialogSubmitting: true })
 
-  onRetryRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    this.loadPrinters(false, true)
-  },
-
-  printerTypeLabel(type: PrinterType): string {
-    return PRINTER_TYPE_LABELS[type] || type
-  },
-
-  printerRoleLabel(role?: string): string {
-    return printerRoleLabel(role)
-  },
-
-  applyPrinters(printers: PrinterResponse[]) {
-    this.setData({ printers: ensureArray(printers) })
-  },
-
-  patchPrinter(printer: PrinterResponse) {
-    const exists = this.data.printers.some((item) => item.id === printer.id)
-    this.applyPrinters(
-      exists
-        ? this.data.printers.map((item) => item.id === printer.id ? printer : item)
-        : [printer, ...this.data.printers]
-    )
-  },
-
-  removePrinter(printerId: number) {
-    this.applyPrinters(this.data.printers.filter((item) => item.id !== printerId))
-  },
-
-  resetFormState() {
-    this.setData({
-      formVisible: false,
-      isEdit: false,
-      editingPrinterId: 0,
-      formData: createDefaultFormData()
-    })
-  },
-
-  onAddPrinter() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    if (this.data.initialLoading || this.data.initialError) return
-
-    this.setData({
-      formVisible: true,
-      isEdit: false,
-      editingPrinterId: 0,
-      formData: createDefaultFormData()
-    })
-  },
-
-  onPrinterClick(e: WechatMiniprogram.TouchEvent) {
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-    const printer = this.data.printers.find((p) => p.id === id)
-    if (!printer) return
-    this.setData({
-      formVisible: true,
-      isEdit: true,
-      editingPrinterId: id,
-      formData: {
-        printer_name: printer.printer_name,
-        printer_sn: printer.printer_sn,
-        printer_key: '',
-        printer_type: printer.printer_type,
-        printer_role: (printer.printer_role || 'front') as PrinterRole,
-        print_takeout: printer.print_takeout,
-        print_dine_in: printer.print_dine_in,
-        print_reservation: printer.print_reservation,
-        is_active: printer.is_active
-      }
-    })
-  },
-
-  onCloseForm() {
-    if (this.data.formSubmitting) return
-    this.resetFormState()
-  },
-
-  onTextInput(e: WechatMiniprogram.Input) {
-    const { field } = e.currentTarget.dataset as { field: string }
-    this.setData({ [`formData.${field}`]: e.detail.value })
-  },
-
-  onTypeChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ 'formData.printer_type': e.detail.value as PrinterType })
-  },
-
-  onRoleChange(e: WechatMiniprogram.CustomEvent) {
-    this.setData({ 'formData.printer_role': e.detail.value as PrinterRole })
-  },
-
-  onSwitchChange(e: WechatMiniprogram.CustomEvent) {
-    const { field } = e.currentTarget.dataset as { field: string }
-    this.setData({ [`formData.${field}`]: e.detail.value })
-  },
-
-  async onSubmitForm() {
-    const { formData, isEdit, editingPrinterId, formSubmitting } = this.data
-    if (formSubmitting) return
-
-    if (!formData.printer_name.trim()) {
-      return wx.showToast({ title: '请填写打印机名称', icon: 'none' })
-    }
-    if (!isEdit && !formData.printer_sn.trim()) {
-      return wx.showToast({ title: '请填写打印机序列号', icon: 'none' })
-    }
-    if (!isEdit && !formData.printer_key.trim()) {
-      return wx.showToast({ title: '请填写打印机密钥', icon: 'none' })
-    }
-
-    this.setData({ formSubmitting: true })
     try {
-      let savedPrinter: PrinterResponse
-      if (isEdit) {
-        const updateParams: UpdatePrinterRequest = {
-          printer_name: formData.printer_name,
-          printer_role: formData.printer_role,
-          print_takeout: formData.print_takeout,
-          print_dine_in: formData.print_dine_in,
-          print_reservation: formData.print_reservation,
-          is_active: formData.is_active
-        }
-        if (formData.printer_key.trim()) {
-          updateParams.printer_key = formData.printer_key
-        }
-        savedPrinter = await deviceManagementService.updatePrinter(editingPrinterId, updateParams)
-      } else {
-        const createParams: CreatePrinterRequest = {
-          printer_name: formData.printer_name,
-          printer_sn: formData.printer_sn,
-          printer_key: formData.printer_key,
-          printer_type: formData.printer_type,
-          printer_role: formData.printer_role,
-          print_takeout: formData.print_takeout,
-          print_dine_in: formData.print_dine_in,
-          print_reservation: formData.print_reservation
-        }
-        savedPrinter = await deviceManagementService.createPrinter(createParams)
+      if (this.data.confirmDialogAction === 'delete') {
+        this.setData({ deletingPrinterId: targetId })
+        await deviceManagementService.deletePrinter(targetId)
+        this.setData({ pageDirty: true })
+        this.resetConfirmDialogState()
+        await this.loadPageData(false, true)
+        wx.showToast({ title: '打印机已删除', icon: 'success' })
+      } else if (this.data.confirmDialogAction === 'test') {
+        this.setData({ testingPrinterId: targetId })
+        await deviceManagementService.testPrinter(targetId)
+        this.resetConfirmDialogState()
+        wx.showToast({ title: '测试命令已发送', icon: 'success' })
       }
-      this.patchPrinter(savedPrinter)
-      this.setData({ refreshErrorMessage: '' })
-      this.resetFormState()
-      await this.loadPrinters(false, true)
     } catch (err) {
-      logger.error('Submit printer form failed', err)
-      const msg = getErrorMessage(err, '操作失败，请稍后重试')
-      wx.showToast({ title: msg, icon: 'none' })
+      logger.error('Handle printer confirm action failed', err)
+      if (this.data.confirmDialogAction === 'delete') {
+        await this.handleMutationFailure(
+          err,
+          '删除失败，请稍后重试'
+        )
+      } else {
+        wx.showToast({ title: getErrorMessage(err, '测试打印失败，请稍后重试'), icon: 'none' })
+      }
+      this.setData({ confirmDialogSubmitting: false })
     } finally {
-      this.setData({ formSubmitting: false })
+      this.setData({
+        deletingPrinterId: 0,
+        testingPrinterId: 0,
+        confirmDialogSubmitting: false
+      })
     }
   },
 
-  onDeletePrinter(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
-    if (!id) return
-    wx.showModal({
-      title: '确认删除',
-      content: `确认删除打印机「${name || id}」吗？`,
-      confirmText: '删除',
-      confirmColor: '#e34d59',
-      cancelText: '取消',
-      success: async (res) => {
-        if (!res.confirm || this.data.deletingPrinterId) return
-        this.setData({ deletingPrinterId: id })
-        try {
-          await deviceManagementService.deletePrinter(id)
-          this.removePrinter(id)
-          if (this.data.editingPrinterId === id) {
-            this.resetFormState()
-          }
-          await this.loadPrinters(false, true)
-        } catch (err) {
-          logger.error('Delete printer failed', err)
-          const message = getErrorMessage(err, '删除失败，请稍后重试')
-          wx.showToast({ title: message, icon: 'none' })
-        } finally {
-          this.setData({ deletingPrinterId: 0 })
-        }
-      }
-    })
+  onStatusPopupVisibleChange(e: WechatMiniprogram.CustomEvent) {
+    if (resolvePopupVisible(e.detail) || this.data.statusLoading) {
+      return
+    }
+
+    this.closeStatusPopup()
   },
 
-  onTestPrinter(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
-    if (!id) return
-    wx.showModal({
-      title: '测试打印',
-      content: `向「${name || '打印机'}」发送测试打印命令？`,
-      confirmText: '发送',
-      cancelText: '取消',
-      success: async (res) => {
-        if (!res.confirm || this.data.testingPrinterId) return
-        this.setData({ testingPrinterId: id })
-        try {
-          await deviceManagementService.testPrinter(id)
-          wx.showToast({ title: '测试命令已发送', icon: 'success' })
-        } catch (err) {
-          logger.error('Test printer failed', err)
-          const message = getErrorMessage(err, '发送失败，请稍后重试')
-          wx.showToast({ title: message, icon: 'none' })
-        } finally {
-          this.setData({ testingPrinterId: 0 })
-        }
-      }
-    })
-  },
-
-  onCloseStatusPopup() {
-    if (this.data.statusLoading) return
+  closeStatusPopup() {
+    printerStatusRequestToken += 1
     this.setData({
       statusPopupVisible: false,
+      statusLoading: false,
+      statusErrorMessage: '',
       statusPrinterId: 0,
       statusPrinterName: '',
       liveStatus: null
@@ -585,87 +472,67 @@ Page({
   async fetchPrinterStatus(printerId: number) {
     const printer = this.data.printers.find((item) => item.id === printerId)
     if (!printer || this.data.statusLoading) return
-
-    if (printer.printer_type !== 'feieyun') {
-      wx.showToast({ title: '当前仅支持飞鹅云打印机查询实时状态', icon: 'none' })
-      return
-    }
+    const requestToken = ++printerStatusRequestToken
 
     this.setData({
-      statusLoading: true,
       statusPopupVisible: true,
+      statusLoading: true,
+      statusErrorMessage: '',
       statusPrinterId: printerId,
       statusPrinterName: printer.printer_name,
       liveStatus: null
     })
 
+    if (printer.printer_type !== 'feieyun') {
+      this.setData({
+        statusLoading: false,
+        statusErrorMessage: '当前仅支持飞鹅云打印机查询实时状态'
+      })
+      return
+    }
+
     try {
       const status = await deviceManagementService.getPrinterLiveStatus(printerId)
+      if (
+        requestToken !== printerStatusRequestToken ||
+        !this.data.statusPopupVisible ||
+        this.data.statusPrinterId !== printerId
+      ) {
+        return
+      }
       this.setData({
-        liveStatus: buildPrinterLiveStatusView(status, printer.printer_role)
+        liveStatus: buildPrinterLiveStatusView(status, printer.printer_role),
+        statusErrorMessage: ''
       })
     } catch (err) {
       logger.error('Load printer live status failed', err)
-      wx.showToast({
-        title: getErrorMessage(err, '实时状态加载失败，请稍后重试'),
-        icon: 'none'
+      if (
+        requestToken !== printerStatusRequestToken ||
+        !this.data.statusPopupVisible ||
+        this.data.statusPrinterId !== printerId
+      ) {
+        return
+      }
+      this.setData({
+        statusErrorMessage: getErrorMessage(err, '实时状态加载失败，请稍后重试'),
+        liveStatus: null
       })
-      this.setData({ statusPopupVisible: false, statusPrinterId: 0, statusPrinterName: '' })
     } finally {
-      this.setData({ statusLoading: false })
+      if (requestToken === printerStatusRequestToken && this.data.statusPrinterId === printerId) {
+        this.setData({ statusLoading: false })
+      }
     }
   },
 
-  async onViewPrinterStatus(e: WechatMiniprogram.TouchEvent) {
+  onViewPrinterStatus(e: WechatMiniprogram.TouchEvent) {
     const { id } = e.currentTarget.dataset as { id?: number }
     if (!id) return
-    await this.fetchPrinterStatus(id)
+    void this.fetchPrinterStatus(id)
   },
 
   onRefreshPrinterStatus() {
     if (!this.data.statusPrinterId) return
-    this.fetchPrinterStatus(this.data.statusPrinterId)
-  },
-
-  onRetryReconciliationJobs() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    void this.loadReconciliationJobs(true)
-  },
-
-  onRetryReconciliationJob(e: WechatMiniprogram.TouchEvent) {
-    const { id, title } = e.currentTarget.dataset as { id?: number, title?: string }
-    if (!id || this.data.retryingReconciliationJobId) return
-
-    wx.showModal({
-      title: '设备同步恢复',
-      content: `确认重试「${title || '恢复任务'}」吗？`,
-      confirmText: '重试同步',
-      cancelText: '取消',
-      success: async (res) => {
-        if (!res.confirm || this.data.retryingReconciliationJobId) return
-
-        this.setData({ retryingReconciliationJobId: id })
-        try {
-          const result = await deviceManagementService.retryPrinterReconciliationJob(id)
-          wx.showToast({
-            title: result.status === 'resolved' ? '设备同步已恢复' : '已发起同步恢复',
-            icon: 'success'
-          })
-          await settlePromises([
-            this.loadReconciliationJobs(true),
-            this.loadPrinters(false, true)
-          ])
-        } catch (err) {
-          logger.error('Retry printer reconciliation job failed', err)
-          wx.showToast({
-            title: getErrorMessage(err, '同步恢复失败，请稍后重试'),
-            icon: 'none'
-          })
-        } finally {
-          this.setData({ retryingReconciliationJobId: 0 })
-        }
-      }
-    })
+    void this.fetchPrinterStatus(this.data.statusPrinterId)
   },
 
   onActionsCatch() {}

@@ -1,108 +1,168 @@
 .page-container {
   min-height: 100vh;
   background: var(--td-bg-color-page);
-  padding-bottom: 120rpx;
 }
 
-.filter-bar {
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+}
+
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--spacer-md);
+}
+
+.page-notice {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  background: var(--td-bg-color-page);
+}
+
+.filter-panel {
+  padding: var(--spacer-sm) var(--spacer-md);
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.filter-block {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
+}
+
+.filter-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+.filter-tags {
   display: flex;
   flex-wrap: wrap;
-  gap: 16rpx;
-  padding: 24rpx;
-  padding-bottom: 0;
+  gap: 12rpx;
 }
 
-.filter-chip {
-  padding: 12rpx 24rpx;
-  border-radius: 999rpx;
-  background: var(--td-bg-color-container);
-  color: var(--td-text-color-secondary);
-  box-shadow: var(--shadow-sm);
-  font-size: 24rpx;
+.result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacer-sm);
+  padding: 0 4rpx;
 }
 
-.filter-chip-active {
-  background: var(--td-brand-color);
-  color: var(--td-text-color-anti);
+.result-summary {
+  font-size: var(--font-size-sm);
+  color: var(--td-text-color-primary);
+  font-weight: 600;
+}
+
+.loading-state,
+.load-more {
+  display: flex;
+  justify-content: center;
 }
 
 .loading-state {
-  padding: 120rpx 0;
+  padding: 100rpx 0;
 }
 
 .combo-list {
-  padding: 24rpx;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
 }
 
 .combo-card {
   background: var(--td-bg-color-container);
-  border-radius: 12rpx;
-  padding: 24rpx;
-  margin-bottom: 20rpx;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
-.combo-cover {
-  position: relative;
-  margin-bottom: 18rpx;
-}
-
-.combo-cover-image {
-  width: 100%;
-  height: 240rpx;
-  border-radius: 16rpx;
-  background: var(--td-bg-color-component);
-}
-
-.combo-cover-badge {
-  position: absolute;
-  right: 16rpx;
-  bottom: 16rpx;
-  padding: 8rpx 14rpx;
-  border-radius: 999rpx;
-  background: rgba(0, 0, 0, 0.58);
-  color: #fff;
-  font-size: 22rpx;
-}
-
-.combo-main {
-  margin-bottom: 16rpx;
-}
-
-.combo-name {
-  font-size: 30rpx;
-  font-weight: 600;
-  color: var(--td-text-color-primary);
-}
-
-.combo-desc {
-  margin-top: 8rpx;
-  font-size: 24rpx;
-  color: var(--td-text-color-secondary);
-}
-
-.combo-side {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16rpx;
-}
-
-.combo-price-wrap {
+.combo-card-main {
   display: flex;
   flex-direction: column;
-  gap: 6rpx;
 }
 
-.combo-price-row {
+.combo-content {
+  padding: var(--spacer-md);
   display: flex;
-  align-items: baseline;
+  flex-direction: column;
   gap: 12rpx;
 }
 
-.combo-price {
-  font-size: 30rpx;
-  font-weight: 600;
+.combo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.combo-header-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8rpx;
+}
+
+.combo-name {
+  font-size: var(--font-size-heading);
+  line-height: 1.35;
+  font-weight: 700;
   color: var(--td-text-color-primary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.combo-desc {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.combo-switch-wrap {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.combo-meta-row {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.combo-price-row,
+.combo-tag-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.price-value {
+  font-size: var(--font-size-title);
+  line-height: 1;
+  color: var(--td-brand-color);
+  font-weight: 700;
 }
 
 .combo-original-price {
@@ -111,22 +171,46 @@
   text-decoration: line-through;
 }
 
-.combo-savings {
-  font-size: 22rpx;
-  color: var(--td-brand-color);
+.combo-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacer-md);
 }
 
-.combo-actions {
-  margin-top: 20rpx;
+.combo-action-slot {
+  flex: 1;
   display: flex;
-  justify-content: flex-end;
-  gap: 12rpx;
-  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.combo-action-button {
+  flex: 0 0 auto;
+}
+
+.dialog-content {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
 }
 
 .load-more {
-  text-align: center;
-  color: var(--td-text-color-placeholder);
-  font-size: 24rpx;
-  padding: 20rpx 0;
+  padding: var(--spacer-sm) 0 8rpx;
+}
+
+.list-end {
+  display: flex;
+  justify-content: center;
+  padding: var(--spacer-sm) 0 8rpx;
+}
+
+.list-end__text {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
+}
+
+@media (max-width: 420px) {
+  .combo-action-bar {
+    padding: 0 var(--spacer-sm);
+  }
 }

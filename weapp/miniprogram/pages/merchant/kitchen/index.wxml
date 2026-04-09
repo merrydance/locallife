@@ -4,183 +4,223 @@
   class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
   style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
 >
-  <view wx:if="{{initialLoading}}" class="state-block">
-    <t-loading theme="circular" size="40rpx" text="加载后厨订单中..." vertical />
+  <view wx:if="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载后厨工作台中..." vertical />
   </view>
 
-  <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty description="{{initialErrorMessage || '后厨数据加载失败，请重试'}}" />
-    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
   <block wx:else>
     <view class="page-content">
-    <view wx:if="{{refreshErrorMessage}}" class="refresh-banner">
-      <text class="refresh-banner-text">{{refreshErrorMessage}}</text>
-      <t-button size="small" theme="primary" variant="outline" shape="round" bind:tap="onRetryRefresh">重新同步</t-button>
-    </view>
-
-    <view class="summary-grid">
-      <view class="summary-card brand-card">
-        <text class="summary-label">待处理总数</text>
-        <text class="summary-value">{{stats.totalPending}}</text>
-      </view>
-      <view class="summary-card">
-        <text class="summary-label">新订单</text>
-        <text class="summary-value">{{stats.newCount}}</text>
-      </view>
-      <view class="summary-card">
-        <text class="summary-label">制作中</text>
-        <text class="summary-value">{{stats.preparingCount}}</text>
-      </view>
-      <view class="summary-card">
-        <text class="summary-label">待取餐</text>
-        <text class="summary-value">{{stats.readyCount}}</text>
-      </view>
-    </view>
-
-    <view class="meta-strip">
-      <view class="meta-item">
-        <t-icon name="time" size="28rpx" />
-        <text>平均出餐 {{stats.avgPreparationTime || '--'}} 分钟</text>
-      </view>
-      <view class="meta-item warning" wx:if="{{stats.behindScheduleCount > 0}}">
-        <t-icon name="error-circle" size="28rpx" />
-        <text>{{stats.behindScheduleCount}} 单已超预估时间</text>
-      </view>
-    </view>
-
-    <t-empty wx:if="{{!newOrders.length && !preparingOrders.length && !readyOrders.length}}" icon="info-circle" description="当前后厨没有待处理订单" />
-
-    <block wx:else>
-      <view class="section-block">
-        <view class="section-head">
-          <text class="section-title">新订单</text>
-          <text class="section-count">{{newOrders.length}}</text>
-        </view>
-        <view wx:if="{{!newOrders.length}}" class="section-empty">暂无新订单</view>
-        <view wx:else class="order-list">
-          <view class="order-card" wx:for="{{newOrders}}" wx:key="id">
-            <view class="order-head">
-              <view class="order-id-row">
-                <t-tag theme="primary" variant="light" size="small">{{item.order_type_label}}</t-tag>
-                <text class="order-no">#{{item.order_no_short}}</text>
+      <t-sticky offset-top="{{navBarHeight}}" z-index="40">
+        <view class="control-panel">
+          <view class="filter-panel">
+            <view class="filter-block">
+              <text class="filter-label">订单状态</text>
+              <view class="filter-tags">
+                <t-check-tag
+                  wx:for="{{boardFilterOptions}}"
+                  wx:key="value"
+                  checked="{{boardFilter === item.value}}"
+                  content="{{item.label}} {{item.value === 'all' ? stats.totalPending : item.value === 'new' ? stats.newCount : item.value === 'preparing' ? stats.preparingCount : stats.readyCount}}"
+                  size="small"
+                  shape="round"
+                  data-value="{{item.value}}"
+                  bind:change="onBoardFilterChange"
+                />
               </view>
-              <t-tag theme="warning" variant="light" size="small">等待 {{item.waiting_label}}</t-tag>
-            </view>
-
-            <view class="order-meta-row">
-              <text>{{item.seat_or_pickup_label}}</text>
-              <text>{{item.created_time_label}} 下单</text>
-            </view>
-
-            <view class="dish-list">
-              <view class="dish-row" wx:for="{{item.items}}" wx:key="id" wx:for-item="dish">
-                <text class="dish-name">{{dish.name}}</text>
-                <text class="dish-qty">x{{dish.quantity}}</text>
-              </view>
-            </view>
-
-            <view class="notes-row" wx:if="{{item.notes}}">
-              <t-icon name="chat-message" size="24rpx" />
-              <text>{{item.notes}}</text>
-            </view>
-
-            <view class="card-actions">
-              <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
-              <t-button theme="primary" size="small" shape="round" bind:tap="onStartPreparing" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'preparing'}}">开始制作</t-button>
             </view>
           </view>
         </view>
+      </t-sticky>
+
+      <t-notice-bar
+        wx:if="{{boardRefreshErrorMessage}}"
+        visible="{{true}}"
+        theme="warning"
+        content="{{boardRefreshErrorMessage}}"
+        prefixIcon="error-circle"
+        t-class="page-notice"
+      />
+
+      <view class="summary-grid">
+        <view class="summary-card brand-card">
+          <text class="summary-label">待处理总数</text>
+          <text class="summary-value">{{stats.totalPending}}</text>
+        </view>
+        <view class="summary-card">
+          <text class="summary-label">新订单</text>
+          <text class="summary-value">{{stats.newCount}}</text>
+        </view>
+        <view class="summary-card">
+          <text class="summary-label">制作中</text>
+          <text class="summary-value">{{stats.preparingCount}}</text>
+        </view>
+        <view class="summary-card">
+          <text class="summary-label">待取餐</text>
+          <text class="summary-value">{{stats.readyCount}}</text>
+        </view>
       </view>
 
-      <view class="section-block">
-        <view class="section-head">
-          <text class="section-title">制作中</text>
-          <text class="section-count">{{preparingOrders.length}}</text>
+      <view class="meta-strip">
+        <view class="meta-item">
+          <t-icon name="time" size="28rpx" />
+          <text>平均出餐 {{stats.avgPreparationTime || '--'}} 分钟</text>
         </view>
-        <view wx:if="{{!preparingOrders.length}}" class="section-empty">暂无制作中的订单</view>
-        <view wx:else class="order-list">
-          <view class="order-card" wx:for="{{preparingOrders}}" wx:key="id">
-            <view class="order-head">
-              <view class="order-id-row">
-                <t-tag theme="primary" variant="light" size="small">{{item.order_type_label}}</t-tag>
-                <text class="order-no">#{{item.order_no_short}}</text>
-              </view>
-              <t-tag theme="{{item.is_overdue ? 'danger' : 'success'}}" variant="light" size="small">{{item.is_overdue ? '已超时' : item.remaining_label}}</t-tag>
-            </view>
+        <view class="meta-item warning" wx:if="{{stats.behindScheduleCount > 0}}">
+          <t-icon name="error-circle" size="28rpx" />
+          <text>{{stats.behindScheduleCount}} 单已超预估时间</text>
+        </view>
+      </view>
 
-            <view class="order-meta-row">
-              <text>{{item.seat_or_pickup_label}}</text>
-              <text>预计 {{item.estimated_ready_label}} 出餐</text>
-            </view>
+      <view class="result-bar">
+        <text class="result-summary">{{boardResultSummaryText}}</text>
+      </view>
 
-            <view class="dish-list compact-list">
-              <view class="dish-row" wx:for="{{item.items}}" wx:key="id" wx:for-item="dish">
-                <text class="dish-name">{{dish.name}}</text>
-                <text class="dish-qty">x{{dish.quantity}}</text>
-              </view>
-            </view>
+      <view wx:if="{{boardInitialLoading}}" class="loading-state">
+        <t-loading theme="circular" size="40rpx" text="加载后厨订单中..." vertical />
+      </view>
 
-            <view class="progress-row">
-              <view class="meta-item warning" wx:if="{{item.is_overdue}}">
-                <t-icon name="error-circle" size="24rpx" />
-                <text>当前订单已超过预估时间</text>
-              </view>
-              <view class="meta-item" wx:else>
-                <t-icon name="time" size="24rpx" />
-                <text>{{item.remaining_label}}</text>
-              </view>
-            </view>
+      <view wx:elif="{{boardInitialError}}" class="state-inline">
+        <t-empty description="{{boardInitialErrorMessage || '后厨数据加载失败，请重试'}}" />
+        <t-button theme="primary" size="small" shape="round" bind:tap="onRetryBoard">重新加载</t-button>
+      </view>
 
-            <view class="card-actions">
-              <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
-              <t-button theme="primary" size="small" shape="round" bind:tap="onMarkReady" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'ready'}}">标记出餐</t-button>
+      <t-empty wx:elif="{{!visibleNewOrders.length && !visiblePreparingOrders.length && !visibleReadyOrders.length}}" icon="info-circle" description="{{boardEmptyDescription}}" />
+
+      <block wx:else>
+        <view wx:if="{{visibleNewOrders.length}}" class="section-block">
+          <view class="section-head">
+            <text class="section-title">新订单</text>
+            <text class="section-count">{{visibleNewOrders.length}}</text>
+          </view>
+          <view class="order-list">
+            <view class="order-card" wx:for="{{visibleNewOrders}}" wx:key="id">
+              <view class="order-head">
+                <view class="order-id-row">
+                  <t-tag theme="primary" variant="light" size="small">{{item.order_type_label}}</t-tag>
+                  <text class="order-no">#{{item.order_no_short}}</text>
+                </view>
+                <t-tag theme="warning" variant="light" size="small">等待 {{item.waiting_label}}</t-tag>
+              </view>
+
+              <view class="order-meta-row">
+                <text>{{item.seat_or_pickup_label}}</text>
+                <text>{{item.created_time_label}} 下单</text>
+              </view>
+
+              <view class="dish-list">
+                <view class="dish-row" wx:for="{{item.items}}" wx:key="id" wx:for-item="dish">
+                  <text class="dish-name">{{dish.name}}</text>
+                  <text class="dish-qty">x{{dish.quantity}}</text>
+                </view>
+              </view>
+
+              <view class="notes-row" wx:if="{{item.notes}}">
+                <t-icon name="chat-message" size="24rpx" />
+                <text>{{item.notes}}</text>
+              </view>
+
+              <view class="card-actions">
+                <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+                <t-button theme="primary" size="small" shape="round" bind:tap="onStartPreparing" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'preparing'}}">开始制作</t-button>
+              </view>
             </view>
           </view>
         </view>
-      </view>
 
-      <view class="section-block">
-        <view class="section-head">
-          <text class="section-title">待取餐</text>
-          <text class="section-count">{{readyOrders.length}}</text>
-        </view>
-        <view wx:if="{{!readyOrders.length}}" class="section-empty">暂无待取餐订单</view>
-        <view wx:else class="order-list">
-          <view class="order-card" wx:for="{{readyOrders}}" wx:key="id">
-            <view class="order-head">
-              <view class="order-id-row">
-                <t-tag theme="success" variant="light" size="small">{{item.order_type_label}}</t-tag>
-                <text class="order-no">#{{item.order_no_short}}</text>
+        <view wx:if="{{visiblePreparingOrders.length}}" class="section-block">
+          <view class="section-head">
+            <text class="section-title">制作中</text>
+            <text class="section-count">{{visiblePreparingOrders.length}}</text>
+          </view>
+          <view class="order-list">
+            <view class="order-card" wx:for="{{visiblePreparingOrders}}" wx:key="id">
+              <view class="order-head">
+                <view class="order-id-row">
+                  <t-tag theme="primary" variant="light" size="small">{{item.order_type_label}}</t-tag>
+                  <text class="order-no">#{{item.order_no_short}}</text>
+                </view>
+                <t-tag theme="{{item.is_overdue ? 'danger' : 'success'}}" variant="light" size="small">{{item.is_overdue ? '已超时' : item.remaining_label}}</t-tag>
               </view>
-              <t-tag theme="success" variant="light" size="small">已出餐</t-tag>
-            </view>
 
-            <view class="order-meta-row">
-              <text>{{item.seat_or_pickup_label}}</text>
-              <text>制作耗时 {{item.preparation_label}}</text>
-            </view>
-
-            <view class="dish-list compact-list">
-              <view class="dish-row" wx:for="{{item.items}}" wx:key="id" wx:for-item="dish">
-                <text class="dish-name">{{dish.name}}</text>
-                <text class="dish-qty">x{{dish.quantity}}</text>
+              <view class="order-meta-row">
+                <text>{{item.seat_or_pickup_label}}</text>
+                <text>预计 {{item.estimated_ready_label}} 出餐</text>
               </view>
-            </view>
 
-            <view class="ready-hint">
-              <t-icon name="check-circle" size="24rpx" />
-              <text>等待骑手或顾客取餐</text>
-            </view>
+              <view class="dish-list compact-list">
+                <view class="dish-row" wx:for="{{item.items}}" wx:key="id" wx:for-item="dish">
+                  <text class="dish-name">{{dish.name}}</text>
+                  <text class="dish-qty">x{{dish.quantity}}</text>
+                </view>
+              </view>
 
-            <view class="card-actions card-actions-single">
-              <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+              <view class="progress-row">
+                <view class="meta-item warning" wx:if="{{item.is_overdue}}">
+                  <t-icon name="error-circle" size="24rpx" />
+                  <text>当前订单已超过预估时间</text>
+                </view>
+                <view class="meta-item" wx:else>
+                  <t-icon name="time" size="24rpx" />
+                  <text>{{item.remaining_label}}</text>
+                </view>
+              </view>
+
+              <view class="card-actions">
+                <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+                <t-button theme="primary" size="small" shape="round" bind:tap="onMarkReady" data-id="{{item.id}}" loading="{{actionOrderId === item.id && actionType === 'ready'}}">标记出餐</t-button>
+              </view>
             </view>
           </view>
         </view>
-      </view>
-    </block>
+
+        <view wx:if="{{visibleReadyOrders.length}}" class="section-block">
+          <view class="section-head">
+            <text class="section-title">待取餐</text>
+            <text class="section-count">{{visibleReadyOrders.length}}</text>
+          </view>
+          <view class="order-list">
+            <view class="order-card" wx:for="{{visibleReadyOrders}}" wx:key="id">
+              <view class="order-head">
+                <view class="order-id-row">
+                  <t-tag theme="success" variant="light" size="small">{{item.order_type_label}}</t-tag>
+                  <text class="order-no">#{{item.order_no_short}}</text>
+                </view>
+                <t-tag theme="success" variant="light" size="small">已出餐</t-tag>
+              </view>
+
+              <view class="order-meta-row">
+                <text>{{item.seat_or_pickup_label}}</text>
+                <text>制作耗时 {{item.preparation_label}}</text>
+              </view>
+
+              <view class="dish-list compact-list">
+                <view class="dish-row" wx:for="{{item.items}}" wx:key="id" wx:for-item="dish">
+                  <text class="dish-name">{{dish.name}}</text>
+                  <text class="dish-qty">x{{dish.quantity}}</text>
+                </view>
+              </view>
+
+              <view class="ready-hint">
+                <t-icon name="check-circle" size="24rpx" />
+                <text>等待骑手或顾客取餐</text>
+              </view>
+
+              <view class="card-actions card-actions-single">
+                <t-button size="small" variant="outline" shape="round" bind:tap="onViewDetail" data-id="{{item.id}}">查看详情</t-button>
+              </view>
+            </view>
+          </view>
+        </view>
+      </block>
     </view>
   </block>
 </view>

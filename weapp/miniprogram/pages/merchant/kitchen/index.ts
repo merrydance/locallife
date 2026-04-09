@@ -1,7 +1,8 @@
 import dayjs from 'dayjs'
+import { getMyMerchantOpenStatus } from '../../../api/merchant'
 import { KitchenDisplayService, KitchenOrderResponse, KitchenOrdersResponse, OrderManagementAdapter } from '../../../api/order-management'
 import { isPreparingOrderStatus, isReadyOrderStatus } from '../../../api/order'
-import { getMyMerchantOpenStatus } from '../../../api/merchant'
+import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
@@ -9,6 +10,12 @@ import { wsManager, WSMessageType } from '../../../utils/websocket'
 type WsUnsubscribe = () => void
 
 type KitchenActionType = '' | 'preparing' | 'ready'
+type KitchenBoardFilter = 'all' | 'new' | 'preparing' | 'ready'
+
+interface KitchenBoardFilterOption {
+  label: string
+  value: KitchenBoardFilter
+}
 
 interface KitchenBoardOrder extends KitchenOrderResponse {
   order_no_short: string
@@ -30,6 +37,13 @@ interface KitchenBoardStats {
   avgPreparationTime: number
   behindScheduleCount: number
 }
+
+const BOARD_FILTER_OPTIONS: KitchenBoardFilterOption[] = [
+  { label: '全部待处理', value: 'all' },
+  { label: '新订单', value: 'new' },
+  { label: '制作中', value: 'preparing' },
+  { label: '待取餐', value: 'ready' }
+]
 
 function formatKitchenOrder(order: KitchenOrderResponse): KitchenBoardOrder {
   const remainingMinutes = Math.round(OrderManagementAdapter.getRemainingTime(order))
@@ -88,14 +102,49 @@ function buildKitchenStatsFromLists(
   }
 }
 
+function buildBoardPresentation(
+  filter: KitchenBoardFilter,
+  newOrders: KitchenBoardOrder[],
+  preparingOrders: KitchenBoardOrder[],
+  readyOrders: KitchenBoardOrder[]
+) {
+  const visibleNewOrders = filter === 'all' || filter === 'new' ? newOrders : []
+  const visiblePreparingOrders = filter === 'all' || filter === 'preparing' ? preparingOrders : []
+  const visibleReadyOrders = filter === 'all' || filter === 'ready' ? readyOrders : []
+  const visibleCount = visibleNewOrders.length + visiblePreparingOrders.length + visibleReadyOrders.length
+  const labelMap: Record<KitchenBoardFilter, string> = {
+    all: '待处理订单',
+    new: '新订单',
+    preparing: '制作中订单',
+    ready: '待取餐订单'
+  }
+
+  return {
+    visibleNewOrders,
+    visiblePreparingOrders,
+    visibleReadyOrders,
+    boardResultSummaryText: filter === 'all'
+      ? `当前共 ${visibleCount} 单待处理订单`
+      : `${labelMap[filter]}共 ${visibleCount} 单`,
+    boardEmptyDescription: filter === 'all'
+      ? '当前后厨没有待处理订单'
+      : `当前没有${labelMap[filter]}`
+  }
+}
+
 Page({
   data: {
     navBarHeight: 88,
-    initialLoading: true,
-    initialError: false,
-    initialErrorMessage: '',
-    refreshErrorMessage: '',
-    loading: false,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
+    boardFilterOptions: BOARD_FILTER_OPTIONS,
+    boardFilter: 'all' as KitchenBoardFilter,
+    boardInitialLoading: true,
+    boardInitialError: false,
+    boardInitialErrorMessage: '',
+    boardRefreshErrorMessage: '',
+    boardLoading: false,
     actionOrderId: 0,
     actionType: '' as KitchenActionType,
     stats: {
@@ -109,23 +158,59 @@ Page({
     newOrders: [] as KitchenBoardOrder[],
     preparingOrders: [] as KitchenBoardOrder[],
     readyOrders: [] as KitchenBoardOrder[],
+    visibleNewOrders: [] as KitchenBoardOrder[],
+    visiblePreparingOrders: [] as KitchenBoardOrder[],
+    visibleReadyOrders: [] as KitchenBoardOrder[],
+    boardResultSummaryText: '当前共 0 单待处理订单',
+    boardEmptyDescription: '当前后厨没有待处理订单',
     _wsListeners: [] as WsUnsubscribe[]
   },
 
-  onLoad() {
+  async onLoad() {
+    await this.bootstrap()
+  },
+
+  async bootstrap() {
     const { navBarHeight } = getStableBarHeights()
-    this.setData({ navBarHeight })
+    this.setData({
+      navBarHeight,
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: ''
+    })
+
+    const accessResult = await ensureMerchantConsoleAccess()
+    this.setData({
+      accessReady: true,
+      accessDenied: accessResult.status === 'denied',
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+    })
+
+    if (accessResult.status !== 'granted') {
+      this.setData({ boardInitialLoading: false })
+      return
+    }
+
     this.refreshRealtimeRuntime()
-    this.loadKitchenOrders()
+    await this.loadKitchenOrders(true)
   },
 
   onPullDownRefresh() {
-    this.loadKitchenOrders(Boolean(this.data.newOrders.length || this.data.preparingOrders.length || this.data.readyOrders.length))
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    this.loadKitchenOrders(false).catch(() => undefined)
   },
 
   onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
     this.refreshRealtimeRuntime()
-    if (!this.data.initialLoading) {
+    if (!this.data.boardInitialLoading) {
       this.loadKitchenOrders(false)
     }
   },
@@ -160,7 +245,7 @@ Page({
         return
       }
 
-      this.setData({ refreshErrorMessage: message })
+      this.setData({ boardRefreshErrorMessage: message })
       wx.showToast({ title: message, icon: 'none' })
     })
 
@@ -199,17 +284,17 @@ Page({
   },
 
   async loadKitchenOrders(showLoading = true) {
-    if (this.data.loading) return
+    if (this.data.boardLoading) return
 
     const hasExistingOrders = Boolean(this.data.newOrders.length || this.data.preparingOrders.length || this.data.readyOrders.length)
     const isSilentRefresh = !showLoading && hasExistingOrders
 
     this.setData({
-      loading: true,
+      boardLoading: true,
       ...(showLoading
-        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+        ? { boardInitialError: false, boardInitialErrorMessage: '', boardRefreshErrorMessage: '' }
         : isSilentRefresh
-          ? { refreshErrorMessage: '' }
+          ? { boardRefreshErrorMessage: '' }
           : {})
     })
 
@@ -220,10 +305,16 @@ Page({
         newOrders: (response.new_orders || []).map(formatKitchenOrder),
         preparingOrders: (response.preparing_orders || []).map(formatKitchenOrder),
         readyOrders: (response.ready_orders || []).map(formatKitchenOrder),
-        initialLoading: false,
-        initialError: false,
-        initialErrorMessage: '',
-        refreshErrorMessage: ''
+        ...buildBoardPresentation(
+          this.data.boardFilter,
+          (response.new_orders || []).map(formatKitchenOrder),
+          (response.preparing_orders || []).map(formatKitchenOrder),
+          (response.ready_orders || []).map(formatKitchenOrder)
+        ),
+        boardInitialLoading: false,
+        boardInitialError: false,
+        boardInitialErrorMessage: '',
+        boardRefreshErrorMessage: ''
       })
     } catch (err: unknown) {
       logger.error('Load kitchen orders failed', err)
@@ -231,29 +322,47 @@ Page({
         ? (err as { userMessage?: string }).userMessage || '后厨数据加载失败，请重试'
         : '后厨数据加载失败，请重试'
 
-      if (this.data.initialLoading || (!this.data.newOrders.length && !this.data.preparingOrders.length && !this.data.readyOrders.length)) {
+      if (this.data.boardInitialLoading || (!this.data.newOrders.length && !this.data.preparingOrders.length && !this.data.readyOrders.length)) {
         this.setData({
-          initialLoading: false,
-          initialError: true,
-          initialErrorMessage: message
+          boardInitialLoading: false,
+          boardInitialError: true,
+          boardInitialErrorMessage: message
         })
       } else if (isSilentRefresh) {
-        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+        this.setData({ boardRefreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
       }
     } finally {
-      this.setData({ loading: false })
+      this.setData({ boardLoading: false })
       wx.stopPullDownRefresh()
     }
   },
 
-  onRetry() {
+  onRetryBoard() {
     this.loadKitchenOrders()
   },
 
-  onRetryRefresh() {
-    this.loadKitchenOrders(false)
+  onRetryAccess() {
+    this.bootstrap()
+  },
+
+  onBoardFilterChange(e: WechatMiniprogram.CustomEvent) {
+    const { value } = e.currentTarget.dataset as { value?: KitchenBoardFilter }
+    if (!value) {
+      return
+    }
+
+    const detail = e.detail as boolean | { checked?: boolean } | undefined
+    const nextChecked = typeof detail === 'boolean' ? detail : !!detail?.checked
+    if (!nextChecked || value === this.data.boardFilter) {
+      return
+    }
+
+    this.setData({
+      boardFilter: value,
+      ...buildBoardPresentation(value, this.data.newOrders, this.data.preparingOrders, this.data.readyOrders)
+    })
   },
 
   applyKitchenLists(newOrders: KitchenBoardOrder[], preparingOrders: KitchenBoardOrder[], readyOrders: KitchenBoardOrder[]) {
@@ -261,7 +370,8 @@ Page({
       newOrders,
       preparingOrders,
       readyOrders,
-      stats: buildKitchenStatsFromLists(newOrders, preparingOrders, readyOrders)
+      stats: buildKitchenStatsFromLists(newOrders, preparingOrders, readyOrders),
+      ...buildBoardPresentation(this.data.boardFilter, newOrders, preparingOrders, readyOrders)
     })
   },
 
@@ -307,7 +417,7 @@ Page({
     try {
       const updatedOrder = await requestPromise
       this.syncKitchenOrder(updatedOrder)
-      this.setData({ refreshErrorMessage: '' })
+      this.setData({ boardRefreshErrorMessage: '' })
       await this.loadKitchenOrders(false)
     } catch (err: unknown) {
       logger.error('Kitchen action failed', err)

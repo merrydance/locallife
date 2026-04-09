@@ -86,6 +86,9 @@ export interface DeliveryPromotionResponse {
     valid_from: string        // RFC3339
     valid_until: string       // RFC3339
     is_active: boolean
+    status_code: 'inactive' | 'expired' | 'scheduled' | 'active'
+    status_label: string
+    status_theme: DeliveryPromotionStatusTheme
     created_at: string
     updated_at?: string
 }
@@ -107,6 +110,62 @@ export interface UpdateDeliveryPromotionRequest {
     valid_from?: string
     valid_until?: string
     is_active?: boolean
+}
+
+export type DeliveryPromotionStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+
+export interface DeliveryPromotionStatusView {
+    label: string
+    theme: DeliveryPromotionStatusTheme
+    code: 'inactive' | 'expired' | 'scheduled' | 'active'
+}
+
+export function buildDeliveryPromotionStatusView(
+    promotion: Pick<DeliveryPromotionResponse, 'is_active' | 'valid_from' | 'valid_until'>,
+    now: Date = new Date()
+): DeliveryPromotionStatusView {
+    const promotionWithStatus = promotion as Partial<Pick<DeliveryPromotionResponse, 'status_code' | 'status_label' | 'status_theme'>>
+
+    if (promotionWithStatus.status_code && promotionWithStatus.status_label && promotionWithStatus.status_theme) {
+        return {
+            label: promotionWithStatus.status_label,
+            theme: promotionWithStatus.status_theme,
+            code: promotionWithStatus.status_code
+        }
+    }
+
+    const validUntil = new Date(promotion.valid_until)
+    const validFrom = new Date(promotion.valid_from)
+
+    if (!promotion.is_active) {
+        return {
+            label: '已停用',
+            theme: 'default',
+            code: 'inactive'
+        }
+    }
+
+    if (now > validUntil) {
+        return {
+            label: '已过期',
+            theme: 'danger',
+            code: 'expired'
+        }
+    }
+
+    if (now < validFrom) {
+        return {
+            label: '未开始',
+            theme: 'warning',
+            code: 'scheduled'
+        }
+    }
+
+    return {
+        label: '生效中',
+        theme: 'success',
+        code: 'active'
+    }
 }
 
 // ==================== 配送费管理服务类 ====================

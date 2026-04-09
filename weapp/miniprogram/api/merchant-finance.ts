@@ -300,6 +300,25 @@ export interface ApplymentStatusResponse {
   reject_reason?: string
 }
 
+const MERCHANT_APPLYMENT_ACTIVE_STATUSES = new Set(['active', 'finish'])
+const MERCHANT_APPLYMENT_SIGNING_STATUSES = new Set(['to_be_signed', 'signing', 'need_sign'])
+
+export function getMerchantApplymentStatusView(status?: string, statusDesc?: string, blockReason?: string) {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+  const isActivated = MERCHANT_APPLYMENT_ACTIVE_STATUSES.has(normalizedStatus)
+  const needsSign = MERCHANT_APPLYMENT_SIGNING_STATUSES.has(normalizedStatus)
+
+  return {
+    normalizedStatus,
+    isActivated,
+    needsSign,
+    statusDesc: statusDesc || '',
+    blockReason: blockReason || (needsSign
+      ? '收付通签约尚未完成，请先完成签约后再营业。'
+      : '营业前需要先完成收付通进件并激活账户。')
+  }
+}
+
 export type MerchantFinanceStatusTheme = 'success' | 'warning' | 'danger' | 'primary' | 'default'
 
 export function getMerchantAccountStatusView(status?: string, statusDesc?: string) {

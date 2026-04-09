@@ -1,150 +1,184 @@
-@import '../../../styles/merchant-config-shared.wxss';
-
 .page-container {
-  background-color: var(--td-bg-color-page);
   min-height: 100vh;
-  padding-bottom: calc(140rpx + var(--safe-area-bottom));
+  background: var(--td-bg-color-page);
 }
 
-.inline-banner {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin: 0 var(--spacer-lg) var(--spacer-md);
-  padding: 20rpx 24rpx;
-  border-radius: 18rpx;
-}
-
-.inline-banner-danger {
-  background: var(--td-error-color-1);
-}
-
-.inline-banner-success {
-  background: var(--td-success-color-1);
-}
-
-.inline-banner-text {
-  flex: 1;
-  font-size: 24rpx;
-  line-height: 1.6;
-  color: var(--td-text-color-primary);
-}
-
-.inline-banner-action {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  line-height: 1.6;
-  color: var(--td-brand-color);
-  font-weight: 600;
-}
-
-.hero-card {
-  margin: var(--spacer-sm) var(--spacer-lg) var(--spacer-md);
-}
-
-/* ==================== 列表 ==================== */
-
-.list-section {
-  padding: 0 var(--spacer-lg) calc(160rpx + var(--safe-area-bottom));
+.page-content {
   display: flex;
   flex-direction: column;
   gap: var(--spacer-md);
 }
 
-.promo-card {
-  background-color: var(--td-bg-color-container);
-  border-radius: var(--radius-lg);
-  padding: var(--spacer-md);
-  box-shadow: var(--shadow-sm);
-}
-
-.promo-header {
+.state-block {
+  min-height: 60vh;
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: var(--spacer-sm);
+  flex-direction: column;
+  gap: var(--spacer-md);
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--spacer-lg);
 }
 
-.promo-name-row {
+.page-notice {
+  border-radius: var(--radius-md);
+  overflow: hidden;
+}
+
+.result-bar {
   display: flex;
   align-items: center;
-  gap: 12rpx;
-  flex: 1;
-  flex-wrap: wrap;
+  justify-content: flex-start;
+  gap: var(--spacer-sm);
+  padding: 0 4rpx;
 }
 
-.promo-name {
-  font-size: var(--font-size-heading);
-  font-weight: 600;
+.result-summary {
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-primary);
+  font-weight: 600;
 }
 
-.promo-body {
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.promotion-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+}
+
+.promotion-card {
+  background: var(--td-bg-color-container);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+}
+
+.promotion-card-main {
+  display: flex;
+  flex-direction: column;
+}
+
+.promotion-content {
   display: flex;
   flex-direction: column;
   gap: 12rpx;
-  margin-bottom: var(--spacer-sm);
+  padding: var(--spacer-md);
 }
 
-.promo-rule {
+.promotion-header {
   display: flex;
   align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
+}
+
+.promotion-header-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
   gap: 8rpx;
 }
 
-.rule-text {
-  font-size: var(--font-size-sm);
+.promotion-name {
+  font-size: var(--font-size-heading);
+  line-height: 1.35;
+  font-weight: 700;
+  color: var(--td-text-color-primary);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+
+.promotion-desc {
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
   color: var(--td-text-color-secondary);
 }
 
-.rule-amount {
-  color: var(--td-error-color);
-  font-weight: 600;
+.promotion-switch-wrap {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
-.promo-date {
-  display: flex;
-  align-items: center;
-  gap: 8rpx;
-}
-
-.date-text {
-  font-size: var(--font-size-xs);
-  color: var(--td-text-color-placeholder);
-}
-
-.promo-footer {
+.promotion-meta-row {
   display: flex;
   flex-direction: column;
-  margin-top: 12rpx;
-  gap: 16rpx;
+  gap: 10rpx;
 }
 
-.promo-action-hint {
+.promotion-price-row,
+.promotion-tag-row,
+.promotion-date-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.meta-label {
   font-size: var(--font-size-xs);
-  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.meta-divider {
+  font-size: var(--font-size-xs);
   color: var(--td-text-color-placeholder);
 }
 
-.promo-actions {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 16rpx;
+.meta-value {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
 }
 
-/* ==================== 弹窗表单 ==================== */
-
-.form-row {
-  gap: var(--spacer-md);
+.price-value {
+  font-size: var(--font-size-title);
+  line-height: 1;
+  color: var(--td-brand-color);
+  font-weight: 700;
 }
 
-.form-item {
-  margin-bottom: var(--spacer-md);
+.price-value--accent {
+  color: var(--td-error-color);
 }
 
-.form-item-row {
+.promotion-action-bar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacer-md);
+}
+
+.promotion-action-slot {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.promotion-action-button {
+  flex: 0 0 auto;
+}
+
+.dialog-content {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+@media (max-width: 420px) {
+  .promotion-action-bar {
+    padding: 0 var(--spacer-sm);
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
 }

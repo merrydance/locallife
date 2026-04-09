@@ -263,6 +263,15 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
     return '当前账号尚未完成开通，暂时无法使用该功能'
   }
 
+  if (
+    normalized.includes('收付通账户未激活') ||
+    normalized.includes('尚未开通收付通账户') ||
+    normalized.includes('完成进件签约') ||
+    normalized.includes('完成进件流程')
+  ) {
+    return '请先完成收付通进件并激活账户后再恢复营业'
+  }
+
   if (normalized.includes('wallet account not bound')) {
     return '请先绑定提现账户后再申请提现'
   }

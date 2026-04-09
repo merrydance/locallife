@@ -40,17 +40,27 @@
               <view class="hero-title-row">
                 <view class="hero-title-main">
                   <text class="hero-title">{{activeMerchant.name || '商户中心'}}</text>
-                  <t-tag
-                    size="small"
-                    shape="round"
-                    variant="dark"
-                    theme="{{isOpen ? 'success' : 'warning'}}"
-                  >
-                    {{isOpen ? '营业中' : '休息中'}}
-                  </t-tag>
                 </view>
-                <text class="hero-period">{{monthRangeLabel}}</text>
+                <view class="hero-meta-row">
+                  <text class="hero-period">{{monthRangeLabel}}</text>
+                    <view class="hero-refresh-trigger {{isPageSyncing ? 'is-syncing' : ''}}" bind:tap="onManualRefresh">
+                      <t-icon name="refresh" size="36rpx" color="var(--td-text-color-secondary)" />
+                    </view>
+                </view>
               </view>
+
+                <view class="hero-status-row">
+                  <view class="hero-status-control">
+                    <text class="hero-status-text">{{isOpen ? '营业中' : '打烊中'}}</text>
+                    <t-switch
+                      value="{{isOpen}}"
+                      size="medium"
+                      loading="{{openStatusSubmitting}}"
+                      disabled="{{isPageSyncing}}"
+                      bind:change="onOpenStatusSwitchChange"
+                    />
+                  </view>
+                </view>
             </view>
           </view>
 

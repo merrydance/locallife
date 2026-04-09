@@ -1,39 +1,23 @@
-import dayjs from 'dayjs'
+import { getStableBarHeights } from '../../../utils/responsive'
 import {
-  createMerchantDiscountRule,
+  buildMerchantDiscountRuleStatusView,
   deleteMerchantDiscountRule,
-  getMyMerchantProfile,
   listMerchantDiscountRules,
-  MerchantDiscountRuleResponse,
+  type MerchantDiscountRuleResponse,
   updateMerchantDiscountRule
 } from '../../../api/merchant'
-import { logger } from '../../../utils/logger'
-import { getStableBarHeights } from '../../../utils/responsive'
-import { getErrorUserMessage } from '../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
-
-type DiscountStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+import { logger } from '../../../utils/logger'
+import { syncCurrentMerchantContext } from '../../../utils/current-merchant'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
 interface DiscountRuleView extends MerchantDiscountRuleResponse {
-  min_order_amount_text: string
-  discount_amount_text: string
-  valid_range_text: string
-  stacking_text: string
-  status_label: string
-  status_theme: DiscountStatusTheme
-}
-
-interface DiscountRuleFormData {
-  name: string
-  description: string
   min_order_amount_yuan: string
   discount_amount_yuan: string
-  can_stack_with_voucher: boolean
-  can_stack_with_membership: boolean
-  stacking_group: string
-  valid_from: string
-  valid_until: string
-  is_active: boolean
+  valid_range_text: string
+  stacking_text: string
+  statusPending: boolean
+  deletePending: boolean
 }
 
 interface DiscountRulePageChunk {
@@ -53,100 +37,56 @@ const DISCOUNT_RULES_PAGE_SIZE = 50
 const DISCOUNT_RULES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 function formatAmount(amount: number) {
-  return `¥${(amount / 100).toFixed(2)}`
+  return (amount / 100).toFixed(2)
 }
 
-function toRFC3339Start(date: string) {
-  return `${date}T00:00:00+08:00`
-}
-
-function toRFC3339End(date: string) {
-  return `${date}T23:59:59+08:00`
-}
-
-function defaultFormData(): DiscountRuleFormData {
-  return {
-    name: '',
-    description: '',
-    min_order_amount_yuan: '',
-    discount_amount_yuan: '',
-    can_stack_with_voucher: false,
-    can_stack_with_membership: false,
-    stacking_group: '',
-    valid_from: '',
-    valid_until: '',
-    is_active: true
-  }
-}
-
-function buildStatus(rule: MerchantDiscountRuleResponse) {
-  const now = dayjs()
-  const validFrom = dayjs(rule.valid_from)
-  const validUntil = dayjs(rule.valid_until)
-
-  if (!rule.is_active) {
-    return { label: '已停用', theme: 'default' as DiscountStatusTheme }
-  }
-  if (validUntil.isValid() && now.isAfter(validUntil)) {
-    return { label: '已过期', theme: 'danger' as DiscountStatusTheme }
-  }
-  if (validFrom.isValid() && now.isBefore(validFrom)) {
-    return { label: '未开始', theme: 'warning' as DiscountStatusTheme }
-  }
-  return { label: '生效中', theme: 'success' as DiscountStatusTheme }
+function formatDate(date: string) {
+  return String(date || '').slice(0, 10)
 }
 
 function buildStackingText(rule: MerchantDiscountRuleResponse) {
-  const tags: string[] = []
-  if (rule.can_stack_with_voucher) tags.push('可叠加代金券')
-  if (rule.can_stack_with_membership) tags.push('可叠加会员权益')
-  if (rule.stacking_group) tags.push(`分组 ${rule.stacking_group}`)
-  return tags.length ? tags.join(' · ') : '默认不与其他优惠叠加'
+  const parts: string[] = []
+
+  if (rule.can_stack_with_voucher) {
+    parts.push('可叠加代金券')
+  }
+  if (rule.can_stack_with_membership) {
+    parts.push('可叠加会员权益')
+  }
+  if (rule.stacking_group) {
+    parts.push(`分组 ${rule.stacking_group}`)
+  }
+
+  return parts.length ? parts.join(' · ') : '默认不与其他优惠叠加'
 }
 
 function buildRuleView(rule: MerchantDiscountRuleResponse): DiscountRuleView {
-  const status = buildStatus(rule)
+  const statusView = buildMerchantDiscountRuleStatusView(rule)
+
   return {
     ...rule,
-    min_order_amount_text: formatAmount(rule.min_order_amount),
-    discount_amount_text: formatAmount(rule.discount_amount),
-    valid_range_text: `${dayjs(rule.valid_from).format('YYYY-MM-DD')} 至 ${dayjs(rule.valid_until).format('YYYY-MM-DD')}`,
+    status_code: statusView.code,
+    status_label: statusView.label,
+    status_theme: statusView.theme,
+    min_order_amount_yuan: formatAmount(rule.min_order_amount),
+    discount_amount_yuan: formatAmount(rule.discount_amount),
+    valid_range_text: `${formatDate(rule.valid_from)} 至 ${formatDate(rule.valid_until)}`,
     stacking_text: buildStackingText(rule),
-    status_label: status.label,
-    status_theme: status.theme
+    statusPending: false,
+    deletePending: false
   }
 }
 
-function toFormData(rule: MerchantDiscountRuleResponse): DiscountRuleFormData {
+function buildResultSummaryText(visibleCount: number) {
+  return `当前已加载 ${visibleCount} 条满减规则`
+}
+
+function buildPresentationUpdate(rules: DiscountRuleView[]) {
   return {
-    name: rule.name,
-    description: rule.description || '',
-    min_order_amount_yuan: (rule.min_order_amount / 100).toFixed(2),
-    discount_amount_yuan: (rule.discount_amount / 100).toFixed(2),
-    can_stack_with_voucher: rule.can_stack_with_voucher,
-    can_stack_with_membership: rule.can_stack_with_membership,
-    stacking_group: rule.stacking_group || '',
-    valid_from: dayjs(rule.valid_from).format('YYYY-MM-DD'),
-    valid_until: dayjs(rule.valid_until).format('YYYY-MM-DD'),
-    is_active: rule.is_active
+    rules,
+    resultSummaryText: buildResultSummaryText(rules.length),
+    emptyDescription: '当前还没有满减规则，先新增一个'
   }
-}
-
-function upsertRuleView(rules: DiscountRuleView[], rule: MerchantDiscountRuleResponse) {
-  const nextRule = buildRuleView(rule)
-  const index = rules.findIndex((item) => item.id === nextRule.id)
-
-  if (index === -1) {
-    return [nextRule, ...rules]
-  }
-
-  const nextRules = [...rules]
-  nextRules[index] = nextRule
-  return nextRules
-}
-
-function removeRuleView(rules: DiscountRuleView[], ruleId: number) {
-  return rules.filter((item) => item.id !== ruleId)
 }
 
 function appendRuleViews(existingRules: DiscountRuleView[], incomingRules: DiscountRuleView[]) {
@@ -169,23 +109,29 @@ function appendRuleViews(existingRules: DiscountRuleView[], incomingRules: Disco
   return merged
 }
 
+function upsertRuleView(rules: DiscountRuleView[], rule: MerchantDiscountRuleResponse) {
+  const nextRule = buildRuleView(rule)
+  const index = rules.findIndex((item) => item.id === nextRule.id)
+
+  if (index === -1) {
+    return [nextRule, ...rules]
+  }
+
+  const nextRules = [...rules]
+  nextRules[index] = nextRule
+  return nextRules
+}
+
+function removeRuleView(rules: DiscountRuleView[], ruleId: number) {
+  return rules.filter((item) => item.id !== ruleId)
+}
+
 function hasReliableTotal(total: number | undefined, loadedCount: number) {
   return typeof total === 'number' && total > loadedCount
 }
 
 function normalizeTotal(total: number | undefined, fallback: number) {
   return typeof total === 'number' && total >= 0 ? total : fallback
-}
-
-function resolveHasMore(total: number | undefined, loadedCount: number, pageSize: number, lastPageLength: number) {
-  // Some adjacent backend list APIs return the current page length in total.
-  // Only trust total when it clearly exceeds what is already loaded.
-  const trustedTotal = hasReliableTotal(total, loadedCount) ? total : undefined
-  if (typeof trustedTotal === 'number') {
-    return loadedCount < trustedTotal
-  }
-
-  return lastPageLength >= pageSize
 }
 
 function resolveTargetPageCount(pageId: number, pageSize: number, visibleCount: number) {
@@ -198,7 +144,13 @@ function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
 }
 
-const getErrorMessage = getErrorUserMessage
+function buildEditPageUrl(ruleId?: number) {
+  if (ruleId && ruleId > 0) {
+    return `/pages/merchant/discount-rules/edit/index?id=${ruleId}`
+  }
+
+  return '/pages/merchant/discount-rules/edit/index'
+}
 
 Page({
   data: {
@@ -209,16 +161,14 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
-    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     loadingMore: false,
-    submitting: false,
-    actingRuleId: 0,
-    actingRuleAction: '',
+    rules: [] as DiscountRuleView[],
+    resultSummaryText: '当前已加载 0 条满减规则',
+    emptyDescription: '当前还没有满减规则，先新增一个',
     merchantId: 0,
     lastLoadedAt: 0,
-    rules: [] as DiscountRuleView[],
     pageId: 0,
     pageSize: DISCOUNT_RULES_PAGE_SIZE,
     total: 0,
@@ -227,10 +177,11 @@ Page({
     lookaheadPageId: 0,
     lookaheadPageSize: DISCOUNT_RULES_PAGE_SIZE,
     lookaheadTotal: 0,
-    formVisible: false,
-    isEdit: false,
-    editId: 0,
-    form: defaultFormData()
+    needsReloadOnShow: false,
+    deleteDialogVisible: false,
+    deleteDialogSubmitting: false,
+    deleteDialogRuleId: 0,
+    deleteDialogRuleName: ''
   },
 
   async onLoad() {
@@ -243,12 +194,13 @@ Page({
       accessDenied: accessResult.status === 'denied',
       accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
     })
+
     if (accessResult.status !== 'granted') {
       this.setData({ initialLoading: false })
       return
     }
 
-    this.loadPageData(true, true)
+    await this.loadPageData(true, true)
   },
 
   onRetryAccess() {
@@ -260,26 +212,50 @@ Page({
       initialError: false,
       initialErrorMessage: ''
     })
-    this.onLoad()
+    void this.onLoad()
   },
 
-  onShow() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    if (
-      this.data.merchantId > 0
-      && !this.data.initialLoading
-      && !this.data.submitting
-      && !this.data.loadingMore
-      && !this.data.actingRuleId
-      && shouldAutoRefresh(this.data.lastLoadedAt, DISCOUNT_RULES_AUTO_REFRESH_WINDOW_MS)
-    ) {
-      void this.loadRules(false)
+  async onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
+    if (this.data.initialLoading || this.data.loading || this.data.loadingMore || this.data.deleteDialogSubmitting) {
+      return
+    }
+
+    const needsReloadOnShow = !!this.data.needsReloadOnShow
+    if (needsReloadOnShow) {
+      this.setData({ needsReloadOnShow: false })
+    }
+
+    const merchantChanged = await this.syncMerchantContext()
+    if (merchantChanged === null) {
+      return
+    }
+
+    if (merchantChanged) {
+      await this.loadRules(true, true)
+      return
+    }
+
+    if (needsReloadOnShow && this.data.merchantId > 0) {
+      await this.loadRules(false, true)
+      return
+    }
+
+    if (this.data.merchantId > 0 && shouldAutoRefresh(this.data.lastLoadedAt, DISCOUNT_RULES_AUTO_REFRESH_WINDOW_MS)) {
+      await this.loadRules(false)
     }
   },
 
   onPullDownRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    this.loadPageData(false, true)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    void this.loadPageData(false, true)
   },
 
   onRetry() {
@@ -288,67 +264,98 @@ Page({
       return
     }
 
-    if (!this.data.accessReady || this.data.accessDenied) return
-    this.loadPageData(true, true)
+    if (!this.data.accessReady || this.data.accessDenied) {
+      return
+    }
+
+    void this.loadPageData(true, true)
   },
 
   onRetryRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    this.loadPageData(false, true)
-  },
-
-  onReachBottom() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    void this.onLoadMore()
-  },
-
-  async ensureMerchantId() {
-    if (this.data.merchantId > 0) {
-      return this.data.merchantId
-    }
-
-    try {
-      const cached = wx.getStorageSync('current_merchant') as { id?: number, merchant_id?: number } | null
-      const cachedMerchantId = Number(cached?.id || cached?.merchant_id || 0)
-      if (cachedMerchantId > 0) {
-        this.setData({ merchantId: cachedMerchantId })
-        return cachedMerchantId
-      }
-
-      const profile = await getMyMerchantProfile()
-      const merchantId = Number(profile.id || 0)
-      if (merchantId > 0) {
-        this.setData({ merchantId })
-        return merchantId
-      }
-
-      throw new Error('invalid merchant id')
-    } catch (err) {
-      logger.error('Init merchant discount rules context failed', err)
-      this.setData({
-        initialLoading: false,
-        initialError: true,
-        initialErrorMessage: getErrorMessage(err, '获取商户信息失败，请重试'),
-        refreshErrorMessage: ''
-      })
-      return 0
-    }
-  },
-
-  async loadPageData(showLoading = true, force = false) {
-    const merchantId = await this.ensureMerchantId()
-    if (!merchantId) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
       wx.stopPullDownRefresh()
       return
     }
 
-    await this.loadRules(showLoading, force)
+    void this.loadPageData(false, true)
+  },
+
+  onReachBottom() {
+    void this.onLoadMore()
+  },
+
+  async syncMerchantContext(): Promise<boolean | null> {
+    try {
+      const context = await syncCurrentMerchantContext({ currentMerchantId: this.data.merchantId })
+
+      if (context.changed) {
+        this.setData({
+          merchantId: context.merchantId,
+          lastLoadedAt: 0,
+          pageId: 0,
+          total: 0,
+          hasMore: false,
+          lookaheadRules: [],
+          lookaheadPageId: 0,
+          lookaheadPageSize: DISCOUNT_RULES_PAGE_SIZE,
+          lookaheadTotal: 0,
+          initialLoading: true,
+          initialError: false,
+          initialErrorMessage: '',
+          refreshErrorMessage: '',
+          needsReloadOnShow: false,
+          deleteDialogVisible: false,
+          deleteDialogSubmitting: false,
+          deleteDialogRuleId: 0,
+          deleteDialogRuleName: '',
+          ...buildPresentationUpdate([])
+        })
+        return true
+      }
+
+      if (context.merchantId !== this.data.merchantId) {
+        this.setData({ merchantId: context.merchantId })
+      }
+
+      return false
+    } catch (err) {
+      logger.error('Sync merchant discount rules context failed', err)
+      const message = getErrorUserMessage(err, '获取商户信息失败，请重试')
+
+      if (!this.data.lastLoadedAt && !this.data.rules.length) {
+        this.setData({
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message,
+          refreshErrorMessage: ''
+        })
+      } else {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+      }
+
+      return null
+    }
+  },
+
+  async loadPageData(showLoading = true, force = false) {
+    const merchantChanged = await this.syncMerchantContext()
+    if (merchantChanged === null) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    if (!this.data.merchantId) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    await this.loadRules(showLoading, force || merchantChanged)
   },
 
   async fetchRulePage(pageNumber: number, requestedPageSize = DISCOUNT_RULES_PAGE_SIZE): Promise<DiscountRulePageChunk> {
     const response = await listMerchantDiscountRules(this.data.merchantId, pageNumber, requestedPageSize)
     return {
-      rules: (response.rules || []).map(buildRuleView),
+      rules: (Array.isArray(response.rules) ? response.rules : []).map(buildRuleView),
       pageId: response.page_id || pageNumber,
       pageSize: response.page_size || requestedPageSize || DISCOUNT_RULES_PAGE_SIZE,
       total: typeof response.total === 'number' && response.total >= 0 ? response.total : undefined
@@ -464,7 +471,10 @@ Page({
   },
 
   async loadRules(showLoading = true, force = false) {
-    if (this.data.loading || !this.data.merchantId) return
+    if (this.data.loading || !this.data.merchantId) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     const hasConfirmedData = this.data.rules.length > 0 || this.data.lastLoadedAt > 0
     if (!force && hasConfirmedData && !shouldAutoRefresh(this.data.lastLoadedAt, DISCOUNT_RULES_AUTO_REFRESH_WINDOW_MS)) {
@@ -483,9 +493,9 @@ Page({
           }
         : hasConfirmedData
           ? {
-            initialError: false,
-            initialErrorMessage: '',
-            refreshErrorMessage: ''
+              initialError: false,
+              initialErrorMessage: '',
+              refreshErrorMessage: ''
             }
           : {})
     })
@@ -496,8 +506,9 @@ Page({
         resolveTargetPageCount(this.data.pageId, this.data.pageSize || DISCOUNT_RULES_PAGE_SIZE, minimumVisibleCount),
         minimumVisibleCount
       )
+
       this.setData({
-        rules: result.rules,
+        ...buildPresentationUpdate(result.rules),
         pageId: result.pageId,
         pageSize: result.pageSize,
         total: result.total,
@@ -514,7 +525,7 @@ Page({
       })
     } catch (err) {
       logger.error('Load merchant discount rules failed', err)
-      const message = getErrorMessage(err, '加载满减规则失败，请稍后重试')
+      const message = getErrorUserMessage(err, '加载满减规则失败，请稍后重试')
 
       if (this.data.initialLoading || !hasConfirmedData) {
         this.setData({
@@ -524,11 +535,7 @@ Page({
           refreshErrorMessage: ''
         })
       } else {
-        this.setData({
-          refreshErrorMessage: this.data.actionNoticeMessage
-            ? `${message}，当前仍显示本页已更新结果`
-            : `${message}，当前已保留上次同步结果`
-        })
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       }
     } finally {
       this.setData({ loading: false })
@@ -537,8 +544,11 @@ Page({
   },
 
   async onLoadMore() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    if (this.data.loading || this.data.loadingMore || !this.data.merchantId || !this.data.hasMore) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
+    if (this.data.loading || this.data.loadingMore || !this.data.merchantId || !this.data.hasMore || this.data.deleteDialogSubmitting) {
       return
     }
 
@@ -552,7 +562,7 @@ Page({
       const pagination = await this.resolveRulePageBoundary(nextChunk, mergedRules.length)
 
       this.setData({
-        rules: mergedRules,
+        ...buildPresentationUpdate(mergedRules),
         pageId: nextChunk.pageId,
         pageSize: nextChunk.pageSize,
         total: Math.max(pagination.total, mergedRules.length),
@@ -569,231 +579,177 @@ Page({
       })
     } catch (err) {
       logger.error('Load more merchant discount rules failed', err)
-      wx.showToast({ title: getErrorMessage(err, '加载更多失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(err, '加载更多失败，请稍后重试'), icon: 'none' })
     } finally {
       this.setData({ loadingMore: false })
     }
   },
 
   onAddRule() {
-    if (this.data.actingRuleId || this.data.submitting) return
+    if (this.data.deleteDialogSubmitting || this.data.loading) {
+      return
+    }
 
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      formVisible: true,
-      isEdit: false,
-      editId: 0,
-      form: defaultFormData()
+    this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
+
+    wx.navigateTo({
+      url: buildEditPageUrl(),
+      fail: (err) => {
+        logger.error('Navigate to discount rule create page failed', err)
+        this.setData({ needsReloadOnShow: false })
+        wx.showToast({ title: '打开新建页失败，请稍后重试', icon: 'none' })
+      }
     })
   },
 
   onEditRule(e: WechatMiniprogram.TouchEvent) {
-    if (this.data.actingRuleId || this.data.submitting) return
-
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-    const rule = this.data.rules.find((item) => item.id === id)
-    if (!rule) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      formVisible: true,
-      isEdit: true,
-      editId: id,
-      form: toFormData(rule)
-    })
-  },
-
-  onCloseForm() {
-    this.setData({ formVisible: false })
-  },
-
-  onTextInput(e: WechatMiniprogram.Input) {
-    const { field } = e.currentTarget.dataset as { field?: keyof DiscountRuleFormData }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: e.detail.value
-    })
-  },
-
-  onDateChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const { field } = e.currentTarget.dataset as { field?: 'valid_from' | 'valid_until' }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: e.detail.value
-    })
-  },
-
-  onSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
-    const { field } = e.currentTarget.dataset as { field?: 'can_stack_with_voucher' | 'can_stack_with_membership' | 'is_active' }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: Boolean(e.detail.value)
-    })
-  },
-
-  validateForm() {
-    const { form } = this.data
-    const minOrderAmount = Number(form.min_order_amount_yuan)
-    const discountAmount = Number(form.discount_amount_yuan)
-
-    if (!form.name.trim()) return '请填写规则名称'
-    if (!Number.isFinite(minOrderAmount) || minOrderAmount <= 0) return '请输入有效的门槛金额'
-    if (!Number.isFinite(discountAmount) || discountAmount <= 0) return '请输入有效的优惠金额'
-    if (discountAmount >= minOrderAmount) return '优惠金额需小于门槛金额'
-    if (!form.valid_from) return '请选择开始日期'
-    if (!form.valid_until) return '请选择结束日期'
-    if (form.valid_until < form.valid_from) return '结束日期不能早于开始日期'
-    return ''
-  },
-
-  async onSubmitForm() {
-    if (this.data.submitting) return
-
-    const errorMessage = this.validateForm()
-    if (errorMessage) {
-      wx.showToast({ title: errorMessage, icon: 'none' })
+    if (this.data.deleteDialogSubmitting || this.data.loading) {
       return
     }
 
-    this.setData({ submitting: true })
-    wx.showLoading({ title: '保存中...' })
+    const id = Number((e.currentTarget.dataset as { id?: number | string }).id || 0)
+    const rule = this.data.rules.find((item) => item.id === id)
+    if (!rule || rule.statusPending || rule.deletePending) {
+      return
+    }
+
+    this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
+
+    wx.navigateTo({
+      url: buildEditPageUrl(id),
+      fail: (err) => {
+        logger.error('Navigate to discount rule edit page failed', err)
+        this.setData({ needsReloadOnShow: false })
+        wx.showToast({ title: '打开编辑页失败，请稍后重试', icon: 'none' })
+      }
+    })
+  },
+
+  onActionsCatch() {},
+
+  async onToggleRuleStatus(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const id = Number((e.currentTarget.dataset as { id?: number | string }).id || 0)
+    if (!id) {
+      return
+    }
+
+    const targetRule = this.data.rules.find((item) => item.id === id)
+    if (!targetRule || targetRule.statusPending || targetRule.deletePending) {
+      return
+    }
+
+    const targetActive = !!e.detail?.value
+    if (targetActive === targetRule.is_active) {
+      return
+    }
+
+    const pendingRules = this.data.rules.map((rule) => (
+      rule.id === id ? { ...rule, statusPending: true } : rule
+    ))
+
+    this.setData(buildPresentationUpdate(pendingRules))
+
     try {
-      const payload = {
-        name: this.data.form.name.trim(),
-        description: this.data.form.description.trim() || undefined,
-        min_order_amount: Math.round(Number(this.data.form.min_order_amount_yuan) * 100),
-        discount_amount: Math.round(Number(this.data.form.discount_amount_yuan) * 100),
-        can_stack_with_voucher: this.data.form.can_stack_with_voucher,
-        can_stack_with_membership: this.data.form.can_stack_with_membership,
-        stacking_group: this.data.form.stacking_group.trim() || undefined,
-        valid_from: toRFC3339Start(this.data.form.valid_from),
-        valid_until: toRFC3339End(this.data.form.valid_until)
-      }
+      const updatedRule = await updateMerchantDiscountRule(this.data.merchantId, id, {
+        is_active: targetActive
+      })
 
-      const wasEdit = this.data.isEdit
-      let savedRule: MerchantDiscountRuleResponse
-
-      if (this.data.isEdit && this.data.editId) {
-        savedRule = await updateMerchantDiscountRule(this.data.merchantId, this.data.editId, {
-          ...payload,
-          is_active: this.data.form.is_active
-        })
-      } else {
-        savedRule = await createMerchantDiscountRule(this.data.merchantId, payload)
-      }
-
-      const nextRules = upsertRuleView(this.data.rules, savedRule)
-      const nextTotal = Math.max(wasEdit ? this.data.total : this.data.total + 1, nextRules.length)
-
+      const nextRules = upsertRuleView(pendingRules, updatedRule)
       this.setData({
-        rules: nextRules,
-        total: nextTotal,
-        hasMore: resolveHasMore(nextTotal, nextRules.length, this.data.pageSize || DISCOUNT_RULES_PAGE_SIZE, 0),
-        lookaheadRules: [],
-        lookaheadPageId: 0,
-        lookaheadPageSize: this.data.pageSize || DISCOUNT_RULES_PAGE_SIZE,
-        lookaheadTotal: 0,
-        formVisible: false,
-        isEdit: false,
-        editId: 0,
-        form: defaultFormData(),
+        ...buildPresentationUpdate(nextRules),
+        total: Math.max(this.data.total, nextRules.length),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        actionNoticeMessage: wasEdit ? '满减规则已更新。' : '满减规则已创建。',
         refreshErrorMessage: '',
         lastLoadedAt: Date.now()
       })
-      void this.loadRules(false, true)
+      wx.showToast({ title: updatedRule.is_active ? '满减规则已启用' : '满减规则已停用', icon: 'none' })
     } catch (err) {
-      logger.error('Submit merchant discount rule failed', err)
-      wx.showToast({ title: getErrorMessage(err, this.data.isEdit ? '更新满减规则失败，请稍后重试' : '创建满减规则失败，请稍后重试'), icon: 'none' })
-    } finally {
-      this.setData({ submitting: false })
-      wx.hideLoading()
+      logger.error('Toggle merchant discount rule status failed', err)
+      const restoredRules = pendingRules.map((rule) => (
+        rule.id === id ? { ...targetRule, statusPending: false } : rule
+      ))
+      this.setData(buildPresentationUpdate(restoredRules))
+      wx.showToast({ title: getErrorUserMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
     }
   },
 
-  onToggleRuleStatus(e: WechatMiniprogram.TouchEvent) {
-    const { id, active } = e.currentTarget.dataset as { id?: number, active?: boolean }
-    if (!id || typeof active !== 'boolean' || this.data.actingRuleId) return
+  onRequestDeleteRule(e: WechatMiniprogram.TouchEvent) {
+    const dataset = e.currentTarget.dataset as { id?: number | string, name?: string }
+    const id = Number(dataset.id || 0)
+    if (!id || this.data.deleteDialogSubmitting) {
+      return
+    }
 
-    this.setData({ actingRuleId: id, actingRuleAction: 'toggle' })
-    updateMerchantDiscountRule(this.data.merchantId, id, { is_active: !active })
-      .then((updatedRule) => {
-        const nextRules = upsertRuleView(this.data.rules, updatedRule)
-        const nextTotal = Math.max(this.data.total, nextRules.length)
+    const rule = this.data.rules.find((item) => item.id === id)
+    if (!rule || rule.statusPending || rule.deletePending) {
+      return
+    }
 
-        this.setData({
-          rules: nextRules,
-          total: nextTotal,
-          hasMore: resolveHasMore(nextTotal, nextRules.length, this.data.pageSize || DISCOUNT_RULES_PAGE_SIZE, 0),
-          lookaheadRules: [],
-          lookaheadPageId: 0,
-          lookaheadPageSize: this.data.pageSize || DISCOUNT_RULES_PAGE_SIZE,
-          lookaheadTotal: 0,
-          initialLoading: false,
-          initialError: false,
-          initialErrorMessage: '',
-          actionNoticeMessage: updatedRule.is_active ? '满减规则已启用。' : '满减规则已停用。',
-          refreshErrorMessage: '',
-          lastLoadedAt: Date.now()
-        })
-        void this.loadRules(false, true)
-      })
-      .catch((err) => {
-        logger.error('Toggle merchant discount rule status failed', err)
-        wx.showToast({ title: getErrorMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
-      })
-      .finally(() => this.setData({ actingRuleId: 0, actingRuleAction: '' }))
+    this.setData({
+      deleteDialogVisible: true,
+      deleteDialogSubmitting: false,
+      deleteDialogRuleId: id,
+      deleteDialogRuleName: dataset.name || rule.name || ''
+    })
   },
 
-  onDeleteRule(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
-    if (!id || this.data.actingRuleId) return
-    wx.showModal({
-      title: '确认删除',
-      content: `删除「${name || '该规则'}」后不可恢复，确认继续吗？`,
-      confirmColor: '#e34d59',
-      success: async (res) => {
-        if (!res.confirm) return
-        this.setData({ actingRuleId: id, actingRuleAction: 'delete' })
-        try {
-          await deleteMerchantDiscountRule(this.data.merchantId, id)
-          const nextRules = removeRuleView(this.data.rules, id)
-          const nextTotal = Math.max(this.data.total - 1, nextRules.length, 0)
+  onCancelDeleteDialog() {
+    if (this.data.deleteDialogSubmitting) {
+      return
+    }
 
-          this.setData({
-            rules: nextRules,
-            total: nextTotal,
-            hasMore: resolveHasMore(nextTotal, nextRules.length, this.data.pageSize || DISCOUNT_RULES_PAGE_SIZE, 0),
-            lookaheadRules: [],
-            lookaheadPageId: 0,
-            lookaheadPageSize: this.data.pageSize || DISCOUNT_RULES_PAGE_SIZE,
-            lookaheadTotal: 0,
-            initialLoading: false,
-            initialError: false,
-            initialErrorMessage: '',
-            actionNoticeMessage: '满减规则已删除。',
-            refreshErrorMessage: '',
-            lastLoadedAt: Date.now()
-          })
-          void this.loadRules(false, true)
-        } catch (err) {
-          logger.error('Delete merchant discount rule failed', err)
-          wx.showToast({ title: getErrorMessage(err, '删除满减规则失败，请稍后重试'), icon: 'none' })
-        } finally {
-          this.setData({ actingRuleId: 0, actingRuleAction: '' })
-        }
-      }
+    this.setData({
+      deleteDialogVisible: false,
+      deleteDialogRuleId: 0,
+      deleteDialogRuleName: ''
     })
+  },
+
+  async onConfirmDeleteRule() {
+    if (this.data.deleteDialogSubmitting || !this.data.deleteDialogRuleId) {
+      return
+    }
+
+    const ruleId = this.data.deleteDialogRuleId
+    const pendingRules = this.data.rules.map((rule) => (
+      rule.id === ruleId ? { ...rule, deletePending: true } : rule
+    ))
+
+    this.setData({
+      ...buildPresentationUpdate(pendingRules),
+      deleteDialogSubmitting: true
+    })
+
+    try {
+      await deleteMerchantDiscountRule(this.data.merchantId, ruleId)
+      const nextRules = removeRuleView(pendingRules, ruleId)
+      this.setData({
+        ...buildPresentationUpdate(nextRules),
+        total: Math.max(this.data.total - 1, nextRules.length, 0),
+        deleteDialogVisible: false,
+        deleteDialogSubmitting: false,
+        deleteDialogRuleId: 0,
+        deleteDialogRuleName: '',
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
+      wx.showToast({ title: '满减规则已删除', icon: 'none' })
+      void this.loadRules(false, true)
+    } catch (err) {
+      logger.error('Delete merchant discount rule failed', err)
+      const restoredRules = pendingRules.map((rule) => (
+        rule.id === ruleId ? { ...rule, deletePending: false } : rule
+      ))
+      this.setData({
+        ...buildPresentationUpdate(restoredRules),
+        deleteDialogSubmitting: false
+      })
+      wx.showToast({ title: getErrorUserMessage(err, '删除满减规则失败，请稍后重试'), icon: 'none' })
+    }
   }
 })

@@ -1,101 +1,69 @@
-import dayjs from 'dayjs'
+import { getStableBarHeights } from '../../../../utils/responsive'
 import {
-  createMerchantRechargeRule,
+  buildMerchantRechargeRuleStatusView,
   deleteMerchantRechargeRule,
-  getMyMerchantProfile,
   listMerchantRechargeRules,
-  MerchantRechargeRuleResponse,
+  type MerchantRechargeRuleResponse,
   updateMerchantRechargeRule
 } from '../../../../api/merchant'
-import { logger } from '../../../../utils/logger'
-import { getStableBarHeights } from '../../../../utils/responsive'
-import { getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
+import { logger } from '../../../../utils/logger'
+import { syncCurrentMerchantContext } from '../../../../utils/current-merchant'
+import { getErrorUserMessage } from '../../../../utils/user-facing'
 
-type RuleStatusTheme = 'success' | 'warning' | 'danger' | 'default'
-
-interface RuleView extends MerchantRechargeRuleResponse {
-  recharge_amount_text: string
-  bonus_amount_text: string
-  total_amount_text: string
-  valid_range_text: string
-  status_label: string
-  status_theme: RuleStatusTheme
-}
-
-interface RuleFormData {
+interface RechargeRuleView extends MerchantRechargeRuleResponse {
   recharge_amount_yuan: string
   bonus_amount_yuan: string
-  valid_from: string
-  valid_until: string
-  is_active: boolean
+  total_amount_yuan: string
+  valid_range_text: string
+  statusPending: boolean
+  deletePending: boolean
 }
 
 const RECHARGE_RULES_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 function formatAmount(amount: number) {
-  return `¥${(amount / 100).toFixed(2)}`
+  return (amount / 100).toFixed(2)
 }
 
-function toRFC3339Start(date: string) {
-  return `${date}T00:00:00+08:00`
+function formatDate(date: string) {
+  return String(date || '').slice(0, 10)
 }
 
-function toRFC3339End(date: string) {
-  return `${date}T23:59:59+08:00`
-}
+function buildRuleView(rule: MerchantRechargeRuleResponse): RechargeRuleView {
+  const statusView = buildMerchantRechargeRuleStatusView(rule)
 
-function defaultFormData(): RuleFormData {
-  return {
-    recharge_amount_yuan: '',
-    bonus_amount_yuan: '',
-    valid_from: '',
-    valid_until: '',
-    is_active: true
-  }
-}
-
-function buildStatus(rule: MerchantRechargeRuleResponse) {
-  const now = dayjs()
-  const validFrom = dayjs(rule.valid_from)
-  const validUntil = dayjs(rule.valid_until)
-
-  if (!rule.is_active) {
-    return { label: '已停用', theme: 'default' as RuleStatusTheme }
-  }
-  if (validUntil.isValid() && now.isAfter(validUntil)) {
-    return { label: '已过期', theme: 'danger' as RuleStatusTheme }
-  }
-  if (validFrom.isValid() && now.isBefore(validFrom)) {
-    return { label: '未开始', theme: 'warning' as RuleStatusTheme }
-  }
-  return { label: '生效中', theme: 'success' as RuleStatusTheme }
-}
-
-function buildRuleView(rule: MerchantRechargeRuleResponse): RuleView {
-  const status = buildStatus(rule)
   return {
     ...rule,
-    recharge_amount_text: formatAmount(rule.recharge_amount),
-    bonus_amount_text: formatAmount(rule.bonus_amount),
-    total_amount_text: formatAmount(rule.recharge_amount + rule.bonus_amount),
-    valid_range_text: `${dayjs(rule.valid_from).format('YYYY-MM-DD')} 至 ${dayjs(rule.valid_until).format('YYYY-MM-DD')}`,
-    status_label: status.label,
-    status_theme: status.theme
+    status_code: statusView.code,
+    status_label: statusView.label,
+    status_theme: statusView.theme,
+    recharge_amount_yuan: formatAmount(rule.recharge_amount),
+    bonus_amount_yuan: formatAmount(rule.bonus_amount),
+    total_amount_yuan: formatAmount(rule.recharge_amount + rule.bonus_amount),
+    valid_range_text: `${formatDate(rule.valid_from)} 至 ${formatDate(rule.valid_until)}`,
+    statusPending: false,
+    deletePending: false
   }
 }
 
-function toFormData(rule: MerchantRechargeRuleResponse): RuleFormData {
+function buildResultSummaryText(visibleCount: number) {
+  return `当前共 ${visibleCount} 条充值规则`
+}
+
+function buildPresentationUpdate(rules: RechargeRuleView[]) {
   return {
-    recharge_amount_yuan: (rule.recharge_amount / 100).toFixed(2),
-    bonus_amount_yuan: (rule.bonus_amount / 100).toFixed(2),
-    valid_from: dayjs(rule.valid_from).format('YYYY-MM-DD'),
-    valid_until: dayjs(rule.valid_until).format('YYYY-MM-DD'),
-    is_active: rule.is_active
+    rules,
+    resultSummaryText: buildResultSummaryText(rules.length),
+    emptyDescription: '当前还没有充值规则，先新增一个'
   }
 }
 
-function upsertRuleView(rules: RuleView[], rule: MerchantRechargeRuleResponse) {
+function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
+  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
+}
+
+function upsertRuleView(rules: RechargeRuleView[], rule: MerchantRechargeRuleResponse) {
   const nextRule = buildRuleView(rule)
   const index = rules.findIndex((item) => item.id === nextRule.id)
 
@@ -108,15 +76,17 @@ function upsertRuleView(rules: RuleView[], rule: MerchantRechargeRuleResponse) {
   return nextRules
 }
 
-function removeRuleView(rules: RuleView[], ruleId: number) {
+function removeRuleView(rules: RechargeRuleView[], ruleId: number) {
   return rules.filter((item) => item.id !== ruleId)
 }
 
-function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
-  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
-}
+function buildEditPageUrl(ruleId?: number) {
+  if (ruleId && ruleId > 0) {
+    return `/pages/merchant/settings/recharge-rules/edit/index?id=${ruleId}`
+  }
 
-const getErrorMessage = getErrorUserMessage
+  return '/pages/merchant/settings/recharge-rules/edit/index'
+}
 
 Page({
   data: {
@@ -127,17 +97,18 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
-    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
-    submitting: false,
+    rules: [] as RechargeRuleView[],
+    resultSummaryText: '当前共 0 条充值规则',
+    emptyDescription: '当前还没有充值规则，先新增一个',
     merchantId: 0,
     lastLoadedAt: 0,
-    rules: [] as RuleView[],
-    formVisible: false,
-    isEdit: false,
-    editId: 0,
-    form: defaultFormData()
+    needsReloadOnShow: false,
+    deleteDialogVisible: false,
+    deleteDialogSubmitting: false,
+    deleteDialogRuleId: 0,
+    deleteDialogRuleName: ''
   },
 
   async onLoad() {
@@ -150,12 +121,13 @@ Page({
       accessDenied: accessResult.status === 'denied',
       accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
     })
+
     if (accessResult.status !== 'granted') {
       this.setData({ initialLoading: false })
       return
     }
 
-    this.loadPageData(true, true)
+    await this.loadPageData(true, true)
   },
 
   onRetryAccess() {
@@ -167,21 +139,50 @@ Page({
       initialError: false,
       initialErrorMessage: ''
     })
-    this.onLoad()
+    void this.onLoad()
   },
 
-  onShow() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    if (this.data.merchantId > 0 && !this.data.initialLoading && !this.data.submitting) {
-      if (shouldAutoRefresh(this.data.lastLoadedAt, RECHARGE_RULES_AUTO_REFRESH_WINDOW_MS)) {
-        this.loadRules(false)
-      }
+  async onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
+    if (this.data.initialLoading || this.data.loading || this.data.deleteDialogSubmitting) {
+      return
+    }
+
+    const needsReloadOnShow = !!this.data.needsReloadOnShow
+    if (needsReloadOnShow) {
+      this.setData({ needsReloadOnShow: false })
+    }
+
+    const merchantChanged = await this.syncMerchantContext()
+    if (merchantChanged === null) {
+      return
+    }
+
+    if (merchantChanged) {
+      await this.loadRules(true, true)
+      return
+    }
+
+    if (needsReloadOnShow && this.data.merchantId > 0) {
+      await this.loadRules(false, true)
+      return
+    }
+
+    if (this.data.merchantId > 0 && shouldAutoRefresh(this.data.lastLoadedAt, RECHARGE_RULES_AUTO_REFRESH_WINDOW_MS)) {
+      await this.loadRules(false)
     }
   },
 
   onPullDownRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    this.loadPageData(false, true)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    void this.loadPageData(false, true)
   },
 
   onRetry() {
@@ -190,63 +191,90 @@ Page({
       return
     }
 
-    if (!this.data.accessReady || this.data.accessDenied) return
-    this.loadPageData(true, true)
+    if (!this.data.accessReady || this.data.accessDenied) {
+      return
+    }
+
+    void this.loadPageData(true, true)
   },
 
   onRetryRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    this.loadPageData(false, true)
-  },
-
-  async ensureMerchantId() {
-    if (this.data.merchantId > 0) {
-      return this.data.merchantId
-    }
-
-    try {
-      const cached = wx.getStorageSync('current_merchant') as { id?: number, merchant_id?: number } | null
-      const cachedMerchantId = Number(cached?.id || cached?.merchant_id || 0)
-      if (cachedMerchantId > 0) {
-        this.setData({ merchantId: cachedMerchantId })
-        return cachedMerchantId
-      }
-
-      const profile = await getMyMerchantProfile()
-      const merchantId = Number(profile.id || 0)
-      if (merchantId > 0) {
-        this.setData({ merchantId })
-        return merchantId
-      }
-      throw new Error('invalid merchant id')
-    } catch (err) {
-      logger.error('Init merchant recharge rules context failed', err)
-      this.setData({
-        initialLoading: false,
-        initialError: true,
-        initialErrorMessage: getErrorMessage(err, '获取商户信息失败，请重试'),
-        refreshErrorMessage: ''
-      })
-      return 0
-    }
-  },
-
-  async loadPageData(showLoading = true, force = false) {
-    const merchantId = await this.ensureMerchantId()
-    if (!merchantId) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
       wx.stopPullDownRefresh()
       return
     }
 
-    await this.loadRules(showLoading, force)
+    void this.loadPageData(false, true)
+  },
+
+  async syncMerchantContext(): Promise<boolean | null> {
+    try {
+      const context = await syncCurrentMerchantContext({ currentMerchantId: this.data.merchantId })
+
+      if (context.changed) {
+        this.setData({
+          merchantId: context.merchantId,
+          lastLoadedAt: 0,
+          initialLoading: true,
+          initialError: false,
+          initialErrorMessage: '',
+          refreshErrorMessage: '',
+          needsReloadOnShow: false,
+          deleteDialogVisible: false,
+          deleteDialogSubmitting: false,
+          deleteDialogRuleId: 0,
+          deleteDialogRuleName: '',
+          ...buildPresentationUpdate([])
+        })
+        return true
+      }
+
+      if (context.merchantId !== this.data.merchantId) {
+        this.setData({ merchantId: context.merchantId })
+      }
+
+      return false
+    } catch (err) {
+      logger.error('Sync merchant recharge rules context failed', err)
+      const message = getErrorUserMessage(err, '获取商户信息失败，请重试')
+
+      if (!this.data.lastLoadedAt && !this.data.rules.length) {
+        this.setData({
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message,
+          refreshErrorMessage: ''
+        })
+      } else {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+      }
+
+      return null
+    }
+  },
+
+  async loadPageData(showLoading = true, force = false) {
+    const merchantChanged = await this.syncMerchantContext()
+    if (merchantChanged === null) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    if (!this.data.merchantId) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    await this.loadRules(showLoading, force || merchantChanged)
   },
 
   async loadRules(showLoading = true, force = false) {
-    if (this.data.loading || !this.data.merchantId) return
+    if (this.data.loading || !this.data.merchantId) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
-    const hasConfirmedData = this.data.lastLoadedAt > 0
-    const isSilentRefresh = !showLoading && hasConfirmedData
-
+    const hasConfirmedData = this.data.rules.length > 0 || this.data.lastLoadedAt > 0
     if (!force && hasConfirmedData && !shouldAutoRefresh(this.data.lastLoadedAt, RECHARGE_RULES_AUTO_REFRESH_WINDOW_MS)) {
       wx.stopPullDownRefresh()
       return
@@ -254,18 +282,28 @@ Page({
 
     this.setData({
       loading: true,
-      ...(showLoading
-        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
-        : isSilentRefresh
-          ? { refreshErrorMessage: '' }
+      ...(showLoading && !hasConfirmedData
+        ? {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          }
+        : hasConfirmedData
+          ? {
+              initialError: false,
+              initialErrorMessage: '',
+              refreshErrorMessage: ''
+            }
           : {})
     })
 
     try {
       const list = await listMerchantRechargeRules(this.data.merchantId)
       const rules = (Array.isArray(list) ? list : []).map(buildRuleView)
+
       this.setData({
-        rules,
+        ...buildPresentationUpdate(rules),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
@@ -274,7 +312,7 @@ Page({
       })
     } catch (err) {
       logger.error('Load merchant recharge rules failed', err)
-      const message = getErrorMessage(err, '加载充值规则失败，请稍后重试')
+      const message = getErrorUserMessage(err, '加载充值规则失败，请稍后重试')
 
       if (this.data.initialLoading || !hasConfirmedData) {
         this.setData({
@@ -293,191 +331,167 @@ Page({
   },
 
   onAddRule() {
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      formVisible: true,
-      isEdit: false,
-      editId: 0,
-      form: defaultFormData()
+    if (this.data.deleteDialogSubmitting || this.data.loading) {
+      return
+    }
+
+    this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
+
+    wx.navigateTo({
+      url: buildEditPageUrl(),
+      fail: (err) => {
+        logger.error('Navigate to recharge rule create page failed', err)
+        this.setData({ needsReloadOnShow: false })
+        wx.showToast({ title: '打开新建页失败，请稍后重试', icon: 'none' })
+      }
     })
   },
 
   onEditRule(e: WechatMiniprogram.TouchEvent) {
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-    const rule = this.data.rules.find((item) => item.id === id)
-    if (!rule) return
-
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      formVisible: true,
-      isEdit: true,
-      editId: id,
-      form: toFormData(rule)
-    })
-  },
-
-  onCloseForm() {
-    this.setData({ formVisible: false })
-  },
-
-  onTextInput(e: WechatMiniprogram.Input) {
-    const { field } = e.currentTarget.dataset as { field?: keyof RuleFormData }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: e.detail.value
-    })
-  },
-
-  onDateChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const { field } = e.currentTarget.dataset as { field?: 'valid_from' | 'valid_until' }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: e.detail.value
-    })
-  },
-
-  onSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      'form.is_active': Boolean(e.detail.value)
-    })
-  },
-
-  validateForm() {
-    const { form } = this.data
-    if (!form.recharge_amount_yuan || Number(form.recharge_amount_yuan) <= 0) return '请输入有效的充值金额'
-    if (!form.bonus_amount_yuan && form.bonus_amount_yuan !== '0') return '请输入赠送金额，没有赠送请填 0'
-    if (Number(form.bonus_amount_yuan) < 0) return '赠送金额不能小于 0'
-    if (!form.valid_from) return '请选择开始日期'
-    if (!form.valid_until) return '请选择结束日期'
-    if (form.valid_until < form.valid_from) return '结束日期不能早于开始日期'
-    return ''
-  },
-
-  async onSubmitForm() {
-    if (this.data.submitting) return
-
-    const errorMessage = this.validateForm()
-    if (errorMessage) {
-      wx.showToast({ title: errorMessage, icon: 'none' })
+    if (this.data.deleteDialogSubmitting || this.data.loading) {
       return
     }
 
-    this.setData({ submitting: true })
-    wx.showLoading({ title: '保存中...' })
+    const id = Number((e.currentTarget.dataset as { id?: number | string }).id || 0)
+    const rule = this.data.rules.find((item) => item.id === id)
+    if (!rule || rule.statusPending || rule.deletePending) {
+      return
+    }
+
+    this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
+
+    wx.navigateTo({
+      url: buildEditPageUrl(id),
+      fail: (err) => {
+        logger.error('Navigate to recharge rule edit page failed', err)
+        this.setData({ needsReloadOnShow: false })
+        wx.showToast({ title: '打开编辑页失败，请稍后重试', icon: 'none' })
+      }
+    })
+  },
+
+  onActionsCatch() {},
+
+  async onToggleRuleStatus(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const id = Number((e.currentTarget.dataset as { id?: number | string }).id || 0)
+    if (!id) {
+      return
+    }
+
+    const targetRule = this.data.rules.find((item) => item.id === id)
+    if (!targetRule || targetRule.statusPending || targetRule.deletePending) {
+      return
+    }
+
+    const targetActive = !!e.detail?.value
+    if (targetActive === targetRule.is_active) {
+      return
+    }
+
+    const pendingRules = this.data.rules.map((rule) => (
+      rule.id === id ? { ...rule, statusPending: true } : rule
+    ))
+
+    this.setData(buildPresentationUpdate(pendingRules))
+
     try {
-      const payload = {
-        recharge_amount: Math.round(Number(this.data.form.recharge_amount_yuan) * 100),
-        bonus_amount: Math.round(Number(this.data.form.bonus_amount_yuan) * 100),
-        valid_from: toRFC3339Start(this.data.form.valid_from),
-        valid_until: toRFC3339End(this.data.form.valid_until)
-      }
+      const updatedRule = await updateMerchantRechargeRule(this.data.merchantId, id, {
+        is_active: targetActive
+      })
 
-      const wasEdit = this.data.isEdit
-      let updatedRule: MerchantRechargeRuleResponse
-
-      if (wasEdit && this.data.editId) {
-        updatedRule = await updateMerchantRechargeRule(this.data.merchantId, this.data.editId, {
-          ...payload,
-          is_active: this.data.form.is_active
-        })
-      } else {
-        updatedRule = await createMerchantRechargeRule(this.data.merchantId, payload)
-      }
-
+      const nextRules = upsertRuleView(pendingRules, updatedRule)
       this.setData({
-        rules: upsertRuleView(this.data.rules, updatedRule),
-        formVisible: false,
-        isEdit: false,
-        editId: 0,
-        form: defaultFormData(),
+        ...buildPresentationUpdate(nextRules),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        actionNoticeMessage: wasEdit ? '充值规则已更新。' : '充值规则已创建。',
         refreshErrorMessage: '',
         lastLoadedAt: Date.now()
       })
-      void this.loadRules(false, true)
+      wx.showToast({ title: updatedRule.is_active ? '充值规则已启用' : '充值规则已停用', icon: 'none' })
     } catch (err) {
-      logger.error('Submit merchant recharge rule failed', err)
-      wx.showToast({ title: getErrorMessage(err, this.data.isEdit ? '更新充值规则失败，请稍后重试' : '创建充值规则失败，请稍后重试'), icon: 'none' })
-    } finally {
-      this.setData({ submitting: false })
-      wx.hideLoading()
+      logger.error('Toggle merchant recharge rule status failed', err)
+      const restoredRules = pendingRules.map((rule) => (
+        rule.id === id ? { ...targetRule, statusPending: false } : rule
+      ))
+      this.setData(buildPresentationUpdate(restoredRules))
+      wx.showToast({ title: getErrorUserMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
     }
   },
 
-  onToggleRuleStatus(e: WechatMiniprogram.TouchEvent) {
-    const { id, active } = e.currentTarget.dataset as { id?: number, active?: boolean }
-    if (!id || typeof active !== 'boolean') return
+  onRequestDeleteRule(e: WechatMiniprogram.TouchEvent) {
+    const dataset = e.currentTarget.dataset as { id?: number | string, name?: string }
+    const id = Number(dataset.id || 0)
+    if (!id || this.data.deleteDialogSubmitting) {
+      return
+    }
 
-    wx.showModal({
-      title: active ? '停用充值规则' : '启用充值规则',
-      content: `${active ? '停用后顾客将看不到该充值活动' : '启用后顾客可在会员充值入口看到该活动'}。`,
-      success: async (res) => {
-        if (!res.confirm) return
-        wx.showLoading({ title: '处理中...' })
-        try {
-          const updatedRule = await updateMerchantRechargeRule(this.data.merchantId, id, { is_active: !active })
-          this.setData({
-            rules: upsertRuleView(this.data.rules, updatedRule),
-            initialLoading: false,
-            initialError: false,
-            initialErrorMessage: '',
-            actionNoticeMessage: updatedRule.is_active ? '充值规则已启用。' : '充值规则已停用。',
-            refreshErrorMessage: '',
-            lastLoadedAt: Date.now()
-          })
-          void this.loadRules(false, true)
-        } catch (err) {
-          logger.error('Toggle merchant recharge rule status failed', err)
-          wx.showToast({ title: getErrorMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
-        } finally {
-          wx.hideLoading()
-        }
-      }
+    const rule = this.data.rules.find((item) => item.id === id)
+    if (!rule || rule.statusPending || rule.deletePending) {
+      return
+    }
+
+    this.setData({
+      deleteDialogVisible: true,
+      deleteDialogSubmitting: false,
+      deleteDialogRuleId: id,
+      deleteDialogRuleName: dataset.name || `充${rule.recharge_amount_yuan}赠${rule.bonus_amount_yuan}`
     })
   },
 
-  onDeleteRule(e: WechatMiniprogram.TouchEvent) {
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
+  onCancelDeleteDialog() {
+    if (this.data.deleteDialogSubmitting) {
+      return
+    }
 
-    wx.showModal({
-      title: '确认删除',
-      content: '删除后不可恢复，确认删除这条充值规则吗？',
-      confirmColor: '#e34d59',
-      success: async (res) => {
-        if (!res.confirm) return
-        wx.showLoading({ title: '删除中...' })
-        try {
-          await deleteMerchantRechargeRule(this.data.merchantId, id)
-          this.setData({
-            rules: removeRuleView(this.data.rules, id),
-            initialLoading: false,
-            initialError: false,
-            initialErrorMessage: '',
-            actionNoticeMessage: '充值规则已删除。',
-            refreshErrorMessage: '',
-            lastLoadedAt: Date.now()
-          })
-          void this.loadRules(false, true)
-        } catch (err) {
-          logger.error('Delete merchant recharge rule failed', err)
-          wx.showToast({ title: getErrorMessage(err, '删除充值规则失败，请稍后重试'), icon: 'none' })
-        } finally {
-          wx.hideLoading()
-        }
-      }
+    this.setData({
+      deleteDialogVisible: false,
+      deleteDialogRuleId: 0,
+      deleteDialogRuleName: ''
     })
+  },
+
+  async onConfirmDeleteRule() {
+    if (this.data.deleteDialogSubmitting || !this.data.deleteDialogRuleId) {
+      return
+    }
+
+    const ruleId = this.data.deleteDialogRuleId
+    const pendingRules = this.data.rules.map((rule) => (
+      rule.id === ruleId ? { ...rule, deletePending: true } : rule
+    ))
+
+    this.setData({
+      ...buildPresentationUpdate(pendingRules),
+      deleteDialogSubmitting: true
+    })
+
+    try {
+      await deleteMerchantRechargeRule(this.data.merchantId, ruleId)
+      const nextRules = removeRuleView(pendingRules, ruleId)
+      this.setData({
+        ...buildPresentationUpdate(nextRules),
+        deleteDialogVisible: false,
+        deleteDialogSubmitting: false,
+        deleteDialogRuleId: 0,
+        deleteDialogRuleName: '',
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
+      wx.showToast({ title: '充值规则已删除', icon: 'none' })
+    } catch (err) {
+      logger.error('Delete merchant recharge rule failed', err)
+      const restoredRules = pendingRules.map((rule) => (
+        rule.id === ruleId ? { ...rule, deletePending: false } : rule
+      ))
+      this.setData({
+        ...buildPresentationUpdate(restoredRules),
+        deleteDialogSubmitting: false
+      })
+      wx.showToast({ title: getErrorUserMessage(err, '删除充值规则失败，请稍后重试'), icon: 'none' })
+    }
   }
 })

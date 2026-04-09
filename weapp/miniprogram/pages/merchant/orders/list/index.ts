@@ -8,6 +8,12 @@ import {
 import { logger } from '../../../../utils/logger'
 import dayjs from 'dayjs'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
+import {
+  ensureMerchantConsoleAccess,
+  getMerchantConsoleAccessErrorMessage,
+  isMerchantConsoleAccessDenied,
+  isMerchantConsoleAccessGranted
+} from '../../../../utils/console-access'
 
 type OrderStatus = OrderResponse['status']
 type OrderStatusFilter = '' | OrderStatus
@@ -32,6 +38,7 @@ interface MerchantOrderListItem extends OrderResponse {
   can_reject: boolean
   can_mark_ready: boolean
   can_complete: boolean
+  show_passive_state: boolean
 }
 
 interface OrdersPageOptions {
@@ -49,9 +56,19 @@ const ORDER_TYPE_OPTIONS: OrderTypeOption[] = [
 
 const getErrorMessage = getErrorUserMessage
 
+interface LoadOrdersOptions {
+  showLoading?: boolean
+  preserveCurrent?: boolean
+}
+
+let orderListRequestPending = false
+
 Page({
   data: {
     navBarHeight: 88,
+    accessReady: false,
+    accessDenied: false,
+    accessErrorMessage: '',
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
@@ -67,7 +84,8 @@ Page({
     hasMore: true
   },
 
-  onLoad(options: OrdersPageOptions) {
+  async onLoad(options: OrdersPageOptions) {
+    orderListRequestPending = false
     const { navBarHeight } = getStableBarHeights()
     this.setData({
       navBarHeight,
@@ -75,30 +93,90 @@ Page({
       orderTypeFilter: options.order_type || '',
       pageTitle: '订单中心'
     })
-    this.loadOrders(true)
+    await this.initializePage()
   },
 
-  onShow() {
-    if (!this.data.initialLoading && !this.data.loading) {
-      this.loadOrders(true, false)
+  async onShow() {
+    if (this.data.initialLoading || this.data.loading) {
+      return
     }
+
+    const hasAccess = await this.syncAccessState()
+    if (!hasAccess) {
+      return
+    }
+
+    await this.loadOrders(true, {
+      showLoading: false,
+      preserveCurrent: this.data.orders.length > 0
+    })
   },
 
-  async loadOrders(reset = false, showLoading = true) {
-    if (this.data.loading) return
-    if (!reset && !this.data.hasMore) return
+  async initializePage() {
+    const hasAccess = await this.syncAccessState()
+    if (!hasAccess) {
+      wx.stopPullDownRefresh()
+      return false
+    }
 
-    const hasExistingOrders = this.data.orders.length > 0
-    const isSilentRefresh = reset && !showLoading && hasExistingOrders
+    return this.loadOrders(true)
+  },
+
+  async syncAccessState() {
+    const accessResult = await ensureMerchantConsoleAccess()
+    const accessGranted = isMerchantConsoleAccessGranted(accessResult)
 
     this.setData({
-      loading: true,
-      ...(showLoading
-        ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
-        : isSilentRefresh
+      accessReady: true,
+      accessDenied: isMerchantConsoleAccessDenied(accessResult),
+      accessErrorMessage: getMerchantConsoleAccessErrorMessage(accessResult),
+      ...(accessGranted
+        ? {}
+        : {
+            loading: false,
+            orders: [],
+            initialLoading: false,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: '',
+            page: 1,
+            hasMore: true
+          })
+    })
+
+    return accessGranted
+  },
+
+  async loadOrders(reset = false, options?: LoadOrdersOptions) {
+    if (orderListRequestPending) return false
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return false
+    if (!reset && !this.data.hasMore) return false
+
+    const hasExistingOrders = this.data.orders.length > 0
+    const preserveCurrent = !!options?.preserveCurrent && reset && hasExistingOrders
+    const showLoading = options?.showLoading !== false
+    const usePageLoading = reset && showLoading && !hasExistingOrders
+    const useListLoading = !reset && showLoading
+    const shouldToggleLoading = usePageLoading || useListLoading
+
+    orderListRequestPending = true
+
+    this.setData({
+      ...(shouldToggleLoading ? { loading: true } : {}),
+      ...(usePageLoading
+        ? {
+            initialLoading: true,
+            initialError: false,
+            initialErrorMessage: '',
+            refreshErrorMessage: ''
+          }
+        : showLoading
+          ? { initialError: false, initialErrorMessage: '', refreshErrorMessage: '' }
+          : preserveCurrent
           ? { refreshErrorMessage: '' }
           : {})
     })
+
     try {
       const page = reset ? 1 : this.data.page
       const res = await MerchantOrderManagementService.getOrderList({
@@ -119,22 +197,28 @@ Page({
         page: page + 1,
         hasMore: page * this.data.pageSize < (res.total || 0)
       })
+      return true
     } catch (err) {
       logger.error('Merchant load orders failed', err)
       const message = getErrorMessage(err, '订单加载失败，请稍后重试')
-      if (this.data.initialLoading) {
+      if (this.data.initialLoading || (!hasExistingOrders && reset)) {
         this.setData({
+          orders: [],
           initialLoading: false,
           initialError: true,
           initialErrorMessage: message
         })
-      } else if (isSilentRefresh) {
+      } else if (preserveCurrent || hasExistingOrders) {
         this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
         wx.showToast({ title: message, icon: 'none' })
       }
+      return false
     } finally {
-      this.setData({ loading: false })
+      orderListRequestPending = false
+      if (shouldToggleLoading && this.data.loading) {
+        this.setData({ loading: false })
+      }
       wx.stopPullDownRefresh()
     }
   },
@@ -150,12 +234,13 @@ Page({
       time_label: dayjs(order.created_at).format('HH:mm'),
       scene_label: scene.label,
       scene_value: scene.value,
-      status_hint_label: order.status_hint || this.getStatusHint(order),
+      status_hint_label: order.status_hint || OrderManagementAdapter.getMerchantOrderStatusHint(order),
       submitting: false,
       can_accept: OrderManagementAdapter.canAcceptOrder(order),
       can_reject: OrderManagementAdapter.canRejectOrder(order),
       can_mark_ready: OrderManagementAdapter.canMarkReady(order),
-      can_complete: OrderManagementAdapter.canCompleteOrder(order)
+      can_complete: OrderManagementAdapter.canCompleteOrder(order),
+      show_passive_state: OrderManagementAdapter.shouldShowPassiveState(order)
     }
   },
 
@@ -187,76 +272,111 @@ Page({
     }
   },
 
-  getStatusHint(order: OrderResponse) {
-    switch (order.status) {
-      case 'paid':
-        return '顾客已支付，建议尽快接单或拒单处理'
-      case 'preparing':
-        return '商户正在制作中，可在出餐后标记完成'
-      case 'ready':
-        return order.order_type === 'takeout' ? '等待骑手取餐或系统分配送力' : '等待顾客取餐或到店核销'
-      case 'courier_accepted':
-        return '骑手已接单，正在到店取餐'
-      case 'picked':
-        return '骑手已取餐，订单即将配送'
-      case 'delivering':
-        return '配送途中，请关注异常和超时情况'
-      case 'rider_delivered':
-        return '骑手已送达，等待顾客确认'
-      case 'user_delivered':
-        return '顾客已确认收货，系统即将完成订单'
-      case 'completed':
-        return '订单已完成履约'
-      case 'cancelled':
-        return order.cancel_reason || '订单已取消'
-      default:
-        return ''
+  async applyFilters(nextStatus: OrderStatusFilter, nextOrderType: OrderTypeFilter) {
+    if (this.data.loading) {
+      return
+    }
+
+    const previousPage = this.data.page
+    const previousHasMore = this.data.hasMore
+    const previousStatus = this.data.currentStatus
+    const previousOrderType = this.data.orderTypeFilter
+    const preserveCurrent = this.data.orders.length > 0
+
+    this.setData({
+      currentStatus: nextStatus,
+      orderTypeFilter: nextOrderType,
+      page: 1,
+      hasMore: true,
+      refreshErrorMessage: ''
+    })
+
+    const success = await this.loadOrders(true, {
+      showLoading: false,
+      preserveCurrent
+    })
+
+    if (!success) {
+      this.setData({
+        currentStatus: previousStatus,
+        orderTypeFilter: previousOrderType,
+        page: previousPage,
+        hasMore: previousHasMore
+      })
     }
   },
 
   onTabChange(e: WechatMiniprogram.CustomEvent<{ value: OrderStatusFilter }>) {
-    this.setData({
-      currentStatus: e.detail.value,
-      orders: [],
-      page: 1,
-      hasMore: true,
-      refreshErrorMessage: ''
-    }, () => {
-      this.loadOrders(true)
-    })
+    const nextStatus = e.detail.value
+    if (nextStatus === this.data.currentStatus) {
+      return
+    }
+
+    void this.applyFilters(nextStatus, this.data.orderTypeFilter)
   },
 
   onOrderTypeChange(e: WechatMiniprogram.TouchEvent) {
     const { value } = e.currentTarget.dataset as { value?: OrderTypeFilter }
-    this.setData({
-      orderTypeFilter: value || '',
-      orders: [],
-      page: 1,
-      hasMore: true,
-      refreshErrorMessage: ''
-    }, () => {
-      this.loadOrders(true)
-    })
+    const nextOrderType = value || ''
+    if (nextOrderType === this.data.orderTypeFilter) {
+      return
+    }
+
+    void this.applyFilters(this.data.currentStatus, nextOrderType)
   },
 
   onPullDownRefresh() {
-    this.loadOrders(true, false)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      void this.onRetryAccess()
+      return
+    }
+
+    void this.loadOrders(true, {
+      showLoading: false,
+      preserveCurrent: this.data.orders.length > 0
+    })
   },
 
   onReachBottom() {
-    this.loadOrders()
+    void this.loadOrders()
   },
 
   onLoadMore() {
-    this.loadOrders()
+    void this.loadOrders()
   },
 
   onRetry() {
-    this.loadOrders(true)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      void this.onRetryAccess()
+      return
+    }
+
+    void this.loadOrders(true)
   },
 
   onRetryRefresh() {
-    this.loadOrders(true, false)
+    void this.loadOrders(true, {
+      showLoading: false,
+      preserveCurrent: this.data.orders.length > 0
+    })
+  },
+
+  async onRetryAccess() {
+    this.setData({
+      accessReady: false,
+      accessDenied: false,
+      accessErrorMessage: '',
+      initialLoading: true,
+      initialError: false,
+      initialErrorMessage: '',
+      refreshErrorMessage: '',
+      loading: false,
+      orders: [],
+      page: 1,
+      hasMore: true
+    })
+
+    await this.initializePage()
   },
 
   onViewDetail(e: WechatMiniprogram.TouchEvent) {

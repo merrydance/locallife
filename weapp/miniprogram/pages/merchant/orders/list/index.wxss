@@ -3,16 +3,32 @@
   min-height: 100vh;
 }
 
+.page-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
+  padding: 0 var(--spacer-md);
+}
+
+.control-panel {
+  display: flex;
+  flex-direction: column;
+  background: var(--td-bg-color-page);
+}
+
 .tabs-container {
   background-color: var(--td-bg-color-container) !important;
   box-shadow: var(--shadow-sm);
+  border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  overflow: hidden;
 }
 
 .type-filter-strip {
   white-space: nowrap;
   background: var(--td-bg-color-container);
-  padding: 16rpx 16rpx 8rpx;
+  padding: 12rpx 16rpx 12rpx;
   box-shadow: var(--shadow-sm);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
 }
 
 .type-filter-row {
@@ -41,7 +57,7 @@
 }
 
 .list-section {
-  padding: 24rpx 16rpx;
+  padding: var(--spacer-sm) 0;
 }
 
 .order-card {

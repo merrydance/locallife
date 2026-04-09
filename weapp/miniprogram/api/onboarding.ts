@@ -61,6 +61,155 @@ export interface IDCardOCRData extends BaseOCRData {
 
 export type ApplicationStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 
+export interface MerchantApplicationStatusView {
+  statusCode: string
+  tagText: string
+  tagTheme: 'primary' | 'success' | 'warning' | 'danger'
+  badgeText: string
+  guideText: string
+  editTip: string
+  canEdit: boolean
+  canSubmit: boolean
+  canReset: boolean
+}
+
+export interface MerchantApplicationOCRStatusView {
+  statusCode: string
+  text: string
+  isPending: boolean
+  isReady: boolean
+  isFailed: boolean
+}
+
+export function buildMerchantApplicationStatusView(status?: ApplicationStatus | string): MerchantApplicationStatusView {
+  const normalizedStatus = String(status || 'draft').trim().toLowerCase() || 'draft'
+
+  switch (normalizedStatus) {
+    case 'submitted':
+      return {
+        statusCode: normalizedStatus,
+        tagText: '审核中',
+        tagTheme: 'warning',
+        badgeText: '审核',
+        guideText: '申请已提交，审核通过后继续完成收付通进件。',
+        editTip: '当前状态不可编辑',
+        canEdit: false,
+        canSubmit: false,
+        canReset: false
+      }
+    case 'approved':
+      return {
+        statusCode: normalizedStatus,
+        tagText: '已通过',
+        tagTheme: 'success',
+        badgeText: '通过',
+        guideText: '主体已通过，可继续完成收付通进件和签约。',
+        editTip: '已通过申请如需修改，保存或上传后会自动回到草稿状态',
+        canEdit: true,
+        canSubmit: true,
+        canReset: false
+      }
+    case 'rejected':
+      return {
+        statusCode: normalizedStatus,
+        tagText: '已驳回',
+        tagTheme: 'danger',
+        badgeText: '驳回',
+        guideText: '申请已驳回，请按驳回原因修改后重新提交。',
+        editTip: '可保存草稿，提交前请确认无误',
+        canEdit: true,
+        canSubmit: true,
+        canReset: true
+      }
+    default:
+      return {
+        statusCode: 'draft',
+        tagText: '草稿中',
+        tagTheme: 'primary',
+        badgeText: '草稿',
+        guideText: '填写主体资料并上传证照，确认定位后提交审核。',
+        editTip: '可保存草稿，提交前请确认无误',
+        canEdit: true,
+        canSubmit: true,
+        canReset: false
+      }
+  }
+}
+
+export function buildMerchantApplicationOCRStatusView(status?: OCRStatus | string): MerchantApplicationOCRStatusView {
+  const normalizedStatus = String(status || '').trim().toLowerCase()
+
+  switch (normalizedStatus) {
+    case 'done':
+      return {
+        statusCode: normalizedStatus,
+        text: '识别完成',
+        isPending: false,
+        isReady: true,
+        isFailed: false
+      }
+    case 'processing':
+      return {
+        statusCode: normalizedStatus,
+        text: '识别中',
+        isPending: true,
+        isReady: false,
+        isFailed: false
+      }
+    case 'failed':
+      return {
+        statusCode: normalizedStatus,
+        text: '识别失败',
+        isPending: false,
+        isReady: false,
+        isFailed: true
+      }
+    case 'pending':
+      return {
+        statusCode: normalizedStatus,
+        text: '待识别',
+        isPending: true,
+        isReady: false,
+        isFailed: false
+      }
+    default:
+      return {
+        statusCode: '',
+        text: '未上传',
+        isPending: false,
+        isReady: false,
+        isFailed: false
+      }
+  }
+}
+
+export function buildMerchantApplicationOCRNoticeMessage(statuses: Array<OCRStatus | string | undefined>) {
+  const hasPendingStatus = statuses.some((status) => buildMerchantApplicationOCRStatusView(status).isPending)
+  if (!hasPendingStatus) {
+    return ''
+  }
+
+  return '部分证照仍在识别中，请等待本次识别完成后再提交审核。'
+}
+
+export function buildMerchantApplicationOCRSubmitBlockMessage(checks: Array<{ label: string, status?: OCRStatus | string }>) {
+  for (const item of checks) {
+    const statusView = buildMerchantApplicationOCRStatusView(item.status)
+    if (statusView.isReady) {
+      continue
+    }
+    if (statusView.isPending) {
+      return `${item.label}仍在识别中，请等待识别完成后再提交`
+    }
+    if (statusView.isFailed) {
+      return `${item.label}识别失败，请提供更清晰更规整的图片重试`
+    }
+    return `${item.label}识别结果未就绪，请重新上传后再试`
+  }
+
+  return ''
+}
+
 export interface MerchantApplicationDraftResponse {
   id: number
   user_id: number

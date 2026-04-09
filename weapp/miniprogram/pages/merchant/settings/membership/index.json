@@ -7,7 +7,9 @@
     "t-input": "tdesign-miniprogram/input/input",
     "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
-    "t-button": "tdesign-miniprogram/button/button"
+    "t-button": "tdesign-miniprogram/button/button",
+    "t-notice-bar": "tdesign-miniprogram/notice-bar/notice-bar",
+    "t-toast": "tdesign-miniprogram/toast/toast"
   },
   "navigationStyle": "custom"
 }

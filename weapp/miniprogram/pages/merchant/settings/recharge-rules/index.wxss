@@ -1,127 +1,176 @@
-@import '../../../../styles/merchant-config-shared.wxss';
-
 .page-container {
-  background: var(--td-bg-color-page);
   min-height: 100vh;
-  padding: 24rpx;
-  padding-bottom: calc(160rpx + var(--safe-area-bottom));
-  box-sizing: border-box;
+  background: var(--td-bg-color-page);
 }
 
-.inline-banner {
+.page-content {
   display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16rpx;
-  margin-bottom: 24rpx;
-  padding: 20rpx 24rpx;
-  border-radius: 18rpx;
+  flex-direction: column;
+  gap: var(--spacer-md);
 }
 
-.inline-banner-danger {
-  background: var(--td-error-color-1);
+.state-block {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-md);
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--spacer-lg);
 }
 
-.inline-banner-success {
-  background: var(--td-success-color-1);
+.page-notice {
+  border-radius: var(--radius-md);
+  overflow: hidden;
 }
 
-.inline-banner-text {
-  flex: 1;
-  font-size: 24rpx;
-  line-height: 1.6;
+.result-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--spacer-sm);
+  padding: 0 4rpx;
+}
+
+.result-summary {
+  font-size: var(--font-size-sm);
   color: var(--td-text-color-primary);
+  font-weight: 600;
 }
 
-.inline-banner-action {
-  flex-shrink: 0;
-  font-size: 24rpx;
-  line-height: 1.6;
-  color: var(--td-brand-color);
-  font-weight: 600;
+.loading-state {
+  display: flex;
+  justify-content: center;
+  padding: 100rpx 0;
+}
+
+.rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--spacer-sm);
 }
 
 .rule-card {
   background: var(--td-bg-color-container);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-sm);
+  overflow: hidden;
 }
 
-.rule-desc,
-.form-label {
-  color: var(--td-text-color-primary);
-}
-
-.rule-desc,
-.rule-desc {
-  font-size: var(--font-size-sm);
-  line-height: 1.6;
-  color: var(--td-text-color-secondary);
-}
-
-.rule-list {
+.rule-card-main {
   display: flex;
   flex-direction: column;
-  gap: var(--spacer-md);
 }
 
-.rule-card {
+.rule-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12rpx;
   padding: var(--spacer-md);
 }
 
-.rule-header,
-.rule-actions,
-.form-item-switch,
-.form-row {
-  display: flex;
-}
-
-.rule-header,
-.form-item-switch,
-.form-row {
-  justify-content: space-between;
-  gap: 16rpx;
-}
-
 .rule-header {
-  align-items: flex-start;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--spacer-sm);
 }
 
-.rule-main {
+.rule-header-main {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8rpx;
 }
 
-.rule-title {
-  font-size: 30rpx;
+.rule-name {
+  font-size: var(--font-size-heading);
+  line-height: 1.35;
   font-weight: 700;
   color: var(--td-text-color-primary);
 }
 
-.rule-subtitle {
-  font-size: 24rpx;
-  line-height: 1.6;
-  color: var(--td-brand-color);
-}
-
 .rule-desc {
-  margin-top: 18rpx;
+  font-size: var(--font-size-xs);
+  line-height: 1.5;
+  color: var(--td-text-color-secondary);
 }
 
-.rule-actions {
-  justify-content: flex-end;
-  gap: 16rpx;
-  margin-top: 20rpx;
-  padding-top: 20rpx;
-  border-top: 1rpx solid var(--td-component-stroke);
+.rule-switch-wrap {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.rule-meta-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.rule-price-row,
+.rule-tag-row,
+.rule-meta-row {
+  display: flex;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 10rpx;
 }
 
-.form-item {
-  margin-bottom: 24rpx;
+.meta-label {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-secondary);
 }
 
-.required {
+.meta-divider {
+  font-size: var(--font-size-xs);
+  color: var(--td-text-color-placeholder);
+}
+
+.meta-value {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+.price-value {
+  font-size: var(--font-size-title);
+  line-height: 1;
+  color: var(--td-brand-color);
+  font-weight: 700;
+}
+
+.price-value--accent {
   color: var(--td-error-color);
+}
+
+.rule-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 var(--spacer-md);
+}
+
+.rule-action-slot {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+}
+
+.rule-action-button {
+  flex: 0 0 auto;
+}
+
+.dialog-content {
+  font-size: var(--font-size-sm);
+  line-height: 1.6;
+  color: var(--td-text-color-secondary);
+}
+
+@media (max-width: 420px) {
+  .rule-action-bar {
+    padding: 0 var(--spacer-sm);
+  }
 }

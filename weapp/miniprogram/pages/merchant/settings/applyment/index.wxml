@@ -1,77 +1,95 @@
 <custom-navbar title="收付通进件" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
-    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
+  <view wx:if="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="校验权限中..." vertical />
   </view>
 
-  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+  <view wx:elif="{{accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{accessDeniedMessage}}" />
+  </view>
+
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
   </view>
 
-  <view wx:elif="{{loading && !applymentLoaded}}" class="state-block">
+  <view wx:elif="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载进件状态中..." vertical />
   </view>
 
   <view wx:elif="{{initialError}}" class="state-block">
     <t-empty description="{{initialErrorMessage || '进件状态加载失败，请重试'}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+    <t-button theme="primary" shape="round" bind:tap="onRetry">重新加载</t-button>
   </view>
 
-  <block wx:else>
-    <view class="section-block">
-      <view class="section-title">收付通进件</view>
+  <view wx:else class="page-content">
+    <t-notice-bar
+      wx:if="{{refreshErrorMessage}}"
+      visible="{{true}}"
+      theme="warning"
+      content="{{refreshErrorMessage}}"
+      prefixIcon="error-circle"
+      t-class="page-notice"
+    />
 
-      <view wx:if="{{refreshErrorMessage}}" class="hint-card hint-card-error hint-card-spaced">
-        <text>{{refreshErrorMessage}}</text>
-        <view class="action-row action-row-start">
-          <t-button theme="primary" size="small" shape="round" loading="{{refreshingStatus}}" bindtap="onRetryRefresh">重新同步</t-button>
-        </view>
+    <view class="section-panel">
+      <view class="section-top">
+        <text class="section-title">当前进件状态</text>
       </view>
 
-      <view wx:if="{{applymentStatus}}" class="status-card">
-        <view class="status-head">
-          <view>
-            <text class="status-title">当前进件状态</text>
-            <text class="status-desc">{{applymentStatus.status_desc || '请以当前状态和页面指引完成后续处理。'}}</text>
+      <t-cell-group theme="card">
+        <t-cell title="当前状态">
+          <view slot="note">
+            <t-tag theme="{{applymentView.tagTheme}}" variant="dark">{{applymentView.tagText}}</t-tag>
           </view>
-          <t-tag theme="{{getApplymentStatusTheme(applymentStatus.status)}}" variant="dark">{{getApplymentStatusText(applymentStatus.status)}}</t-tag>
-        </view>
-        <view wx:if="{{applymentStatus.sub_mch_id}}" class="meta-row">
-          <text class="meta-label">子商户号</text>
-          <text class="meta-value">{{applymentStatus.sub_mch_id}}</text>
-        </view>
-      </view>
+        </t-cell>
+        <t-cell wx:if="{{applymentView.statusDesc}}" title="状态说明" note="{{applymentView.statusDesc}}" />
+        <t-cell wx:if="{{applymentView.subMchId !== '-'}}" title="子商户号" note="{{applymentView.subMchId}}" />
+        <t-cell wx:if="{{applymentView.showRejectReason}}" title="拒绝原因" note="{{applymentView.rejectReason}}" />
+      </t-cell-group>
 
-      <view wx:if="{{!showBindForm}}" class="action-row action-row-start">
-        <t-button wx:if="{{canEditCurrentApplyment}}" theme="primary" shape="round" bindtap="onShowBindForm">{{applymentActionLabel}}</t-button>
-        <t-button theme="default" shape="round" bindtap="onGoFinance">查看资金账户</t-button>
-      </view>
-
-      <view wx:if="{{!showBindForm && applymentActionHint}}" class="hint-card {{pageNoticeThemeClass}} hint-card-spaced">
-        <text>{{applymentActionHint}}</text>
-      </view>
-
-      <view wx:if="{{canEditCurrentApplyment && applymentStatus.reject_reason}}" class="hint-card hint-card-error hint-card-spaced">
-        <text>{{applymentStatus.reject_reason}}</text>
-      </view>
-
-      <block wx:if="{{!canEditCurrentApplyment && applymentStatus.sign_url}}">
-        <view class="sign-url">{{applymentStatus.sign_url}}</view>
-        <view class="action-row">
-          <t-button theme="primary" shape="round" bindtap="onCopySignUrl">复制签约链接</t-button>
-          <t-button theme="default" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">已签约，刷新状态</t-button>
-        </view>
-      </block>
-
-      <view wx:elif="{{!canEditCurrentApplyment}}" class="action-row action-row-start action-row-tight">
-        <t-button theme="default" shape="round" loading="{{refreshingStatus}}" bindtap="onRefreshStatus">刷新状态</t-button>
-      </view>
-
-      <view wx:if="{{showBindForm}}" class="bind-form">
-        <applyment-bank-form apiBasePath="/v1/merchant/applyment" initialDraft="{{bindBankDraft}}" defaultAccountType="ACCOUNT_TYPE_BUSINESS" submitLabel="提交银行账户信息" submitting="{{submittingBind}}" bind:submit="onSubmitBindBank" bind:cancel="onHideBindForm" bind:draftchange="onBindDraftChange" />
+      <view wx:if="{{!showBindForm}}" class="action-row">
+        <t-button
+          wx:if="{{applymentView.canSubmitOpenInfo}}"
+          theme="primary"
+          shape="round"
+          bind:tap="onShowBindForm"
+        >{{applymentView.submitActionLabel}}</t-button>
+        <t-button
+          wx:if="{{applymentView.needsSign && applymentView.signURL}}"
+          theme="primary"
+          variant="outline"
+          shape="round"
+          bind:tap="onCopySignUrl"
+        >复制签约链接</t-button>
+        <t-button
+          wx:if="{{!applymentView.isOpened && !applymentView.canSubmitOpenInfo}}"
+          theme="default"
+          shape="round"
+          loading="{{refreshingStatus}}"
+          bind:tap="onRefreshStatus"
+        >刷新状态</t-button>
       </view>
     </view>
-  </block>
+
+    <view wx:if="{{showBindForm}}" class="section-panel form-panel">
+      <view class="section-top">
+        <text class="section-title">填写结算账户</text>
+      </view>
+      <applyment-bank-form
+        apiBasePath="/v1/merchant/applyment"
+        initialDraft="{{bindBankDraft}}"
+        defaultAccountType="ACCOUNT_TYPE_BUSINESS"
+        submitLabel="提交银行账户信息"
+        submitting="{{submittingBind}}"
+        bind:submit="onSubmitBindBank"
+        bind:cancel="onHideBindForm"
+        bind:draftchange="onBindDraftChange"
+      />
+    </view>
+  </view>
 </view>

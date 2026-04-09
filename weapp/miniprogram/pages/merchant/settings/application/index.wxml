@@ -1,6 +1,9 @@
 <custom-navbar title="主体申请" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
     <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
@@ -11,143 +14,124 @@
   </view>
 
   <block wx:else>
-  <view wx:if="{{initialLoading}}" class="state-block">
-    <t-loading theme="circular" size="40rpx" text="加载申请资料中..." vertical />
-  </view>
+    <view wx:if="{{initialLoading}}" class="state-block">
+      <t-loading theme="circular" size="40rpx" text="加载申请资料中..." vertical />
+    </view>
 
-  <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty description="{{initialErrorMessage || '申请资料加载失败，请重试'}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
-  </view>
+    <view wx:elif="{{initialError}}" class="state-block">
+      <t-empty description="{{initialErrorMessage || '申请资料加载失败，请重试'}}" />
+      <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
+    </view>
 
-  <block wx:else>
-    <view class="meta-strip">
-      <view class="meta-row">
-        <text class="meta-label">申请单号</text>
-        <text class="meta-value">{{applicationId || '--'}}</text>
-      </view>
-      <view class="meta-row">
-        <text class="meta-label">最后更新时间</text>
-        <text class="meta-value">{{updatedAtLabel}}</text>
-      </view>
-      <view class="meta-row">
-        <text class="meta-label">当前状态</text>
-        <view class="meta-value">
-          <t-tag theme="{{getStatusTheme(status)}}" variant="dark" size="small">{{getStatusText(status)}}</t-tag>
+    <block wx:else>
+      <view class="page-content">
+        <view wx:if="{{refreshErrorMessage}}" class="notice-card notice-card-error">
+          <text class="notice-text notice-text-flex">{{refreshErrorMessage}}</text>
+          <text class="notice-action" bindtap="onRetryRefresh">重新同步</text>
+        </view>
+
+        <t-badge
+          count="{{statusBadgeText}}"
+          shape="ribbon-right"
+          size="large"
+          style="--td-badge-bg-color: {{statusBadgeColor}}; --td-badge-large-height: 68rpx; --td-line-height-mark-small: 68rpx;"
+          t-class="status-badge"
+          t-class-content="status-badge__content"
+          t-class-count="status-badge__count"
+        >
+          <view class="section-panel section-panel--status">
+            <t-cell-group theme="card">
+              <t-cell title="资质信息" bordered="{{false}}" />
+              <t-cell wx:if="{{rejectReason}}" title="驳回原因" description="{{rejectReason}}" align="top" />
+              <t-cell title="店铺名" note="{{form.merchantName}}" />
+              <t-cell title="电话" note="{{form.contactPhone}}" />
+              <t-cell title="经营位置" note="{{locationLabel}}" />
+              <t-cell title="信用代码" note="{{form.businessLicenseNumber}}" />
+              <t-cell title="法人姓名" note="{{form.legalPersonName}}" />
+              <t-cell title="法人证件号" note="{{form.legalPersonIdNumber}}" />
+              <t-cell title="经营范围" description="{{form.businessScope}}" align="top" />
+            </t-cell-group>
+          </view>
+        </t-badge>
+
+        <view class="section-panel">
+          <view class="section-head section-head-tight">
+            <text class="section-title">必要证照</text>
+          </view>
+
+          <view class="certificate-card">
+            <view class="certificate-head">
+              <text class="certificate-title">营业执照</text>
+              <t-tag shape="mark" theme="{{licenseOcrTheme}}" variant="light" size="small">{{licenseOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{licenseImageUrl}}"
+              class="certificate-image"
+              src="{{licenseImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{licenseImageUrl}}"
+              data-urls="{{[licenseImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
+
+          <view class="certificate-card">
+            <view class="certificate-head">
+              <text class="certificate-title">食品经营许可证</text>
+              <t-tag shape="mark" theme="{{foodPermitOcrTheme}}" variant="light" size="small">{{foodPermitOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{foodPermitImageUrl}}"
+              class="certificate-image"
+              src="{{foodPermitImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{foodPermitImageUrl}}"
+              data-urls="{{[foodPermitImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
+
+          <view class="certificate-card">
+            <view class="certificate-head">
+              <text class="certificate-title">身份证正面</text>
+              <t-tag shape="mark" theme="{{idCardFrontOcrTheme}}" variant="light" size="small">{{idCardFrontOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{idCardFrontImageUrl}}"
+              class="certificate-image"
+              src="{{idCardFrontImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{idCardFrontImageUrl}}"
+              data-urls="{{[idCardFrontImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
+
+          <view class="certificate-card certificate-card-last">
+            <view class="certificate-head">
+              <text class="certificate-title">身份证背面</text>
+              <t-tag shape="mark" theme="{{idCardBackOcrTheme}}" variant="light" size="small">{{idCardBackOcrText}}</t-tag>
+            </view>
+            <t-image
+              wx:if="{{idCardBackImageUrl}}"
+              class="certificate-image"
+              src="{{idCardBackImageUrl}}"
+              mode="aspectFit"
+              lazy
+              shape="round"
+              data-url="{{idCardBackImageUrl}}"
+              data-urls="{{[idCardBackImageUrl]}}"
+              bindtap="onPreviewImage"
+            />
+          </view>
         </view>
       </view>
-    </view>
-
-    <view wx:if="{{actionNoticeMessage}}" class="section-block hint-card hint-card-success action-notice-card">
-      <text class="action-notice-text">{{actionNoticeMessage}}</text>
-    </view>
-
-    <view wx:if="{{refreshErrorMessage}}" class="section-block hint-card hint-card-error action-notice-card">
-      <text class="action-notice-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
-    </view>
-
-    <view wx:if="{{status && getStatusGuide(status)}}" class="section-block hint-card hint-card-warning">
-      <text>{{getStatusGuide(status)}}</text>
-    </view>
-
-    <view wx:if="{{rejectReason}}" class="section-block">
-      <view class="section-title">驳回原因</view>
-      <view class="hint-card hint-card-error">{{rejectReason}}</view>
-    </view>
-
-    <view class="section-block">
-      <view class="section-head">
-        <view class="section-title">基础信息</view>
-        <text class="section-tip">{{getEditTipCurrent(status)}}</text>
-      </view>
-      <t-cell-group theme="card">
-        <t-input label="店铺名称" value="{{form.merchantName}}" data-field="merchantName" placeholder="请输入店铺名称" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
-        <t-input label="联系电话" type="number" value="{{form.contactPhone}}" data-field="contactPhone" placeholder="11 位手机号" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
-        <t-input label="经营地址" value="{{form.businessAddress}}" placeholder="请通过下方选择经营位置维护" disabled="{{true}}" />
-        <t-input label="统一信用代码" value="{{form.businessLicenseNumber}}" data-field="businessLicenseNumber" placeholder="上传营业执照后自动回填，可手动修正" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
-        <t-input label="法人姓名" value="{{form.legalPersonName}}" data-field="legalPersonName" placeholder="上传身份证后自动回填，可手动修正" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
-        <t-input label="法人身份证号" value="{{form.legalPersonIdNumber}}" data-field="legalPersonIdNumber" placeholder="上传身份证后自动回填，可手动修正" disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
-        <t-textarea label="经营范围" value="{{form.businessScope}}" data-field="businessScope" placeholder="上传营业执照后自动回填，可根据门店实际情况补充" maxlength="300" indicator disabled="{{!canEditCurrent(status)}}" bindchange="onInputChange" />
-      </t-cell-group>
-    </view>
-
-    <view class="section-block">
-      <view class="section-head">
-        <view class="section-title">经营位置</view>
-        <text class="section-tip">经营地址以下方选择经营位置为准，提交前需完成定位，系统会自动匹配经营区域</text>
-      </view>
-      <view class="location-card">
-        <view class="location-head">
-          <text class="location-title">当前经营位置</text>
-          <t-tag theme="{{regionId ? 'success' : 'warning'}}" variant="dark" size="small">{{regionId ? '区域已匹配' : '待匹配区域'}}</t-tag>
-        </view>
-        <view class="location-value">{{locationLabel}}</view>
-        <view class="location-hint">{{locationHint}}</view>
-        <t-button theme="default" size="small" shape="round" disabled="{{!canEditCurrent(status) || saving || submitting || resetting}}" bindtap="onChooseLocation">选择经营位置</t-button>
-      </view>
-    </view>
-
-    <view class="section-block">
-      <view class="section-head">
-        <view class="section-title">必要证照</view>
-        <text class="section-tip">上传即触发 OCR 回填，支持删除后重新上传，也可直接重新选择新文件替换</text>
-      </view>
-
-      <view wx:if="{{ocrNoticeMessage}}" class="hint-card hint-card-warning ocr-notice-card">
-        <text class="ocr-notice-text">{{ocrNoticeMessage}}</text>
-      </view>
-
-      <view class="upload-card">
-        <view class="upload-head">
-          <text class="upload-title">营业执照</text>
-          <text class="upload-status">{{licenseOcrText}}</text>
-        </view>
-        <t-upload mediaType="{{['image']}}" max="{{1}}" files="{{licenseImage}}" disabled="{{!canEditCurrent(status) || licenseUploading || submitting || resetting}}" bind:add="onLicenseUpload" bind:remove="onLicenseRemove" />
-        <view class="upload-tip">用于识别企业名称、统一信用代码、法人和经营范围。</view>
-      </view>
-
-      <view class="upload-card">
-        <view class="upload-head">
-          <text class="upload-title">食品经营许可证</text>
-          <text class="upload-status">{{foodPermitOcrText}}</text>
-        </view>
-        <t-upload mediaType="{{['image']}}" max="{{1}}" files="{{foodPermitImage}}" disabled="{{!canEditCurrent(status) || foodPermitUploading || submitting || resetting}}" bind:add="onFoodPermitUpload" bind:remove="onFoodPermitRemove" />
-        <view class="upload-tip">提交审核前必须上传，系统会核对许可证有效期和主体信息。</view>
-      </view>
-
-      <view class="upload-card">
-        <view class="upload-head">
-          <text class="upload-title">身份证正面</text>
-          <text class="upload-status">{{idCardFrontOcrText}}</text>
-        </view>
-        <t-upload mediaType="{{['image']}}" max="{{1}}" files="{{idCardFrontImage}}" disabled="{{!canEditCurrent(status) || idCardFrontUploading || submitting || resetting}}" bind:add="onIdCardFrontUpload" bind:remove="onIdCardFrontRemove" />
-        <view class="upload-tip">用于识别法人姓名和身份证号。</view>
-      </view>
-
-      <view class="upload-card upload-card-last">
-        <view class="upload-head">
-          <text class="upload-title">身份证背面</text>
-          <text class="upload-status">{{idCardBackOcrText}}</text>
-        </view>
-        <t-upload mediaType="{{['image']}}" max="{{1}}" files="{{idCardBackImage}}" disabled="{{!canEditCurrent(status) || idCardBackUploading || submitting || resetting}}" bind:add="onIdCardBackUpload" bind:remove="onIdCardBackRemove" />
-        <view class="upload-tip">用于留存证件有效期信息，提交审核前请确认已上传。</view>
-      </view>
-    </view>
-
-    <view class="section-block">
-      <view class="section-title">相关设置</view>
-      <t-cell-group theme="card">
-        <t-cell title="店铺图片管理" description="维护门头照和环境照，作为申请展示资料补充" arrow bindtap="onGoProfileImages" />
-        <t-cell title="收付通进件" description="主体申请通过后，继续完成银行账户资料和签约" arrow bindtap="onGoApplyment" />
-      </t-cell-group>
-    </view>
-
-    <view class="actions-wrap">
-      <t-button theme="default" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || submitting || resetting || !hasChanges || !canEditCurrent(status)}}" bindtap="onSaveDraft">保存草稿</t-button>
-      <t-button wx:if="{{canSubmitCurrent(status)}}" theme="primary" size="large" shape="round" block loading="{{submitting}}" disabled="{{saving || submitting || resetting}}" bindtap="onSubmitApplication">提交审核</t-button>
-      <t-button wx:if="{{canResetCurrent(status)}}" theme="danger" size="large" shape="round" block loading="{{resetting}}" disabled="{{saving || submitting || resetting}}" bindtap="onResetApplication">重置为草稿</t-button>
-    </view>
-  </block>
+    </block>
   </block>
 </view>

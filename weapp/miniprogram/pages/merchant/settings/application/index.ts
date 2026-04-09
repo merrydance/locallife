@@ -1,5 +1,10 @@
 import {
+  buildMerchantApplicationOCRNoticeMessage,
+  buildMerchantApplicationOCRStatusView,
+  buildMerchantApplicationOCRSubmitBlockMessage,
+  buildMerchantApplicationStatusView,
   type MerchantApplicationDraftResponse,
+  type OCRStatus as MerchantApplicationOCRStatus,
   getMerchantApplication,
   getMyApplication,
   ocrBusinessLicense,
@@ -36,7 +41,9 @@ type UploadFileItem = {
 
 type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
 
-type OcrStatus = 'pending' | 'processing' | 'done' | 'failed' | ''
+type OcrStatus = MerchantApplicationOCRStatus | ''
+
+type ApplicationStatusView = ReturnType<typeof buildMerchantApplicationStatusView>
 
 const EMPTY_FORM: ApplicationForm = {
   merchantName: '',
@@ -86,81 +93,15 @@ function hasFormChanged(current: ApplicationForm, initial: ApplicationForm) {
     || current.legalPersonIdNumber !== initial.legalPersonIdNumber
 }
 
-function getStatusText(status: string) {
-  const map: Record<string, string> = {
-    draft: '草稿中',
-    submitted: '审核中',
-    approved: '已通过',
-    rejected: '已驳回'
-  }
-  return map[status] || status || '草稿中'
-}
-
-function getStatusTheme(status: string) {
-  switch (status) {
-    case 'approved':
-      return 'success'
-    case 'rejected':
-      return 'danger'
-    case 'submitted':
-      return 'warning'
-    default:
-      return 'primary'
-  }
-}
-
-function getStatusGuide(status: string) {
-  switch (status) {
-    case 'submitted':
-      return '申请已提交，审核通过后继续完成收付通进件。'
-    case 'approved':
-      return '主体已通过，可继续完成收付通进件和签约。'
-    case 'rejected':
-      return '申请已驳回，请按驳回原因修改后重新提交。'
-    default:
-      return '填写主体资料并上传证照，确认定位后提交审核。'
-  }
-}
-
-function getEditTip(status: string) {
-  if (status === 'approved') {
-    return '已通过申请如需修改，保存或上传后会自动回到草稿状态'
-  }
-  return canEdit(status) ? '可保存草稿，提交前请确认无误' : '当前状态不可编辑'
-}
-
-function canEdit(status: string) {
-  return status === 'draft' || status === 'rejected' || status === 'approved' || !status
-}
-
-function canSubmit(status: string) {
-  return status === 'draft' || status === 'rejected' || status === 'approved' || !status
-}
-
-function canReset(status: string) {
-  return status === 'rejected'
-}
-
 function extractUploadPath(detail: { path?: string, files?: Array<{ url?: string }> }) {
   if (detail?.path) return detail.path
   const latestFile = detail?.files?.[detail.files.length - 1]
   return latestFile?.url || ''
 }
 
-function buildLocationLabel(address: string, latitude?: string | null, longitude?: string | null) {
+function buildLocationLabel(address: string) {
   if (address.trim()) return address.trim()
-  if (latitude && longitude) return `坐标 ${latitude}, ${longitude}`
-  return '未选择经营位置'
-}
-
-function buildLocationHint(regionId?: number | null, latitude?: string | null, longitude?: string | null) {
-  if (regionId) {
-    return '位置已保存，已匹配经营区域。'
-  }
-  if (latitude && longitude) {
-    return '位置已保存，暂未匹配经营区域，请重新选择更准确的位置。'
-  }
-  return '提交前请完成定位，系统会自动匹配经营区域。'
+  return '--'
 }
 
 function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSuccessCallbackResult) {
@@ -176,17 +117,55 @@ function resolveDraftPublicAssetUrl(url?: string | null) {
   return getMediaDisplayUrl(url || '')
 }
 
-function isPendingOcrStatus(status?: string) {
-  return status === 'pending' || status === 'processing'
+function buildUploadFileItem(url: string, name: string) {
+  return [{ url, name }]
 }
 
-function buildOcrNoticeMessage(statuses: OcrStatus[]) {
-  const hasPendingStatus = statuses.some((status) => isPendingOcrStatus(status))
-  if (!hasPendingStatus) {
-    return ''
+function buildUploadFileState(params: {
+  url: string
+  name: string
+  uploaded: boolean
+  currentFiles: UploadFileItem[]
+}) {
+  if (params.url) {
+    return buildUploadFileItem(params.url, params.name)
   }
 
-  return '部分证照仍在识别中，请等待本次识别完成后再提交审核。'
+  if (params.uploaded) {
+    return params.currentFiles
+  }
+
+  return []
+}
+
+function hasUploadedDocument(params: {
+  assetId?: number | null
+  files?: UploadFileItem[]
+}) {
+  return (typeof params.assetId === 'number' && params.assetId > 0) || Boolean(params.files?.length)
+}
+
+function getOcrTagTheme(status?: string) {
+  const statusView = buildMerchantApplicationOCRStatusView(status)
+  if (statusView.isReady) return 'success'
+  if (statusView.isFailed) return 'danger'
+  if (statusView.isPending) return 'warning'
+  return 'default'
+}
+
+function getBadgeColor(theme?: string) {
+  switch (theme) {
+    case 'success':
+      return '#00A870'
+    case 'danger':
+      return '#E34D59'
+    case 'warning':
+      return '#ED7B2F'
+    case 'primary':
+      return '#0052D9'
+    default:
+      return '#8B8BA3'
+  }
 }
 
 function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
@@ -209,17 +188,26 @@ Page({
     resetting: false,
     applicationId: 0,
     status: 'draft',
+    statusView: buildMerchantApplicationStatusView('draft') as ApplicationStatusView,
+    statusBadgeText: buildMerchantApplicationStatusView('draft').badgeText,
+    statusBadgeColor: getBadgeColor('primary'),
     rejectReason: '',
-    updatedAtLabel: '--',
     actionNoticeMessage: '',
     regionId: 0,
     latitude: '',
     longitude: '',
-    locationLabel: '未选择经营位置',
-    locationHint: '提交审核前必须完成定位，后端会据此匹配经营区域。',
+    locationLabel: '--',
     form: { ...EMPTY_FORM } as ApplicationForm,
     initialForm: { ...EMPTY_FORM } as ApplicationForm,
     hasChanges: false,
+    licenseAssetId: 0,
+    foodPermitAssetId: 0,
+    idCardFrontAssetId: 0,
+    idCardBackAssetId: 0,
+    licenseImageUrl: '',
+    foodPermitImageUrl: '',
+    idCardFrontImageUrl: '',
+    idCardBackImageUrl: '',
     licenseImage: [] as UploadFileItem[],
     foodPermitImage: [] as UploadFileItem[],
     idCardFrontImage: [] as UploadFileItem[],
@@ -232,6 +220,10 @@ Page({
     foodPermitOcrStatus: '' as OcrStatus,
     idCardFrontOcrStatus: '' as OcrStatus,
     idCardBackOcrStatus: '' as OcrStatus,
+    licenseOcrTheme: 'default',
+    foodPermitOcrTheme: 'default',
+    idCardFrontOcrTheme: 'default',
+    idCardBackOcrTheme: 'default',
     ocrNoticeMessage: '',
     licenseUploading: false,
     foodPermitUploading: false,
@@ -272,6 +264,13 @@ Page({
       wx.stopPullDownRefresh()
       return
     }
+
+    if (this.data.hasChanges) {
+      wx.stopPullDownRefresh()
+      wx.showToast({ title: '当前有未保存修改，请先保存草稿', icon: 'none' })
+      return
+    }
+
     this.loadApplication(false, true)
   },
 
@@ -295,7 +294,7 @@ Page({
 
     try {
       const draft = await this.fetchCurrentApplication()
-      await this.applyDraftToPage(draft, false)
+      await this.applyDraftToPage(draft, this.data.hasChanges)
       this.setData({
         initialLoading: false,
         initialError: false,
@@ -342,6 +341,11 @@ Page({
 
     const form = keepDirty ? this.data.form : buildForm(draft)
     const initialForm = buildForm(draft)
+    const statusView = buildMerchantApplicationStatusView(draft.status)
+    const licenseAssetId = Number(draft.business_license_media_asset_id || 0)
+    const foodPermitAssetId = Number(draft.food_permit_media_asset_id || 0)
+    const idCardFrontAssetId = Number(draft.id_card_front_media_asset_id || 0)
+    const idCardBackAssetId = Number(draft.id_card_back_media_asset_id || 0)
 
     const ocrStatuses = [
       (draft.business_license_ocr?.status || '') as OcrStatus,
@@ -353,20 +357,49 @@ Page({
     this.setData({
       applicationId: draft.id,
       status: draft.status || 'draft',
+      statusView,
+      statusBadgeText: statusView.badgeText,
+      statusBadgeColor: getBadgeColor(statusView.tagTheme),
       rejectReason: draft.reject_reason || '',
-      updatedAtLabel: draft.updated_at ? draft.updated_at.replace('T', ' ').slice(0, 16) : '--',
       regionId: draft.region_id || 0,
       latitude: draft.latitude || '',
       longitude: draft.longitude || '',
-      locationLabel: buildLocationLabel(draft.business_address || form.businessAddress, draft.latitude, draft.longitude),
-      locationHint: buildLocationHint(draft.region_id, draft.latitude, draft.longitude),
+      locationLabel: buildLocationLabel(draft.business_address || form.businessAddress),
       form,
       initialForm,
       hasChanges: keepDirty ? hasFormChanged(this.data.form, initialForm) : false,
-      licenseImage: licenseUrl ? [{ url: licenseUrl, name: '营业执照' }] : [],
-      foodPermitImage: foodPermitUrl ? [{ url: foodPermitUrl, name: '食品经营许可证' }] : [],
-      idCardFrontImage: idCardFrontUrl ? [{ url: idCardFrontUrl, name: '身份证正面' }] : [],
-      idCardBackImage: idCardBackUrl ? [{ url: idCardBackUrl, name: '身份证背面' }] : [],
+      licenseAssetId,
+      foodPermitAssetId,
+      idCardFrontAssetId,
+      idCardBackAssetId,
+      licenseImageUrl: licenseUrl,
+      foodPermitImageUrl: foodPermitUrl,
+      idCardFrontImageUrl: idCardFrontUrl,
+      idCardBackImageUrl: idCardBackUrl,
+      licenseImage: buildUploadFileState({
+        url: licenseUrl,
+        name: '营业执照',
+        uploaded: licenseAssetId > 0,
+        currentFiles: this.data.licenseImage
+      }),
+      foodPermitImage: buildUploadFileState({
+        url: foodPermitUrl,
+        name: '食品经营许可证',
+        uploaded: foodPermitAssetId > 0,
+        currentFiles: this.data.foodPermitImage
+      }),
+      idCardFrontImage: buildUploadFileState({
+        url: idCardFrontUrl,
+        name: '身份证正面',
+        uploaded: idCardFrontAssetId > 0,
+        currentFiles: this.data.idCardFrontImage
+      }),
+      idCardBackImage: buildUploadFileState({
+        url: idCardBackUrl,
+        name: '身份证背面',
+        uploaded: idCardBackAssetId > 0,
+        currentFiles: this.data.idCardBackImage
+      }),
       licenseOcrText: this.getOcrStatusText(draft.business_license_ocr?.status),
       foodPermitOcrText: this.getOcrStatusText(draft.food_permit_ocr?.status),
       idCardFrontOcrText: this.getOcrStatusText(draft.id_card_front_ocr?.status),
@@ -375,7 +408,11 @@ Page({
       foodPermitOcrStatus: (draft.food_permit_ocr?.status || '') as OcrStatus,
       idCardFrontOcrStatus: (draft.id_card_front_ocr?.status || '') as OcrStatus,
       idCardBackOcrStatus: (draft.id_card_back_ocr?.status || '') as OcrStatus,
-      ocrNoticeMessage: buildOcrNoticeMessage(ocrStatuses)
+      licenseOcrTheme: getOcrTagTheme(draft.business_license_ocr?.status),
+      foodPermitOcrTheme: getOcrTagTheme(draft.food_permit_ocr?.status),
+      idCardFrontOcrTheme: getOcrTagTheme(draft.id_card_front_ocr?.status),
+      idCardBackOcrTheme: getOcrTagTheme(draft.id_card_back_ocr?.status),
+      ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses)
     })
   },
 
@@ -435,7 +472,12 @@ Page({
       wx.showToast({ title: '请上传身份证并补齐法人信息', icon: 'none' })
       return false
     }
-    if (!this.data.licenseImage.length || !this.data.foodPermitImage.length || !this.data.idCardFrontImage.length || !this.data.idCardBackImage.length) {
+    if (
+      !hasUploadedDocument({ assetId: this.data.licenseAssetId, files: this.data.licenseImage })
+      || !hasUploadedDocument({ assetId: this.data.foodPermitAssetId, files: this.data.foodPermitImage })
+      || !hasUploadedDocument({ assetId: this.data.idCardFrontAssetId, files: this.data.idCardFrontImage })
+      || !hasUploadedDocument({ assetId: this.data.idCardBackAssetId, files: this.data.idCardBackImage })
+    ) {
       wx.showToast({ title: '请先上传营业执照、食品经营许可证和身份证正反面', icon: 'none' })
       return false
     }
@@ -493,12 +535,12 @@ Page({
   },
 
   async onSaveDraft() {
-    if (!canEdit(this.data.status) || !this.data.hasChanges) return
+    if (!this.data.statusView.canEdit || !this.data.hasChanges) return
     await this.persistDraft(true)
   },
 
   async onSubmitApplication() {
-    if (this.data.submitting || !canSubmit(this.data.status)) return
+    if (this.data.submitting || !this.data.statusView.canSubmit) return
     if (!this.validateForm(true)) return
 
     let consentPayload
@@ -532,7 +574,7 @@ Page({
   },
 
   async onResetApplication() {
-    if (this.data.resetting || !canReset(this.data.status)) return
+    if (this.data.resetting || !this.data.statusView.canReset) return
 
     const confirmed = await new Promise<boolean>((resolve) => {
       wx.showModal({
@@ -592,7 +634,7 @@ Page({
   },
 
   async handleDocumentRemove(field: UploadField) {
-    if (!canEdit(this.data.status)) {
+    if (!this.data.statusView.canEdit) {
       wx.showToast({ title: '当前状态不可编辑申请资料', icon: 'none' })
       return
     }
@@ -619,7 +661,7 @@ Page({
 
   async handleDocumentUpload(field: UploadField, path: string) {
     if (!path) return
-    if (!canEdit(this.data.status)) {
+    if (!this.data.statusView.canEdit) {
       wx.showToast({ title: '当前状态不可编辑申请资料', icon: 'none' })
       return
     }
@@ -695,6 +737,12 @@ Page({
     ])
     const licenseUrl = resolveDraftPublicAssetUrl(draft.business_license_url)
     const foodPermitUrl = resolveDraftPublicAssetUrl(draft.food_permit_url)
+    const licenseAssetId = Number(draft.business_license_media_asset_id || this.data.licenseAssetId || 0)
+    const foodPermitAssetId = Number(draft.food_permit_media_asset_id || this.data.foodPermitAssetId || 0)
+    const idCardFrontAssetId = Number(draft.id_card_front_media_asset_id || this.data.idCardFrontAssetId || 0)
+    const idCardBackAssetId = Number(draft.id_card_back_media_asset_id || this.data.idCardBackAssetId || 0)
+    const nextStatus = draft.status || this.data.status
+    const nextStatusView = buildMerchantApplicationStatusView(nextStatus)
 
     const ocrStatuses = [
       (draft.business_license_ocr?.status || this.data.licenseOcrStatus || '') as OcrStatus,
@@ -704,20 +752,57 @@ Page({
     ]
 
     this.setData({
-      status: draft.status || this.data.status,
+      status: nextStatus,
+      statusView: nextStatusView,
+      statusBadgeText: nextStatusView.badgeText,
+      statusBadgeColor: getBadgeColor(nextStatusView.tagTheme),
       rejectReason: draft.reject_reason || this.data.rejectReason,
-      updatedAtLabel: draft.updated_at ? draft.updated_at.replace('T', ' ').slice(0, 16) : this.data.updatedAtLabel,
       regionId: draft.region_id || this.data.regionId,
       latitude: draft.latitude || this.data.latitude,
       longitude: draft.longitude || this.data.longitude,
-      locationLabel: buildLocationLabel(draft.business_address || nextForm.businessAddress, draft.latitude || this.data.latitude, draft.longitude || this.data.longitude),
-      locationHint: buildLocationHint(draft.region_id || this.data.regionId, draft.latitude || this.data.latitude, draft.longitude || this.data.longitude),
+      locationLabel: buildLocationLabel(draft.business_address || nextForm.businessAddress),
       form: nextForm,
       hasChanges: hasFormChanged(nextForm, this.data.initialForm),
-      licenseImage: (licenseUrl || field === 'license') ? [{ url: licenseUrl || fallbackPath, name: '营业执照' }] : this.data.licenseImage,
-      foodPermitImage: (foodPermitUrl || field === 'foodPermit') ? [{ url: foodPermitUrl || fallbackPath, name: '食品经营许可证' }] : this.data.foodPermitImage,
-      idCardFrontImage: (idCardFrontUrl || field === 'idCardFront') ? [{ url: idCardFrontUrl || fallbackPath, name: '身份证正面' }] : this.data.idCardFrontImage,
-      idCardBackImage: (idCardBackUrl || field === 'idCardBack') ? [{ url: idCardBackUrl || fallbackPath, name: '身份证背面' }] : this.data.idCardBackImage,
+      licenseAssetId,
+      foodPermitAssetId,
+      idCardFrontAssetId,
+      idCardBackAssetId,
+      licenseImageUrl: licenseUrl || (field === 'license' ? fallbackPath : this.data.licenseImageUrl),
+      foodPermitImageUrl: foodPermitUrl || (field === 'foodPermit' ? fallbackPath : this.data.foodPermitImageUrl),
+      idCardFrontImageUrl: idCardFrontUrl || (field === 'idCardFront' ? fallbackPath : this.data.idCardFrontImageUrl),
+      idCardBackImageUrl: idCardBackUrl || (field === 'idCardBack' ? fallbackPath : this.data.idCardBackImageUrl),
+      licenseImage: (licenseUrl || field === 'license')
+        ? buildUploadFileItem(licenseUrl || fallbackPath, '营业执照')
+        : buildUploadFileState({
+            url: '',
+            name: '营业执照',
+            uploaded: licenseAssetId > 0,
+            currentFiles: this.data.licenseImage
+          }),
+      foodPermitImage: (foodPermitUrl || field === 'foodPermit')
+        ? buildUploadFileItem(foodPermitUrl || fallbackPath, '食品经营许可证')
+        : buildUploadFileState({
+            url: '',
+            name: '食品经营许可证',
+            uploaded: foodPermitAssetId > 0,
+            currentFiles: this.data.foodPermitImage
+          }),
+      idCardFrontImage: (idCardFrontUrl || field === 'idCardFront')
+        ? buildUploadFileItem(idCardFrontUrl || fallbackPath, '身份证正面')
+        : buildUploadFileState({
+            url: '',
+            name: '身份证正面',
+            uploaded: idCardFrontAssetId > 0,
+            currentFiles: this.data.idCardFrontImage
+          }),
+      idCardBackImage: (idCardBackUrl || field === 'idCardBack')
+        ? buildUploadFileItem(idCardBackUrl || fallbackPath, '身份证背面')
+        : buildUploadFileState({
+            url: '',
+            name: '身份证背面',
+            uploaded: idCardBackAssetId > 0,
+            currentFiles: this.data.idCardBackImage
+          }),
       licenseOcrText: this.getOcrStatusText(draft.business_license_ocr?.status),
       foodPermitOcrText: this.getOcrStatusText(draft.food_permit_ocr?.status),
       idCardFrontOcrText: this.getOcrStatusText(draft.id_card_front_ocr?.status),
@@ -726,24 +811,28 @@ Page({
       foodPermitOcrStatus: (draft.food_permit_ocr?.status || this.data.foodPermitOcrStatus || '') as OcrStatus,
       idCardFrontOcrStatus: (draft.id_card_front_ocr?.status || this.data.idCardFrontOcrStatus || '') as OcrStatus,
       idCardBackOcrStatus: (draft.id_card_back_ocr?.status || this.data.idCardBackOcrStatus || '') as OcrStatus,
-      ocrNoticeMessage: buildOcrNoticeMessage(ocrStatuses)
+      licenseOcrTheme: getOcrTagTheme(draft.business_license_ocr?.status || this.data.licenseOcrStatus || ''),
+      foodPermitOcrTheme: getOcrTagTheme(draft.food_permit_ocr?.status || this.data.foodPermitOcrStatus || ''),
+      idCardFrontOcrTheme: getOcrTagTheme(draft.id_card_front_ocr?.status || this.data.idCardFrontOcrStatus || ''),
+      idCardBackOcrTheme: getOcrTagTheme(draft.id_card_back_ocr?.status || this.data.idCardBackOcrStatus || ''),
+      ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses)
     })
 
   },
 
+  onPreviewImage(e: WechatMiniprogram.BaseEvent<{ url?: string, urls?: string[] }>) {
+    const url = e.currentTarget?.dataset?.url || ''
+    const urls = (e.currentTarget?.dataset?.urls || []).filter(Boolean)
+    if (!url) return
+
+    wx.previewImage({
+      current: url,
+      urls: urls.length ? urls : [url]
+    })
+  },
+
   getOcrStatusText(status?: string) {
-    switch (status) {
-      case 'done':
-        return '识别完成'
-      case 'processing':
-        return '识别中'
-      case 'failed':
-        return '识别失败'
-      case 'pending':
-        return '待识别'
-      default:
-        return '未上传'
-    }
+    return buildMerchantApplicationOCRStatusView(status).text
   },
 
   getOcrSubmitBlockMessage() {
@@ -754,22 +843,11 @@ Page({
       { label: '身份证背面', status: this.data.idCardBackOcrStatus }
     ]
 
-    for (const item of checks) {
-      if (item.status === 'done') continue
-      if (item.status === 'processing' || item.status === 'pending') {
-        return `${item.label}仍在识别中，请等待识别完成后再提交`
-      }
-      if (item.status === 'failed') {
-        return `${item.label}识别失败，请提供更清晰更规整的图片重试`
-      }
-      return `${item.label}识别结果未就绪，请重新上传后再试`
-    }
-
-    return ''
+    return buildMerchantApplicationOCRSubmitBlockMessage(checks)
   },
 
   onChooseLocation() {
-    if (!canEdit(this.data.status)) {
+    if (!this.data.statusView.canEdit) {
       wx.showToast({ title: '当前状态不可编辑申请资料', icon: 'none' })
       return
     }
@@ -831,14 +909,6 @@ Page({
     })
   },
 
-  onGoProfileImages() {
-    wx.navigateTo({ url: '/pages/merchant/profile-images/index' })
-  },
-
-  onGoApplyment() {
-    wx.navigateTo({ url: '/pages/merchant/settings/applyment/index' })
-  },
-
   onRetry() {
     if (this.data.accessErrorMessage) {
       this.onRetryAccess()
@@ -851,6 +921,12 @@ Page({
 
   onRetryRefresh() {
     if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
+
+    if (this.data.hasChanges) {
+      wx.showToast({ title: '当前有未保存修改，请先保存草稿', icon: 'none' })
+      return
+    }
+
     this.loadApplication(false, true)
   },
 
@@ -865,33 +941,5 @@ Page({
       refreshErrorMessage: ''
     })
     this.onLoad()
-  },
-
-  getStatusText(status: string) {
-    return getStatusText(status)
-  },
-
-  getStatusTheme(status: string) {
-    return getStatusTheme(status)
-  },
-
-  getStatusGuide(status: string) {
-    return getStatusGuide(status)
-  },
-
-  canEditCurrent(status: string) {
-    return canEdit(status)
-  },
-
-  getEditTipCurrent(status: string) {
-    return getEditTip(status)
-  },
-
-  canSubmitCurrent(status: string) {
-    return canSubmit(status)
-  },
-
-  canResetCurrent(status: string) {
-    return canReset(status)
   }
 })

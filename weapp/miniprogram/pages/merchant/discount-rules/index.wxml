@@ -1,156 +1,142 @@
 <custom-navbar title="满减规则管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 32rpx;"
+>
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
-    <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
+    <t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
   <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载满减规则中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '满减规则加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
   </view>
 
   <block wx:else>
-    <view class="hero-card">
-      <view class="hero-copy">
-        <text class="hero-title">店铺满减规则</text>
-        <text class="hero-subtitle">维护门店订单满减活动，并控制是否允许与代金券、会员权益叠加。</text>
-      </view>
-    </view>
+    <view class="page-content">
+      <t-notice-bar
+        wx:if="{{refreshErrorMessage}}"
+        visible="{{true}}"
+        theme="warning"
+        content="{{refreshErrorMessage}}"
+        prefixIcon="error-circle"
+        t-class="page-notice"
+      />
 
-    <view wx:if="{{initialLoading}}" class="state-block">
-      <t-loading theme="circular" size="40rpx" text="加载满减规则中..." vertical />
-    </view>
-
-    <view wx:elif="{{initialError}}" class="state-block">
-      <t-empty description="{{initialErrorMessage || '满减规则加载失败，请重试'}}" />
-      <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
-    </view>
-
-    <block wx:else>
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
-    </view>
-
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
-    </view>
-
-    <view wx:if="{{!rules.length}}" class="state-block">
-      <t-empty description="当前还没有满减规则，点击右下角按钮开始创建" />
-    </view>
-
-    <view wx:else class="rule-list">
-      <view wx:for="{{rules}}" wx:key="id" class="rule-card">
-        <view class="rule-header">
-          <view class="rule-main">
-            <text class="rule-name">{{item.name}}</text>
-            <text class="rule-desc">{{item.description || '未填写规则说明'}}</text>
-          </view>
-          <t-tag size="small" variant="dark" theme="{{item.status_theme}}">{{item.status_label}}</t-tag>
-        </view>
-
-        <view class="rule-body">
-          <view class="rule-highlight">满 {{item.min_order_amount_text}} 减 {{item.discount_amount_text}}</view>
-          <view class="rule-meta-row">
-            <text class="rule-meta-label">有效期</text>
-            <text class="rule-meta-value">{{item.valid_range_text}}</text>
-          </view>
-          <view class="rule-meta-row">
-            <text class="rule-meta-label">叠加规则</text>
-            <text class="rule-meta-value">{{item.stacking_text}}</text>
-          </view>
-        </view>
-
-        <view class="rule-footer">
-          <text wx:if="{{actingRuleId === item.id}}" class="rule-action-hint">{{actingRuleAction === 'toggle' ? '状态更新中...' : '删除处理中...'}}</text>
-          <view class="rule-actions">
-            <t-button block size="small" theme="default" shape="round" data-id="{{item.id}}" disabled="{{submitting || !!actingRuleId}}" bind:tap="onEditRule">编辑</t-button>
-            <t-button block size="small" theme="primary" shape="round" data-id="{{item.id}}" data-active="{{item.is_active}}" loading="{{actingRuleId === item.id && actingRuleAction === 'toggle'}}" disabled="{{submitting || !!actingRuleId}}" bind:tap="onToggleRuleStatus">{{item.is_active ? '停用' : '启用'}}</t-button>
-            <t-button block size="small" theme="danger" shape="round" data-id="{{item.id}}" data-name="{{item.name}}" loading="{{actingRuleId === item.id && actingRuleAction === 'delete'}}" disabled="{{submitting || !!actingRuleId}}" bind:tap="onDeleteRule">删除</t-button>
-          </view>
-        </view>
+      <view class="result-bar">
+        <text class="result-summary">{{resultSummaryText}}</text>
       </view>
 
-      <view class="list-footer">
-        <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多规则中..." />
-        <t-button wx:elif="{{hasMore}}" theme="default" shape="round" size="large" bind:tap="onLoadMore">继续加载更多</t-button>
-        <text wx:else class="list-footer-text">已加载全部规则，共 {{rules.length}} 条</text>
+      <view wx:if="{{loading && !rules.length}}" class="loading-state">
+        <t-loading theme="circular" size="40rpx" text="加载满减规则中..." vertical />
+      </view>
+
+      <t-empty wx:elif="{{!loading && !rules.length}}" icon="info-circle" description="{{emptyDescription}}" />
+
+      <view wx:else class="rule-list">
+        <block wx:for="{{rules}}" wx:key="id">
+          <t-cell-group class="rule-card" theme="card">
+            <view class="rule-card-main" bindtap="onEditRule" data-id="{{item.id}}">
+              <view class="rule-content">
+                <view class="rule-header">
+                  <view class="rule-header-main">
+                    <text class="rule-name">{{item.name}}</text>
+                    <text class="rule-desc">{{item.description || '未填写规则说明'}} </text>
+                  </view>
+                  <view class="rule-switch-wrap" catchtap="onActionsCatch">
+                    <t-switch
+                      value="{{item.is_active}}"
+                      size="small"
+                      loading="{{item.statusPending}}"
+                      disabled="{{item.deletePending}}"
+                      bind:change="onToggleRuleStatus"
+                      data-id="{{item.id}}"
+                    />
+                  </view>
+                </view>
+
+                <view class="rule-meta-group">
+                  <view class="rule-price-row">
+                    <text class="meta-label">门槛</text>
+                    <text class="price-value">¥{{item.min_order_amount_yuan}}</text>
+                    <text class="meta-divider">减</text>
+                    <text class="price-value price-value--accent">¥{{item.discount_amount_yuan}}</text>
+                  </view>
+
+                  <view class="rule-tag-row">
+                    <t-tag theme="{{item.status_theme}}" variant="light" size="small">{{item.status_label}}</t-tag>
+                  </view>
+
+                  <view class="rule-meta-row">
+                    <text class="meta-label">叠加</text>
+                    <text class="meta-value">{{item.stacking_text}}</text>
+                  </view>
+
+                  <view class="rule-meta-row">
+                    <text class="meta-label">有效期</text>
+                    <text class="meta-value">{{item.valid_range_text}}</text>
+                  </view>
+                </view>
+              </view>
+            </view>
+
+            <t-divider />
+
+            <view class="rule-action-bar" catchtap="onActionsCatch">
+              <view class="rule-action-slot">
+                <t-button class="rule-action-button" variant="text" theme="default" size="small" bind:tap="onEditRule" data-id="{{item.id}}">编辑</t-button>
+              </view>
+              <t-divider layout="vertical" />
+              <view class="rule-action-slot">
+                <t-button
+                  class="rule-action-button"
+                  variant="text"
+                  theme="danger"
+                  size="small"
+                  loading="{{item.deletePending}}"
+                  disabled="{{item.deletePending || item.statusPending}}"
+                  bind:tap="onRequestDeleteRule"
+                  data-id="{{item.id}}"
+                  data-name="{{item.name}}"
+                >删除</t-button>
+              </view>
+            </view>
+          </t-cell-group>
+        </block>
+
+        <view class="list-footer">
+          <t-loading wx:if="{{loadingMore}}" theme="circular" size="32rpx" text="加载更多规则中..." />
+          <t-button wx:elif="{{hasMore}}" theme="default" shape="round" size="large" bind:tap="onLoadMore">继续加载更多</t-button>
+          <text wx:else class="list-footer-text">已完成当前结果加载</text>
+        </view>
       </view>
     </view>
 
     <t-fab icon="add" bind:click="onAddRule" />
-    </block>
   </block>
 
-
-  <t-popup visible="{{formVisible}}" placement="bottom" bind:visible-change="onCloseForm">
-    <view class="form-popup">
-      <scroll-view scroll-y class="form-scroll">
-        <view class="form-title">{{isEdit ? '编辑满减规则' : '新建满减规则'}}</view>
-
-        <view class="form-item">
-          <text class="form-label">规则名称 <text class="required">*</text></text>
-          <input class="form-input" value="{{form.name}}" data-field="name" placeholder="如 午市满减" bindinput="onTextInput" />
-        </view>
-
-        <view class="form-item">
-          <text class="form-label">规则说明</text>
-          <textarea class="form-textarea" value="{{form.description}}" data-field="description" placeholder="可选，说明适用时段或展示文案" bindinput="onTextInput" />
-        </view>
-
-        <view class="form-row">
-          <view class="form-item form-item-half">
-            <text class="form-label">门槛金额（元） <text class="required">*</text></text>
-            <input class="form-input" type="digit" value="{{form.min_order_amount_yuan}}" data-field="min_order_amount_yuan" placeholder="如 50" bindinput="onTextInput" />
-          </view>
-          <view class="form-item form-item-half">
-            <text class="form-label">优惠金额（元） <text class="required">*</text></text>
-            <input class="form-input" type="digit" value="{{form.discount_amount_yuan}}" data-field="discount_amount_yuan" placeholder="如 8" bindinput="onTextInput" />
-          </view>
-        </view>
-
-        <view class="form-row">
-          <view class="form-item form-item-half">
-            <text class="form-label">开始日期 <text class="required">*</text></text>
-            <picker mode="date" value="{{form.valid_from}}" data-field="valid_from" bindchange="onDateChange">
-              <view class="form-picker {{form.valid_from ? '' : 'is-placeholder'}}">{{form.valid_from || '请选择开始日期'}}</view>
-            </picker>
-          </view>
-          <view class="form-item form-item-half">
-            <text class="form-label">结束日期 <text class="required">*</text></text>
-            <picker mode="date" value="{{form.valid_until}}" data-field="valid_until" bindchange="onDateChange">
-              <view class="form-picker {{form.valid_until ? '' : 'is-placeholder'}}">{{form.valid_until || '请选择结束日期'}}</view>
-            </picker>
-          </view>
-        </view>
-
-        <view class="form-item form-item-switch">
-          <text class="form-label">可与代金券叠加</text>
-          <t-switch value="{{form.can_stack_with_voucher}}" data-field="can_stack_with_voucher" bind:change="onSwitchChange" size="large" />
-        </view>
-
-        <view class="form-item form-item-switch">
-          <text class="form-label">可与会员权益叠加</text>
-          <t-switch value="{{form.can_stack_with_membership}}" data-field="can_stack_with_membership" bind:change="onSwitchChange" size="large" />
-        </view>
-
-        <view class="form-item">
-          <text class="form-label">叠加分组</text>
-          <input class="form-input" value="{{form.stacking_group}}" data-field="stacking_group" placeholder="可选，例如 lunch，便于后端分组互斥" bindinput="onTextInput" />
-        </view>
-
-        <view class="form-item form-item-switch" wx:if="{{isEdit}}">
-          <text class="form-label">立即启用</text>
-          <t-switch value="{{form.is_active}}" data-field="is_active" bind:change="onSwitchChange" size="large" />
-        </view>
-
-      </scroll-view>
-      <view class="form-actions">
-        <t-button block theme="default" size="large" shape="round" bind:tap="onCloseForm">取消</t-button>
-        <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmitForm">保存</t-button>
-      </view>
+  <t-dialog
+    visible="{{deleteDialogVisible}}"
+    title="确认删除满减规则"
+    using-custom-navbar="{{true}}"
+    confirm-btn="{{ { content: '确认删除', theme: 'danger', loading: deleteDialogSubmitting } }}"
+    cancel-btn="取消"
+    bind:confirm="onConfirmDeleteRule"
+    bind:cancel="onCancelDeleteDialog"
+    bind:close="onCancelDeleteDialog"
+  >
+    <view slot="content" class="dialog-content">
+      <text>删除后无法恢复，确定要删除“{{deleteDialogRuleName}}”吗？</text>
     </view>
-  </t-popup>
+  </t-dialog>
 </view>

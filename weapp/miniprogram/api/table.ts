@@ -168,6 +168,10 @@ export function getTableStatusDisplay(status?: TableStatus | string) {
     }
 }
 
+export function isTableStatusDisabled(status?: TableStatus | string): boolean {
+    return getTableStatusDisplay(status).normalizedStatus === 'disabled'
+}
+
 /** 更新桌台状态请求 - 对齐 api.updateTableStatusRequest */
 export interface UpdateTableStatusRequest extends Record<string, unknown> {
     current_reservation_id?: number              // 当前预定ID

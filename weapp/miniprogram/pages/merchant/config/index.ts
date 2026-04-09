@@ -1,5 +1,11 @@
 import { getStableBarHeights } from '../../../utils/responsive'
-import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
+import {
+  canManageMerchantApplyment,
+  canUseMerchantDeviceManagementFallback,
+  ensureMerchantConsoleAccess,
+  getRecentMerchantDeviceAccess
+} from '../../../utils/console-access'
+import { logger } from '../../../utils/logger'
 
 interface ConfigItem {
   id: string
@@ -39,11 +45,10 @@ const CONFIG_SECTIONS: ConfigSection[] = [
   {
     id: 'store',
     title: '店铺资料',
-    desc: '维护门店基础资料、图资、经营类目与营业规则。',
+    desc: '维护门店基础资料、图资与营业规则。',
     items: [
-      { id: 'profile', title: '店铺资料', desc: '维护店铺名称、联系电话、地址与介绍', path: '/pages/merchant/settings/profile/index' },
+      { id: 'profile', title: '店铺资料', desc: '维护店铺名称、联系电话、地址、经营类目与介绍', path: '/pages/merchant/settings/profile/index' },
       { id: 'profile-images', title: '店铺图片管理', desc: '维护 Logo、门头照和环境照', path: '/pages/merchant/profile-images/index' },
-      { id: 'merchant-categories', title: '经营类目设置', desc: '维护店铺经营类目与平台分类归属', path: '/pages/merchant/merchant-categories/index' },
       { id: 'business-hours', title: '营业时间', desc: '维护营业时段与特殊日期安排', path: '/pages/merchant/settings/business-hours/index' }
     ]
   },
@@ -52,7 +57,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     title: '会员与营销',
     desc: '维护会员权益、充值活动和营销规则。',
     items: [
-      { id: 'membership', title: '会员设置', desc: '配置余额与赠送金可用场景及叠加规则', path: '/pages/merchant/settings/membership/index' },
+      { id: 'membership', title: '叠加规则', desc: '配置余额与赠送金可用场景及叠加规则', path: '/pages/merchant/settings/membership/index' },
       { id: 'recharge-rules', title: '充值规则', desc: '维护会员充值赠送活动与有效期', path: '/pages/merchant/settings/recharge-rules/index' },
       { id: 'discount-rules', title: '满减规则', desc: '维护订单满减活动与叠加规则', path: '/pages/merchant/discount-rules/index' },
       { id: 'delivery-promotions', title: '配送优惠', desc: '维护配送活动与优惠策略', path: '/pages/merchant/delivery-promotions/index' },
@@ -74,7 +79,7 @@ const CONFIG_SECTIONS: ConfigSection[] = [
     title: '设备与展示',
     desc: '维护显示、打印和门店设备设置。',
     items: [
-      { id: 'display-config', title: '打印与提醒设置', desc: '统一维护打印与语音播报配置', path: '/pages/merchant/settings/display-config/index' },
+      { id: 'display-config', title: '后厨协同设置', desc: '统一维护打印分发与语音播报配置', path: '/pages/merchant/settings/display-config/index' },
       { id: 'printers', title: '打印机管理', desc: '添加、配置和维护云打印机设备', path: '/pages/merchant/printers/index' }
     ]
   },
@@ -104,6 +109,35 @@ const CONFIG_SECTIONS: ConfigSection[] = [
   }
 ]
 
+const DEVICE_MANAGE_ITEM_IDS = new Set(['display-config', 'printers'])
+
+function filterConfigSections(
+  sections: ConfigSection[],
+  canManageDeviceSettings: boolean,
+  canManageApplyment: boolean
+) {
+  return sections
+    .map((section) => ({
+      ...section,
+      items: section.items?.filter((item) => {
+        const passesDeviceGate = canManageDeviceSettings || !DEVICE_MANAGE_ITEM_IDS.has(item.id)
+        const passesApplymentGate = canManageApplyment || item.id !== 'applyment'
+        return passesDeviceGate && passesApplymentGate
+      }),
+      groups: section.groups
+        ?.map((group) => ({
+          ...group,
+          items: group.items.filter((item) => {
+            const passesDeviceGate = canManageDeviceSettings || !DEVICE_MANAGE_ITEM_IDS.has(item.id)
+            const passesApplymentGate = canManageApplyment || item.id !== 'applyment'
+            return passesDeviceGate && passesApplymentGate
+          })
+        }))
+        .filter((group) => group.items.length > 0)
+    }))
+    .filter((section) => (section.items && section.items.length > 0) || (section.groups && section.groups.length > 0))
+}
+
 Page({
   data: {
     navBarHeight: 88,
@@ -118,10 +152,26 @@ Page({
     this.setData({ navBarHeight })
 
     const accessResult = await ensureMerchantConsoleAccess()
+    let canManageDeviceSettings = false
+    let canManageApplyment = false
+    if (accessResult.status === 'granted') {
+      canManageApplyment = canManageMerchantApplyment(accessResult.user?.roles || [])
+      try {
+        const deviceAccess = await getRecentMerchantDeviceAccess()
+        canManageDeviceSettings = canUseMerchantDeviceManagementFallback(accessResult.user?.roles || [], deviceAccess)
+      } catch (err) {
+        logger.warn('Load merchant device access for config page failed', err)
+        canManageDeviceSettings = canUseMerchantDeviceManagementFallback(accessResult.user?.roles || [])
+      }
+    }
+
     this.setData({
       accessReady: true,
       accessDenied: accessResult.status === 'denied',
-      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
+      accessErrorMessage: accessResult.status === 'error' ? accessResult.message : '',
+      configSections: accessResult.status === 'granted'
+        ? filterConfigSections(CONFIG_SECTIONS, canManageDeviceSettings, canManageApplyment)
+        : []
     })
   },
 

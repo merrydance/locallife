@@ -10,6 +10,7 @@ const PAGE_ROOT = 'weapp/miniprogram/pages/'
 const APPROVED_TOP_GAP = /padding-top:\s*calc\(\s*\{\{navBarHeight\}\}px\s*\+\s*var\(--spacer-sm\)\s*\)/
 const APPROVED_PAGE_SHELL_TOP = /page-shell--with-nav/
 const APPROVED_NAV_HEIGHT_VAR = /--page-shell-nav-height:\s*\{\{navBarHeight\}\}px/
+const APPROVED_PAGE_SHELL_GUTTER = /page-shell--page-gutter/
 const APPROVED_GUTTER = /var\(--spacer-md\)/
 const APPROVED_PAGE_SHELL_SAFE = /page-shell--bottom-safe/
 const APPROVED_SAFE_AREA = /var\(--safe-area-bottom\)|env\(safe-area-inset-bottom\)|--popup-bottom-padding-(?:sm|md|lg)/
@@ -53,7 +54,7 @@ function main() {
       pageFailures.push('missing approved top-navigation gap pattern `calc({{navBarHeight}}px + var(--spacer-sm))`')
     }
 
-    if (!APPROVED_GUTTER.test(combinedContent)) {
+    if (!APPROVED_GUTTER.test(combinedContent) && !APPROVED_PAGE_SHELL_GUTTER.test(combinedContent)) {
       pageFailures.push('missing approved horizontal gutter token `var(--spacer-md)`')
     }
 

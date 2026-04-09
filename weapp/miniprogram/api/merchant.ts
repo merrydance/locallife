@@ -63,6 +63,7 @@ export interface SearchMerchantsParams {
   keyword?: string
   region_id?: number
   tag_id?: number
+  sort_by?: 'distance'
   page_id?: number
   page_size?: number
   user_latitude?: number
@@ -123,6 +124,10 @@ export async function searchMerchantsWithMeta(params: SearchMerchantsParams): Pr
 
   if (params.tag_id !== undefined && params.tag_id !== null) {
     requestParams.tag_id = params.tag_id
+  }
+
+  if (params.sort_by) {
+    requestParams.sort_by = params.sort_by
   }
 
   const response = await request<SearchMerchantsEnvelope>({
@@ -620,8 +625,59 @@ export interface MerchantRechargeRuleResponse {
   is_active: boolean
   valid_from: string
   valid_until: string
+  status_code: MerchantTimedRuleStatusCode
+  status_label: string
+  status_theme: MerchantRuleStatusTheme
   created_at: string
   updated_at?: string
+}
+
+export type MerchantRuleStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+export type MerchantTimedRuleStatusCode = 'inactive' | 'expired' | 'scheduled' | 'active'
+
+export interface MerchantTimedRuleStatusView {
+  label: string
+  theme: MerchantRuleStatusTheme
+  code: MerchantTimedRuleStatusCode
+}
+
+function buildMerchantTimedRuleStatusView(
+  rule: Pick<MerchantRechargeRuleResponse | MerchantDiscountRuleResponse, 'is_active' | 'valid_from' | 'valid_until'>,
+  now: Date = new Date()
+): MerchantTimedRuleStatusView {
+  const ruleWithStatus = rule as Partial<Pick<MerchantRechargeRuleResponse, 'status_code' | 'status_label' | 'status_theme'>>
+
+  if (ruleWithStatus.status_code && ruleWithStatus.status_label && ruleWithStatus.status_theme) {
+    return {
+      label: ruleWithStatus.status_label,
+      theme: ruleWithStatus.status_theme,
+      code: ruleWithStatus.status_code
+    }
+  }
+
+  const validUntil = new Date(rule.valid_until)
+  const validFrom = new Date(rule.valid_from)
+
+  if (!rule.is_active) {
+    return { label: '已停用', theme: 'default', code: 'inactive' }
+  }
+
+  if (now > validUntil) {
+    return { label: '已过期', theme: 'danger', code: 'expired' }
+  }
+
+  if (now < validFrom) {
+    return { label: '未开始', theme: 'warning', code: 'scheduled' }
+  }
+
+  return { label: '生效中', theme: 'success', code: 'active' }
+}
+
+export function buildMerchantRechargeRuleStatusView(
+  rule: Pick<MerchantRechargeRuleResponse, 'is_active' | 'valid_from' | 'valid_until'>,
+  now: Date = new Date()
+): MerchantTimedRuleStatusView {
+  return buildMerchantTimedRuleStatusView(rule, now)
 }
 
 export interface CreateMerchantRechargeRuleRequest {
@@ -691,7 +747,17 @@ export interface MerchantDiscountRuleResponse {
   valid_from: string
   valid_until: string
   is_active: boolean
+  status_code: MerchantTimedRuleStatusCode
+  status_label: string
+  status_theme: MerchantRuleStatusTheme
   created_at: string
+}
+
+export function buildMerchantDiscountRuleStatusView(
+  rule: Pick<MerchantDiscountRuleResponse, 'is_active' | 'valid_from' | 'valid_until'>,
+  now: Date = new Date()
+): MerchantTimedRuleStatusView {
+  return buildMerchantTimedRuleStatusView(rule, now)
 }
 
 export interface ListMerchantDiscountRulesResponse {
@@ -816,6 +882,17 @@ export function listMerchantDiscountRules(merchantId: number, pageId: number = 1
     url: `/v1/merchants/${merchantId}/discounts`,
     method: 'GET',
     data: { page_id: pageId, page_size: pageSize }
+  })
+}
+
+/**
+ * 获取单条商户满减规则
+ * GET /v1/merchants/{id}/discounts/{rule_id}
+ */
+export function getMerchantDiscountRule(merchantId: number, ruleId: number) {
+  return request<MerchantDiscountRuleResponse>({
+    url: `/v1/merchants/${merchantId}/discounts/${ruleId}`,
+    method: 'GET'
   })
 }
 

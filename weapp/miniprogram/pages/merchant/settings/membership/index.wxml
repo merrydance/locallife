@@ -1,4 +1,4 @@
-<custom-navbar title="会员设置" showBack="{{true}}" />
+<custom-navbar title="叠加规则" showBack="{{true}}" />
 
 <view class="page-container" style="padding-top: calc({{navBarHeight}}px + var(--spacer-sm));">
   <view wx:if="{{accessReady && accessDenied}}" class="state-block">
@@ -21,14 +21,8 @@
   </view>
 
   <block wx:else>
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
-    </view>
-
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
-    </view>
+    <t-notice-bar wx:if="{{refreshErrorMessage}}" class="page-notice" theme="warning" content="{{refreshErrorMessage}}" visible="{{true}}" />
+    <t-button wx:if="{{refreshErrorMessage}}" class="notice-action" theme="primary" size="small" shape="round" bindtap="onRetryRefresh">重新同步</t-button>
 
     <view class="section-block">
       <view class="section-title">叠加规则</view>
@@ -42,14 +36,6 @@
         <t-input label="最高抵扣比例" type="number" value="{{form.max_deduction_percent}}" placeholder="1-100" bindchange="onPercentChange">
           <text slot="suffix">%</text>
         </t-input>
-      </t-cell-group>
-    </view>
-
-    <view class="section-block">
-      <view class="section-title">充值活动</view>
-      <t-cell-group theme="card">
-        <t-cell title="充值规则管理" description="维护顾客可见的充值赠送活动、有效期和启停状态" arrow bind:tap="onOpenRechargeRules" />
-        <t-cell title="会员管理" description="查看门店会员余额、消费流水，并支持人工余额调整" arrow bind:tap="onOpenMembers" />
       </t-cell-group>
     </view>
 
@@ -84,4 +70,5 @@
     </view>
   </block>
   </block>
+  <t-toast id="t-toast" />
 </view>

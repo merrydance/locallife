@@ -1,7 +1,7 @@
 {
     "usingComponents": {
         "t-button": "tdesign-miniprogram/button/button",
-        "t-tag": "tdesign-miniprogram/tag/tag",
+        "t-switch": "tdesign-miniprogram/switch/switch",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-skeleton": "tdesign-miniprogram/skeleton/skeleton",
@@ -12,6 +12,5 @@
         "t-icon": "tdesign-miniprogram/icon/icon",
         "custom-navbar": "/components/custom-navbar/index"
     },
-    "navigationStyle": "custom",
-    "enablePullDownRefresh": true
+    "navigationStyle": "custom"
 }

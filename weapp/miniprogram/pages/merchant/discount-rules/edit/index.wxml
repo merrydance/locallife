@@ -1,0 +1,125 @@
+<custom-navbar title="{{isEdit ? '编辑满减规则' : '新增满减规则'}}" showBack="{{true}}" />
+
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="当前账号无商户权限，请返回“我的”切换身份" />
+  </view>
+
+  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+    <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{initialLoading}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载满减规则信息中..." vertical />
+  </view>
+
+  <view wx:elif="{{initialError}}" class="state-block">
+    <t-empty icon="error-circle" description="{{initialErrorMessage || '满减规则编辑页加载失败，请重试'}}" />
+    <t-button theme="primary" size="small" shape="round" bind:tap="onRetry">重新加载</t-button>
+  </view>
+
+  <block wx:else>
+    <view class="page-content">
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">基本规则</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-input
+            label="规则名称"
+            placeholder="例如：午市满50减8"
+            value="{{formData.name}}"
+            data-field="name"
+            required
+            bind:change="onFormInputChange"
+          />
+          <t-input
+            label="规则说明"
+            placeholder="可选，补充展示文案或适用说明"
+            value="{{formData.description}}"
+            data-field="description"
+            bind:change="onFormInputChange"
+          />
+          <t-input
+            label="门槛金额(元)"
+            type="digit"
+            placeholder="如 50.00"
+            value="{{formData.min_order_amount_yuan}}"
+            data-field="min_order_amount_yuan"
+            required
+            bind:change="onFormInputChange"
+          />
+          <t-input
+            label="优惠金额(元)"
+            type="digit"
+            placeholder="如 8.00"
+            value="{{formData.discount_amount_yuan}}"
+            data-field="discount_amount_yuan"
+            required
+            bind:change="onFormInputChange"
+          />
+        </t-cell-group>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">生效时间</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <picker mode="date" value="{{formData.valid_from}}" bindchange="onDateChange" data-field="valid_from">
+            <t-cell title="开始日期" arrow note="{{formData.valid_from || '请选择'}}" />
+          </picker>
+          <picker mode="date" value="{{formData.valid_until}}" bindchange="onDateChange" data-field="valid_until">
+            <t-cell title="结束日期" arrow note="{{formData.valid_until || '请选择'}}" />
+          </picker>
+        </t-cell-group>
+      </view>
+
+      <view class="section-panel">
+        <view class="section-top">
+          <text class="section-title">叠加关系</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-cell title="可叠加代金券" description="开启后当前满减可与代金券同时命中">
+            <t-switch slot="note" value="{{formData.can_stack_with_voucher}}" data-field="can_stack_with_voucher" bind:change="onSwitchChange" />
+          </t-cell>
+          <t-cell title="可叠加会员权益" description="开启后当前满减可与会员优惠同时生效">
+            <t-switch slot="note" value="{{formData.can_stack_with_membership}}" data-field="can_stack_with_membership" bind:change="onSwitchChange" />
+          </t-cell>
+          <t-input
+            label="叠加分组"
+            placeholder="可选，例如 lunch"
+            value="{{formData.stacking_group}}"
+            data-field="stacking_group"
+            bind:change="onFormInputChange"
+          />
+        </t-cell-group>
+      </view>
+
+      <view wx:if="{{isEdit}}" class="section-panel">
+        <view class="section-top">
+          <text class="section-title">生效状态</text>
+        </view>
+
+        <t-cell-group theme="card">
+          <t-cell title="启用状态" description="关闭后当前规则不再参与新的订单优惠计算">
+            <t-switch slot="note" value="{{formData.is_active}}" data-field="is_active" bind:change="onSwitchChange" />
+          </t-cell>
+        </t-cell-group>
+      </view>
+    </view>
+
+    <view class="footer-bar">
+      <t-button block theme="primary" size="large" shape="round" loading="{{submitting}}" bind:tap="onSubmit">
+        {{isEdit ? '保存满减规则' : '创建满减规则'}}
+      </t-button>
+    </view>
+  </block>
+</view>

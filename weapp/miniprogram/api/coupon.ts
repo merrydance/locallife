@@ -25,6 +25,9 @@ interface BackendVoucher {
     claimed_quantity?: number
     used_quantity?: number
     is_active?: boolean
+    status_code?: MerchantVoucherStatusCode
+    status_label?: string
+    status_theme?: MerchantVoucherStatusTheme
     allowed_order_types?: string[]
 }
 
@@ -75,7 +78,56 @@ export interface MerchantVoucher {
     valid_from: string
     valid_until: string
     is_active: boolean
+    status_code: MerchantVoucherStatusCode
+    status_label: string
+    status_theme: MerchantVoucherStatusTheme
     allowed_order_types: string[]
+}
+
+export type MerchantVoucherStatusTheme = 'success' | 'warning' | 'danger' | 'default'
+export type MerchantVoucherStatusCode = 'inactive' | 'expired' | 'scheduled' | 'depleted' | 'active'
+
+export interface MerchantVoucherStatusView {
+    label: string
+    theme: MerchantVoucherStatusTheme
+    code: MerchantVoucherStatusCode
+}
+
+export function buildMerchantVoucherStatusView(
+    voucher: Pick<MerchantVoucher, 'is_active' | 'valid_from' | 'valid_until' | 'total_quantity' | 'claimed_quantity'>,
+    now: Date = new Date()
+): MerchantVoucherStatusView {
+    const voucherWithStatus = voucher as Partial<Pick<MerchantVoucher, 'status_code' | 'status_label' | 'status_theme'>>
+
+    if (voucherWithStatus.status_code && voucherWithStatus.status_label && voucherWithStatus.status_theme) {
+        return {
+            label: voucherWithStatus.status_label,
+            theme: voucherWithStatus.status_theme,
+            code: voucherWithStatus.status_code
+        }
+    }
+
+    const validUntil = new Date(voucher.valid_until)
+    const validFrom = new Date(voucher.valid_from)
+    const remainingQuantity = Math.max(voucher.total_quantity - voucher.claimed_quantity, 0)
+
+    if (!voucher.is_active) {
+        return { label: '已停用', theme: 'default', code: 'inactive' }
+    }
+
+    if (now > validUntil) {
+        return { label: '已过期', theme: 'danger', code: 'expired' }
+    }
+
+    if (now < validFrom) {
+        return { label: '未开始', theme: 'warning', code: 'scheduled' }
+    }
+
+    if (remainingQuantity <= 0) {
+        return { label: '已领完', theme: 'warning', code: 'depleted' }
+    }
+
+    return { label: '发放中', theme: 'success', code: 'active' }
 }
 
 export interface MerchantVoucherListResult extends PaginatedListResult<MerchantVoucher> {
@@ -171,7 +223,7 @@ function normalizeVoucherToCoupon(item: BackendVoucher): Coupon {
 }
 
 function normalizeMerchantVoucher(item: BackendVoucher): MerchantVoucher {
-    return {
+    const normalizedVoucher = {
         id: item.id,
         merchant_id: item.merchant_id,
         code: item.code || '',
@@ -185,7 +237,19 @@ function normalizeMerchantVoucher(item: BackendVoucher): MerchantVoucher {
         valid_from: item.valid_from || '',
         valid_until: item.valid_until || '',
         is_active: typeof item.is_active === 'boolean' ? item.is_active : true,
+        status_code: item.status_code || 'active',
+        status_label: item.status_label || '',
+        status_theme: item.status_theme || 'success',
         allowed_order_types: Array.isArray(item.allowed_order_types) ? item.allowed_order_types : []
+    } as MerchantVoucher
+
+    const statusView = buildMerchantVoucherStatusView(normalizedVoucher)
+
+    return {
+        ...normalizedVoucher,
+        status_code: statusView.code,
+        status_label: statusView.label,
+        status_theme: statusView.theme
     }
 }
 

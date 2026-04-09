@@ -505,6 +505,10 @@ export class KitchenDisplayService {
  */
 export class OrderManagementAdapter {
 
+    static isTerminalOrderStatus(status: OrderResponse['status'] | string): boolean {
+        return status === 'completed' || status === 'cancelled'
+    }
+
     /**
      * 格式化订单状态显示文本
      */
@@ -576,6 +580,33 @@ export class OrderManagementAdapter {
         }
     }
 
+    static getMerchantOrderStatusHint(order: OrderResponse): string {
+        switch (order.status) {
+            case 'paid':
+                return '顾客已支付，建议尽快接单或拒单处理'
+            case 'preparing':
+                return '商户正在制作中，可在出餐后标记完成'
+            case 'ready':
+                return order.order_type === 'takeout' ? '等待骑手取餐或系统分配送力' : '等待顾客取餐或到店核销'
+            case 'courier_accepted':
+                return '骑手已接单，正在到店取餐'
+            case 'picked':
+                return '骑手已取餐，订单即将配送'
+            case 'delivering':
+                return '配送途中，请关注异常和超时情况'
+            case 'rider_delivered':
+                return '骑手已送达，等待顾客确认'
+            case 'user_delivered':
+                return '顾客已确认收货，系统即将完成订单'
+            case 'completed':
+                return '订单已完成履约'
+            case 'cancelled':
+                return order.cancel_reason || '订单已取消'
+            default:
+                return ''
+        }
+    }
+
     /**
      * 判断订单是否可以接单
      */
@@ -602,6 +633,14 @@ export class OrderManagementAdapter {
      */
     static canCompleteOrder(order: OrderResponse): boolean {
         return order.status === 'ready' && ['dine_in', 'takeaway'].includes(order.order_type)
+    }
+
+    static shouldShowPassiveState(order: OrderResponse): boolean {
+        return !this.canAcceptOrder(order)
+            && !this.canRejectOrder(order)
+            && !this.canMarkReady(order)
+            && !this.canCompleteOrder(order)
+            && !this.isTerminalOrderStatus(order.status)
     }
 
     /**

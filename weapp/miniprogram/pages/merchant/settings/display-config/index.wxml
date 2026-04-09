@@ -1,125 +1,132 @@
-<custom-navbar title="显示与打印设置" showBack="{{true}}" />
+<custom-navbar title="后厨协同设置" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
-  <view wx:if="{{accessReady && accessDenied}}" class="state-block">
+<view
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter"
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 220rpx;"
+>
+  <view wx:if="{{!accessReady}}" class="state-block">
+    <t-loading theme="circular" size="40rpx" text="加载后厨协同设置中..." vertical />
+  </view>
+
+  <view wx:elif="{{accessDenied}}" class="state-block">
     <t-empty icon="error-circle" description="当前账号无商户权限，请返回“我的”切换身份" />
   </view>
 
-  <view wx:elif="{{accessReady && accessErrorMessage}}" class="state-block">
+  <view wx:elif="{{accessErrorMessage}}" class="state-block">
     <t-empty icon="error-circle" description="{{accessErrorMessage}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetryAccess">重新校验</t-button>
+    <t-button theme="primary" shape="round" bind:tap="onRetryAccess">重新校验</t-button>
+  </view>
+
+  <view wx:elif="{{settingsAccessDenied}}" class="state-block">
+    <t-empty icon="lock-on" description="{{settingsAccessDeniedMessage || '打印设备和后厨协同设置仅支持老板或店长管理'}}" />
   </view>
 
   <block wx:else>
-  <view wx:if="{{initialLoading}}" class="loading-shell">
-    <view class="section-block section-block-loading" wx:for="{{[1, 2, 3]}}" wx:key="*this">
-      <view class="skeleton-line skeleton-heading skeleton-shimmer"></view>
-      <view class="skeleton-cell" wx:for="{{[1, 2]}}" wx:key="*this">
-        <view class="skeleton-line skeleton-cell-title skeleton-shimmer"></view>
-        <view class="skeleton-circle skeleton-switch skeleton-shimmer"></view>
+    <view class="page-content">
+      <t-notice-bar
+        wx:if="{{settingsRefreshErrorMessage}}"
+        visible="{{true}}"
+        theme="warning"
+        content="{{settingsRefreshErrorMessage}}"
+        prefixIcon="error-circle"
+        t-class="page-notice"
+      />
+
+      <view wx:if="{{settingsInitialLoading}}" class="loading-state">
+        <t-loading theme="circular" size="40rpx" text="加载后厨协同设置中..." vertical />
       </view>
-    </view>
-  </view>
 
-  <view wx:elif="{{initialError}}" class="state-block">
-    <t-empty description="{{initialErrorMessage || '显示配置加载失败，请重试'}}" />
-    <t-button theme="primary" shape="round" bindtap="onRetry">重新加载</t-button>
-  </view>
+      <view wx:elif="{{settingsInitialError}}" class="state-inline">
+        <t-empty description="{{settingsInitialErrorMessage || '后厨协同配置加载失败，请重试'}}" />
+        <t-button theme="primary" size="small" shape="round" bind:tap="onRetrySettings">重新加载</t-button>
+      </view>
 
-  <block wx:else>
-    <view wx:if="{{actionNoticeMessage}}" class="inline-banner inline-banner-success">
-      <text class="inline-banner-text">{{actionNoticeMessage}}</text>
-    </view>
+      <block wx:else>
+        <view class="section-panel">
+          <view class="section-top">
+            <text class="section-title">打印协同</text>
+            <text class="section-caption">统一管理后厨和前台打印分发，订单是否打印仍由后端真实状态决定。</text>
+          </view>
+          <t-cell-group theme="card">
+            <t-cell title="启用打印" description="关闭后，不再向打印机分发小票，但会保留当前细项配置值">
+              <t-switch slot="note" value="{{settingsForm.enable_print}}" data-field="enable_print" bind:change="onSettingsSwitchChange" size="large" />
+            </t-cell>
+            <t-cell title="打印外卖订单" description="顾客下单成功后向绑定打印机下发外卖小票">
+              <t-switch slot="note" value="{{settingsForm.print_takeout}}" data-field="print_takeout" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_print}}" />
+            </t-cell>
+            <t-cell title="打印堂食订单" description="堂食或扫码下单后打印后厨或前台小票">
+              <t-switch slot="note" value="{{settingsForm.print_dine_in}}" data-field="print_dine_in" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_print}}" />
+            </t-cell>
+            <t-cell title="打印预订订单" description="代客建预订或预订点餐后打印预订相关单据">
+              <t-switch slot="note" value="{{settingsForm.print_reservation}}" data-field="print_reservation" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_print}}" />
+            </t-cell>
+          </t-cell-group>
 
-    <view wx:if="{{refreshErrorMessage}}" class="inline-banner inline-banner-danger">
-      <text class="inline-banner-text">{{refreshErrorMessage}}</text>
-      <text class="inline-banner-action" bindtap="onRetryRefresh">重新同步</text>
-    </view>
-
-    <view class="section-block">
-      <view class="section-title">全局开关</view>
-      <t-cell-group theme="card">
-        <t-cell title="启用打印" description="关闭后，仅保留订单展示，不再向打印机分发小票">
-          <t-switch slot="note" value="{{form.enable_print}}" data-field="enable_print" bind:change="onToggleSwitch" size="large" />
-        </t-cell>
-        <t-cell title="启用语音播报" description="关闭后，新单与履约关键节点不再播报语音提示">
-          <t-switch slot="note" value="{{form.enable_voice}}" data-field="enable_voice" bind:change="onToggleSwitch" size="large" />
-        </t-cell>
-        <t-cell title="启用 KDS" description="开启后，后厨可接收 KDS 看板展示地址和分发配置">
-          <t-switch slot="note" value="{{form.enable_kds}}" data-field="enable_kds" bind:change="onToggleSwitch" size="large" />
-        </t-cell>
-      </t-cell-group>
-    </view>
-
-    <view class="section-block">
-      <view class="section-title">打印场景</view>
-      <view wx:if="{{!form.enable_print}}" class="section-desc">打印总开关关闭时，细分打印场景会一并关闭，避免保存出自相矛盾的分发配置。</view>
-      <t-cell-group theme="card">
-        <t-cell title="打印外卖订单" description="顾客下单成功后向绑定打印机下发外卖小票">
-          <t-switch slot="note" value="{{form.print_takeout}}" data-field="print_takeout" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_print}}" />
-        </t-cell>
-        <t-cell title="打印堂食订单" description="堂食或扫码下单后打印后厨或前台小票">
-          <t-switch slot="note" value="{{form.print_dine_in}}" data-field="print_dine_in" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_print}}" />
-        </t-cell>
-        <t-cell title="打印预订订单" description="代客建预订或预订点餐后打印预订相关单据">
-          <t-switch slot="note" value="{{form.print_reservation}}" data-field="print_reservation" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_print}}" />
-        </t-cell>
-      </t-cell-group>
-    </view>
-
-    <view class="section-block">
-      <view class="section-title">打印分发策略</view>
-      <view class="section-desc">对齐后端的分发与触发模式，决定订单在什么节点、按什么方式推送到打印机。</view>
-
-      <view class="mode-card {{!form.enable_print ? 'mode-card-disabled' : ''}}">
-        <view class="mode-title">分发模式</view>
-        <radio-group bindchange="onDispatchModeChange">
-          <label class="mode-option" wx:for="{{printDispatchModeOptions}}" wx:key="value">
-            <radio value="{{item.value}}" checked="{{form.print_dispatch_mode === item.value}}" color="var(--td-brand-color)" disabled="{{!form.enable_print}}" />
-            <view class="mode-copy">
-              <text class="mode-option-title">{{item.label}}</text>
-              <text class="mode-option-desc">{{item.desc}}</text>
+          <view class="option-group {{!settingsForm.enable_print ? 'option-group--disabled' : ''}}">
+            <view class="option-group__header">
+              <text class="option-group__title">分发模式</text>
+              <text class="option-group__desc">决定订单是整单分发还是按职责拆单</text>
             </view>
-          </label>
-        </radio-group>
-      </view>
-
-      <view class="mode-card {{!form.enable_print ? 'mode-card-disabled' : ''}}">
-        <view class="mode-title">触发时机</view>
-        <radio-group bindchange="onTriggerModeChange">
-          <label class="mode-option" wx:for="{{printTriggerModeOptions}}" wx:key="value">
-            <radio value="{{item.value}}" checked="{{form.print_trigger_mode === item.value}}" color="var(--td-brand-color)" disabled="{{!form.enable_print}}" />
-            <view class="mode-copy">
-              <text class="mode-option-title">{{item.label}}</text>
-              <text class="mode-option-desc">{{item.desc}}</text>
+            <view class="option-tags">
+              <t-check-tag
+                wx:for="{{printDispatchModeOptions}}"
+                wx:key="value"
+                checked="{{settingsForm.print_dispatch_mode === item.value}}"
+                content="{{item.label}}"
+                shape="round"
+                disabled="{{!settingsForm.enable_print}}"
+                data-value="{{item.value}}"
+                bind:change="onDispatchModeSelect"
+              />
             </view>
-          </label>
-        </radio-group>
-      </view>
-    </view>
+            <text class="option-group__help">{{settingsForm.print_dispatch_mode === 'split' ? '当前按设备职责拆分前台与后厨小票。' : '当前每台打印机都会收到完整订单。'}}</text>
+          </view>
 
-    <view class="section-block">
-      <view class="section-title">语音提醒</view>
-      <view wx:if="{{!form.enable_voice}}" class="section-desc">语音总开关关闭时，细分提醒场景会一起停用，避免页面显示与真实播报链路不一致。</view>
-      <t-cell-group theme="card">
-        <t-cell title="外卖语音提醒" description="新外卖订单到达时播报提醒，适合前台接单场景">
-          <t-switch slot="note" value="{{form.voice_takeout}}" data-field="voice_takeout" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_voice}}" />
-        </t-cell>
-        <t-cell title="堂食语音提醒" description="堂食新单和履约变化时播报，减少漏单和错单">
-          <t-switch slot="note" value="{{form.voice_dine_in}}" data-field="voice_dine_in" bind:change="onToggleSwitch" size="large" disabled="{{!form.enable_voice}}" />
-        </t-cell>
-      </t-cell-group>
-    </view>
+          <view class="option-group {{!settingsForm.enable_print ? 'option-group--disabled' : ''}}">
+            <view class="option-group__header">
+              <text class="option-group__title">触发时机</text>
+              <text class="option-group__desc">控制订单在什么节点触发打印</text>
+            </view>
+            <view class="option-tags">
+              <t-check-tag
+                wx:for="{{printTriggerModeOptions}}"
+                wx:key="value"
+                checked="{{settingsForm.print_trigger_mode === item.value}}"
+                content="{{item.label}}"
+                shape="round"
+                disabled="{{!settingsForm.enable_print}}"
+                data-value="{{item.value}}"
+                bind:change="onTriggerModeSelect"
+              />
+            </view>
+            <text class="option-group__help">{{settingsForm.print_trigger_mode === 'ready' ? '当前会在备餐完成后触发打印。' : settingsForm.print_trigger_mode === 'manual' ? '当前仅保留手动打印能力。' : '当前会在商户接单后立即触发打印。'}}</text>
+          </view>
+        </view>
 
-    <view class="section-block">
-      <view class="section-title">KDS 地址</view>
-      <view class="section-desc">如已部署后厨看板地址，可在此统一维护，供后续多端分发和跳转复用。</view>
-      <t-input label="KDS URL" value="{{form.kds_url}}" placeholder="可选，填写 http:// 或 https:// 地址" bindchange="onKdsUrlChange" />
-    </view>
+        <view class="section-panel">
+          <view class="section-top">
+            <text class="section-title">语音提醒</text>
+            <text class="section-caption">保留外卖与堂食的独立提醒偏好，便于不同岗位协作。</text>
+          </view>
+          <t-cell-group theme="card">
+            <t-cell title="启用语音播报" description="关闭后，新单与履约关键节点不再播报语音提示，但会保留当前细项配置值">
+              <t-switch slot="note" value="{{settingsForm.enable_voice}}" data-field="enable_voice" bind:change="onSettingsSwitchChange" size="large" />
+            </t-cell>
+            <t-cell title="外卖语音提醒" description="新外卖订单到达时播报提醒，适合前台接单场景">
+              <t-switch slot="note" value="{{settingsForm.voice_takeout}}" data-field="voice_takeout" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_voice}}" />
+            </t-cell>
+            <t-cell title="堂食语音提醒" description="堂食新单和履约变化时播报，减少漏单和错单">
+              <t-switch slot="note" value="{{settingsForm.voice_dine_in}}" data-field="voice_dine_in" bind:change="onSettingsSwitchChange" size="large" disabled="{{!settingsForm.enable_voice}}" />
+            </t-cell>
+          </t-cell-group>
+        </view>
 
-    <view class="save-wrap">
-      <t-button theme="primary" size="large" shape="round" block loading="{{saving}}" disabled="{{saving || !hasChanges}}" bindtap="onSave">保存显示配置</t-button>
+        <view class="footer-bar">
+          <t-button theme="primary" size="large" shape="round" block loading="{{settingsSaving}}" disabled="{{settingsSaving}}" bind:tap="onSaveSettings">保存后厨协同设置</t-button>
+        </view>
+      </block>
     </view>
   </block>
-  </block>
+
+  <t-message id="t-message" />
 </view>

@@ -4,6 +4,7 @@ import {
   MerchantMembershipSettingsResponse,
   updateMyMerchantMembershipSettings
 } from '../../../../api/merchant'
+import Toast from '../../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { logger } from '../../../../utils/logger'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
@@ -68,7 +69,6 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
-    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     saving: false,
@@ -127,10 +127,22 @@ Page({
     }
     if (this.data.hasChanges) {
       wx.stopPullDownRefresh()
-      wx.showToast({ title: '当前有未保存修改，请先保存后再刷新', icon: 'none' })
+      this.showFeedbackToast('warning', '当前有未保存修改，请先保存后再刷新')
       return
     }
     this.loadSettings(false, true)
+  },
+
+  showFeedbackToast(theme: 'success' | 'warning' | 'error', message: string, duration = 2200) {
+    Toast({
+      context: this,
+      selector: '#t-toast',
+      theme,
+      message,
+      placement: 'middle',
+      duration,
+      direction: 'column'
+    })
   },
 
   onRetryRefresh() {
@@ -177,7 +189,6 @@ Page({
         merchantId: settings.merchant_id,
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
-        actionNoticeMessage: '',
         hasChanges: false,
         initialLoading: false,
         initialError: false,
@@ -198,7 +209,7 @@ Page({
       } else if (hasExistingData) {
         this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       } else {
-        wx.showToast({ title: message, icon: 'none' })
+        this.showFeedbackToast('error', message)
       }
     } finally {
       this.setData({ loading: false })
@@ -212,7 +223,7 @@ Page({
       ...this.data.form,
       [field]: e.detail.value
     }
-    this.setData({ actionNoticeMessage: '', refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   onPercentChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -220,7 +231,7 @@ Page({
       ...this.data.form,
       max_deduction_percent: e.detail.value
     }
-    this.setData({ actionNoticeMessage: '', refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   onToggleScene(e: WechatMiniprogram.TouchEvent) {
@@ -237,13 +248,13 @@ Page({
       ...this.data.form,
       [group]: nextGroup
     }
-    this.setData({ actionNoticeMessage: '', refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
+    this.setData({ refreshErrorMessage: '', form, hasChanges: hasFormChanged(form, this.data.initialForm) })
   },
 
   validateForm() {
     const percent = Number(this.data.form.max_deduction_percent)
     if (!Number.isFinite(percent) || percent < 1 || percent > 100) {
-      wx.showToast({ title: '最高抵扣比例需在 1-100 之间', icon: 'none' })
+      this.showFeedbackToast('warning', '最高抵扣比例需在 1-100 之间')
       return false
     }
     return true
@@ -254,7 +265,6 @@ Page({
     if (!this.validateForm()) return
 
     this.setData({ saving: true })
-    wx.showLoading({ title: '保存中...' })
 
     try {
       const updated = await updateMyMerchantMembershipSettings({
@@ -269,15 +279,21 @@ Page({
         merchantId: updated.merchant_id,
         form,
         initialForm: JSON.parse(JSON.stringify(form)),
-        actionNoticeMessage: '会员设置已保存。',
-        hasChanges: false
+        refreshErrorMessage: '',
+        hasChanges: false,
+        lastLoadedAt: Date.now()
+      })
+      wx.navigateBack({
+        delta: 1,
+        fail: () => {
+          this.showFeedbackToast('success', '会员设置已保存')
+        }
       })
     } catch (err: unknown) {
       logger.error('Save merchant membership settings failed', err)
       const message = getErrorMessage(err, '保存失败，请稍后重试')
-      wx.showToast({ title: message, icon: 'none' })
+      this.showFeedbackToast('error', message)
     } finally {
-      wx.hideLoading()
       this.setData({ saving: false })
     }
   },
@@ -290,13 +306,5 @@ Page({
 
     if (!this.data.accessReady || this.data.accessDenied) return
     this.loadSettings(true, true)
-  },
-
-  onOpenRechargeRules() {
-    wx.navigateTo({ url: '/pages/merchant/settings/recharge-rules/index' })
-  },
-
-  onOpenMembers() {
-    wx.navigateTo({ url: '/pages/merchant/settings/members/index' })
   }
 })

@@ -1,24 +1,25 @@
-import dayjs from 'dayjs'
-import { CreateMerchantVoucherParams, MerchantVoucher, MerchantVoucherService, UpdateMerchantVoucherParams } from '../../../api/coupon'
-import { getMyMerchantProfile } from '../../../api/merchant'
-import { logger } from '../../../utils/logger'
 import { getStableBarHeights } from '../../../utils/responsive'
-import { getErrorUserMessage } from '../../../utils/user-facing'
+import {
+  buildMerchantVoucherStatusView,
+  MerchantVoucherService,
+  type MerchantVoucher
+} from '../../../api/coupon'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
+import { logger } from '../../../utils/logger'
+import { syncCurrentMerchantContext } from '../../../utils/current-merchant'
+import { getErrorUserMessage } from '../../../utils/user-facing'
 
-type VoucherStatusTheme = 'success' | 'warning' | 'danger' | 'default'
 type OrderType = 'takeout' | 'dine_in' | 'takeaway' | 'reservation'
 
 interface VoucherView extends MerchantVoucher {
-  amount_text: string
-  min_order_amount_text: string
+  amount_yuan: string
+  min_order_amount_yuan: string
   usage_condition_text: string
   valid_range_text: string
-  remaining_quantity: number
   remaining_quantity_text: string
   order_type_labels: string[]
-  status_label: string
-  status_theme: VoucherStatusTheme
+  statusPending: boolean
+  deletePending: boolean
 }
 
 interface VoucherPageChunk {
@@ -26,6 +27,7 @@ interface VoucherPageChunk {
   pageId: number
   pageSize: number
   total?: number
+  hasMore?: boolean
 }
 
 interface VoucherPageProbeResult {
@@ -34,132 +36,62 @@ interface VoucherPageProbeResult {
   nextPageCache: VoucherPageChunk | null
 }
 
-interface VoucherFormData {
-  code: string
-  name: string
-  description: string
-  amount_yuan: string
-  min_order_amount_yuan: string
-  total_quantity: string
-  valid_from: string
-  valid_until: string
-  is_active: boolean
-  allowed_order_types: OrderType[]
-}
-
 const VOUCHERS_PAGE_SIZE = 50
 const VOUCHERS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
 
 const ALL_ORDER_TYPES: OrderType[] = ['takeout', 'dine_in', 'takeaway', 'reservation']
 
-const ORDER_TYPE_OPTIONS: Array<{ value: OrderType, label: string }> = [
-  { value: 'takeout', label: '外卖配送' },
-  { value: 'dine_in', label: '堂食' },
-  { value: 'takeaway', label: '到店自取' },
-  { value: 'reservation', label: '预订' }
-]
-
-function formatMoney(amount: number) {
-  return `¥${(amount / 100).toFixed(2)}`
+const ORDER_TYPE_LABEL_MAP: Record<OrderType, string> = {
+  takeout: '外卖配送',
+  dine_in: '堂食',
+  takeaway: '到店自取',
+  reservation: '预订'
 }
 
-function toRFC3339Start(date: string) {
-  return `${date}T00:00:00+08:00`
+function formatAmount(amount: number) {
+  return (amount / 100).toFixed(2)
 }
 
-function toRFC3339End(date: string) {
-  return `${date}T23:59:59+08:00`
+function formatDate(date: string) {
+  return String(date || '').slice(0, 10)
 }
 
-function defaultFormData(): VoucherFormData {
-  return {
-    code: '',
-    name: '',
-    description: '',
-    amount_yuan: '',
-    min_order_amount_yuan: '',
-    total_quantity: '',
-    valid_from: '',
-    valid_until: '',
-    is_active: true,
-    allowed_order_types: [...ALL_ORDER_TYPES]
-  }
-}
-
-function getOrderTypeLabel(type: OrderType) {
-  const matched = ORDER_TYPE_OPTIONS.find((item) => item.value === type)
-  return matched?.label || type
-}
-
-function buildStatus(view: MerchantVoucher) {
-  const now = dayjs()
-  const validFrom = dayjs(view.valid_from)
-  const validUntil = dayjs(view.valid_until)
-  const remainingQuantity = Math.max(view.total_quantity - view.claimed_quantity, 0)
-
-  if (!view.is_active) {
-    return { label: '已停用', theme: 'default' as VoucherStatusTheme }
-  }
-  if (validUntil.isValid() && now.isAfter(validUntil)) {
-    return { label: '已过期', theme: 'danger' as VoucherStatusTheme }
-  }
-  if (validFrom.isValid() && now.isBefore(validFrom)) {
-    return { label: '未开始', theme: 'warning' as VoucherStatusTheme }
-  }
-  if (remainingQuantity <= 0) {
-    return { label: '已领完', theme: 'warning' as VoucherStatusTheme }
-  }
-  return { label: '发放中', theme: 'success' as VoucherStatusTheme }
+function getOrderTypeLabels(orderTypes: string[]) {
+  const normalized = (orderTypes.length ? orderTypes : ALL_ORDER_TYPES) as OrderType[]
+  return normalized.map((item) => ORDER_TYPE_LABEL_MAP[item] || item)
 }
 
 function buildVoucherView(voucher: MerchantVoucher): VoucherView {
-  const status = buildStatus(voucher)
+  const statusView = buildMerchantVoucherStatusView(voucher)
+  const minOrderAmountYuan = formatAmount(voucher.min_order_amount)
   const remainingQuantity = Math.max(voucher.total_quantity - voucher.claimed_quantity, 0)
-  const minOrderAmountText = voucher.min_order_amount > 0 ? formatMoney(voucher.min_order_amount) : '不限门槛'
+
   return {
     ...voucher,
-    amount_text: formatMoney(voucher.amount),
-    min_order_amount_text: minOrderAmountText,
-    usage_condition_text: voucher.min_order_amount > 0 ? `满 ${minOrderAmountText} 可用` : '不限门槛可用',
-    valid_range_text: `${dayjs(voucher.valid_from).format('YYYY-MM-DD')} 至 ${dayjs(voucher.valid_until).format('YYYY-MM-DD')}`,
-    remaining_quantity: remainingQuantity,
+    status_code: statusView.code,
+    status_label: statusView.label,
+    status_theme: statusView.theme,
+    amount_yuan: formatAmount(voucher.amount),
+    min_order_amount_yuan: minOrderAmountYuan,
+    usage_condition_text: voucher.min_order_amount > 0 ? `满 ¥${minOrderAmountYuan} 可用` : '不限门槛可用',
+    valid_range_text: `${formatDate(voucher.valid_from)} 至 ${formatDate(voucher.valid_until)}`,
     remaining_quantity_text: `${remainingQuantity} / ${voucher.total_quantity}`,
-    order_type_labels: (voucher.allowed_order_types.length ? voucher.allowed_order_types : ALL_ORDER_TYPES).map((item) => getOrderTypeLabel(item as OrderType)),
-    status_label: status.label,
-    status_theme: status.theme
+    order_type_labels: getOrderTypeLabels(voucher.allowed_order_types),
+    statusPending: false,
+    deletePending: false
   }
 }
 
-function toFormData(voucher: MerchantVoucher): VoucherFormData {
+function buildResultSummaryText(visibleCount: number) {
+  return `当前已加载 ${visibleCount} 张代金券`
+}
+
+function buildPresentationUpdate(vouchers: VoucherView[]) {
   return {
-    code: voucher.code,
-    name: voucher.name,
-    description: voucher.description,
-    amount_yuan: (voucher.amount / 100).toFixed(2),
-    min_order_amount_yuan: voucher.min_order_amount > 0 ? (voucher.min_order_amount / 100).toFixed(2) : '',
-    total_quantity: String(voucher.total_quantity),
-    valid_from: dayjs(voucher.valid_from).format('YYYY-MM-DD'),
-    valid_until: dayjs(voucher.valid_until).format('YYYY-MM-DD'),
-    is_active: voucher.is_active,
-    allowed_order_types: (voucher.allowed_order_types.length ? voucher.allowed_order_types : ALL_ORDER_TYPES) as OrderType[]
+    vouchers,
+    resultSummaryText: buildResultSummaryText(vouchers.length),
+    emptyDescription: '当前还没有代金券，先新增一个'
   }
-}
-
-function upsertVoucherView(vouchers: VoucherView[], voucher: MerchantVoucher) {
-  const nextVoucher = buildVoucherView(voucher)
-  const index = vouchers.findIndex((item) => item.id === nextVoucher.id)
-
-  if (index === -1) {
-    return [nextVoucher, ...vouchers]
-  }
-
-  const nextVouchers = [...vouchers]
-  nextVouchers[index] = nextVoucher
-  return nextVouchers
-}
-
-function removeVoucherView(vouchers: VoucherView[], voucherId: number) {
-  return vouchers.filter((item) => item.id !== voucherId)
 }
 
 function appendVoucherViews(existingVouchers: VoucherView[], incomingVouchers: VoucherView[]) {
@@ -182,23 +114,29 @@ function appendVoucherViews(existingVouchers: VoucherView[], incomingVouchers: V
   return merged
 }
 
+function upsertVoucherView(vouchers: VoucherView[], voucher: MerchantVoucher) {
+  const nextVoucher = buildVoucherView(voucher)
+  const index = vouchers.findIndex((item) => item.id === nextVoucher.id)
+
+  if (index === -1) {
+    return [nextVoucher, ...vouchers]
+  }
+
+  const nextVouchers = [...vouchers]
+  nextVouchers[index] = nextVoucher
+  return nextVouchers
+}
+
+function removeVoucherView(vouchers: VoucherView[], voucherId: number) {
+  return vouchers.filter((item) => item.id !== voucherId)
+}
+
 function hasReliableTotal(total: number | undefined, loadedCount: number) {
   return typeof total === 'number' && total > loadedCount
 }
 
 function normalizeTotal(total: number | undefined, fallback: number) {
   return typeof total === 'number' && total >= 0 ? total : fallback
-}
-
-function resolveHasMore(total: number | undefined, loadedCount: number, pageSize: number, lastPageLength: number) {
-  // Some adjacent backend list APIs return the current page length in total.
-  // Only trust total when it clearly exceeds what is already loaded.
-  const trustedTotal = hasReliableTotal(total, loadedCount) ? total : undefined
-  if (typeof trustedTotal === 'number') {
-    return loadedCount < trustedTotal
-  }
-
-  return lastPageLength >= pageSize
 }
 
 function resolveTargetPageCount(pageId: number, pageSize: number, visibleCount: number) {
@@ -211,35 +149,13 @@ function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
   return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
 }
 
-function getCreatePayload(form: VoucherFormData): CreateMerchantVoucherParams {
-  return {
-    code: form.code.trim() || undefined,
-    name: form.name.trim(),
-    description: form.description.trim() || undefined,
-    amount: Math.round(Number(form.amount_yuan) * 100),
-    min_order_amount: form.min_order_amount_yuan ? Math.round(Number(form.min_order_amount_yuan) * 100) : 0,
-    total_quantity: Number(form.total_quantity),
-    valid_from: toRFC3339Start(form.valid_from),
-    valid_until: toRFC3339End(form.valid_until),
-    allowed_order_types: form.allowed_order_types
+function buildEditPageUrl(voucherId?: number) {
+  if (voucherId && voucherId > 0) {
+    return `/pages/merchant/vouchers/edit/index?id=${voucherId}`
   }
-}
 
-function getUpdatePayload(form: VoucherFormData): UpdateMerchantVoucherParams {
-  return {
-    name: form.name.trim(),
-    description: form.description.trim() || undefined,
-    amount: Math.round(Number(form.amount_yuan) * 100),
-    min_order_amount: form.min_order_amount_yuan ? Math.round(Number(form.min_order_amount_yuan) * 100) : 0,
-    total_quantity: Number(form.total_quantity),
-    valid_from: toRFC3339Start(form.valid_from),
-    valid_until: toRFC3339End(form.valid_until),
-    is_active: form.is_active,
-    allowed_order_types: form.allowed_order_types
-  }
+  return '/pages/merchant/vouchers/edit/index'
 }
-
-const getErrorMessage = getErrorUserMessage
 
 Page({
   data: {
@@ -250,16 +166,14 @@ Page({
     initialLoading: true,
     initialError: false,
     initialErrorMessage: '',
-    actionNoticeMessage: '',
     refreshErrorMessage: '',
     loading: false,
     loadingMore: false,
-    submitting: false,
-    actingVoucherId: 0,
-    actingVoucherAction: '',
+    vouchers: [] as VoucherView[],
+    resultSummaryText: '当前已加载 0 张代金券',
+    emptyDescription: '当前还没有代金券，先新增一个',
     merchantId: 0,
     lastLoadedAt: 0,
-    vouchers: [] as VoucherView[],
     pageId: 0,
     pageSize: VOUCHERS_PAGE_SIZE,
     total: 0,
@@ -268,11 +182,11 @@ Page({
     lookaheadPageId: 0,
     lookaheadPageSize: VOUCHERS_PAGE_SIZE,
     lookaheadTotal: 0,
-    formVisible: false,
-    isEdit: false,
-    editId: 0,
-    form: defaultFormData(),
-    orderTypeOptions: ORDER_TYPE_OPTIONS
+    needsReloadOnShow: false,
+    deleteDialogVisible: false,
+    deleteDialogSubmitting: false,
+    deleteDialogVoucherId: 0,
+    deleteDialogVoucherName: ''
   },
 
   async onLoad() {
@@ -285,12 +199,13 @@ Page({
       accessDenied: accessResult.status === 'denied',
       accessErrorMessage: accessResult.status === 'error' ? accessResult.message : ''
     })
+
     if (accessResult.status !== 'granted') {
       this.setData({ initialLoading: false })
       return
     }
 
-    this.loadPageData(true, true)
+    await this.loadPageData(true, true)
   },
 
   onRetryAccess() {
@@ -302,26 +217,50 @@ Page({
       initialError: false,
       initialErrorMessage: ''
     })
-    this.onLoad()
+    void this.onLoad()
   },
 
-  onShow() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    if (
-      this.data.merchantId > 0
-      && !this.data.initialLoading
-      && !this.data.submitting
-      && !this.data.loadingMore
-      && !this.data.actingVoucherId
-      && shouldAutoRefresh(this.data.lastLoadedAt, VOUCHERS_AUTO_REFRESH_WINDOW_MS)
-    ) {
-      void this.loadVouchers(false)
+  async onShow() {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
+    if (this.data.initialLoading || this.data.loading || this.data.loadingMore || this.data.deleteDialogSubmitting) {
+      return
+    }
+
+    const needsReloadOnShow = !!this.data.needsReloadOnShow
+    if (needsReloadOnShow) {
+      this.setData({ needsReloadOnShow: false })
+    }
+
+    const merchantChanged = await this.syncMerchantContext()
+    if (merchantChanged === null) {
+      return
+    }
+
+    if (merchantChanged) {
+      await this.loadVouchers(true, true)
+      return
+    }
+
+    if (needsReloadOnShow && this.data.merchantId > 0) {
+      await this.loadVouchers(false, true)
+      return
+    }
+
+    if (this.data.merchantId > 0 && shouldAutoRefresh(this.data.lastLoadedAt, VOUCHERS_AUTO_REFRESH_WINDOW_MS)) {
+      await this.loadVouchers(false)
     }
   },
 
   onPullDownRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    this.loadPageData(false, true)
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    void this.loadPageData(false, true)
   },
 
   onRetry() {
@@ -330,70 +269,102 @@ Page({
       return
     }
 
-    if (!this.data.accessReady || this.data.accessDenied) return
-    this.loadPageData(true, true)
+    if (!this.data.accessReady || this.data.accessDenied) {
+      return
+    }
+
+    void this.loadPageData(true, true)
   },
 
   onRetryRefresh() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    this.loadPageData(false, true)
-  },
-
-  onReachBottom() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    void this.onLoadMore()
-  },
-
-  async ensureMerchantId() {
-    if (this.data.merchantId > 0) {
-      return this.data.merchantId
-    }
-
-    try {
-      const cached = wx.getStorageSync('current_merchant') as { id?: number, merchant_id?: number } | null
-      const cachedMerchantId = Number(cached?.id || cached?.merchant_id || 0)
-      if (cachedMerchantId > 0) {
-        this.setData({ merchantId: cachedMerchantId })
-        return cachedMerchantId
-      }
-
-      const profile = await getMyMerchantProfile()
-      const merchantId = Number(profile.id || 0)
-      if (merchantId > 0) {
-        this.setData({ merchantId })
-        return merchantId
-      }
-
-      throw new Error('invalid merchant id')
-    } catch (err) {
-      logger.error('Init merchant voucher context failed', err)
-      this.setData({
-        initialLoading: false,
-        initialError: true,
-        initialErrorMessage: getErrorMessage(err, '获取商户信息失败，请重试'),
-        refreshErrorMessage: ''
-      })
-      return 0
-    }
-  },
-
-  async loadPageData(showLoading = true, force = false) {
-    const merchantId = await this.ensureMerchantId()
-    if (!merchantId) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
       wx.stopPullDownRefresh()
       return
     }
 
-    await this.loadVouchers(showLoading, force)
+    void this.loadPageData(false, true)
+  },
+
+  onReachBottom() {
+    void this.onLoadMore()
+  },
+
+  async syncMerchantContext(): Promise<boolean | null> {
+    try {
+      const context = await syncCurrentMerchantContext({ currentMerchantId: this.data.merchantId })
+
+      if (context.changed) {
+        this.setData({
+          merchantId: context.merchantId,
+          lastLoadedAt: 0,
+          pageId: 0,
+          total: 0,
+          hasMore: false,
+          lookaheadVouchers: [],
+          lookaheadPageId: 0,
+          lookaheadPageSize: VOUCHERS_PAGE_SIZE,
+          lookaheadTotal: 0,
+          initialLoading: true,
+          initialError: false,
+          initialErrorMessage: '',
+          refreshErrorMessage: '',
+          needsReloadOnShow: false,
+          deleteDialogVisible: false,
+          deleteDialogSubmitting: false,
+          deleteDialogVoucherId: 0,
+          deleteDialogVoucherName: '',
+          ...buildPresentationUpdate([])
+        })
+        return true
+      }
+
+      if (context.merchantId !== this.data.merchantId) {
+        this.setData({ merchantId: context.merchantId })
+      }
+
+      return false
+    } catch (err) {
+      logger.error('Sync merchant vouchers context failed', err)
+      const message = getErrorUserMessage(err, '获取商户信息失败，请重试')
+
+      if (!this.data.lastLoadedAt && !this.data.vouchers.length) {
+        this.setData({
+          initialLoading: false,
+          initialError: true,
+          initialErrorMessage: message,
+          refreshErrorMessage: ''
+        })
+      } else {
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
+      }
+
+      return null
+    }
+  },
+
+  async loadPageData(showLoading = true, force = false) {
+    const merchantChanged = await this.syncMerchantContext()
+    if (merchantChanged === null) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    if (!this.data.merchantId) {
+      wx.stopPullDownRefresh()
+      return
+    }
+
+    await this.loadVouchers(showLoading, force || merchantChanged)
   },
 
   async fetchVoucherPage(pageNumber: number, requestedPageSize = VOUCHERS_PAGE_SIZE): Promise<VoucherPageChunk> {
     const response = await MerchantVoucherService.listMerchantVouchers(this.data.merchantId, pageNumber, requestedPageSize)
     return {
-      vouchers: (response.vouchers || []).map(buildVoucherView),
+      vouchers: (Array.isArray(response.vouchers) ? response.vouchers : []).map(buildVoucherView),
       pageId: response.page || pageNumber,
       pageSize: response.pageSize || requestedPageSize || VOUCHERS_PAGE_SIZE,
-      total: typeof response.total === 'number' && response.total >= 0 ? response.total : undefined
+      total: typeof response.total === 'number' && response.total >= 0 ? response.total : undefined,
+      hasMore: response.hasMore
     }
   },
 
@@ -506,7 +477,10 @@ Page({
   },
 
   async loadVouchers(showLoading = true, force = false) {
-    if (this.data.loading || !this.data.merchantId) return
+    if (this.data.loading || !this.data.merchantId) {
+      wx.stopPullDownRefresh()
+      return
+    }
 
     const hasConfirmedData = this.data.vouchers.length > 0 || this.data.lastLoadedAt > 0
     if (!force && hasConfirmedData && !shouldAutoRefresh(this.data.lastLoadedAt, VOUCHERS_AUTO_REFRESH_WINDOW_MS)) {
@@ -538,8 +512,9 @@ Page({
         resolveTargetPageCount(this.data.pageId, this.data.pageSize || VOUCHERS_PAGE_SIZE, minimumVisibleCount),
         minimumVisibleCount
       )
+
       this.setData({
-        vouchers: result.vouchers,
+        ...buildPresentationUpdate(result.vouchers),
         pageId: result.pageId,
         pageSize: result.pageSize,
         total: result.total,
@@ -556,7 +531,7 @@ Page({
       })
     } catch (err) {
       logger.error('Load merchant vouchers failed', err)
-      const message = getErrorMessage(err, '加载代金券失败，请稍后重试')
+      const message = getErrorUserMessage(err, '加载代金券失败，请稍后重试')
 
       if (this.data.initialLoading || !hasConfirmedData) {
         this.setData({
@@ -566,11 +541,7 @@ Page({
           refreshErrorMessage: ''
         })
       } else {
-        this.setData({
-          refreshErrorMessage: this.data.actionNoticeMessage
-            ? `${message}，当前仍显示本页已更新结果`
-            : `${message}，当前已保留上次同步结果`
-        })
+        this.setData({ refreshErrorMessage: `${message}，当前已保留上次同步结果` })
       }
     } finally {
       this.setData({ loading: false })
@@ -579,8 +550,11 @@ Page({
   },
 
   async onLoadMore() {
-    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) return
-    if (this.data.loading || this.data.loadingMore || !this.data.merchantId || !this.data.hasMore) {
+    if (!this.data.accessReady || this.data.accessDenied || this.data.accessErrorMessage) {
+      return
+    }
+
+    if (this.data.loading || this.data.loadingMore || !this.data.merchantId || !this.data.hasMore || this.data.deleteDialogSubmitting) {
       return
     }
 
@@ -594,7 +568,7 @@ Page({
       const pagination = await this.resolveVoucherPageBoundary(nextChunk, mergedVouchers.length)
 
       this.setData({
-        vouchers: mergedVouchers,
+        ...buildPresentationUpdate(mergedVouchers),
         pageId: nextChunk.pageId,
         pageSize: nextChunk.pageSize,
         total: Math.max(pagination.total, mergedVouchers.length),
@@ -611,243 +585,177 @@ Page({
       })
     } catch (err) {
       logger.error('Load more merchant vouchers failed', err)
-      wx.showToast({ title: getErrorMessage(err, '加载更多失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: getErrorUserMessage(err, '加载更多失败，请稍后重试'), icon: 'none' })
     } finally {
       this.setData({ loadingMore: false })
     }
   },
 
   onAddVoucher() {
-    if (this.data.actingVoucherId) return
+    if (this.data.deleteDialogSubmitting || this.data.loading) {
+      return
+    }
 
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      formVisible: true,
-      isEdit: false,
-      editId: 0,
-      form: defaultFormData()
+    this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
+
+    wx.navigateTo({
+      url: buildEditPageUrl(),
+      fail: (err) => {
+        logger.error('Navigate to voucher create page failed', err)
+        this.setData({ needsReloadOnShow: false })
+        wx.showToast({ title: '打开新建页失败，请稍后重试', icon: 'none' })
+      }
     })
   },
 
   onEditVoucher(e: WechatMiniprogram.TouchEvent) {
-    if (this.data.actingVoucherId) return
-
-    const { id } = e.currentTarget.dataset as { id?: number }
-    if (!id) return
-    const target = this.data.vouchers.find((item) => item.id === id)
-    if (!target) return
-
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      formVisible: true,
-      isEdit: true,
-      editId: id,
-      form: toFormData(target)
-    })
-  },
-
-  onCloseForm() {
-    this.setData({ formVisible: false })
-  },
-
-  onTextInput(e: WechatMiniprogram.Input) {
-    const { field } = e.currentTarget.dataset as { field?: keyof VoucherFormData }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: e.detail.value
-    })
-  },
-
-  onDateChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
-    const { field } = e.currentTarget.dataset as { field?: 'valid_from' | 'valid_until' }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: e.detail.value
-    })
-  },
-
-  onSwitchChange(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
-    const { field } = e.currentTarget.dataset as { field?: 'is_active' }
-    if (!field) return
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      [`form.${field}`]: Boolean(e.detail.value)
-    })
-  },
-
-  onToggleOrderType(e: WechatMiniprogram.TouchEvent) {
-    const { value } = e.currentTarget.dataset as { value?: OrderType }
-    if (!value) return
-
-    const next = [...this.data.form.allowed_order_types]
-    const index = next.indexOf(value)
-    if (index >= 0) {
-      next.splice(index, 1)
-    } else {
-      next.push(value)
-    }
-
-    this.setData({
-      actionNoticeMessage: '',
-      refreshErrorMessage: '',
-      'form.allowed_order_types': next
-    })
-  },
-
-  validateForm() {
-    const { form } = this.data
-    if (!form.name.trim()) return '请填写代金券名称'
-    if (!form.amount_yuan || Number(form.amount_yuan) <= 0) return '请输入有效的抵扣金额'
-    if (form.min_order_amount_yuan && Number(form.min_order_amount_yuan) < 0) return '使用门槛不能小于 0'
-    if (!form.total_quantity || Number(form.total_quantity) <= 0) return '请输入有效的发放数量'
-    if (!form.valid_from) return '请选择生效开始日期'
-    if (!form.valid_until) return '请选择生效结束日期'
-    if (form.valid_until < form.valid_from) return '结束日期不能早于开始日期'
-    if (!form.allowed_order_types.length) return '请至少选择一个可用订单类型'
-    return ''
-  },
-
-  async onSubmitForm() {
-    if (this.data.submitting) return
-
-    const errorMessage = this.validateForm()
-    if (errorMessage) {
-      wx.showToast({ title: errorMessage, icon: 'none' })
+    if (this.data.deleteDialogSubmitting || this.data.loading) {
       return
     }
 
-    this.setData({ submitting: true })
-    wx.showLoading({ title: '保存中...' })
-    try {
-      const wasEdit = this.data.isEdit
-      let savedVoucher: MerchantVoucher
+    const id = Number((e.currentTarget.dataset as { id?: number | string }).id || 0)
+    const voucher = this.data.vouchers.find((item) => item.id === id)
+    if (!voucher || voucher.statusPending || voucher.deletePending) {
+      return
+    }
 
-      if (wasEdit && this.data.editId) {
-        savedVoucher = await MerchantVoucherService.updateMerchantVoucher(this.data.merchantId, this.data.editId, getUpdatePayload(this.data.form))
-      } else {
-        savedVoucher = await MerchantVoucherService.createMerchantVoucher(this.data.merchantId, getCreatePayload(this.data.form))
+    this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
+
+    wx.navigateTo({
+      url: buildEditPageUrl(id),
+      fail: (err) => {
+        logger.error('Navigate to voucher edit page failed', err)
+        this.setData({ needsReloadOnShow: false })
+        wx.showToast({ title: '打开编辑页失败，请稍后重试', icon: 'none' })
       }
+    })
+  },
 
-      const nextVouchers = upsertVoucherView(this.data.vouchers, savedVoucher)
-      const nextTotal = Math.max(wasEdit ? this.data.total : this.data.total + 1, nextVouchers.length)
+  onActionsCatch() {},
 
+  async onToggleVoucherStatus(e: WechatMiniprogram.CustomEvent<{ value: boolean }>) {
+    const id = Number((e.currentTarget.dataset as { id?: number | string }).id || 0)
+    if (!id) {
+      return
+    }
+
+    const targetVoucher = this.data.vouchers.find((item) => item.id === id)
+    if (!targetVoucher || targetVoucher.statusPending || targetVoucher.deletePending) {
+      return
+    }
+
+    const targetActive = !!e.detail?.value
+    if (targetActive === targetVoucher.is_active) {
+      return
+    }
+
+    const pendingVouchers = this.data.vouchers.map((voucher) => (
+      voucher.id === id ? { ...voucher, statusPending: true } : voucher
+    ))
+
+    this.setData(buildPresentationUpdate(pendingVouchers))
+
+    try {
+      const updatedVoucher = await MerchantVoucherService.updateMerchantVoucher(this.data.merchantId, id, {
+        is_active: targetActive
+      })
+
+      const nextVouchers = upsertVoucherView(pendingVouchers, updatedVoucher)
       this.setData({
-        vouchers: nextVouchers,
-        total: nextTotal,
-        hasMore: resolveHasMore(nextTotal, nextVouchers.length, this.data.pageSize || VOUCHERS_PAGE_SIZE, 0),
-        lookaheadVouchers: [],
-        lookaheadPageId: 0,
-        lookaheadPageSize: this.data.pageSize || VOUCHERS_PAGE_SIZE,
-        lookaheadTotal: 0,
-        formVisible: false,
-        isEdit: false,
-        editId: 0,
-        form: defaultFormData(),
+        ...buildPresentationUpdate(nextVouchers),
+        total: Math.max(this.data.total, nextVouchers.length),
         initialLoading: false,
         initialError: false,
         initialErrorMessage: '',
-        actionNoticeMessage: wasEdit ? '代金券已更新。' : '代金券已创建。',
         refreshErrorMessage: '',
         lastLoadedAt: Date.now()
       })
-      void this.loadVouchers(false, true)
+      wx.showToast({ title: updatedVoucher.is_active ? '代金券已启用' : '代金券已停用', icon: 'none' })
     } catch (err) {
-      logger.error('Submit merchant voucher failed', err)
-      wx.showToast({ title: getErrorMessage(err, this.data.isEdit ? '更新代金券失败，请稍后重试' : '创建代金券失败，请稍后重试'), icon: 'none' })
-    } finally {
-      this.setData({ submitting: false })
-      wx.hideLoading()
+      logger.error('Toggle merchant voucher status failed', err)
+      const restoredVouchers = pendingVouchers.map((voucher) => (
+        voucher.id === id ? { ...targetVoucher, statusPending: false } : voucher
+      ))
+      this.setData(buildPresentationUpdate(restoredVouchers))
+      wx.showToast({ title: getErrorUserMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
     }
   },
 
-  onToggleVoucherStatus(e: WechatMiniprogram.TouchEvent) {
-    const { id, active, name } = e.currentTarget.dataset as { id?: number, active?: boolean, name?: string }
-    if (!id || typeof active !== 'boolean' || this.data.actingVoucherId) return
+  onRequestDeleteVoucher(e: WechatMiniprogram.TouchEvent) {
+    const dataset = e.currentTarget.dataset as { id?: number | string, name?: string }
+    const id = Number(dataset.id || 0)
+    if (!id || this.data.deleteDialogSubmitting) {
+      return
+    }
 
-    wx.showModal({
-      title: active ? '停用代金券' : '启用代金券',
-      content: `${active ? '停用' : '启用'}「${name || '该代金券'}」后，顾客${active ? '将不能继续领取和使用' : '可以继续领取并在有效期内使用'}。`,
-      success: async (res) => {
-        if (!res.confirm) return
-        this.setData({ actingVoucherId: id, actingVoucherAction: 'toggle' })
-        try {
-          const updatedVoucher = await MerchantVoucherService.updateMerchantVoucher(this.data.merchantId, id, { is_active: !active })
-          const nextVouchers = upsertVoucherView(this.data.vouchers, updatedVoucher)
-          const nextTotal = Math.max(this.data.total, nextVouchers.length)
+    const voucher = this.data.vouchers.find((item) => item.id === id)
+    if (!voucher || voucher.statusPending || voucher.deletePending) {
+      return
+    }
 
-          this.setData({
-            vouchers: nextVouchers,
-            total: nextTotal,
-            hasMore: resolveHasMore(nextTotal, nextVouchers.length, this.data.pageSize || VOUCHERS_PAGE_SIZE, 0),
-            lookaheadVouchers: [],
-            lookaheadPageId: 0,
-            lookaheadPageSize: this.data.pageSize || VOUCHERS_PAGE_SIZE,
-            lookaheadTotal: 0,
-            initialLoading: false,
-            initialError: false,
-            initialErrorMessage: '',
-            actionNoticeMessage: updatedVoucher.is_active ? '代金券已启用。' : '代金券已停用。',
-            refreshErrorMessage: '',
-            lastLoadedAt: Date.now()
-          })
-          void this.loadVouchers(false, true)
-        } catch (err) {
-          logger.error('Toggle merchant voucher status failed', err)
-          wx.showToast({ title: getErrorMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
-        } finally {
-          this.setData({ actingVoucherId: 0, actingVoucherAction: '' })
-        }
-      }
+    this.setData({
+      deleteDialogVisible: true,
+      deleteDialogSubmitting: false,
+      deleteDialogVoucherId: id,
+      deleteDialogVoucherName: dataset.name || voucher.name || ''
     })
   },
 
-  onDeleteVoucher(e: WechatMiniprogram.TouchEvent) {
-    const { id, name } = e.currentTarget.dataset as { id?: number, name?: string }
-    if (!id || this.data.actingVoucherId) return
+  onCancelDeleteDialog() {
+    if (this.data.deleteDialogSubmitting) {
+      return
+    }
 
-    wx.showModal({
-      title: '确认删除',
-      content: `删除「${name || '该代金券'}」后不可恢复；若仍有未使用券，后端会拒绝删除。`,
-      confirmColor: '#e34d59',
-      success: async (res) => {
-        if (!res.confirm) return
-
-        this.setData({ actingVoucherId: id, actingVoucherAction: 'delete' })
-        try {
-          await MerchantVoucherService.deleteMerchantVoucher(this.data.merchantId, id)
-          const nextVouchers = removeVoucherView(this.data.vouchers, id)
-          const nextTotal = Math.max(this.data.total - 1, nextVouchers.length, 0)
-
-          this.setData({
-            vouchers: nextVouchers,
-            total: nextTotal,
-            hasMore: resolveHasMore(nextTotal, nextVouchers.length, this.data.pageSize || VOUCHERS_PAGE_SIZE, 0),
-            lookaheadVouchers: [],
-            lookaheadPageId: 0,
-            lookaheadPageSize: this.data.pageSize || VOUCHERS_PAGE_SIZE,
-            lookaheadTotal: 0,
-            initialLoading: false,
-            initialError: false,
-            initialErrorMessage: '',
-            actionNoticeMessage: '代金券已删除。',
-            refreshErrorMessage: '',
-            lastLoadedAt: Date.now()
-          })
-          void this.loadVouchers(false, true)
-        } catch (err) {
-          logger.error('Delete merchant voucher failed', err)
-          wx.showToast({ title: getErrorMessage(err, '删除代金券失败，请稍后重试'), icon: 'none' })
-        } finally {
-          this.setData({ actingVoucherId: 0, actingVoucherAction: '' })
-        }
-      }
+    this.setData({
+      deleteDialogVisible: false,
+      deleteDialogVoucherId: 0,
+      deleteDialogVoucherName: ''
     })
+  },
+
+  async onConfirmDeleteVoucher() {
+    if (this.data.deleteDialogSubmitting || !this.data.deleteDialogVoucherId) {
+      return
+    }
+
+    const voucherId = this.data.deleteDialogVoucherId
+    const pendingVouchers = this.data.vouchers.map((voucher) => (
+      voucher.id === voucherId ? { ...voucher, deletePending: true } : voucher
+    ))
+
+    this.setData({
+      ...buildPresentationUpdate(pendingVouchers),
+      deleteDialogSubmitting: true
+    })
+
+    try {
+      await MerchantVoucherService.deleteMerchantVoucher(this.data.merchantId, voucherId)
+      const nextVouchers = removeVoucherView(pendingVouchers, voucherId)
+      this.setData({
+        ...buildPresentationUpdate(nextVouchers),
+        total: Math.max(this.data.total - 1, nextVouchers.length, 0),
+        deleteDialogVisible: false,
+        deleteDialogSubmitting: false,
+        deleteDialogVoucherId: 0,
+        deleteDialogVoucherName: '',
+        initialLoading: false,
+        initialError: false,
+        initialErrorMessage: '',
+        refreshErrorMessage: '',
+        lastLoadedAt: Date.now()
+      })
+      wx.showToast({ title: '代金券已删除', icon: 'none' })
+      void this.loadVouchers(false, true)
+    } catch (err) {
+      logger.error('Delete merchant voucher failed', err)
+      const restoredVouchers = pendingVouchers.map((voucher) => (
+        voucher.id === voucherId ? { ...voucher, deletePending: false } : voucher
+      ))
+      this.setData({
+        ...buildPresentationUpdate(restoredVouchers),
+        deleteDialogSubmitting: false
+      })
+      wx.showToast({ title: getErrorUserMessage(err, '删除代金券失败，请稍后重试'), icon: 'none' })
+    }
   }
 })
