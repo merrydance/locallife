@@ -77,6 +77,24 @@ func createRandomMerchantWithOwner(t *testing.T, ownerID int64) Merchant {
 	return merchant
 }
 
+func createActiveMerchantInRegion(t *testing.T, regionID int64, name string, latitude, longitude float64) Merchant {
+	user := createRandomUser(t)
+	appData, _ := json.Marshal(map[string]string{"test": "data"})
+	merchant, err := testStore.CreateMerchant(context.Background(), CreateMerchantParams{
+		OwnerUserID:     user.ID,
+		Name:            name,
+		Phone:           fmt.Sprintf("138%08d", util.RandomInt(10000000, 99999999)),
+		Address:         "test address " + util.RandomString(10),
+		Latitude:        numericFromFloat(latitude),
+		Longitude:       numericFromFloat(longitude),
+		Status:          "active",
+		ApplicationData: appData,
+		RegionID:        regionID,
+	})
+	require.NoError(t, err)
+	return merchant
+}
+
 func createRandomMerchantApplication(t *testing.T) MerchantApplication {
 	user := createRandomUser(t)
 	return createRandomMerchantApplicationWithUser(t, user.ID)
@@ -373,6 +391,62 @@ func TestSearchMerchants_ExcludesTakeoutSuspendedMerchants(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.Zero(t, count)
+}
+
+func TestSearchMerchants_DistanceSort(t *testing.T) {
+	region := createRandomRegion(t)
+	keyword := "DISTANCE_SORT_MERCHANT_" + util.RandomString(6)
+	nearMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_near", 39.9080, 116.3970)
+	farMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_far", 39.9680, 116.4870)
+
+	merchants, err := testStore.SearchMerchants(context.Background(), SearchMerchantsParams{
+		Offset:  0,
+		Limit:   10,
+		Column3: keyword,
+		Column4: 39.9082,
+		Column5: 116.3975,
+		SortBy:  "distance",
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+	})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(merchants), 2)
+	require.Equal(t, nearMerchant.ID, merchants[0].ID)
+	require.Equal(t, farMerchant.ID, merchants[1].ID)
+	require.LessOrEqual(t, merchants[0].DistanceMeters, merchants[1].DistanceMeters)
+}
+
+func TestSearchMerchantsByTag_DistanceSort(t *testing.T) {
+	region := createRandomRegion(t)
+	tag := createRandomTag(t, "merchant")
+	keyword := "TAG_DISTANCE_SORT_MERCHANT_" + util.RandomString(6)
+	nearMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_near", 39.9080, 116.3970)
+	farMerchant := createActiveMerchantInRegion(t, region.ID, keyword+"_far", 39.9680, 116.4870)
+
+	err := testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{MerchantID: nearMerchant.ID, TagID: tag.ID})
+	require.NoError(t, err)
+	err = testStore.AddMerchantTag(context.Background(), AddMerchantTagParams{MerchantID: farMerchant.ID, TagID: tag.ID})
+	require.NoError(t, err)
+
+	merchants, err := testStore.SearchMerchantsByTag(context.Background(), SearchMerchantsByTagParams{
+		TagID:   tag.ID,
+		UserLat: 39.9082,
+		UserLng: 116.3975,
+		SortBy:  "distance",
+		RegionID: pgtype.Int8{
+			Int64: region.ID,
+			Valid: true,
+		},
+		Limit:  10,
+		Offset: 0,
+	})
+	require.NoError(t, err)
+	require.Len(t, merchants, 2)
+	require.Equal(t, nearMerchant.ID, merchants[0].ID)
+	require.Equal(t, farMerchant.ID, merchants[1].ID)
+	require.LessOrEqual(t, merchants[0].DistanceMeters, merchants[1].DistanceMeters)
 }
 
 // ==================== Merchant Application Tests ====================

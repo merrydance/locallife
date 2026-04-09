@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -272,6 +273,26 @@ func TestSearchMerchantsAPI(t *testing.T) {
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Len(t, resp.Merchants, 1)
 				require.Equal(t, "/dev/uploads/merchants/12/storefront/cover.jpg", resp.Merchants[0].CoverImage)
+			},
+		},
+		{
+			name:  "OK_TagFilterDistanceSort",
+			query: "?tag_id=8&sort_by=distance&region_id=1&page_id=1&page_size=10&user_latitude=39.90&user_longitude=116.40",
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().
+					SearchMerchantsByTag(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, arg db.SearchMerchantsByTagParams) ([]db.SearchMerchantsByTagRow, error) {
+						require.Equal(t, searchMerchantSortByDistance, arg.SortBy)
+						return []db.SearchMerchantsByTagRow{}, nil
+					})
+
+				store.EXPECT().
+					CountSearchMerchantsByTag(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(int64(0), nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
 			},
 		},
 	}

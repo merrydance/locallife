@@ -2,7 +2,7 @@ import ConsumerDiscoveryAdapter from '../../adapters/consumer-discovery'
 import CartService from '../../services/cart'
 import { getUserCarts } from '../../api/cart'
 import { searchMerchantsWithMeta, MerchantSummary, getPublicMerchantDishes, getPublicMerchantDetail, getHasUserOrderedFromMerchant, PublicDiscountRule, PublicVoucher, PublicDeliveryPromotion } from '../../api/merchant'
-import { getActiveCategories, ActiveCategory } from '../../api/location'
+import { getActiveCategories } from '../../api/location'
 import Navigation from '../../utils/navigation'
 import { logger } from '../../utils/logger'
 import { isRateLimitError } from '../../utils/user-facing'
@@ -14,6 +14,7 @@ import { getPublicImageUrl } from '../../utils/image'
 import { settleAll } from '../../utils/promise'
 import { formatPrice } from '../../utils/util'
 import { buildMerchantDisplayTags } from '../../adapters/merchant-labels'
+import { buildTakeoutCategoryGridItems, TakeoutCategoryGridItem } from '../../adapters/takeout-categories'
 
 const PAGE_CONTEXT = 'takeout_index'
 const PAGE_SIZE = 10  // 每页条数，用于无限滚动分页
@@ -96,7 +97,7 @@ function deriveMerchantPromotions(tags: string[] = [], deliveryFee?: number) {
 Page({
   data: {
     merchantFeed: [] as MerchantFeedViewModel[],
-    cuisineCategories: [] as Array<ActiveCategory & { emoji: string, bg: string }>,
+    cuisineCategories: [] as TakeoutCategoryGridItem[],
     activeCategoryId: '',
     cartTotalCount: 0,
     cartTotalPrice: 0,
@@ -120,6 +121,7 @@ Page({
   _dataLoadedLng: null as number | null,
   _feedHydrationGeneration: 0,
   _feedHydrationTimers: [] as SearchTimer[],
+  _pendingReload: false,
 
   onLoad() {
     wx.showShareMenu({
@@ -230,12 +232,18 @@ Page({
     wx.navigateTo({ url: '/pages/takeout/search/index' })
   },
 
-  // 品类网格点击：跳转到品类专属列表页
+  // 品类网格点击：页内切换筛选，不再跳转独立页
   onCategoryTap(e: WechatMiniprogram.CustomEvent) {
-    const { id, name } = e.currentTarget.dataset as { id: number, name: string }
-    wx.navigateTo({
-      url: `/pages/takeout/category/index?tag_id=${id}&name=${encodeURIComponent(name)}`
+    const { id } = e.currentTarget.dataset as { id: string }
+    const nextCategoryId = String(id || '')
+    const shouldResetToAll = nextCategoryId === this.data.activeCategoryId && nextCategoryId !== ''
+
+    this.setData({
+      activeCategoryId: shouldResetToAll ? '' : nextCategoryId,
+      page: 1
     })
+
+    this.loadData()
   },
 
   onShow() {
@@ -446,40 +454,20 @@ Page({
         user_latitude: app.globalData.latitude,
         user_longitude: app.globalData.longitude
       })
-
-      // 品类名到 emoji + 背景色的映射（前端静态装饰，后端不存储图标）
-      const CUISINE_META: Record<string, { emoji: string, bg: string }> = {
-        '川菜': { emoji: '🌶️', bg: 'rgba(255, 87, 34, 0.12)' },
-        '粤菜': { emoji: '🍱', bg: 'rgba(255, 193, 7, 0.12)' },
-        '湘菜': { emoji: '🥘', bg: 'rgba(244, 67, 54, 0.12)' },
-        '快餐': { emoji: '🍔', bg: 'rgba(255, 152, 0, 0.12)' },
-        '汉堡': { emoji: '🍔', bg: 'rgba(255, 152, 0, 0.12)' },
-        '披萨': { emoji: '🍕', bg: 'rgba(233, 30, 99, 0.12)' },
-        '火锅': { emoji: '🍲', bg: 'rgba(244, 67, 54, 0.12)' },
-        '日料': { emoji: '🍣', bg: 'rgba(33, 150, 243, 0.12)' },
-        '韩餐': { emoji: '🥗', bg: 'rgba(76, 175, 80, 0.12)' },
-        '西餐': { emoji: '🍝', bg: 'rgba(156, 39, 176, 0.12)' },
-        '早餐': { emoji: '🥐', bg: 'rgba(255, 235, 59, 0.12)' },
-        '包子': { emoji: '🥟', bg: 'rgba(121, 85, 72, 0.12)' },
-        '饺子': { emoji: '🥟', bg: 'rgba(96, 125, 139, 0.12)' },
-        '烧烤': { emoji: '🍢', bg: 'rgba(255, 87, 34, 0.12)' },
-        '炸鸡': { emoji: '🍗', bg: 'rgba(255, 193, 7, 0.12)' },
-        '甜品': { emoji: '🍰', bg: 'rgba(233, 30, 99, 0.12)' },
-        '奶茶': { emoji: '🧋', bg: 'rgba(121, 85, 72, 0.12)' },
-        '咖啡': { emoji: '☕', bg: 'rgba(121, 85, 72, 0.12)' },
-        '面食': { emoji: '🍜', bg: 'rgba(255, 152, 0, 0.12)' },
-        '米粉': { emoji: '🍜', bg: 'rgba(255, 193, 7, 0.12)' },
-        '素食': { emoji: '🥦', bg: 'rgba(76, 175, 80, 0.12)' }
-      }
-      const DEFAULT_META = { emoji: '🍽️', bg: 'rgba(158, 158, 158, 0.12)' }
       const MAX_CATEGORIES = 8
+      const availableCategories = rawList.slice(0, MAX_CATEGORIES)
+      const hasRealCategories = availableCategories.length > 0
+      const availableCategoryIds = new Set(availableCategories.map((category) => String(category.id)))
+      const activeCategoryId = this.data.activeCategoryId && availableCategoryIds.has(this.data.activeCategoryId)
+        ? this.data.activeCategoryId
+        : ''
 
-      const enriched = rawList.slice(0, MAX_CATEGORIES).map((c) => ({
-        ...c,
-        ...(CUISINE_META[c.name] ?? DEFAULT_META)
-      }))
-
-      this.setData({ cuisineCategories: enriched })
+      this.setData({
+        activeCategoryId,
+        cuisineCategories: hasRealCategories
+          ? buildTakeoutCategoryGridItems(availableCategories, activeCategoryId)
+          : []
+      })
     } catch (e) {
       // 加载失败不影响主流程，品类网格不显示即可
       logger.warn('[Takeout] 品类加载失败', e, 'Takeout.loadCategories')
@@ -487,8 +475,12 @@ Page({
   },
 
   async loadData() {
-    if (this._isLoading) return // 仅检查物理请求锁，不检查 UI loading 标志
+    if (this._isLoading) {
+      this._pendingReload = true
+      return
+    }
 
+    this._pendingReload = false
     this._isLoading = true
     this.setData({ loading: true, isError: false })
 
@@ -502,11 +494,7 @@ Page({
       const reset = page === 1
 
       if (reset) {
-        // onLoad 时若 token 尚未就绪，loadCategories 会被跳过；
-        // 在此补充调用，确保品类数据在 token 就绪后一定能加载
-        if (this.data.cuisineCategories.length === 0) {
-          this.loadCategories()
-        }
+        await this.loadCategories()
       }
 
       await this.loadFeed(reset)
@@ -524,6 +512,11 @@ Page({
     } finally {
       this._isLoading = false
       this.setData({ loading: false })
+
+      if (this._pendingReload) {
+        this._pendingReload = false
+        void this.loadData()
+      }
     }
   },
 
@@ -540,6 +533,8 @@ Page({
 
       const result = await searchMerchantsWithMeta({
         keyword: this.data.searchKeyword,
+        tag_id: this.data.activeCategoryId ? Number(this.data.activeCategoryId) : undefined,
+        sort_by: 'distance',
         page_id: currentPage,
         page_size: PAGE_SIZE,
         user_latitude: app.globalData.latitude || undefined,

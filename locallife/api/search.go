@@ -41,6 +41,7 @@ type searchMerchantsRequest struct {
 	Keyword       string   `form:"keyword" binding:"omitempty,max=100"` // 可选：为空时返回全部
 	RegionID      *int64   `form:"region_id" binding:"omitempty,min=1"` // 可选：区域过滤
 	TagID         *int64   `form:"tag_id" binding:"omitempty,min=1"`    // 可选：标签（菜系）ID 过滤
+	SortBy        string   `form:"sort_by" binding:"omitempty,oneof=distance"`
 	PageID        int32    `form:"page_id" binding:"required,min=1"`
 	PageSize      int32    `form:"page_size" binding:"required,min=1,max=50"`
 	UserLatitude  *float64 `form:"user_latitude" binding:"omitempty"`  // 用户当前纬度
@@ -73,6 +74,8 @@ type searchMerchantCountResponse struct {
 	Count     int64 `json:"count"`
 	Available bool  `json:"available"`
 }
+
+const searchMerchantSortByDistance = "distance"
 
 type searchComboListResponse struct {
 	Combos   []searchComboResponse `json:"combos"`
@@ -406,6 +409,7 @@ func (server *Server) searchDishes(ctx *gin.Context) {
 // @Param region_id query int false "区域ID"
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(1) maximum(50)
+// @Param sort_by query string false "排序方式，支持 distance"
 // @Param user_latitude query number false "用户当前纬度（用于计算距离和运费）"
 // @Param user_longitude query number false "用户当前经度（用于计算距离和运费）"
 // @Success 200 {object} searchMerchantListResponse "搜索结果"
@@ -429,6 +433,11 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		userLat = *resolvedLat
 		userLng = *resolvedLng
 	}
+	preferDistanceSort := req.SortBy == searchMerchantSortByDistance && resolvedLat != nil && resolvedLng != nil
+	sortBy := ""
+	if preferDistanceSort {
+		sortBy = searchMerchantSortByDistance
+	}
 
 	merchantRegionID, err := resolveRegionID(ctx, server, req.RegionID, resolvedLat, resolvedLng)
 	if err != nil {
@@ -451,6 +460,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		// 按菜系品类过滤搜索
 		merchants, err := server.store.SearchMerchantsByTag(ctx, db.SearchMerchantsByTagParams{
 			TagID:    *req.TagID,
+			SortBy:   sortBy,
 			RegionID: merchantRegionID,
 			UserLat:  userLat,
 			UserLng:  userLng,
@@ -473,7 +483,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		repurchaseRates := make([]float64, len(merchants))
 		orderCounts := make([]int32, len(merchants))
 		for i, m := range merchants {
-			response[i] = server.newSearchMerchantResponseFromTagRow(m)
+			response[i] = server.newSearchMerchantResponseFromTagRow(m, resolvedLat != nil && resolvedLng != nil)
 			repurchaseRates[i] = m.AvgRepurchaseRate
 			orderCounts[i] = m.TotalOrders
 		}
@@ -486,6 +496,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 			Column3:  req.Keyword,
 			Column4:  userLat,
 			Column5:  userLng,
+			SortBy:   sortBy,
 			RegionID: merchantRegionID,
 		})
 		if err != nil {
@@ -504,7 +515,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 		repurchaseRates := make([]float64, len(merchants))
 		orderCounts := make([]int32, len(merchants))
 		for i, merchant := range merchants {
-			response[i] = server.newSearchMerchantResponseFromRow(merchant)
+			response[i] = server.newSearchMerchantResponseFromRow(merchant, resolvedLat != nil && resolvedLng != nil)
 			repurchaseRates[i] = merchant.AvgRepurchaseRate
 			orderCounts[i] = merchant.TotalOrders
 		}
@@ -513,7 +524,7 @@ func (server *Server) searchMerchants(ctx *gin.Context) {
 
 	// 如果用户提供了位置，计算精确距离（展示用）和运费
 	if resolvedLat != nil && resolvedLng != nil && server.mapClient != nil {
-		server.calculateSearchMerchantDistancesAndFees(ctx, response, *resolvedLat, *resolvedLng)
+		server.calculateSearchMerchantDistancesAndFees(ctx, response, *resolvedLat, *resolvedLng, !preferDistanceSort)
 	}
 
 	// 后台记录搜索历史 + 热词
@@ -862,7 +873,7 @@ func assignMerchantLabels(merchants []searchMerchantResponse, repurchaseRates []
 	}
 }
 
-func (server *Server) newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow) searchMerchantResponse {
+func (server *Server) newSearchMerchantResponseFromTagRow(merchant db.SearchMerchantsByTagRow, includeDistance bool) searchMerchantResponse {
 	resp := searchMerchantResponse{
 		ID:          merchant.ID,
 		Name:        merchant.Name,
@@ -887,10 +898,14 @@ func (server *Server) newSearchMerchantResponseFromTagRow(merchant db.SearchMerc
 		lng, _ := merchant.Longitude.Float64Value()
 		resp.Longitude = lng.Float64
 	}
+	if includeDistance && merchant.DistanceMeters > 0 {
+		distance := int(merchant.DistanceMeters)
+		resp.Distance = &distance
+	}
 	return resp
 }
 
-func (server *Server) newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow) searchMerchantResponse {
+func (server *Server) newSearchMerchantResponseFromRow(merchant db.SearchMerchantsRow, includeDistance bool) searchMerchantResponse {
 	resp := searchMerchantResponse{
 		ID:          merchant.ID,
 		Name:        merchant.Name,
@@ -916,6 +931,10 @@ func (server *Server) newSearchMerchantResponseFromRow(merchant db.SearchMerchan
 	if merchant.Longitude.Valid {
 		lng, _ := merchant.Longitude.Float64Value()
 		resp.Longitude = lng.Float64
+	}
+	if includeDistance && merchant.DistanceMeters > 0 {
+		distance := int(merchant.DistanceMeters)
+		resp.Distance = &distance
 	}
 	return resp
 }
@@ -1211,7 +1230,7 @@ func parseTime(timeStr string) (pgtype.Time, error) {
 // ==================== 距离和运费计算辅助函数 ====================
 
 // calculateSearchMerchantDistancesAndFees 批量计算搜索结果中商户到用户的距离和预估运费
-func (server *Server) calculateSearchMerchantDistancesAndFees(ctx *gin.Context, merchants []searchMerchantResponse, userLat, userLng float64) {
+func (server *Server) calculateSearchMerchantDistancesAndFees(ctx *gin.Context, merchants []searchMerchantResponse, userLat, userLng float64, overwriteDistance bool) {
 	if len(merchants) == 0 || server.mapClient == nil {
 		return
 	}
@@ -1251,7 +1270,9 @@ func (server *Server) calculateSearchMerchantDistancesAndFees(ctx *gin.Context, 
 		idx := validIndices[i]
 		if len(row.Elements) > 0 {
 			distance := row.Elements[0].Distance
-			merchants[idx].Distance = &distance
+			if overwriteDistance || merchants[idx].Distance == nil {
+				merchants[idx].Distance = &distance
+			}
 
 			// 商户列表没有具体订单金额，传0表示只计算基础运费+距离费，不含货值加价
 			// 时段系数和天气系数仍正常参与计算

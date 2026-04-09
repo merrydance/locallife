@@ -1909,6 +1909,7 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latit
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
        AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
+  , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 0)::bigint AS distance_meters
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
@@ -1922,13 +1923,22 @@ WHERE m.status = 'active'
   )
 ORDER BY
     m.is_open DESC,
-    COALESCE((SELECT AVG(d.repurchase_rate)
+    CASE WHEN $7 = 'distance'
+      THEN earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))
+    END ASC NULLS LAST,
+    CASE WHEN $7 = 'distance' THEN COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
-       AND d.is_online = true), 0) DESC,
-    COALESCE(mp.total_orders, 0) DESC,
-    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)) ASC
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN $7 = 'distance' THEN COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+    CASE WHEN $7 = 'distance' THEN NULL ELSE COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN $7 = 'distance' THEN NULL ELSE COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+  m.id ASC
 LIMIT $2
 OFFSET $1
 `
@@ -1940,6 +1950,7 @@ type SearchMerchantsParams struct {
 	Column4  float64     `json:"column_4"`
 	Column5  float64     `json:"column_5"`
 	RegionID pgtype.Int8 `json:"region_id"`
+	SortBy   interface{} `json:"sort_by"`
 }
 
 type SearchMerchantsRow struct {
@@ -1972,6 +1983,7 @@ type SearchMerchantsRow struct {
 	SystemLabels            interface{}        `json:"system_labels"`
 	StorefrontImages        []byte             `json:"storefront_images"`
 	AvgRepurchaseRate       float64            `json:"avg_repurchase_rate"`
+	DistanceMeters          int64              `json:"distance_meters"`
 }
 
 func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams) ([]SearchMerchantsRow, error) {
@@ -1982,6 +1994,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 		arg.Column4,
 		arg.Column5,
 		arg.RegionID,
+		arg.SortBy,
 	)
 	if err != nil {
 		return nil, err
@@ -2020,6 +2033,7 @@ func (q *Queries) SearchMerchants(ctx context.Context, arg SearchMerchantsParams
 			&i.SystemLabels,
 			&i.StorefrontImages,
 			&i.AvgRepurchaseRate,
+			&i.DistanceMeters,
 		); err != nil {
 			return nil, err
 		}
@@ -2055,6 +2069,7 @@ SELECT m.id, m.owner_user_id, m.name, m.description, m.phone, m.address, m.latit
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
        AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
+  , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($1::float8, $2::float8)), 0)::bigint AS distance_meters
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
@@ -2062,26 +2077,36 @@ FROM merchants m
 WHERE m.status = 'active'
   AND m.deleted_at IS NULL
   AND COALESCE(mp.is_takeout_suspended, false) = false
-  AND m.region_id = $1
-  AND mt_filter.tag_id = $2
+  AND m.region_id = $3
+  AND mt_filter.tag_id = $4
 ORDER BY
     m.is_open DESC,
-    COALESCE((SELECT AVG(d.repurchase_rate)
+    CASE WHEN $5 = 'distance'
+      THEN earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($1::float8, $2::float8))
+    END ASC NULLS LAST,
+    CASE WHEN $5 = 'distance' THEN COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
-       AND d.is_online = true), 0) DESC,
-    COALESCE(mp.total_orders, 0) DESC,
-    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($3::float8, $4::float8)) ASC
-LIMIT $6
-OFFSET $5
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN $5 = 'distance' THEN COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+    CASE WHEN $5 = 'distance' THEN NULL ELSE COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN $5 = 'distance' THEN NULL ELSE COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+  m.id ASC
+LIMIT $7
+OFFSET $6
 `
 
 type SearchMerchantsByTagParams struct {
-	RegionID pgtype.Int8 `json:"region_id"`
-	TagID    int64       `json:"tag_id"`
 	UserLat  float64     `json:"user_lat"`
 	UserLng  float64     `json:"user_lng"`
+	RegionID pgtype.Int8 `json:"region_id"`
+	TagID    int64       `json:"tag_id"`
+	SortBy   interface{} `json:"sort_by"`
 	Offset   int32       `json:"offset"`
 	Limit    int32       `json:"limit"`
 }
@@ -2116,15 +2141,17 @@ type SearchMerchantsByTagRow struct {
 	SystemLabels            interface{}        `json:"system_labels"`
 	StorefrontImages        []byte             `json:"storefront_images"`
 	AvgRepurchaseRate       float64            `json:"avg_repurchase_rate"`
+	DistanceMeters          int64              `json:"distance_meters"`
 }
 
 // 按标签（菜系）过滤商户，支持区域和位置排序
 func (q *Queries) SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsByTagParams) ([]SearchMerchantsByTagRow, error) {
 	rows, err := q.db.Query(ctx, searchMerchantsByTag,
-		arg.RegionID,
-		arg.TagID,
 		arg.UserLat,
 		arg.UserLng,
+		arg.RegionID,
+		arg.TagID,
+		arg.SortBy,
 		arg.Offset,
 		arg.Limit,
 	)
@@ -2165,6 +2192,7 @@ func (q *Queries) SearchMerchantsByTag(ctx context.Context, arg SearchMerchantsB
 			&i.SystemLabels,
 			&i.StorefrontImages,
 			&i.AvgRepurchaseRate,
+			&i.DistanceMeters,
 		); err != nil {
 			return nil, err
 		}

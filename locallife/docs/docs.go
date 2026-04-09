@@ -28835,6 +28835,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
+                        "type": "string",
+                        "description": "排序方式，支持 distance",
+                        "name": "sort_by",
+                        "in": "query"
+                    },
+                    {
                         "type": "number",
                         "description": "用户当前纬度（用于计算距离和运费）",
                         "name": "user_latitude",

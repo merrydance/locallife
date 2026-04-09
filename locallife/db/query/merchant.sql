@@ -187,6 +187,7 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
        AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
+  , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)), 0)::bigint AS distance_meters
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
@@ -200,13 +201,22 @@ WHERE m.status = 'active'
   )
 ORDER BY
     m.is_open DESC,
-    COALESCE((SELECT AVG(d.repurchase_rate)
+    CASE WHEN sqlc.arg('sort_by') = 'distance'
+      THEN earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8))
+    END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
-       AND d.is_online = true), 0) DESC,
-    COALESCE(mp.total_orders, 0) DESC,
-    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth($4::float8, $5::float8)) ASC
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+  m.id ASC
 LIMIT $2
 OFFSET $1;
 
@@ -606,6 +616,7 @@ SELECT m.*, COALESCE(mp.total_orders, 0)::int AS total_orders,
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
        AND d.is_online = true), 0)::float8 AS avg_repurchase_rate
+  , COALESCE(earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8)), 0)::bigint AS distance_meters
 FROM merchants m
   LEFT JOIN merchant_profiles mp ON m.id = mp.merchant_id
   LEFT JOIN merchant_applications ma ON ma.user_id = m.owner_user_id
@@ -617,13 +628,22 @@ WHERE m.status = 'active'
   AND mt_filter.tag_id = sqlc.arg('tag_id')
 ORDER BY
     m.is_open DESC,
-    COALESCE((SELECT AVG(d.repurchase_rate)
+    CASE WHEN sqlc.arg('sort_by') = 'distance'
+      THEN earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8))
+    END ASC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE((SELECT AVG(d.repurchase_rate)
      FROM dishes d
      WHERE d.merchant_id = m.id
        AND d.deleted_at IS NULL
-       AND d.is_online = true), 0) DESC,
-    COALESCE(mp.total_orders, 0) DESC,
-    earth_distance(ll_to_earth(m.latitude::float8, m.longitude::float8), ll_to_earth(sqlc.arg('user_lat')::float8, sqlc.arg('user_lng')::float8)) ASC
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+    CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE((SELECT AVG(d.repurchase_rate)
+     FROM dishes d
+     WHERE d.merchant_id = m.id
+       AND d.deleted_at IS NULL
+       AND d.is_online = true), 0) END DESC NULLS LAST,
+  CASE WHEN sqlc.arg('sort_by') = 'distance' THEN NULL ELSE COALESCE(mp.total_orders, 0) END DESC NULLS LAST,
+  m.id ASC
 LIMIT sqlc.arg('limit')
 OFFSET sqlc.arg('offset');
 

@@ -31,22 +31,23 @@
   </view>
 
   <!-- 菜系品类网格（动态，按区域） -->
-  <view wx:if="{{cuisineCategories.length > 0}}" class="cuisine-grid-section">
-    <view class="cuisine-grid">
-      <view
-        class="cuisine-item"
+  <view wx:if="{{cuisineCategories.length > 1}}" class="cuisine-grid-section">
+    <t-grid column="{{5}}" gutter="{{12}}" border="{{false}}" t-class="cuisine-grid">
+      <t-grid-item
         wx:for="{{cuisineCategories}}"
         wx:key="id"
-        bindtap="onCategoryTap"
+        bind:click="onCategoryTap"
         data-id="{{item.id}}"
-        data-name="{{item.name}}"
+        text="{{item.name}}"
+        t-class="{{item.selected ? 'cuisine-grid-item cuisine-grid-item--active' : 'cuisine-grid-item'}}"
+        t-class-content="cuisine-grid-item-content"
+        t-class-text="{{item.selected ? 'cuisine-grid-item-text cuisine-grid-item-text--active' : 'cuisine-grid-item-text'}}"
       >
-        <view class="cuisine-icon-wrap" style="background: {{item.bg}}">
-          <text class="cuisine-emoji">{{item.emoji}}</text>
+        <view slot="image" class="cuisine-icon-wrap {{item.selected ? 'cuisine-icon-wrap--active' : ''}}" style="{{item.iconStyle}}">
+          <text class="cuisine-icon-text">{{item.iconText}}</text>
         </view>
-        <text class="cuisine-name">{{item.name}}</text>
-      </view>
-    </view>
+      </t-grid-item>
+    </t-grid>
   </view>
 
   <!-- 内容区域 (统一 Feed) -->

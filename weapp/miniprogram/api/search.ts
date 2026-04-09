@@ -21,6 +21,7 @@ export interface SearchMerchantsParams extends Record<string, unknown> {
     keyword: string
     region_id?: number
     tag_id?: number
+    sort_by?: 'distance'
     user_latitude?: number
     user_longitude?: number
     page_id: number

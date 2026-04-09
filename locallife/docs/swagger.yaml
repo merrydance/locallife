@@ -28060,6 +28060,10 @@ paths:
         name: page_size
         required: true
         type: integer
+      - description: 排序方式，支持 distance
+        in: query
+        name: sort_by
+        type: string
       - description: 用户当前纬度（用于计算距离和运费）
         in: query
         name: user_latitude

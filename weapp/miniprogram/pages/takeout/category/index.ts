@@ -116,6 +116,7 @@ Page({
     try {
       const result = await searchMerchantsWithMeta({
         tag_id: this._tagId,
+        sort_by: 'distance',
         page_id: currentPage,
         page_size: PAGE_SIZE,
         user_latitude: app.globalData.latitude || undefined,
