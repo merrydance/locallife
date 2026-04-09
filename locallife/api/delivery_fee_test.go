@@ -22,13 +22,16 @@ import (
 // ==================== 测试数据生成 ====================
 
 func randomDeliveryFeeConfig(regionID int64) db.DeliveryFeeConfig {
+	valueRatio := pgtype.Numeric{}
+	_ = valueRatio.Scan("0.01")
+
 	return db.DeliveryFeeConfig{
 		ID:            util.RandomInt(1, 1000),
 		RegionID:      regionID,
 		BaseFee:       500,
 		BaseDistance:  3000,
 		ExtraFeePerKm: 100,
-		ValueRatio:    pgtype.Numeric{Valid: true},
+		ValueRatio:    valueRatio,
 		MaxFee:        pgtype.Int8{Int64: 3000, Valid: true},
 		MinFee:        300,
 		IsActive:      true,
@@ -226,11 +229,18 @@ func TestCreateDeliveryFeeConfigAPI(t *testing.T) {
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusCreated, recorder.Code)
 
-				var response deliveryPromotionResponse
+				var response deliveryFeeConfigResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.Equal(t, "active", response.StatusCode)
-				require.Equal(t, "生效中", response.StatusLabel)
-				require.Equal(t, "success", response.StatusTheme)
+				require.Equal(t, config.ID, response.ID)
+				require.Equal(t, regionID, response.RegionID)
+				require.Equal(t, config.BaseFee, response.BaseFee)
+				require.Equal(t, config.BaseDistance, response.BaseDistance)
+				require.Equal(t, config.ExtraFeePerKm, response.ExtraFeePerKm)
+				require.Equal(t, config.MinFee, response.MinFee)
+				require.True(t, response.IsActive)
+				require.NotNil(t, response.MaxFee)
+				require.Equal(t, config.MaxFee.Int64, *response.MaxFee)
+				require.InDelta(t, 0.01, response.ValueRatio, 0.000001)
 			},
 		},
 		{

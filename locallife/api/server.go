@@ -943,7 +943,9 @@ func (server *Server) setupRouter() {
 	// 用餐会话
 	diningSessionsGroup := authGroup.Group("/dining-sessions")
 	{
+		diningSessionsGroup.GET("/entry", server.getDiningSessionEntry)
 		diningSessionsGroup.GET("/precheck", server.precheckDiningSession)
+		diningSessionsGroup.GET("/:id/menu", server.getDiningSessionMenu)
 		diningSessionsGroup.POST("/open", server.openDiningSession)
 		diningSessionsGroup.POST("/:id/transfer-table", server.transferDiningSessionTable)
 		diningSessionsGroup.POST("/:id/checkout", server.checkoutDiningSession)

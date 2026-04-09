@@ -639,9 +639,9 @@ func TestTakeoutJourneyB1Integration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_b1_integration_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_integration_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b1_integration_001",
@@ -926,9 +926,9 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 
 	mockEcommerceClient := mockwechat.NewMockEcommerceClientInterface(ctrl)
 	mockEcommerceClient.EXPECT().
-		CreateCombineOrder(gomock.Any(), gomock.Any()).
+		CreatePartnerJSAPIOrder(gomock.Any(), gomock.Any()).
 		Times(1).
-		Return(&wechat.CombineOrderResponse{PrepayID: "prepay_b1_webhook_001"}, &wechat.JSAPIPayParams{
+		Return(&wechat.PartnerJSAPIOrderResponse{PrepayID: "prepay_b1_webhook_001"}, &wechat.JSAPIPayParams{
 			TimeStamp: "1",
 			NonceStr:  "nonce",
 			Package:   "prepay_id=prepay_b1_webhook_001",
@@ -1038,7 +1038,7 @@ func TestTakeoutJourneyB1WebhookIntegration(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 
 	updatedPayment, err := store.GetPaymentOrder(ctx, payment.ID)
 	require.NoError(t, err)
@@ -2099,7 +2099,7 @@ func TestDineInJourneyA1Integration(t *testing.T) {
 
 	rec := httptest.NewRecorder()
 	server.Handler().ServeHTTP(rec, req)
-	require.Equal(t, http.StatusOK, rec.Code)
+	require.Equal(t, http.StatusNoContent, rec.Code)
 
 	// 5) 处理支付成功任务
 	payloads := distributor.Payloads()

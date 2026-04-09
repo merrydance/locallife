@@ -1,91 +1,85 @@
-<custom-navbar title="扫码点餐" showBack="{{true}}" bind:navheight="onNavHeight" />
+<custom-navbar title="堂食入座" showBack="{{true}}" bind:navheight="onNavHeight" />
 
 <view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
-  <!-- 1. 加载状态 -->
   <view wx:if="{{loading}}" class="skeleton-wrap">
     <t-skeleton theme="paragraph" animation="gradient" />
     <t-skeleton theme="paragraph" animation="gradient" style="margin-top: 32rpx;" />
   </view>
 
-  <block wx:else>
-    <!-- 2. 错误状态 -->
-    <view wx:if="{{error}}" class="error-wrap">
-      <t-empty icon="info-circle" description="{{error}}">
-        <t-button slot="action" theme="primary" size="small" bindtap="rescan" shape="round">重新扫码</t-button>
-      </t-empty>
-    </view>
+  <view wx:elif="{{error}}" class="error-wrap">
+    <t-empty icon="info-circle" description="{{error}}">
+      <t-button slot="action" theme="primary" size="small" bindtap="onRetry" shape="round">重新加载</t-button>
+    </t-empty>
+  </view>
 
-    <!-- 3. 主界面 -->
-    <view wx:else class="content-animate">
-      <!-- 商户信息卡片 -->
-      <view class="merchant-card">
-        <image class="merchant-cover" src="{{merchantInfo.cover_image || '/assets/images/merchant_default_cover.jpg'}}" mode="aspectFill" />
-        <view class="merchant-info">
-          <t-avatar image="{{merchantInfo.logo_url}}" size="large" class="merchant-logo" />
-          <view class="merchant-detail">
-            <view class="merchant-name">{{merchantInfo.name}}</view>
-            <view class="merchant-tags">
-              <t-tag size="small" variant="dark" theme="default" shape="round">支持外卖</t-tag>
-              <t-tag size="small" variant="dark" theme="default" shape="round">支持预订</t-tag>
-            </view>
-          </view>
-        </view>
-      </view>
-
-      <!-- 桌台核心操作区 -->
-      <view class="table-action-card">
-        <view class="table-header">
-          <t-icon name="root-list" size="48rpx" color="var(--td-brand-color)" />
-          <view class="table-no-box">
-            <text class="table-label">当前桌号</text>
-            <text class="table-no">{{tableInfo.table_no}}</text>
-          </view>
-          <view class="table-status {{tableInfo.status_badge_class}}">
-            {{tableInfo.status_label}}
-          </view>
-        </view>
-
-        <view class="tips">
-          <t-icon name="info-circle" size="32rpx" />
-          <text>确认桌号无误后，点击下方按钮开始点餐</text>
-        </view>
-
-        <t-button block size="large" theme="primary" shape="round" t-class="btn-start" bindtap="startDining">
-          开始点餐
-        </t-button>
-
-        <view class="secondary-actions">
-          <view class="action-item" bindtap="goToTakeout">
-            <t-icon name="order-adjustment-column" size="40rpx" />
-            <text>改点外卖</text>
-          </view>
-          <t-divider layout="vertical" />
-          <view class="action-item" bindtap="goToReservation">
-            <t-icon name="calendar" size="40rpx" />
-            <text>预订包间</text>
-          </view>
+  <view wx:else class="content-animate">
+    <view class="merchant-card">
+      <view class="merchant-info merchant-info--compact">
+        <t-avatar image="{{merchantInfo.logo_url}}" size="72rpx" class="merchant-logo" />
+        <view class="merchant-detail merchant-detail--compact">
+          <view class="merchant-name">{{merchantInfo.name}}</view>
+          <view class="merchant-meta">{{merchantInfo.address || merchantInfo.phone || '欢迎入座'}}</view>
         </view>
       </view>
     </view>
-  </block>
 
-  <!-- 换桌确认弹窗 -->
+    <view class="table-action-card">
+      <view class="table-header">
+        <t-icon name="root-list" size="48rpx" color="var(--td-brand-color)" />
+        <view class="table-no-box">
+          <text class="table-label">当前桌号</text>
+          <text class="table-no">{{tableInfo.table_no}}</text>
+        </view>
+        <view class="table-status {{statusBadgeClass}}">{{statusLabel}}</view>
+      </view>
+
+      <view wx:if="{{blockedReason}}" class="state-banner state-banner--blocked">{{blockedReason}}</view>
+      <view wx:elif="{{action === 'resume_session'}}" class="state-banner">检测到您在当前桌已有进行中的用餐会话，可直接继续点餐。</view>
+      <view wx:elif="{{action === 'transfer_session'}}" class="state-banner">检测到您在同商户的 {{transferSession.table_no}} 号桌有进行中的用餐会话，可申请换到当前桌继续点餐。</view>
+      <view wx:elif="{{precheck && precheck.reserved && precheck.is_reservation_owner}}" class="state-banner">检测到当前桌对应您的有效预订，系统将按预订入座并继续点餐。</view>
+      <view wx:else class="state-banner">请确认桌号无误后完成入座，系统会以后端会话状态作为堂食唯一真值。</view>
+
+      <t-input
+        wx:if="{{requiresTableCode && action === 'open_session'}}"
+        label="桌台验证码"
+        placeholder="请输入桌台验证码"
+        value="{{tableCode}}"
+        bind:change="onTableCodeInput"
+        borderless
+        class="transfer-input"
+      />
+
+      <t-button
+        block
+        size="large"
+        theme="primary"
+        shape="round"
+        t-class="btn-start"
+        loading="{{submitting && action !== 'transfer_session'}}"
+        disabled="{{action === 'blocked'}}"
+        bindtap="onPrimaryAction"
+      >
+        {{primaryActionLabel}}
+      </t-button>
+    </view>
+  </view>
+
   <t-dialog
     visible="{{showTransferDialog}}"
-    title="检测到已有订单"
-    confirm-btn="{{ { content: '确认换桌', variant: 'base', loading: transferSubmitting } }}"
+    title="换到当前桌"
+    confirm-btn="{{ { content: '确认换桌', variant: 'base', loading: submitting } }}"
     cancel-btn="取消"
     bind:confirm="confirmTransfer"
     bind:cancel="cancelTransfer"
   >
     <view slot="content" class="dialog-content">
       <view class="dialog-text">
-        您在 <text class="highlight">{{activeSession.table_no}}号桌</text> 有进行中的订单，是否将订单转至当前 <text class="highlight">{{tableInfo.table_no}}号桌</text>？
+        您当前在 <text class="highlight">{{transferSession.table_no}}号桌</text> 有进行中的用餐会话，是否转到 <text class="highlight">{{tableInfo.table_no}}号桌</text>？
       </view>
       <t-input
-        wx:if="{{!activeSession.reservation_id}}"
-        label="桌台验证码"
-        placeholder="请输入当前桌台码"
+        wx:if="{{transferRequiresTableCode}}"
+        label="当前桌台验证码"
+        placeholder="请输入当前桌台验证码"
         value="{{transferCode}}"
         bind:change="onTransferCodeInput"
         borderless

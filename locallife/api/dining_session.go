@@ -2,11 +2,14 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/logic"
+	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/websocket"
 
@@ -103,6 +106,49 @@ type diningSessionPrecheckResponse struct {
 	OrderFulfillmentStatus *string `json:"order_fulfillment_status,omitempty"`
 }
 
+type diningSessionEntryRequest struct {
+	MerchantID *int64 `form:"merchant_id" binding:"omitempty,min=1"`
+	TableNo    string `form:"table_no" binding:"omitempty,max=50"`
+	TableID    *int64 `form:"table_id" binding:"omitempty,min=1"`
+}
+
+type diningSessionEntryCapabilities struct {
+	RequiresTableCode         bool `json:"requires_table_code"`
+	TransferRequiresTableCode bool `json:"transfer_requires_table_code"`
+	CanOrder                  bool `json:"can_order"`
+	CanTransfer               bool `json:"can_transfer"`
+	SupportsTakeoutJump       bool `json:"supports_takeout_jump"`
+	SupportsReservationJump   bool `json:"supports_reservation_jump"`
+	SupportsServiceCall       bool `json:"supports_service_call"`
+}
+
+type diningSessionEntrySessionSummary struct {
+	Session      diningSessionResponse `json:"session"`
+	BillingGroup billingGroupResponse  `json:"billing_group"`
+	TableNo      string                `json:"table_no"`
+}
+
+type diningSessionEntryResponse struct {
+	Action          string                            `json:"action"`
+	BlockedReason   *string                           `json:"blocked_reason,omitempty"`
+	Merchant        scanTableMerchantInfo             `json:"merchant"`
+	Table           scanTableTableInfo                `json:"table"`
+	Precheck        diningSessionPrecheckResponse     `json:"precheck"`
+	ActiveSession   *diningSessionEntrySessionSummary `json:"active_session,omitempty"`
+	TransferSession *diningSessionEntrySessionSummary `json:"transfer_session,omitempty"`
+	Capabilities    diningSessionEntryCapabilities    `json:"capabilities"`
+}
+
+type diningSessionMenuResponse struct {
+	Session      diningSessionResponse    `json:"session"`
+	BillingGroup billingGroupResponse     `json:"billing_group"`
+	Merchant     scanTableMerchantInfo    `json:"merchant"`
+	Table        scanTableTableInfo       `json:"table"`
+	Categories   []scanTableCategoryInfo  `json:"categories"`
+	Combos       []scanTableComboInfo     `json:"combos"`
+	Promotions   []scanTablePromotionInfo `json:"promotions"`
+}
+
 func newDiningSessionResponse(s db.DiningSession) diningSessionResponse {
 	resp := diningSessionResponse{
 		ID:         s.ID,
@@ -128,6 +174,219 @@ func newDiningSessionResponse(s db.DiningSession) diningSessionResponse {
 		resp.UpdatedAt = &t
 	}
 	return resp
+}
+
+func newDiningSessionPrecheckResponse(result logic.DiningSessionPrecheckResult, fallbackTableID int64) diningSessionPrecheckResponse {
+	resp := diningSessionPrecheckResponse{
+		TableID:            result.Table.ID,
+		Reserved:           result.Reserved,
+		IsReservationOwner: result.IsReservationOwner,
+		PaymentMode:        result.PaymentMode,
+		PaidAmount:         result.PaidAmount,
+	}
+	if resp.TableID == 0 {
+		resp.TableID = fallbackTableID
+	}
+	if result.Reservation != nil {
+		resp.ReservationID = &result.Reservation.ID
+	}
+	if result.Order != nil {
+		resp.OrderID = &result.Order.ID
+		resp.OrderStatus = &result.Order.Status
+		if result.Order.FulfillmentStatus != "" {
+			fulfillmentStatus := result.Order.FulfillmentStatus
+			resp.OrderFulfillmentStatus = &fulfillmentStatus
+		}
+	}
+	return resp
+}
+
+func (server *Server) newScanTableMerchantInfo(ctx *gin.Context, merchant db.Merchant) scanTableMerchantInfo {
+	resp := scanTableMerchantInfo{
+		ID:      merchant.ID,
+		Name:    merchant.Name,
+		Phone:   merchant.Phone,
+		Address: merchant.Address,
+		Status:  merchant.Status,
+		IsOpen:  merchant.IsOpen,
+	}
+	if merchant.Description.Valid {
+		resp.Description = &merchant.Description.String
+	}
+	resp.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
+	resp.LogoURL = server.publicImageURL(ctx, resp.LogoAssetID, media.VariantCard)
+	return resp
+}
+
+func (server *Server) newScanTableTableInfo(table db.Table) scanTableTableInfo {
+	resp := scanTableTableInfo{
+		ID:        table.ID,
+		TableNo:   table.TableNo,
+		TableType: table.TableType,
+		Capacity:  table.Capacity,
+		Status:    table.Status,
+	}
+	if table.Description.Valid {
+		resp.Description = &table.Description.String
+	}
+	if table.MinimumSpend.Valid {
+		resp.MinimumSpend = &table.MinimumSpend.Int64
+	}
+	return resp
+}
+
+func (server *Server) newDiningSessionEntrySessionSummary(ctx *gin.Context, session db.DiningSession, billingGroup db.BillingGroup, tableNo string) (diningSessionEntrySessionSummary, error) {
+	billingGroupResp, err := server.buildBillingGroupResponse(ctx, billingGroup)
+	if err != nil {
+		return diningSessionEntrySessionSummary{}, err
+	}
+	return diningSessionEntrySessionSummary{
+		Session:      newDiningSessionResponse(session),
+		BillingGroup: billingGroupResp,
+		TableNo:      tableNo,
+	}, nil
+}
+
+// getDiningSessionEntry godoc
+// @Summary 堂食扫码接入
+// @Description 顾客扫码进入堂食时，返回桌台、预检、活动会话和可执行动作，作为顾客堂食的唯一接入真值。
+// @Tags 用餐会话
+// @Produce json
+// @Param merchant_id query int false "商户ID" minimum(1)
+// @Param table_no query string false "桌号" maxLength(50)
+// @Param table_id query int false "桌台ID" minimum(1)
+// @Success 200 {object} diningSessionEntryResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Security BearerAuth
+// @Router /v1/dining-sessions/entry [get]
+func (server *Server) getDiningSessionEntry(ctx *gin.Context) {
+	var req diningSessionEntryRequest
+	if err := ctx.ShouldBindQuery(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+	if req.TableID == nil && (req.MerchantID == nil || strings.TrimSpace(req.TableNo) == "") {
+		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("table_id or merchant_id + table_no is required")))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	result, err := logic.ResolveDiningSessionEntry(ctx, server.store, logic.DiningSessionEntryInput{
+		UserID:     authPayload.UserID,
+		MerchantID: req.MerchantID,
+		TableNo: func() *string {
+			trimmed := strings.TrimSpace(req.TableNo)
+			if trimmed == "" {
+				return nil
+			}
+			return &trimmed
+		}(),
+		TableID: req.TableID,
+		Now:     time.Now(),
+	})
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	response := diningSessionEntryResponse{
+		Action:        result.Action,
+		BlockedReason: result.BlockedReason,
+		Merchant:      server.newScanTableMerchantInfo(ctx, result.Merchant),
+		Table:         server.newScanTableTableInfo(result.Table),
+		Precheck:      newDiningSessionPrecheckResponse(result.Precheck, result.Table.ID),
+		Capabilities: diningSessionEntryCapabilities{
+			RequiresTableCode:         result.RequiresTableCode,
+			TransferRequiresTableCode: result.TransferRequiresTableCode,
+			CanOrder:                  result.CanOrder,
+			CanTransfer:               result.CanTransfer,
+			SupportsTakeoutJump:       false,
+			SupportsReservationJump:   false,
+			SupportsServiceCall:       false,
+		},
+	}
+
+	if result.ActiveSession != nil && result.ActiveBillingGroup != nil {
+		summary, err := server.newDiningSessionEntrySessionSummary(ctx, *result.ActiveSession, *result.ActiveBillingGroup, result.Table.TableNo)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		response.ActiveSession = &summary
+	}
+	if result.TransferSession != nil && result.TransferBillingGroup != nil && result.TransferSourceTable != nil {
+		summary, err := server.newDiningSessionEntrySessionSummary(ctx, *result.TransferSession, *result.TransferBillingGroup, result.TransferSourceTable.TableNo)
+		if err != nil {
+			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+			return
+		}
+		response.TransferSession = &summary
+	}
+
+	ctx.JSON(http.StatusOK, response)
+}
+
+// getDiningSessionMenu godoc
+// @Summary 获取会话态堂食菜单
+// @Description 基于开放中的用餐会话返回顾客堂食菜单和会话上下文。
+// @Tags 用餐会话
+// @Produce json
+// @Param id path int true "用餐会话ID"
+// @Success 200 {object} diningSessionMenuResponse
+// @Failure 400 {object} ErrorResponse
+// @Failure 401 {object} ErrorResponse
+// @Failure 403 {object} ErrorResponse
+// @Failure 404 {object} ErrorResponse
+// @Failure 409 {object} ErrorResponse
+// @Failure 500 {object} ErrorResponse
+// @Security BearerAuth
+// @Router /v1/dining-sessions/{id}/menu [get]
+func (server *Server) getDiningSessionMenu(ctx *gin.Context) {
+	var req struct {
+		ID int64 `uri:"id" binding:"required,min=1"`
+	}
+	if err := ctx.ShouldBindUri(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
+		return
+	}
+
+	authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
+	result, err := logic.ResolveDiningSessionMenu(ctx, server.store, req.ID, authPayload.UserID)
+	if err != nil {
+		if writeLogicRequestError(ctx, err) {
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	billingGroupResp, err := server.buildBillingGroupResponse(ctx, result.BillingGroup)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	scanResponse, err := server.buildScanTableResponse(ctx, result.Merchant, result.Table)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	ctx.JSON(http.StatusOK, diningSessionMenuResponse{
+		Session:      newDiningSessionResponse(result.Session),
+		BillingGroup: billingGroupResp,
+		Merchant:     scanResponse.Merchant,
+		Table:        scanResponse.Table,
+		Categories:   scanResponse.Categories,
+		Combos:       scanResponse.Combos,
+		Promotions:   scanResponse.Promotions,
+	})
 }
 
 // precheckDiningSession 预检查桌台时段预订占用

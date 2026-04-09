@@ -325,7 +325,11 @@ Page({
 
     if (orderType === 'dine_in') {
         const tableId = orderDTO.table_id || order.tableId
-        wx.navigateTo({ url: `/pages/dine-in/menu/menu?table_id=${tableId || ''}&merchant_id=${order.merchantId}` })
+        if (!tableId) {
+          wx.showToast({ title: '请重新扫码进入堂食点餐', icon: 'none' })
+          return
+        }
+        wx.navigateTo({ url: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableId}` })
         return
     }
 

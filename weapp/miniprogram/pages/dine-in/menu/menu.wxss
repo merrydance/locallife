@@ -42,6 +42,8 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  padding-left: var(--spacer-md);
+  padding-right: var(--spacer-md);
   padding-bottom: calc(120rpx + env(safe-area-inset-bottom));
 }
 

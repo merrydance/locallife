@@ -46,6 +46,12 @@
   align-items: flex-end;
 }
 
+.merchant-info--compact {
+  margin-top: 0;
+  padding: 32rpx;
+  align-items: center;
+}
+
 .merchant-logo {
   border: 4rpx solid #fff;
   box-shadow: 0 4rpx 12rpx rgba(0, 0, 0, 0.1);
@@ -56,11 +62,20 @@
   padding-bottom: 8rpx;
 }
 
+.merchant-detail--compact {
+  padding-bottom: 0;
+}
+
 .merchant-name {
   font-size: 34rpx;
   font-weight: 600;
   color: var(--td-text-color-primary);
   margin-bottom: 12rpx;
+}
+
+.merchant-meta {
+  font-size: 24rpx;
+  color: var(--td-text-color-secondary);
 }
 
 .merchant-tags {
@@ -125,6 +140,21 @@
   color: var(--td-text-color-placeholder);
   margin-bottom: 48rpx;
   justify-content: center;
+}
+
+.state-banner {
+  margin-bottom: 32rpx;
+  padding: 24rpx;
+  border-radius: 20rpx;
+  background: var(--td-brand-color-light);
+  color: var(--td-text-color-primary);
+  font-size: 26rpx;
+  line-height: 1.6;
+}
+
+.state-banner--blocked {
+  background: var(--td-error-color-1);
+  color: var(--td-error-color-6);
 }
 
 .btn-start {

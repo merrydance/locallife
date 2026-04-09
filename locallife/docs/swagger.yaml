@@ -2901,6 +2901,74 @@ definitions:
       type:
         type: string
     type: object
+  api.diningSessionEntryCapabilities:
+    properties:
+      can_order:
+        type: boolean
+      can_transfer:
+        type: boolean
+      requires_table_code:
+        type: boolean
+      supports_reservation_jump:
+        type: boolean
+      supports_service_call:
+        type: boolean
+      supports_takeout_jump:
+        type: boolean
+      transfer_requires_table_code:
+        type: boolean
+    type: object
+  api.diningSessionEntryResponse:
+    properties:
+      action:
+        type: string
+      active_session:
+        $ref: '#/definitions/api.diningSessionEntrySessionSummary'
+      blocked_reason:
+        type: string
+      capabilities:
+        $ref: '#/definitions/api.diningSessionEntryCapabilities'
+      merchant:
+        $ref: '#/definitions/api.scanTableMerchantInfo'
+      precheck:
+        $ref: '#/definitions/api.diningSessionPrecheckResponse'
+      table:
+        $ref: '#/definitions/api.scanTableTableInfo'
+      transfer_session:
+        $ref: '#/definitions/api.diningSessionEntrySessionSummary'
+    type: object
+  api.diningSessionEntrySessionSummary:
+    properties:
+      billing_group:
+        $ref: '#/definitions/api.billingGroupResponse'
+      session:
+        $ref: '#/definitions/api.diningSessionResponse'
+      table_no:
+        type: string
+    type: object
+  api.diningSessionMenuResponse:
+    properties:
+      billing_group:
+        $ref: '#/definitions/api.billingGroupResponse'
+      categories:
+        items:
+          $ref: '#/definitions/api.scanTableCategoryInfo'
+        type: array
+      combos:
+        items:
+          $ref: '#/definitions/api.scanTableComboInfo'
+        type: array
+      merchant:
+        $ref: '#/definitions/api.scanTableMerchantInfo'
+      promotions:
+        items:
+          $ref: '#/definitions/api.scanTablePromotionInfo'
+        type: array
+      session:
+        $ref: '#/definitions/api.diningSessionResponse'
+      table:
+        $ref: '#/definitions/api.scanTableTableInfo'
+    type: object
   api.diningSessionPrecheckResponse:
     properties:
       is_reservation_owner:
@@ -7375,6 +7443,8 @@ definitions:
         type: integer
       image_asset_id:
         type: integer
+      image_url:
+        type: string
       is_available:
         type: boolean
       name:
@@ -7404,6 +7474,8 @@ definitions:
         type: integer
       image_asset_id:
         type: integer
+      image_url:
+        type: string
       is_available:
         type: boolean
       is_online:
@@ -7437,6 +7509,8 @@ definitions:
         type: boolean
       logo_asset_id:
         type: integer
+      logo_url:
+        type: string
       name:
         type: string
       phone:
@@ -11880,6 +11954,51 @@ paths:
       summary: 结束就餐会话（结账离店）
       tags:
       - 就餐会话
+  /v1/dining-sessions/{id}/menu:
+    get:
+      description: 基于开放中的用餐会话返回顾客堂食菜单和会话上下文。
+      parameters:
+      - description: 用餐会话ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.diningSessionMenuResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取会话态堂食菜单
+      tags:
+      - 用餐会话
   /v1/dining-sessions/{id}/transfer-table:
     post:
       consumes:
@@ -11932,6 +12051,53 @@ paths:
       security:
       - BearerAuth: []
       summary: 转台（换桌）
+      tags:
+      - 用餐会话
+  /v1/dining-sessions/entry:
+    get:
+      description: 顾客扫码进入堂食时，返回桌台、预检、活动会话和可执行动作，作为顾客堂食的唯一接入真值。
+      parameters:
+      - description: 商户ID
+        in: query
+        minimum: 1
+        name: merchant_id
+        type: integer
+      - description: 桌号
+        in: query
+        maxLength: 50
+        name: table_no
+        type: string
+      - description: 桌台ID
+        in: query
+        minimum: 1
+        name: table_id
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.diningSessionEntryResponse'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 堂食扫码接入
       tags:
       - 用餐会话
   /v1/dining-sessions/open:

@@ -3927,6 +3927,78 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/dining-sessions/entry": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "顾客扫码进入堂食时，返回桌台、预检、活动会话和可执行动作，作为顾客堂食的唯一接入真值。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用餐会话"
+                ],
+                "summary": "堂食扫码接入",
+                "parameters": [
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "商户ID",
+                        "name": "merchant_id",
+                        "in": "query"
+                    },
+                    {
+                        "maxLength": 50,
+                        "type": "string",
+                        "description": "桌号",
+                        "name": "table_no",
+                        "in": "query"
+                    },
+                    {
+                        "minimum": 1,
+                        "type": "integer",
+                        "description": "桌台ID",
+                        "name": "table_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.diningSessionEntryResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/dining-sessions/open": {
             "post": {
                 "security": [
@@ -4132,6 +4204,76 @@ const docTemplate = `{
                     },
                     "500": {
                         "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/dining-sessions/{id}/menu": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "基于开放中的用餐会话返回顾客堂食菜单和会话上下文。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "用餐会话"
+                ],
+                "summary": "获取会话态堂食菜单",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "用餐会话ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.diningSessionMenuResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
                         "schema": {
                             "$ref": "#/definitions/api.ErrorResponse"
                         }
@@ -34787,6 +34929,110 @@ const docTemplate = `{
                 }
             }
         },
+        "api.diningSessionEntryCapabilities": {
+            "type": "object",
+            "properties": {
+                "can_order": {
+                    "type": "boolean"
+                },
+                "can_transfer": {
+                    "type": "boolean"
+                },
+                "requires_table_code": {
+                    "type": "boolean"
+                },
+                "supports_reservation_jump": {
+                    "type": "boolean"
+                },
+                "supports_service_call": {
+                    "type": "boolean"
+                },
+                "supports_takeout_jump": {
+                    "type": "boolean"
+                },
+                "transfer_requires_table_code": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "api.diningSessionEntryResponse": {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string"
+                },
+                "active_session": {
+                    "$ref": "#/definitions/api.diningSessionEntrySessionSummary"
+                },
+                "blocked_reason": {
+                    "type": "string"
+                },
+                "capabilities": {
+                    "$ref": "#/definitions/api.diningSessionEntryCapabilities"
+                },
+                "merchant": {
+                    "$ref": "#/definitions/api.scanTableMerchantInfo"
+                },
+                "precheck": {
+                    "$ref": "#/definitions/api.diningSessionPrecheckResponse"
+                },
+                "table": {
+                    "$ref": "#/definitions/api.scanTableTableInfo"
+                },
+                "transfer_session": {
+                    "$ref": "#/definitions/api.diningSessionEntrySessionSummary"
+                }
+            }
+        },
+        "api.diningSessionEntrySessionSummary": {
+            "type": "object",
+            "properties": {
+                "billing_group": {
+                    "$ref": "#/definitions/api.billingGroupResponse"
+                },
+                "session": {
+                    "$ref": "#/definitions/api.diningSessionResponse"
+                },
+                "table_no": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.diningSessionMenuResponse": {
+            "type": "object",
+            "properties": {
+                "billing_group": {
+                    "$ref": "#/definitions/api.billingGroupResponse"
+                },
+                "categories": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.scanTableCategoryInfo"
+                    }
+                },
+                "combos": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.scanTableComboInfo"
+                    }
+                },
+                "merchant": {
+                    "$ref": "#/definitions/api.scanTableMerchantInfo"
+                },
+                "promotions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.scanTablePromotionInfo"
+                    }
+                },
+                "session": {
+                    "$ref": "#/definitions/api.diningSessionResponse"
+                },
+                "table": {
+                    "$ref": "#/definitions/api.scanTableTableInfo"
+                }
+            }
+        },
         "api.diningSessionPrecheckResponse": {
             "type": "object",
             "properties": {
@@ -41418,6 +41664,9 @@ const docTemplate = `{
                 "image_asset_id": {
                     "type": "integer"
                 },
+                "image_url": {
+                    "type": "string"
+                },
                 "is_available": {
                     "type": "boolean"
                 },
@@ -41461,6 +41710,9 @@ const docTemplate = `{
                 },
                 "image_asset_id": {
                     "type": "integer"
+                },
+                "image_url": {
+                    "type": "string"
                 },
                 "is_available": {
                     "type": "boolean"
@@ -41511,6 +41763,9 @@ const docTemplate = `{
                 },
                 "logo_asset_id": {
                     "type": "integer"
+                },
+                "logo_url": {
+                    "type": "string"
                 },
                 "name": {
                     "type": "string"

@@ -1,7 +1,7 @@
 <!--堂食/预订结算页面 - 使用 TDesign 组件-->
 <custom-navbar title="{{orderType === 'dine_in' ? '堂食结账' : '预订结算'}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 加载状态 -->
   <!-- 骨架屏 -->
   <view wx:if="{{loading}}" class="skeleton-wrapper">

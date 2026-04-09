@@ -449,6 +449,7 @@ export async function createOrderFromCart(
     notes?: string
     table_id?: number
     reservation_id?: number
+    billing_group_id?: number
     // 前端计算透传字段
     delivery_fee?: number
     delivery_fee_discount?: number
@@ -488,6 +489,7 @@ export async function createOrderFromCart(
     notes: options.notes,
     table_id: options.table_id,
     reservation_id: options.reservation_id,
+    billing_group_id: options.billing_group_id,
     delivery_fee: options.delivery_fee,
     delivery_fee_discount: options.delivery_fee_discount,
     delivery_distance: options.delivery_distance

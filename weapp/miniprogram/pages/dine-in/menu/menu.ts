@@ -1,12 +1,9 @@
 /**
  * 堂食点餐/预订点菜菜单页面
- * 支持三种入口：
- * 1. 页面跳转：直接传 table_id 和 merchant_id
- * 2. 扫描小程序码：scene 参数格式 m=商户ID&t=桌号
- * 3. 预订点菜：直接传 reservation_id 和 merchant_id
+ * 堂食仅允许基于已建立的用餐会话进入；预订点菜允许 reservation 直达。
  */
 
-import { scanTable, getTableDetail, ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo, ScanTableDishInfo } from '../../../api/table'
+import { ScanTableCategoryInfo, ScanTableMerchantInfo, ScanTableTableInfo, ScanTableComboInfo, ScanTablePromotionInfo, ScanTableDishInfo } from '../../../api/table'
 import {
     getCart,
     addToCart,
@@ -18,11 +15,13 @@ import {
 } from '../../../api/cart'
 import { getReservationDetail } from '../../../api/reservation'
 import { getMerchantDishes, PublicDish } from '../../../api/merchant'
+import { getDiningSessionMenu } from '../../../api/dining-session'
 import type { CustomizationGroup } from '../../../api/dish'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import { getStableBarHeights } from '../../../utils/responsive'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { clearDineInSessionContext, getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
 
 type MenuDish = {
     id: number
@@ -82,6 +81,8 @@ type DrawerDish = MenuDish & {
 
 Page({
     data: {
+        sessionId: 0,
+        billingGroupId: 0,
         tableId: 0,
         merchantId: 0,
         tableNo: '',
@@ -123,7 +124,7 @@ Page({
         errorMessage: ''
     },
 
-    onLoad(options: { reservation_id?: string, merchant_id?: string, table_id?: string, scene?: string }) {
+    onLoad(options: { session_id?: string, reservation_id?: string, merchant_id?: string, table_id?: string, scene?: string }) {
         wx.showShareMenu({
             withShareTicket: true,
             menus: ['shareAppMessage', 'shareTimeline']
@@ -133,9 +134,21 @@ Page({
         const { navBarHeight } = getStableBarHeights()
         this.setData({ navBarHeight })
 
-        let tableId: number | null = null
+        if (options.session_id) {
+            const sessionId = parseInt(options.session_id)
+            this.setData({ sessionId, orderType: 'dine_in' })
+            this.initPageBySession(sessionId)
+            return
+        }
+
+        const storedSession = getDineInSessionContext()
+        if (storedSession?.session_id) {
+            this.setData({ sessionId: storedSession.session_id, orderType: 'dine_in' })
+            this.initPageBySession(storedSession.session_id)
+            return
+        }
+
         let merchantId: number | null = null
-        let tableNo: string | null = null
 
         // 方式0: 预订点菜入口 (从预订详情页跳转)
         if (options.reservation_id && options.merchant_id) {
@@ -150,37 +163,16 @@ Page({
             return
         }
 
-        // 方式1: 直接参数 (从页面跳转)
+        // 旧的桌台直进入口统一回到扫码接入页，不再允许绕过会话建立。
         if (options.table_id && options.merchant_id) {
-            tableId = parseInt(options.table_id)
-            merchantId = parseInt(options.merchant_id)
-            this.setData({ tableId, merchantId, orderType: 'dine_in' })
-            this.initPageById(tableId, merchantId)
+            wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?table_id=${options.table_id}` })
             return
         }
 
-        // 方式2: scene参数 (从小程序码扫描)
-        // scene格式: m_商户ID-t_桌号 或 tid_桌台ID
+        // scene 参数同样统一回到扫码接入页。
         if (options.scene) {
-            const scene = decodeURIComponent(options.scene)
-
-            // 解析新格式: m_1-t_A01
-            const mMatch = scene.match(/m_(\d+)/)
-            const tMatch = scene.match(/t_([^-]+)/)
-            const tidMatch = scene.match(/tid_(\d+)/)
-
-            if (mMatch && tMatch) {
-                merchantId = parseInt(mMatch[1])
-                tableNo = tMatch[1]
-                this.setData({ merchantId, tableNo, orderType: 'dine_in' })
-                this.initPageByTableNo(merchantId, tableNo)
-                return
-            } else if (tidMatch) {
-                tableId = parseInt(tidMatch[1])
-                this.setData({ tableId, orderType: 'dine_in' })
-                this.showError('暂不支持此扫码格式')
-                return
-            }
+            wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?scene=${encodeURIComponent(options.scene)}` })
+            return
         }
 
         // 参数错误 - 显示友好提示
@@ -205,36 +197,75 @@ Page({
         if (pages.length > 1) {
             wx.navigateBack()
         } else {
-            wx.switchTab({ url: '/pages/dining/index' })
+            const tableId = this.data.tableId || getDineInSessionContext()?.table_id
+            if (tableId) {
+                wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableId}` })
+                return
+            }
+            wx.switchTab({ url: '/pages/user_center/index' })
         }
     },
 
     /**
-     * 通过桌台ID和商户ID初始化页面
+     * 基于会话初始化页面（扫码堂食唯一真值入口）
      */
-    async initPageById(tableId: number, merchantId: number) {
-        // 暂时用 initPageByTableNo 的方式，需要查询桌号
-        // 后续可以优化为直接用 tableId
+    async initPageBySession(sessionId: number) {
         this.setData({ loading: true, hasError: false })
 
         try {
-            const tableDetail = await getTableDetail(tableId)
+            const menuResponse = await getDiningSessionMenu(sessionId)
+            saveDineInSessionFromMenu(menuResponse)
 
-            if (tableDetail && tableDetail.table_no) {
-                await this.initPageByTableNo(merchantId, tableDetail.table_no)
-            } else {
-                throw new Error('无法获取桌台信息')
-            }
+            const allDishes: MenuDish[] = []
+            const processedCategories: MenuCategory[] = (menuResponse.categories || []).map((cat: ScanTableCategoryInfo) => {
+                const dishes = (cat.dishes || []).map((dish: ScanTableDishInfo) => {
+                    const processedDish: MenuDish = {
+                        ...dish,
+                        image_url: getPublicImageUrl(dish.image_url || ''),
+                        priceDisplay: formatPriceNoSymbol(dish.price || 0),
+                        memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
+                        hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
+                        cartQty: 0,
+                        tags: dish.tags || [],
+                        customization_groups: dish.customization_groups || []
+                    }
+                    allDishes.push(processedDish)
+                    return processedDish
+                })
+                return { id: cat.id, name: cat.name, sort_order: cat.sort_order, dishes }
+            })
+
+            const finalCategories: MenuCategory[] = [
+                { id: 0, name: '全部', sort_order: -1, dishes: allDishes },
+                ...processedCategories
+            ]
+
+            this.setData({
+                sessionId: menuResponse.session.id,
+                billingGroupId: menuResponse.billing_group.id,
+                tableId: menuResponse.session.table_id,
+                merchantId: menuResponse.session.merchant_id,
+                reservationId: menuResponse.session.reservation_id || 0,
+                orderType: 'dine_in',
+                tableNo: menuResponse.table.table_no,
+                merchantInfo: menuResponse.merchant,
+                tableInfo: menuResponse.table,
+                categories: finalCategories,
+                combos: menuResponse.combos || [],
+                promotions: menuResponse.promotions || [],
+                currentCategoryId: 0,
+                currentDishes: allDishes,
+                loading: false
+            })
+
+            wx.setNavigationBarTitle({ title: menuResponse.merchant.name })
+            await this.loadCart()
         } catch (error: unknown) {
-            console.error('初始化失败:', error)
-            const message =
-                error && typeof error === 'object' && 'message' in error
-                    ? String((error as { message?: string }).message || '')
-                    : ''
+            clearDineInSessionContext()
             this.setData({
                 loading: false,
                 hasError: true,
-                errorMessage: message || '加载失败'
+                errorMessage: getErrorUserMessage(error, '堂食会话已失效，请重新扫码入座')
             })
         }
     },
@@ -335,77 +366,6 @@ Page({
 
         } catch (error: unknown) {
             console.error('预订初始化失败:', error)
-            const message =
-                error && typeof error === 'object' && 'message' in error
-                    ? String((error as { message?: string }).message || '')
-                    : ''
-            this.setData({
-                hasError: true,
-                errorMessage: message || '加载失败'
-            })
-        } finally {
-            this.setData({ loading: false })
-        }
-    },
-
-    /**
-     * 通过桌号初始化页面（扫码场景）
-     */
-    async initPageByTableNo(merchantId: number, tableNo: string) {
-        try {
-            this.setData({ loading: true, hasError: false })
-
-            // 调用扫码API获取完整信息
-            const scanResult = await scanTable(merchantId, tableNo)
-
-            // 预处理菜品价格、图片和定制标志
-            const allDishes: MenuDish[] = []
-            const processedCategories: MenuCategory[] = (scanResult.categories || []).map((cat: ScanTableCategoryInfo) => {
-                const dishes = (cat.dishes || []).map((dish: ScanTableDishInfo) => {
-                    const processedDish: MenuDish = {
-                        ...dish,
-                        image_url: getPublicImageUrl(dish.image_url || ''),
-                        priceDisplay: formatPriceNoSymbol(dish.price || 0),
-                        memberPriceDisplay: dish.member_price ? formatPriceNoSymbol(dish.member_price) : null,
-                        hasCustomizations: Array.isArray(dish.customization_groups) && dish.customization_groups.length > 0,
-                        cartQty: 0,
-                        tags: dish.tags || [],
-                        customization_groups: dish.customization_groups || []
-                    }
-                    allDishes.push(processedDish)
-                    return processedDish
-                })
-                return { id: cat.id, name: cat.name, sort_order: cat.sort_order, dishes }
-            })
-
-            // 添加"全部"分类
-            const finalCategories: MenuCategory[] = [
-                { id: 0, name: '全部', sort_order: -1, dishes: allDishes },
-                ...processedCategories
-            ]
-
-            // 设置桌台和商户信息
-            this.setData({
-                tableId: scanResult.table.id,
-                merchantId: scanResult.merchant.id,
-                tableNo: scanResult.table.table_no,
-                merchantInfo: scanResult.merchant,
-                tableInfo: scanResult.table,
-                categories: finalCategories,
-                combos: scanResult.combos || [],
-                promotions: scanResult.promotions || [],
-                currentCategoryId: 0,
-                currentDishes: allDishes
-            })
-
-            // 设置页面标题
-            wx.setNavigationBarTitle({ title: scanResult.merchant.name })
-
-            // 加载购物车
-            await this.loadCart()
-
-        } catch (error: unknown) {
-            console.error('扫码初始化失败:', error)
             const message =
                 error && typeof error === 'object' && 'message' in error
                     ? String((error as { message?: string }).message || '')
@@ -842,7 +802,7 @@ Page({
      * 去结算
      */
     async goToCheckout() {
-        const { cart, tableId, merchantId, orderType, reservationId } = this.data
+        const { cart, tableId, merchantId, orderType, reservationId, sessionId, billingGroupId } = this.data
 
         if (!cart || cart.items.length === 0) {
             wx.showToast({ title: '购物车为空', icon: 'none' })
@@ -858,18 +818,21 @@ Page({
                 reservation_id: this.data.reservationId || undefined
             })
 
-            // 根据订单类型拼接参数
             let url = `/pages/dine-in/checkout/checkout?merchant_id=${merchantId}&order_type=${orderType}`
-            if (orderType === 'dine_in') {
-                url += `&table_id=${tableId}`
-                if (this.data.tableNo) {
-                    url += `&table_no=${encodeURIComponent(this.data.tableNo)}`
-                }
+            if (sessionId > 0) {
+                url += `&session_id=${sessionId}&billing_group_id=${billingGroupId}`
             } else if (orderType === 'reservation') {
                 url += `&reservation_id=${reservationId}`
+            } else {
+                const fallbackTableId = tableId || getDineInSessionContext()?.table_id
+                if (fallbackTableId) {
+                    wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?table_id=${fallbackTableId}` })
+                    return
+                }
+                wx.showToast({ title: '堂食会话已失效，请重新扫码', icon: 'none' })
+                return
             }
 
-            // 跳转到结算页面
             wx.navigateTo({ url })
         } catch (error) {
             console.error('结算失败:', error)
@@ -886,31 +849,16 @@ Page({
     },
 
     /**
-     * 呼叫服务员
-     */
-    callService() {
-        wx.showModal({
-            title: '呼叫服务',
-            content: '确定要呼叫服务员吗？',
-            success: (res) => {
-                if (res.confirm) {
-                    wx.showToast({ title: '已呼叫服务员', icon: 'success' })
-                }
-            }
-        })
-    },
-
-    /**
      * 重试加载
      */
     onRetry() {
-        const { merchantId, tableNo, reservationId, tableId } = this.data
-        if (reservationId) {
+        const { sessionId, reservationId, merchantId, tableId } = this.data
+        if (sessionId) {
+            this.initPageBySession(sessionId)
+        } else if (reservationId) {
             this.initPageForReservation(reservationId, merchantId)
-        } else if (tableNo) {
-            this.initPageByTableNo(merchantId, tableNo)
         } else if (tableId) {
-            this.initPageById(tableId, merchantId)
+            wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableId}` })
         }
     },
 
@@ -922,7 +870,7 @@ Page({
 
         return {
             title: `${merchantInfo?.name || '餐厅'}的菜单`,
-            path: `/pages/dine-in/menu/menu?table_id=${tableId}&merchant_id=${this.data.merchantId}`,
+            path: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableId}`,
             imageUrl: merchantInfo?.logo_url
         }
     },
@@ -932,7 +880,7 @@ Page({
 
         return {
             title: `${merchantInfo?.name || '餐厅'}的菜单`,
-            query: `table_id=${tableId}&merchant_id=${this.data.merchantId}`,
+            query: `table_id=${tableId}`,
             imageUrl: merchantInfo?.logo_url
         }
     },

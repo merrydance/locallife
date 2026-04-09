@@ -43,6 +43,7 @@ type scanTableMerchantInfo struct {
 	Name        string  `json:"name"`
 	Description *string `json:"description,omitempty"`
 	LogoAssetID *int64  `json:"logo_asset_id,omitempty"`
+	LogoURL     string  `json:"logo_url,omitempty"`
 	Phone       string  `json:"phone,omitempty"`
 	Address     string  `json:"address,omitempty"`
 	Status      string  `json:"status"`
@@ -66,6 +67,7 @@ type scanTableDishInfo struct {
 	Name                string               `json:"name"`
 	Description         *string              `json:"description,omitempty"`
 	ImageAssetID        *int64               `json:"image_asset_id,omitempty"`
+	ImageURL            string               `json:"image_url,omitempty"`
 	Price               int64                `json:"price"`
 	OriginalPrice       int64                `json:"original_price"`
 	MemberPrice         *int64               `json:"member_price,omitempty"`
@@ -93,6 +95,7 @@ type scanTableComboInfo struct {
 	Name          string   `json:"name"`
 	Description   *string  `json:"description,omitempty"`
 	ImageAssetID  *int64   `json:"image_asset_id,omitempty"`
+	ImageURL      string   `json:"image_url,omitempty"`
 	Price         int64    `json:"price"`
 	OriginalPrice *int64   `json:"original_price,omitempty"`
 	IsAvailable   bool     `json:"is_available"`
@@ -180,26 +183,33 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		return
 	}
 
-	// 3. 获取菜品分类
-	categories, err := server.store.ListDishCategories(ctx, req.MerchantID)
+	response, err := server.buildScanTableResponse(ctx, merchant, table)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 		return
 	}
 
-	// 4. 获取所有上架菜品
-	dishes, err := server.store.ListDishesForMenu(ctx, req.MerchantID)
+	ctx.JSON(http.StatusOK, response)
+}
+
+func (server *Server) buildScanTableResponse(ctx context.Context, merchant db.Merchant, table db.Table) (scanTableResponse, error) {
+	categories, err := server.store.ListDishCategories(ctx, merchant.ID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		return scanTableResponse{}, err
 	}
 
-	// 构建分类 -> 菜品映射
+	dishes, err := server.store.ListDishesForMenu(ctx, merchant.ID)
+	if err != nil {
+		return scanTableResponse{}, err
+	}
+
 	categoryMap := make(map[int64]int)
 	categoryNameMap := make(map[int64]string)
 	categoryList := make([]scanTableCategoryInfo, 0, len(categories)+1)
 	const uncategorizedCategoryID int64 = -1
 	const uncategorizedCategoryName = "其他"
+	var dishAssetIDs []int64
+
 	for _, cat := range categories {
 		catInfo := scanTableCategoryInfo{
 			ID:        cat.ID,
@@ -229,7 +239,6 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		return idx
 	}
 
-	// 将菜品分配到分类
 	for _, dish := range dishes {
 		var categoryID int64
 		if dish.CategoryID.Valid {
@@ -238,7 +247,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 
 		dishInfo := scanTableDishInfo{
 			ID:            dish.ID,
-			MerchantID:    req.MerchantID,
+			MerchantID:    merchant.ID,
 			IsOnline:      true,
 			Name:          dish.Name,
 			Price:         dish.Price,
@@ -251,11 +260,12 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			dishInfo.Description = &dish.Description.String
 		}
 		dishInfo.ImageAssetID = int64PtrFromPgInt8(dish.ImageMediaAssetID)
+		if dishInfo.ImageAssetID != nil {
+			dishAssetIDs = append(dishAssetIDs, *dishInfo.ImageAssetID)
+		}
 		if dish.MemberPrice.Valid {
 			dishInfo.MemberPrice = &dish.MemberPrice.Int64
 		}
-
-		// 解析 Tags 和 CustomizationGroups
 		if dish.Tags != nil {
 			_ = parseJSON(dish.Tags, &dishInfo.Tags)
 		}
@@ -277,14 +287,13 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		}
 	}
 
-	// 5. 获取上架套餐
-	combos, err := server.store.ListOnlineCombosByMerchant(ctx, req.MerchantID)
+	combos, err := server.store.ListOnlineCombosByMerchant(ctx, merchant.ID)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-		return
+		return scanTableResponse{}, err
 	}
 
-	var comboList []scanTableComboInfo
+	var comboAssetIDs []int64
+	comboList := make([]scanTableComboInfo, 0, len(combos))
 	for _, combo := range combos {
 		comboInfo := scanTableComboInfo{
 			ID:          combo.ID,
@@ -299,18 +308,17 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			comboInfo.Description = &combo.Description.String
 		}
 		comboInfo.ImageAssetID = int64PtrFromPgInt8(combo.ImageMediaAssetID)
+		if comboInfo.ImageAssetID != nil {
+			comboAssetIDs = append(comboAssetIDs, *comboInfo.ImageAssetID)
+		}
 		if combo.OriginalPrice > 0 {
 			comboInfo.OriginalPrice = &combo.OriginalPrice
 		}
 		comboList = append(comboList, comboInfo)
 	}
 
-	// 6. 获取优惠活动（满返运费 + 满减）
 	var promotions []scanTablePromotionInfo
-
-	// 6.1 满返运费（商户配送优惠）- 使用已过滤有效期和活动状态的查询
-	deliveryPromotions, err := server.store.ListActiveDeliveryPromotionsByMerchant(ctx, req.MerchantID)
-	if err == nil {
+	if deliveryPromotions, err := server.store.ListActiveDeliveryPromotionsByMerchant(ctx, merchant.ID); err == nil {
 		for _, dp := range deliveryPromotions {
 			promotions = append(promotions, scanTablePromotionInfo{
 				Type:        "delivery_return",
@@ -320,10 +328,7 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			})
 		}
 	}
-
-	// 6.2 满减规则
-	discountRules, err := server.store.ListActiveDiscountRules(ctx, req.MerchantID)
-	if err == nil {
+	if discountRules, err := server.store.ListActiveDiscountRules(ctx, merchant.ID); err == nil {
 		for _, dr := range discountRules {
 			promotions = append(promotions, scanTablePromotionInfo{
 				Type:        "discount",
@@ -334,13 +339,14 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		}
 	}
 
-	// 构建响应
 	response := scanTableResponse{
 		Merchant: scanTableMerchantInfo{
-			ID:     merchant.ID,
-			Name:   merchant.Name,
-			Status: merchant.Status,
-			IsOpen: merchant.IsOpen,
+			ID:      merchant.ID,
+			Name:    merchant.Name,
+			Phone:   merchant.Phone,
+			Address: merchant.Address,
+			Status:  merchant.Status,
+			IsOpen:  merchant.IsOpen,
 		},
 		Table: scanTableTableInfo{
 			ID:        table.ID,
@@ -354,11 +360,11 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		Promotions: promotions,
 	}
 
-	// 填充可选字段
 	if merchant.Description.Valid {
 		response.Merchant.Description = &merchant.Description.String
 	}
 	response.Merchant.LogoAssetID = int64PtrFromPgInt8(merchant.LogoMediaAssetID)
+	response.Merchant.LogoURL = server.publicImageURL(ctx, response.Merchant.LogoAssetID, media.VariantCard)
 	if table.Description.Valid {
 		response.Table.Description = &table.Description.String
 	}
@@ -366,13 +372,14 @@ func (server *Server) scanTable(ctx *gin.Context) {
 		response.Table.MinimumSpend = &table.MinimumSpend.Int64
 	}
 
-	// 为每个菜品填充定制化分组
+	dishImageURLs := server.batchPublicImageURLs(ctx, dishAssetIDs, media.VariantCard)
+	comboImageURLs := server.batchPublicImageURLs(ctx, comboAssetIDs, media.VariantCard)
 	for i := range response.Categories {
 		for j := range response.Categories[i].Dishes {
+			if response.Categories[i].Dishes[j].ImageAssetID != nil {
+				response.Categories[i].Dishes[j].ImageURL = dishImageURLs[*response.Categories[i].Dishes[j].ImageAssetID]
+			}
 			dishID := response.Categories[i].Dishes[j].ID
-			// 这种做法虽然有 N+1 问题，但在扫码点餐这种低频、单商户（菜品量通常 < 100）的场景下，
-			// 复用已有的 GetDishWithCustomizations 逻辑最为稳妥且开发效率最高。
-			// 如果后续性能成为瓶颈，可优化为批量查询。
 			dishWithCust, err := server.store.GetDishWithCustomizations(ctx, dishID)
 			if err == nil {
 				var groups []customizationGroup
@@ -382,8 +389,13 @@ func (server *Server) scanTable(ctx *gin.Context) {
 			}
 		}
 	}
+	for i := range response.Combos {
+		if response.Combos[i].ImageAssetID != nil {
+			response.Combos[i].ImageURL = comboImageURLs[*response.Combos[i].ImageAssetID]
+		}
+	}
 
-	ctx.JSON(http.StatusOK, response)
+	return response, nil
 }
 
 // formatDeliveryReturnDesc 格式化满返描述

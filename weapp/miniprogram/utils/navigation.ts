@@ -255,7 +255,7 @@ export class Navigation {
      */
   static toDiningMenu(tableId: string) {
     wx.navigateTo({
-      url: `/pages/dining/index?table_id=${tableId}`
+      url: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableId}`
     })
   }
 

@@ -1,13 +1,15 @@
 import { getCart, calculateCart, CartResponse, CalculateCartResponse } from '../../../api/cart'
 import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merchant'
 import { createOrderFromCart } from '../../../api/order'
+import { getDiningSessionMenu } from '../../../api/dining-session'
 import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
 import { getMyMemberships, MembershipResponse } from '../../../api/personal'
-import { getTableDetail } from '../../../api/table'
+import type { ScanTableTableInfo } from '../../../api/table'
 import { formatPriceNoSymbol } from '../../../utils/util'
 import { getPublicImageUrl } from '../../../utils/image'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
+import { getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
 
 type PromotionItem = NonNullable<CalculateCartResponse['applied_promotions']>[number] & {
     amountDisplay: string
@@ -56,16 +58,30 @@ type CartView = CartResponse & {
     items: CartItemView[]
 }
 
+type CheckoutMerchantInfo = PublicMerchantDetail | {
+    id: number
+    name: string
+    logo_url?: string
+    cover_image?: string
+    address?: string
+}
+
+type CheckoutTableInfo = ScanTableTableInfo | {
+    table_no: string
+}
+
 Page({
     data: {
+        sessionId: 0,
+        billingGroupId: 0,
         merchantId: 0,
         tableId: 0,
         reservationId: 0,
         orderType: 'dine_in' as 'dine_in' | 'reservation',
         
         loading: true,
-        merchantInfo: null as PublicMerchantDetail | null,
-        tableInfo: null as Record<string, unknown> | null,
+        merchantInfo: null as CheckoutMerchantInfo | null,
+        tableInfo: null as CheckoutTableInfo | null,
         reservationInfo: null as Record<string, unknown> | null,
         cart: null as CartResponse | null,
         calculation: {
@@ -106,12 +122,43 @@ Page({
         this.setData({ navBarHeight: e.detail.navBarHeight })
     },
 
-    async onLoad(options: { merchant_id?: string, table_id?: string, reservation_id?: string, order_type?: 'dine_in' | 'reservation', table_no?: string }) {
+    async onLoad(options: { session_id?: string, billing_group_id?: string, merchant_id?: string, table_id?: string, reservation_id?: string, order_type?: 'dine_in' | 'reservation', table_no?: string }) {
+        const directSessionId = options.session_id ? parseInt(options.session_id) : 0
+        const directBillingGroupId = options.billing_group_id ? parseInt(options.billing_group_id) : 0
+
+        if (directSessionId > 0) {
+            this.setData({ sessionId: directSessionId, billingGroupId: directBillingGroupId, orderType: 'dine_in' })
+            await this.initData()
+            return
+        }
+
+        if (!options.reservation_id && !options.merchant_id && !options.table_id) {
+            const storedSession = getDineInSessionContext()
+            if (storedSession?.session_id) {
+                this.setData({ sessionId: storedSession.session_id, billingGroupId: storedSession.billing_group_id, orderType: 'dine_in' })
+                await this.initData()
+                return
+            }
+        }
+
         const merchantId = parseInt(options.merchant_id || '0')
         const tableId = options.table_id ? parseInt(options.table_id) : 0
         const reservationId = options.reservation_id ? parseInt(options.reservation_id) : 0
         const orderType = options.order_type || (reservationId ? 'reservation' : 'dine_in')
         const tableNo = options.table_no ? decodeURIComponent(options.table_no) : ''
+
+        if (orderType === 'dine_in') {
+            if (tableId > 0) {
+                wx.redirectTo({ url: `/pages/dine-in/scan-entry/scan-entry?table_id=${tableId}` })
+                return
+            }
+            this.setData({
+                loading: false,
+                isError: true,
+                errorMessage: '请通过扫描桌台二维码进入结账页面'
+            })
+            return
+        }
 
         this.setData({ 
             merchantId, 
@@ -120,17 +167,6 @@ Page({
             orderType,
             tableInfo: tableNo ? { table_no: tableNo } : null
         })
-
-        if (orderType === 'dine_in' && tableId > 0 && !tableNo) {
-            try {
-                const tableDetail = await getTableDetail(tableId)
-                if (tableDetail?.table_no) {
-                    this.setData({ tableInfo: { table_no: tableDetail.table_no } })
-                }
-            } catch (error) {
-                console.warn('获取桌台详情失败', error)
-            }
-        }
 
         await this.initData()
     },
@@ -147,28 +183,53 @@ Page({
      */
     async initData() {
         this.setData({ loading: true, isError: false })
-        const { merchantId, tableId, reservationId, orderType } = this.data
+        const { sessionId } = this.data
 
         try {
-            // 1. 获取基础信息
-            const [merchantInfo, cart] = await Promise.all([
-                getPublicMerchantDetail(merchantId),
-                getCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
-            ])
+            if (sessionId > 0) {
+                const menuResponse = await getDiningSessionMenu(sessionId)
+                saveDineInSessionFromMenu(menuResponse)
 
-            // 2. 获取计算结果 (后端自动应用最优优惠)
-            const calculationResult = await calculateCart({
-                merchant_id: merchantId,
-                order_type: orderType,
-                table_id: tableId || undefined,
-                reservation_id: reservationId || undefined
-            })
+                const merchantId = menuResponse.session.merchant_id
+                const tableId = menuResponse.session.table_id
+                const reservationId = menuResponse.session.reservation_id || 0
+                const orderType = 'dine_in' as const
 
-            // 3. 处理会员信息
-            await this.loadMembershipInfo()
+                this.setData({
+                    sessionId: menuResponse.session.id,
+                    billingGroupId: this.data.billingGroupId || menuResponse.billing_group.id,
+                    merchantId,
+                    tableId,
+                    reservationId,
+                    orderType,
+                    merchantInfo: menuResponse.merchant,
+                    tableInfo: menuResponse.table
+                })
 
-            // 4. 更新 UI 数据
-            this.renderData(merchantInfo, cart, calculationResult)
+                const [cart, calculationResult] = await Promise.all([
+                    getCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined }),
+                    calculateCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
+                ])
+
+                await this.loadMembershipInfo(merchantId)
+                this.renderData(menuResponse.merchant, cart, calculationResult)
+            } else {
+                const { merchantId, tableId, reservationId, orderType } = this.data
+                const [merchantInfo, cart] = await Promise.all([
+                    getPublicMerchantDetail(merchantId),
+                    getCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
+                ])
+
+                const calculationResult = await calculateCart({
+                    merchant_id: merchantId,
+                    order_type: orderType,
+                    table_id: tableId || undefined,
+                    reservation_id: reservationId || undefined
+                })
+
+                await this.loadMembershipInfo(merchantId)
+                this.renderData(merchantInfo, cart, calculationResult)
+            }
 
         } catch (error: unknown) {
             const message = getErrorUserMessage(error, '加载失败，请重试')
@@ -182,11 +243,12 @@ Page({
         }
     },
 
-    async loadMembershipInfo() {
+    async loadMembershipInfo(merchantId?: number) {
+        const targetMerchantId = merchantId ?? this.data.merchantId
         try {
             const membershipsResult = await getMyMemberships()
             const membership = membershipsResult.memberships?.find(
-                (m: MembershipResponse) => m.merchant_id === this.data.merchantId
+                (m: MembershipResponse) => m.merchant_id === targetMerchantId
             )
             if (membership) {
                 const balance = membership.balance || 0
@@ -201,7 +263,7 @@ Page({
         }
     },
 
-    renderData(merchantInfo: PublicMerchantDetail, cart: CartResponse, calculation: CalculateCartResponse) {
+    renderData(merchantInfo: CheckoutMerchantInfo, cart: CartResponse, calculation: CalculateCartResponse) {
         const processedCalculation: CalculationView = {
             ...calculation,
             subtotalDisplay: formatPriceNoSymbol(calculation.subtotal || 0),
@@ -284,12 +346,13 @@ Page({
         if (this.data.submitting) return
         this.setData({ submitting: true })
 
-        const { merchantId, orderType, tableId, reservationId, selectedPaymentMethod, remark } = this.data
+        const { merchantId, orderType, tableId, reservationId, selectedPaymentMethod, remark, billingGroupId } = this.data
 
         try {
             const order = await createOrderFromCart(merchantId, orderType, {
                 table_id: tableId || undefined,
                 reservation_id: reservationId || undefined,
+                billing_group_id: billingGroupId || undefined,
                 notes: remark,
                 use_balance: selectedPaymentMethod === 'balance'
             })

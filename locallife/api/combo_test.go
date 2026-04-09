@@ -1043,10 +1043,9 @@ func TestDeleteComboSetAPI(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
-				var response comboSetResponse
+				var response MessageResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
-				require.True(t, response.IsOnline)
-				require.Equal(t, combo.OriginalPrice, response.OriginalPrice)
+				require.Equal(t, "combo set deleted", response.Message)
 			},
 		},
 		{

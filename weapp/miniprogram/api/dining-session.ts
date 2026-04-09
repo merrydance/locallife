@@ -5,6 +5,13 @@
 
 import { request } from '../utils/request'
 import type { OrderItemRequest, OrderResponse, OrderType } from './order'
+import type {
+  ScanTableCategoryInfo,
+  ScanTableComboInfo,
+  ScanTableMerchantInfo,
+  ScanTablePromotionInfo,
+  ScanTableTableInfo
+} from './table'
 
 export type DiningSessionStatus = 'open' | 'closed'
 
@@ -72,6 +79,43 @@ export interface BillingGroupDTO {
   closed_at?: string
 }
 
+export interface DiningSessionEntryCapabilities {
+  requires_table_code: boolean
+  transfer_requires_table_code: boolean
+  can_order: boolean
+  can_transfer: boolean
+  supports_takeout_jump: boolean
+  supports_reservation_jump: boolean
+  supports_service_call: boolean
+}
+
+export interface DiningSessionEntrySessionSummary {
+  session: DiningSessionDTO
+  billing_group: BillingGroupDTO
+  table_no: string
+}
+
+export interface DiningSessionEntryResponse {
+  action: 'open_session' | 'resume_session' | 'transfer_session' | 'blocked'
+  blocked_reason?: string
+  merchant: ScanTableMerchantInfo
+  table: ScanTableTableInfo
+  precheck: DiningSessionPrecheckResponse
+  active_session?: DiningSessionEntrySessionSummary
+  transfer_session?: DiningSessionEntrySessionSummary
+  capabilities: DiningSessionEntryCapabilities
+}
+
+export interface DiningSessionMenuResponse {
+  session: DiningSessionDTO
+  billing_group: BillingGroupDTO
+  merchant: ScanTableMerchantInfo
+  table: ScanTableTableInfo
+  categories: ScanTableCategoryInfo[]
+  combos: ScanTableComboInfo[]
+  promotions: ScanTablePromotionInfo[]
+}
+
 export interface CreateDiningOrderRequest {
   merchant_id: number
   table_id: number
@@ -91,12 +135,31 @@ export async function precheckDiningSession(tableId: number): Promise<DiningSess
   })
 }
 
+export async function getDiningSessionEntry(params: {
+  merchant_id?: number
+  table_no?: string
+  table_id?: number
+}): Promise<DiningSessionEntryResponse> {
+  return request({
+    url: '/v1/dining-sessions/entry',
+    method: 'GET',
+    data: params
+  })
+}
+
 /** 开启用餐会话（若已存在开放会话，后端会直接返回） */
 export async function openDiningSession(data: OpenDiningSessionRequest): Promise<OpenDiningSessionResponse> {
   return request({
     url: '/v1/dining-sessions/open',
     method: 'POST',
     data
+  })
+}
+
+export async function getDiningSessionMenu(sessionId: number): Promise<DiningSessionMenuResponse> {
+  return request({
+    url: `/v1/dining-sessions/${sessionId}/menu`,
+    method: 'GET'
   })
 }
 
@@ -128,6 +191,8 @@ export async function createDiningOrder(payload: CreateDiningOrderRequest): Prom
 }
 
 export default {
+  getDiningSessionEntry,
+  getDiningSessionMenu,
   precheckDiningSession,
   openDiningSession,
   transferDiningSessionTable,
