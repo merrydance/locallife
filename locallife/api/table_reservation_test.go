@@ -1509,6 +1509,7 @@ func TestMerchantCreateReservationAPISuccess(t *testing.T) {
 	createdReservation.ContactName = "Alice"
 	createdReservation.ContactPhone = "13800138000"
 	createdReservation.GuestCount = 4
+	createdReservation.Source = pgtype.Text{String: ReservationSourceMerchant, Valid: true}
 
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
@@ -1587,6 +1588,7 @@ func TestMerchantCreateReservationAPISuccess(t *testing.T) {
 	require.Equal(t, table.ID, resp.TableID)
 	require.Equal(t, "2026-04-02", resp.ReservationDate)
 	require.Equal(t, "18:30", resp.ReservationTime)
+	require.Equal(t, ReservationSourceMerchant, resp.Source)
 }
 
 func TestMerchantUpdateReservationAPICashierForbidden(t *testing.T) {

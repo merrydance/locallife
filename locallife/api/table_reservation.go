@@ -71,6 +71,7 @@ type reservationResponse struct {
 	GuestCount      int16                     `json:"guest_count"`
 	ContactName     string                    `json:"contact_name"`
 	ContactPhone    string                    `json:"contact_phone"`
+	Source          string                    `json:"source,omitempty"`
 	PaymentMode     string                    `json:"payment_mode"`
 	DepositAmount   int64                     `json:"deposit_amount"`
 	PrepaidAmount   int64                     `json:"prepaid_amount"`
@@ -172,6 +173,7 @@ func newReservationResponse(r db.TableReservation) reservationResponse {
 		GuestCount:      r.GuestCount,
 		ContactName:     r.ContactName,
 		ContactPhone:    r.ContactPhone,
+		Source:          r.Source.String,
 		PaymentMode:     r.PaymentMode,
 		DepositAmount:   r.DepositAmount,
 		PrepaidAmount:   r.PrepaidAmount,
@@ -225,6 +227,7 @@ func newReservationWithTableResponse(r db.GetTableReservationWithTableRow) reser
 		GuestCount:      r.GuestCount,
 		ContactName:     r.ContactName,
 		ContactPhone:    r.ContactPhone,
+		Source:          r.Source.String,
 		PaymentMode:     r.PaymentMode,
 		DepositAmount:   r.DepositAmount,
 		PrepaidAmount:   r.PrepaidAmount,
@@ -623,6 +626,7 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 			GuestCount:      r.GuestCount,
 			ContactName:     r.ContactName,
 			ContactPhone:    r.ContactPhone,
+			Source:          r.Source.String,
 			PaymentMode:     r.PaymentMode,
 			DepositAmount:   r.DepositAmount,
 			PrepaidAmount:   r.PrepaidAmount,
@@ -984,6 +988,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 				GuestCount:      r.GuestCount,
 				ContactName:     r.ContactName,
 				ContactPhone:    r.ContactPhone,
+				Source:          r.Source.String,
 				PaymentMode:     r.PaymentMode,
 				DepositAmount:   r.DepositAmount,
 				PrepaidAmount:   r.PrepaidAmount,
@@ -1111,6 +1116,7 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 			GuestCount:      r.GuestCount,
 			ContactName:     r.ContactName,
 			ContactPhone:    r.ContactPhone,
+			Source:          r.Source.String,
 			PaymentMode:     r.PaymentMode,
 			DepositAmount:   r.DepositAmount,
 			PrepaidAmount:   r.PrepaidAmount,
@@ -2006,6 +2012,7 @@ func (server *Server) listTodayReservations(ctx *gin.Context) {
 			GuestCount:      r.GuestCount,
 			ContactName:     r.ContactName,
 			ContactPhone:    r.ContactPhone,
+			Source:          r.Source.String,
 			PaymentMode:     r.PaymentMode,
 			DepositAmount:   r.DepositAmount,
 			PrepaidAmount:   r.PrepaidAmount,

@@ -4375,6 +4375,23 @@ definitions:
       version:
         type: integer
     type: object
+  api.merchantDeviceAccessResponse:
+    properties:
+      allowed_roles:
+        items:
+          type: string
+        type: array
+      block_reason:
+        type: string
+      can_manage:
+        type: boolean
+      merchant_id:
+        type: integer
+      merchant_name:
+        type: string
+      staff_role:
+        type: string
+    type: object
   api.merchantHourlyStatsRow:
     properties:
       avg_order_amount:
@@ -4637,6 +4654,94 @@ definitions:
         description: 百分比
         type: number
       total_users:
+        type: integer
+    type: object
+  api.merchantReservationPrepItemResponse:
+    properties:
+      combo_id:
+        type: integer
+      dish_id:
+        type: integer
+      name:
+        type: string
+      references:
+        items:
+          $ref: '#/definitions/api.merchantReservationPrepReferenceResponse'
+        type: array
+      reservation_count:
+        type: integer
+      total_quantity:
+        type: integer
+      type:
+        type: string
+    type: object
+  api.merchantReservationPrepReferenceResponse:
+    properties:
+      contact_name:
+        type: string
+      quantity:
+        type: integer
+      reservation_id:
+        type: integer
+      reservation_time:
+        type: string
+      status:
+        type: string
+      table_no:
+        type: string
+    type: object
+  api.merchantReservationPrepSummaryResponse:
+    properties:
+      dish_kinds:
+        type: integer
+      items:
+        items:
+          $ref: '#/definitions/api.merchantReservationPrepItemResponse'
+        type: array
+      table_count:
+        type: integer
+      total_quantity:
+        type: integer
+    type: object
+  api.merchantReservationWorkbenchResponse:
+    properties:
+      date:
+        type: string
+      prep_summary:
+        $ref: '#/definitions/api.merchantReservationPrepSummaryResponse'
+      status_totals:
+        $ref: '#/definitions/api.merchantReservationWorkbenchStatusTotalsResponse'
+      summary:
+        $ref: '#/definitions/api.merchantReservationWorkbenchSummaryResponse'
+    type: object
+  api.merchantReservationWorkbenchStatusTotalsResponse:
+    properties:
+      all:
+        type: integer
+      cancelled:
+        type: integer
+      checked_in:
+        type: integer
+      completed:
+        type: integer
+      confirmed:
+        type: integer
+      exception:
+        type: integer
+      expired:
+        type: integer
+      no_show:
+        type: integer
+      paid:
+        type: integer
+      pending:
+        type: integer
+    type: object
+  api.merchantReservationWorkbenchSummaryResponse:
+    properties:
+      active_table_count:
+        type: integer
+      reservation_count:
         type: integer
     type: object
   api.merchantResponse:
@@ -6709,6 +6814,8 @@ definitions:
       reservation_date:
         type: string
       reservation_time:
+        type: string
+      source:
         type: string
       status:
         type: string
@@ -16134,6 +16241,39 @@ paths:
       security:
       - Bearer: []
       summary: 测试打印机
+      tags:
+      - 商户设备管理
+  /v1/merchant/devices/access:
+    get:
+      consumes:
+      - application/json
+      description: 返回当前商户关联用户是否可以管理打印设备与后厨协同配置，供小程序入口与页面守卫统一使用
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 成功返回设备管理能力
+          schema:
+            $ref: '#/definitions/api.merchantDeviceAccessResponse'
+        "400":
+          description: 商户选择错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户或未关联商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户设备管理能力
       tags:
       - 商户设备管理
   /v1/merchant/devices/reconciliation-jobs:
@@ -26039,10 +26179,12 @@ paths:
         - pending
         - paid
         - confirmed
+        - checked_in
         - completed
         - cancelled
         - expired
         - no_show
+        - exception
         in: query
         name: status
         type: string
@@ -26236,6 +26378,45 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取今日预订列表
+      tags:
+      - 预定管理-商户
+  /v1/reservations/merchant/workbench:
+    get:
+      consumes:
+      - application/json
+      description: 按日期返回预订工作台摘要、状态计数和备菜汇总，供商户工作台首页使用
+      parameters:
+      - description: 日期 (YYYY-MM-DD)
+        in: query
+        name: date
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.merchantReservationWorkbenchResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未授权
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 非商户
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户预订工作台汇总
       tags:
       - 预定管理-商户
   /v1/reviews:

@@ -10444,6 +10444,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/merchant/devices/access": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "返回当前商户关联用户是否可以管理打印设备与后厨协同配置，供小程序入口与页面守卫统一使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "商户设备管理"
+                ],
+                "summary": "获取商户设备管理能力",
+                "responses": {
+                    "200": {
+                        "description": "成功返回设备管理能力",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantDeviceAccessResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "商户选择错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户或未关联商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/merchant/devices/reconciliation-jobs": {
             "get": {
                 "security": [
@@ -25214,10 +25266,12 @@ const docTemplate = `{
                             "pending",
                             "paid",
                             "confirmed",
+                            "checked_in",
                             "completed",
                             "cancelled",
                             "expired",
-                            "no_show"
+                            "no_show",
+                            "exception"
                         ],
                         "type": "string",
                         "description": "筛选状态",
@@ -25490,6 +25544,67 @@ const docTemplate = `{
                                     }
                                 }
                             }
+                        }
+                    },
+                    "401": {
+                        "description": "未授权",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/reservations/merchant/workbench": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "按日期返回预订工作台摘要、状态计数和备菜汇总，供商户工作台首页使用",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "预定管理-商户"
+                ],
+                "summary": "获取商户预订工作台汇总",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "日期 (YYYY-MM-DD)",
+                        "name": "date",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.merchantReservationWorkbenchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
                         }
                     },
                     "401": {
@@ -36867,6 +36982,32 @@ const docTemplate = `{
                 }
             }
         },
+        "api.merchantDeviceAccessResponse": {
+            "type": "object",
+            "properties": {
+                "allowed_roles": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "block_reason": {
+                    "type": "string"
+                },
+                "can_manage": {
+                    "type": "boolean"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "staff_role": {
+                    "type": "string"
+                }
+            }
+        },
         "api.merchantHourlyStatsRow": {
             "type": "object",
             "properties": {
@@ -37259,6 +37400,141 @@ const docTemplate = `{
                     "type": "number"
                 },
                 "total_users": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantReservationPrepItemResponse": {
+            "type": "object",
+            "properties": {
+                "combo_id": {
+                    "type": "integer"
+                },
+                "dish_id": {
+                    "type": "integer"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "references": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantReservationPrepReferenceResponse"
+                    }
+                },
+                "reservation_count": {
+                    "type": "integer"
+                },
+                "total_quantity": {
+                    "type": "integer"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantReservationPrepReferenceResponse": {
+            "type": "object",
+            "properties": {
+                "contact_name": {
+                    "type": "string"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "reservation_id": {
+                    "type": "integer"
+                },
+                "reservation_time": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
+                },
+                "table_no": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.merchantReservationPrepSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "dish_kinds": {
+                    "type": "integer"
+                },
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.merchantReservationPrepItemResponse"
+                    }
+                },
+                "table_count": {
+                    "type": "integer"
+                },
+                "total_quantity": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantReservationWorkbenchResponse": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string"
+                },
+                "prep_summary": {
+                    "$ref": "#/definitions/api.merchantReservationPrepSummaryResponse"
+                },
+                "status_totals": {
+                    "$ref": "#/definitions/api.merchantReservationWorkbenchStatusTotalsResponse"
+                },
+                "summary": {
+                    "$ref": "#/definitions/api.merchantReservationWorkbenchSummaryResponse"
+                }
+            }
+        },
+        "api.merchantReservationWorkbenchStatusTotalsResponse": {
+            "type": "object",
+            "properties": {
+                "all": {
+                    "type": "integer"
+                },
+                "cancelled": {
+                    "type": "integer"
+                },
+                "checked_in": {
+                    "type": "integer"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "confirmed": {
+                    "type": "integer"
+                },
+                "exception": {
+                    "type": "integer"
+                },
+                "expired": {
+                    "type": "integer"
+                },
+                "no_show": {
+                    "type": "integer"
+                },
+                "paid": {
+                    "type": "integer"
+                },
+                "pending": {
+                    "type": "integer"
+                }
+            }
+        },
+        "api.merchantReservationWorkbenchSummaryResponse": {
+            "type": "object",
+            "properties": {
+                "active_table_count": {
+                    "type": "integer"
+                },
+                "reservation_count": {
                     "type": "integer"
                 }
             }
@@ -40297,6 +40573,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "reservation_time": {
+                    "type": "string"
+                },
+                "source": {
                     "type": "string"
                 },
                 "status": {
