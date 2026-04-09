@@ -1,5 +1,5 @@
 import dayjs from 'dayjs'
-import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast'
+import Toast, { hideToast } from '../../../miniprogram_npm/tdesign-miniprogram/toast/index'
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
   cancelReservation,
