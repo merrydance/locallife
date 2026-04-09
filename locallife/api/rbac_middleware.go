@@ -179,8 +179,7 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 	return func(ctx *gin.Context) {
 		authPayload := ctx.MustGet(authorizationPayloadKey).(*token.Payload)
 
-		// 1. 统一通过商户关联解析入口获取当前商户。
-		merchant, err := server.resolveMerchantForUser(ctx, authPayload.UserID)
+		merchant, staffRole, err := server.resolveMerchantStaffIdentity(ctx, authPayload.UserID)
 		if err != nil {
 			if isMerchantSelectionRequiredError(err) {
 				ctx.AbortWithStatusJSON(http.StatusBadRequest, errorResponse(err))
@@ -223,31 +222,6 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 			return
 		}
 
-		// 2. 获取用户在该商户的角色
-		var staffRole string
-
-		// 先检查是否是 owner（owner_user_id 匹配）
-		if merchant.OwnerUserID == authPayload.UserID {
-			staffRole = "owner"
-		} else {
-			// 从 merchant_staff 表获取角色
-			role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
-				MerchantID: merchant.ID,
-				UserID:     authPayload.UserID,
-			})
-			if err != nil {
-				if isNotFoundError(err) {
-					ctx.AbortWithStatusJSON(http.StatusForbidden, errorResponse(
-						errors.New("you are not a staff of this merchant"),
-					))
-					return
-				}
-				ctx.AbortWithStatusJSON(http.StatusInternalServerError, internalError(ctx, err))
-				return
-			}
-			staffRole = role
-		}
-
 		// 3. 检查角色权限
 		hasPermission := false
 		for _, allowed := range allowedRoles {
@@ -269,6 +243,30 @@ func (server *Server) MerchantStaffMiddleware(allowedRoles ...string) gin.Handle
 		ctx.Set(merchantStaffRoleKey, staffRole)
 		ctx.Next()
 	}
+}
+
+func (server *Server) resolveMerchantStaffIdentity(ctx *gin.Context, userID int64) (db.Merchant, string, error) {
+	merchant, err := server.resolveMerchantForUser(ctx, userID)
+	if err != nil {
+		return db.Merchant{}, "", err
+	}
+
+	if merchant.OwnerUserID == userID {
+		return merchant, "owner", nil
+	}
+
+	role, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+		MerchantID: merchant.ID,
+		UserID:     userID,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			return db.Merchant{}, "", errors.New("you are not a staff of this merchant")
+		}
+		return db.Merchant{}, "", err
+	}
+
+	return merchant, role, nil
 }
 
 // RiderMiddleware 创建骑手验证中间件

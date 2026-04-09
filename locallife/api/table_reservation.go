@@ -682,8 +682,8 @@ func (server *Server) listUserReservations(ctx *gin.Context) {
 }
 
 type listMerchantReservationsRequest struct {
-	Date     string `form:"date,omitempty"`                                                                                        // YYYY-MM-DD
-	Status   string `form:"status,omitempty" binding:"omitempty,oneof=pending paid confirmed completed cancelled expired no_show"` // 状态筛选
+	Date     string `form:"date,omitempty"`                                                                                                             // YYYY-MM-DD
+	Status   string `form:"status,omitempty" binding:"omitempty,oneof=pending paid confirmed checked_in completed cancelled expired no_show exception"` // 状态筛选
 	PageID   int32  `form:"page_id" binding:"required,min=1"`
 	PageSize int32  `form:"page_size" binding:"required,min=5,max=200"`
 }
@@ -875,7 +875,7 @@ func (server *Server) listMerchantReservationDishes(ctx *gin.Context) {
 // @Accept json
 // @Produce json
 // @Param date query string false "筛选日期 (YYYY-MM-DD)"
-// @Param status query string false "筛选状态" Enums(pending, paid, confirmed, completed, cancelled, expired, no_show)
+// @Param status query string false "筛选状态" Enums(pending, paid, confirmed, checked_in, completed, cancelled, expired, no_show, exception)
 // @Param page_id query int true "页码" minimum(1)
 // @Param page_size query int true "每页数量" minimum(5) maximum(50)
 // @Success 200 {object} reservationListResponse
@@ -921,8 +921,27 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
 			return
 		}
+
+		filteredReservations := make([]db.ListReservationsByMerchantAndDateRow, 0, len(dateReservations))
+		for _, reservation := range dateReservations {
+			if !matchesMerchantReservationStatusFilter(reservation.Status, req.Status) {
+				continue
+			}
+			filteredReservations = append(filteredReservations, reservation)
+		}
+
+		totalCount := int64(len(filteredReservations))
+		start := int(pageOffset(req.PageID, req.PageSize))
+		if start > len(filteredReservations) {
+			start = len(filteredReservations)
+		}
+		end := start + int(req.PageSize)
+		if end > len(filteredReservations) {
+			end = len(filteredReservations)
+		}
+
 		// 转换类型
-		for _, r := range dateReservations {
+		for _, r := range filteredReservations[start:end] {
 			reservations = append(reservations, db.ListReservationsByMerchantRow{
 				ID:              r.ID,
 				TableID:         r.TableID,
@@ -951,7 +970,80 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 				TableType:       r.TableType,
 			})
 		}
+
+		resp := make([]reservationResponse, len(reservations))
+		for i, r := range reservations {
+			resp[i] = reservationResponse{
+				ID:              r.ID,
+				TableID:         r.TableID,
+				TableNo:         r.TableNo,
+				TableType:       r.TableType,
+				UserID:          r.UserID,
+				MerchantID:      r.MerchantID,
+				ReservationDate: r.ReservationDate.Time.Format("2006-01-02"),
+				GuestCount:      r.GuestCount,
+				ContactName:     r.ContactName,
+				ContactPhone:    r.ContactPhone,
+				PaymentMode:     r.PaymentMode,
+				DepositAmount:   r.DepositAmount,
+				PrepaidAmount:   r.PrepaidAmount,
+				RefundDeadline:  r.RefundDeadline,
+				PaymentDeadline: r.PaymentDeadline,
+				Status:          r.Status,
+				CreatedAt:       r.CreatedAt,
+			}
+			if r.ReservationTime.Valid {
+				hours := r.ReservationTime.Microseconds / 1000000 / 3600
+				minutes := (r.ReservationTime.Microseconds / 1000000 % 3600) / 60
+				resp[i].ReservationTime = time.Date(0, 1, 1, int(hours), int(minutes), 0, 0, time.UTC).Format("15:04")
+			}
+
+			items, err := server.store.ListReservationItems(ctx, r.ID)
+			if err == nil && len(items) > 0 {
+				resp[i].Items = make([]reservationItemResponse, len(items))
+				for j, item := range items {
+					resp[i].Items[j] = reservationItemResponse{
+						ID:         item.ID,
+						Quantity:   item.Quantity,
+						UnitPrice:  item.UnitPrice,
+						TotalPrice: int64(item.Quantity) * item.UnitPrice,
+						Type:       "dish",
+					}
+
+					if item.DishID.Valid {
+						resp[i].Items[j].DishID = &item.DishID.Int64
+						if item.DishName.Valid {
+							resp[i].Items[j].Name = item.DishName.String
+						}
+						if item.DishImageMediaAssetID.Valid {
+							resp[i].Items[j].ImageAssetID = &item.DishImageMediaAssetID.Int64
+						}
+					} else if item.ComboID.Valid {
+						resp[i].Items[j].ComboID = &item.ComboID.Int64
+						resp[i].Items[j].Type = "combo"
+						if item.ComboName.Valid {
+							resp[i].Items[j].Name = item.ComboName.String
+						}
+						if item.ComboImageMediaAssetID.Valid {
+							resp[i].Items[j].ImageAssetID = &item.ComboImageMediaAssetID.Int64
+						}
+					}
+				}
+			}
+		}
+
+		ctx.JSON(http.StatusOK, reservationListResponse{
+			Reservations: resp,
+			Total:        totalCount,
+			PageID:       req.PageID,
+			PageSize:     req.PageSize,
+		})
+		return
 	} else if req.Status != "" {
+		if req.Status == "exception" {
+			ctx.JSON(http.StatusBadRequest, errorResponse(errors.New("status=exception requires date filter")))
+			return
+		}
 		// 按状态查询
 		statusReservations, err := server.store.ListReservationsByMerchantAndStatus(ctx, db.ListReservationsByMerchantAndStatusParams{
 			MerchantID: merchant.ID,
@@ -1109,6 +1201,18 @@ func (server *Server) listMerchantReservations(ctx *gin.Context) {
 		PageID:       req.PageID,
 		PageSize:     req.PageSize,
 	})
+}
+
+func matchesMerchantReservationStatusFilter(status string, filter string) bool {
+	if filter == "" {
+		return true
+	}
+
+	if filter == "exception" {
+		return status == "cancelled" || status == "expired" || status == "no_show"
+	}
+
+	return status == filter
 }
 
 // ==================== 预定状态变更 ====================

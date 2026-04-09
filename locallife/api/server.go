@@ -924,6 +924,7 @@ func (server *Server) setupRouter() {
 	reservationMerchantOpsGroup.Use(server.MerchantStaffMiddleware("owner", "manager", "cashier"))
 	{
 		reservationMerchantOpsGroup.GET("/merchant", server.listMerchantReservations)
+		reservationMerchantOpsGroup.GET("/merchant/workbench", server.getMerchantReservationWorkbench)
 		reservationMerchantOpsGroup.GET("/merchant/dishes", server.listMerchantReservationDishes)
 		reservationMerchantOpsGroup.GET("/merchant/today", server.listTodayReservations)
 		reservationMerchantOpsGroup.GET("/merchant/stats", server.getReservationStats)
@@ -1211,6 +1212,8 @@ func (server *Server) setupRouter() {
 		merchantFinanceOwnerGroup.POST("/account/settlement-account", server.modifyMerchantSettlementAccount)
 		merchantFinanceOwnerGroup.GET("/account/settlement-account/applications/:application_no", server.getMerchantSettlementApplication)
 	}
+
+	authGroup.GET("/merchant/devices/access", server.getMerchantDeviceAccess)
 
 	// 商户设备管理路由
 	merchantDevicesGroup := authGroup.Group("/merchant/devices")
