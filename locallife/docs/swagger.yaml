@@ -8844,6 +8844,10 @@ definitions:
         type: array
       wechat_openid:
         type: string
+      workbenches:
+        items:
+          $ref: '#/definitions/api.userWorkbenchResponse'
+        type: array
     type: object
   api.userVoucherResponse:
     properties:
@@ -8875,6 +8879,21 @@ definitions:
         type: integer
       voucher_id:
         type: integer
+    type: object
+  api.userWorkbenchResponse:
+    properties:
+      id:
+        type: string
+      merchant_id:
+        type: integer
+      merchant_name:
+        type: string
+      message:
+        type: string
+      staff_role:
+        type: string
+      status:
+        type: string
     type: object
   api.voucherResponse:
     properties:

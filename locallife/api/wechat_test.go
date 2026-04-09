@@ -67,6 +67,10 @@ func TestWechatLoginAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), user.ID).
 					Times(1).
 					Return([]db.UserRole{{UserID: user.ID, Role: "customer"}}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -120,6 +124,10 @@ func TestWechatLoginAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), user.ID).
 					Times(1).
 					Return([]db.UserRole{{UserID: user.ID, Role: "customer"}}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), user.ID).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

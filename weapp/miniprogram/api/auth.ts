@@ -31,8 +31,18 @@ export interface UserResponse {
   full_name?: string  // 全名
   phone?: string  // 手机号
   roles: string[]  // 用户角色数组
+  workbenches?: UserWorkbenchResponse[]
   wechat_openid?: string  // 微信OpenID
   created_at?: string  // 创建时间
+}
+
+export interface UserWorkbenchResponse {
+	id: string
+	status: string
+	merchant_id?: number
+	merchant_name?: string
+	staff_role?: string
+	message?: string
 }
 
 /**

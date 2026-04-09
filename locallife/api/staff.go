@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -136,6 +137,7 @@ func (server *Server) addMerchantStaff(ctx *gin.Context) {
 		MerchantID: merchant.ID,
 		UserID:     req.UserID,
 		Role:       req.Role,
+		Status:     "active",
 		InvitedBy:  pgtype.Int8{Int64: authPayload.UserID, Valid: true},
 	})
 	if err != nil {
@@ -143,19 +145,9 @@ func (server *Server) addMerchantStaff(ctx *gin.Context) {
 		return
 	}
 
-	// 为用户添加 merchant_staff 角色到 user_roles
-	_, err = server.store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          req.UserID,
-		Role:            RoleMerchantStaff,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-	})
-	if err != nil {
-		// 忽略重复角色错误
-		if !isDuplicateKeyError(err) {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
+	if err := server.ensureMerchantStaffUserRoleActive(ctx, req.UserID, merchant.ID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
 	}
 
 	ctx.JSON(http.StatusCreated, staffResponse{
@@ -242,6 +234,11 @@ func (server *Server) updateMerchantStaffRole(ctx *gin.Context) {
 		return
 	}
 
+	if err := server.ensureMerchantStaffUserRoleActive(ctx, updatedStaff.UserID, updatedStaff.MerchantID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
 	ctx.JSON(http.StatusOK, staffResponse{
 		ID:         updatedStaff.ID,
 		MerchantID: updatedStaff.MerchantID,
@@ -311,8 +308,10 @@ func (server *Server) deleteMerchantStaff(ctx *gin.Context) {
 		return
 	}
 
-	// 注意：不删除 user_roles 中的 merchant_staff 角色
-	// 因为用户可能还关联其他商户，或者将来可能重新入职
+	if err := server.disableMerchantStaffUserRoleIfUnused(ctx, staff.UserID); err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
 
 	ctx.JSON(http.StatusOK, successMessage("staff removed successfully"))
 }
@@ -451,20 +450,6 @@ func (server *Server) bindMerchant(ctx *gin.Context) {
 		return
 	}
 
-	// 为用户添加 merchant_staff 角色
-	_, err = server.store.CreateUserRole(ctx, db.CreateUserRoleParams{
-		UserID:          authPayload.UserID,
-		Role:            RoleMerchantStaff,
-		Status:          "active",
-		RelatedEntityID: pgtype.Int8{Int64: merchant.ID, Valid: true},
-	})
-	if err != nil {
-		if !isDuplicateKeyError(err) {
-			ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
-			return
-		}
-	}
-
 	ctx.JSON(http.StatusOK, staffBindResponse{
 		Message:      "successfully bound to merchant",
 		MerchantID:   merchant.ID,
@@ -478,4 +463,81 @@ func isDuplicateKeyError(err error) bool {
 	return err != nil && !isNotFoundError(err) &&
 		(err.Error() == "duplicate key value violates unique constraint" ||
 			len(err.Error()) > 0 && err.Error()[0:9] == "duplicate")
+}
+
+func (server *Server) ensureMerchantStaffUserRoleActive(ctx context.Context, userID, merchantID int64) error {
+	userRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
+		UserID: userID,
+		Role:   RoleMerchantStaff,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			_, err = server.store.CreateUserRole(ctx, db.CreateUserRoleParams{
+				UserID:          userID,
+				Role:            RoleMerchantStaff,
+				Status:          "active",
+				RelatedEntityID: pgtype.Int8{Int64: merchantID, Valid: true},
+			})
+			if err != nil && !isDuplicateKeyError(err) {
+				return err
+			}
+			return nil
+		}
+		return err
+	}
+
+	if userRole.Status == "active" {
+		return nil
+	}
+
+	_, err = server.store.UpdateUserRoleStatus(ctx, db.UpdateUserRoleStatusParams{
+		ID:     userRole.ID,
+		Status: "active",
+	})
+	return err
+}
+
+func (server *Server) disableMerchantStaffUserRoleIfUnused(ctx context.Context, userID int64) error {
+	merchants, err := server.store.ListMerchantsByStaff(ctx, userID)
+	if err != nil {
+		return err
+	}
+
+	for _, merchant := range merchants {
+		staffRole, err := server.store.GetUserMerchantRole(ctx, db.GetUserMerchantRoleParams{
+			MerchantID: merchant.ID,
+			UserID:     userID,
+		})
+		if err != nil {
+			if isNotFoundError(err) {
+				continue
+			}
+			return err
+		}
+
+		if staffRole != "pending" {
+			return nil
+		}
+	}
+
+	userRole, err := server.store.GetUserRoleByType(ctx, db.GetUserRoleByTypeParams{
+		UserID: userID,
+		Role:   RoleMerchantStaff,
+	})
+	if err != nil {
+		if isNotFoundError(err) {
+			return nil
+		}
+		return err
+	}
+
+	if userRole.Status != "active" {
+		return nil
+	}
+
+	_, err = server.store.UpdateUserRoleStatus(ctx, db.UpdateUserRoleStatusParams{
+		ID:     userRole.ID,
+		Status: "disabled",
+	})
+	return err
 }

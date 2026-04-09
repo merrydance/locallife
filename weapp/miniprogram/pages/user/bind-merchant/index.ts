@@ -296,6 +296,12 @@ Page({
 
     // 前往商户工作台
     goToMerchant() {
+        if (this.data.result?.role === 'pending') {
+            wx.switchTab({
+                url: '/pages/user_center/index'
+            })
+            return
+        }
         wx.reLaunch({
             url: '/pages/merchant/dashboard/index'
         })

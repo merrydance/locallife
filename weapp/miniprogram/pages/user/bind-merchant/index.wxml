@@ -5,8 +5,8 @@
   <view wx:if="{{success}}" class="success-state animate-fade-in">
     <t-result 
       theme="success" 
-      title="加入成功" 
-      description="您已成功加入 {{result.merchant_name}}"
+      title="{{result.role === 'pending' ? '已提交入职' : '加入成功'}}" 
+      description="{{result.role === 'pending' ? '您已加入 ' + result.merchant_name + '，等待老板分配岗位后即可进入工作台' : '您已成功加入 ' + result.merchant_name}}"
     >
       <view slot="description" class="role-desc">
         您的角色：{{result.role === 'manager' ? '店长' : result.role === 'chef' ? '后厨' : result.role === 'cashier' ? '收银员' : result.role === 'owner' ? '老板' : result.role === 'pending' ? '待分配' : '员工'}}
@@ -14,7 +14,7 @@
     </t-result>
     
     <view class="success-actions">
-      <t-button theme="primary" block size="large" shape="round" bindtap="goToMerchant">进入工作台</t-button>
+      <t-button theme="primary" block size="large" shape="round" bindtap="goToMerchant">{{result.role === 'pending' ? '查看入职状态' : '进入工作台'}}</t-button>
       <t-button block size="large" shape="round" bindtap="goHome" class="mt-md">返回首页</t-button>
     </view>
   </view>

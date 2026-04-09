@@ -1,11 +1,11 @@
 import Navigation from '../../utils/navigation'
-import { updateUserInfo, getUserInfo, getWebLoginSessionStatus, confirmWebLoginSession } from '../../api/auth'
+import { updateUserInfo, getUserInfo, getWebLoginSessionStatus, confirmWebLoginSession, type UserWorkbenchResponse } from '../../api/auth'
 import { bindMerchant } from '../../api/personal'
 import { logger } from '../../utils/logger'
 import { UploadService } from '../../api/upload'
 import { getStableBarHeights } from '../../utils/responsive'
 import { notificationService } from '../../api/notification'
-import { invalidateConsoleAccessUserInfoCache, resolveConsoleWorkbenches } from '../../utils/console-access'
+import { invalidateConsoleAccessUserInfoCache, resolveConsoleWorkbenchesFromProfile } from '../../utils/console-access'
 
 const app = getApp<IAppOption>()
 let _refreshUserInfoPromise: Promise<void> | null = null
@@ -141,7 +141,7 @@ Page({
     },
     actionNoticeMessage: '',
     userRoles: [] as Array<{ key: string, label: string }>,
-    workbenches: [] as Array<{ id: string, name: string, path: string, icon: string }>,
+    workbenches: [] as Array<{ id: string, name: string, path: string, icon: string, description?: string, disabled?: boolean, message?: string }>,
     registrationOptions: [
       { id: 'merchant', name: '餐厅入驻', desc: '开通商家账号', path: '/pages/register/merchant/index', icon: 'shop' },
       { id: 'rider', name: '骑手入驻', desc: '成为配送骑手', path: '/pages/register/rider/index', icon: 'undertake-delivery' },
@@ -172,7 +172,7 @@ Page({
       // 优先使用缓存的完整角色数组，避免 onShow 用 userRole 单值（可能是 'guest'）清空工作台
       const cachedRoles = app.globalData.userRoles
       const roles = cachedRoles && cachedRoles.length > 0 ? cachedRoles : app.globalData.userRole
-      this.updateUser(app.globalData.userInfo, roles)
+      this.updateUser(app.globalData.userInfo, roles, app.globalData.userWorkbenches)
     }
     const shouldForceRefresh = consumeForceRefreshUserInfoFlag()
     // Always try to fetch fresh data on show to ensure persistence check
@@ -188,7 +188,8 @@ Page({
       avatar_url?: string
       avatar?: string
     },
-    roles: string[] | string
+    roles: string[] | string,
+    workbenches?: UserWorkbenchResponse[]
   ) {
     const roleList = normalizeRoles(roles)
 
@@ -207,14 +208,14 @@ Page({
       userRoles
     })
 
-    this.loadWorkbenches(roleList)
+    this.loadWorkbenches(roleList, workbenches)
   },
 
   async initUserInfo() {
     if (app.globalData.userInfo) {
       const cachedRoles = app.globalData.userRoles
       const roles = cachedRoles && cachedRoles.length > 0 ? cachedRoles : app.globalData.userRole
-      this.updateUser(app.globalData.userInfo, roles)
+      this.updateUser(app.globalData.userInfo, roles, app.globalData.userWorkbenches)
     }
     await this.refreshUserInfo()
   },
@@ -256,10 +257,11 @@ Page({
           } as WechatMiniprogram.UserInfo
           // 缓存完整角色列表，供 onShow 快速恢复工作台
           app.globalData.userRoles = normalizeRoles(user.roles || [])
+          app.globalData.userWorkbenches = user.workbenches || []
           app.globalData.userRole = pickPrimaryRole(app.globalData.userRoles)
 
           // Update Local Data
-          this.updateUser(app.globalData.userInfo, user.roles || [])
+          this.updateUser(app.globalData.userInfo, user.roles || [], user.workbenches)
         }
         this.setData({ initialLoading: false, loading: false })
         // 只有成功才更新时间戳：失败（如 token 尚未就绪）不应占用 60s 节流窗口，
@@ -377,12 +379,21 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  loadWorkbenches(roles: string[]) {
-    this.setData({ workbenches: resolveConsoleWorkbenches(roles) })
+  loadWorkbenches(roles: string[], backendWorkbenches?: UserWorkbenchResponse[]) {
+    this.setData({ workbenches: resolveConsoleWorkbenchesFromProfile(roles, backendWorkbenches) })
   },
 
   onWorkbenchTap(e: WechatMiniprogram.TouchEvent) {
-    const { path } = e.currentTarget.dataset
+    const { path, disabled, message } = e.currentTarget.dataset
+    if (disabled) {
+      wx.showModal({
+        title: '暂未开通',
+        content: message || '已加入商户，等待老板分配岗位后即可进入工作台。',
+        showCancel: false,
+        confirmText: '我知道了'
+      })
+      return
+    }
     if (path) {
       wx.navigateTo({ url: path })
     }

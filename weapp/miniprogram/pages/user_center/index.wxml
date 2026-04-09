@@ -74,10 +74,13 @@
               wx:for="{{workbenches}}" 
               wx:key="id"
               title="{{item.name}}"
-              arrow
-              hover
+              description="{{item.description}}"
+              arrow="{{!item.disabled}}"
+              hover="{{!item.disabled}}"
               bind:click="onWorkbenchTap"
               data-path="{{item.path}}"
+              data-disabled="{{item.disabled}}"
+              data-message="{{item.message}}"
             >
               <t-image slot="left-icon" src="{{item.icon}}" t-class="workbench-icon" />
             </t-cell>

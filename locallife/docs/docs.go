@@ -43568,6 +43568,12 @@ const docTemplate = `{
                 },
                 "wechat_openid": {
                     "type": "string"
+                },
+                "workbenches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/api.userWorkbenchResponse"
+                    }
                 }
             }
         },
@@ -43615,6 +43621,29 @@ const docTemplate = `{
                 },
                 "voucher_id": {
                     "type": "integer"
+                }
+            }
+        },
+        "api.userWorkbenchResponse": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "merchant_id": {
+                    "type": "integer"
+                },
+                "merchant_name": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "staff_role": {
+                    "type": "string"
+                },
+                "status": {
+                    "type": "string"
                 }
             }
         },

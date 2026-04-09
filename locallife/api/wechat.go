@@ -161,9 +161,10 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		return
 	}
 
-	roles := make([]string, len(userRoles))
-	for i, r := range userRoles {
-		roles[i] = r.Role
+	roles, workbenches, err := server.buildUserAccessProfile(ctx, user.ID, userRoles)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("build user access profile: %w", err)))
+		return
 	}
 
 	rsp := wechatLoginResponse{
@@ -172,7 +173,7 @@ func (server *Server) wechatLogin(ctx *gin.Context) {
 		AccessTokenExpiresAt:  accessPayload.ExpiredAt,
 		RefreshToken:          refreshToken,
 		RefreshTokenExpiresAt: refreshPayload.ExpiredAt,
-		User:                  newUserResponse(user, roles),
+		User:                  newUserResponse(user, roles, workbenches),
 	}
 	ctx.JSON(http.StatusOK, rsp)
 }

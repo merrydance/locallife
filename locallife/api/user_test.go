@@ -40,6 +40,10 @@ func TestGetCurrentUserAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return([]db.UserRole{}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -148,6 +152,10 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 					Times(1).
 					Return([]db.UserRole{}, nil)
 				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
+				store.EXPECT().
 					GetMediaAssetByID(gomock.Any(), gomock.Eq(int64(101))).
 					Times(1).
 					Return(db.MediaAsset{ID: 101, ObjectKey: "user/avatar/101/profile.jpg", Visibility: "public", ModerationStatus: "approved"}, nil)
@@ -176,6 +184,10 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 					ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
 					Times(1).
 					Return([]db.UserRole{}, nil)
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+					Times(1).
+					Return([]db.Merchant{}, nil)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)
@@ -216,6 +228,10 @@ func TestUpdateCurrentUserAPI(t *testing.T) {
 
 				store.EXPECT().
 					ListUserRoles(gomock.Any(), gomock.Any()).
+					Times(0)
+
+				store.EXPECT().
+					ListMerchantsByStaff(gomock.Any(), gomock.Any()).
 					Times(0)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
@@ -287,6 +303,10 @@ func TestGetCurrentUserAPI_WithAvatarURL(t *testing.T) {
 		Times(1).
 		Return([]db.UserRole{}, nil)
 	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{}, nil)
+	store.EXPECT().
 		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
 		Times(1).
 		Return(avatarAsset, nil)
@@ -336,6 +356,10 @@ func TestUpdateCurrentUserAPI_WithAvatarAssetID(t *testing.T) {
 		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
 		Times(1).
 		Return([]db.UserRole{}, nil)
+	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{}, nil)
 	store.EXPECT().
 		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
 		Times(1).
@@ -389,6 +413,10 @@ func TestGetCurrentUserAPI_WithPendingAvatarVisibleToOwner(t *testing.T) {
 		Times(1).
 		Return([]db.UserRole{}, nil)
 	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{}, nil)
+	store.EXPECT().
 		GetMediaAssetByID(gomock.Any(), gomock.Eq(avatarAssetID)).
 		Times(1).
 		Return(avatarAsset, nil)
@@ -408,4 +436,49 @@ func TestGetCurrentUserAPI_WithPendingAvatarVisibleToOwner(t *testing.T) {
 	require.NotNil(t, resp.AvatarURL)
 	require.Contains(t, *resp.AvatarURL, "https://cdn.test.example.com")
 	require.Contains(t, *resp.AvatarURL, "user/avatar/109/profile.jpg")
+}
+
+func TestGetCurrentUserAPI_WithPendingMerchantWorkbench(t *testing.T) {
+	user, _ := randomUser(t)
+	merchant := randomMerchant(user.ID + 100)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	store.EXPECT().
+		GetUser(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return(user, nil)
+	store.EXPECT().
+		ListUserRoles(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.UserRole{{UserID: user.ID, Role: RoleMerchantStaff, Status: "active"}}, nil)
+	store.EXPECT().
+		ListMerchantsByStaff(gomock.Any(), gomock.Eq(user.ID)).
+		Times(1).
+		Return([]db.Merchant{merchant}, nil)
+	store.EXPECT().
+		GetUserMerchantRole(gomock.Any(), gomock.Eq(db.GetUserMerchantRoleParams{MerchantID: merchant.ID, UserID: user.ID})).
+		Times(1).
+		Return("pending", nil)
+
+	server := newTestServer(t, store)
+	recorder := httptest.NewRecorder()
+
+	request, err := http.NewRequest(http.MethodGet, "/v1/users/me", nil)
+	require.NoError(t, err)
+	addAuthorization(t, request, server.tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+	server.router.ServeHTTP(recorder, request)
+
+	require.Equal(t, http.StatusOK, recorder.Code)
+
+	var resp userResponse
+	requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+	require.NotContains(t, resp.Roles, RoleMerchantStaff)
+	require.Len(t, resp.Workbenches, 1)
+	require.Equal(t, "merchant", resp.Workbenches[0].ID)
+	require.Equal(t, "pending_assignment", resp.Workbenches[0].Status)
+	require.Equal(t, merchant.Name, resp.Workbenches[0].MerchantName)
+	require.Equal(t, "pending", resp.Workbenches[0].StaffRole)
 }

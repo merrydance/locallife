@@ -1,4 +1,4 @@
-import { getUserInfo, type UserResponse } from '../api/auth'
+import { getUserInfo, type UserResponse, type UserWorkbenchResponse } from '../api/auth'
 import {
   getMerchantDeviceAccess,
   type MerchantDeviceAccessResponse
@@ -9,6 +9,9 @@ export interface ConsoleWorkbench {
   name: string
   path: string
   icon: string
+  description?: string
+  disabled?: boolean
+  message?: string
 }
 
 const MERCHANT_CONSOLE_ROLES = ['merchant', 'merchant_owner', 'merchant_staff']
@@ -82,6 +85,10 @@ export function hasMerchantConsoleAccess(roles: string[]) {
   const normalizedRoles = normalizeConsoleRoles(roles)
 
   return normalizedRoles.some((role) => MERCHANT_CONSOLE_ROLES.includes(role))
+}
+
+function hasGrantedMerchantWorkbench(workbenches?: UserWorkbenchResponse[]) {
+	return (workbenches || []).some((workbench) => workbench.id === 'merchant' && workbench.status === 'granted')
 }
 
 export function canManageMerchantApplyment(roles: string[]) {
@@ -227,7 +234,7 @@ export async function ensureMerchantConsoleAccess() {
 
   try {
     const user = await getRecentUserInfo()
-    const hasAccess = hasMerchantConsoleAccess(user.roles || [])
+    const hasAccess = hasGrantedMerchantWorkbench(user.workbenches) || hasMerchantConsoleAccess(user.roles || [])
 
     if (!hasAccess) {
       return {
@@ -317,29 +324,73 @@ export async function ensureMerchantDeviceManagementAccess(options?: { force?: b
 }
 
 export function resolveConsoleWorkbenches(roles: string[]): ConsoleWorkbench[] {
+  return resolveConsoleWorkbenchesFromProfile(roles)
+}
+
+function buildWorkbenchFromBackend(workbench: UserWorkbenchResponse): ConsoleWorkbench | null {
+  switch (workbench.id) {
+    case 'merchant':
+      if (workbench.status === 'pending_assignment') {
+        return {
+          id: 'merchant',
+          name: '商户工作台',
+          path: '',
+          icon: '/assets/icons/store.svg',
+          description: workbench.merchant_name
+            ? `已加入 ${workbench.merchant_name}，等待老板分配岗位后开通`
+            : '已加入商户，等待老板分配岗位后开通',
+          disabled: true,
+          message: workbench.message || '已加入商户，等待老板分配岗位后即可进入工作台。'
+        }
+      }
+      return {
+        id: 'merchant',
+        name: '商户中心',
+        path: '/pages/merchant/dashboard/index',
+        icon: '/assets/icons/store.svg',
+        description: workbench.merchant_name || undefined
+      }
+    case 'rider':
+      return { ...ALL_CONSOLE_WORKBENCHES[1] }
+    case 'operator':
+      return { ...ALL_CONSOLE_WORKBENCHES[2] }
+    case 'admin':
+      return { ...ALL_CONSOLE_WORKBENCHES[3] }
+    default:
+      return null
+  }
+}
+
+export function resolveConsoleWorkbenchesFromProfile(roles: string[], profileWorkbenches?: UserWorkbenchResponse[]): ConsoleWorkbench[] {
   if (shouldBypassConsoleRoleValidation()) {
     return [...ALL_CONSOLE_WORKBENCHES]
   }
 
+  if (profileWorkbenches && profileWorkbenches.length > 0) {
+    return profileWorkbenches
+      .map((workbench) => buildWorkbenchFromBackend(workbench))
+      .filter((workbench): workbench is ConsoleWorkbench => !!workbench)
+  }
+
   const normalizedRoles = normalizeConsoleRoles(roles)
 
-  const workbenches: ConsoleWorkbench[] = []
+  const resolvedWorkbenches: ConsoleWorkbench[] = []
 
   if (normalizedRoles.some((role) => MERCHANT_CONSOLE_ROLES.includes(role))) {
-    workbenches.push(ALL_CONSOLE_WORKBENCHES[0])
+    resolvedWorkbenches.push(ALL_CONSOLE_WORKBENCHES[0])
   }
 
   if (normalizedRoles.includes('rider')) {
-    workbenches.push(ALL_CONSOLE_WORKBENCHES[1])
+    resolvedWorkbenches.push(ALL_CONSOLE_WORKBENCHES[1])
   }
 
   if (normalizedRoles.includes('operator')) {
-    workbenches.push(ALL_CONSOLE_WORKBENCHES[2])
+    resolvedWorkbenches.push(ALL_CONSOLE_WORKBENCHES[2])
   }
 
   if (normalizedRoles.includes('admin')) {
-    workbenches.push(ALL_CONSOLE_WORKBENCHES[3])
+    resolvedWorkbenches.push(ALL_CONSOLE_WORKBENCHES[3])
   }
 
-  return workbenches
+  return resolvedWorkbenches
 }
