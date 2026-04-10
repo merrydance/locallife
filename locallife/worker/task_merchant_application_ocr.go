@@ -417,7 +417,7 @@ func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
 			// 清洗企业名称：在常见企业结尾词处截断
 			name = cleanCompanyName(name)
 			// 排除明显不是企业名的结果
-			if name != "" && len(name) >= 4 && !strings.HasPrefix(name, "JY") && !strings.HasPrefix(name, "9") {
+			if isLikelyFoodPermitCompanyName(name) {
 				data.CompanyName = name
 				break
 			}
@@ -554,6 +554,27 @@ func cleanCompanyName(name string) string {
 	}
 
 	return name
+}
+
+func isLikelyFoodPermitCompanyName(name string) bool {
+	if name == "" {
+		return false
+	}
+	if len([]rune(name)) < 4 || len([]rune(name)) > 30 {
+		return false
+	}
+	if strings.HasPrefix(name, "JY") || strings.HasPrefix(name, "9") {
+		return false
+	}
+	suspiciousKeywords := []string{
+		"地址", "经营场所", "面积", "办理", "许可证", "项目", "食品", "路东", "路西", "路北", "路南", "《", "》", "请",
+	}
+	for _, keyword := range suspiciousKeywords {
+		if strings.Contains(name, keyword) {
+			return false
+		}
+	}
+	return true
 }
 
 // normalizeValidPeriod 归一化营业执照营业期限字段。

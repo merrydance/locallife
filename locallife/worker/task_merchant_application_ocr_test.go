@@ -232,6 +232,28 @@ func TestProcessTaskMerchantApplicationFoodPermitOCR_UsesOCRJob(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestParseFoodPermitOCRText_ExtractsLikelyCompanyName(t *testing.T) {
+	t.Parallel()
+
+	var data foodPermitOCRData
+	parseFoodPermitOCRText(&data, "经营者名称：测试餐饮有限公司\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+
+	require.Equal(t, "测试餐饮有限公司", data.CompanyName)
+	require.Equal(t, "JY12345678901234", data.PermitNo)
+	require.Equal(t, "2027年01月08日", data.ValidTo)
+}
+
+func TestParseFoodPermitOCRText_RejectsSuspiciousCompanyName(t *testing.T) {
+	t.Parallel()
+
+	var data foodPermitOCRData
+	parseFoodPermitOCRText(&data, "经营者名称：地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东\n许可证编号：JY12345678901234\n有效期至：2027年01月08日")
+
+	require.Empty(t, data.CompanyName)
+	require.Equal(t, "JY12345678901234", data.PermitNo)
+	require.Equal(t, "2027年01月08日", data.ValidTo)
+}
+
 func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()
