@@ -93,6 +93,8 @@ Use `.github/standards/engineering/README.md` as the stable governance index, th
 - Backend: check that source changes in `locallife/db/query/`, interfaces, or Swagger annotations were followed by the required regeneration steps.
 - Backend: review authn/authz, secret handling, callback verification, upload/download access control, and whether sensitive data is over-logged or over-returned.
 - Backend: when callbacks, workers, schedulers, or retries are involved, check idempotency, repeated delivery semantics, and failure recovery expectations even if the diff only shows one layer.
+- Backend: treat `sqlguard:` and `goguard:` exception comments as explicit review hotspots; check whether the reason is concrete, whether the scope is genuinely narrow, and whether a `G2`/`G3` path is using an exception where the safer default should have been preserved.
+- Backend: when the review is formal enough to produce reusable findings, use `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md` and `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md` to decide what must be written back into durable project knowledge.
 - Web: check that new UI work still follows `.github/standards/web/WEB_UI_STANDARDS.md` and `.github/standards/web/DESIGN_GUARDRAILS.md`.
 - Web: check that new data or status fields are fully threaded through page state, API calls, rendering states, and user-visible copy.
 - Web: flag client-only permission checks, sensitive data exposure in page state or rendered fields, unsafe rendering of user content, and dangerous actions without proper confirmation or disabled states.

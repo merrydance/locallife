@@ -56,6 +56,12 @@ test-unit:
 test-integration:
 	go test -v -cover -count=1 -p 1 ./integration
 
+test-safety:
+	./scripts/test_safety.sh
+
+check-generated:
+	./scripts/check_generated.sh
+
 doc-audit:
 	go run ./cmd/doc_audit -report docs/phase0/user_journey_coverage_report.md
 
@@ -117,4 +123,4 @@ lint-filesize:
 	  echo "✅ All files within $(MAX_FILE_LINES)-line limit"; \
 	fi
 
-.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger ocr-baseline test test-unit test-integration server mock proto evans redis sync_regions_test doc-audit lint-filesize
+.PHONY: network postgres createdb dropdb migrateup migratedown migrateup1 migratedown1 new_migration db_docs db_schema sqlc swagger ocr-baseline test test-unit test-integration test-safety check-generated server mock proto evans redis sync_regions_test doc-audit lint-filesize

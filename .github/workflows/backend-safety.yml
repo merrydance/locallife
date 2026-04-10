@@ -1,0 +1,80 @@
+name: Backend Safety
+
+on:
+  push:
+    paths:
+      - "locallife/**"
+  pull_request:
+    paths:
+      - "locallife/**"
+
+jobs:
+  backend-safety:
+    name: High-risk backend regressions
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: locallife_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d locallife_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: locallife
+
+    env:
+      TEST_DB_SOURCE: postgresql://postgres:postgres@127.0.0.1:5432/locallife_test?sslmode=disable
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: locallife/go.mod
+
+      - name: Download modules
+        run: go mod download
+
+      - name: Run high-risk regression suite
+        run: make test-safety
+
+      - name: Check handler and logic file size limits
+        run: make lint-filesize
+
+  generated-consistency:
+    name: Generated artifact consistency
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: locallife
+
+    steps:
+      - name: Check out code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: locallife/go.mod
+
+      - name: Install generation tools
+        run: |
+          go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0
+          go install go.uber.org/mock/mockgen@v0.6.0
+          go install github.com/swaggo/swag/cmd/swag@v1.16.6
+
+      - name: Check generated artifacts
+        run: PATH=/usr/local/go/bin:$HOME/go/bin:$PATH make check-generated

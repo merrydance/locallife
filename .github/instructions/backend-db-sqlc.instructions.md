@@ -19,6 +19,9 @@ Use `.github/standards/backend/SQL_STANDARDS.md` as the canonical persistence-fa
 - Keep transaction orchestration inside existing `execTx` patterns and `tx_*.go` files.
 - Use `locallife/db/sqlc/constants.go` as the single source of truth for persistence-facing business constants.
 - Preserve existing `Store` and `Querier` composition patterns when adding new operations.
+- Keep order, payment, refund, delivery, reservation, and inventory state transitions inside transaction helpers or clearly scoped conditional updates rather than scattering write steps across callers.
+- When a conditional `UPDATE ... RETURNING` encodes exclusivity or current-state preconditions, treat zero rows affected as a real conflict or stale-state signal, not as a silent success.
+- Do not place external I/O inside transaction helpers; commit durable state first, then let callers enqueue or emit post-commit side effects.
 
 ## Boundary Checks
 

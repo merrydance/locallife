@@ -4,6 +4,12 @@
 > `.github/standards/backend/SYSTEM_PROMPT.md`。
 > SQL 编写、migration、索引与 sqlc 约定见 `.github/standards/backend/SQL_STANDARDS.md`。
 > Go 代码组织、`context`、并发、接口与测试实践见 `.github/standards/backend/GO_PRACTICES.md`。
+> 后端目录总入口见 `.github/standards/backend/README.md`。
+> 仓库级高风险链路与已知失效模式见 `.github/standards/backend/BACKEND_RISK_MAP.md`。
+> 当前仓库真实运行结构与生成触点见 `.github/standards/backend/RUNTIME_ARCHITECTURE.md`。
+> 常用命令、再生成规则和验证工作流见 `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`。
+> 交付与评审收口清单见 `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` 与 `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`。
+> 正式审查如何形成 durable knowledge 见 `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md`。
 
 ## 1. 依赖注入
 
@@ -80,3 +86,5 @@
 - 说明本次改动是否需要执行 `make sqlc`、`make mock`、`make swagger`。
 - 至少运行最小相关验证命令，并在交付时说明执行了什么。
 - 若未补测试，必须明确说明残余风险落在哪个分支或失败路径。
+- 高风险实现交付前，至少过一遍 `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md`。
+- 正式 backend 审查或 subsystem audit 收口时，至少过一遍 `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`。

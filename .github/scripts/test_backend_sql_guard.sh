@@ -166,6 +166,61 @@ SELECT * FROM legacy_items
 LIMIT \$1;"
 
 run_case \
+  implicit_insert_columns_violation \
+  1 \
+  "explicit column list" \
+  "-- name: CreateSample :one
+INSERT INTO sample_items (id, status)
+VALUES (\$1, \$2)
+RETURNING *;" \
+  "-- name: CreateSample :one
+INSERT INTO sample_items
+VALUES (\$1, \$2)
+RETURNING *;"
+
+run_case \
+  allow_implicit_insert_columns_passes \
+  0 \
+  "SQL guardrail passed" \
+  "-- name: CreateSample :one
+INSERT INTO sample_items (id, status)
+VALUES (\$1, \$2)
+RETURNING *;" \
+  "-- name: CreateSample :one
+-- sqlguard: allow-implicit-insert-columns legacy fixture shape is fixed by vendor contract
+INSERT INTO sample_items
+VALUES (\$1, \$2)
+RETURNING *;"
+
+run_case \
+  bare_allow_select_star_rejected \
+  1 \
+  "bare 'sqlguard: allow-select-star'" \
+  "-- name: ListSample :many
+SELECT id, created_at FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;" \
+  "-- name: ListSample :many
+-- sqlguard: allow-select-star
+SELECT * FROM sample_items
+ORDER BY created_at DESC
+LIMIT \$1;"
+
+run_case \
+  bare_allow_implicit_insert_rejected \
+  1 \
+  "bare 'sqlguard: allow-implicit-insert-columns'" \
+  "-- name: CreateSample :one
+INSERT INTO sample_items (id, status)
+VALUES (\$1, \$2)
+RETURNING *;" \
+  "-- name: CreateSample :one
+-- sqlguard: allow-implicit-insert-columns
+INSERT INTO sample_items
+VALUES (\$1, \$2)
+RETURNING *;"
+
+run_case \
   query_name_change_still_checks_bad_sql \
   1 \
   "uses SELECT *" \

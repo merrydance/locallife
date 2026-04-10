@@ -151,16 +151,17 @@ func CalculateOrderPreview(
 		regionID := merchant.RegionID
 
 		if input.AddressID != nil {
-			address, err := store.GetUserAddress(ctx, *input.AddressID)
-			if err == nil && address.UserID == input.UserID {
-				if address.Latitude.Valid && address.Longitude.Valid {
-					lat, _ := address.Latitude.Float64Value()
-					lng, _ := address.Longitude.Float64Value()
-					userLat = lat.Float64
-					userLng = lng.Float64
-				}
-				regionID = address.RegionID
+			address, err := loadOwnedUserAddress(ctx, store, input.UserID, *input.AddressID)
+			if err != nil {
+				return result, err
 			}
+			if address.Latitude.Valid && address.Longitude.Valid {
+				lat, _ := address.Latitude.Float64Value()
+				lng, _ := address.Longitude.Float64Value()
+				userLat = lat.Float64
+				userLng = lng.Float64
+			}
+			regionID = address.RegionID
 		} else if input.Latitude != nil && input.Longitude != nil {
 			userLat = *input.Latitude
 			userLng = *input.Longitude

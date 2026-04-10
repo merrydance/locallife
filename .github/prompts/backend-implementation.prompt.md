@@ -1,12 +1,15 @@
 ---
 name: "后端实现请求模板"
-description: "Use when drafting a normal backend implementation or bug-fix request for locallife/, outside payment-specialized or task-card-specialized flows. Trigger phrases: implement backend endpoint, 后端接口, handler 到 sqlc, fix handler logic wiring, update sqlc flow, add business rule, backend contract change. 适用于发起常规 Go 后端功能开发与缺陷修复任务。"
+description: "Use when drafting a normal backend implementation request for locallife/, outside payment-specialized, takeover, root-cause bugfix, or task-card-specialized flows. Trigger phrases: implement backend endpoint, 后端接口, handler 到 sqlc, fix handler logic wiring, update sqlc flow, add business rule, backend contract change. 适用于发起常规 Go 后端功能开发任务。"
 ---
 # Backend Implementation Template
 
 Use this template when asking for a concrete backend change in `locallife/`.
 
 Use the backend row in `.github/standards/engineering/AI_PROMPT_GOVERNANCE.md` as the shared source for must-push items, prohibited shortcuts, and review-ready hand-off expectations.
+Use `.github/standards/backend/BACKEND_RISK_MAP.md` to identify repo-specific hot paths before changing payment, refund, delivery, reservation, callback, worker, or scheduler behavior.
+Use `.github/standards/backend/WORKFLOW_AND_VALIDATION.md` as the canonical source for regeneration triggers, safety regressions, and common validation commands.
+Use `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before claiming a non-trivial backend task is complete.
 
 ## Backend Feature Or Fix
 
@@ -28,7 +31,7 @@ Required context:
 Optional context:
 
 - Existing reference implementation: <path>
-- Related domain docs: `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`, `.github/standards/backend/API_CONTRACT_STANDARDS.md`
+- Related domain docs: `.github/standards/backend/AGENT.md`, `.github/standards/backend/SYSTEM_PROMPT.md`, `.github/standards/backend/API_CONTRACT_STANDARDS.md`, `.github/standards/backend/BACKEND_RISK_MAP.md`
 
 Acceptance checklist:
 

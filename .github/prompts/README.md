@@ -15,6 +15,7 @@ The files listed here are the active reusable prompt set for this workspace. Pro
 - `general-implementation.prompt.md`
 - `general-incident-followup.prompt.md`
 - `general-review.prompt.md`
+- `backend-bugfix.prompt.md`
 - `backend-implementation.prompt.md`
 - `backend-task-card-implementation.prompt.md`
 - `backend-phase-batch-implementation.prompt.md`
@@ -22,6 +23,7 @@ The files listed here are the active reusable prompt set for this workspace. Pro
 - `backend-sql-review.prompt.md`
 - `backend-integration-test.prompt.md`
 - `backend-payment-runbook.prompt.md`
+- `backend-takeover.prompt.md`
 - `business-flow-mermaid.prompt.md`
 - `general-task-loop.prompt.md`
 - `web-implementation.prompt.md`
@@ -38,8 +40,8 @@ Prefer the most specific prompt template that matches the task. If the task is g
 Treat this directory as a logical layered system even though files are stored flat.
 
 - Protocol layer: `general-implementation.prompt.md`, `general-review.prompt.md`, `general-incident-followup.prompt.md`, `general-task-loop.prompt.md`
-- Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
-- Domain layer: `backend-payment-runbook.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
+- Stack layer: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`, `web-implementation.prompt.md`, `web-review.prompt.md`, `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
+- Domain / workflow layer: `backend-payment-runbook.prompt.md`, `backend-sql-review.prompt.md`, `backend-integration-test.prompt.md`, `backend-task-card-implementation.prompt.md`, `backend-phase-batch-implementation.prompt.md`, `business-flow-mermaid.prompt.md`
 
 Layering rules:
 
@@ -57,12 +59,14 @@ Use this order to avoid prompt collisions:
 
 1. If the request is diagramming only, use `business-flow-mermaid.prompt.md`.
 2. If the request is backend payment-specific, use `backend-payment-runbook.prompt.md`.
-3. If the request is backend SQL or migration review-focused, use `backend-sql-review.prompt.md`.
-4. If the request is backend task-card or phase-map driven, use the matching task-card or phase prompt.
-5. If the request is an ordered task list that should be completed through implement, review, fix, and doc-sync stages, use `general-task-loop.prompt.md`.
-6. If the request is about incident follow-up, escaped defect closure, or turning a postmortem into standards/gates/tests, use `general-incident-followup.prompt.md`.
-7. Otherwise use the area-specific implementation or review prompt.
-8. Use `general-implementation.prompt.md` or `general-review.prompt.md` only when the request spans multiple areas or the target area is still ambiguous.
+3. If the request is backend takeover or onboarding focused, use `backend-takeover.prompt.md`.
+4. If the request is backend production bugfix or regression focused, use `backend-bugfix.prompt.md`.
+5. If the request is backend SQL or migration review-focused, use `backend-sql-review.prompt.md`.
+6. If the request is backend task-card or phase-map driven, use the matching task-card or phase prompt.
+7. If the request is an ordered task list that should be completed through implement, review, fix, and doc-sync stages, use `general-task-loop.prompt.md`.
+8. If the request is about incident follow-up, escaped defect closure, or turning a postmortem into standards/gates/tests, use `general-incident-followup.prompt.md`.
+9. Otherwise use the area-specific implementation or review prompt.
+10. Use `general-implementation.prompt.md` or `general-review.prompt.md` only when the request spans multiple areas or the target area is still ambiguous.
 
 ## Prompt Boundaries
 
@@ -70,7 +74,9 @@ Use this order to avoid prompt collisions:
 - `general-incident-followup.prompt.md`: cross-area incident/postmortem follow-up that must convert findings into standards, prompts, workflows, tests, or runbooks.
 - `general-review.prompt.md`: multi-area or not-yet-scoped review requests.
 - `general-task-loop.prompt.md`: ordered task lists or autopilot loops that should be executed through an implement-review-fix-doc loop until complete.
-- `backend-implementation.prompt.md`: normal backend feature or bug-fix work outside payment-specialized or task-card-specialized flows.
+- `backend-bugfix.prompt.md`: backend regression, production defect, or root-cause fix requests that should start from the broken invariant and real production path.
+- `backend-implementation.prompt.md`: normal backend feature work outside payment-specialized, takeover, root-cause bugfix, or task-card-specialized flows.
+- `backend-takeover.prompt.md`: backend onboarding or new-owner context-building requests before implementation starts.
 - `backend-sql-review.prompt.md`: backend SQL, migration, sqlc propagation, index, or persistence-focused review requests.
 - `backend-payment-runbook.prompt.md`: WeChat payment, callback, refund, runbook, or audit-ledger work.
 - `weapp-implementation.prompt.md`: all Mini Program implementation requests, including diagnosis-first page方案, payment-adjacent flows, and normal page or component implementation.
@@ -88,40 +94,46 @@ Use these prompts to sanity-check description routing after future edits:
 1. "实现一个后端接口，补齐 handler 到 sqlc 的闭环，并告诉我要不要 make sqlc。"
 Expected target: `backend-implementation.prompt.md`
 
-2. "审查这个 PR，重点看 DTO 字段改了之后有没有一路传到 handler、logic、sqlc 和测试。"
+2. "修一个后端线上回归，先追真实根因，再说明为什么不能只在 handler 打补丁。"
+Expected target: `backend-bugfix.prompt.md`
+
+3. "我要接手这个后端项目，先帮我建立关键生产链路、测试链路和最高风险点的工作上下文。"
+Expected target: `backend-takeover.prompt.md`
+
+4. "审查这个 PR，重点看 DTO 字段改了之后有没有一路传到 handler、logic、sqlc 和测试。"
 Expected target: `backend-review-closure.prompt.md`
 
-3. "给微信支付回调和退款链路做一次实现和审查请求模板。"
+5. "给微信支付回调和退款链路做一次实现和审查请求模板。"
 Expected target: `backend-payment-runbook.prompt.md`
 
-4. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
+6. "审查这个 db/query 和 migration 变更，重点看 sqlc 传播、索引遗漏和事务风险。"
 Expected target: `backend-sql-review.prompt.md`
 
-5. "给这个小程序页面做页面方案，先诊断 setData 热点和弱网体验，再给实施方案。"
+7. "给这个小程序页面做页面方案，先诊断 setData 热点和弱网体验，再给实施方案。"
 Expected target: `weapp-implementation.prompt.md`
 
-6. "修一下小程序支付完成后返回页状态丢失和重复点击支付的问题。"
+8. "修一下小程序支付完成后返回页状态丢失和重复点击支付的问题。"
 Expected target: `weapp-implementation.prompt.md`
 
-7. "改一下小程序页面的列表空态和错误态。"
+9. "改一下小程序页面的列表空态和错误态。"
 Expected target: `weapp-implementation.prompt.md`
 
-8. "把这个小程序页面完全用 TDesign 重构，整页重新布局成极简风格，复杂区块拆成组件，新增删除改成图标按钮。"
+10. "把这个小程序页面完全用 TDesign 重构，整页重新布局成极简风格，复杂区块拆成组件，新增删除改成图标按钮。"
 Expected target: `weapp-implementation.prompt.md`
 
-9. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
+11. "从整体升级角度审查一下 weapp 的交互和风格，既看现行规范，也看后端真相、页面连贯性和常见低质量模式。"
 Expected target: `weapp-review.prompt.md`
 
-10. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
+12. "这个需求要同时改 backend 和 web，帮我整理一份实现请求。"
 Expected target: `general-implementation.prompt.md`
 
-11. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
+13. "把这段报销审批流程整理成 Mermaid，补上驳回和超时分支。"
 Expected target: `business-flow-mermaid.prompt.md`
 
-12. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
+14. "把这组任务按 开发 -> review -> 修复 -> review -> 文档同步 的顺序跑完，直到任务清单完成。"
 Expected target: `general-task-loop.prompt.md`
 
-13. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
+15. "把这次线上事故的结论落成规则、workflow、测试和 runbook 更新清单。"
 Expected target: `general-incident-followup.prompt.md`
 
 ## Maintenance Rule

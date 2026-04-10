@@ -71,6 +71,26 @@
 - 是否物理删除、软删除或归档，必须跟随当前领域既有语义，不在单个 query 中私自切换模型。
 - 对被 CI 轻量 guard 命中的变更 query，默认会拦截无 `WHERE` 的 `UPDATE` 或 `DELETE`；如果确有合理的全表写入场景，必须在 query block 内用 `sqlguard: allow-unscoped-write` 注释说明。
 
+### 3.5 禁止写法与推荐写法
+
+以下清单用于把高频 SQL 坏味道写成显式规则。能自动门禁的，会在后文说明；其余至少应作为 review 必查项。
+
+| 场景 | 禁止写法 | 推荐写法 |
+| --- | --- | --- |
+| 读取列面 | `SELECT * FROM orders WHERE id = $1;` | `SELECT id, user_id, status, total_amount, created_at FROM orders WHERE id = $1;` |
+| 分页稳定性 | `SELECT id, status FROM orders WHERE user_id = $1 LIMIT $2 OFFSET $3;` | `SELECT id, status FROM orders WHERE user_id = $1 ORDER BY id DESC LIMIT $2 OFFSET $3;` |
+| 无作用域写入 | `UPDATE orders SET status = 'closed';` | `UPDATE orders SET status = 'closed' WHERE id = $1 AND status = 'pending';` |
+| 无列名插入 | `INSERT INTO orders VALUES ($1, $2, $3);` | `INSERT INTO orders (user_id, merchant_id, status) VALUES ($1, $2, $3);` |
+| 事务外兜底状态条件 | `UPDATE refunds SET status = 'success' WHERE id = $1;` | `UPDATE refunds SET status = 'success' WHERE id = $1 AND status = 'processing';` |
+
+额外说明：
+
+- `SELECT *` 不是“偷懒”，而是会扩大返回面、放大 schema 漂移风险，并让 review 难以判断调用面真实依赖。
+- `LIMIT` / `OFFSET` 没有 `ORDER BY`，在业务、分页和测试上都不稳定。
+- `UPDATE` / `DELETE` 没有 `WHERE`，默认按事故级危险写法处理。
+- `INSERT INTO ... VALUES (...)` 不写列名，会让 schema 演进时的风险被隐式放大。
+- 状态迁移若依赖当前状态成立，就不要把前置条件藏在事务外假设里；应落实在 `WHERE` 或明确事务语义里。
+
 ## 4. Schema 与 Migration 规范
 
 ### 4.1 设计原则
@@ -96,6 +116,78 @@
 - 当正确性依赖“读后写”顺序时，要明确事务边界、当前状态条件或唯一约束支撑，避免并发请求互相覆盖。
 - 新增锁敏感 query 或热点写路径时，要说明为什么当前语义在重复请求、重试或并发提交下仍然成立。
 
+### 5.1 状态机与条件更新
+
+- 订单、支付、退款、配送、预订、库存、delivery pool 等状态迁移写入，默认要把“当前状态前置条件”落实到 `WHERE` 或同一事务的锁语义里，而不是只依赖事务外检查。
+- 对依赖状态前置条件的 `UPDATE ... RETURNING`，调用方必须检查“是否真的命中 1 行”；如果命中 0 行，默认视为并发冲突、状态漂移或重复执行，而不是静默成功。
+- 禁止把终态/前态切换写成“只按 id 更新”的宽条件写法，尤其是 `pending -> paid`、`ready -> courier_accepted`、`processing -> succeeded`、`reserved -> released` 之类高风险状态迁移。
+
+推荐示例：
+
+```text
+-- bad: 并发下会把任何当前状态直接改成 ready
+UPDATE orders
+SET status = 'ready', updated_at = now()
+WHERE id = $1
+RETURNING *;
+
+-- good: 只有 preparing 状态才能推进到 ready
+UPDATE orders
+SET status = 'ready', updated_at = now()
+WHERE id = $1
+  AND status = 'preparing'
+RETURNING *;
+```
+
+### 5.2 排他性、唯一性与 claim 语义
+
+- “一个预订只允许一个活跃订单”“一个配送池项目只允许一个成功抢单者”“同一库存单元不能被重复占用”等约束，不能只靠事务外 `SELECT` 判断。
+- 当业务正确性依赖排他性时，优先考虑：唯一约束、部分唯一索引、`SELECT ... FOR UPDATE`、带状态条件的 claim 更新、或显式 lease 字段。
+- callback、worker、scheduler、delivery pool、recovery scanner 相关 query 必须定义重复领取和重复执行语义，不允许默认“应该只跑一次”。
+
+推荐示例：
+
+```text
+-- bad: 只读检查后在别处再写，两个并发请求都可能通过
+SELECT COUNT(*)
+FROM table_reservations
+WHERE table_id = $1
+  AND reservation_date = $2
+  AND status IN ('pending', 'paid', 'confirmed');
+
+-- good: 在事务里锁定目标记录，或通过条件更新 claim 目标状态
+SELECT *
+FROM delivery_pool
+WHERE order_id = $1
+FOR UPDATE;
+```
+
+### 5.3 热路径扫描、分页与聚合
+
+- 商户订单列表、用户订单列表、配送池、退款/恢复扫描、运营筛选页等热路径，默认不能把大 `OFFSET`、无界 `COUNT(*)` 或全表排序当作免费操作。
+- 对高基数、持续增长且用户高频访问的列表，默认优先评估 keyset / seek pagination，而不是只延续 `LIMIT ... OFFSET ...` 习惯。
+- `COUNT(*)`、热状态扫描、恢复任务扫描若进入请求热路径，必须明确说明索引支撑、访问频率和可接受代价；否则应优先考虑 `has_more`、summary/projection、异步统计或受控扫描。
+- 新增 recovery / pool / timeout scanner 时，默认按 `status + next_retry_at/expires_at + tenant/scope` 设计过滤与索引，而不是依赖“数据量还不大”的假设。
+
+推荐示例：
+
+```text
+-- bad: 热路径高 offset 分页
+SELECT id, status, created_at
+FROM orders
+WHERE merchant_id = $1
+ORDER BY created_at DESC
+LIMIT $2 OFFSET $3;
+
+-- better: 高基数热路径优先考虑 keyset
+SELECT id, status, created_at
+FROM orders
+WHERE merchant_id = $1
+  AND (created_at, id) < ($2, $3)
+ORDER BY created_at DESC, id DESC
+LIMIT $4;
+```
+
 ## 6. 生成、传播与验证
 
 - 修改 `db/query/` 或依赖 SQL 结构时，运行 `make sqlc`。
@@ -110,14 +202,24 @@
 
 - 当前轻量 guard 只检查被本次 diff 实质性触碰到的 query block，而不是重扫整个文件的历史债务。
 - 当前 guard 会拦截三类高信噪比问题：
+- 当前 guard 会拦截四类高信噪比问题：
   - 变更 query block 中出现 `SELECT *`。
   - `:many` query 中使用 `LIMIT` 或 `OFFSET` 但没有 `ORDER BY`。
   - `UPDATE` 或 `DELETE` 语句缺少 `WHERE`。
+  - `INSERT INTO <table> VALUES (...)` 这类未显式声明列名的插入语句。
+- 当前 guard **不会** 自动拦截所有 SQL 坏味道；例如状态迁移条件过宽、热路径 `COUNT(*)` 或查询列面过大但不是 `SELECT *`，仍主要依赖实现者与 reviewer 按本标准收口。
 - 仅注释改动不会重新触发同一 query block 的历史坏 SQL 检查，但 query 名称变更仍视为实质性变更。
 - 允许的例外必须在对应 query block 内显式说明：
   - `sqlguard: allow-select-star`
   - `sqlguard: allow-unordered-limit`
   - `sqlguard: allow-unscoped-write`
+  - `sqlguard: allow-implicit-insert-columns`
+- `sqlguard:` 例外注释不是空白豁免。每条例外至少要在同一注释行里写出：
+  - 为什么默认规则在这里不适用。
+  - 为什么该例外在当前 query block 内仍然安全。
+  - 例外边界是什么，避免后续调用方误把它当通用模式复制。
+- 禁止只写裸标记，例如只写 `-- sqlguard: allow-select-star` 却不解释原因；这种写法应视为门禁绕过尝试。
+- 对支付、退款、分账、回调、worker/recovery、订单/履约/预订/库存状态机等 `G2` / `G3` 路径，`sqlguard:` 例外默认按高风险审查点处理，而不是普通注释。
 
 ### 6.2 本地校验命令
 
@@ -131,7 +233,7 @@
 - 对非平凡 query，不要把“应该很快”当作证据；必要时使用 `EXPLAIN` 或 `EXPLAIN ANALYZE` 验证执行计划。
 - 避免在业务热路径中引入明显的 N+1 SQL 模式；若必须分步查询，应说明原因并控制调用规模。
 - query 日志、错误与排障信息不能把原始 SQL、驱动细节或敏感参数直接暴露给用户侧响应。
-- CI 允许做轻量 SQL guardrail，但 guardrail 只能覆盖高信噪比规则；如果确有合理例外，必须用明确注释说明原因，例如 `sqlguard: allow-select-star`、`sqlguard: allow-unordered-limit`、`sqlguard: allow-unscoped-write`，而不是绕过 source-of-truth 或直接改生成文件。
+- CI 允许做轻量 SQL guardrail，但 guardrail 只能覆盖高信噪比规则；如果确有合理例外，必须用明确注释说明原因，例如 `sqlguard: allow-select-star`、`sqlguard: allow-unordered-limit`、`sqlguard: allow-unscoped-write`、`sqlguard: allow-implicit-insert-columns`，而不是绕过 source-of-truth 或直接改生成文件。
 
 ## 8. Review 检查单
 

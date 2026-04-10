@@ -160,6 +160,226 @@ function unique(values) {
   return [...new Set(values)];
 }
 
+function lintFileContains(errors, relativePath, snippets, messageSuffix) {
+  const filePath = path.join(repoRoot, relativePath);
+  const content = readFile(filePath);
+
+  for (const snippet of snippets) {
+    if (!content.includes(snippet)) {
+      errors.push(`${relativePath}: ${messageSuffix} '${snippet}'`);
+    }
+  }
+}
+
+function lintFileOmits(errors, relativePath, snippets, messageSuffix) {
+  const filePath = path.join(repoRoot, relativePath);
+  const content = readFile(filePath);
+
+  for (const snippet of snippets) {
+    if (content.includes(snippet)) {
+      errors.push(`${relativePath}: ${messageSuffix} '${snippet}'`);
+    }
+  }
+}
+
+function lintFileConditionalContains(errors, relativePath, triggerSnippet, requiredSnippets, messageSuffix) {
+  const filePath = path.join(repoRoot, relativePath);
+  const content = readFile(filePath);
+
+  if (!content.includes(triggerSnippet)) {
+    return;
+  }
+
+  for (const snippet of requiredSnippets) {
+    if (!content.includes(snippet)) {
+      errors.push(`${relativePath}: ${messageSuffix} '${snippet}'`);
+    }
+  }
+}
+
+function lintBackendCanonicalOwners(errors) {
+  const backendEntryFiles = [
+    '.github/copilot-instructions.md',
+    '.github/instructions/backend-locallife.instructions.md',
+    'locallife/AGENTS.md'
+  ];
+
+  for (const relativePath of backendEntryFiles) {
+    lintFileContains(
+      errors,
+      relativePath,
+      ['.github/standards/backend/README.md'],
+      'backend entrypoint must reference canonical backend index'
+    );
+  }
+
+  lintFileContains(
+    errors,
+    'locallife/AGENTS.md',
+    ['../.github/prompts/'],
+    'backend agent guide must keep .github as the canonical prompt entrypoint'
+  );
+
+  lintFileConditionalContains(
+    errors,
+    'locallife/AGENTS.md',
+    '.codex/prompts/',
+    ['backend-local wrappers', 'not the long-term source of truth'],
+    'backend agent guide must clearly downgrade legacy .codex prompt wrappers when they are mentioned'
+  );
+
+  const codexPromptOwners = {
+    'locallife/.codex/prompts/feature.md': ['Compatibility Pointer', '.github/prompts/backend-implementation.prompt.md'],
+    'locallife/.codex/prompts/bugfix.md': ['Compatibility Pointer', '.github/prompts/backend-bugfix.prompt.md'],
+    'locallife/.codex/prompts/review.md': ['Compatibility Pointer', '.github/prompts/backend-review-closure.prompt.md', '.github/review/open-findings.md', '.github/review/audit-log.md'],
+    'locallife/.codex/prompts/full-audit.md': ['Compatibility Pointer', '.github/prompts/backend-review-closure.prompt.md', '.github/review/open-findings.md', '.github/review/audit-log.md'],
+    'locallife/.codex/prompts/takeover.md': ['Compatibility Pointer', '.github/prompts/backend-takeover.prompt.md'],
+    'locallife/.codex/prompts/schema-change.md': ['Compatibility Pointer', '.github/standards/backend/SQL_STANDARDS.md', '.github/prompts/backend-sql-review.prompt.md']
+  };
+
+  for (const [relativePath, snippets] of Object.entries(codexPromptOwners)) {
+    lintFileContains(errors, relativePath, snippets, 'legacy codex prompt wrapper is missing canonical pointer');
+  }
+
+  const codexContextOwners = {
+    'locallife/.codex/context/architecture.md': ['Compatibility Pointer', '.github/standards/backend/RUNTIME_ARCHITECTURE.md'],
+    'locallife/.codex/context/workflow.md': ['Compatibility Pointer', '.github/standards/backend/WORKFLOW_AND_VALIDATION.md'],
+    'locallife/.codex/context/risk-map.md': ['Compatibility Pointer', '.github/standards/backend/BACKEND_RISK_MAP.md'],
+    'locallife/.codex/context/review-loop.md': ['Compatibility Pointer', '.github/standards/backend/FORMAL_REVIEW_DURABILITY.md', '.github/review/open-findings.md', '.github/review/audit-log.md']
+  };
+
+  for (const [relativePath, snippets] of Object.entries(codexContextOwners)) {
+    lintFileContains(errors, relativePath, snippets, 'legacy codex context wrapper is missing canonical pointer');
+  }
+
+  const codexChecklistOwners = {
+    'locallife/.codex/checklists/change-safety.md': [
+      'Compatibility Pointer',
+      '.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md',
+      'compatibility pointer',
+      'canonical `.github` checklist'
+    ],
+    'locallife/.codex/checklists/review-closeout.md': [
+      'Compatibility Pointer',
+      '.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md',
+      '.github/standards/backend/FORMAL_REVIEW_DURABILITY.md',
+      '.github/review/open-findings.md',
+      '.github/review/audit-log.md',
+      'compatibility pointer',
+      'canonical `.github` checklist'
+    ]
+  };
+
+  for (const [relativePath, snippets] of Object.entries(codexChecklistOwners)) {
+    lintFileContains(errors, relativePath, snippets, 'legacy codex checklist is missing canonical pointer');
+  }
+
+  lintFileOmits(
+    errors,
+    'locallife/.codex/checklists/change-safety.md',
+    ['## Path Coverage', '## Invariants', '## Generated Outputs', '## Tests', '## Workspace Safety'],
+    'legacy change-safety checklist must stay a thin compatibility pointer instead of restoring duplicated sections'
+  );
+
+  lintFileOmits(
+    errors,
+    'locallife/.codex/checklists/review-closeout.md',
+    ['## Findings', '## Durable Knowledge', '## Audit Trail', '## Verification', '## Closure'],
+    'legacy review-closeout checklist must stay a thin compatibility pointer instead of restoring duplicated sections'
+  );
+
+  const codexReviewOwners = {
+    'locallife/.codex/review/open-findings.md': ['Compatibility Pointer', '.github/review/open-findings.md'],
+    'locallife/.codex/review/audit-log.md': ['Compatibility Pointer', '.github/review/audit-log.md']
+  };
+
+  for (const [relativePath, snippets] of Object.entries(codexReviewOwners)) {
+    lintFileContains(errors, relativePath, snippets, 'legacy codex review ledger is missing canonical pointer');
+  }
+
+  lintFileContains(
+    errors,
+    '.github/standards/backend/FORMAL_REVIEW_DURABILITY.md',
+    ['.github/review/open-findings.md', '.github/review/audit-log.md'],
+    'formal review durability doc must reference canonical review ledgers'
+  );
+
+  for (const relativePath of [
+    '.github/standards/backend/FORMAL_REVIEW_DURABILITY.md',
+    '.github/instructions/review.instructions.md',
+    'locallife/AGENTS.md'
+  ]) {
+    lintFileOmits(
+      errors,
+      relativePath,
+      ['.codex/review/'],
+      'active review owner must not drift back to legacy .codex review ledgers via'
+    );
+  }
+}
+
+function lintWeappPromptBoundaries(errors) {
+  lintFileContains(
+    errors,
+    '.github/instructions/weapp-mini-program.instructions.md',
+    [
+      '.github/standards/weapp/PAGE_DELIVERY_BASELINE.md',
+      'TDesign MCP',
+      '.github/prompts/weapp-implementation.prompt.md',
+      '.github/prompts/weapp-review.prompt.md'
+    ],
+    'weapp hot-path instruction is missing canonical weapp prompt or standards anchor'
+  );
+
+  lintFileContains(
+    errors,
+    '.github/prompts/weapp-implementation.prompt.md',
+    [
+      '.github/standards/weapp/README.md',
+      '.github/standards/weapp/PAGE_DELIVERY_BASELINE.md',
+      '.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md',
+      '.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md',
+      'State the task risk level',
+      'State which relevant paths remain unverified',
+      'Payment-related mode:'
+    ],
+    'weapp implementation prompt is missing required risk or canonical standards anchor'
+  );
+
+  lintFileOmits(
+    errors,
+    '.github/prompts/weapp-implementation.prompt.md',
+    ['Delivery baseline:'],
+    'weapp implementation prompt must stay prompt-shaped instead of restoring a standards-like body via'
+  );
+
+  lintFileContains(
+    errors,
+    '.github/prompts/weapp-review.prompt.md',
+    [
+      '.github/standards/weapp/README.md',
+      '.github/standards/weapp/PAGE_DELIVERY_BASELINE.md',
+      '.github/standards/weapp/REVIEW_CHECKLIST.md',
+      '.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md',
+      '.github/standards/engineering/VALIDATION_AND_RELEASE_MATRIX.md',
+      'Infer or confirm the task risk level',
+      'Overall upgrade audit add-on:',
+      'Payment / high-risk review add-on:'
+    ],
+    'weapp review prompt is missing required risk or review-mode boundary anchor'
+  );
+
+  lintFileOmits(
+    errors,
+    '.github/prompts/weapp-review.prompt.md',
+    [
+      'Popup forms use a stable bottom action area instead of leaving action buttons inside scroll content tails',
+      'Bottom popup dual actions render as equal-width block buttons and do not degrade into content-width small buttons'
+    ],
+    'weapp review prompt should rely on canonical weapp standards for low-level UI rules instead of restating'
+  );
+}
+
 function main() {
   const errors = [];
   const promptFiles = fs.readdirSync(promptDir)
@@ -283,11 +503,21 @@ function main() {
     path.join(githubRoot, 'copilot-instructions.md'),
     path.join(promptDir, 'README.md'),
     path.join(agentDir, 'README.md'),
+    ...walkMarkdownFiles(path.join(githubRoot, 'review')),
     ...walkMarkdownFiles(path.join(githubRoot, 'instructions')),
     ...walkMarkdownFiles(promptDir),
     ...walkMarkdownFiles(agentDir),
-    ...walkMarkdownFiles(path.join(githubRoot, 'standards', 'engineering'))
+    ...walkMarkdownFiles(path.join(githubRoot, 'standards', 'engineering')),
+    ...walkMarkdownFiles(path.join(githubRoot, 'standards', 'backend')),
+    path.join(repoRoot, 'locallife', 'AGENTS.md'),
+    ...walkMarkdownFiles(path.join(repoRoot, 'locallife', '.codex', 'context')),
+    ...walkMarkdownFiles(path.join(repoRoot, 'locallife', '.codex', 'prompts')),
+    ...walkMarkdownFiles(path.join(repoRoot, 'locallife', '.codex', 'checklists')),
+    ...walkMarkdownFiles(path.join(repoRoot, 'locallife', '.codex', 'review'))
   ]);
+
+  lintBackendCanonicalOwners(errors);
+  lintWeappPromptBoundaries(errors);
 
   const seenReferences = new Set();
   for (const filePath of aiFacingFiles) {

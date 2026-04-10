@@ -2,7 +2,7 @@
 
 > 作用：为最容易造成高影响事故的变更提供可直接执行的专项检查表。
 
-本文件不是对 `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` 的替代，而是其在高风险场景下的具体抓手。当前覆盖六类：payment、authz、media、OCR、callback 与 async recovery。
+本文件不是对 `.github/standards/engineering/ENGINEERING_GOVERNANCE_BASELINE.md` 的替代，而是其在高风险场景下的具体抓手。当前覆盖七类：payment、authz、media、OCR、callback、async recovery，以及 order / fulfillment / reservation / inventory 状态机。
 
 ## 1. 使用方式
 
@@ -14,6 +14,7 @@
 4. OCR job 创建、provider 路由、媒体读取、异步 worker 回写、重试、告警、人工介入。
 5. 第三方回调、Webhook、结果通知、回调驱动入队、callback ack 语义。
 6. recovery scheduler、outbox、补偿任务、结果轮询、dead-letter、人工作业兜底。
+7. 订单、履约、配送池、预订、库存、超时取消、占用/释放与相关状态机。
 
 ## 2. Payment 变更清单
 
@@ -279,9 +280,46 @@
 - 至少验证一个 query 失败、enqueue 失败或未知态继续轮询的失败路径。
 - 若变更涉及补偿锚点、扫描范围、租约或终态退出条件，必须说明未验证的具体剩余风险。
 
-## 8. 使用结果要求
+## 8. Order / Fulfillment / Reservation / Inventory 变更清单
 
-当 payment、authz、media、OCR、callback 或 async recovery 变更交付时，至少应在说明中写清：
+优先参考：
+
+- `locallife/docs/order-money-chains-review.md`
+- `locallife/docs/production-robustness-review-report.md`
+- `.github/standards/backend/BACKEND_RISK_MAP.md`
+
+### 8.1 状态机与前置条件
+
+- 订单、配送、预订、库存、delivery pool 等状态迁移是否显式检查当前状态，而不是只按 `id` 直接覆盖。
+- 商户履约状态、配送状态和订单主状态是否保持一致，不会出现局部成功、全局矛盾的半状态。
+- 终态是否不可逆；若允许回退，是否有明确补偿语义和审计依据。
+
+### 8.2 排他性与并发
+
+- “单预订唯一活跃订单”“单配送池项唯一抢单成功者”“库存不能超卖”“同一资源不能被重复占用”等约束是否落实在事务、条件更新或数据库约束层。
+- 并发双击、重复提交、多端同时操作、worker/recovery/callback 乱序到达时，最多会成功几次，失败方如何被稳定识别。
+- 若条件更新或 claim 失败，是否返回明确 conflict 语义，而不是静默吞掉。
+
+### 8.3 资源与资金联动
+
+- 下单、预订、配送或取消是否会联动库存、优惠券、余额、押金、delivery pool、打印、通知等下游状态；这些联动是否有同事务保护或明确补偿边界。
+- 超时取消、商户拒单、用户取消、替单、配送失败、退款成功后，库存/押金/占券/预订资源是否会正确释放或回收。
+- 如果某条链路当前依赖 recovery 或补偿任务兜底，是否明确写出主路径失败后的收敛方式。
+
+### 8.4 扫描、列表与运营热路径
+
+- 商户订单列表、骑手待抢单列表、预订列表、库存页、恢复扫描是否评估过排序稳定性、分页策略和索引支撑，而不是默认用高 offset 或全表聚合。
+- delivery pool、timeout/recovery 扫描、库存过期清理等 query 是否带有清晰 scope、时间锚点或状态过滤，而不是全表粗扫。
+
+### 8.5 最低验证
+
+- 至少验证一个合法状态推进路径。
+- 至少验证一个并发冲突、重复执行、乱序到达或 stale-state 路径。
+- 至少说明一个恢复、释放、补偿或人工介入方向的剩余风险。
+
+## 9. 使用结果要求
+
+当 payment、authz、media、OCR、callback、async recovery 或 order/fulfillment/reservation/inventory 变更交付时，至少应在说明中写清：
 
 1. 套用了哪一类专项清单。
 2. 哪几项已验证。

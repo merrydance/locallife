@@ -90,7 +90,7 @@ func (server *Server) newTableResponse(t db.Table) tableResponse {
 	if t.MinimumSpend.Valid {
 		resp.MinimumSpend = &t.MinimumSpend.Int64
 	}
-	if t.QrCodeUrl.Valid {
+	if t.QrCodeUrl.Valid && t.QrCodeUrl.String != "" {
 		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
 		resp.QrCodeUrl = &qrCodeURL
 	}
@@ -134,7 +134,7 @@ func (server *Server) newTableResponseFromListRow(t db.ListTablesByMerchantRow) 
 	if t.MinimumSpend.Valid {
 		resp.MinimumSpend = &t.MinimumSpend.Int64
 	}
-	if t.QrCodeUrl.Valid {
+	if t.QrCodeUrl.Valid && t.QrCodeUrl.String != "" {
 		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
 		resp.QrCodeUrl = &qrCodeURL
 	}
@@ -166,7 +166,7 @@ func (server *Server) newTableResponseFromListTypeRow(t db.ListTablesByMerchantA
 	if t.MinimumSpend.Valid {
 		resp.MinimumSpend = &t.MinimumSpend.Int64
 	}
-	if t.QrCodeUrl.Valid {
+	if t.QrCodeUrl.Valid && t.QrCodeUrl.String != "" {
 		qrCodeURL := server.resolvePublicUploadURLForClient(t.QrCodeUrl.String)
 		resp.QrCodeUrl = &qrCodeURL
 	}
@@ -682,6 +682,9 @@ func (server *Server) updateTable(ctx *gin.Context) {
 
 	if req.TableNo != nil {
 		arg.TableNo = pgtype.Text{String: *req.TableNo, Valid: true}
+		if *req.TableNo != table.TableNo {
+			arg.QrCodeUrl = pgtype.Text{String: "", Valid: true}
+		}
 	}
 	if req.TableType != nil {
 		arg.TableType = pgtype.Text{String: *req.TableType, Valid: true}

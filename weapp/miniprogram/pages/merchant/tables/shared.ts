@@ -16,6 +16,10 @@ export const TABLE_UPLOAD_FILE_STATUS = {
   failed: 'failed'
 } as const
 
+export const TABLE_QR_POSTER_CANVAS_ID = 'tableQrPosterCanvas'
+export const TABLE_QR_POSTER_CANVAS_WIDTH = 720
+export const TABLE_QR_POSTER_CANVAS_HEIGHT = 1120
+
 export type TableUploadFileStatus = typeof TABLE_UPLOAD_FILE_STATUS[keyof typeof TABLE_UPLOAD_FILE_STATUS]
 
 export interface TableUploadFile {
@@ -341,6 +345,11 @@ export function normalizeTableBusinessStatus(status?: string): TableStatus {
   return getTableStatusDisplay(status).normalizedStatus as TableStatus
 }
 
+export function buildTableQRCodePosterTitle(tableNo?: string): string {
+  const normalized = String(tableNo || '').trim()
+  return normalized || '未命名桌台'
+}
+
 function getMiniProgramErrorMessage(error: unknown): string {
   if (typeof error === 'string') {
     return error
@@ -363,7 +372,7 @@ export function isUserCancelledError(error: unknown): boolean {
   return getMiniProgramErrorMessage(error).includes('cancel')
 }
 
-export async function downloadRemoteImageToAlbum(imageUrl: string) {
+async function downloadRemoteImageToTempFile(imageUrl: string): Promise<string> {
   const downloadResult = await new Promise<WechatMiniprogram.DownloadFileSuccessCallbackResult>((resolve, reject) => {
     wx.downloadFile({
       url: imageUrl,
@@ -379,11 +388,235 @@ export async function downloadRemoteImageToAlbum(imageUrl: string) {
     })
   })
 
+  return downloadResult.tempFilePath
+}
+
+async function getLocalImageInfo(src: string): Promise<WechatMiniprogram.GetImageInfoSuccessCallbackResult> {
+  return new Promise((resolve, reject) => {
+    wx.getImageInfo({
+      src,
+      success: resolve,
+      fail: reject
+    })
+  })
+}
+
+async function saveImageFileToAlbum(filePath: string) {
   await new Promise<void>((resolve, reject) => {
     wx.saveImageToPhotosAlbum({
-      filePath: downloadResult.tempFilePath,
+      filePath,
       success: () => resolve(),
       fail: reject
     })
   })
 }
+
+function splitPosterTextLines(
+  context: WechatMiniprogram.CanvasContext,
+  text: string,
+  maxWidth: number,
+  maxLines: number
+): string[] {
+  const normalized = buildTableQRCodePosterTitle(text)
+  const glyphs = Array.from(normalized)
+  const lines: string[] = []
+  let currentLine = ''
+
+  for (const glyph of glyphs) {
+    const nextLine = currentLine + glyph
+    if (!currentLine || context.measureText(nextLine).width <= maxWidth) {
+      currentLine = nextLine
+      continue
+    }
+
+    lines.push(currentLine)
+    currentLine = glyph
+    if (lines.length === maxLines - 1) {
+      break
+    }
+  }
+
+  const consumedGlyphCount = lines.join('').length
+  const remainingGlyphs = glyphs.slice(consumedGlyphCount).join('')
+  if (remainingGlyphs) {
+    currentLine += remainingGlyphs
+  }
+
+  if (currentLine) {
+    lines.push(currentLine)
+  }
+
+  if (lines.length <= maxLines) {
+    return lines
+  }
+
+  return lines.slice(0, maxLines)
+}
+
+function clampPosterLinesToWidth(
+  context: WechatMiniprogram.CanvasContext,
+  lines: string[],
+  maxWidth: number
+): string[] {
+  if (!lines.length) {
+    return [buildTableQRCodePosterTitle('')]
+  }
+
+  const nextLines = [...lines]
+  const lastIndex = nextLines.length - 1
+  let lastLine = nextLines[lastIndex]
+
+  while (lastLine.length > 1 && context.measureText(`${lastLine}…`).width > maxWidth) {
+    lastLine = lastLine.slice(0, -1)
+  }
+
+  if (context.measureText(lastLine).width > maxWidth) {
+    lastLine = '桌台'
+  }
+
+  nextLines[lastIndex] = context.measureText(lastLine).width > maxWidth ? lastLine : `${lastLine}${lastLine === lines[lastIndex] ? '' : '…'}`
+  return nextLines
+}
+
+function computePosterHeadlineLayout(
+  context: WechatMiniprogram.CanvasContext,
+  tableNo: string,
+  maxWidth: number
+): { fontSize: number, lines: string[] } {
+  for (let fontSize = 120; fontSize >= 68; fontSize -= 4) {
+    context.setFontSize(fontSize)
+    const lines = splitPosterTextLines(context, tableNo, maxWidth, 2)
+    const fitsWithinWidth = lines.every((line) => context.measureText(line).width <= maxWidth)
+    if (lines.length <= 2 && fitsWithinWidth) {
+      return { fontSize, lines }
+    }
+
+    if (lines.length > 2) {
+      const clampedLines = clampPosterLinesToWidth(context, lines.slice(0, 2), maxWidth)
+      const clampedFits = clampedLines.every((line) => context.measureText(line).width <= maxWidth)
+      if (clampedFits) {
+        return { fontSize, lines: clampedLines }
+      }
+    }
+  }
+
+  context.setFontSize(68)
+  const fallbackLines = clampPosterLinesToWidth(context, splitPosterTextLines(context, tableNo, maxWidth, 2), maxWidth)
+  return { fontSize: 68, lines: fallbackLines }
+}
+
+function drawPosterImageContain(params: {
+  context: WechatMiniprogram.CanvasContext
+  imagePath: string
+  imageWidth: number
+  imageHeight: number
+  boxX: number
+  boxY: number
+  boxWidth: number
+  boxHeight: number
+}) {
+  const imageRatio = params.imageWidth / Math.max(1, params.imageHeight)
+  const boxRatio = params.boxWidth / Math.max(1, params.boxHeight)
+  let drawWidth = params.boxWidth
+  let drawHeight = params.boxHeight
+
+  if (imageRatio > boxRatio) {
+    drawHeight = drawWidth / imageRatio
+  } else {
+    drawWidth = drawHeight * imageRatio
+  }
+
+  const drawX = params.boxX + ((params.boxWidth - drawWidth) / 2)
+  const drawY = params.boxY + ((params.boxHeight - drawHeight) / 2)
+  params.context.drawImage(params.imagePath, drawX, drawY, drawWidth, drawHeight)
+}
+
+async function drawTableQRCodePoster(canvasId: string, qrCodeUrl: string, tableNo: string): Promise<string> {
+  const tempFilePath = await downloadRemoteImageToTempFile(qrCodeUrl)
+  const imageInfo = await getLocalImageInfo(tempFilePath)
+  const context = wx.createCanvasContext(canvasId)
+  const canvasWidth = TABLE_QR_POSTER_CANVAS_WIDTH
+  const canvasHeight = TABLE_QR_POSTER_CANVAS_HEIGHT
+  const qrBoxX = 100
+  const qrBoxY = 132
+  const qrBoxSize = 520
+  const headlineMaxWidth = canvasWidth - 96
+  const headlineLayout = computePosterHeadlineLayout(context, tableNo, headlineMaxWidth)
+  const headlineLineHeight = Math.round(headlineLayout.fontSize * 1.18)
+  const headlineStartY = 760
+
+  context.setFillStyle('#FFFFFF')
+  context.fillRect(0, 0, canvasWidth, canvasHeight)
+
+  context.setFillStyle('#111827')
+  context.setTextAlign('center')
+  context.setTextBaseline('middle')
+  context.setFontSize(34)
+  context.fillText('桌台二维码', canvasWidth / 2, 66)
+
+  context.setFillStyle('#F5F7FA')
+  context.fillRect(72, 104, 576, 576)
+  drawPosterImageContain({
+    context,
+    imagePath: tempFilePath,
+    imageWidth: imageInfo.width,
+    imageHeight: imageInfo.height,
+    boxX: qrBoxX,
+    boxY: qrBoxY,
+    boxWidth: qrBoxSize,
+    boxHeight: qrBoxSize
+  })
+
+  context.setFillStyle('#0F172A')
+  context.setFontSize(headlineLayout.fontSize)
+  for (const [index, line] of headlineLayout.lines.entries()) {
+    context.fillText(line, canvasWidth / 2, headlineStartY + (index * headlineLineHeight))
+  }
+
+  const subtitleY = headlineStartY + (Math.max(1, headlineLayout.lines.length) * headlineLineHeight) + 40
+  context.setFillStyle('#475569')
+  context.setFontSize(30)
+  context.fillText('扫码即可进入当前桌台点餐', canvasWidth / 2, subtitleY)
+
+  context.setFillStyle('#94A3B8')
+  context.setFontSize(24)
+  context.fillText('建议直接打印后张贴到桌台、门口或包间入口', canvasWidth / 2, subtitleY + 46)
+
+  await new Promise<void>((resolve) => {
+    context.draw(false, () => resolve())
+  })
+
+  return new Promise((resolve, reject) => {
+    wx.canvasToTempFilePath({
+      canvasId,
+      x: 0,
+      y: 0,
+      width: canvasWidth,
+      height: canvasHeight,
+      destWidth: canvasWidth,
+      destHeight: canvasHeight,
+      fileType: 'png',
+      success: (result) => resolve(result.tempFilePath),
+      fail: reject
+    })
+  })
+}
+
+export async function saveTableQRCodePosterToAlbum(params: {
+  qrCodeUrl: string
+  tableNo: string
+  canvasId?: string
+}) {
+  const posterPath = await drawTableQRCodePoster(
+    params.canvasId || TABLE_QR_POSTER_CANVAS_ID,
+    params.qrCodeUrl,
+    params.tableNo
+  )
+  await saveImageFileToAlbum(posterPath)
+}
+
+export async function downloadRemoteImageToAlbum(imageUrl: string) {
+  const tempFilePath = await downloadRemoteImageToTempFile(imageUrl)
+  await saveImageFileToAlbum(tempFilePath)
+}
+

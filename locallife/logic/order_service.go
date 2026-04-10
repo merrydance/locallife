@@ -152,15 +152,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, input CreateOrderCommand
 	var deliveryDuration int32
 	var takeoutAddress *db.UserAddress
 	if input.OrderType == "takeout" && input.AddressID != nil {
-		address, getErr := s.store.GetUserAddress(ctx, *input.AddressID)
+		address, getErr := loadOwnedUserAddress(ctx, s.store, input.UserID, *input.AddressID)
 		if getErr != nil {
-			if errors.Is(getErr, db.ErrRecordNotFound) {
-				return CreateOrderCommandResult{}, NewRequestError(http.StatusNotFound, errors.New("address not found"))
-			}
 			return CreateOrderCommandResult{}, getErr
-		}
-		if address.UserID != input.UserID {
-			return CreateOrderCommandResult{}, NewRequestError(http.StatusForbidden, errors.New("address does not belong to you"))
 		}
 		takeoutAddress = &address
 

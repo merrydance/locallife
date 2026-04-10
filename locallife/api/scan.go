@@ -6,10 +6,6 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
-	"image"
-	"image/color"
-	"image/draw"
-	"image/png"
 	"net/http"
 	"strconv"
 	"strings"
@@ -20,12 +16,9 @@ import (
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/token"
 	"github.com/merrydance/locallife/wechat"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/basicfont"
-	"golang.org/x/image/math/fixed"
 )
 
-const labeledQRCodeFilenameSuffix = "_labeled.png"
+const currentTableQRCodeFilenameSuffix = "_qrcode_v2.png"
 
 // =============================================================================
 // Scan Table API - 扫码点餐
@@ -417,19 +410,8 @@ type generateTableQRCodeResponse struct {
 	MerchantID int64  `json:"merchant_id" example:"1"`
 }
 
-func isLabeledQRCodePath(path string) bool {
-	return strings.HasSuffix(path, labeledQRCodeFilenameSuffix)
-}
-
-func tableTypeLabel(tableType string) string {
-	if tableType == "room" {
-		return "包间"
-	}
-	return "大厅"
-}
-
-func buildTableQRCodeLabel(merchantID int64, table db.Table) string {
-	return fmt.Sprintf("商户#%d | 桌号:%s | %s", merchantID, table.TableNo, tableTypeLabel(table.TableType))
+func isCurrentTableQRCodePath(path string) bool {
+	return strings.HasSuffix(path, currentTableQRCodeFilenameSuffix)
 }
 
 func buildTableQRCodeObjectKey(merchantID, tableID int64, checksum string) string {
@@ -437,7 +419,7 @@ func buildTableQRCodeObjectKey(merchantID, tableID int64, checksum string) strin
 	if len(shortChecksum) > 12 {
 		shortChecksum = shortChecksum[:12]
 	}
-	filename := fmt.Sprintf("qrcode_m%d_t%d_%s%s", merchantID, tableID, shortChecksum, labeledQRCodeFilenameSuffix)
+	filename := fmt.Sprintf("qrcode_m%d_t%d_%s%s", merchantID, tableID, shortChecksum, currentTableQRCodeFilenameSuffix)
 	return fmt.Sprintf("merchant/table/%d/qrcodes/%s", merchantID, filename)
 }
 
@@ -478,72 +460,6 @@ func (server *Server) storeTableQRCode(ctx context.Context, uploaderID int64, me
 	}
 
 	return server.mediaResolver.PublicURL(objectKey, media.VariantOriginal), nil
-}
-
-func fitLabelTextForWidth(text string, maxWidth int) string {
-	if maxWidth <= 0 {
-		return text
-	}
-	if font.MeasureString(basicfont.Face7x13, text).Round() <= maxWidth {
-		return text
-	}
-
-	runes := []rune(text)
-	for len(runes) > 0 {
-		runes = runes[:len(runes)-1]
-		candidate := string(runes) + "..."
-		if font.MeasureString(basicfont.Face7x13, candidate).Round() <= maxWidth {
-			return candidate
-		}
-	}
-
-	return "..."
-}
-
-func decorateTableQRCodeWithLabel(pngData []byte, label string) ([]byte, error) {
-	srcImg, _, err := image.Decode(bytes.NewReader(pngData))
-	if err != nil {
-		return nil, fmt.Errorf("decode qrcode png failed: %w", err)
-	}
-
-	bounds := srcImg.Bounds()
-	qrW := bounds.Dx()
-	qrH := bounds.Dy()
-	labelAreaHeight := 52
-
-	canvas := image.NewRGBA(image.Rect(0, 0, qrW, qrH+labelAreaHeight))
-	draw.Draw(canvas, canvas.Bounds(), &image.Uniform{C: color.White}, image.Point{}, draw.Src)
-	draw.Draw(canvas, image.Rect(0, 0, qrW, qrH), srcImg, bounds.Min, draw.Src)
-
-	dividerColor := color.NRGBA{R: 230, G: 230, B: 230, A: 255}
-	for x := 0; x < qrW; x++ {
-		canvas.Set(x, qrH, dividerColor)
-	}
-
-	labelText := fitLabelTextForWidth(strings.TrimSpace(label), qrW-16)
-	if labelText != "" {
-		textColor := color.NRGBA{R: 45, G: 45, B: 45, A: 255}
-		textWidth := font.MeasureString(basicfont.Face7x13, labelText).Round()
-		textX := (qrW - textWidth) / 2
-		if textX < 8 {
-			textX = 8
-		}
-		textY := qrH + 31
-		drawer := &font.Drawer{
-			Dst:  canvas,
-			Src:  image.NewUniform(textColor),
-			Face: basicfont.Face7x13,
-			Dot:  fixed.P(textX, textY),
-		}
-		drawer.DrawString(labelText)
-	}
-
-	var out bytes.Buffer
-	if err := png.Encode(&out, canvas); err != nil {
-		return nil, fmt.Errorf("encode labeled qrcode png failed: %w", err)
-	}
-
-	return out.Bytes(), nil
 }
 
 // generateTableQRCode godoc
@@ -591,8 +507,8 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
-	// 如果已有已打标二维码，直接返回；未打标二维码走重新生成流程
-	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" && isLabeledQRCodePath(table.QrCodeUrl.String) {
+	// 如果已有当前版本二维码，直接返回；旧版带文字二维码会在这里自动刷新为新版本。
+	if table.QrCodeUrl.Valid && table.QrCodeUrl.String != "" && isCurrentTableQRCodePath(table.QrCodeUrl.String) {
 		ctx.JSON(http.StatusOK, generateTableQRCodeResponse{
 			QrCodeUrl:  table.QrCodeUrl.String,
 			TableNo:    table.TableNo,
@@ -625,13 +541,7 @@ func (server *Server) generateTableQRCode(ctx *gin.Context) {
 		return
 	}
 
-	labeledPNG, err := decorateTableQRCodeWithLabel(pngData, buildTableQRCodeLabel(merchant.ID, table))
-	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("二维码打标失败: %w", err)))
-		return
-	}
-
-	qrCodeURL, err := server.storeTableQRCode(ctx, authPayload.UserID, merchant.ID, tableID, labeledPNG)
+	qrCodeURL, err := server.storeTableQRCode(ctx, authPayload.UserID, merchant.ID, tableID, pngData)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, internalError(ctx, fmt.Errorf("保存二维码图片失败: %w", err)))
 		return

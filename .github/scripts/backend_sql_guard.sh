@@ -156,6 +156,16 @@ query_block_for_name() {
   ' "$repo_root/$file"
 }
 
+has_sqlguard_justification() {
+  local block="$1"
+  local token="$2"
+  local escaped_token
+
+  escaped_token="$(printf '%s' "$token" | sed 's/[][(){}.^$*+?|\\/]/\\&/g')"
+
+  printf '%s\n' "$block" | grep -Eq -- "^[[:space:]]*--.*${escaped_token}([[:space:]]+[^[:space:]].*)$"
+}
+
   find_unscoped_write_statements() {
     local block="$1"
     local normalized statement
@@ -175,6 +185,22 @@ query_block_for_name() {
       fi
     done <<< "$normalized"
   }
+
+    find_implicit_insert_column_omissions() {
+      local block="$1"
+      local normalized statement
+
+      normalized="$(printf '%s\n' "$block" | sed '/^[[:space:]]*--/d' | tr '[:upper:]' '[:lower:]' | tr '\n\t' '  ' | tr -s ' ')"
+
+      while IFS=';' read -r statement; do
+        statement="$(printf ' %s ' "$statement" | tr -s ' ')"
+        [[ "$statement" =~ [^[:space:]] ]] || continue
+
+        if printf '%s\n' "$statement" | grep -Eq '[[:space:]]insert[[:space:]]+into[[:space:]]+[^[:space:](;]+[[:space:]]+values[[:space:]]*\('; then
+          printf 'implicit-insert-columns\n'
+        fi
+      done <<< "$normalized"
+    }
 
 violations=0
 
@@ -211,25 +237,78 @@ for file in "${changed_files[@]}"; do
     header="$(printf '%s\n' "$block" | head -n 1)"
     normalized="$(printf '%s' "$block" | tr '[:upper:]' '[:lower:]' | tr '\n\t' '  ' | tr -s ' ')"
 
-    if [[ "$normalized" != *"sqlguard: allow-select-star"* ]] && [[ "$normalized" =~ select[[:space:]]+\* ]]; then
+    allow_select_star=0
+    if [[ "$normalized" == *"sqlguard: allow-select-star"* ]]; then
+      if has_sqlguard_justification "$block" "sqlguard: allow-select-star"; then
+        allow_select_star=1
+      else
+        echo "  ❌ $file :: $query_name uses bare 'sqlguard: allow-select-star' without a concrete justification"
+        echo "     keep the allow comment on one line and explain why the default rule does not apply and why the exception is safe here"
+        violations=$((violations + 1))
+      fi
+    fi
+
+    if (( allow_select_star == 0 )) && [[ "$normalized" =~ select[[:space:]]+\* ]]; then
       echo "  ❌ $file :: $query_name uses SELECT * in a touched query block"
       echo "     add explicit columns or annotate with 'sqlguard: allow-select-star' when justified"
       violations=$((violations + 1))
     fi
 
-    if [[ "$header" == *":many"* ]] && [[ "$normalized" =~ (limit|offset) ]] && [[ ! "$normalized" =~ order[[:space:]]+by ]] && [[ "$normalized" != *"sqlguard: allow-unordered-limit"* ]]; then
+    allow_unordered_limit=0
+    if [[ "$normalized" == *"sqlguard: allow-unordered-limit"* ]]; then
+      if has_sqlguard_justification "$block" "sqlguard: allow-unordered-limit"; then
+        allow_unordered_limit=1
+      else
+        echo "  ❌ $file :: $query_name uses bare 'sqlguard: allow-unordered-limit' without a concrete justification"
+        echo "     keep the allow comment on one line and explain why the default rule does not apply and why the exception is safe here"
+        violations=$((violations + 1))
+      fi
+    fi
+
+    if [[ "$header" == *":many"* ]] && [[ "$normalized" =~ (limit|offset) ]] && [[ ! "$normalized" =~ order[[:space:]]+by ]] && (( allow_unordered_limit == 0 )); then
       echo "  ❌ $file :: $query_name is a :many query with LIMIT/OFFSET but no ORDER BY"
       echo "     add ORDER BY or annotate with 'sqlguard: allow-unordered-limit' when the result is provably stable"
       violations=$((violations + 1))
     fi
 
-    if [[ "$normalized" != *"sqlguard: allow-unscoped-write"* ]]; then
+    allow_unscoped_write=0
+    if [[ "$normalized" == *"sqlguard: allow-unscoped-write"* ]]; then
+      if has_sqlguard_justification "$block" "sqlguard: allow-unscoped-write"; then
+        allow_unscoped_write=1
+      else
+        echo "  ❌ $file :: $query_name uses bare 'sqlguard: allow-unscoped-write' without a concrete justification"
+        echo "     keep the allow comment on one line and explain why the default rule does not apply and why the exception is safe here"
+        violations=$((violations + 1))
+      fi
+    fi
+
+    if (( allow_unscoped_write == 0 )); then
       while IFS= read -r write_kind; do
         [[ -n "$write_kind" ]] || continue
         echo "  ❌ $file :: $query_name has a $write_kind statement without WHERE in a touched query block"
         echo "     add an explicit WHERE scope or annotate with 'sqlguard: allow-unscoped-write' when the full-table write is intentional"
         violations=$((violations + 1))
       done < <(find_unscoped_write_statements "$block")
+    fi
+
+    allow_implicit_insert=0
+    if [[ "$normalized" == *"sqlguard: allow-implicit-insert-columns"* ]]; then
+      if has_sqlguard_justification "$block" "sqlguard: allow-implicit-insert-columns"; then
+        allow_implicit_insert=1
+      else
+        echo "  ❌ $file :: $query_name uses bare 'sqlguard: allow-implicit-insert-columns' without a concrete justification"
+        echo "     keep the allow comment on one line and explain why the default rule does not apply and why the exception is safe here"
+        violations=$((violations + 1))
+      fi
+    fi
+
+    if (( allow_implicit_insert == 0 )); then
+      while IFS= read -r insert_kind; do
+        [[ -n "$insert_kind" ]] || continue
+        echo "  ❌ $file :: $query_name uses INSERT without an explicit column list in a touched query block"
+        echo "     add explicit column names or annotate with 'sqlguard: allow-implicit-insert-columns' when the omission is truly intentional"
+        violations=$((violations + 1))
+      done < <(find_implicit_insert_column_omissions "$block")
     fi
   done
 

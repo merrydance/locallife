@@ -40,9 +40,14 @@ Use this file as a workspace routing summary. Detailed execution rules should li
 Read these first when changing backend behavior:
 
 - `.github/standards/engineering/README.md`
-- `.github/standards/backend/AGENT.md`
-- `.github/standards/backend/SYSTEM_PROMPT.md`
-- `.github/standards/backend/API_CONTRACT_STANDARDS.md`
+- `.github/standards/backend/README.md`
+
+Then open the smallest relevant backend deep docs for the current task instead of loading the full stack by default:
+
+- `RUNTIME_ARCHITECTURE.md` for real entrypoints, async boundaries, or takeover context
+- `WORKFLOW_AND_VALIDATION.md` for commands, regeneration, and validation depth
+- `API_CONTRACT_STANDARDS.md` for route, status-code, and empty-state semantics
+- `BACKEND_RISK_MAP.md` for funds, state machines, callback, worker, and recovery hot paths
 
 Common commands:
 

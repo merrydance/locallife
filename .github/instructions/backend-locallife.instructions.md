@@ -11,12 +11,23 @@ More specific backend instruction files under `.github/instructions/` take prece
 ## Read First
 
 - `.github/standards/engineering/README.md`
-- `.github/standards/backend/AGENT.md`
-- `.github/standards/backend/SYSTEM_PROMPT.md`
-- `.github/standards/backend/GO_PRACTICES.md`
-- `.github/standards/backend/API_CONTRACT_STANDARDS.md`
+- `.github/standards/backend/README.md`
 
 Use `.github/standards/engineering/README.md` as the stable governance index, then open the baseline, validation matrix, or high-risk checklists when the active change needs them.
+
+Open the smallest relevant backend deep docs for the current task instead of reading the whole backend stack every time:
+
+- `RUNTIME_ARCHITECTURE.md`: real entrypoints, async boundaries, and takeover or high-risk path tracing
+- `WORKFLOW_AND_VALIDATION.md`: regeneration triggers, local commands, and validation depth
+- `BACKEND_RISK_MAP.md`: funds, state machines, callback, worker, scheduler, and recovery hot paths
+- `API_CONTRACT_STANDARDS.md`: contract semantics, status codes, empty states, and route behavior
+- `SYSTEM_PROMPT.md`: detailed layering, middleware, DTO, and implementation-shape rules when a task truly needs the deeper contract
+
+Prompt routing defaults for this area:
+
+- Use `.github/prompts/backend-bugfix.prompt.md` for production defects, regressions, or root-cause fixes.
+- Use `.github/prompts/backend-takeover.prompt.md` when a new engineer or agent needs development-ready backend context before making changes.
+- Use `.github/prompts/backend-review-closure.prompt.md` for formal backend review focused on closure and propagation.
 
 ## Risk Classification
 
@@ -41,6 +52,11 @@ Use `.github/standards/engineering/README.md` as the stable governance index, th
 - Reuse existing request error mapping patterns instead of inventing a new API error shape.
 - Use structured logging. Do not add `fmt.Println` or other unstructured logging in request paths.
 - Do not add fire-and-forget goroutines in request paths; if work must outlive the request, move it to a worker, scheduler, outbox, or another explicit background boundary.
+- Do not replace upstream request or task context with `context.Background()` in ordinary flows; keep cancellation, timeout, and tracing semantics threaded through the call chain.
+- Do not store `context.Context` in struct fields.
+- Do not use string matching on `err.Error()` when `errors.Is` / `errors.As` or typed request errors can express the branch safely.
+- Do not introduce `panic(...)` in ordinary backend request, task, or state-machine flows; treat zero-row conditional updates and business conflicts as explicit errors, not crash paths.
+- If a line uses `goguard:` to allow an exception, require a concrete same-line reason; bare allow markers are not acceptable.
 - Keep handler, logic, and worker files within the existing file-size guardrail enforced by `make lint-filesize`.
 - Inspect nearby files in the same domain package before adding new abstractions.
 - After changing Go files, normalize formatting and imports before hand-off instead of leaving basic cleanup to review.
@@ -51,10 +67,13 @@ Use `.github/standards/engineering/README.md` as the stable governance index, th
 
 - For payment, refund, callback, webhook, upload, media, OCR, or other externally triggered flows, verify the server-side trust boundary explicitly instead of relying on client-provided identity, status, or ownership fields.
 - For money movement, status transitions, and async recovery paths, make the persistence boundary explicit. Important state changes must be backed by persisted records, idempotency guards, and auditable transitions instead of in-memory assumptions.
+- For order, delivery, reservation, and inventory work, treat conditional state updates, exclusivity rules, and release/recovery behavior as first-class concerns; do not rely on transaction-external checks or process-local state to keep them correct.
 - For worker, scheduler, outbox, retry, or callback-triggered work, define duplicate-delivery behavior and failure recovery behavior deliberately. Do not leave repeated execution semantics implicit.
+- Do not place third-party calls, websocket emits, or other external side effects inside transaction-owned critical sections; commit durable state first, then trigger post-commit work.
 - For private media, OCR, document, or download access, preserve ownership checks, visibility rules, and secret handling. Do not weaken access assumptions just to make a path easier to wire.
 - For `G2` and `G3` changes, explicitly check timeout handling, partial failure behavior, repeated delivery semantics, and what the operator or downstream caller observes when the path degrades.
 - When the change is payment- or authz-sensitive, apply the matching section in `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md` instead of relying on generic review memory.
+- When the change touches order, fulfillment, reservation, or inventory state machines, also apply the matching section in `.github/standards/engineering/HIGH_RISK_CHANGE_CHECKLISTS.md`.
 - If a high-risk path cannot be validated locally, call that out as residual risk instead of implying the path is production-safe.
 
 ## Regeneration Triggers
@@ -68,6 +87,9 @@ Use `.github/standards/engineering/README.md` as the stable governance index, th
 - Prefer `make test-unit` for focused validation.
 - Run `make test-integration` only when the change touches integration flows or database-backed behavior.
 - Common local commands: `make server`, `make test`, `make migrateup`, `make new_migration name=<name>`.
+- Use `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md` before closing a non-trivial backend implementation or fix.
+- Use `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md` after formal backend review or subsystem audit.
+- Use `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md` when formal backend review findings should become durable project knowledge.
 
 ## Completion Contract
 

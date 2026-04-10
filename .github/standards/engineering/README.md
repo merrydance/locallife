@@ -16,7 +16,7 @@
 - `AI_PROMPT_GOVERNANCE.md`: AI-facing Prompt、Instruction、Agent 与治理门禁的分层和维护规则。
 - `UNREACHABLE_DEPENDENCY_RISK_REGISTER.md`: 不可达依赖风险台账，用于收口 `required module not called` 一类非可触达依赖发现。
 - `INCIDENT_FEEDBACK_LOOP.md`: 事故、重大缺陷、near miss 与高价值 review finding 的规则回灌机制。
-- `HIGH_RISK_CHANGE_CHECKLISTS.md`: 第一批高风险变更专项清单，当前覆盖 payment、authz、media、OCR、callback 与 async recovery。
+- `HIGH_RISK_CHANGE_CHECKLISTS.md`: 第一批高风险变更专项清单，当前覆盖 payment、authz、media、OCR、callback、async recovery，以及 order / fulfillment / reservation / inventory 状态机。
 
 ## Historical Material
 

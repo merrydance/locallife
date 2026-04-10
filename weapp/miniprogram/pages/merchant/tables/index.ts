@@ -5,12 +5,12 @@ import { getErrorUserMessage } from '../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import {
   buildTablePresentationState,
-  downloadRemoteImageToAlbum,
   ensureArray,
   formatTableView,
   isPermissionDeniedError,
   isUserCancelledError,
   normalizeQRCodeUrl,
+  saveTableQRCodePosterToAlbum,
   TABLE_STATUS_FILTER_OPTIONS,
   type TableListItem,
   type TableStatusFilterKey,
@@ -371,8 +371,11 @@ Page({
     wx.showLoading({ title: '保存中...' })
 
     try {
-      await downloadRemoteImageToAlbum(this.data.qrCodeImageUrl)
-      wx.showToast({ title: '二维码已保存到相册', icon: 'success' })
+      await saveTableQRCodePosterToAlbum({
+        qrCodeUrl: this.data.qrCodeImageUrl,
+        tableNo: this.data.qrCodeTableNo
+      })
+      wx.showToast({ title: '打印海报已保存到相册', icon: 'success' })
     } catch (err) {
       logger.error('Download table qrcode failed', err)
       if (isPermissionDeniedError(err)) {

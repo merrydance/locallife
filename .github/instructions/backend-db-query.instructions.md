@@ -19,6 +19,15 @@ Use `.github/standards/backend/SQL_STANDARDS.md` as the canonical SQL authoring 
 - Preserve existing sqlc naming conventions such as `-- name: Xxx :one`, `:many`, or `:exec`.
 - Keep query names stable and domain-specific so generated methods remain predictable for callers.
 - Follow existing patterns for optional arguments, pagination, and update statements instead of inventing a new style in one file.
+- Do not use `SELECT *`; list the real columns needed by callers.
+- Do not add `LIMIT` / `OFFSET` to `:many` queries without a stable `ORDER BY`.
+- Do not write `UPDATE` / `DELETE` without an explicit `WHERE` scope.
+- Prefer explicit column lists in `INSERT` statements instead of positional `VALUES` against the whole table shape.
+- Treat implicit `INSERT INTO table VALUES (...)` style writes as guardrail-level bad SQL unless a query block documents a specific exception.
+- If a query block uses `sqlguard:` exception comments, require an inline reason that states why the default rule is not applicable and why the exception is still safe in this narrow block.
+- For order, payment, refund, delivery, reservation, and inventory writes, prefer conditional updates that encode the required current state instead of updating by `id` alone.
+- Do not rely on transaction-external `SELECT` checks to enforce exclusivity such as single active reservation order, single successful delivery claim, or no oversell inventory semantics.
+- Treat merchant order lists, rider pool lists, reservation lists, and recovery scans as hot paths; avoid assuming high-offset pagination or broad `COUNT(*)` queries are free.
 
 ## Boundary Checks
 

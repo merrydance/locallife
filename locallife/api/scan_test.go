@@ -674,9 +674,76 @@ func TestGenerateTableQRCodeAPI(t *testing.T) {
 				require.NotEmpty(t, response.QrCodeUrl)
 				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("merchant/table/%d/qrcodes/", merchant.ID))
 				require.Contains(t, response.QrCodeUrl, fmt.Sprintf("qrcode_m%d_t%d_", merchant.ID, table.ID))
-				require.Contains(t, response.QrCodeUrl, labeledQRCodeFilenameSuffix)
+				require.Contains(t, response.QrCodeUrl, currentTableQRCodeFilenameSuffix)
 				require.Equal(t, table.TableNo, response.TableNo)
 				require.Equal(t, merchant.ID, response.MerchantID)
+			},
+		},
+		{
+			name:    "ReuseCurrentVersionQRCode",
+			tableID: table.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				tableWithQRCode := table
+				tableWithQRCode.QrCodeUrl = pgtype.Text{String: fmt.Sprintf("https://cdn.example.com/qrcode%s", currentTableQRCodeFilenameSuffix), Valid: true}
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(tableWithQRCode, nil)
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response generateTableQRCodeResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Contains(t, response.QrCodeUrl, currentTableQRCodeFilenameSuffix)
+			},
+		},
+		{
+			name:    "RegenerateOldVersionQRCode",
+			tableID: table.ID,
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore, wechatClient *mockwechat.MockWechatClient) {
+				tableWithLegacyQRCode := table
+				tableWithLegacyQRCode.QrCodeUrl = pgtype.Text{String: "https://cdn.example.com/qrcode_labeled.png", Valid: true}
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
+					Times(1).
+					Return(tableWithLegacyQRCode, nil)
+
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				wechatClient.EXPECT().
+					GetWXACodeUnlimited(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(qrCodeData, nil)
+
+				store.EXPECT().
+					CreateMediaAsset(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.MediaAsset{ID: util.RandomInt(1, 1000), ModerationStatus: "approved"}, nil)
+
+				store.EXPECT().
+					UpdateTable(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(tableWithLegacyQRCode, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+				var response generateTableQRCodeResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &response)
+				require.Contains(t, response.QrCodeUrl, currentTableQRCodeFilenameSuffix)
 			},
 		},
 		{

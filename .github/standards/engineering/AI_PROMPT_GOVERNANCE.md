@@ -72,7 +72,7 @@
 
 技术栈层模板：
 
-- Backend: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`
+- Backend: `backend-implementation.prompt.md`, `backend-review-closure.prompt.md`, `backend-bugfix.prompt.md`, `backend-takeover.prompt.md`
 - Web: `web-implementation.prompt.md`, `web-review.prompt.md`
 - Weapp: `weapp-implementation.prompt.md`, `weapp-review.prompt.md`
 
@@ -118,6 +118,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 - 协议边界明确：`general-implementation.prompt.md` 与 `general-review.prompt.md` 必须保留 `Use only when` 边界。
 - 索引一致：`.github/prompts/README.md` 中 `Current Templates` 必须与实际 Prompt 文件一一对应。
 - Agent 引用有效：Prompt frontmatter 中的 `agent` 必须指向真实存在的 Agent 名称。
+- Backend canonical-owner consistency：backend 热路径入口、legacy `.codex` wrappers 与 formal review ledger 指向不得偏离 `.github` 下的 canonical backend owners。
 - README 一致：`.github/agents/README.md` 必须能覆盖当前 Agent 文件集合。
 - 仓库内引用可达：AI-facing 资产中的仓库路径引用不得悬空。
 
@@ -145,7 +146,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Backend | 闭环打通 handler / logic / store / route / DTO / tests；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；说明验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要跳过生成步骤判断 | 传播是否断层；新增逻辑是否真正可达；生成物是否提交；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证 |
+| Backend | 闭环打通 handler / logic / store / route / DTO / tests；状态常量复用 `db/sqlc/constants.go`；识别并执行 `make sqlc` / `make mock` / `make swagger`；对仓库级高风险链路参考 `BACKEND_RISK_MAP.md`；说明验证范围与残余风险 | 不要把业务逻辑塞进 handler；不要新增魔法状态字符串；不要只改 SQL、DTO 或 handler 而不做全链路传播；不要跳过生成步骤判断；不要把生产 bugfix 当成表层补丁而不追真实写边界或恢复路径 | 传播是否断层；新增逻辑是否真正可达；生成物是否提交；回调、异步、支付、上传、OCR、鉴权等高风险路径是否真实验证；正式 review 是否形成 durable closeout |
 
 ### 3.2 Web
 

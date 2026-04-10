@@ -20,6 +20,10 @@ Apply these rules for files under `locallife/logic/`.
 - Reuse constants from `locallife/db/sqlc/constants.go` instead of redefining status strings.
 - Do not introduce package-level mutable runtime state for caches, clients, or configuration.
 - Do not store `context.Context` in service structs or switch to `context.Background()` inside ordinary logic flows.
+- Do not rely on in-process maps, mutexes, websocket state, or cache projections as the source of truth for order, payment, refund, delivery, reservation, or inventory correctness.
+- When a business action needs both durable state and side effects, write the durable anchor first and emit tasks, notifications, or third-party calls only after the state boundary is safe.
+- Worker, scheduler, callback, and retry orchestration should classify retryable vs non-retryable outcomes explicitly; do not loop all failures through the same retry path by default.
+- Keep request-path fan-out bounded and deliberate; if one logic method needs multiple downstream reads or calls, define the concurrency limit and partial-failure behavior explicitly.
 
 ## Boundary Checks
 

@@ -203,6 +203,21 @@
   background: var(--td-bg-color-container);
 }
 
+.qr-poster-canvas-shell {
+  position: fixed;
+  left: -9999rpx;
+  top: -9999rpx;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.qr-poster-canvas {
+  width: 720px;
+  height: 1120px;
+}
+
 @media (max-width: 420px) {
   .image-upload-grid,
   .section-top,

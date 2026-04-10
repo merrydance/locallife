@@ -192,16 +192,24 @@
 
           <view wx:else class="qr-card">
             <image class="qr-image" src="{{qrCodeImageUrl}}" mode="aspectFit" />
-            <text class="qr-popup-tip">顾客扫码即可进入当前桌台点餐页面。</text>
+            <text class="qr-popup-tip">顾客扫码即可进入当前桌台点餐页面，保存时会自动生成大字版打印海报。</text>
           </view>
 
           <view class="popup-actions">
             <t-button block size="large" shape="round" theme="default" bind:tap="onCloseQRCodePopup">关闭</t-button>
             <t-button wx:if="{{qrCodeError}}" block size="large" shape="round" theme="primary" bind:tap="onRetryQRCode">重新生成</t-button>
-            <t-button wx:else block size="large" shape="round" theme="primary" bind:tap="onDownloadQRCode" loading="{{qrCodeDownloading}}" disabled="{{qrCodeLoading || !qrCodeImageUrl}}">下载二维码</t-button>
+            <t-button wx:else block size="large" shape="round" theme="primary" bind:tap="onDownloadQRCode" loading="{{qrCodeDownloading}}" disabled="{{qrCodeLoading || !qrCodeImageUrl}}">下载打印海报</t-button>
           </view>
         </view>
       </t-popup>
+
+      <view class="qr-poster-canvas-shell" aria-hidden="true">
+        <canvas
+          canvas-id="tableQrPosterCanvas"
+          class="qr-poster-canvas"
+          disable-scroll="true"
+        />
+      </view>
     </block>
   </block>
 </view>

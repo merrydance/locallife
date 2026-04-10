@@ -608,7 +608,150 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
-				require.Contains(t, recorder.Body.String(), "经营范围不包含餐饮相关内容")
+				require.Contains(t, recorder.Body.String(), "经营范围未识别到餐饮相关内容")
+			},
+		},
+		{
+			name: "Approved_FoodPermitRawTextFallback",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:     "JY11105000000001",
+					CompanyName:  "地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东",
+					OperatorName: "张三",
+					ValidTo:      "2030年12月31日",
+					RawText:      "经营者名称：测试餐饮有限公司\n经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001\n有效期至：2030年12月31日",
+					OCRAt:        time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
+			name: "BadRequest_FoodPermitNameUnreadable",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:     "JY11105000000001",
+					CompanyName:  "地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东",
+					OperatorName: "张三",
+					ValidTo:      "2030年12月31日",
+					RawText:      "经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001\n有效期至：2030年12月31日",
+					OCRAt:        time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrMerchantFoodPermitNameUnreadable.Code, response.Code)
+				require.Equal(t, ErrMerchantFoodPermitNameUnreadable.Message, response.Error)
+			},
+		},
+		{
+			name: "BadRequest_FoodPermitNameMismatch",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:     "JY11105000000001",
+					CompanyName:  "另一家餐饮店",
+					OperatorName: "李四",
+					ValidTo:      "2030年12月31日",
+					RawText:      "经营者名称：另一家餐饮店\n经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001\n有效期至：2030年12月31日",
+					OCRAt:        time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrMerchantFoodPermitNameMismatch.Code, response.Code)
+				require.Contains(t, response.Error, "食品经营许可证主体名称与营业执照企业名称不一致")
+				require.Contains(t, response.Error, "营业执照：测试餐饮有限公司")
+				require.Contains(t, response.Error, "食品经营许可证：另一家餐饮店")
 			},
 		},
 		{
@@ -803,7 +946,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
-				require.Contains(t, recorder.Body.String(), "坐标距离过近")
+				require.Contains(t, recorder.Body.String(), "附近已有其他商户完成入驻")
 			},
 		},
 	}

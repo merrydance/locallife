@@ -138,3 +138,56 @@ func TestCalculateOrderPreview_WithVoucher(t *testing.T) {
 	}
 	require.True(t, foundVoucher)
 }
+
+func TestCalculateOrderPreview_RejectsForeignAddress(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	store := mockdb.NewMockStore(ctrl)
+	userID := int64(1)
+	merchantID := int64(2)
+	addressID := int64(99)
+
+	store.EXPECT().
+		GetCartByUserAndMerchant(gomock.Any(), db.GetCartByUserAndMerchantParams{
+			UserID:     userID,
+			MerchantID: merchantID,
+		}).
+		Times(1).
+		Return(db.Cart{ID: 30}, nil)
+	store.EXPECT().
+		ListCartItems(gomock.Any(), int64(30)).
+		Times(1).
+		Return([]db.ListCartItemsRow{
+			{DishID: pgtype.Int8{Int64: 5, Valid: true}, DishName: pgtype.Text{String: "Dish", Valid: true}, DishPrice: pgtype.Int8{Int64: 1000, Valid: true}, Quantity: 1},
+		}, nil)
+	store.EXPECT().
+		GetMerchant(gomock.Any(), merchantID).
+		Times(1).
+		Return(db.Merchant{ID: merchantID, RegionID: 9}, nil)
+	store.EXPECT().
+		GetUserAddress(gomock.Any(), addressID).
+		Times(1).
+		Return(db.UserAddress{ID: addressID, UserID: userID + 1, RegionID: 9}, nil)
+
+	_, err := CalculateOrderPreview(
+		context.Background(),
+		store,
+		nil,
+		OrderCalculationInput{
+			UserID:     userID,
+			MerchantID: merchantID,
+			OrderType:  "takeout",
+			AddressID:  &addressID,
+		},
+		func(context.Context, int64, map[string]interface{}) ([]byte, int64, error) {
+			return json.RawMessage{}, 0, nil
+		},
+		func(context.Context, int64, int64, int32, int64) (DeliveryFeeComputation, error) {
+			return DeliveryFeeComputation{}, nil
+		},
+	)
+	reqErr := assertRequestError(t, err)
+	require.Equal(t, 403, reqErr.Status)
+	require.Equal(t, "address does not belong to you", reqErr.Err.Error())
+}

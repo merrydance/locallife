@@ -859,9 +859,9 @@ func (server *Server) submitMerchantApplication(ctx *gin.Context) {
 		return
 	}
 
-	if approved, rejectReason := server.checkMerchantApplicationApproval(ctx, app); !approved {
-		log.Warn().Str("request_id", requestID).Str("reject_reason", rejectReason).Msg("submit blocked: merchant application remains editable")
-		ctx.JSON(http.StatusBadRequest, errorResponse(errors.New(rejectReason)))
+	if err := server.checkMerchantApplicationApproval(ctx, app); err != nil {
+		log.Warn().Str("request_id", requestID).Str("reject_reason", err.Error()).Msg("submit blocked: merchant application remains editable")
+		ctx.JSON(http.StatusBadRequest, errorResponse(err))
 		return
 	}
 
@@ -977,35 +977,35 @@ func validateMerchantApplicationRequired(app db.MerchantApplication) error {
 // 5. 法人身份证在有效期内
 // 6. 有经纬度信息
 // 7. 地址未被其他商户占用
-func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.MerchantApplication) (bool, string) {
+func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.MerchantApplication) error {
 	// 1. 检查经纬度
 	if !app.Longitude.Valid || !app.Latitude.Valid {
-		return false, "请选择商户地理位置"
+		return apierr(ErrMerchantLocationRequired.Code, "请选择商户地理位置")
 	}
 
 	// 2. 检查营业执照OCR数据
 	if len(app.BusinessLicenseOcr) == 0 {
-		return false, "营业执照信息未识别，请重新上传清晰的营业执照照片"
+		return apierr(ErrBusinessLicenseRequired.Code, "营业执照信息未识别，请重新上传清晰的营业执照照片")
 	}
 
 	var licenseOCR BusinessLicenseOCRData
 	if err := json.Unmarshal(app.BusinessLicenseOcr, &licenseOCR); err != nil {
-		return false, "营业执照信息解析失败，请重新上传"
+		return apierr(ErrBusinessLicenseRequired.Code, "营业执照信息解析失败，请重新上传清晰完整的营业执照照片")
 	}
 
 	// 3. 检查营业执照有效期
 	if !isValidPeriodValid(licenseOCR.ValidPeriod) {
-		return false, "营业执照已过期或有效期无法识别"
+		return apierr(ErrApplymentBusinessLicenseValidityInvalid.Code, "营业执照已过期或有效期无法识别，请重新上传在有效期内的营业执照")
 	}
 
 	// 4. 检查经营范围是否包含餐饮相关
 	if !isCateringBusiness(licenseOCR.EnterpriseName, licenseOCR.BusinessScope) {
-		return false, "经营范围不包含餐饮相关内容"
+		return apierr(ErrApplicationInvalidState.Code, "营业执照经营范围未识别到餐饮相关内容，请确认经营范围后重试")
 	}
 
 	// 5. 检查地址匹配（营业执照地址与填写的商户地址）
 	if !isAddressMatch(licenseOCR.Address, app.BusinessAddress) {
-		return false, "营业执照地址与商户地址不匹配"
+		return apierr(ErrInvalidAddress.Code, "营业执照注册地址与您填写的店铺地址不一致，请核对后重试")
 	}
 
 	// 6. 检查地址是否已被占用（GPS 距离去重）
@@ -1013,7 +1013,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	// 同一商户重复申请或两家店坐标几乎完全相同 → 距离 ≤ 20m，拒绝。
 	// 字符串比较在模糊地址（无门牌号）场景下天生有歧义，GPS 是唯一可靠手段。
 	if !app.Longitude.Valid || !app.Latitude.Valid {
-		return false, "请选择商户地理位置"
+		return apierr(ErrMerchantLocationRequired.Code, "请选择商户地理位置")
 	}
 	if app.RegionID.Valid {
 		appLat := pgNumericToFloat64(app.Latitude)
@@ -1039,7 +1039,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 						Str("exist_addr", loc.Address).
 						Int("dist_m", dist).
 						Msg("GPS 地址重复检测命中")
-					return false, "该位置已有其他商户注册（坐标距离过近）"
+					return apierr(ErrApplicationInvalidState.Code, "该位置附近已有其他商户完成入驻，请核对定位后重试")
 				}
 			}
 		}
@@ -1047,12 +1047,12 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 
 	// 7. 检查食品经营许可证
 	if len(app.FoodPermitOcr) == 0 {
-		return false, "食品经营许可证信息未识别，请重新上传清晰的照片"
+		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证信息未识别，请重新上传清晰完整的食品经营许可证照片")
 	}
 
 	var foodPermitOCR FoodPermitOCRData
 	if err := json.Unmarshal(app.FoodPermitOcr, &foodPermitOCR); err != nil {
-		return false, "食品经营许可证信息解析失败，请重新上传"
+		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证信息解析失败，请重新上传清晰完整的食品经营许可证照片")
 	}
 
 	// 旧OCR缓存可能因解析器bug导致字段为空；若 RawText 有值则尝试重新提取并写回DB
@@ -1068,71 +1068,83 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 
 	// 检查食品经营许可证有效期
 	if !isFoodPermitValid(foodPermitOCR.ValidTo) {
-		return false, "食品经营许可证已过期或有效期无法识别"
+		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证已过期或有效期无法识别，请重新上传在有效期内的证件")
 	}
 
-	// 新增规则：食品经营许可证企业名称必须与营业执照企业名称一致
+	// 新增规则：食品经营许可证企业名称必须与营业执照企业名称一致。
+	// 优先使用结构化 company_name；若结构化字段缺失、异常或与营业执照不一致，则回退到 RawText 做全文匹配，
+	// 避免解析器误把地址/说明文字当成企业名称时误伤正常申请。
 	licenseName := normalizeCompanyName(licenseOCR.EnterpriseName)
 	permitName := normalizeCompanyName(foodPermitOCR.CompanyName)
 	if licenseName == "" {
-		return false, "营业执照企业名称未识别，请重新上传清晰的营业执照照片"
+		return ErrMerchantBusinessLicenseNameUnreadable
+	}
+	matchedByRawText := false
+	if permitName != "" && companyNamesMatch(licenseName, permitName) {
+		matchedByRawText = false
+	} else if foodPermitRawTextContainsCompanyName(foodPermitOCR.RawText, licenseName) {
+		permitName = licenseName
+		matchedByRawText = true
 	}
 	if permitName == "" {
-		return false, "食品经营许可证企业名称未识别，请重新上传清晰的食品经营许可证照片"
+		return ErrMerchantFoodPermitNameUnreadable
 	}
 	if !companyNamesMatch(licenseName, permitName) {
-		return false, fmt.Sprintf("食品经营许可证企业名称（%s）与营业执照企业名称（%s）不一致", permitName, licenseName)
+		if isSuspiciousFoodPermitCompanyName(permitName) {
+			return ErrMerchantFoodPermitNameUnreadable
+		}
+		return apierr(ErrMerchantFoodPermitNameMismatch.Code, fmt.Sprintf("食品经营许可证主体名称与营业执照企业名称不一致，请核对后重试。营业执照：%s；食品经营许可证：%s。", licenseName, permitName))
 	}
 	// 仅前缀宽松匹配通过（非完全一致）时，额外要求经营者姓名与营业执照法人一致
-	if licenseName != permitName {
+	if !matchedByRawText && licenseName != permitName {
 		permitOperator := strings.TrimSpace(foodPermitOCR.OperatorName)
 		licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
 		if licenseLegalPerson != "" && permitOperator != "" && licenseLegalPerson != permitOperator {
-			return false, fmt.Sprintf("食品经营许可证企业名称（%s）与营业执照（%s）不完全一致，且经营者（%s）与营业执照法人（%s）不符", permitName, licenseName, permitOperator, licenseLegalPerson)
+			return apierr(ErrMerchantFoodPermitNameMismatch.Code, fmt.Sprintf("食品经营许可证主体名称与营业执照企业名称未完全一致，且食品经营许可证经营者（%s）与营业执照法人（%s）不一致，请核对证照信息后重试。", permitOperator, licenseLegalPerson))
 		}
 	}
 
 	// 新增规则：食品经营许可证有效期需超过提交当日30天
 	if !isChineseDateAtLeastDaysAfterNow(foodPermitOCR.ValidTo, 30) {
-		return false, "食品经营许可证有效期需超过提交当日30天"
+		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证有效期需至少超过当前日期30天，请更新证件后重试")
 	}
 
 	// 7. 检查身份证正面信息（姓名）
 	if len(app.IDCardFrontOcr) == 0 {
-		return false, "身份证正面信息未识别，请重新上传身份证正面照片"
+		return apierr(ErrIDCardFrontRequired.Code, "身份证正面信息未识别，请重新上传清晰的身份证正面照片")
 	}
 
 	var idCardFrontOCR MerchantIDCardOCRData
 	if err := json.Unmarshal(app.IDCardFrontOcr, &idCardFrontOCR); err != nil {
-		return false, "身份证正面信息解析失败，请重新上传"
+		return apierr(ErrIDCardFrontRequired.Code, "身份证正面信息解析失败，请重新上传清晰的身份证正面照片")
 	}
 
 	// 新增规则：身份证姓名必须与营业执照法人一致
 	licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
 	idCardName := strings.TrimSpace(idCardFrontOCR.Name)
 	if licenseLegalPerson == "" {
-		return false, "营业执照法人姓名未识别，请重新上传清晰的营业执照照片"
+		return apierr(ErrBusinessLicenseRequired.Code, "营业执照法人姓名未识别，请重新上传清晰完整的营业执照照片")
 	}
 	if idCardName == "" {
-		return false, "身份证姓名未识别，请重新上传清晰的身份证正面照片"
+		return apierr(ErrIDCardFrontRequired.Code, "身份证姓名未识别，请重新上传清晰的身份证正面照片")
 	}
 	if licenseLegalPerson != idCardName {
-		return false, fmt.Sprintf("身份证姓名（%s）与营业执照法人（%s）不一致", idCardName, licenseLegalPerson)
+		return apierr(ErrApplicationInvalidState.Code, fmt.Sprintf("身份证姓名与营业执照法人信息不一致，请核对后重试。身份证：%s；营业执照法人：%s。", idCardName, licenseLegalPerson))
 	}
 
 	// 8. 检查身份证背面信息（有效期）
 	if len(app.IDCardBackOcr) == 0 {
-		return false, "身份证背面信息未识别，请重新上传身份证背面照片"
+		return apierr(ErrIDCardBackRequired.Code, "身份证背面信息未识别，请重新上传清晰的身份证背面照片")
 	}
 
 	var idCardBackOCR MerchantIDCardOCRData
 	if err := json.Unmarshal(app.IDCardBackOcr, &idCardBackOCR); err != nil {
-		return false, "身份证背面信息解析失败，请重新上传"
+		return apierr(ErrIDCardBackRequired.Code, "身份证背面信息解析失败，请重新上传清晰的身份证背面照片")
 	}
 
 	// 检查身份证有效期
 	if !isIDCardValidPeriodValid(idCardBackOCR.ValidDate) {
-		return false, "法人身份证已过期"
+		return apierr(ErrIDCardBackRequired.Code, "法人身份证已过期或有效期无法识别，请重新上传在有效期内的身份证背面照片")
 	}
 
 	// P1-038: 防欺诈多重校验
@@ -1143,10 +1155,10 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	})
 	if err != nil {
 		log.Error().Err(err).Int64("application_id", app.ID).Msg("failed to check duplicate license")
-		return false, "系统错误，请稍后重试"
+		return errors.New("系统繁忙，请稍后重试")
 	}
 	if licenseCount > 0 {
-		return false, "该营业执照号码已被其他商户使用" // 防止恶意抢注/重复入驻
+		return apierr(ErrApplicationInvalidState.Code, "该营业执照号码已被其他商户使用，如非重复申请请联系客服处理") // 防止恶意抢注/重复入驻
 	}
 
 	// 10. 检查身份证是否已被使用
@@ -1158,13 +1170,13 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	})
 	if err != nil {
 		log.Error().Err(err).Int64("application_id", app.ID).Msg("failed to check duplicate id card")
-		return false, "系统错误，请稍后重试"
+		return errors.New("系统繁忙，请稍后重试")
 	}
 	if idCardCount > 0 {
-		return false, "该身份证号码已被注册"
+		return apierr(ErrApplicationInvalidState.Code, "该身份证号码已被用于其他商户入驻申请，如有疑问请联系客服处理")
 	}
 
-	return true, ""
+	return nil
 }
 
 // companyNamesMatch 比较两个企业名称是否实质相同。
@@ -1191,6 +1203,58 @@ func companyNamesMatch(a, b string) bool {
 		}
 	}
 	return true
+}
+
+func foodPermitRawTextContainsCompanyName(rawText, companyName string) bool {
+	normalizedText := normalizeOCRSearchText(rawText)
+	normalizedCompanyName := normalizeCompanyName(companyName)
+	if normalizedText == "" || normalizedCompanyName == "" {
+		return false
+	}
+	return strings.Contains(normalizedText, normalizedCompanyName)
+}
+
+func normalizeOCRSearchText(text string) string {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return ""
+	}
+	replacer := strings.NewReplacer(
+		" ", "",
+		"\t", "",
+		"\n", "",
+		"\r", "",
+		"（", "(",
+		"）", ")",
+		"：", "",
+		":", "",
+		"，", "",
+		",", "",
+		"。", "",
+		"、", "",
+		"；", "",
+		";", "",
+		"《", "",
+		"》", "",
+	)
+	return replacer.Replace(text)
+}
+
+func isSuspiciousFoodPermitCompanyName(name string) bool {
+	name = normalizeCompanyName(name)
+	if name == "" {
+		return true
+	}
+	if len([]rune(name)) > 30 {
+		return true
+	}
+	suspiciousKeywords := []string{"地址", "经营场所", "面积", "办理", "许可证", "项目", "路东", "路西", "请", "《"}
+	for _, keyword := range suspiciousKeywords {
+		if strings.Contains(name, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeCompanyName(name string) string {

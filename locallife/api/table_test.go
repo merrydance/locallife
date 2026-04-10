@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -590,11 +591,48 @@ func TestUpdateTableAPI(t *testing.T) {
 				updatedTable := table
 				updatedTable.TableNo = newTableNo
 				updatedTable.Capacity = newCapacity
+				updatedTable.QrCodeUrl = pgtype.Text{}
 
 				store.EXPECT().
-					UpdateTable(gomock.Any(), gomock.Any()).
+					UpdateTable(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
+						require.True(t, arg.QrCodeUrl.Valid)
+						require.Empty(t, arg.QrCodeUrl.String)
+						return updatedTable, nil
+					}).
+					Times(1)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name:    "KeepsQRCodeWhenTableNoUnchanged",
+			tableID: table.ID,
+			body: gin.H{
+				"capacity": newCapacity,
+			},
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				expectResolveSingleOwnedMerchant(store, user.ID, merchant)
+
+				store.EXPECT().
+					GetTable(gomock.Any(), gomock.Eq(table.ID)).
 					Times(1).
-					Return(updatedTable, nil)
+					Return(table, nil)
+
+				updatedTable := table
+				updatedTable.Capacity = newCapacity
+
+				store.EXPECT().
+					UpdateTable(gomock.Any(), gomock.AssignableToTypeOf(db.UpdateTableParams{})).
+					DoAndReturn(func(_ context.Context, arg db.UpdateTableParams) (db.Table, error) {
+						require.False(t, arg.QrCodeUrl.Valid)
+						return updatedTable, nil
+					}).
+					Times(1)
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusOK, recorder.Code)

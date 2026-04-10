@@ -49,16 +49,11 @@ Practical defaults for this workspace:
 - Prefer area-specific prompts over `general-` prompts once the target is clearly `locallife/`, `web/`, or `weapp/`.
 - Prefer specialized prompts such as payment, integration-test, task-card, or Mermaid only when the request explicitly matches that workflow.
 - Do not create a new agent just to express expertise. Expertise belongs in prompt wording or instructions unless a tool boundary is required.
-- Keep agent count minimal. In this workspace, read-only Mini Program audit and the delivery-loop orchestration workflow are the two user-facing agent modes that justify a separate boundary.
-- The delivery workflow also uses three internal helper agents for implement, review, and doc-sync delegation. Treat those as supporting workflow parts, not as equal top-level routing modes.
+- Keep agent count minimal. In this workspace, default to prompts and instructions unless a future workflow adds real repository-backed agent files.
 - Do not use `prompts/` as a task archive. One-off planning notes and temporary implementation breakdowns should stay in session state or an existing design document unless the user explicitly asks to persist them.
 - When a prompt is worth keeping, prefer updating an existing reusable prompt over adding another near-duplicate file.
 
-Specialized workflow currently provided:
-
-- `Delivery Loop Orchestrator`: executes an ordered task list through implement, review, fix, review, and doc-sync stages.
-
-See `agents/README.md` for the active agent set and the distinction between user-facing agent modes and internal helper agents.
+There is currently no repository-backed custom agent file set under `.github/agents/`; keep routing prompt-first unless a future workflow lands real agent assets.
 
 ## Authoritative Source Strategy
 
@@ -80,11 +75,18 @@ Hot-path maintenance rule:
 
 Backend:
 
+- `.github/standards/backend/README.md`
 - `.github/standards/backend/AGENT.md`
 - `.github/standards/backend/SYSTEM_PROMPT.md`
 - `.github/standards/backend/GO_PRACTICES.md`
 - `.github/standards/backend/SQL_STANDARDS.md`
 - `.github/standards/backend/API_CONTRACT_STANDARDS.md`
+- `.github/standards/backend/RUNTIME_ARCHITECTURE.md`
+- `.github/standards/backend/WORKFLOW_AND_VALIDATION.md`
+- `.github/standards/backend/BACKEND_RISK_MAP.md`
+- `.github/standards/backend/BACKEND_CHANGE_SAFETY_CHECKLIST.md`
+- `.github/standards/backend/BACKEND_REVIEW_CLOSEOUT_CHECKLIST.md`
+- `.github/standards/backend/FORMAL_REVIEW_DURABILITY.md`
 
 Cross-cutting engineering governance:
 

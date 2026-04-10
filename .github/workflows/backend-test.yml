@@ -5,6 +5,8 @@ on:
     paths:
       - 'locallife/**'
       - '.github/workflows/backend-test.yml'
+      - '.github/scripts/backend_go_guard.sh'
+      - '.github/scripts/test_backend_go_guard.sh'
   push:
     branches:
       - main
@@ -12,6 +14,8 @@ on:
     paths:
       - 'locallife/**'
       - '.github/workflows/backend-test.yml'
+      - '.github/scripts/backend_go_guard.sh'
+      - '.github/scripts/test_backend_go_guard.sh'
   workflow_dispatch:
 
 permissions:
@@ -68,6 +72,15 @@ jobs:
           BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           HEAD_SHA: ${{ github.sha }}
         run: bash ../.github/scripts/backend_changed_filesize_guard.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Changed-file Go guardrail
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: bash ../.github/scripts/backend_go_guard.sh "$BASE_SHA" "$HEAD_SHA"
+
+      - name: Self-test Go guard script
+        run: bash ../.github/scripts/test_backend_go_guard.sh
 
       - name: Unit tests
         run: make test-unit
