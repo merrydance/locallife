@@ -1084,6 +1084,8 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	// 避免解析器误把地址/说明文字当成企业名称时误伤正常申请。
 	licenseName := normalizeCompanyName(licenseOCR.EnterpriseName)
 	permitName := normalizeCompanyName(foodPermitOCR.CompanyName)
+	permitOperator := strings.TrimSpace(foodPermitOCR.OperatorName)
+	licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
 	if licenseName == "" {
 		return ErrMerchantBusinessLicenseNameUnreadable
 	}
@@ -1093,6 +1095,10 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	} else if foodPermitRawTextContainsCompanyName(foodPermitOCR.RawText, licenseName) {
 		permitName = licenseName
 		matchedByRawText = true
+	} else if permitName == "" && canUseFoodPermitOperatorFallback(foodPermitOCR.RawText, permitOperator, licenseLegalPerson) {
+		permitName = licenseName
+		matchedByRawText = true
+		log.Info().Int64("application_id", app.ID).Int64("user_id", app.UserID).Str("license_name", licenseName).Str("permit_operator", permitOperator).Msg("submit merchant application: food permit validated by operator fallback")
 	}
 	if permitName == "" {
 		server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "name_unreadable")
@@ -1108,8 +1114,6 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	}
 	// 仅前缀宽松匹配通过（非完全一致）时，额外要求经营者姓名与营业执照法人一致
 	if !matchedByRawText && licenseName != permitName {
-		permitOperator := strings.TrimSpace(foodPermitOCR.OperatorName)
-		licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
 		if licenseLegalPerson != "" && permitOperator != "" && licenseLegalPerson != permitOperator {
 			server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "operator_mismatch")
 			return apierr(ErrMerchantFoodPermitNameMismatch.Code, fmt.Sprintf("食品经营许可证主体名称与营业执照企业名称未完全一致，且食品经营许可证经营者（%s）与营业执照法人（%s）不一致，请核对证照信息后重试。", permitOperator, licenseLegalPerson))
@@ -1132,7 +1136,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 	}
 
 	// 新增规则：身份证姓名必须与营业执照法人一致
-	licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
+	licenseLegalPerson = strings.TrimSpace(licenseOCR.LegalRepresentative)
 	idCardName := strings.TrimSpace(idCardFrontOCR.Name)
 	if licenseLegalPerson == "" {
 		return apierr(ErrBusinessLicenseRequired.Code, "营业执照法人姓名未识别，请重新上传清晰完整的营业执照照片")
@@ -1224,6 +1228,25 @@ func foodPermitRawTextContainsCompanyName(rawText, companyName string) bool {
 		return false
 	}
 	return strings.Contains(normalizedText, normalizedCompanyName)
+}
+
+func canUseFoodPermitOperatorFallback(rawText, permitOperator, licenseLegalPerson string) bool {
+	if normalizeCompanyName(permitOperator) == "" || normalizeCompanyName(licenseLegalPerson) == "" {
+		return false
+	}
+	if normalizeCompanyName(permitOperator) != normalizeCompanyName(licenseLegalPerson) {
+		return false
+	}
+	rawText = normalizeOCRSearchText(rawText)
+	if rawText == "" {
+		return false
+	}
+	for _, keyword := range []string{"登记证", "小餐饮", "小作坊"} {
+		if strings.Contains(rawText, keyword) {
+			return true
+		}
+	}
+	return false
 }
 
 func normalizeOCRSearchText(text string) string {
