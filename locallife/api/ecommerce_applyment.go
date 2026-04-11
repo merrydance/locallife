@@ -667,10 +667,14 @@ func validateApplymentIDCardValidity(begin, end string) error {
 }
 
 func validateApplymentBusinessLicenseValidity(validPeriod string) error {
-	if strings.TrimSpace(validPeriod) == "" {
+	trimmed := strings.TrimSpace(validPeriod)
+	if trimmed == "" {
 		return nil
 	}
-	begin, end := parseApplymentDateRange(validPeriod)
+	if normalizeApplymentDate(trimmed) == "长期" {
+		return nil
+	}
+	begin, end := parseApplymentDateRange(trimmed)
 	return validateApplymentDateWindow(begin, end, ErrApplymentBusinessLicenseValidityInvalid)
 }
 

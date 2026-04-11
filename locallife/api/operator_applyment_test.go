@@ -414,7 +414,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 				invalidApplication := applicationWithTestURL
-				invalidApplication.BusinessLicenseOcr = []byte(`{"type_of_enterprise":"有限责任公司","address":"广州市天河区","valid_period":"长期"}`)
+				invalidApplication.BusinessLicenseOcr = []byte(`{"type_of_enterprise":"有限责任公司","address":"广州市天河区","valid_period":"无效文本"}`)
 				store.EXPECT().
 					GetApprovedOperatorApplicationByUserID(gomock.Any(), user.ID).
 					Times(1).

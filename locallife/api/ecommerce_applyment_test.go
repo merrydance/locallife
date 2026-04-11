@@ -347,7 +347,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					Return(db.EcommerceApplyment{}, db.ErrRecordNotFound)
 
 				invalidApplication := applicationWithTestURL
-				invalidApplication.BusinessLicenseOcr = []byte(`{"type_of_enterprise":"个体工商户","address":"深圳市南山区","valid_period":"长期"}`)
+				invalidApplication.BusinessLicenseOcr = []byte(`{"type_of_enterprise":"个体工商户","address":"深圳市南山区","valid_period":"无效文本"}`)
 				store.EXPECT().
 					GetUserMerchantApplication(gomock.Any(), user.ID).
 					Times(1).
@@ -451,6 +451,61 @@ func TestMerchantBindBankAPI(t *testing.T) {
 			tc.checkResponse(recorder)
 		})
 	}
+}
+
+func TestValidateApplymentBusinessLicenseValidity(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name        string
+		validPeriod string
+		wantErr     bool
+	}{
+		{
+			name:        "EmptyIsAllowed",
+			validPeriod: "",
+			wantErr:     false,
+		},
+		{
+			name:        "LongTermOnlyIsAllowed",
+			validPeriod: "长期",
+			wantErr:     false,
+		},
+		{
+			name:        "PermanentKeywordIsAllowed",
+			validPeriod: "永久有效",
+			wantErr:     false,
+		},
+		{
+			name:        "RangedLongTermIsAllowed",
+			validPeriod: "2020年01月01日至长期",
+			wantErr:     false,
+		},
+		{
+			name:        "InvalidTextRejected",
+			validPeriod: "无效文本",
+			wantErr:     true,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateApplymentBusinessLicenseValidity(tc.validPeriod)
+			if tc.wantErr {
+				require.ErrorIs(t, err, ErrApplymentBusinessLicenseValidityInvalid)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestBuildApplymentBusinessTime(t *testing.T) {
+	t.Parallel()
+
+	require.Empty(t, buildApplymentBusinessTime("长期"))
+	require.Empty(t, buildApplymentBusinessTime("永久有效"))
+	require.Equal(t, `["2020-01-01","长期"]`, buildApplymentBusinessTime("2020年01月01日至长期"))
 }
 
 // ==================== 商户开户状态查询测试 ====================
