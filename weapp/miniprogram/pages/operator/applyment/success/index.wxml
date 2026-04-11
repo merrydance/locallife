@@ -1,6 +1,6 @@
 <custom-navbar title="提交成功" showBack="{{false}}" bind:navheight="onNavHeight" />
 
-<view class="page" style="padding-top: {{navBarHeight}}px;">
+<view class="page page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="content">
     <view class="result-card">
       <t-icon name="check-circle-filled" size="120rpx" color="var(--td-success-color-6)" />

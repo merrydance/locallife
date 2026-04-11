@@ -1,0 +1,12 @@
+{
+  "purpose": "Merchant promotion center panel that aggregates vouchers, discounts, recharge rules, and claim or recharge actions.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "button",
+    "tag",
+    "loading",
+    "icon"
+  ],
+  "decision": "local-component",
+  "rationale": "Promotion aggregation spans multiple backend capability groups and local selection state. A domain component prevents checkout and membership pages from each rebuilding promotion logic and presentation."
+}

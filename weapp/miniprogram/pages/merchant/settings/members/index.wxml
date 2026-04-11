@@ -1,6 +1,6 @@
 <custom-navbar title="会员管理" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{initialLoading}}" class="state-block">
     <t-loading theme="circular" size="40rpx" text="加载会员列表中..." vertical />
   </view>
@@ -29,7 +29,7 @@
         <view class="member-header">
           <view class="member-profile">
             <image wx:if="{{item.avatar_url}}" class="member-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
-            <view wx:else class="member-avatar member-avatar-fallback">{{item.display_name.slice(0, 1)}}</view>
+            <view wx:else class="member-avatar member-avatar-fallback">{{item.display_initial}}</view>
             <view class="member-meta">
               <text class="member-name">{{item.display_name}}</text>
               <text class="member-submeta">{{item.phone_text}} · 开通于 {{item.joined_at_label}}</text>
@@ -133,12 +133,12 @@
 
       <view class="form-item">
         <text class="form-label">调整金额（元）</text>
-        <input class="form-input" type="digit" value="{{adjustForm.amount_yuan}}" data-field="amount_yuan" placeholder="请输入正数金额" bindinput="onAdjustInput" />
+        <t-input class="form-input" type="digit" value="{{adjustForm.amount_yuan}}" data-field="amount_yuan" placeholder="请输入正数金额" borderless bind:change="onAdjustInput" />
       </view>
 
       <view class="form-item">
         <text class="form-label">调整备注</text>
-        <textarea class="form-textarea" value="{{adjustForm.notes}}" data-field="notes" maxlength="200" placeholder="说明调整原因，后台会记录在交易流水中" bindinput="onAdjustInput" />
+        <t-textarea class="form-textarea" value="{{adjustForm.notes}}" data-field="notes" maxlength="200" placeholder="说明调整原因，后台会记录在交易流水中" indicator="{{false}}" bind:change="onAdjustInput" />
       </view>
 
       <view class="popup-actions">

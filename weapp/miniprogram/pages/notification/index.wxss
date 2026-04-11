@@ -15,6 +15,7 @@
   box-shadow: 0 2rpx 8rpx rgba(0,0,0,0.04);
 }
 
+/* weapp-gate allow-tdesign-internal-class: 通知页标签栏需要占满粘性头部剩余宽度，等待统一 tabs 包装层后移除 */
 .tabs-bar .t-tabs {
   flex: 1;
 }

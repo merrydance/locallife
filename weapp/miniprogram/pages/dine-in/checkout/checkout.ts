@@ -1,74 +1,32 @@
-import { getCart, calculateCart, CartResponse, CalculateCartResponse } from '../../../api/cart'
-import { getPublicMerchantDetail, PublicMerchantDetail } from '../../../api/merchant'
-import { createOrderFromCart } from '../../../api/order'
-import { getDiningSessionMenu } from '../../../api/dining-session'
-import { createOrderPayment, invokeWechatPay } from '../../../api/payment'
-import { getMyMemberships, MembershipResponse } from '../../../api/personal'
-import type { ScanTableTableInfo } from '../../../api/table'
 import { formatPriceNoSymbol } from '../../../utils/util'
-import { getPublicImageUrl } from '../../../utils/image'
 import Navigation from '../../../utils/navigation'
 import { getErrorUserMessage } from '../../../utils/user-facing'
 import { getDineInSessionContext, saveDineInSessionFromMenu } from '../../../services/dine-in-session'
-
-type PromotionItem = NonNullable<CalculateCartResponse['applied_promotions']>[number] & {
-    amountDisplay: string
-}
-
-type LadderItem = NonNullable<CalculateCartResponse['ladder_promotions']>[number] & {
-    thresholdDisplay: string
-    discountDisplay: string
-    missingNeedDisplay: string
-}
-
-type VoucherTrialItem = NonNullable<CalculateCartResponse['voucher_trials']>[number] & {
-    amountDisplay: string
-    trialPayableDisplay: string
-}
-
-type PaymentAssessmentItem = NonNullable<CalculateCartResponse['payment_assessment']>
-
-interface CalculationView {
-    subtotal: number
-    discount_amount: number
-    total_amount: number
-    subtotalDisplay: string
-    totalDisplay: string
-    applied_promotions: PromotionItem[]
-    ladder_promotions: LadderItem[]
-    voucher_trials: VoucherTrialItem[]
-    payment_assessment: PaymentAssessmentItem | null
-}
-
-interface PaymentMethodView {
-    id: string
-    name: string
-    icon: string
-    disabled: boolean
-}
-
-type CartItemView = CartResponse['items'][number] & {
-    image_url?: string
-    dish_image?: string
-    priceDisplay: string
-    subtotalDisplay: string
-}
-
-type CartView = CartResponse & {
-    items: CartItemView[]
-}
-
-type CheckoutMerchantInfo = PublicMerchantDetail | {
-    id: number
-    name: string
-    logo_url?: string
-    cover_image?: string
-    address?: string
-}
-
-type CheckoutTableInfo = ScanTableTableInfo | {
-    table_no: string
-}
+import {
+    calculateCheckoutCart,
+    createCheckoutOrderFromCart,
+    createCheckoutOrderPayment,
+    invokeCheckoutWechatPay,
+    loadCheckoutCart,
+    loadCheckoutMemberships,
+    loadCheckoutMerchantDetail,
+    loadDineInCheckoutSession,
+    type CheckoutCalculationResponse,
+    type CheckoutCartResponse,
+    type CheckoutMerchantDetail
+} from '../../../services/dine-in-checkout'
+import {
+    buildCheckoutRenderState,
+    buildCheckoutSessionState,
+    type CalculationView,
+    type CheckoutMerchantInfo,
+    type CheckoutTableInfo,
+    type PaymentAssessmentItem,
+    type PaymentMethodView,
+    type PromotionItem,
+    type LadderItem,
+    type VoucherTrialItem
+} from '../../../utils/dine-in-checkout-view'
 
 Page({
     data: {
@@ -83,7 +41,7 @@ Page({
         merchantInfo: null as CheckoutMerchantInfo | null,
         tableInfo: null as CheckoutTableInfo | null,
         reservationInfo: null as Record<string, unknown> | null,
-        cart: null as CartResponse | null,
+        cart: null as CheckoutCartResponse | null,
         calculation: {
             subtotal: 0,
             subtotalDisplay: '0.00',
@@ -187,7 +145,7 @@ Page({
 
         try {
             if (sessionId > 0) {
-                const menuResponse = await getDiningSessionMenu(sessionId)
+                const menuResponse = await loadDineInCheckoutSession(sessionId)
                 saveDineInSessionFromMenu(menuResponse)
 
                 const merchantId = menuResponse.session.merchant_id
@@ -195,20 +153,11 @@ Page({
                 const reservationId = menuResponse.session.reservation_id || 0
                 const orderType = 'dine_in' as const
 
-                this.setData({
-                    sessionId: menuResponse.session.id,
-                    billingGroupId: this.data.billingGroupId || menuResponse.billing_group.id,
-                    merchantId,
-                    tableId,
-                    reservationId,
-                    orderType,
-                    merchantInfo: menuResponse.merchant,
-                    tableInfo: menuResponse.table
-                })
+                this.setData(buildCheckoutSessionState(menuResponse, this.data.billingGroupId))
 
                 const [cart, calculationResult] = await Promise.all([
-                    getCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined }),
-                    calculateCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
+                    loadCheckoutCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined }),
+                    calculateCheckoutCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
                 ])
 
                 await this.loadMembershipInfo(merchantId)
@@ -216,11 +165,11 @@ Page({
             } else {
                 const { merchantId, tableId, reservationId, orderType } = this.data
                 const [merchantInfo, cart] = await Promise.all([
-                    getPublicMerchantDetail(merchantId),
-                    getCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
+                    loadCheckoutMerchantDetail(merchantId),
+                    loadCheckoutCart({ merchant_id: merchantId, order_type: orderType, table_id: tableId || undefined, reservation_id: reservationId || undefined })
                 ])
 
-                const calculationResult = await calculateCart({
+                const calculationResult = await calculateCheckoutCart({
                     merchant_id: merchantId,
                     order_type: orderType,
                     table_id: tableId || undefined,
@@ -246,9 +195,9 @@ Page({
     async loadMembershipInfo(merchantId?: number) {
         const targetMerchantId = merchantId ?? this.data.merchantId
         try {
-            const membershipsResult = await getMyMemberships()
+            const membershipsResult = await loadCheckoutMemberships()
             const membership = membershipsResult.memberships?.find(
-                (m: MembershipResponse) => m.merchant_id === targetMerchantId
+                (m) => m.merchant_id === targetMerchantId
             )
             if (membership) {
                 const balance = membership.balance || 0
@@ -263,67 +212,15 @@ Page({
         }
     },
 
-    renderData(merchantInfo: CheckoutMerchantInfo, cart: CartResponse, calculation: CalculateCartResponse) {
-        const processedCalculation: CalculationView = {
-            ...calculation,
-            subtotalDisplay: formatPriceNoSymbol(calculation.subtotal || 0),
-            totalDisplay: formatPriceNoSymbol(calculation.total_amount || 0),
-            applied_promotions: (calculation.applied_promotions || []).map((p) => ({
-                ...p,
-                amountDisplay: formatPriceNoSymbol(p.amount || 0)
-            })),
-            ladder_promotions: (calculation.ladder_promotions || []).map((rule) => ({
-                ...rule,
-                thresholdDisplay: formatPriceNoSymbol(rule.threshold || 0),
-                discountDisplay: formatPriceNoSymbol(rule.discount || 0),
-                missingNeedDisplay: formatPriceNoSymbol(rule.missing_need || 0)
-            })),
-            voucher_trials: (calculation.voucher_trials || []).map((trial) => ({
-                ...trial,
-                amountDisplay: formatPriceNoSymbol(trial.amount || 0),
-                trialPayableDisplay: formatPriceNoSymbol(trial.trial_payable || 0)
-            })),
-            payment_assessment: calculation.payment_assessment || null
-        }
-
-        const processedCart: CartView = {
-            ...cart,
-            items: (cart.items || []).map((item) => {
-                const rawDishImage = (item as unknown as { dish_image?: string }).dish_image
-                const normalizedImage = getPublicImageUrl(item.image_url || rawDishImage || '')
-                return {
-                    ...item,
-                    image_url: normalizedImage,
-                    dish_image: normalizedImage,
-                    priceDisplay: formatPriceNoSymbol(item.unit_price || 0),
-                    subtotalDisplay: formatPriceNoSymbol(item.subtotal || 0)
-                }
-            })
-        }
-
-        const balanceInsufficient = this.data.memberBalance < calculation.total_amount
-
-        const paymentMethods: PaymentMethodView[] = [
-            { id: 'wechat_pay', name: '微信支付', icon: 'logo-wechat', disabled: false },
-            { 
-                id: 'balance', 
-                name: `储值支付 (¥${this.data.memberBalanceDisplay})`, 
-                icon: 'wallet', 
-                disabled: this.data.memberBalance <= 0 
-            }
-        ]
-
-        this.setData({
-            merchantInfo: {
-                ...merchantInfo,
-                logo_url: getPublicImageUrl(merchantInfo.logo_url || merchantInfo.cover_image || '')
-            },
-            cart: processedCart,
-            calculation: processedCalculation,
-            balanceInsufficient,
-            paymentMethods,
-            selectedPaymentMethod: balanceInsufficient ? 'wechat_pay' : this.data.selectedPaymentMethod
-        })
+    renderData(merchantInfo: CheckoutMerchantInfo, cart: CheckoutCartResponse, calculation: CheckoutCalculationResponse) {
+        this.setData(buildCheckoutRenderState({
+            merchantInfo,
+            cart,
+            calculation,
+            memberBalance: this.data.memberBalance,
+            memberBalanceDisplay: this.data.memberBalanceDisplay,
+            selectedPaymentMethod: this.data.selectedPaymentMethod
+        }))
     },
 
     onPaymentMethodChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {
@@ -349,7 +246,7 @@ Page({
         const { merchantId, orderType, tableId, reservationId, selectedPaymentMethod, remark, billingGroupId } = this.data
 
         try {
-            const order = await createOrderFromCart(merchantId, orderType, {
+            const order = await createCheckoutOrderFromCart(merchantId, orderType, {
                 table_id: tableId || undefined,
                 reservation_id: reservationId || undefined,
                 billing_group_id: billingGroupId || undefined,
@@ -368,9 +265,9 @@ Page({
 
     async handlePayment(orderId: number) {
         try {
-            const payment = await createOrderPayment(orderId)
+            const payment = await createCheckoutOrderPayment(orderId)
             if (payment.pay_params) {
-                await invokeWechatPay(payment.pay_params)
+                await invokeCheckoutWechatPay(payment.pay_params)
             }
             Navigation.toDineInPaymentSuccess({
                 orderId: String(orderId),

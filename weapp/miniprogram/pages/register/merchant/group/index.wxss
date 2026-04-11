@@ -179,10 +179,12 @@
   margin-bottom: 12rpx;
   margin-left: 8rpx;
 }
+/* weapp-gate allow-tdesign-internal-class: OCR 预览继续借用 t-cell 标题/说明区，待改成独立预览卡片后移除 */
 .ocr-preview .t-cell__title {
   color: var(--td-text-color-secondary);
   font-weight: 400;
 }
+/* weapp-gate allow-tdesign-internal-class: OCR 预览继续借用 t-cell 标题/说明区，待改成独立预览卡片后移除 */
 .ocr-preview .t-cell__note {
   color: var(--td-text-color-primary);
   font-weight: 500;

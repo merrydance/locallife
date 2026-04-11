@@ -1,6 +1,6 @@
 <custom-navbar title="平台管理中心" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
-<view class="platform-dashboard" style="padding-top: {{navBarHeight}}px;">
+<view class="platform-dashboard page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <scroll-view
     scroll-y
     class="dashboard-scroll"

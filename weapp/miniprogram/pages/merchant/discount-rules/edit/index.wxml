@@ -72,12 +72,8 @@
         </view>
 
         <t-cell-group theme="card">
-          <picker mode="date" value="{{formData.valid_from}}" bindchange="onDateChange" data-field="valid_from">
-            <t-cell title="开始日期" arrow note="{{formData.valid_from || '请选择'}}" />
-          </picker>
-          <picker mode="date" value="{{formData.valid_until}}" bindchange="onDateChange" data-field="valid_until">
-            <t-cell title="结束日期" arrow note="{{formData.valid_until || '请选择'}}" />
-          </picker>
+          <t-cell title="开始日期" arrow note="{{formData.valid_from || '请选择'}}" bind:tap="showValidFromPicker" />
+          <t-cell title="结束日期" arrow note="{{formData.valid_until || '请选择'}}" bind:tap="showValidUntilPicker" />
         </t-cell-group>
       </view>
 
@@ -121,5 +117,25 @@
         {{isEdit ? '保存满减规则' : '创建满减规则'}}
       </t-button>
     </view>
+
+    <t-date-time-picker
+      title="选择开始日期"
+      visible="{{validFromPickerVisible}}"
+      mode="date"
+      format="YYYY-MM-DD"
+      defaultValue="{{formData.valid_from}}"
+      bind:confirm="onValidFromConfirm"
+      bind:cancel="hideValidFromPicker"
+    />
+
+    <t-date-time-picker
+      title="选择结束日期"
+      visible="{{validUntilPickerVisible}}"
+      mode="date"
+      format="YYYY-MM-DD"
+      defaultValue="{{formData.valid_until}}"
+      bind:confirm="onValidUntilConfirm"
+      bind:cancel="hideValidUntilPicker"
+    />
   </block>
 </view>

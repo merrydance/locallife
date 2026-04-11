@@ -1,8 +1,12 @@
 import { isLargeScreen } from '@/utils/responsive'
-import { operatorBasicManagementService, RegionResponse } from '../../../api/operator-basic-management'
-import { operatorAnalyticsService } from '../../../api/operator-analytics'
-import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
-import { operatorRiderManagementService } from '../../../api/operator-rider-management'
+import {
+  loadOperatorAnalyticsPageData,
+  loadOperatorRegions,
+  type ConsoleRegionOption,
+  type OperatorAnalyticsRegionSummary,
+  type OperatorMerchantRankingView,
+  type OperatorRiderRankingView
+} from '../../../services/operator-console'
 
 type TimeDimension = 'day' | 'week' | 'month'
 type RankingType = 'merchant' | 'rider'
@@ -97,9 +101,12 @@ Page({
     error: null as string | null,
     timeDimension: 'week' as TimeDimension,
     rankingType: 'merchant' as RankingType,
-    regions: [] as RegionResponse[],
+    regions: [] as ConsoleRegionOption[],
+    regionPickerOptions: [] as Array<{ label: string, value: string }>,
+    regionPickerVisible: false,
     selectedRegionIdx: 0,
     selectedRegionId: 0,
+    selectedRegionValue: '',
     metrics: [] as Array<{ label: string, value: string, change: string, trend: 'up' | 'down' }>,
     regionSummary: {
       regionName: '',
@@ -107,9 +114,9 @@ Page({
       riderText: '-',
       completionRate: '-',
       commission: '-'
-    } as RegionSummaryView,
-    topMerchants: [] as MerchantRankingView[],
-    topRiders: [] as RiderRankingView[]
+    } as OperatorAnalyticsRegionSummary,
+    topMerchants: [] as OperatorMerchantRankingView[],
+    topRiders: [] as OperatorRiderRankingView[]
   },
 
   async onLoad() {
@@ -119,134 +126,21 @@ Page({
   },
 
   async loadRegions() {
-    try {
-      const response = await operatorBasicManagementService.getOperatorRegions({ page: 1, limit: 100 })
-      const regions = response.regions || []
-      this.setData({
-        regions,
-        selectedRegionIdx: 0,
-        selectedRegionId: regions[0]?.id || 0
-      })
-    } catch (_error) {
-      this.setData({
-        regions: [],
-        selectedRegionIdx: 0,
-        selectedRegionId: 0
-      })
-    }
+    const regionState = await loadOperatorRegions()
+    this.setData(regionState)
   },
 
   async loadData() {
     this.setData({ loading: true, error: null })
     try {
-      const { timeDimension, selectedRegionId } = this.data
-      const currentRange = getRange(timeDimension, 0)
-      const previousRange = getRange(timeDimension, 1)
-      const regionId = selectedRegionId || undefined
-      const periodLabel = getPeriodLabel(timeDimension)
+      const nextView = await loadOperatorAnalyticsPageData({
+        timeDimension: this.data.timeDimension,
+        selectedRegionId: this.data.selectedRegionId,
+        selectedRegionName: this.data.regions[this.data.selectedRegionIdx]?.name
+      })
 
-      const [realtime, trends, regionStats, merchantRanking, riderRanking] = await Promise.all([
-        operatorAnalyticsService.getRealtimeStats(regionId),
-        operatorAnalyticsService.getDailyTrend(regionId, previousRange.startDate, currentRange.endDate),
-        regionId
-          ? operatorAnalyticsService.getRegionStats(regionId, currentRange.startDate, currentRange.endDate).catch(() => null)
-          : Promise.resolve(null),
-        operatorMerchantManagementService.getMerchantRanking({
-          region_id: regionId,
-          start_date: currentRange.startDate,
-          end_date: currentRange.endDate,
-          limit: 5
-        }),
-        operatorRiderManagementService.getRiderRanking({
-          region_id: regionId,
-          start_date: currentRange.startDate,
-          end_date: currentRange.endDate,
-          limit: 5
-        })
-      ])
-
-      const trendList = Array.isArray(trends) ? trends as TrendLike[] : []
-      const currentPeriod = trendList.filter((item) => item.date && item.date >= currentRange.startDate && item.date <= currentRange.endDate)
-      const previousPeriod = trendList.filter((item) => item.date && item.date >= previousRange.startDate && item.date <= previousRange.endDate)
-      const currentSummary = sumTrendValues(currentPeriod)
-      const previousSummary = sumTrendValues(previousPeriod)
-      const gmvChange = calcChange(currentSummary.totalGmv, previousSummary.totalGmv)
-      const ordersChange = calcChange(currentSummary.totalOrders, previousSummary.totalOrders)
-      const gmvTrend: 'up' | 'down' = gmvChange.startsWith('-') ? 'down' : 'up'
-      const ordersTrend: 'up' | 'down' = ordersChange.startsWith('-') ? 'down' : 'up'
-
-      const metrics = [
-        {
-          label: `${periodLabel}GMV`,
-          value: formatCurrencyFen(currentSummary.totalGmv),
-          change: gmvChange,
-          trend: gmvTrend
-        },
-        {
-          label: '活跃商户',
-          value: String(realtime.active_merchant_count ?? 0),
-          change: `待审 ${realtime.pending_merchant_count ?? 0}`,
-          trend: 'up' as const
-        },
-        {
-          label: '活跃骑手',
-          value: String(realtime.active_rider_count ?? 0),
-          change: `待审 ${realtime.pending_rider_count ?? 0}`,
-          trend: 'up' as const
-        },
-        {
-          label: `${periodLabel}订单`,
-          value: String(currentSummary.totalOrders),
-          change: ordersChange,
-          trend: ordersTrend
-        }
-      ]
-
-      const merchantRankingList = (Array.isArray((merchantRanking as unknown as { rankings?: unknown[] }).rankings)
-        ? (merchantRanking as unknown as { rankings: Array<Record<string, unknown>> }).rankings
-        : (Array.isArray(merchantRanking) ? merchantRanking : [])) as Array<Record<string, unknown>>
-
-      const riderRankingList = (Array.isArray((riderRanking as unknown as { rankings?: unknown[] }).rankings)
-        ? (riderRanking as unknown as { rankings: Array<Record<string, unknown>> }).rankings
-        : (Array.isArray(riderRanking) ? riderRanking : [])) as Array<Record<string, unknown>>
-
-      const topMerchants = merchantRankingList.slice(0, 5).map((item, index) => ({
-        rank: index + 1,
-        name: String(item.merchant_name || '-'),
-        gmv: (Number(item.total_sales || item.total_gmv || 0) / 100).toFixed(2),
-        orders: Number(item.order_count || 0),
-        commission: (Number(item.total_commission || 0) / 100).toFixed(2)
-      }))
-
-      const topRiders = riderRankingList.slice(0, 5).map((item, index) => ({
-        rank: index + 1,
-        name: String(item.rider_name || '-'),
-        deliveries: Number(item.delivery_count || 0),
-        completionRate: `${Number(item.completion_rate || 0).toFixed(1)}%`,
-        earnings: (Number(item.total_earnings || 0) / 100).toFixed(2)
-      }))
-
-      const regionSummary: RegionSummaryView = regionStats
-        ? {
-            regionName: String(regionStats.region_name || this.data.regions[this.data.selectedRegionIdx]?.name || '当前区域'),
-            merchantText: `${regionStats.merchant_stats.active_merchants}/${regionStats.merchant_stats.total_merchants}`,
-            riderText: `${regionStats.rider_stats.online_riders}/${regionStats.rider_stats.active_riders}`,
-            completionRate: `${Number(regionStats.order_stats.completion_rate || 0).toFixed(1)}%`,
-            commission: formatCurrencyFen(regionStats.financial_stats.total_commission || 0)
-          }
-        : {
-            regionName: this.data.regions[this.data.selectedRegionIdx]?.name || '全部区域',
-            merchantText: '-',
-            riderText: '-',
-            completionRate: '-',
-            commission: '-'
-          }
-      
       this.setData({
-        metrics,
-        regionSummary,
-        topMerchants,
-        topRiders,
+        ...nextView,
         initialLoading: false,
         loading: false
       })
@@ -262,6 +156,36 @@ Page({
 
   onRetry() {
     this.loadData()
+  },
+
+  onOpenRegionPicker() {
+    if (!this.data.regions.length) {
+      return
+    }
+
+    this.setData({ regionPickerVisible: true })
+  },
+
+  onCloseRegionPicker() {
+    this.setData({ regionPickerVisible: false })
+  },
+
+  onRegionConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const selectedValue = String(values[0] || '')
+    const idx = this.data.regionPickerOptions.findIndex((item) => item.value === selectedValue)
+    const region = idx >= 0 ? this.data.regions[idx] : null
+
+    this.setData({
+      regionPickerVisible: false,
+      selectedRegionIdx: idx >= 0 ? idx : this.data.selectedRegionIdx,
+      selectedRegionId: region?.id || this.data.selectedRegionId,
+      selectedRegionValue: selectedValue || this.data.selectedRegionValue
+    }, () => {
+      if (region?.id) {
+        this.loadData()
+      }
+    })
   },
 
   onRegionChange(e: WechatMiniprogram.CustomEvent<{ value: string }>) {

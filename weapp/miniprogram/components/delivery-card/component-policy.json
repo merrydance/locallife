@@ -1,0 +1,11 @@
+{
+  "purpose": "Delivery task summary card with status tag, timing hints, and action affordances for rider and order flows.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "tag",
+    "button",
+    "icon"
+  ],
+  "decision": "local-component",
+  "rationale": "Delivery cards bundle delivery-specific status, timing, and action composition that would otherwise be reassembled repeatedly in rider and order pages."
+}

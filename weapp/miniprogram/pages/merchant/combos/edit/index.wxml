@@ -31,14 +31,13 @@
           </view>
         </view>
 
-        <checkbox-group bindchange="onDishCheckChange">
+        <t-checkbox-group bindchange="onDishCheckChange">
           <view class="dish-card" wx:for="{{dishes}}" wx:key="id">
             <view class="dish-card__main">
-              <checkbox
+              <t-checkbox
                 value="{{item.id}}"
                 checked="{{item.checked}}"
-                color="var(--td-brand-color)"
-              />
+              ></t-checkbox>
               <image wx:if="{{item.image_url}}" class="dish-thumb" src="{{item.image_url}}" mode="aspectFill" />
               <view class="dish-meta">
                 <view class="dish-name">{{item.name}}</view>
@@ -85,7 +84,7 @@
               </view>
             </view>
           </view>
-        </checkbox-group>
+        </t-checkbox-group>
         <t-empty wx:if="{{!dishes.length}}" icon="info-circle" description="{{dishEmptyDescription}}" />
       </view>
 

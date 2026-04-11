@@ -173,11 +173,13 @@
   margin-left: 8rpx;
 }
 
+/* weapp-gate allow-tdesign-internal-class: OCR 预览仍复用 t-cell 结构，标题与说明的轻量排版待后续改成显式插槽后移除 */
 .ocr-preview .t-cell__title {
   color: var(--td-text-color-secondary);
   font-weight: 400;
 }
 
+/* weapp-gate allow-tdesign-internal-class: OCR 预览仍复用 t-cell 结构，标题与说明的轻量排版待后续改成显式插槽后移除 */
 .ocr-preview .t-cell__note {
   color: var(--td-text-color-primary);
   font-weight: 500;

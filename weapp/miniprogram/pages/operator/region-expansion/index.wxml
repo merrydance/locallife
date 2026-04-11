@@ -56,12 +56,10 @@
 
       <!-- 城市选择 -->
       <view class="field-label">选择城市</view>
-      <picker mode="selector" range="{{cityOptions}}" range-key="label" value="{{selectedCityIndex}}" bindchange="onCityChange">
-        <view class="picker-display">
-          <text class="{{selectedCityName ? '' : 'placeholder'}}">{{selectedCityName || '请选择城市'}}</text>
-          <text class="picker-arrow">›</text>
-        </view>
-      </picker>
+      <view class="picker-display" bind:tap="onOpenCityPicker">
+        <text class="{{selectedCityName ? '' : 'placeholder'}}">{{selectedCityName || '请选择城市'}}</text>
+        <text class="picker-arrow">›</text>
+      </view>
 
       <!-- 区域搜索 + 列表 -->
       <view class="field-label">选择区县</view>
@@ -104,6 +102,18 @@
           disabled="{{!selectedRegionId || submitting}}"
         >提交申请</t-button>
       </view>
+
+      <t-picker
+        visible="{{cityPickerVisible}}"
+        value="{{[selectedCityId]}}"
+        title="选择城市"
+        cancelBtn="取消"
+        confirmBtn="确认"
+        bind:confirm="onCityConfirm"
+        bind:cancel="onCloseCityPicker"
+      >
+        <t-picker-item options="{{cityOptions}}" />
+      </t-picker>
     </view>
   </view>
 

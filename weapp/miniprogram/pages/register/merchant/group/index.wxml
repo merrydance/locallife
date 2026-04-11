@@ -179,12 +179,12 @@
   <!-- Navigation Buttons -->
   <view class="action-bar animate-slide-up" wx:if="{{currentStep < 4}}">
     <view class="consent-row" wx:if="{{currentStep === 0 || currentStep === 3}}">
-      <checkbox-group bindchange="onConsentChange">
+      <t-checkbox-group bindchange="onConsentChange">
         <label class="consent-label">
-          <checkbox value="agree" checked="{{consentChecked}}" color="var(--td-brand-color)" />
+          <t-checkbox value="agree" checked="{{consentChecked}}"></t-checkbox>
           <text>我已阅读并同意</text>
         </label>
-      </checkbox-group>
+      </t-checkbox-group>
       <view class="consent-links">
         <text class="consent-link" data-type="USER_AGREEMENT" data-title="用户服务协议" catchtap="onViewAgreement">《用户服务协议》</text>
         <text>和</text>

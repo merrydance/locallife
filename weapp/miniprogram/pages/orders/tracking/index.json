@@ -6,6 +6,7 @@
   "navigationStyle": "custom",
   "usingComponents": {
     "custom-navbar": "/components/custom-navbar/index",
+    "t-button": "tdesign-miniprogram/button/button",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-empty": "tdesign-miniprogram/empty/empty"

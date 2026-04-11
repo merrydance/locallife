@@ -5,6 +5,7 @@
     "t-tag": "tdesign-miniprogram/tag/tag",
     "t-icon": "tdesign-miniprogram/icon/icon",
     "t-divider": "tdesign-miniprogram/divider/divider",
+    "t-empty": "tdesign-miniprogram/empty/empty",
     "t-loading": "tdesign-miniprogram/loading/loading",
     "t-sticky": "tdesign-miniprogram/sticky/sticky",
     "t-stepper": "tdesign-miniprogram/stepper/stepper",

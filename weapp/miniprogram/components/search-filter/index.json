@@ -1,4 +1,8 @@
 {
     "component": true,
-    "usingComponents": {}
+    "usingComponents": {
+        "t-date-time-picker": "tdesign-miniprogram/date-time-picker/date-time-picker",
+        "t-search": "tdesign-miniprogram/search/search",
+        "t-slider": "tdesign-miniprogram/slider/slider"
+    }
 }

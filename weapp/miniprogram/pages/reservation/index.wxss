@@ -117,6 +117,7 @@
   background: var(--td-bg-color-container);
 }
 
+/* weapp-gate allow-tdesign-internal-class: 抽屉底部双按钮需要等宽撑满，待统一底栏动作容器后移除 */
 .drawer-footer .t-button {
   flex: 1;
 }

@@ -1,0 +1,10 @@
+{
+  "purpose": "Virtualized list container for large data sets with stable render and scroll contracts.",
+  "tdesignGroup": "base",
+  "tdesignCandidates": [
+    "loading",
+    "empty"
+  ],
+  "decision": "local-component",
+  "rationale": "Virtualized rendering is a performance boundary rather than a single visual primitive. The component exists to keep large-list rendering behavior reusable and controlled."
+}

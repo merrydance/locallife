@@ -1,6 +1,6 @@
 <custom-navbar title="运营规则配置" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 左侧/顶部 分类控制 -->
   <view class="sidebar-tabs">
     <view 

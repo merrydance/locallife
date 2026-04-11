@@ -1,6 +1,6 @@
 <custom-navbar title="预订详情" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 120rpx;">
   <block wx:if="{{loading}}">
      <view style="padding: 24rpx;">
        <card-skeleton wx:for="{{[1,2]}}" wx:key="*this" />
@@ -102,7 +102,7 @@
           <!-- 只有已确认/已到店才能加菜，或者全款模式且未确认也可以修改菜品(视业务而定)，这里保守按 Adapter 逻辑 -->
           <t-button wx:if="{{reservation.canOrder}}" theme="primary" size="medium" shape="round" bindtap="onModifyDishes">加菜/点餐</t-button>
           
-          <t-button wx:if="{{reservation.status === 'completed'}}" theme="primary" size="medium" shape="round" bindtap="onRebook">再次预订</t-button>
+          <t-button wx:if="{{reservation.canRebook}}" theme="primary" size="medium" shape="round" bindtap="onRebook">再次预订</t-button>
       </view>
    </view>
 </view>

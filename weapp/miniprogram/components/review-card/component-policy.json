@@ -1,0 +1,11 @@
+{
+  "purpose": "Review summary card with score, text excerpt, and reviewer metadata.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "rate",
+    "tag",
+    "image"
+  ],
+  "decision": "local-component",
+  "rationale": "Review presentation has its own scoring hierarchy and text truncation rules. A shared card component prevents rating and review metadata layouts from drifting."
+}

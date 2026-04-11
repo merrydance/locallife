@@ -24,15 +24,13 @@
         <view class="info-header">
           <text class="info-name">{{operatorInfo.name}}</text>
           <view class="info-header-right">
-            <t-tag theme="success" size="small">{{operatorInfo.status === 'active' ? '正常' : '暂停'}}</t-tag>
+            <t-tag theme="success" size="small">{{operatorInfo.status_label || operatorInfo.statusText || operatorInfo.status || '正常'}}</t-tag>
             <!-- 区域显示/切换器：始终显示当前区域，多区域时可点击切换 -->
-            <picker wx:if="{{regionStats.length > 1}}" mode="selector" range="{{regionStats}}" range-key="region_name" value="{{selectedRegionIdx}}" bindchange="onRegionChange">
-              <view class="region-pill region-pill--clickable">
-                <t-icon name="map" size="28rpx" color="rgba(255,255,255,0.85)" />
-                <text class="region-pill-name">{{regionStats[selectedRegionIdx].region_name}}</text>
-                <t-icon name="chevron-down" size="24rpx" color="rgba(255,255,255,0.85)" />
-              </view>
-            </picker>
+            <view wx:if="{{regionStats.length > 1}}" class="region-pill region-pill--clickable" bind:tap="onOpenRegionPicker">
+              <t-icon name="map" size="28rpx" color="rgba(255,255,255,0.85)" />
+              <text class="region-pill-name">{{regionStats[selectedRegionIdx].region_name}}</text>
+              <t-icon name="chevron-down" size="24rpx" color="rgba(255,255,255,0.85)" />
+            </view>
             <view wx:elif="{{regionStats.length === 1}}" class="region-pill">
               <t-icon name="map" size="28rpx" color="rgba(255,255,255,0.85)" />
               <text class="region-pill-name">{{regionStats[0].region_name}}</text>
@@ -197,4 +195,16 @@
       </view>
     </view>
   </block>
+
+  <t-picker
+    visible="{{regionPickerVisible}}"
+    value="{{[selectedRegionValue]}}"
+    title="选择区域"
+    cancelBtn="取消"
+    confirmBtn="确认"
+    bind:confirm="onRegionConfirm"
+    bind:cancel="onCloseRegionPicker"
+  >
+    <t-picker-item options="{{regionPickerOptions}}" />
+  </t-picker>
 </view>

@@ -125,6 +125,7 @@
   gap: var(--spacer-md);
 }
 
+/* weapp-gate allow-tdesign-internal-class: 定位引导区按钮需要最小宽度以避免弱网文案抖动，待切成包装按钮类后移除 */
 .location-guide-buttons .t-button {
   min-width: 180rpx;
 }

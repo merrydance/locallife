@@ -1,11 +1,30 @@
 import Navigation from '../../utils/navigation'
-import { updateUserInfo, getUserInfo, getWebLoginSessionStatus, confirmWebLoginSession, type UserWorkbenchResponse } from '../../api/auth'
-import { bindMerchant } from '../../api/personal'
 import { logger } from '../../utils/logger'
-import { UploadService } from '../../api/upload'
 import { getStableBarHeights } from '../../utils/responsive'
-import { notificationService } from '../../api/notification'
 import { invalidateConsoleAccessUserInfoCache, resolveConsoleWorkbenchesFromProfile } from '../../utils/console-access'
+import {
+  bindMerchantInviteCode,
+  confirmWebLoginSessionCode,
+  fetchUnreadNotificationCount,
+  fetchUserProfile,
+  fetchWebLoginSessionStatus,
+  type UserWorkbenchProfile,
+  updateUserProfile,
+  uploadAvatarImage
+} from '../../services/user-profile'
+import {
+  consumeForceRefreshFlag,
+  extractCode,
+  extractRawPayload,
+  extractWebLoginMeta,
+  getErrorStatusCode,
+  isUsableWebLoginSession,
+  normalizeRoles,
+  pickPrimaryRole,
+  ROLE_LABEL_MAP,
+  toFriendlyMessage,
+  type WebLoginMeta
+} from '../../utils/user-center-auth'
 
 const app = getApp<IAppOption>()
 let _refreshUserInfoPromise: Promise<void> | null = null
@@ -15,123 +34,6 @@ let _fetchUnreadPromise: Promise<void> | null = null
 let _lastFetchUnreadAt = 0
 const USER_CENTER_FORCE_REFRESH_FLAG = 'user_center_force_refresh_after_bind_merchant'
 
-interface MessageError {
-  userMessage?: string
-  message?: string
-}
-
-interface ScanCodeRawPayload {
-  path?: string
-  result?: string
-  rawData?: string
-  scene?: string
-  query?: Record<string, unknown>
-}
-
-interface WebLoginSessionLookupResult {
-  code?: string
-  status?: string
-}
-
-interface StatusCodeError {
-  statusCode?: number | string
-  code?: number | string
-}
-
-const ROLE_LABEL_MAP: Record<string, string> = {
-  merchant: '商家',
-  merchant_owner: '商户老板',
-  merchant_staff: '店员',
-  rider: '骑手',
-  customer: '顾客',
-  operator: '运营',
-  admin: '管理员'
-}
-
-function normalizeRoles(roles: string[] | string) {
-  const rawRoles = Array.isArray(roles) ? roles : [roles]
-  return Array.from(
-    new Set(
-      rawRoles
-        .map((role) => String(role || '').trim().toLowerCase())
-        .filter(Boolean)
-    )
-  )
-}
-
-function pickPrimaryRole(roles: string[]) {
-  if (roles.some((role) => ['merchant', 'merchant_owner', 'merchant_staff'].includes(role))) return 'merchant'
-  if (roles.includes('rider')) return 'rider'
-  if (roles.includes('operator') || roles.includes('admin')) return 'operator'
-  if (roles.includes('customer')) return 'customer'
-  return 'guest'
-}
-
-function getErrorStatusCode(error: unknown) {
-  if (!error || typeof error !== 'object') return 0
-  const knownError = error as StatusCodeError
-  const candidates = [knownError.statusCode, knownError.code]
-  for (const candidate of candidates) {
-    const numericStatusCode = typeof candidate === 'number' ? candidate : Number(candidate)
-    if (Number.isFinite(numericStatusCode)) {
-      return numericStatusCode
-    }
-  }
-  return 0
-}
-
-function isUsableWebLoginSession(session?: WebLoginSessionLookupResult | null) {
-  if (!session?.code) return false
-  return session.status !== 'expired' && session.status !== 'consumed'
-}
-
-function toFriendlyMessage(error: unknown, fallback: string) {
-  const err = error as MessageError
-  const raw = err?.userMessage || err?.message || ''
-  const text = String(raw || '').trim()
-  if (!text) return fallback
-  if (/[\u4e00-\u9fa5]/.test(text)) return text
-  const lower = text.toLowerCase()
-  if (lower.includes('sig') && lower.includes('required')) {
-    return '二维码签名缺失，请刷新二维码后重试'
-  }
-  if ((lower.includes('ts') || lower.includes('timestamp')) && lower.includes('required')) {
-    return '二维码时间戳缺失，请刷新二维码后重试'
-  }
-  if (lower.includes('signature') || lower.includes('sig') || lower.includes('mismatch')) {
-    return '二维码校验失败，请刷新二维码后重试'
-  }
-  if (lower.includes('expired')) {
-    return '二维码已过期，请刷新二维码'
-  }
-  if (lower.includes('session not found') || lower.includes('not found')) {
-    return '登录码不存在或已失效，请刷新二维码'
-  }
-  if (lower.includes('already consumed')) {
-    return '该登录码已被使用，请刷新二维码'
-  }
-  if (lower.includes('not confirmed')) {
-    return '请先在小程序确认登录'
-  }
-  if (lower.includes('merchant account') || lower.includes('merchant')) {
-    return '当前账号暂无商户权限'
-  }
-  if (lower.includes('too many') || lower.includes('429')) {
-    return '操作太频繁，请稍后再试'
-  }
-  if (lower.includes('network') || lower.includes('timeout')) {
-    return '网络异常，请稍后重试'
-  }
-  return fallback
-}
-
-function consumeForceRefreshUserInfoFlag() {
-  const shouldForceRefresh = wx.getStorageSync(USER_CENTER_FORCE_REFRESH_FLAG) === '1'
-  if (shouldForceRefresh) {
-    wx.removeStorageSync(USER_CENTER_FORCE_REFRESH_FLAG)
-  }
-  return shouldForceRefresh
-}
 
 Page({
   data: {
@@ -174,7 +76,7 @@ Page({
       const roles = cachedRoles && cachedRoles.length > 0 ? cachedRoles : app.globalData.userRole
       this.updateUser(app.globalData.userInfo, roles, app.globalData.userWorkbenches)
     }
-    const shouldForceRefresh = consumeForceRefreshUserInfoFlag()
+    const shouldForceRefresh = consumeForceRefreshFlag(USER_CENTER_FORCE_REFRESH_FLAG)
     // Always try to fetch fresh data on show to ensure persistence check
     this.refreshUserInfo(shouldForceRefresh, shouldForceRefresh)
     // Gap 4: 获取未读消息数
@@ -189,7 +91,7 @@ Page({
       avatar?: string
     },
     roles: string[] | string,
-    workbenches?: UserWorkbenchResponse[]
+    workbenches?: UserWorkbenchProfile[]
   ) {
     const roleList = normalizeRoles(roles)
 
@@ -240,7 +142,7 @@ Page({
         this.setData({ loading: true, error: null })
       }
       try {
-        const user = await getUserInfo()
+        const user = await fetchUserProfile()
         if (user) {
           logger.debug('Refreshed User Info from Backend', user)
           invalidateConsoleAccessUserInfoCache()
@@ -357,7 +259,7 @@ Page({
 
     _fetchUnreadPromise = (async () => {
       try {
-        const res = await notificationService.getUnreadCount()
+        const res = await fetchUnreadNotificationCount()
         this.setData({ unreadCount: res.count || 0 })
       } catch (err) {
         logger.warn('获取未读消息失败', err, 'UserCenter.fetchUnreadCount')
@@ -379,7 +281,7 @@ Page({
     this.setData({ navBarHeight: e.detail.navBarHeight })
   },
 
-  loadWorkbenches(roles: string[], backendWorkbenches?: UserWorkbenchResponse[]) {
+  loadWorkbenches(roles: string[], backendWorkbenches?: UserWorkbenchProfile[]) {
     this.setData({ workbenches: resolveConsoleWorkbenchesFromProfile(roles, backendWorkbenches) })
   },
 
@@ -439,10 +341,10 @@ Page({
   },
 
   async handleScanResult(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
-    const payload = this.extractRawPayload(res)
+    const payload = extractRawPayload(res)
     const raw = payload.raw
-    const webLoginMeta = this.extractWebLoginMeta(raw)
-    const code = webLoginMeta.code || this.extractCode(payload.codeCandidate)
+    const webLoginMeta = extractWebLoginMeta(raw)
+    const code = webLoginMeta.code || extractCode(payload.codeCandidate)
 
     if (!code) {
       logger.warn('Scan empty payload', res, 'UserCenter.scan')
@@ -464,7 +366,7 @@ Page({
     await this.handleCodeCandidate(raw, code, webLoginMeta)
   },
 
-  async handleCodeCandidate(raw: string, code: string, webLoginMeta?: { code?: string, sig?: string, ts?: number }) {
+  async handleCodeCandidate(raw: string, code: string, webLoginMeta?: WebLoginMeta) {
     const isWebLoginHint = raw.includes('web-login') || raw.includes('/merchant/login') || raw.includes('sig=') || raw.includes('ts=')
     const isInviteHint = raw.includes('invite-merchant') || raw.includes('bind-merchant')
 
@@ -472,7 +374,7 @@ Page({
     if (isWebLoginHint) {
       const loginCode = webLoginMeta?.code || code
       try {
-        const session = await getWebLoginSessionStatus(loginCode)
+        const session = await fetchWebLoginSessionStatus(loginCode)
         if (isUsableWebLoginSession(session)) {
           this.confirmWebLogin(loginCode, webLoginMeta?.sig, webLoginMeta?.ts)
           return
@@ -502,51 +404,6 @@ Page({
     this.confirmInviteCode(code)
   },
 
-  extractCode(raw: string) {
-    if (!raw) return ''
-    const decoded = decodeURIComponent(raw)
-    const match = decoded.match(/code=([^&]+)/)
-    if (match) return match[1]
-    const webLoginMatch = decoded.match(/web-login:([0-9a-fA-F]{32})/)
-    if (webLoginMatch) return webLoginMatch[1]
-    const inviteMatch = decoded.match(/invite-merchant:([A-Za-z0-9_-]+)/)
-    if (inviteMatch) return inviteMatch[1]
-    const hexMatch = decoded.match(/[0-9a-fA-F]{32}/)
-    if (hexMatch) return hexMatch[0]
-    return decoded
-  },
-
-  extractWebLoginMeta(raw: string) {
-    if (!raw) return { code: '', sig: '', ts: undefined }
-    const decoded = decodeURIComponent(raw)
-    const queryCodeMatch = decoded.match(/code=([^&]+)/)
-    const webLoginMatch = decoded.match(/web-login:([0-9a-fA-F]{32})/)
-    const code = queryCodeMatch ? queryCodeMatch[1] : webLoginMatch ? webLoginMatch[1] : ''
-    if (!code) return { code: '', sig: '', ts: undefined }
-    const sigMatch = decoded.match(/sig=([0-9a-fA-F]+)/)
-    const tsMatch = decoded.match(/ts=(\d+)/)
-    return {
-      code,
-      sig: sigMatch ? sigMatch[1] : '',
-      ts: tsMatch ? Number(tsMatch[1]) : undefined
-    }
-  },
-
-  extractRawPayload(res: WechatMiniprogram.ScanCodeSuccessCallbackResult) {
-    const rawRes = res as unknown as ScanCodeRawPayload
-    const path = rawRes.path || ''
-    const result = rawRes.result || ''
-    const rawData = rawRes.rawData || ''
-    const scene = rawRes.scene || ''
-    const query = rawRes.query || {}
-    const codeFromQuery = typeof query.code === 'string' ? query.code : ''
-    const candidate = [path, result, rawData, scene, codeFromQuery].find((val) => !!val) || ''
-    return {
-      raw: String(candidate),
-      codeCandidate: String(codeFromQuery || candidate || '')
-    }
-  },
-
   promptManualCode() {
     wx.showModal({
       title: '输入扫码内容',
@@ -557,8 +414,8 @@ Page({
       success: async (res) => {
         if (!res.confirm || !res.content) return
         const raw = String(res.content)
-        const webLoginMeta = this.extractWebLoginMeta(raw)
-        const code = webLoginMeta.code || this.extractCode(raw)
+        const webLoginMeta = extractWebLoginMeta(raw)
+        const code = webLoginMeta.code || extractCode(raw)
         if (!code) {
           wx.showToast({ title: '内容无效', icon: 'none' })
           return
@@ -596,7 +453,7 @@ Page({
         if (!modal.confirm) return
         wx.showLoading({ title: '处理中...' })
         try {
-          await bindMerchant(code)
+          await bindMerchantInviteCode(code)
           await this.refreshUserInfo(true, true)
           this.setData({ actionNoticeMessage: '已加入商户，可从“商家及运营服务”进入对应工作台。' })
         } catch (error: unknown) {
@@ -628,7 +485,7 @@ Page({
         }
         wx.showLoading({ title: '确认中...' })
         try {
-          await confirmWebLoginSession(code, sig, ts)
+          await confirmWebLoginSessionCode(code, sig, ts)
           wx.showToast({ title: '已确认登录', icon: 'success' })
         } catch (error: unknown) {
           const message = toFriendlyMessage(error, '确认失败，请稍后重试')
@@ -658,10 +515,10 @@ Page({
 
     try {
       // 1. Upload to Server
-      const { mediaId, displayUrl } = await UploadService.uploadImage(avatarUrl, 'avatar')
+      const { mediaId, displayUrl } = await uploadAvatarImage(avatarUrl)
 
       // 2. Update Backend Profile
-      await updateUserInfo({ avatar_media_asset_id: mediaId })
+      await updateUserProfile({ avatar_media_asset_id: mediaId })
 
       const resolvedAvatarUrl = displayUrl || avatarUrl
 
@@ -715,7 +572,7 @@ Page({
 
     // Call Backend API
     try {
-      await updateUserInfo({ full_name: nickName })
+      await updateUserProfile({ full_name: nickName })
     } catch (error) {
       console.error('Failed to update nickname on backend', error)
     }

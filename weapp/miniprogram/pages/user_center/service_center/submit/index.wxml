@@ -1,6 +1,6 @@
 <custom-navbar title="{{pageTitle}}" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <!-- 提交成功结果 -->
   <view wx:if="{{submitResult}}" class="result-container animate-fade-in">
     <view class="result-card">
@@ -68,13 +68,15 @@
       </view>
       <view class="amount-input-wrapper">
         <text class="amount-prefix">¥</text>
-        <input
+        <t-input
           class="amount-input"
           type="digit"
           placeholder="请输入索赔金额"
           value="{{amountInput}}"
-          bindinput="onAmountInput"
-        />
+          borderless
+          align="center"
+          bind:change="onAmountInput"
+        ></t-input>
       </view>
     </view>
 

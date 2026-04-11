@@ -73,7 +73,7 @@
                 </view>
                 <view class="merchant-rating">
                   <t-icon name="star-filled" size="16px" color="#faad14" />
-                  <text class="rating-text">{{item.rating.toFixed(1)}}</text>
+                  <text class="rating-text">{{item.rating_text}}</text>
                 </view>
               </view>
 

@@ -1,161 +1,28 @@
 import { getStableBarHeights } from '../../../utils/responsive'
 import {
-  buildMerchantVoucherStatusView,
-  MerchantVoucherService,
-  type MerchantVoucher
+  MerchantVoucherService
 } from '../../../api/coupon'
 import { ensureMerchantConsoleAccess } from '../../../utils/console-access'
 import { logger } from '../../../utils/logger'
 import { syncCurrentMerchantContext } from '../../../utils/current-merchant'
 import { getErrorUserMessage } from '../../../utils/user-facing'
-
-type OrderType = 'takeout' | 'dine_in' | 'takeaway' | 'reservation'
-
-interface VoucherView extends MerchantVoucher {
-  amount_yuan: string
-  min_order_amount_yuan: string
-  usage_condition_text: string
-  valid_range_text: string
-  remaining_quantity_text: string
-  order_type_labels: string[]
-  statusPending: boolean
-  deletePending: boolean
-}
-
-interface VoucherPageChunk {
-  vouchers: VoucherView[]
-  pageId: number
-  pageSize: number
-  total?: number
-  hasMore?: boolean
-}
-
-interface VoucherPageProbeResult {
-  hasMore: boolean
-  total: number
-  nextPageCache: VoucherPageChunk | null
-}
-
-const VOUCHERS_PAGE_SIZE = 50
-const VOUCHERS_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-
-const ALL_ORDER_TYPES: OrderType[] = ['takeout', 'dine_in', 'takeaway', 'reservation']
-
-const ORDER_TYPE_LABEL_MAP: Record<OrderType, string> = {
-  takeout: '外卖配送',
-  dine_in: '堂食',
-  takeaway: '到店自取',
-  reservation: '预订'
-}
-
-function formatAmount(amount: number) {
-  return (amount / 100).toFixed(2)
-}
-
-function formatDate(date: string) {
-  return String(date || '').slice(0, 10)
-}
-
-function getOrderTypeLabels(orderTypes: string[]) {
-  const normalized = (orderTypes.length ? orderTypes : ALL_ORDER_TYPES) as OrderType[]
-  return normalized.map((item) => ORDER_TYPE_LABEL_MAP[item] || item)
-}
-
-function buildVoucherView(voucher: MerchantVoucher): VoucherView {
-  const statusView = buildMerchantVoucherStatusView(voucher)
-  const minOrderAmountYuan = formatAmount(voucher.min_order_amount)
-  const remainingQuantity = Math.max(voucher.total_quantity - voucher.claimed_quantity, 0)
-
-  return {
-    ...voucher,
-    status_code: statusView.code,
-    status_label: statusView.label,
-    status_theme: statusView.theme,
-    amount_yuan: formatAmount(voucher.amount),
-    min_order_amount_yuan: minOrderAmountYuan,
-    usage_condition_text: voucher.min_order_amount > 0 ? `满 ¥${minOrderAmountYuan} 可用` : '不限门槛可用',
-    valid_range_text: `${formatDate(voucher.valid_from)} 至 ${formatDate(voucher.valid_until)}`,
-    remaining_quantity_text: `${remainingQuantity} / ${voucher.total_quantity}`,
-    order_type_labels: getOrderTypeLabels(voucher.allowed_order_types),
-    statusPending: false,
-    deletePending: false
-  }
-}
-
-function buildResultSummaryText(visibleCount: number) {
-  return `当前已加载 ${visibleCount} 张代金券`
-}
-
-function buildPresentationUpdate(vouchers: VoucherView[]) {
-  return {
-    vouchers,
-    resultSummaryText: buildResultSummaryText(vouchers.length),
-    emptyDescription: '当前还没有代金券，先新增一个'
-  }
-}
-
-function appendVoucherViews(existingVouchers: VoucherView[], incomingVouchers: VoucherView[]) {
-  if (!incomingVouchers.length) {
-    return existingVouchers
-  }
-
-  const merged = [...existingVouchers]
-  const seen = new Set(existingVouchers.map((item) => item.id))
-
-  incomingVouchers.forEach((voucher) => {
-    if (seen.has(voucher.id)) {
-      return
-    }
-
-    seen.add(voucher.id)
-    merged.push(voucher)
-  })
-
-  return merged
-}
-
-function upsertVoucherView(vouchers: VoucherView[], voucher: MerchantVoucher) {
-  const nextVoucher = buildVoucherView(voucher)
-  const index = vouchers.findIndex((item) => item.id === nextVoucher.id)
-
-  if (index === -1) {
-    return [nextVoucher, ...vouchers]
-  }
-
-  const nextVouchers = [...vouchers]
-  nextVouchers[index] = nextVoucher
-  return nextVouchers
-}
-
-function removeVoucherView(vouchers: VoucherView[], voucherId: number) {
-  return vouchers.filter((item) => item.id !== voucherId)
-}
-
-function hasReliableTotal(total: number | undefined, loadedCount: number) {
-  return typeof total === 'number' && total > loadedCount
-}
-
-function normalizeTotal(total: number | undefined, fallback: number) {
-  return typeof total === 'number' && total >= 0 ? total : fallback
-}
-
-function resolveTargetPageCount(pageId: number, pageSize: number, visibleCount: number) {
-  const normalizedPageSize = pageSize > 0 ? pageSize : VOUCHERS_PAGE_SIZE
-  const visiblePageCount = visibleCount > 0 ? Math.ceil(visibleCount / normalizedPageSize) : 1
-  return Math.max(pageId || 0, visiblePageCount, 1)
-}
-
-function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
-  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
-}
-
-function buildEditPageUrl(voucherId?: number) {
-  if (voucherId && voucherId > 0) {
-    return `/pages/merchant/vouchers/edit/index?id=${voucherId}`
-  }
-
-  return '/pages/merchant/vouchers/edit/index'
-}
+import {
+  appendVoucherViews,
+  buildVoucherEditPageUrl,
+  buildVoucherPresentationUpdate,
+  buildVoucherView,
+  hasReliableTotal,
+  normalizeTotal,
+  removeVoucherView,
+  resolveTargetPageCount,
+  shouldAutoRefresh,
+  upsertVoucherView,
+  VOUCHERS_AUTO_REFRESH_WINDOW_MS,
+  VOUCHERS_PAGE_SIZE,
+  type VoucherPageChunk,
+  type VoucherPageProbeResult,
+  type VoucherView
+} from '../../../utils/merchant-vouchers-view'
 
 Page({
   data: {
@@ -313,7 +180,7 @@ Page({
           deleteDialogSubmitting: false,
           deleteDialogVoucherId: 0,
           deleteDialogVoucherName: '',
-          ...buildPresentationUpdate([])
+          ...buildVoucherPresentationUpdate([])
         })
         return true
       }
@@ -514,7 +381,7 @@ Page({
       )
 
       this.setData({
-        ...buildPresentationUpdate(result.vouchers),
+        ...buildVoucherPresentationUpdate(result.vouchers),
         pageId: result.pageId,
         pageSize: result.pageSize,
         total: result.total,
@@ -568,7 +435,7 @@ Page({
       const pagination = await this.resolveVoucherPageBoundary(nextChunk, mergedVouchers.length)
 
       this.setData({
-        ...buildPresentationUpdate(mergedVouchers),
+        ...buildVoucherPresentationUpdate(mergedVouchers),
         pageId: nextChunk.pageId,
         pageSize: nextChunk.pageSize,
         total: Math.max(pagination.total, mergedVouchers.length),
@@ -599,7 +466,7 @@ Page({
     this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
 
     wx.navigateTo({
-      url: buildEditPageUrl(),
+      url: buildVoucherEditPageUrl(),
       fail: (err) => {
         logger.error('Navigate to voucher create page failed', err)
         this.setData({ needsReloadOnShow: false })
@@ -622,7 +489,7 @@ Page({
     this.setData({ refreshErrorMessage: '', needsReloadOnShow: true })
 
     wx.navigateTo({
-      url: buildEditPageUrl(id),
+      url: buildVoucherEditPageUrl(id),
       fail: (err) => {
         logger.error('Navigate to voucher edit page failed', err)
         this.setData({ needsReloadOnShow: false })
@@ -653,7 +520,7 @@ Page({
       voucher.id === id ? { ...voucher, statusPending: true } : voucher
     ))
 
-    this.setData(buildPresentationUpdate(pendingVouchers))
+    this.setData(buildVoucherPresentationUpdate(pendingVouchers))
 
     try {
       const updatedVoucher = await MerchantVoucherService.updateMerchantVoucher(this.data.merchantId, id, {
@@ -662,7 +529,7 @@ Page({
 
       const nextVouchers = upsertVoucherView(pendingVouchers, updatedVoucher)
       this.setData({
-        ...buildPresentationUpdate(nextVouchers),
+        ...buildVoucherPresentationUpdate(nextVouchers),
         total: Math.max(this.data.total, nextVouchers.length),
         initialLoading: false,
         initialError: false,
@@ -676,7 +543,7 @@ Page({
       const restoredVouchers = pendingVouchers.map((voucher) => (
         voucher.id === id ? { ...targetVoucher, statusPending: false } : voucher
       ))
-      this.setData(buildPresentationUpdate(restoredVouchers))
+      this.setData(buildVoucherPresentationUpdate(restoredVouchers))
       wx.showToast({ title: getErrorUserMessage(err, '更新状态失败，请稍后重试'), icon: 'none' })
     }
   },
@@ -724,7 +591,7 @@ Page({
     ))
 
     this.setData({
-      ...buildPresentationUpdate(pendingVouchers),
+      ...buildVoucherPresentationUpdate(pendingVouchers),
       deleteDialogSubmitting: true
     })
 
@@ -732,7 +599,7 @@ Page({
       await MerchantVoucherService.deleteMerchantVoucher(this.data.merchantId, voucherId)
       const nextVouchers = removeVoucherView(pendingVouchers, voucherId)
       this.setData({
-        ...buildPresentationUpdate(nextVouchers),
+        ...buildVoucherPresentationUpdate(nextVouchers),
         total: Math.max(this.data.total - 1, nextVouchers.length, 0),
         deleteDialogVisible: false,
         deleteDialogSubmitting: false,
@@ -752,7 +619,7 @@ Page({
         voucher.id === voucherId ? { ...voucher, deletePending: false } : voucher
       ))
       this.setData({
-        ...buildPresentationUpdate(restoredVouchers),
+        ...buildVoucherPresentationUpdate(restoredVouchers),
         deleteDialogSubmitting: false
       })
       wx.showToast({ title: getErrorUserMessage(err, '删除代金券失败，请稍后重试'), icon: 'none' })

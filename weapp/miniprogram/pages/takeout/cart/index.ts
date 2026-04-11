@@ -1,77 +1,23 @@
 import * as CartAPI from '@/api/cart'
-import { MerchantCartResponse, CartResponse } from '@/api/cart'
 import { logger } from '@/utils/logger'
-import { getPublicImageUrl } from '@/utils/image'
+import {
+  buildCartSummary,
+  buildEmptyCartSummary,
+  buildMerchantGroup,
+  buildRecalculatedGroup,
+  buildUpdatedGroupWithDeliveryFee,
+  getCheckoutTotal,
+  getTotalCount,
+  isAbortLikeError,
+  type MerchantCartGroup
+} from '@/utils/takeout-cart-view'
 
 // ... existing imports
 
 // ... existing imports
-
-interface MerchantCartGroup {
-  cartId: number
-  merchantId: number
-  orderType?: string
-  tableId?: number
-  reservationId?: number
-  merchantName: string
-  merchantLogo: string
-  items: CartItemView[]
-  subtotal: number
-  subtotalDisplay: string
-  deliveryFee: number
-  deliveryFeeDisplay: string
-  totalAmount: number
-  totalAmountDisplay: string
-  itemCount: number
-  allAvailable: boolean
-  selected: boolean
-  errorStatus?: string // 商户错误状态：如“已打烊”、“无法配送”
-}
-
-interface CartItemView {
-  id: number
-  dishId?: number
-  comboId?: number
-  name: string
-  imageUrl: string
-  quantity: number
-  unitPrice: number
-  priceDisplay: string
-  subtotal: number
-  subtotalDisplay: string
-  isAvailable: boolean
-  specDisplay?: string // 规格展示
-  customizations?: Record<string, unknown> // 原始定制选项，用于前端解析
-  dishImages?: string[] // 新增：套餐内的菜品图片
-}
 
 let _loadAllCartsPromise: Promise<void> | null = null
 let _lastLoadAllCartsAt = 0
-
-function isAbortLikeError(error: unknown): boolean {
-  if (!error) return false
-
-  if (typeof error === 'object' && error !== null) {
-    const maybeErrMsg = (error as { errMsg?: unknown }).errMsg
-    if (typeof maybeErrMsg === 'string' && maybeErrMsg.toLowerCase().includes('abort')) {
-      return true
-    }
-
-    const maybeMessage = (error as { message?: unknown }).message
-    if (typeof maybeMessage === 'string') {
-      const lower = maybeMessage.toLowerCase()
-      if (lower.includes('abort') || lower.includes('请求已取消')) {
-        return true
-      }
-    }
-  }
-
-  if (typeof error === 'string') {
-    return error.toLowerCase().includes('abort')
-  }
-
-  return false
-}
 
 Page({
   data: {
@@ -127,12 +73,7 @@ Page({
           this.setData({
             loading: false,
             merchantGroups: [],
-            summary: {
-              cartCount: 0,
-              totalItems: 0,
-              totalAmount: 0,
-              totalAmountDisplay: '¥0.00'
-            }
+            summary: buildEmptyCartSummary()
           })
           // 重要：空购物车也要同步到全局状态
           this.syncToGlobalStore()
@@ -153,7 +94,7 @@ Page({
               table_id: merchantCart.table_id ?? undefined,
               reservation_id: merchantCart.reservation_id ?? undefined
             })
-            const group = this.buildMerchantGroup(merchantCart, cartDetail)
+            const group = buildMerchantGroup(merchantCart, cartDetail)
             merchantGroups.push(group)
           } catch (error) {
             logger.warn('Failed to load cart for merchant', { merchantId: merchantCart.merchant_id }, 'cart.loadAllCarts')
@@ -173,12 +114,7 @@ Page({
           loading: false,
           merchantGroups,
           selectedCartIds,
-          summary: {
-            cartCount: userCarts.summary?.cart_count || merchantGroups.length,
-            totalItems: userCarts.summary?.total_items || 0,
-            totalAmount: userCarts.summary?.total_amount || 0,
-            totalAmountDisplay: `¥${((userCarts.summary?.total_amount || 0) / 100).toFixed(2)}`
-          }
+          summary: buildCartSummary(userCarts.summary, merchantGroups.length)
         })
 
         this.calculateCheckoutTotal()
@@ -209,8 +145,7 @@ Page({
     const { globalStore } = require('@/utils/global-store')
     const { summary, merchantGroups } = this.data
 
-    // 计算总数量
-    const totalCount = merchantGroups.reduce((sum, group) => sum + group.itemCount, 0)
+    const totalCount = getTotalCount(merchantGroups)
 
     globalStore.set('cart', {
       items: [],  // 多商户模式下不使用单一 items 列表
@@ -220,55 +155,6 @@ Page({
     })
 
     logger.debug('Cart synced to globalStore', { totalCount }, 'cart.syncToGlobalStore')
-  },
-
-  /**
-   * 构建商户购物车组
-   */
-  buildMerchantGroup(merchantCart: MerchantCartResponse, cartDetail: CartResponse): MerchantCartGroup {
-    const items: CartItemView[] = (cartDetail.items || []).map((item) => {
-      const specDisplay = item.spec_text || ''
-
-      return {
-        id: item.id,
-        dishId: item.dish_id,
-        comboId: item.combo_id,
-        name: item.name,
-        imageUrl: getPublicImageUrl(item.image_url || ''),
-        quantity: item.quantity,
-        unitPrice: item.unit_price,
-        priceDisplay: `¥${(item.unit_price / 100).toFixed(2)}`,
-        subtotal: item.subtotal,
-        subtotalDisplay: `¥${(item.subtotal / 100).toFixed(2)}`,
-        isAvailable: item.is_available,
-        specDisplay,
-        customizations: item.customizations,
-        dishImages: item.combo_member_images?.map((url) => getPublicImageUrl(url)) || []
-      }
-    })
-
-    const subtotal = cartDetail.subtotal || 0
-    const orderType = cartDetail.order_type || merchantCart.order_type || 'takeout'
-
-    return {
-      cartId: cartDetail.id,
-      merchantId: merchantCart.merchant_id || 0,
-      orderType,
-      tableId: cartDetail.table_id ?? merchantCart.table_id,
-      reservationId: cartDetail.reservation_id ?? merchantCart.reservation_id,
-      merchantName: merchantCart.merchant_name || '未知商户',
-      merchantLogo: getPublicImageUrl(merchantCart.merchant_logo || ''),
-      items,
-      subtotal,
-      subtotalDisplay: `¥${(subtotal / 100).toFixed(2)}`,
-      deliveryFee: 0,  // 需要通过 calculateCart 获取
-      deliveryFeeDisplay: '待计算',
-      totalAmount: subtotal,
-      totalAmountDisplay: `¥${(subtotal / 100).toFixed(2)}`,
-      itemCount: items.reduce((sum, item) => sum + item.quantity, 0),
-      allAvailable: items.every((item) => item.isAvailable),
-      selected: true // 初始设为true，calculateDeliveryFees 后可能会改为 false
-    }
   },
 
   /**
@@ -304,19 +190,7 @@ Page({
         }, { loading: !silent })
 
         // 更新代取费信息
-        updatedGroups[i] = {
-          ...group,
-          deliveryFee: result.delivery_fee || 0,
-          deliveryFeeDisplay: result.delivery_fee > 0
-            ? `¥${(result.delivery_fee / 100).toFixed(2)}`
-            : '免代取费',
-          totalAmount: group.subtotal + (result.delivery_fee || 0),
-          totalAmountDisplay: `¥${((group.subtotal + (result.delivery_fee || 0)) / 100).toFixed(2)}`,
-          errorStatus: '' // 清除错误状态
-          // 既然计算成功，如果是之前因错误导致的selected=false，是否要恢复？
-          // 保守起见，保持当前selected状态，除非它之前是错的但用户本意是选中
-          // 这里简化：只有在出错时才强制selected=false
-        }
+        updatedGroups[i] = buildUpdatedGroupWithDeliveryFee(group, result.delivery_fee || 0)
       } catch (error: unknown) {
         const userMessage =
           typeof error === 'object' && error !== null && 'userMessage' in error
@@ -366,13 +240,7 @@ Page({
    */
   calculateCheckoutTotal() {
     const { merchantGroups, selectedCartIds } = this.data
-
-    let total = 0
-    for (const group of merchantGroups) {
-      if (selectedCartIds.includes(group.cartId)) {
-        total += group.totalAmount
-      }
-    }
+    const total = getCheckoutTotal(merchantGroups, selectedCartIds)
 
     this.setData({
       checkoutTotal: total,
@@ -514,19 +382,12 @@ Page({
     const updates: Record<string, unknown> = {}
 
     for (let i = 0; i < merchantGroups.length; i++) {
-      const group = merchantGroups[i]
-      const subtotal = group.items.reduce((sum, item) => {
-        return sum + (item.unitPrice * item.quantity)
-      }, 0)
-      const itemCount = group.items.reduce((sum, item) => sum + item.quantity, 0)
-      const deliveryFee = group.deliveryFee || 0
-      const totalAmount = subtotal + deliveryFee
-
-      updates[`merchantGroups[${i}].subtotal`] = subtotal
-      updates[`merchantGroups[${i}].subtotalDisplay`] = `¥${(subtotal / 100).toFixed(2)}`
-      updates[`merchantGroups[${i}].itemCount`] = itemCount
-      updates[`merchantGroups[${i}].totalAmount`] = totalAmount
-      updates[`merchantGroups[${i}].totalAmountDisplay`] = `¥${(totalAmount / 100).toFixed(2)}`
+      const group = buildRecalculatedGroup(merchantGroups[i])
+      updates[`merchantGroups[${i}].subtotal`] = group.subtotal
+      updates[`merchantGroups[${i}].subtotalDisplay`] = group.subtotalDisplay
+      updates[`merchantGroups[${i}].itemCount`] = group.itemCount
+      updates[`merchantGroups[${i}].totalAmount`] = group.totalAmount
+      updates[`merchantGroups[${i}].totalAmountDisplay`] = group.totalAmountDisplay
     }
 
     // 一次性更新所有值
@@ -578,12 +439,7 @@ Page({
     }, () => {
       if (updatedGroups.length === 0) {
         this.setData({
-          summary: {
-            cartCount: 0,
-            totalItems: 0,
-            totalAmount: 0,
-            totalAmountDisplay: '¥0.00'
-          }
+          summary: buildEmptyCartSummary()
         })
       } else {
         this.recalculateSubtotals()

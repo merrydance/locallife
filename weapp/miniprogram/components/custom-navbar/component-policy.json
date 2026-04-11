@@ -1,0 +1,10 @@
+{
+  "purpose": "Workspace-standard custom navigation bar that emits nav-height and unifies top-shell behavior across Mini Program pages.",
+  "tdesignGroup": "navigation",
+  "tdesignCandidates": [
+    "icon",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "The Mini Program shell depends on a shared custom navbar for nav height, role-aware title behavior, and page-shell alignment. This boundary cannot be replaced by a single stock TDesign control."
+}

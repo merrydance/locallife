@@ -1,0 +1,11 @@
+{
+  "purpose": "Shared search bar wrapper that standardizes consumer and console search entry styling and event contract.",
+  "tdesignGroup": "navigation",
+  "tdesignCandidates": [
+    "search",
+    "input",
+    "icon"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The component centralizes a repeated search-entry contract on top of TDesign search primitives so pages do not diverge on search affordance or event shape."
+}

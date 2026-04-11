@@ -23,7 +23,7 @@
       <view class="meta">等级：{{report.level}}</view>
       <view class="meta">时间：{{report.created_at}}</view>
       <view class="desc">{{report.description}}</view>
-      <view class="meta">涉及商户：{{report.merchant_ids.length ? report.merchant_ids.join(', ') : '无'}}</view>
+      <view class="meta">涉及商户：{{report.merchant_ids_text}}</view>
     </view>
 
     <view class="card" wx:if="{{report.is_pending}}">
@@ -42,7 +42,7 @@
       <view class="section-title">处置结果</view>
       <view class="meta">当前状态：{{report.status_label}}</view>
       <view class="desc">{{report.resolution_notes || '暂无处置说明'}}</view>
-      <view wx:if="{{recoveredMerchantIds.length > 0}}" class="meta">本页恢复商户：{{recoveredMerchantIds.join(', ')}}</view>
+      <view wx:if="{{recoveredMerchantIds.length > 0}}" class="meta">本页恢复商户：{{recoveredMerchantIdsText}}</view>
       <view class="readonly-tip">当前事件已进入只读状态，不可重复提交处置。</view>
     </view>
 

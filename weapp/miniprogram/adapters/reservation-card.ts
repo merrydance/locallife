@@ -44,6 +44,7 @@ export interface ReservationDetailViewModel extends ReservationCardViewModel {
     paymentModeText: string
     items: ReservationItemViewModel[]
     itemsTotalDisplay: string
+    canRebook: boolean
 }
 
 export const ReservationCardAdapter = {
@@ -117,7 +118,8 @@ export const ReservationCardAdapter = {
             paymentMode: dto.payment_mode,
             paymentModeText: dto.payment_mode === 'deposit' ? '定金留座' : '在线点餐',
             items,
-            itemsTotalDisplay: `¥${(itemsTotal / 100).toFixed(2)}`
+            itemsTotalDisplay: `¥${(itemsTotal / 100).toFixed(2)}`,
+            canRebook: dto.status === 'completed'
         }
     }
 }

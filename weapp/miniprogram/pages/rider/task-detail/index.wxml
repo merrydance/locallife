@@ -2,8 +2,8 @@
 
 <scroll-view 
   scroll-y 
-  class="page-container" 
-  style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" 
+  style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 200rpx;"
 >
   <view class="loading-box" wx:if="{{loading}}">
     <t-loading theme="circular" size="40rpx" text="正在加载详情..." />

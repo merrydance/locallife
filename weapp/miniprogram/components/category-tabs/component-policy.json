@@ -1,0 +1,11 @@
+{
+  "purpose": "Scrollable category tab rail with active-state synchronization for merchant and consumer category switching.",
+  "tdesignGroup": "navigation",
+  "tdesignCandidates": [
+    "tabs",
+    "tab-panel",
+    "sticky"
+  ],
+  "decision": "tdesign-wrapper",
+  "rationale": "The component normalizes a repeated category-tab pattern while preserving a single TDesign-first tab contract, instead of re-implementing category switching in each page."
+}

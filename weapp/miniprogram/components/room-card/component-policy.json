@@ -1,0 +1,11 @@
+{
+  "purpose": "Reservation room card with image, tags, capacity, and booking action presentation.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "image",
+    "tag",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "Room cards capture reservation-specific capacity, availability, and CTA treatment that should remain consistent across reservation discovery flows."
+}

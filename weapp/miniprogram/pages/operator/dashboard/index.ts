@@ -1,18 +1,18 @@
 import { responsiveBehavior } from '@/utils/responsive'
-import { formatPriceNoSymbol } from '@/utils/util'
-import { operatorBasicManagementService, RegionResponse } from '../../../api/operator-basic-management'
-import { operatorAnalyticsService, OperatorAppealService } from '../../../api/operator-analytics'
-import { operatorMerchantManagementService } from '../../../api/operator-merchant-management'
-import { operatorRiderManagementService } from '../../../api/operator-rider-management'
 import { getConsoleDashboardErrorState, shouldShowOperatorApplymentEntry } from '../../../utils/console-dashboard'
 import { wsManager, WSMessageType } from '../../../utils/websocket'
-import { platformAlertsService } from '../../../api/platform-alerts'
 import {
   buildAbnormalRefundClipboardText,
   formatPlatformAlertTime,
   toActionableAbnormalRefundAlert,
   type ActionableAbnormalRefundAlert
 } from '../../../utils/platform-alerts'
+import {
+  loadOperatorAlertFeed,
+  loadOperatorCenterPageData,
+  loadOperatorRegions,
+  type ConsoleRegionOption
+} from '../../../services/operator-console'
 
 type TimeDimension = 'day' | 'week' | 'month'
 
@@ -20,43 +20,6 @@ interface PendingSummary {
   merchants: number
   riders: number
   appeals: number
-}
-
-interface TrendSummary {
-  totalGmv: number
-  totalOrders: number
-  totalIncome: number
-}
-
-interface DailyTrendItemLike {
-  date?: string
-  total_gmv?: number
-  order_count?: number
-  operator_income?: number
-}
-
-function summarizeTrends(trends: DailyTrendItemLike[]): TrendSummary {
-  return trends.reduce<TrendSummary>((summary, item) => ({
-    totalGmv: summary.totalGmv + Number(item.total_gmv || 0),
-    totalOrders: summary.totalOrders + Number(item.order_count || 0),
-    totalIncome: summary.totalIncome + Number(item.operator_income || 0)
-  }), {
-    totalGmv: 0,
-    totalOrders: 0,
-    totalIncome: 0
-  })
-}
-
-function normalizeRankingRows(source: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(source)) {
-    return source as Array<Record<string, unknown>>
-  }
-
-  if (source && typeof source === 'object' && Array.isArray((source as { rankings?: unknown[] }).rankings)) {
-    return (source as { rankings: Array<Record<string, unknown>> }).rankings
-  }
-
-  return []
 }
 
 interface PendingApprovalItem {
@@ -74,8 +37,6 @@ interface RiderRankingDisplayItem {
 interface AlertFeedItem extends ActionableAbnormalRefundAlert {
   timeDisplay: string
 }
-
-const appealService = new OperatorAppealService()
 
 Page({
   behaviors: [responsiveBehavior],
@@ -116,9 +77,12 @@ Page({
     rankingType: 'merchant', // merchant | rider
 
     // 区域切换
-    regions: [] as RegionResponse[],
+    regions: [] as ConsoleRegionOption[],
+    regionPickerOptions: [] as Array<{ label: string, value: string }>,
+    regionPickerVisible: false,
     selectedRegionIdx: 0,
     selectedRegionId: 0,
+    selectedRegionValue: '',
 
     loading: false,
     initialLoading: true,
@@ -159,18 +123,8 @@ Page({
 
   async initDashboard() {
     this.setData({ initialLoading: true, error: null })
-    // 先加载区域列表，再加载看板数据
-    try {
-      const regionsResult = await operatorBasicManagementService.getOperatorRegions({ limit: 100 })
-      const regions = regionsResult.regions || []
-      this.setData({
-        regions,
-        selectedRegionIdx: 0,
-        selectedRegionId: regions[0]?.id || 0
-      })
-    } catch {
-      // 区域加载失败不阻断页面
-    }
+    const regionState = await loadOperatorRegions()
+    this.setData(regionState)
     await this.loadDashboardData()
     this.setData({ initialLoading: false })
   },
@@ -187,100 +141,16 @@ Page({
     this.setData({ loading: true })
     
     try {
-      const { timeDimension, selectedRegionId } = this.data
-      const { startDate, endDate } = this.getDateRange(timeDimension)
-      const regionId = selectedRegionId || undefined
-      
-      // 1. 并行获取各项数据（财务概览失败不阻断运营中心）
-      const [
-        financeOverview,
-        realtimeStats,
-        merchantSummary,
-        riderSummary,
-        appealSummary,
-        merchantsPending,
-        ridersPending,
-        merchantRanking,
-        riderRanking,
-        dailyTrends,
-        appeals
-      ] = await Promise.all([
-        operatorBasicManagementService.getFinanceOverview(undefined, undefined, regionId).catch(() => null),
-        operatorAnalyticsService.getRealtimeStats(regionId),
-        operatorMerchantManagementService.getMerchantSummary(regionId)
-          .catch(() => ({ total: 0, pending: 0, approved: 0, rejected: 0, suspended: 0 })),
-        operatorRiderManagementService.getRiderSummary(regionId)
-          .catch(() => ({ total: 0, pending_approval: 0, active: 0, rejected: 0, suspended: 0, online: 0 })),
-        appealService.getAppealSummary(regionId)
-          .catch(() => ({ total: 0, pending: 0, approved: 0, rejected: 0 })),
-        operatorMerchantManagementService.getMerchantList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
-          .catch(() => ({ merchants: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
-        operatorRiderManagementService.getRiderList({ page: 1, limit: 5, status: 'pending_approval', region_id: regionId })
-          .catch(() => ({ riders: [] as Array<{ id: number, name: string, created_at: string }>, total: 0 })),
-        operatorMerchantManagementService.getMerchantRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
-          .catch(() => ({ rankings: [] })),
-        operatorRiderManagementService.getRiderRanking({ start_date: startDate, end_date: endDate, limit: 5, region_id: regionId })
-          .catch(() => ({ rankings: [] })),
-        operatorAnalyticsService.getDailyTrend(regionId, startDate, endDate)
-          .catch(() => []),
-        appealService.getAppealList({ page: 1, limit: 5, status: 'pending', region_id: regionId })
-          .catch(() => ({ appeals: [] as Array<{ id: number, reason: string, created_at: string }>, total: 0 }))
-      ])
-
-      const trends = Array.isArray(dailyTrends) ? dailyTrends as DailyTrendItemLike[] : []
-      const currentPeriodSummary = summarizeTrends(trends)
-
-      const merchantRankList = normalizeRankingRows(merchantRanking)
-      const riderRankList = normalizeRankingRows(riderRanking).map((r: Record<string, unknown>) => ({
-        ...r,
-        completion_rate:
-          typeof r.completion_rate === 'number'
-            ? r.completion_rate.toFixed(1)
-            : '0.0'
-      }))
-
-      const pendingSummary: PendingSummary = {
-        merchants: Number(merchantSummary.pending || 0),
-        riders: Number(riderSummary.pending_approval || 0),
-        appeals: Number(appealSummary.pending || 0)
-      }
-
-      // 待办事项组合
-      const pendingItems = [
-        ...(merchantsPending.merchants || []).map((m: { id: number, name: string, created_at: string }) => ({ id: m.id, type: 'MERCHANT', name: m.name, time: m.created_at })),
-        ...(ridersPending.riders || []).map((r: { id: number, name: string, created_at: string }) => ({ id: r.id, type: 'RIDER', name: r.name, time: r.created_at })),
-        ...(appeals.appeals || []).map((a: { id: number, reason?: string, created_at: string }) => ({ id: a.id, type: 'APPEAL', name: `客诉: ${a.reason || ('#' + a.id)}`, time: a.created_at }))
-      ] as PendingApprovalItem[]
-
-      pendingItems.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
+      const nextView = await loadOperatorCenterPageData({
+        timeDimension: this.data.timeDimension,
+        selectedRegionId: this.data.selectedRegionId
+      })
 
       this.setData({
-        stats: {
-          total_gmv_display: formatPriceNoSymbol(currentPeriodSummary.totalGmv),
-          total_orders: currentPeriodSummary.totalOrders,
-          active_merchants: realtimeStats.active_merchant_count,
-          active_riders: realtimeStats.active_rider_count,
-          today_gmv_display: formatPriceNoSymbol(currentPeriodSummary.totalGmv),
-          today_orders: currentPeriodSummary.totalOrders,
-          today_income_display: formatPriceNoSymbol(currentPeriodSummary.totalIncome)
-        },
-        finance: {
-          balance_display: formatPriceNoSymbol(financeOverview?.total?.operator_income ?? 0),
-          total_income_display: formatPriceNoSymbol(financeOverview?.total?.operator_income ?? 0),
-          current_month_income_display: formatPriceNoSymbol(financeOverview?.current_month?.operator_income ?? 0)
-        },
-        merchantRankings: merchantRankList,
-        riderRankings: riderRankList,
-        pending_approvals: pendingItems.slice(0, 5),
-        pending_count: pendingSummary.merchants + pendingSummary.riders + pendingSummary.appeals,
-        pendingSummary,
+        ...nextView,
         loading: false,
         error: null
       })
-
-      if (!financeOverview) {
-        console.warn('运营中心财务概览降级：finance overview unavailable')
-      }
     } catch (error: unknown) {
       const errorState = getConsoleDashboardErrorState('operator', error, '运营中心数据加载失败，请稍后重试。')
       console.error('加载运营仪表盘失败:', error)
@@ -347,6 +217,36 @@ Page({
     this.initDashboard()
   },
 
+  onOpenRegionPicker() {
+    if (this.data.regions.length <= 1) {
+      return
+    }
+
+    this.setData({ regionPickerVisible: true })
+  },
+
+  onCloseRegionPicker() {
+    this.setData({ regionPickerVisible: false })
+  },
+
+  onRegionConfirm(e: WechatMiniprogram.CustomEvent<{ value: Array<string | number> | null }>) {
+    const values = Array.isArray(e.detail?.value) ? e.detail.value : []
+    const selectedValue = String(values[0] || '')
+    const idx = this.data.regionPickerOptions.findIndex((item) => item.value === selectedValue)
+    const region = idx >= 0 ? this.data.regions[idx] : null
+
+    this.setData({
+      regionPickerVisible: false,
+      selectedRegionIdx: idx >= 0 ? idx : this.data.selectedRegionIdx,
+      selectedRegionId: region?.id || this.data.selectedRegionId,
+      selectedRegionValue: selectedValue || this.data.selectedRegionValue
+    }, () => {
+      if (region?.id) {
+        this.loadDashboardData()
+      }
+    })
+  },
+
   startAlertFeed() {
     this.stopAlertFeed()
     wsManager.connect('/v1/platform/ws')
@@ -384,18 +284,8 @@ Page({
 
   async loadRecentPlatformAlerts() {
     try {
-      const response = await platformAlertsService.listPlatformAlerts({ page_id: 1, page_size: 10 })
-      const alerts = (response.alerts || [])
-        .map((item) => toActionableAbnormalRefundAlert(item))
-        .filter((item): item is ActionableAbnormalRefundAlert => !!item)
-        .map((item) => ({
-          ...item,
-          timeDisplay: formatPlatformAlertTime(item.timestamp)
-        }))
-        .slice(0, 5)
-
       this.setData({
-        abnormalRefundAlerts: alerts,
+        abnormalRefundAlerts: await loadOperatorAlertFeed(),
         alertFeedReady: true
       })
     } catch (_error) {

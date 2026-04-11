@@ -1,6 +1,6 @@
 <custom-navbar title="订单详情" showBack="{{true}}" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view wx:if="{{loading && !order}}" class="loading-state loading-state-page">
     <t-loading theme="circular" size="40rpx" text="加载中..." vertical />
   </view>
@@ -15,8 +15,6 @@
       <text>{{refreshErrorMessage}}</text>
       <text class="section-error-action" bindtap="onRetryRefresh">重新同步</text>
     </view>
-
-    <!-- 状态横幅 -->
     <view class="status-banner" style="background-color: {{order.status_color}}">
       <view class="status-main">
         <t-icon name="{{order.status_icon}}" size="48rpx" />
@@ -25,9 +23,7 @@
       <view class="status-desc">{{order.status_desc}}</view>
       <view wx:if="{{order.status_hint_label}}" class="status-subdesc">{{order.status_hint_label}}</view>
     </view>
-
     <view class="content-section">
-      <!-- 履约信息 -->
       <view class="card-wrap info-card">
         <view class="card-title">履行信息</view>
         <view class="info-row">
@@ -47,8 +43,6 @@
           </view>
         </view>
       </view>
-
-      <!-- 商品清单 -->
       <view class="card-wrap items-card">
         <view class="card-title">商品清单</view>
         <view class="dish-item" wx:for="{{order.items}}" wx:key="id">
@@ -80,8 +74,6 @@
           </view>
         </view>
       </view>
-
-      <!-- 订单说明 -->
       <view class="card-wrap detail-card">
         <t-cell title="订单编号" note="{{order.order_no}}" bordered="{{false}}" />
         <t-cell title="下单时间" note="{{order.created_at_fmt}}" bordered="{{false}}" />
@@ -89,7 +81,6 @@
         <t-cell wx:if="{{order.cancel_reason}}" title="取消原因" note="{{order.cancel_reason}}" bordered="{{false}}" />
         <t-cell wx:if="{{order.notes}}" title="备注信息" note="{{order.notes}}" note-class="notes-text" bordered="{{false}}" />
       </view>
-
       <view class="card-wrap refund-card">
         <view class="card-title-row">
           <view>
@@ -202,7 +193,6 @@
 
         <t-empty wx:else icon="info-circle" description="当前订单暂无已支付支付单，暂时不能发起退款" />
       </view>
-
       <view class="card-wrap print-card">
         <view class="card-title-row">
           <view>
@@ -292,7 +282,6 @@
 
         <t-empty wx:else icon="info-circle" description="当前订单暂无打印任务记录" />
       </view>
-
       <view class="card-wrap timeline-card">
         <view class="card-title">订单进度</view>
         <t-steps layout="vertical" current="{{order.step_current}}" theme="dot">
@@ -301,8 +290,6 @@
       </view>
     </view>
   </block>
-
-  <!-- 底部操作按钮 -->
   <view class="footer-bar {{isIPhoneX ? 'iphone-x' : ''}}" wx:if="{{order}}">
     <block wx:if="{{order.can_accept || order.can_reject}}">
       <view class="footer-action-row">
@@ -319,9 +306,7 @@
     <view wx:else class="status-footer">{{order.status_label}}</view>
   </view>
 </view>
-
 <t-dialog id="t-dialog" />
-
 <t-popup wx:if="{{refundPopupVisible}}" visible="{{refundPopupVisible}}" placement="bottom" bind:visible-change="onRefundPopupVisibleChange">
   <view class="popup-sheet">
     <view class="popup-title">发起退款</view>
@@ -329,12 +314,12 @@
 
     <view class="popup-block">
       <text class="popup-label">退款方式</text>
-      <radio-group class="refund-type-options" bindchange="onRefundTypeChange">
+      <t-radio-group class="refund-type-options" value="{{refundForm.refund_type}}" bindchange="onRefundTypeChange">
         <label wx:for="{{refundAvailableTypes}}" wx:key="*this" class="refund-type-option">
-          <radio value="{{item}}" checked="{{refundForm.refund_type === item}}" color="var(--td-brand-color)" />
+          <t-radio value="{{item}}" checked="{{refundForm.refund_type === item}}" />
           <text>{{item === 'full' ? '全额退款' : '部分退款'}}</text>
         </label>
-      </radio-group>
+      </t-radio-group>
       <text wx:if="{{payment && !payment.allow_full_refund}}" class="popup-tip">当前支付单已有退款记录，仅支持继续发起部分退款。</text>
     </view>
 

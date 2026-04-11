@@ -1,0 +1,12 @@
+{
+  "purpose": "Merchant business-hours slot option editor for repeated add, remove, enable, and time-range interactions.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "button",
+    "switch",
+    "picker",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "Time-slot rows have their own local editing rhythm and repeated state transitions. Extracting them avoids inflating the page container and preserves a clear TDesign-based editing boundary."
+}

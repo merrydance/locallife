@@ -9,7 +9,9 @@
     "t-switch": "tdesign-miniprogram/switch/switch",
     "t-stepper": "tdesign-miniprogram/stepper/stepper",
     "t-input": "tdesign-miniprogram/input/input",
-    "t-textarea": "tdesign-miniprogram/textarea/textarea"
+    "t-textarea": "tdesign-miniprogram/textarea/textarea",
+    "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
+    "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group"
   },
   "navigationStyle": "custom"
 }

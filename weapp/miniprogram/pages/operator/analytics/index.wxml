@@ -1,6 +1,6 @@
 <custom-navbar title="全局数据分析" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container {{isLargeScreen ? 'large-screen' : ''}}" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter {{isLargeScreen ? 'large-screen' : ''}}" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="content">
     <!-- 错误状态 -->
     <view wx:if="{{error && !initialLoading}}" class="error-container">
@@ -23,9 +23,7 @@
         <view class="toolbar-card">
           <view class="toolbar-row">
             <text class="toolbar-title">统计范围</text>
-            <picker wx:if="{{regions.length > 0}}" mode="selector" range="{{regions}}" range-key="name" value="{{selectedRegionIdx}}" bindchange="onRegionChange">
-              <view class="region-picker">{{regions[selectedRegionIdx].name}}</view>
-            </picker>
+            <view wx:if="{{regions.length > 0}}" class="region-picker" bind:tap="onOpenRegionPicker">{{regions[selectedRegionIdx].name}}</view>
             <view wx:else class="region-picker region-picker--static">全部区域</view>
           </view>
 
@@ -109,4 +107,16 @@
       </view>
     </block>
   </view>
+
+  <t-picker
+    visible="{{regionPickerVisible}}"
+    value="{{[selectedRegionValue]}}"
+    title="选择统计区域"
+    cancelBtn="取消"
+    confirmBtn="确认"
+    bind:confirm="onRegionConfirm"
+    bind:cancel="onCloseRegionPicker"
+  >
+    <t-picker-item options="{{regionPickerOptions}}" />
+  </t-picker>
 </view>

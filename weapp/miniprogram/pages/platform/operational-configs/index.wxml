@@ -1,6 +1,6 @@
 <custom-navbar title="平台运营配置" show-back="{{true}}" show-location="{{false}}" bind:navheight="onNavHeight" />
 
-<scroll-view scroll-y class="page-container" style="padding-top: {{navBarHeight}}px">
+<scroll-view scroll-y class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <view class="content-inner">
     <view class="welcome-header">
       <view class="title">平台运营配置</view>

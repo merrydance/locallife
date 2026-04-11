@@ -11,6 +11,8 @@
         "t-loading": "tdesign-miniprogram/loading/loading",
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-popup": "tdesign-miniprogram/popup/popup",
+        "t-checkbox": "tdesign-miniprogram/checkbox/checkbox",
+        "t-checkbox-group": "tdesign-miniprogram/checkbox-group/checkbox-group",
         "document-uploader": "/components/document-uploader/index"
     }
 }

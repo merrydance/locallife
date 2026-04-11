@@ -144,11 +144,12 @@
   box-shadow: var(--shadow-sm);
 }
 
-/* TDesign 覆盖样式 */
+/* weapp-gate allow-tdesign-internal-class: 用户中心工作台目前需要清空默认网格和分组底色，待切到统一工作台容器后移除 */
 .t-grid {
   background-color: transparent !important;
 }
 
+/* weapp-gate allow-tdesign-internal-class: 用户中心工作台当前还需要清空默认分组底色，待切到统一工作台容器后移除 */
 .t-cell-group {
   background-color: transparent !important;
 }

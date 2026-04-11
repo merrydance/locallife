@@ -1,0 +1,12 @@
+{
+  "purpose": "Document upload field with preview, upload progress, and retry-friendly feedback for onboarding and applyment flows.",
+  "tdesignGroup": "form",
+  "tdesignCandidates": [
+    "image",
+    "loading",
+    "icon",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "Document upload requires domain-specific preview, upload state, and onboarding copy that would be verbose and inconsistent if rebuilt inline in every onboarding page."
+}

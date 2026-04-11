@@ -1,6 +1,6 @@
 <custom-navbar title="优惠券" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(120rpx + env(safe-area-inset-bottom));">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 120rpx;">
   
   <!-- Tabs -->
   <t-tabs value="{{activeTab}}" bind:change="onTabChange" sticky offset-top="{{navBarHeight}}">

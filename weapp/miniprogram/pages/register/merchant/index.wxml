@@ -1,6 +1,6 @@
 <custom-navbar title="商家入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 80rpx;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 80rpx;">
   <view class="hero-section">
     <view class="hero-title">开启您的数字化餐厅之路</view>
     <view class="hero-subtitle">选择适合您的入驻方式，享受全方位技术赋能</view>

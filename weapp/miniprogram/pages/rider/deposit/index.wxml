@@ -2,8 +2,8 @@
 
 <scroll-view 
   scroll-y 
-  class="page-container" 
-  style="padding-top: {{navBarHeight}}px;"
+  class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" 
+  style="--page-shell-nav-height: {{navBarHeight}}px;"
   refresher-enabled="{{true}}"
   refresher-triggered="{{refreshing}}"
   bindrefresherrefresh="onRefresh"

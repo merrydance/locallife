@@ -1,0 +1,10 @@
+{
+  "purpose": "Statistics summary card with icon, value, and supporting trend copy for dashboard and overview surfaces.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "icon",
+    "tag"
+  ],
+  "decision": "local-component",
+  "rationale": "Stats cards package dashboard-specific semantic layout and trend hierarchy that would otherwise be duplicated across overview surfaces."
+}

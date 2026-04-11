@@ -1,85 +1,10 @@
+@import "../../../styles/takeout-combo-detail-top.wxss";
+
 .page-container {
   min-height: 100vh;
   background-color: var(--td-bg-color-page);
   display: flex;
   flex-direction: column;
-}
-
-/* 骨架屏布局 */
-.skeleton-content {
-  background-color: var(--td-bg-color-page);
-  min-height: 100vh;
-}
-
-.skeleton-header-image {
-  width: 100%;
-  height: 560rpx;
-  background: var(--td-bg-color-secondarycontainer);
-}
-
-.skeleton-scroll {
-  padding: 0 24rpx;
-}
-
-.skeleton-line {
-  background: var(--td-bg-color-secondarycontainer);
-  border-radius: 4rpx;
-}
-
-.action-bar-skeleton {
-  display: flex;
-  width: 100%;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.error-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 100rpx 0;
-}
-
-.loading-container {
-  display: none;
-}
-
-/* 头部主图 / 拼图 */
-.header-image {
-  position: relative;
-  width: 100%;
-  height: 560rpx;
-  background-color: var(--td-bg-color-secondarycontainer);
-  overflow: hidden;
-}
-
-.combo-image-grid {
-  display: grid;
-  width: 100%;
-  height: 100%;
-  gap: 2rpx;
-}
-
-.grid-count-1 { grid-template-columns: 1fr; }
-.grid-count-2 { grid-template-columns: 1fr 1fr; }
-.grid-count-3 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-.grid-count-3 .grid-img:first-child { grid-row: span 2; }
-.grid-count-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-
-.grid-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.image-overlay {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 120rpx;
-  background: linear-gradient(to bottom, transparent, rgba(0, 0, 0, 0.1));
 }
 
 /* 内容区域 */

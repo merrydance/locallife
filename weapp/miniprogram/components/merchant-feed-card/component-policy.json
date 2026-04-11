@@ -1,0 +1,11 @@
+{
+  "purpose": "Merchant feed card for consumer recommendation and search surfaces with image, status tag, and CTA composition.",
+  "tdesignGroup": "data",
+  "tdesignCandidates": [
+    "image",
+    "tag",
+    "button"
+  ],
+  "decision": "local-component",
+  "rationale": "Merchant feed entries combine merchant-specific summary fields, badges, and CTAs into one repeatable card. Keeping one component prevents visual and behavioral drift across feed-like pages."
+}

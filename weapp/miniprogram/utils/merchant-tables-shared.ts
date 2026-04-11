@@ -1,6 +1,6 @@
-import type { TableImageResponse, TableResponse } from '../../../api/table-device-management'
-import { getTableStatusDisplay, type TableStatus } from '../../../api/table'
-import { getPublicImageUrl } from '../../../utils/image'
+import type { TableImageResponse, TableResponse } from '../api/table-device-management'
+import { getTableStatusDisplay, type TableStatus } from '../api/table'
+import { getPublicImageUrl } from './image'
 
 export type TableTypeFilterKey = 'all' | 'table' | 'room'
 export type TableStatusFilterKey = 'all' | TableStatus

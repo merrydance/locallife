@@ -127,6 +127,7 @@
   opacity: 0.7;
 }
 
+/* weapp-gate allow-tdesign-internal-class: 当前纯展示分组依赖 t-cell-group 裁剪圆角，待改成独立展示容器后移除 */
 .section-panel--plain .t-cell-group {
   overflow: hidden;
 }

@@ -1,14 +1,13 @@
 <view class="remark-input-wrapper">
-  <textarea
+  <t-textarea
     class="native-textarea"
     value="{{value}}"
     placeholder="{{placeholder}}"
-    placeholder-class="textarea-placeholder"
     maxlength="{{maxlength}}"
-    auto-height
-    bindinput="onInputChange"
-    cursor-spacing="20"
-  />
+    autosize
+    indicator="{{false}}"
+    bind:change="onInputChange"
+  ></t-textarea>
 
   <view class="quick-remarks" wx:if="{{quickRemarks.length > 0}}">
     <view 

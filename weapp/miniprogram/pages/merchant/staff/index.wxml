@@ -70,7 +70,7 @@
           <view class="staff-header">
             <view class="staff-profile">
               <image wx:if="{{item.avatar_url}}" class="staff-avatar" src="{{item.avatar_url}}" mode="aspectFill" />
-              <view wx:else class="staff-avatar staff-avatar-fallback">{{item.displayName.slice(0, 1)}}</view>
+              <view wx:else class="staff-avatar staff-avatar-fallback">{{item.displayInitial}}</view>
               <view class="staff-meta">
                 <text class="staff-name">{{item.displayName}}</text>
                 <text class="staff-submeta">用户 ID {{item.user_id}} · 加入于 {{item.joinedAtLabel}}</text>

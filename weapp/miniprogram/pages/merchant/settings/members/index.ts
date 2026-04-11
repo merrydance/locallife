@@ -16,6 +16,7 @@ type AdjustDirection = 'increase' | 'decrease'
 
 interface MemberView extends MerchantMemberSummary {
   display_name: string
+  display_initial: string
   joined_at_label: string
   balance_text: string
   recharged_text: string
@@ -49,6 +50,7 @@ function buildMemberView(item: MerchantMemberSummary): MemberView {
   return {
     ...item,
     display_name: item.full_name || `用户 #${item.user_id}`,
+    display_initial: (item.full_name || `用户 #${item.user_id}`).slice(0, 1),
     joined_at_label: formatTime(item.created_at),
     balance_text: formatAmount(item.balance),
     recharged_text: formatAmount(item.total_recharged),

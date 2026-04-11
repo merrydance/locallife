@@ -6,6 +6,12 @@
         "t-tag": "tdesign-miniprogram/tag/tag",
         "t-empty": "tdesign-miniprogram/empty/empty",
         "t-loading": "tdesign-miniprogram/loading/loading",
+        "t-dialog": "tdesign-miniprogram/dialog/dialog",
+        "t-icon": "tdesign-miniprogram/icon/icon",
+        "t-search": "tdesign-miniprogram/search/search",
+        "t-tab-panel": "tdesign-miniprogram/tab-panel/tab-panel",
+        "t-tabs": "tdesign-miniprogram/tabs/tabs",
+        "t-textarea": "tdesign-miniprogram/textarea/textarea",
         "card-skeleton": "/components/card-skeleton/index",
         "list-skeleton": "/components/list-skeleton/index"
     }

@@ -1,7 +1,4 @@
 import {
-  buildMerchantApplicationOCRNoticeMessage,
-  buildMerchantApplicationOCRStatusView,
-  buildMerchantApplicationOCRSubmitBlockMessage,
   buildMerchantApplicationStatusView,
   type MerchantApplicationDraftResponse,
   type OCRStatus as MerchantApplicationOCRStatus,
@@ -19,159 +16,35 @@ import {
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { logger } from '../../../../utils/logger'
-import { getMediaDisplayUrl } from '../../../../utils/media'
 import { getStableBarHeights } from '../../../../utils/responsive'
-import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
 import { reverseGeocode } from '../../../../api/location'
-
-type ApplicationForm = {
-  merchantName: string
-  contactPhone: string
-  businessAddress: string
-  businessLicenseNumber: string
-  businessScope: string
-  legalPersonName: string
-  legalPersonIdNumber: string
-}
-
-type UploadFileItem = {
-  url: string
-  name: string
-}
-
-type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
-
-type OcrStatus = MerchantApplicationOCRStatus | ''
-
-type ApplicationStatusView = ReturnType<typeof buildMerchantApplicationStatusView>
-
-const EMPTY_FORM: ApplicationForm = {
-  merchantName: '',
-  contactPhone: '',
-  businessAddress: '',
-  businessLicenseNumber: '',
-  businessScope: '',
-  legalPersonName: '',
-  legalPersonIdNumber: ''
-}
-
-const APPLICATION_AUTO_REFRESH_WINDOW_MS = 60 * 1000
-
-function extractErrorMessage(error: unknown, fallback: string) {
-  return getErrorUserMessage(error, fallback)
-}
-
-function shouldFallbackToLatest(error: unknown) {
-  const message = getErrorDebugMessage(error).toLowerCase()
-  return message.includes('409')
-    || message.includes('冲突')
-    || message.includes('submitted')
-    || message.includes('approved')
-    || message.includes('已提交')
-    || message.includes('已通过')
-}
-
-function buildForm(draft: MerchantApplicationDraftResponse): ApplicationForm {
-  return {
-    merchantName: draft.merchant_name || draft.business_license_ocr?.enterprise_name || '',
-    contactPhone: draft.contact_phone || '',
-    businessAddress: draft.business_address || draft.business_license_ocr?.address || '',
-    businessLicenseNumber: draft.business_license_number || draft.business_license_ocr?.reg_num || draft.business_license_ocr?.credit_code || '',
-    businessScope: draft.business_scope || draft.business_license_ocr?.business_scope || '',
-    legalPersonName: draft.legal_person_name || draft.id_card_front_ocr?.name || draft.business_license_ocr?.legal_representative || '',
-    legalPersonIdNumber: draft.legal_person_id_number || draft.id_card_front_ocr?.id_number || ''
-  }
-}
-
-function hasFormChanged(current: ApplicationForm, initial: ApplicationForm) {
-  return current.merchantName !== initial.merchantName
-    || current.contactPhone !== initial.contactPhone
-    || current.businessAddress !== initial.businessAddress
-    || current.businessLicenseNumber !== initial.businessLicenseNumber
-    || current.businessScope !== initial.businessScope
-    || current.legalPersonName !== initial.legalPersonName
-    || current.legalPersonIdNumber !== initial.legalPersonIdNumber
-}
-
-function extractUploadPath(detail: { path?: string, files?: Array<{ url?: string }> }) {
-  if (detail?.path) return detail.path
-  const latestFile = detail?.files?.[detail.files.length - 1]
-  return latestFile?.url || ''
-}
-
-function buildLocationLabel(address: string) {
-  if (address.trim()) return address.trim()
-  return '--'
-}
-
-function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSuccessCallbackResult, geocodedAddress = '') {
-  const address = geocodedAddress.trim() || result.address || ''
-  const name = result.name || ''
-  if (address && name) {
-    return address.includes(name) ? address : `${address} ${name}`
-  }
-  return address || name || ''
-}
-
-function resolveDraftPublicAssetUrl(url?: string | null) {
-  return getMediaDisplayUrl(url || '')
-}
-
-function buildUploadFileItem(url: string, name: string) {
-  return [{ url, name }]
-}
-
-function buildUploadFileState(params: {
-  url: string
-  name: string
-  uploaded: boolean
-  currentFiles: UploadFileItem[]
-}) {
-  if (params.url) {
-    return buildUploadFileItem(params.url, params.name)
-  }
-
-  if (params.uploaded) {
-    return params.currentFiles
-  }
-
-  return []
-}
-
-function hasUploadedDocument(params: {
-  assetId?: number | null
-  files?: UploadFileItem[]
-}) {
-  return (typeof params.assetId === 'number' && params.assetId > 0) || Boolean(params.files?.length)
-}
-
-function getOcrTagTheme(status?: string) {
-  const statusView = buildMerchantApplicationOCRStatusView(status)
-  if (statusView.isReady) return 'success'
-  if (statusView.isFailed) return 'danger'
-  if (statusView.isPending) return 'warning'
-  return 'default'
-}
-
-function getBadgeColor(theme?: string) {
-  switch (theme) {
-    case 'success':
-      return '#00A870'
-    case 'danger':
-      return '#E34D59'
-    case 'warning':
-      return '#ED7B2F'
-    case 'primary':
-      return '#0052D9'
-    default:
-      return '#8B8BA3'
-  }
-}
-
-function shouldAutoRefresh(lastLoadedAt: number, freshnessWindowMs: number) {
-  return !lastLoadedAt || Date.now() - lastLoadedAt >= freshnessWindowMs
-}
+import {
+  APPLICATION_AUTO_REFRESH_WINDOW_MS,
+  buildChosenLocationAddress,
+  buildLocationLabel,
+  buildMerchantApplicationBasicPayload,
+  buildMerchantApplicationDraftPatch,
+  buildMerchantApplicationOcrMergePatch,
+  buildMerchantApplicationSubmitBlockText,
+  EMPTY_FORM,
+  extractApplicationErrorMessage,
+  extractUploadPath,
+  getBadgeColor,
+  getMerchantApplicationValidationMessage,
+  getMerchantApplicationUploadingKey,
+  getOcrTagTheme,
+  hasApplicationFormChanged,
+  hasUploadedDocument,
+  resolveDraftPublicAssetUrl,
+  shouldAutoRefresh,
+  shouldFallbackToLatestApplication,
+  type ApplicationForm,
+  type ApplicationStatusView,
+  type OcrStatus,
+  type UploadField,
+  type UploadFileItem
+} from '../../../../utils/merchant-application-view'
 
 Page({
   data: {
@@ -305,7 +178,7 @@ Page({
       })
     } catch (error) {
       logger.error('Load merchant application settings failed', error, 'merchant-application-page')
-      const message = extractErrorMessage(error, '商户申请资料加载失败，请稍后重试')
+      const message = extractApplicationErrorMessage(error, '商户申请资料加载失败，请稍后重试')
       if (this.data.initialLoading) {
         this.setData({
           initialLoading: false,
@@ -325,7 +198,7 @@ Page({
     try {
       return await getMerchantApplication()
     } catch (error) {
-      if (shouldFallbackToLatest(error)) {
+      if (shouldFallbackToLatestApplication(error)) {
         return await getMyApplication()
       }
       throw error
@@ -341,81 +214,37 @@ Page({
     const foodPermitUrl = resolveDraftPublicAssetUrl(draft.food_permit_url)
     const locationLabel = await this.resolveLocationLabel(draft.latitude, draft.longitude, draft.business_address)
 
-    const form = keepDirty ? this.data.form : buildForm(draft)
-    const initialForm = buildForm(draft)
-    const statusView = buildMerchantApplicationStatusView(draft.status)
-    const licenseAssetId = Number(draft.business_license_media_asset_id || 0)
-    const foodPermitAssetId = Number(draft.food_permit_media_asset_id || 0)
-    const idCardFrontAssetId = Number(draft.id_card_front_media_asset_id || 0)
-    const idCardBackAssetId = Number(draft.id_card_back_media_asset_id || 0)
-
-    const ocrStatuses = [
-      (draft.business_license_ocr?.status || '') as OcrStatus,
-      (draft.food_permit_ocr?.status || '') as OcrStatus,
-      (draft.id_card_front_ocr?.status || '') as OcrStatus,
-      (draft.id_card_back_ocr?.status || '') as OcrStatus
-    ]
-
-    this.setData({
-      applicationId: draft.id,
-      status: draft.status || 'draft',
-      statusView,
-      statusBadgeText: statusView.badgeText,
-      statusBadgeColor: getBadgeColor(statusView.tagTheme),
-      rejectReason: draft.reject_reason || '',
-      regionId: draft.region_id || 0,
-      latitude: draft.latitude || '',
-      longitude: draft.longitude || '',
+    this.setData(buildMerchantApplicationDraftPatch(draft, {
+      form: this.data.form,
+      initialForm: this.data.initialForm,
+      status: this.data.status,
+      rejectReason: this.data.rejectReason,
+      regionId: this.data.regionId,
+      latitude: this.data.latitude,
+      longitude: this.data.longitude,
+      licenseAssetId: this.data.licenseAssetId,
+      foodPermitAssetId: this.data.foodPermitAssetId,
+      idCardFrontAssetId: this.data.idCardFrontAssetId,
+      idCardBackAssetId: this.data.idCardBackAssetId,
+      licenseImageUrl: this.data.licenseImageUrl,
+      foodPermitImageUrl: this.data.foodPermitImageUrl,
+      idCardFrontImageUrl: this.data.idCardFrontImageUrl,
+      idCardBackImageUrl: this.data.idCardBackImageUrl,
+      licenseImage: this.data.licenseImage,
+      foodPermitImage: this.data.foodPermitImage,
+      idCardFrontImage: this.data.idCardFrontImage,
+      idCardBackImage: this.data.idCardBackImage,
+      licenseOcrStatus: this.data.licenseOcrStatus,
+      foodPermitOcrStatus: this.data.foodPermitOcrStatus,
+      idCardFrontOcrStatus: this.data.idCardFrontOcrStatus,
+      idCardBackOcrStatus: this.data.idCardBackOcrStatus
+    }, {
       locationLabel,
-      form,
-      initialForm,
-      hasChanges: keepDirty ? hasFormChanged(this.data.form, initialForm) : false,
-      licenseAssetId,
-      foodPermitAssetId,
-      idCardFrontAssetId,
-      idCardBackAssetId,
-      licenseImageUrl: licenseUrl,
-      foodPermitImageUrl: foodPermitUrl,
-      idCardFrontImageUrl: idCardFrontUrl,
-      idCardBackImageUrl: idCardBackUrl,
-      licenseImage: buildUploadFileState({
-        url: licenseUrl,
-        name: '营业执照',
-        uploaded: licenseAssetId > 0,
-        currentFiles: this.data.licenseImage
-      }),
-      foodPermitImage: buildUploadFileState({
-        url: foodPermitUrl,
-        name: '食品经营许可证',
-        uploaded: foodPermitAssetId > 0,
-        currentFiles: this.data.foodPermitImage
-      }),
-      idCardFrontImage: buildUploadFileState({
-        url: idCardFrontUrl,
-        name: '身份证正面',
-        uploaded: idCardFrontAssetId > 0,
-        currentFiles: this.data.idCardFrontImage
-      }),
-      idCardBackImage: buildUploadFileState({
-        url: idCardBackUrl,
-        name: '身份证背面',
-        uploaded: idCardBackAssetId > 0,
-        currentFiles: this.data.idCardBackImage
-      }),
-      licenseOcrText: this.getOcrStatusText(draft.business_license_ocr?.status),
-      foodPermitOcrText: this.getOcrStatusText(draft.food_permit_ocr?.status),
-      idCardFrontOcrText: this.getOcrStatusText(draft.id_card_front_ocr?.status),
-      idCardBackOcrText: this.getOcrStatusText(draft.id_card_back_ocr?.status),
-      licenseOcrStatus: (draft.business_license_ocr?.status || '') as OcrStatus,
-      foodPermitOcrStatus: (draft.food_permit_ocr?.status || '') as OcrStatus,
-      idCardFrontOcrStatus: (draft.id_card_front_ocr?.status || '') as OcrStatus,
-      idCardBackOcrStatus: (draft.id_card_back_ocr?.status || '') as OcrStatus,
-      licenseOcrTheme: getOcrTagTheme(draft.business_license_ocr?.status),
-      foodPermitOcrTheme: getOcrTagTheme(draft.food_permit_ocr?.status),
-      idCardFrontOcrTheme: getOcrTagTheme(draft.id_card_front_ocr?.status),
-      idCardBackOcrTheme: getOcrTagTheme(draft.id_card_back_ocr?.status),
-      ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses)
-    })
+      licenseUrl,
+      foodPermitUrl,
+      idCardFrontUrl,
+      idCardBackUrl
+    }, keepDirty))
   },
 
   async resolveLocationLabel(latitude?: string | null, longitude?: string | null, fallbackAddress?: string | null) {
@@ -458,72 +287,33 @@ Page({
     }
     this.setData({
       form: nextForm,
-      hasChanges: hasFormChanged(nextForm, this.data.initialForm),
+      hasChanges: hasApplicationFormChanged(nextForm, this.data.initialForm),
       actionNoticeMessage: ''
     })
   },
 
   validateForm(forSubmit = false) {
-    const { form } = this.data
-    if (!form.merchantName.trim()) {
-      wx.showToast({ title: '请填写店铺名称', icon: 'none' })
-      return false
-    }
-    if (!form.contactPhone.trim() || form.contactPhone.trim().length !== 11) {
-      wx.showToast({ title: '请填写 11 位联系电话', icon: 'none' })
-      return false
-    }
-    if (!form.businessAddress.trim() || form.businessAddress.trim().length < 5) {
-      wx.showToast({ title: '请填写完整经营地址', icon: 'none' })
-      return false
-    }
-
-    if (!forSubmit) return true
-
-    if (!form.businessLicenseNumber.trim()) {
-      wx.showToast({ title: '请上传营业执照并补齐统一信用代码', icon: 'none' })
-      return false
-    }
-    if (!form.legalPersonName.trim() || !form.legalPersonIdNumber.trim()) {
-      wx.showToast({ title: '请上传身份证并补齐法人信息', icon: 'none' })
-      return false
-    }
-    if (
-      !hasUploadedDocument({ assetId: this.data.licenseAssetId, files: this.data.licenseImage })
-      || !hasUploadedDocument({ assetId: this.data.foodPermitAssetId, files: this.data.foodPermitImage })
-      || !hasUploadedDocument({ assetId: this.data.idCardFrontAssetId, files: this.data.idCardFrontImage })
-      || !hasUploadedDocument({ assetId: this.data.idCardBackAssetId, files: this.data.idCardBackImage })
-    ) {
-      wx.showToast({ title: '请先上传营业执照、食品经营许可证和身份证正反面', icon: 'none' })
-      return false
-    }
-    if (!this.data.latitude || !this.data.longitude) {
-      wx.showToast({ title: '请先选择经营位置', icon: 'none' })
-      return false
-    }
-    if (!this.data.regionId) {
-      wx.showToast({ title: '当前位置还未匹配到经营区域，请重新选择更准确的位置', icon: 'none' })
-      return false
-    }
-    const ocrMessage = this.getOcrSubmitBlockMessage()
-    if (ocrMessage) {
-      wx.showToast({ title: ocrMessage, icon: 'none' })
+    const message = getMerchantApplicationValidationMessage({
+      form: this.data.form,
+      forSubmit,
+      licenseAssetId: this.data.licenseAssetId,
+      foodPermitAssetId: this.data.foodPermitAssetId,
+      idCardFrontAssetId: this.data.idCardFrontAssetId,
+      idCardBackAssetId: this.data.idCardBackAssetId,
+      licenseImage: this.data.licenseImage,
+      foodPermitImage: this.data.foodPermitImage,
+      idCardFrontImage: this.data.idCardFrontImage,
+      idCardBackImage: this.data.idCardBackImage,
+      latitude: this.data.latitude,
+      longitude: this.data.longitude,
+      regionId: this.data.regionId,
+      ocrBlockMessage: this.getOcrSubmitBlockMessage()
+    })
+    if (message) {
+      wx.showToast({ title: message, icon: 'none' })
       return false
     }
     return true
-  },
-
-  buildBasicPayload() {
-    const { form } = this.data
-    return {
-      merchant_name: form.merchantName.trim(),
-      contact_phone: form.contactPhone.trim(),
-      business_address: form.businessAddress.trim(),
-      business_license_number: form.businessLicenseNumber.trim() || undefined,
-      business_scope: form.businessScope.trim() || undefined,
-      legal_person_name: form.legalPersonName.trim() || undefined,
-      legal_person_id_number: form.legalPersonIdNumber.trim() || undefined
-    }
   },
 
   async persistDraft(showSuccessToast: boolean) {
@@ -534,7 +324,7 @@ Page({
     wx.showLoading({ title: '保存中...' })
 
     try {
-      const updated = await updateMerchantBasicInfo(this.buildBasicPayload())
+      const updated = await updateMerchantBasicInfo(buildMerchantApplicationBasicPayload(this.data.form))
       await this.applyDraftToPage(updated, false)
       if (showSuccessToast) {
         this.setData({ actionNoticeMessage: '草稿已保存。' })
@@ -542,7 +332,7 @@ Page({
       return true
     } catch (error) {
       logger.error('Save merchant application draft failed', error, 'merchant-application-page')
-      wx.showToast({ title: extractErrorMessage(error, '草稿保存失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: extractApplicationErrorMessage(error, '草稿保存失败，请稍后重试'), icon: 'none' })
       return false
     } finally {
       wx.hideLoading()
@@ -563,7 +353,7 @@ Page({
     try {
       consentPayload = await buildAgreementConsentPayload()
     } catch (error) {
-      wx.showToast({ title: extractErrorMessage(error, '协议信息加载失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: extractApplicationErrorMessage(error, '协议信息加载失败，请稍后重试'), icon: 'none' })
       return
     }
 
@@ -582,7 +372,7 @@ Page({
       this.setData({ actionNoticeMessage: '' })
     } catch (error) {
       logger.error('Submit merchant application failed', error, 'merchant-application-page')
-      wx.showToast({ title: extractErrorMessage(error, '申请提交失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: extractApplicationErrorMessage(error, '申请提交失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
       this.setData({ submitting: false })
@@ -610,44 +400,21 @@ Page({
       this.setData({ actionNoticeMessage: '已重置为草稿。' })
     } catch (error) {
       logger.error('Reset merchant application failed', error, 'merchant-application-page')
-      wx.showToast({ title: extractErrorMessage(error, '申请重置失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: extractApplicationErrorMessage(error, '申请重置失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
       this.setData({ resetting: false })
     }
   },
 
-  async onLicenseUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) {
-    await this.handleDocumentUpload('license', extractUploadPath(e.detail))
-  },
-
-  onLicenseRemove() {
-    this.handleDocumentRemove('license')
-  },
-
-  async onFoodPermitUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) {
-    await this.handleDocumentUpload('foodPermit', extractUploadPath(e.detail))
-  },
-
-  onFoodPermitRemove() {
-    this.handleDocumentRemove('foodPermit')
-  },
-
-  async onIdCardFrontUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) {
-    await this.handleDocumentUpload('idCardFront', extractUploadPath(e.detail))
-  },
-
-  onIdCardFrontRemove() {
-    this.handleDocumentRemove('idCardFront')
-  },
-
-  async onIdCardBackUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) {
-    await this.handleDocumentUpload('idCardBack', extractUploadPath(e.detail))
-  },
-
-  onIdCardBackRemove() {
-    this.handleDocumentRemove('idCardBack')
-  },
+  async onLicenseUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) { await this.handleDocumentUpload('license', extractUploadPath(e.detail)) },
+  onLicenseRemove() { this.handleDocumentRemove('license') },
+  async onFoodPermitUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) { await this.handleDocumentUpload('foodPermit', extractUploadPath(e.detail)) },
+  onFoodPermitRemove() { this.handleDocumentRemove('foodPermit') },
+  async onIdCardFrontUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) { await this.handleDocumentUpload('idCardFront', extractUploadPath(e.detail)) },
+  onIdCardFrontRemove() { this.handleDocumentRemove('idCardFront') },
+  async onIdCardBackUpload(e: WechatMiniprogram.CustomEvent<{ path?: string, files?: Array<{ url?: string }> }>) { await this.handleDocumentUpload('idCardBack', extractUploadPath(e.detail)) },
+  onIdCardBackRemove() { this.handleDocumentRemove('idCardBack') },
 
   async handleDocumentRemove(field: UploadField) {
     if (!this.data.statusView.canEdit) {
@@ -669,7 +436,7 @@ Page({
       await this.applyDraftToPage(updated, false)
     } catch (error) {
       logger.error('Delete merchant application document failed', { field, error }, 'merchant-application-page')
-      wx.showToast({ title: extractErrorMessage(error, '删除失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: extractApplicationErrorMessage(error, '删除失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
     }
@@ -682,7 +449,7 @@ Page({
       return
     }
 
-    const uploadingKey = this.getUploadingKey(field)
+    const uploadingKey = getMerchantApplicationUploadingKey(field)
     this.setData({
       [uploadingKey]: true,
       actionNoticeMessage: ''
@@ -708,23 +475,10 @@ Page({
       await this.mergeOcrDraft(field, submissionResult.draft, path)
     } catch (error) {
       logger.error('Upload merchant application document failed', error, 'merchant-application-page')
-      wx.showToast({ title: extractErrorMessage(error, '证照上传或识别失败，请稍后重试'), icon: 'none' })
+      wx.showToast({ title: extractApplicationErrorMessage(error, '证照上传或识别失败，请稍后重试'), icon: 'none' })
     } finally {
       wx.hideLoading()
       this.setData({ [uploadingKey]: false })
-    }
-  },
-
-  getUploadingKey(field: UploadField) {
-    switch (field) {
-      case 'license':
-        return 'licenseUploading'
-      case 'foodPermit':
-        return 'foodPermitUploading'
-      case 'idCardFront':
-        return 'idCardFrontUploading'
-      default:
-        return 'idCardBackUploading'
     }
   },
 
@@ -733,106 +487,43 @@ Page({
     draft: MerchantApplicationDraftResponse,
     fallbackPath: string
   ) {
-    const nextForm = { ...this.data.form }
-
-    if (field === 'license') {
-      nextForm.merchantName = nextForm.merchantName || draft.business_license_ocr?.enterprise_name || draft.merchant_name || ''
-      nextForm.businessLicenseNumber = draft.business_license_number || draft.business_license_ocr?.reg_num || draft.business_license_ocr?.credit_code || nextForm.businessLicenseNumber
-      nextForm.businessScope = draft.business_scope || draft.business_license_ocr?.business_scope || nextForm.businessScope
-      nextForm.legalPersonName = draft.legal_person_name || draft.business_license_ocr?.legal_representative || nextForm.legalPersonName
-    }
-
-    if (field === 'idCardFront') {
-      nextForm.legalPersonName = draft.id_card_front_ocr?.name || draft.legal_person_name || nextForm.legalPersonName
-      nextForm.legalPersonIdNumber = draft.id_card_front_ocr?.id_number || draft.legal_person_id_number || nextForm.legalPersonIdNumber
-    }
-
     const [idCardFrontUrl, idCardBackUrl] = await Promise.all([
       draft.id_card_front_media_asset_id ? this.resolvePrivateAssetUrl(draft.id_card_front_media_asset_id) : Promise.resolve(''),
       draft.id_card_back_media_asset_id ? this.resolvePrivateAssetUrl(draft.id_card_back_media_asset_id) : Promise.resolve('')
     ])
     const licenseUrl = resolveDraftPublicAssetUrl(draft.business_license_url)
     const foodPermitUrl = resolveDraftPublicAssetUrl(draft.food_permit_url)
-    const licenseAssetId = Number(draft.business_license_media_asset_id || this.data.licenseAssetId || 0)
-    const foodPermitAssetId = Number(draft.food_permit_media_asset_id || this.data.foodPermitAssetId || 0)
-    const idCardFrontAssetId = Number(draft.id_card_front_media_asset_id || this.data.idCardFrontAssetId || 0)
-    const idCardBackAssetId = Number(draft.id_card_back_media_asset_id || this.data.idCardBackAssetId || 0)
-    const nextStatus = draft.status || this.data.status
-    const nextStatusView = buildMerchantApplicationStatusView(nextStatus)
-
-    const ocrStatuses = [
-      (draft.business_license_ocr?.status || this.data.licenseOcrStatus || '') as OcrStatus,
-      (draft.food_permit_ocr?.status || this.data.foodPermitOcrStatus || '') as OcrStatus,
-      (draft.id_card_front_ocr?.status || this.data.idCardFrontOcrStatus || '') as OcrStatus,
-      (draft.id_card_back_ocr?.status || this.data.idCardBackOcrStatus || '') as OcrStatus
-    ]
-
-    this.setData({
-      status: nextStatus,
-      statusView: nextStatusView,
-      statusBadgeText: nextStatusView.badgeText,
-      statusBadgeColor: getBadgeColor(nextStatusView.tagTheme),
-      rejectReason: draft.reject_reason || this.data.rejectReason,
-      regionId: draft.region_id || this.data.regionId,
-      latitude: draft.latitude || this.data.latitude,
-      longitude: draft.longitude || this.data.longitude,
-      locationLabel: buildLocationLabel(draft.business_address || nextForm.businessAddress),
-      form: nextForm,
-      hasChanges: hasFormChanged(nextForm, this.data.initialForm),
-      licenseAssetId,
-      foodPermitAssetId,
-      idCardFrontAssetId,
-      idCardBackAssetId,
-      licenseImageUrl: licenseUrl || (field === 'license' ? fallbackPath : this.data.licenseImageUrl),
-      foodPermitImageUrl: foodPermitUrl || (field === 'foodPermit' ? fallbackPath : this.data.foodPermitImageUrl),
-      idCardFrontImageUrl: idCardFrontUrl || (field === 'idCardFront' ? fallbackPath : this.data.idCardFrontImageUrl),
-      idCardBackImageUrl: idCardBackUrl || (field === 'idCardBack' ? fallbackPath : this.data.idCardBackImageUrl),
-      licenseImage: (licenseUrl || field === 'license')
-        ? buildUploadFileItem(licenseUrl || fallbackPath, '营业执照')
-        : buildUploadFileState({
-            url: '',
-            name: '营业执照',
-            uploaded: licenseAssetId > 0,
-            currentFiles: this.data.licenseImage
-          }),
-      foodPermitImage: (foodPermitUrl || field === 'foodPermit')
-        ? buildUploadFileItem(foodPermitUrl || fallbackPath, '食品经营许可证')
-        : buildUploadFileState({
-            url: '',
-            name: '食品经营许可证',
-            uploaded: foodPermitAssetId > 0,
-            currentFiles: this.data.foodPermitImage
-          }),
-      idCardFrontImage: (idCardFrontUrl || field === 'idCardFront')
-        ? buildUploadFileItem(idCardFrontUrl || fallbackPath, '身份证正面')
-        : buildUploadFileState({
-            url: '',
-            name: '身份证正面',
-            uploaded: idCardFrontAssetId > 0,
-            currentFiles: this.data.idCardFrontImage
-          }),
-      idCardBackImage: (idCardBackUrl || field === 'idCardBack')
-        ? buildUploadFileItem(idCardBackUrl || fallbackPath, '身份证背面')
-        : buildUploadFileState({
-            url: '',
-            name: '身份证背面',
-            uploaded: idCardBackAssetId > 0,
-            currentFiles: this.data.idCardBackImage
-          }),
-      licenseOcrText: this.getOcrStatusText(draft.business_license_ocr?.status),
-      foodPermitOcrText: this.getOcrStatusText(draft.food_permit_ocr?.status),
-      idCardFrontOcrText: this.getOcrStatusText(draft.id_card_front_ocr?.status),
-      idCardBackOcrText: this.getOcrStatusText(draft.id_card_back_ocr?.status),
-      licenseOcrStatus: (draft.business_license_ocr?.status || this.data.licenseOcrStatus || '') as OcrStatus,
-      foodPermitOcrStatus: (draft.food_permit_ocr?.status || this.data.foodPermitOcrStatus || '') as OcrStatus,
-      idCardFrontOcrStatus: (draft.id_card_front_ocr?.status || this.data.idCardFrontOcrStatus || '') as OcrStatus,
-      idCardBackOcrStatus: (draft.id_card_back_ocr?.status || this.data.idCardBackOcrStatus || '') as OcrStatus,
-      licenseOcrTheme: getOcrTagTheme(draft.business_license_ocr?.status || this.data.licenseOcrStatus || ''),
-      foodPermitOcrTheme: getOcrTagTheme(draft.food_permit_ocr?.status || this.data.foodPermitOcrStatus || ''),
-      idCardFrontOcrTheme: getOcrTagTheme(draft.id_card_front_ocr?.status || this.data.idCardFrontOcrStatus || ''),
-      idCardBackOcrTheme: getOcrTagTheme(draft.id_card_back_ocr?.status || this.data.idCardBackOcrStatus || ''),
-      ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses)
-    })
+    this.setData(buildMerchantApplicationOcrMergePatch(field, draft, {
+      form: this.data.form,
+      initialForm: this.data.initialForm,
+      status: this.data.status,
+      rejectReason: this.data.rejectReason,
+      regionId: this.data.regionId,
+      latitude: this.data.latitude,
+      longitude: this.data.longitude,
+      licenseAssetId: this.data.licenseAssetId,
+      foodPermitAssetId: this.data.foodPermitAssetId,
+      idCardFrontAssetId: this.data.idCardFrontAssetId,
+      idCardBackAssetId: this.data.idCardBackAssetId,
+      licenseImageUrl: this.data.licenseImageUrl,
+      foodPermitImageUrl: this.data.foodPermitImageUrl,
+      idCardFrontImageUrl: this.data.idCardFrontImageUrl,
+      idCardBackImageUrl: this.data.idCardBackImageUrl,
+      licenseImage: this.data.licenseImage,
+      foodPermitImage: this.data.foodPermitImage,
+      idCardFrontImage: this.data.idCardFrontImage,
+      idCardBackImage: this.data.idCardBackImage,
+      licenseOcrStatus: this.data.licenseOcrStatus,
+      foodPermitOcrStatus: this.data.foodPermitOcrStatus,
+      idCardFrontOcrStatus: this.data.idCardFrontOcrStatus,
+      idCardBackOcrStatus: this.data.idCardBackOcrStatus
+    }, {
+      locationLabel: buildLocationLabel(draft.business_address || this.data.form.businessAddress),
+      licenseUrl,
+      foodPermitUrl,
+      idCardFrontUrl,
+      idCardBackUrl
+    }, fallbackPath))
 
   },
 
@@ -847,10 +538,6 @@ Page({
     })
   },
 
-  getOcrStatusText(status?: string) {
-    return buildMerchantApplicationOCRStatusView(status).text
-  },
-
   getOcrSubmitBlockMessage() {
     const checks = [
       { label: '营业执照', status: this.data.licenseOcrStatus },
@@ -859,7 +546,7 @@ Page({
       { label: '身份证背面', status: this.data.idCardBackOcrStatus }
     ]
 
-    return buildMerchantApplicationOCRSubmitBlockMessage(checks)
+    return buildMerchantApplicationSubmitBlockText(checks)
   },
 
   onChooseLocation() {
@@ -881,7 +568,7 @@ Page({
           latitude: String(result.latitude),
           longitude: String(result.longitude),
           locationLabel: buildLocationLabel(fullAddress),
-          hasChanges: hasFormChanged(nextForm, this.data.initialForm),
+          hasChanges: hasApplicationFormChanged(nextForm, this.data.initialForm),
           actionNoticeMessage: ''
         })
 
@@ -898,7 +585,7 @@ Page({
             hasChanges: previousHasChanges
           })
           logger.error('Update merchant application location failed', error, 'merchant-application-page')
-          wx.showToast({ title: extractErrorMessage(error, '位置保存失败，请稍后重试'), icon: 'none' })
+          wx.showToast({ title: extractApplicationErrorMessage(error, '位置保存失败，请稍后重试'), icon: 'none' })
         } finally {
           wx.hideLoading()
         }

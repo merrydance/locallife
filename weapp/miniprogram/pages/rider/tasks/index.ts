@@ -1,4 +1,5 @@
-import { Delivery } from '../../../api/delivery'
+import { Delivery, getDeliveryStatusDisplay } from '../../../api/delivery'
+import { deliveryTaskManagementService } from '../../../api/delivery-task-management'
 import { logger } from '../../../utils/logger'
 import { locationService } from '../../../utils/location'
 import { getStableBarHeights } from '../../../utils/responsive'
@@ -24,30 +25,8 @@ interface UserMessageError {
   userMessage?: string
 }
 
-function getDeliveryStatusMeta(status?: Delivery['status']) {
-  switch (status) {
-    case 'completed':
-    case 'delivered':
-      return { text: '已送达', theme: 'success' as const }
-    case 'cancelled':
-      return { text: '已取消', theme: 'warning' as const }
-    case 'exception':
-      return { text: '异常结束', theme: 'danger' as const }
-    case 'delivering':
-      return { text: '配送中', theme: 'primary' as const }
-    case 'picked':
-      return { text: '待配送', theme: 'primary' as const }
-    case 'picking':
-      return { text: '取餐中', theme: 'primary' as const }
-    case 'assigned':
-      return { text: '已接单', theme: 'default' as const }
-    default:
-      return { text: status || '历史记录', theme: 'default' as const }
-  }
-}
-
 function decorateHistoryDelivery(delivery: Delivery): DeliveryHistoryView {
-  const statusMeta = getDeliveryStatusMeta(delivery.status)
+  const statusMeta = getDeliveryStatusDisplay(delivery.status)
   return {
     ...delivery,
     display_time: delivery.completed_at || delivery.delivered_at || delivery.created_at || '',
@@ -83,14 +62,10 @@ Page({
     this.setData(reset ? { loading: true } : { loadingMore: true })
     
     try {
-        const resp = await (require('../../../utils/request').request({
-            url: '/v1/delivery/history',
-            method: 'GET',
-            data: {
-                page,
-                limit: PAGE_SIZE
-            }
-        })) as DeliveryHistoryResponse
+      const resp = await deliveryTaskManagementService.getDeliveryHistory({
+        page_id: page,
+        page_size: PAGE_SIZE
+      }) as DeliveryHistoryResponse
         
         const list = (resp.deliveries || []).map(decorateHistoryDelivery)
         const total = resp.total || 0

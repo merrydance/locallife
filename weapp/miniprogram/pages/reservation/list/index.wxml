@@ -1,6 +1,6 @@
 <custom-navbar title="我的预订" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px;">
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px;">
   <t-tabs value="{{currentTab}}" bind:change="onTabChange" sticky sticky-props="{{ { offsetTop: navBarHeight } }}">
     <t-tab-panel wx:for="{{tabs}}" wx:key="value" label="{{item.label}}" value="{{item.value}}" />
   </t-tabs>
