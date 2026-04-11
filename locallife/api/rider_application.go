@@ -95,29 +95,18 @@ func decodeHealthCertOCRData(data []byte) (*HealthCertOCRData, error) {
 	return &payload, nil
 }
 
+func buildRiderApplicationMissingFieldsError(missingFields []string) error {
+	return &APIError{
+		Code:    40105,
+		Message: fmt.Sprintf("请先补充以下资料后再提交：%s", joinStrings(missingFields, "、")),
+	}
+}
+
 func normalizePersonName(name string) string {
 	name = strings.TrimSpace(name)
 	name = strings.ReplaceAll(name, " ", "")
 	name = strings.ReplaceAll(name, "\t", "")
 	return name
-}
-
-func parseChineseYMD(dateStr string) (time.Time, error) {
-	dateRegex := regexp.MustCompile(`(\d{4})年(\d{1,2})月(\d{1,2})日`)
-	match := dateRegex.FindStringSubmatch(dateStr)
-	if len(match) < 4 {
-		return time.Time{}, fmt.Errorf("invalid chinese date: %s", dateStr)
-	}
-	year := match[1]
-	month := match[2]
-	day := match[3]
-	if len(month) == 1 {
-		month = "0" + month
-	}
-	if len(day) == 1 {
-		day = "0" + day
-	}
-	return parseISODate(year+"-"+month+"-"+day, "")
 }
 
 func parseFlexibleDocumentEndDate(dateStr string) (time.Time, error) {
@@ -549,7 +538,7 @@ func (server *Server) submitRiderApplication(ctx *gin.Context) {
 	}
 
 	if len(missingFields) > 0 {
-		ctx.JSON(http.StatusBadRequest, errorResponse(fmt.Errorf("missing required fields: %s", joinStrings(missingFields, ", "))))
+		ctx.JSON(http.StatusBadRequest, errorResponse(buildRiderApplicationMissingFieldsError(missingFields)))
 		return
 	}
 
@@ -734,7 +723,7 @@ func (server *Server) checkRiderApplicationApproval(app db.RiderApplication) (bo
 	if strings.Contains(healthOCR.ValidEnd, "长期") || strings.Contains(healthOCR.ValidEnd, "永久") {
 		return true, ""
 	}
-	validEndDate, err := parseChineseYMD(healthOCR.ValidEnd)
+	validEndDate, err := parseFlexibleDocumentEndDate(healthOCR.ValidEnd)
 	if err != nil {
 		log.Error().Err(err).Str("valid_end", healthOCR.ValidEnd).Msg("解析健康证有效期失败")
 		return false, "健康证有效期格式无法识别，请重新上传"

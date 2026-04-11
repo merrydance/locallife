@@ -1,7 +1,7 @@
 <custom-navbar title="骑手入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: calc(140rpx + env(safe-area-inset-bottom));">
-  
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 140rpx;">
+
   <view class="steps-container" wx:if="{{currentStep > 0 && currentStep < 4}}">
     <t-steps current="{{currentStep - 1}}">
       <t-step-item title="上传证照" />
@@ -57,7 +57,7 @@
             title="身份证人像面" 
             value="{{idFront.url}}" 
             rawUrl="{{idFront.rawUrl}}"
-            disabled="{{applicationStatus !== 'draft'}}"
+            disabled="{{!riderStatusView.isDraft}}"
             feedbackState="{{uploadFeedback.idFront.state}}"
             feedbackTitle="{{uploadFeedback.idFront.title}}"
             feedbackDescription="{{uploadFeedback.idFront.description}}"
@@ -70,7 +70,7 @@
             title="身份证国徽面" 
             value="{{idBack.url}}" 
             rawUrl="{{idBack.rawUrl}}"
-            disabled="{{applicationStatus !== 'draft'}}"
+            disabled="{{!riderStatusView.isDraft}}"
             feedbackState="{{uploadFeedback.idBack.state}}"
             feedbackTitle="{{uploadFeedback.idBack.title}}"
             feedbackDescription="{{uploadFeedback.idBack.description}}"
@@ -90,7 +90,7 @@
           title="点击上传本人健康证" 
           value="{{healthCert.url}}" 
           rawUrl="{{healthCert.rawUrl}}"
-          disabled="{{applicationStatus !== 'draft'}}"
+          disabled="{{!riderStatusView.isDraft}}"
           feedbackState="{{uploadFeedback.healthCert.state}}"
           feedbackTitle="{{uploadFeedback.healthCert.title}}"
           feedbackDescription="{{uploadFeedback.healthCert.description}}"
@@ -131,11 +131,11 @@
           <t-cell title="身份证号" note="{{formData.idNumber || '--'}}" />
           <t-cell title="身份证有效期" note="{{formData.idValidity || '--'}}" />
         </block>
-        <view class="ocr-status-card" wx:if="{{ocrDisplayState.identity === 'processing'}}">
+        <view class="ocr-status-card" wx:if="{{ocrPanelState.identityProcessing}}">
           <view class="ocr-status-title">身份证识别中</view>
           <view class="ocr-status-desc">已识别到的身份证字段会先展示，剩余字段完成后继续回填。</view>
         </view>
-        <view class="ocr-status-card error" wx:if="{{ocrDisplayState.identity === 'failed'}}">
+        <view class="ocr-status-card error" wx:if="{{ocrPanelState.identityFailed}}">
           <view class="ocr-status-title">身份证识别失败</view>
           <view class="ocr-status-desc">请重新上传清晰、完整的身份证正反面。</view>
         </view>
@@ -147,11 +147,11 @@
           <t-cell title="健康证号" note="{{formData.healthCertNo || '--'}}" />
           <t-cell title="有效期至" note="{{formData.healthCertDate || '--'}}" />
         </block>
-        <view class="ocr-status-card" wx:if="{{ocrDisplayState.health === 'processing'}}">
+        <view class="ocr-status-card" wx:if="{{ocrPanelState.healthProcessing}}">
           <view class="ocr-status-title">健康证识别中</view>
           <view class="ocr-status-desc">已识别到的健康证字段会先展示，剩余字段完成后继续回填。</view>
         </view>
-        <view class="ocr-status-card error" wx:if="{{ocrDisplayState.health === 'failed'}}">
+        <view class="ocr-status-card error" wx:if="{{ocrPanelState.healthFailed}}">
           <view class="ocr-status-title">健康证识别失败</view>
           <view class="ocr-status-desc">请重新上传清晰、无遮挡的健康证照片。</view>
         </view>

@@ -268,12 +268,16 @@ func TestParseRiderHealthCertOCRText_ExtractsFlexibleValidEnd(t *testing.T) {
 	testCases := []struct {
 		name            string
 		text            string
+		expectName      string
+		expectCertNo    string
 		expectValidFrom string
 		expectValidEnd  string
 	}{
 		{
 			name:           "ExplicitDeadlineWithDash",
 			text:           "姓名：张三\n健康证号：JK20260001\n有效截止日期：2030-12-31",
+			expectName:     "张三",
+			expectCertNo:   "JK20260001",
 			expectValidEnd: "2030-12-31",
 		},
 		{
@@ -287,12 +291,27 @@ func TestParseRiderHealthCertOCRText_ExtractsFlexibleValidEnd(t *testing.T) {
 			text:           "有效期限至: 2030 / 12 / 31",
 			expectValidEnd: "2030/12/31",
 		},
+		{
+			name:           "RealHealthCertLayoutWithGenderAndCertNo",
+			text:           "姓名：周松涛性别：男\n从业类别：食品\n证书号：1305282025D590\n有效期至：2026.12.06",
+			expectName:     "周松涛",
+			expectCertNo:   "1305282025D590",
+			expectValidEnd: "2026.12.06",
+		},
+		{
+			name:           "FallbackToLastDateWhenLabelIsMissing",
+			text:           "周松涛\n男\n食品\n1305282025D590\n2026.12.06",
+			expectName:     "周松涛",
+			expectValidEnd: "2026.12.06",
+		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			var data riderHealthCertOCRData
 			parseRiderHealthCertOCRText(&data, tc.text)
+			require.Equal(t, tc.expectName, data.Name)
+			require.Equal(t, tc.expectCertNo, data.CertNumber)
 			require.Equal(t, tc.expectValidFrom, data.ValidStart)
 			require.Equal(t, tc.expectValidEnd, data.ValidEnd)
 		})

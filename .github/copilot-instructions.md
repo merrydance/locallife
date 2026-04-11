@@ -7,6 +7,7 @@ See `.github/README.md` for the normalized index of standards, instructions, pro
 ## Workspace Layout
 
 - `locallife/`: Go backend API, workers, scheduler, SQL migrations, generated sqlc code, and integration tests.
+- `merchant_app/`: Flutter Android merchant app for order notifications, voice alerts, and receipt printing.
 - `web/`: Next.js web console.
 - `weapp/`: WeChat Mini Program.
 - `legal_exports/`: exported agreement HTML files and helper scripts. Treat as reference material unless the task is specifically about legal content export.
@@ -103,6 +104,29 @@ Web conventions:
 - Do not hardcode one-off colors or typography tokens when a semantic utility already exists.
 - Keep page-level data and API logic out of presentational components when the codebase already separates them.
 - Check UI standards before changing operator or merchant pages.
+
+## Flutter Merchant App: `merchant_app/`
+
+Read these first when changing the Flutter merchant app:
+
+- `.github/standards/engineering/README.md`
+- `.github/standards/flutter/README.md`
+
+Common commands:
+
+- `flutter pub get`
+- `flutter run`
+- `flutter build apk --release`
+- `flutter analyze`
+- `flutter test`
+
+Flutter conventions:
+
+- Use Riverpod for state management.
+- Feature-first directory structure: `lib/features/<feature>/`.
+- Message deduplication is mandatory across all three delivery channels (WebSocket, push, polling).
+- All user-facing strings must be in Chinese.
+- Foreground Service must be active with a persistent notification.
 
 ## Mini Program: `weapp/`
 

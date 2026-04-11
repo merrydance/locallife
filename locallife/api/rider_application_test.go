@@ -88,6 +88,17 @@ func TestCheckRiderApplicationApproval_AcceptsStringifiedHealthCertOCR(t *testin
 	require.Empty(t, rejectReason)
 }
 
+func TestCheckRiderApplicationApproval_AcceptsHealthCertDateWithDots(t *testing.T) {
+	server := &Server{}
+	app := randomRiderApplicationWithData(1)
+	app.HealthCertOcr = []byte(`{"name":"张三","id_number":"110101199001011234","valid_end":"2030.12.31"}`)
+
+	approved, rejectReason := server.checkRiderApplicationApproval(app)
+
+	require.True(t, approved)
+	require.Empty(t, rejectReason)
+}
+
 func TestCheckRiderApplicationApproval_FallsBackToApplicationRealName(t *testing.T) {
 	server := &Server{}
 	app := randomRiderApplicationWithData(1)
@@ -118,6 +129,7 @@ func TestCreateOrGetRiderApplicationDraft(t *testing.T) {
 
 	testCases := []struct {
 		name          string
+		requestBody   []byte
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
@@ -334,6 +346,7 @@ func TestDeleteRiderApplicationHealthCert(t *testing.T) {
 
 	testCases := []struct {
 		name          string
+		requestBody   []byte
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
@@ -564,6 +577,7 @@ func TestSubmitRiderApplication(t *testing.T) {
 
 	testCases := []struct {
 		name          string
+		requestBody   []byte
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(store *mockdb.MockStore)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
@@ -701,6 +715,22 @@ func TestSubmitRiderApplication(t *testing.T) {
 			},
 			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
 				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "请先补充以下资料后再提交：健康证照片")
+			},
+		},
+		{
+			name:        "BadRequest_AgreementConsentMissingUserAgreementVersion",
+			requestBody: []byte(`{"privacy_policy_version":"v1.0.0","consented_at":"2026-04-11T10:00:00Z"}`),
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(store *mockdb.MockStore) {
+				store.EXPECT().GetRiderApplicationByUserID(gomock.Any(), gomock.Any()).Times(0)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				require.Contains(t, recorder.Body.String(), "请先阅读并同意用户协议后再提交申请")
+				require.Contains(t, recorder.Body.String(), "40101")
 			},
 		},
 		{
@@ -813,8 +843,11 @@ func TestSubmitRiderApplication(t *testing.T) {
 			server := newTestServer(t, store)
 			recorder := httptest.NewRecorder()
 
-			request, err := http.NewRequest(http.MethodPost, "/v1/rider/application/submit", nil)
+			request, err := http.NewRequest(http.MethodPost, "/v1/rider/application/submit", bytes.NewReader(tc.requestBody))
 			require.NoError(t, err)
+			if len(tc.requestBody) > 0 {
+				request.Header.Set("Content-Type", "application/json")
+			}
 
 			tc.setupAuth(t, request, server.tokenMaker)
 			server.router.ServeHTTP(recorder, request)

@@ -89,6 +89,53 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
 }
 
+function containsChineseText(text: string): boolean {
+  return /[\u4e00-\u9fff]/.test(text)
+}
+
+function isOnboardingSubmitEndpoint(url: string): boolean {
+  return url === '/v1/merchant/application/submit' || url === '/v1/rider/application/submit'
+}
+
+function shouldPreserveOnboardingBusinessMessage(url: string, backendMessage: string): boolean {
+  if (!isOnboardingSubmitEndpoint(url)) {
+    return false
+  }
+
+  const message = backendMessage.replace(/\s+/g, ' ').trim()
+  if (!message || message.length > 120 || message.includes('\n')) {
+    return false
+  }
+
+  if (!containsChineseText(message)) {
+    return false
+  }
+
+  const normalized = message.toLowerCase()
+  const diagnosticMarkers = [
+    'sql',
+    'stack',
+    'traceback',
+    'panic',
+    'exception',
+    'token',
+    'jwt',
+    'request:fail',
+    'http ',
+    'bad gateway',
+    'gateway timeout',
+    'service unavailable',
+    'internal server error',
+    'unauthorized',
+    'forbidden',
+    'not found',
+    'no rows in result set',
+    'nginx'
+  ]
+
+  return !diagnosticMarkers.some((marker) => normalized.includes(marker))
+}
+
 function mapSearchBadRequestMessage(url: string, backendMessage: string, fallback: string): string {
   const normalized = backendMessage.toLowerCase()
   const isNoRows = normalized.includes('no rows in result set')
@@ -186,6 +233,10 @@ function mapKnownBackendMessage(url: string, backendMessage: string): string | u
     return '申请已提交，请等待审核'
   }
 
+  if (normalized.includes('application can only be submitted in draft state')) {
+    return '当前申请状态暂不支持再次提交，请返回查看审核进度'
+  }
+
   if (normalized.includes('application can only be modified in draft state')) {
     return '申请已提交，暂时不能修改资料'
   }
@@ -209,6 +260,10 @@ function normalizeBackendUserMessage(url: string, backendMessage: string, fallba
   const mappedMessage = mapKnownBackendMessage(url, backendMessage)
   if (mappedMessage) {
     return mappedMessage
+  }
+
+  if (shouldPreserveOnboardingBusinessMessage(url, backendMessage)) {
+    return backendMessage.replace(/\s+/g, ' ').trim()
   }
 
   return mapBackendMessageToUserMessage(backendMessage, fallback)

@@ -331,6 +331,13 @@ export function mapBackendMessageToUserMessage(rawMessage: string, fallback: str
   }
 
   if (
+    normalized.includes('application can only be submitted in draft state') ||
+    normalized.includes('当前申请状态暂不支持再次提交')
+  ) {
+    return '当前申请状态暂不支持再次提交，请返回查看审核进度'
+  }
+
+  if (
     normalized.includes('application can only be modified in draft state') ||
     normalized.includes('暂时不能修改资料')
   ) {

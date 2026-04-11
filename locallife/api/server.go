@@ -88,6 +88,7 @@ type Server struct {
 	router                  *gin.Engine
 	applymentCatalogCache   *applymentCatalogCache
 	applymentCatalogCacheMu sync.Mutex
+	redisClient             *redis.Client // Redis 客户端（绑定码等功能使用）
 }
 
 // SetPaymentClientForTest injects a payment client in tests.
@@ -311,6 +312,14 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 		imageDeleter:    newImageDeleteWorker(),
 		keywordWorker:   newSearchKeywordWorker(store),
 	}
+
+	// 初始化 Redis 客户端（供绑定码等功能使用）
+	if config.RedisAddress != "" {
+		server.redisClient = redis.NewClient(&redis.Options{
+			Addr:     config.RedisAddress,
+			Password: config.RedisPassword,
+		})
+	}
 	server.orderCommandSvc = server.buildOrderCommandService()
 	server.orderQuerySvc = server.buildOrderQueryService()
 	server.paymentFacade = server.buildPaymentFacade()
@@ -503,6 +512,7 @@ func (server *Server) setupRouter() {
 	authPublicGroup.POST("/web-login/sessions", server.createWebLoginSession)
 	authPublicGroup.GET("/web-login/sessions/:code", server.getWebLoginSessionStatus)
 	authPublicGroup.POST("/web-login/consume", server.consumeWebLoginSession)
+	authPublicGroup.POST("/app-bind/verify", server.verifyAppBindCode) // App 绑定码验证（公开端点）
 
 	// 微信支付回调路由（无需认证，微信服务器调用）
 	webhooksGroup := v1.Group("/webhooks")
@@ -621,6 +631,7 @@ func (server *Server) setupRouter() {
 	authGroup.PATCH("/users/me", server.updateCurrentUser)
 
 	authGroup.POST("/auth/web-login/confirm", server.confirmWebLoginSession)
+	authGroup.POST("/auth/app-bind/code", server.generateAppBindCode) // App 绑定码生成（需要 merchant 角色）
 
 	// 媒体中心路由
 	mediaGroup := authGroup.Group("/media")

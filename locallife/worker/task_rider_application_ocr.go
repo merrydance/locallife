@@ -178,11 +178,30 @@ func parseRiderHealthCertOCRText(data *riderHealthCertOCRData, text string) {
 	if match := idRegex.FindString(text); match != "" {
 		data.IDNumber = strings.ToUpper(match)
 	}
-	nameRegex := regexp.MustCompile(`(?m)(?:从业人员姓名|持证人|体检者|姓名)\s*[:：]?\s*([^\n\r\s]{2,20})`)
-	if match := nameRegex.FindStringSubmatch(text); len(match) > 1 {
-		data.Name = strings.TrimSpace(match[1])
+	trimHealthCertName := func(candidate string) string {
+		candidate = strings.TrimSpace(candidate)
+		candidate = regexp.MustCompile(`(?:性别\s*[:：]?.*|男|女).*$`).ReplaceAllString(candidate, "")
+		candidate = regexp.MustCompile(`[^\p{Han}·]`).ReplaceAllString(candidate, "")
+		candidate = strings.TrimSpace(candidate)
+		if len([]rune(candidate)) < 2 {
+			return ""
+		}
+		return candidate
 	}
-	certRegex := regexp.MustCompile(`(?m)(?:健康证号|证书编号|证号|编号)\s*[:：]?\s*([A-Za-z0-9\-]{5,})`)
+	namePatterns := []*regexp.Regexp{
+		regexp.MustCompile(`(?m)(?:从业人员姓名|持证人|体检者|姓名)\s*[:：]?\s*([^\n\r]{2,20})`),
+		regexp.MustCompile(`(?m)([^\n\r]{2,20})\s*(?:性别\s*[:：]?\s*(?:男|女)|男|女)`),
+	}
+	for _, nameRegex := range namePatterns {
+		if match := nameRegex.FindStringSubmatch(text); len(match) > 1 {
+			candidate := trimHealthCertName(match[1])
+			if candidate != "" {
+				data.Name = candidate
+				break
+			}
+		}
+	}
+	certRegex := regexp.MustCompile(`(?m)(?:健康证号|证书编号|证书号|证号|编号)\s*[:：]?\s*([A-Za-z0-9\-]{5,})`)
 	if match := certRegex.FindStringSubmatch(text); len(match) > 1 {
 		data.CertNumber = strings.TrimSpace(match[1])
 	}
@@ -201,6 +220,16 @@ func parseRiderHealthCertOCRText(data *riderHealthCertOCRData, text string) {
 	if match := validRangeRegex.FindStringSubmatch(text); len(match) > 2 {
 		data.ValidStart = normalizeRiderOCRDateText(match[1])
 		data.ValidEnd = normalizeRiderOCRDateText(match[2])
+	}
+	if data.ValidEnd == "" {
+		dateRegex := regexp.MustCompile(datePattern)
+		matches := dateRegex.FindAllString(text, -1)
+		if len(matches) > 0 {
+			if len(matches) > 1 && data.ValidStart == "" {
+				data.ValidStart = normalizeRiderOCRDateText(matches[0])
+			}
+			data.ValidEnd = normalizeRiderOCRDateText(matches[len(matches)-1])
+		}
 	}
 	if data.ValidEnd == "" && strings.Contains(text, "长期") {
 		data.ValidEnd = "长期"

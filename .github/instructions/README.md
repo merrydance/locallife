@@ -41,6 +41,10 @@ Cross-cutting:
 
 - `review.instructions.md`
 
+Flutter:
+
+- `flutter-merchant-app.instructions.md`
+
 ## Maintenance Rule
 
 If an original project standard is updated, mirror the most actionable operational changes here so the auto-matched instruction layer stays aligned.
