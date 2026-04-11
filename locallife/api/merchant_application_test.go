@@ -14,6 +14,7 @@ import (
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
 	"github.com/merrydance/locallife/maps"
+	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -735,6 +736,104 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					Times(1).
 					Return(app, nil)
 
+				store.EXPECT().
+					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var resp merchantApplicationDraftResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
+				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
+			name: "Approved_FoodPermitOCRJobNormalizedFallback",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				ocrJobID := int64(777)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					OCRJobID:    &ocrJobID,
+					PermitNo:    "",
+					CompanyName: "地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东",
+					ValidTo:     "",
+					RawText:     "经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001",
+					OCRAt:       time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				normalizedResult, err := ocr.MarshalNormalizedResult(ocr.NormalizedResult{
+					DocumentType: ocr.DocumentTypeFoodPermit,
+					RecognizedAt: time.Now(),
+					FoodPermit: &ocr.FoodPermitResult{
+						LicenseNumber: "JY11105000000001",
+						BusinessName:  "测试餐饮有限公司",
+						OperatorName:  "张三",
+						ValidPeriod:   "2030年12月31日",
+						RawText:       "主体名称：测试餐饮有限公司\n经营场所：北京市朝阳区测试路100号1楼\n许可证编号：JY11105000000001\n有效期：2030年12月31日",
+					},
+				})
+				require.NoError(t, err)
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					GetOCRJob(gomock.Any(), ocrJobID).
+					Times(1).
+					Return(db.OcrJob{ID: ocrJobID, Provider: "aliyun", Status: "succeeded", NormalizedResult: normalizedResult}, nil)
+
+				store.EXPECT().
+					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(app, nil)
+
 				submittedApp := app
 				submittedApp.Status = "submitted"
 				store.EXPECT().
@@ -808,7 +907,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 
 				store.EXPECT().
 					GetOCRJob(gomock.Any(), ocrJobID).
-					Times(1).
+					Times(2).
 					Return(db.OcrJob{ID: ocrJobID, Provider: "wechat", Status: "succeeded"}, nil)
 
 				store.EXPECT().

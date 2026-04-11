@@ -1072,16 +1072,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return apierr(ErrFoodLicenseRequired.Code, "食品经营许可证信息解析失败，请重新上传清晰完整的食品经营许可证照片")
 	}
 
-	// 旧OCR缓存可能因解析器bug导致字段为空；若 RawText 有值则尝试重新提取并写回DB
-	if (foodPermitOCR.ValidTo == "" || foodPermitOCR.OperatorName == "") && foodPermitOCR.RawText != "" {
-		reparseFoodPermitMissingFields(&foodPermitOCR)
-		if reparsed, err := json.Marshal(foodPermitOCR); err == nil {
-			_, _ = server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
-				ID:            app.ID,
-				FoodPermitOcr: reparsed,
-			})
-		}
-	}
+	server.repairFoodPermitOCRFields(ctx, app.ID, &foodPermitOCR)
 
 	// 检查食品经营许可证有效期
 	if !isFoodPermitValid(foodPermitOCR.ValidTo) {
@@ -1763,12 +1754,79 @@ func extractAddressKeywords(addr string) []string {
 	return keywords
 }
 
+func (server *Server) repairFoodPermitOCRFields(ctx context.Context, appID int64, ocrData *FoodPermitOCRData) {
+	if ocrData == nil || !foodPermitNeedsRepair(*ocrData) {
+		return
+	}
+
+	changed := false
+	if ocrData.RawText != "" {
+		changed = reparseFoodPermitMissingFields(ocrData) || changed
+	}
+	if foodPermitNeedsRepair(*ocrData) {
+		changed = server.hydrateFoodPermitOCRFromJob(ctx, appID, ocrData) || changed
+		if ocrData.RawText != "" {
+			changed = reparseFoodPermitMissingFields(ocrData) || changed
+		}
+	}
+	if !changed || server.store == nil {
+		return
+	}
+
+	reparsed, err := json.Marshal(ocrData)
+	if err != nil {
+		log.Warn().Err(err).Int64("application_id", appID).Msg("submit merchant application: marshal repaired food permit ocr failed")
+		return
+	}
+	if _, err := server.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
+		ID:            appID,
+		FoodPermitOcr: reparsed,
+	}); err != nil {
+		log.Warn().Err(err).Int64("application_id", appID).Msg("submit merchant application: persist repaired food permit ocr failed")
+	}
+}
+
+func foodPermitNeedsRepair(ocr FoodPermitOCRData) bool {
+	return ocr.ValidTo == "" || ocr.OperatorName == "" || ocr.CompanyName == "" || ocr.PermitNo == "" || isSuspiciousFoodPermitCompanyName(ocr.CompanyName)
+}
+
+func (server *Server) hydrateFoodPermitOCRFromJob(ctx context.Context, appID int64, ocrData *FoodPermitOCRData) bool {
+	if server.store == nil || ocrData == nil || ocrData.OCRJobID == nil || *ocrData.OCRJobID <= 0 {
+		return false
+	}
+
+	job, err := server.store.GetOCRJob(ctx, *ocrData.OCRJobID)
+	if err != nil {
+		log.Warn().Err(err).Int64("application_id", appID).Int64("ocr_job_id", *ocrData.OCRJobID).Msg("submit merchant application: load food permit ocr job for repair failed")
+		return false
+	}
+	if len(job.NormalizedResult) == 0 {
+		return false
+	}
+
+	normalized, err := ocr.UnmarshalNormalizedResult(job.NormalizedResult)
+	if err != nil {
+		log.Warn().Err(err).Int64("application_id", appID).Int64("ocr_job_id", job.ID).Msg("submit merchant application: decode food permit ocr normalized result failed")
+		return false
+	}
+	if normalized.FoodPermit == nil {
+		return false
+	}
+
+	changed := populateFoodPermitOCRDataFromNormalized(ocrData, normalized.FoodPermit)
+	if changed {
+		log.Info().Int64("application_id", appID).Int64("ocr_job_id", job.ID).Str("ocr_provider", job.Provider).Msg("submit merchant application: repaired food permit ocr from job result")
+	}
+	return changed
+}
+
 // reparseFoodPermitMissingFields 从 RawText 补充因旧解析器bug漏掉的字段。
 // 用于修复存量OCR缓存数据（如 OCR输出"2027 年01月08日"在旧版未能正确提取的情况）。
-func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) {
+func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) bool {
+	changed := false
 	raw := ocr.RawText
 	if raw == "" {
-		return
+		return false
 	}
 
 	// 提取有效期至
@@ -1781,7 +1839,10 @@ func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) {
 			norm = strings.ReplaceAll(norm, " 月", "月")
 			norm = strings.ReplaceAll(norm, "月 ", "月")
 			norm = strings.ReplaceAll(norm, " 日", "日")
-			ocr.ValidTo = norm
+			if norm != ocr.ValidTo {
+				ocr.ValidTo = norm
+				changed = true
+			}
 		}
 	}
 
@@ -1790,18 +1851,28 @@ func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) {
 		permitRe := regexp.MustCompile(`(?:JY[0-9]{12,}|(?:登记证编号|证书编号|食品经营许可证编号)\s*[:：]\s*([0-9A-Za-z]{6,}))`)
 		if m := permitRe.FindStringSubmatch(raw); m != nil {
 			if m[1] != "" {
-				ocr.PermitNo = m[1]
+				if m[1] != ocr.PermitNo {
+					ocr.PermitNo = m[1]
+					changed = true
+				}
 			} else {
-				ocr.PermitNo = m[0]
+				if m[0] != ocr.PermitNo {
+					ocr.PermitNo = m[0]
+					changed = true
+				}
 			}
 		}
 	}
 
 	// 提取企业/商号名称
-	if ocr.CompanyName == "" {
+	if ocr.CompanyName == "" || isSuspiciousFoodPermitCompanyName(ocr.CompanyName) {
 		nameRe := regexp.MustCompile(`(?:经营者名称|单位名称|名\s*称|主体名称|商号名称)\s*[:：]?\s*([^\n\r]{2,30})`)
 		if m := nameRe.FindStringSubmatch(raw); m != nil {
-			ocr.CompanyName = strings.TrimSpace(m[1])
+			candidate := normalizeCompanyName(strings.TrimSpace(m[1]))
+			if candidate != "" && candidate != ocr.CompanyName {
+				ocr.CompanyName = candidate
+				changed = true
+			}
 		}
 	}
 
@@ -1809,9 +1880,77 @@ func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) {
 	if ocr.OperatorName == "" {
 		operatorRe := regexp.MustCompile(`经营者姓名\s*[:：]?\s*([^\s\n\r,，。]{2,10})`)
 		if m := operatorRe.FindStringSubmatch(raw); m != nil {
-			ocr.OperatorName = strings.TrimSpace(m[1])
+			candidate := strings.TrimSpace(m[1])
+			if candidate != "" && candidate != ocr.OperatorName {
+				ocr.OperatorName = candidate
+				changed = true
+			}
 		}
 	}
+
+	return changed
+}
+
+func populateFoodPermitOCRDataFromNormalized(ocrData *FoodPermitOCRData, result *ocr.FoodPermitResult) bool {
+	if ocrData == nil || result == nil {
+		return false
+	}
+
+	changed := false
+	if rawText := strings.TrimSpace(result.RawText); rawText != "" && rawText != ocrData.RawText {
+		ocrData.RawText = rawText
+		changed = true
+	}
+	if licenseNumber := strings.TrimSpace(result.LicenseNumber); licenseNumber != "" && ocrData.PermitNo == "" {
+		ocrData.PermitNo = licenseNumber
+		changed = true
+	}
+	if companyName := normalizeCompanyName(strings.TrimSpace(result.BusinessName)); companyName != "" && (ocrData.CompanyName == "" || isSuspiciousFoodPermitCompanyName(ocrData.CompanyName)) {
+		if companyName != ocrData.CompanyName {
+			ocrData.CompanyName = companyName
+			changed = true
+		}
+	}
+	if operatorName := strings.TrimSpace(result.OperatorName); operatorName != "" && ocrData.OperatorName == "" {
+		ocrData.OperatorName = operatorName
+		changed = true
+	}
+	validFrom, validTo := parseFoodPermitValidPeriod(result.ValidPeriod)
+	if validFrom != "" && ocrData.ValidFrom == "" {
+		ocrData.ValidFrom = validFrom
+		changed = true
+	}
+	if validTo != "" && ocrData.ValidTo == "" {
+		ocrData.ValidTo = validTo
+		changed = true
+	}
+	return changed
+}
+
+func parseFoodPermitValidPeriod(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	raw = strings.ReplaceAll(raw, " 年", "年")
+	raw = strings.ReplaceAll(raw, "年 ", "年")
+	raw = strings.ReplaceAll(raw, " 月", "月")
+	raw = strings.ReplaceAll(raw, "月 ", "月")
+	raw = strings.ReplaceAll(raw, " 日", "日")
+	raw = strings.ReplaceAll(raw, "日 ", "日")
+	if strings.Contains(raw, "长期") || strings.Contains(raw, "永久") {
+		return "", "长期"
+	}
+	datePattern := `\d{4}年\d{1,2}月\d{1,2}日`
+	rangeRegex := regexp.MustCompile(`(` + datePattern + `)\s*[至到-]\s*(` + datePattern + `)`)
+	if match := rangeRegex.FindStringSubmatch(raw); len(match) > 2 {
+		return match[1], match[2]
+	}
+	singleRegex := regexp.MustCompile(`(` + datePattern + `)`)
+	if match := singleRegex.FindStringSubmatch(raw); len(match) > 1 {
+		return "", match[1]
+	}
+	return "", raw
 }
 
 // isFoodPermitValid 检查食品经营许可证是否有效
