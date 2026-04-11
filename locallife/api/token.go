@@ -55,6 +55,24 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 		return
 	}
 
+	session, err := server.store.GetSessionByRefreshToken(ctx, db.GetSessionByRefreshTokenParams{
+		RefreshToken:         refreshTokenHash,
+		RefreshTokenFallback: req.RefreshToken,
+	})
+	if err != nil {
+		if errors.Is(err, db.ErrRecordNotFound) {
+			ctx.JSON(http.StatusNotFound, errorResponse(err))
+			return
+		}
+		ctx.JSON(http.StatusInternalServerError, internalError(ctx, err))
+		return
+	}
+
+	refreshTokenDuration := server.config.RefreshTokenDuration
+	if isAppBindSessionUserAgent(session.UserAgent) {
+		refreshTokenDuration = appRefreshTokenDuration
+	}
+
 	// 先生成新 token（不涉及 DB 写操作）
 	accessToken, accessPayload, err := server.tokenMaker.CreateToken(
 		refreshPayload.UserID,
@@ -68,7 +86,7 @@ func (server *Server) renewAccessToken(ctx *gin.Context) {
 
 	newRefreshToken, newRefreshPayload, err := server.tokenMaker.CreateToken(
 		refreshPayload.UserID,
-		server.config.RefreshTokenDuration,
+		refreshTokenDuration,
 		token.TokenTypeRefreshToken,
 	)
 	if err != nil {

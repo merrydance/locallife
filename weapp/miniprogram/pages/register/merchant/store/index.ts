@@ -22,7 +22,7 @@ import {
 } from '../../../../api/onboarding'
 import { getPrivateMediaUrl } from '../../../../utils/image-security'
 import { getMediaDisplayUrl } from '../../../../utils/media'
-import { getErrorUserMessage } from '../../../../utils/user-facing'
+import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
 import { getCurrentRegion, reverseGeocode, searchRegions, type RegionSearchResult } from '../../../../api/location'
@@ -2017,8 +2017,13 @@ Page({
         this.startPollingStatus()
       }
     } catch (err: unknown) {
-      logger.error('[MerchantRegister] Submit failed', err)
       const errMsg = getErrorMessage(err, '提交失败，请重试')
+      const debugMessage = getErrorDebugMessage(err)
+      logger.error('[MerchantRegister] Submit failed', {
+        error: err,
+        userMessage: errMsg,
+        debugMessage
+      }, 'merchant-register-submit')
       this.setData({ isSubmitting: false, currentStep: 4 })
       wx.showModal({
         title: isMerchantCorrectionError(errMsg) ? '请修改资料后重试' : '提交失败',

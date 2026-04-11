@@ -52,8 +52,70 @@ export interface RiderApplicationResponse {
   submitted_at?: string
 }
 
+export interface RiderApplicationStatusView {
+  statusCode: string
+  isDraft: boolean
+  isSubmitted: boolean
+  isApproved: boolean
+  isRejected: boolean
+  canEdit: boolean
+  canSubmit: boolean
+}
+
+export function buildRiderApplicationStatusView(status?: ApplicationStatus | string): RiderApplicationStatusView {
+  const normalizedStatus = String(status || 'draft').trim().toLowerCase() || 'draft'
+
+  switch (normalizedStatus) {
+    case 'submitted':
+      return {
+        statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: true,
+        isApproved: false,
+        isRejected: false,
+        canEdit: false,
+        canSubmit: false
+      }
+    case 'approved':
+      return {
+        statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: false,
+        isApproved: true,
+        isRejected: false,
+        canEdit: false,
+        canSubmit: false
+      }
+    case 'rejected':
+      return {
+        statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: false,
+        isApproved: false,
+        isRejected: true,
+        canEdit: false,
+        canSubmit: false
+      }
+    default:
+      return {
+        statusCode: 'draft',
+        isDraft: true,
+        isSubmitted: false,
+        isApproved: false,
+        isRejected: false,
+        canEdit: true,
+        canSubmit: true
+      }
+  }
+}
+
 function hasRiderText(value?: string) {
   return typeof value === 'string' && value.trim().length > 0
+}
+
+function hasRiderHealthCertKeyFields(latest: RiderApplicationResponse) {
+  return hasRiderText(latest.health_cert_ocr?.valid_end)
+    && hasRiderText(latest.health_cert_ocr?.name)
 }
 
 function buildRiderApplicationReadonlyMessage(status: ApplicationStatus) {
@@ -103,13 +165,13 @@ function checkRiderIDCardWriteback(latest: RiderApplicationResponse, side: 'Fron
 function checkRiderHealthCertWriteback(latest: RiderApplicationResponse) {
   const status = latest.health_cert_ocr?.status || ''
   const error = latest.health_cert_ocr?.error || ''
+  const hasKeyFields = hasRiderHealthCertKeyFields(latest)
   return {
-    ready: status === 'done'
-      || hasRiderText(latest.health_cert_ocr?.cert_number)
-      || hasRiderText(latest.health_cert_ocr?.valid_end)
-      || hasRiderText(latest.health_cert_ocr?.name),
-    failed: status === 'failed',
-    errorMessage: error
+    ready: hasKeyFields,
+    failed: status === 'failed' || (status === 'done' && !hasKeyFields),
+    errorMessage: error || (status === 'done' && !hasKeyFields
+      ? '健康证关键字段未识别，请重新上传清晰、无遮挡的健康证照片'
+      : '')
   }
 }
 

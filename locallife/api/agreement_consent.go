@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"errors"
 	"strings"
 	"time"
 
@@ -21,16 +20,16 @@ func (r agreementConsentRequest) isEmpty() bool {
 
 func (r agreementConsentRequest) validate() error {
 	if strings.TrimSpace(r.UserAgreementVersion) == "" {
-		return errors.New("user_agreement_version is required")
+		return ErrUserAgreementVersionRequired
 	}
 	if strings.TrimSpace(r.PrivacyPolicyVersion) == "" {
-		return errors.New("privacy_policy_version is required")
+		return ErrPrivacyPolicyVersionRequired
 	}
 	if strings.TrimSpace(r.ConsentedAt) == "" {
-		return errors.New("consented_at is required")
+		return ErrAgreementConsentedAtRequired
 	}
 	if _, err := time.Parse(time.RFC3339, r.ConsentedAt); err != nil {
-		return errors.New("consented_at must be RFC3339 format")
+		return ErrAgreementConsentedAtInvalid
 	}
 	return nil
 }

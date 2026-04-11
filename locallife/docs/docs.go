@@ -667,6 +667,89 @@ const docTemplate = `{
                 }
             }
         },
+        "/v1/auth/app-bind/code": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "商户在小程序端调用，生成 6 位数字绑定码供 App 输入验证。需要 merchant 角色。",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "生成 App 绑定码",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.generateAppBindCodeResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "非商户角色",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/auth/app-bind/verify": {
+            "post": {
+                "description": "App 端调用，使用绑定码换取 JWT token。公开端点，无需认证。",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "验证 App 绑定码",
+                "parameters": [
+                    {
+                        "description": "绑定码验证请求",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/api.verifyAppBindCodeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.verifyAppBindCodeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "请求参数错误或绑定码无效",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "服务器内部错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/auth/refresh": {
             "post": {
                 "description": "使用刷新令牌获取新的访问令牌",
@@ -35447,6 +35530,19 @@ const docTemplate = `{
                 }
             }
         },
+        "api.generateAppBindCodeResponse": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string",
+                    "example": "839471"
+                },
+                "expires_in": {
+                    "type": "integer",
+                    "example": 300
+                }
+            }
+        },
         "api.generateInviteCodeResponse": {
             "type": "object",
             "properties": {
@@ -43899,6 +43995,58 @@ const docTemplate = `{
                 },
                 "status": {
                     "type": "string"
+                }
+            }
+        },
+        "api.verifyAppBindCodeRequest": {
+            "type": "object",
+            "required": [
+                "code",
+                "device_id"
+            ],
+            "properties": {
+                "app_version": {
+                    "type": "string",
+                    "maxLength": 20
+                },
+                "code": {
+                    "type": "string"
+                },
+                "device_id": {
+                    "type": "string",
+                    "maxLength": 255,
+                    "minLength": 1
+                },
+                "device_model": {
+                    "type": "string",
+                    "maxLength": 100
+                },
+                "os_version": {
+                    "type": "string",
+                    "maxLength": 50
+                }
+            }
+        },
+        "api.verifyAppBindCodeResponse": {
+            "type": "object",
+            "properties": {
+                "access_token": {
+                    "type": "string"
+                },
+                "access_token_expires_at": {
+                    "type": "string"
+                },
+                "refresh_token": {
+                    "type": "string"
+                },
+                "refresh_token_expires_at": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "integer"
+                },
+                "user": {
+                    "$ref": "#/definitions/api.userResponse"
                 }
             }
         },

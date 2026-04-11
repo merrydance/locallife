@@ -37,6 +37,10 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
 				store.EXPECT().
+					GetSessionByRefreshToken(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Session{UserID: userID}, nil)
+				store.EXPECT().
 					RefreshSessionTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.RefreshSessionTxResult{Session: db.Session{UserID: userID}}, nil)
@@ -66,6 +70,37 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 				// 验证token确实在将来过期
 				require.True(t, payload.ExpiredAt.After(time.Now()))
+			},
+		},
+		{
+			name: "AppBindSessionKeepsLongLivedRefreshToken",
+			setupBody: func(t *testing.T, tokenMaker token.Maker) (map[string]interface{}, string) {
+				refreshToken, _, err := tokenMaker.CreateToken(user.ID, 24*time.Hour, token.TokenTypeRefreshToken)
+				require.NoError(t, err)
+				return map[string]interface{}{
+					"refresh_token": refreshToken,
+				}, refreshToken
+			},
+			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
+				store.EXPECT().
+					GetSessionByRefreshToken(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Session{UserID: userID, UserAgent: makeAppBindSessionUserAgent("LocalLifeMerchantApp/1.0")}, nil)
+				store.EXPECT().
+					RefreshSessionTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.RefreshSessionTxResult{Session: db.Session{UserID: userID}}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder, tokenMaker token.Maker, userID int64) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+
+				var rsp renewAccessTokenResponse
+				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &rsp)
+
+				refreshPayload, err := tokenMaker.VerifyToken(rsp.RefreshToken, token.TokenTypeRefreshToken)
+				require.NoError(t, err)
+				require.Equal(t, userID, refreshPayload.UserID)
+				require.WithinDuration(t, time.Now().Add(appRefreshTokenDuration), refreshPayload.ExpiredAt, 5*time.Second)
 			},
 		},
 		{
@@ -116,6 +151,10 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 			},
 			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
 				store.EXPECT().
+					GetSessionByRefreshToken(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Session{UserID: userID}, nil)
+				store.EXPECT().
 					RefreshSessionTx(gomock.Any(), gomock.Any()).
 					Times(1).
 					Return(db.RefreshSessionTxResult{}, fmt.Errorf("refresh token expired"))
@@ -134,6 +173,10 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 				}, refreshToken
 			},
 			buildStubs: func(store *mockdb.MockStore, refreshToken string, userID int64, tokenSecret string) {
+				store.EXPECT().
+					GetSessionByRefreshToken(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.Session{UserID: userID}, nil)
 				store.EXPECT().
 					RefreshSessionTx(gomock.Any(), gomock.Any()).
 					Times(1).
@@ -170,8 +213,9 @@ func TestRenewAccessTokenAPI(t *testing.T) {
 
 			// 创建真实的tokenMaker用于测试
 			config := util.Config{
-				TokenSymmetricKey:   util.RandomString(32),
-				AccessTokenDuration: time.Minute,
+				TokenSymmetricKey:    util.RandomString(32),
+				AccessTokenDuration:  time.Minute,
+				RefreshTokenDuration: 24 * time.Hour,
 			}
 			tokenMaker, err := token.NewPasetoMaker(config.TokenSymmetricKey)
 			require.NoError(t, err)
