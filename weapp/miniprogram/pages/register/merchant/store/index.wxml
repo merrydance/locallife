@@ -1,7 +1,7 @@
 <custom-navbar title="餐厅入驻" showBack="{{true}}" bind:navheight="onNavHeight" />
 
-<view class="page-container" style="padding-top: {{navBarHeight}}px; padding-bottom: 200rpx;">
-  
+<view class="page-container page-shell page-shell--with-nav page-shell--bottom-safe page-shell--page-gutter" style="--page-shell-nav-height: {{navBarHeight}}px; --page-shell-bottom-offset: 200rpx;">
+
   <!-- 步骤条 (Step 0 不显示) -->
   <view class="steps-container" wx:if="{{currentStep > 0}}">
     <t-steps current="{{currentStep - 1}}" bind:change="onStepChange">
@@ -60,7 +60,7 @@
         <view class="ocr-progress-notice" wx:if="{{ocrProgressMessage}}">{{ocrProgressMessage}}</view>
         <view class="form-group readonly-group ocr-section-card">
             <view class="ocr-section-title">营业执照</view>
-            <block wx:if="{{ocrDisplayState.businessLicense === 'done'}}">
+            <block wx:if="{{ocrDisplayState.businessLicenseReady}}">
                 <t-cell title="营业执照名" note="{{formData.licenseName || '--'}}" />
                 <t-cell title="统一信用代码" note="{{formData.creditCode || '--'}}" />
                 <t-cell title="注册地址" note="{{formData.registerAddress || '--'}}" />
@@ -70,11 +70,11 @@
                     <view class="scope-content">{{formData.businessScope || '--'}}</view>
                 </view>
             </block>
-            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.businessLicense === 'processing'}}">
+            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.businessLicenseProcessing}}">
                 <view class="ocr-status-title">营业执照识别中</view>
                 <view class="ocr-status-desc">营业执照整张识别完成后再统一回填，不再按单个字段穿插占位。</view>
             </view>
-            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.businessLicense === 'failed'}}">
+            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.businessLicenseFailed}}">
                 <view class="ocr-status-title">营业执照识别失败</view>
                 <view class="ocr-status-desc">请重新上传清晰、完整的营业执照照片。</view>
             </view>
@@ -82,14 +82,14 @@
 
         <view class="form-group readonly-group ocr-section-card">
             <view class="ocr-section-title">食品经营许可证</view>
-            <block wx:if="{{ocrDisplayState.foodPermit === 'done'}}">
+            <block wx:if="{{ocrDisplayState.foodPermitReady}}">
                 <t-cell title="许可证有效期" note="{{formData.foodLicenseValidity || '--'}}" />
             </block>
-            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.foodPermit === 'processing'}}">
+            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.foodPermitProcessing}}">
                 <view class="ocr-status-title">许可证识别中</view>
                 <view class="ocr-status-desc">许可证识别完成后会统一回填有效期等信息。</view>
             </view>
-            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.foodPermit === 'failed'}}">
+            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.foodPermitFailed}}">
                 <view class="ocr-status-title">许可证识别失败</view>
                 <view class="ocr-status-desc">请重新上传清晰、无遮挡的许可证照片。</view>
             </view>
@@ -97,16 +97,16 @@
 
         <view class="section-header">法人信息 (OCR识别)</view>
         <view class="form-group readonly-group ocr-section-card">
-            <block wx:if="{{ocrDisplayState.idCard === 'done'}}">
+            <block wx:if="{{ocrDisplayState.idCardReady}}">
                 <t-cell title="法人姓名" note="{{formData.legalPerson || '--'}}" />
                 <t-cell title="身份证号" note="{{formData.idCard || '--'}}" />
                 <t-cell title="身份证有效期" note="{{formData.idCardValidity || '--'}}" />
             </block>
-            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.idCard === 'processing'}}">
+            <view class="ocr-status-panel" wx:elif="{{ocrDisplayState.idCardProcessing}}">
                 <view class="ocr-status-title">法人身份证识别中</view>
                 <view class="ocr-status-desc">身份证人像面和国徽面都处理完成后，再统一展示法人信息。</view>
             </view>
-            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.idCard === 'failed'}}">
+            <view class="ocr-status-panel error" wx:elif="{{ocrDisplayState.idCardFailed}}">
                 <view class="ocr-status-title">法人身份证识别失败</view>
                 <view class="ocr-status-desc">请重新上传身份证正反面，确保文字完整清晰。</view>
             </view>
@@ -127,10 +127,12 @@
         <view class="form-group">
              <view class="external-field">
                 <view class="custom-label-row">
-                   <text class="external-label">店铺地址</text>
+                    <text class="external-label">营业执照地址</text>
                    <t-button theme="primary" variant="text" size="small" icon="location" bindtap="onChooseAddress" shape="round">选择位置</t-button>
                 </view>
-                <t-textarea placeholder="请选择或输入店铺地址" value="{{formData.address}}" autosize bindchange="onAddressInput" bindblur="onFieldBlur" data-field="address" />
+                 <t-textarea placeholder="请填写营业执照上的经营地址" value="{{formData.address}}" autosize bindchange="onAddressInput" bindblur="onFieldBlur" data-field="address" />
+                 <view class="upload-tip">页面展示与提交的地址以营业执照为准，地图定位仅用于骑手导航和自动核验。</view>
+                 <view class="upload-tip" wx:if="{{formData.addressDetail}}">地图定位：{{formData.addressDetail}}</view>
              </view>
         </view>
         
@@ -152,7 +154,8 @@
          <view class="form-group">
              <t-cell title="营业执照名" note="{{formData.licenseName || '--'}}" />
              <t-cell title="联系电话" note="{{formData.phone || '--'}}" />
-             <t-cell title="店铺地址" note="{{formData.address}}" />
+             <t-cell title="营业执照地址" note="{{formData.address}}" />
+             <t-cell wx:if="{{formData.addressDetail}}" title="地图定位" note="{{formData.addressDetail}}" />
              <t-cell title="法人姓名" note="{{formData.legalPerson}}" />
          </view>
          <view class="review-tips">提交后将进入审核流程。</view>

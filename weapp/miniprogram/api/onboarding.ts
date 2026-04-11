@@ -63,6 +63,10 @@ export type ApplicationStatus = 'draft' | 'submitted' | 'approved' | 'rejected'
 
 export interface MerchantApplicationStatusView {
   statusCode: string
+  isDraft: boolean
+  isSubmitted: boolean
+  isApproved: boolean
+  isRejected: boolean
   tagText: string
   tagTheme: 'primary' | 'success' | 'warning' | 'danger'
   badgeText: string
@@ -88,6 +92,10 @@ export function buildMerchantApplicationStatusView(status?: ApplicationStatus | 
     case 'submitted':
       return {
         statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: true,
+        isApproved: false,
+        isRejected: false,
         tagText: '审核中',
         tagTheme: 'warning',
         badgeText: '审核',
@@ -100,6 +108,10 @@ export function buildMerchantApplicationStatusView(status?: ApplicationStatus | 
     case 'approved':
       return {
         statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: false,
+        isApproved: true,
+        isRejected: false,
         tagText: '已通过',
         tagTheme: 'success',
         badgeText: '通过',
@@ -112,6 +124,10 @@ export function buildMerchantApplicationStatusView(status?: ApplicationStatus | 
     case 'rejected':
       return {
         statusCode: normalizedStatus,
+        isDraft: false,
+        isSubmitted: false,
+        isApproved: false,
+        isRejected: true,
         tagText: '已驳回',
         tagTheme: 'danger',
         badgeText: '驳回',
@@ -124,6 +140,10 @@ export function buildMerchantApplicationStatusView(status?: ApplicationStatus | 
     default:
       return {
         statusCode: 'draft',
+        isDraft: true,
+        isSubmitted: false,
+        isApproved: false,
+        isRejected: false,
         tagText: '草稿中',
         tagTheme: 'primary',
         badgeText: '草稿',

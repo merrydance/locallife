@@ -37,16 +37,55 @@ jobs:
       - name: Install gosec
         run: go install github.com/securego/gosec/v2/cmd/gosec@latest
 
+      - name: Determine focused gosec paths
+        id: scope
+        env:
+          BASE_SHA: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+
+          default_paths=(./api ./logic ./worker ./media ./wechat ./util/...)
+
+          if [ -n "${BASE_SHA:-}" ] && [ "$BASE_SHA" != "0000000000000000000000000000000000000000" ]; then
+            mapfile -t changed_files < <(
+              git diff --name-only --diff-filter=ACMR "$BASE_SHA" "$HEAD_SHA" | \
+                grep -E '^locallife/(api|logic|worker|media|wechat|util)/.*\.go$' | \
+                grep -Ev '(_test\.go$|\.sql\.go$|/mock/)' || true
+            )
+          else
+            changed_files=()
+          fi
+
+          if [ "${#changed_files[@]}" -gt 0 ]; then
+            declare -A seen=()
+            scoped_paths=()
+            for file in "${changed_files[@]}"; do
+              dir="./${file#locallife/}"
+              dir="${dir%/*}"
+              if [ -n "$dir" ] && [ -z "${seen[$dir]+x}" ]; then
+                seen[$dir]=1
+                scoped_paths+=("$dir")
+              fi
+            done
+          else
+            scoped_paths=("${default_paths[@]}")
+          fi
+
+          printf 'paths=%s\n' "${scoped_paths[*]}" >> "$GITHUB_OUTPUT"
+
       - name: Run focused gosec
         id: gosec
-        continue-on-error: true
         env:
-          GOSEC_PATHS: ./worker ./media ./wechat ./util/...
+          GOSEC_PATHS: ${{ steps.scope.outputs.paths }}
         run: |
-          set +e
+          set -euo pipefail
           mkdir -p ../artifacts
-          "$HOME/go/bin/gosec" -fmt=json -out ../artifacts/focused-gosec-report.json $GOSEC_PATHS 2>&1 | tee ../artifacts/focused-gosec.log
+          echo "Running gosec on: ${GOSEC_PATHS}"
+          set +e
+          "$HOME/go/bin/gosec" -fmt=json -out ../artifacts/focused-gosec-report.json ${GOSEC_PATHS} 2>&1 | tee ../artifacts/focused-gosec.log
           status=$?
+          set -e
           echo "exit_code=$status" >> "$GITHUB_OUTPUT"
           python3 - <<'PY' >> "$GITHUB_OUTPUT"
           import json
@@ -69,18 +108,18 @@ jobs:
         env:
           GOSEC_EXIT_CODE: ${{ steps.gosec.outputs.exit_code }}
           GOSEC_ISSUE_COUNT: ${{ steps.gosec.outputs.issue_count }}
+          GOSEC_PATHS: ${{ steps.scope.outputs.paths }}
         run: |
           echo "## Focused gosec" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "- Paths: ./worker ./media ./wechat ./util/..." >> "$GITHUB_STEP_SUMMARY"
+          echo "- Paths: ${GOSEC_PATHS:-unknown}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Exit code: ${GOSEC_EXIT_CODE:-unknown}" >> "$GITHUB_STEP_SUMMARY"
           echo "- Issue count: ${GOSEC_ISSUE_COUNT:-unknown}" >> "$GITHUB_STEP_SUMMARY"
 
           if [ "${GOSEC_EXIT_CODE:-unknown}" = "0" ]; then
             echo "- Result: no focused gosec findings" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "- Result: focused gosec reported findings or scan errors; this workflow is intentionally non-blocking" >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning title=Focused gosec::Focused gosec returned exit code ${GOSEC_EXIT_CODE:-unknown} with ${GOSEC_ISSUE_COUNT:-unknown} issue(s). See artifact focused-gosec-report."
+            echo "- Result: focused gosec reported findings or scan errors and blocked the workflow" >> "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Upload focused gosec artifact

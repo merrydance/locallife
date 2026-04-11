@@ -7,6 +7,16 @@ export interface CurrentRegionResponse {
     parent_name?: string
 }
 
+export interface ReverseGeocodeResponse {
+    address: string
+    formatted_address: string
+    province: string
+    city: string
+    district: string
+    street: string
+    street_number: string
+}
+
 export interface RegionSearchResult {
     id: number
     code: string
@@ -41,6 +51,19 @@ export function searchRegions(query: string): Promise<RegionSearchResult[]> {
         url: '/v1/regions/search',
         method: 'GET',
         data: { q: query.trim() }
+    })
+}
+
+export function reverseGeocode(params: { latitude: number, longitude: number }): Promise<ReverseGeocodeResponse> {
+    assertValidCoordinate(Number(params.latitude), Number(params.longitude))
+
+    return request<ReverseGeocodeResponse>({
+        url: '/v1/location/reverse-geocode',
+        method: 'GET',
+        data: {
+            latitude: Number(params.latitude),
+            longitude: Number(params.longitude)
+        }
     })
 }
 

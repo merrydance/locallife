@@ -13,6 +13,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	mockdb "github.com/merrydance/locallife/db/mock"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/token"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
@@ -525,6 +526,7 @@ func TestSubmitMerchantApplication(t *testing.T) {
 		name          string
 		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
 		buildStubs    func(t *testing.T, store *mockdb.MockStore)
+		configureServer func(server *Server)
 		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
@@ -583,6 +585,103 @@ func TestSubmitMerchantApplication(t *testing.T) {
 				var resp merchantApplicationDraftResponse
 				requireUnmarshalAPIResponseData(t, recorder.Body.Bytes(), &resp)
 				require.Equal(t, "approved", resp.Status)
+			},
+		},
+		{
+			name: "Approved_AddressMatchesReverseGeocode",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			configureServer: func(server *Server) {
+				server.mapClient = stubMapClient{reverseResult: &maps.ReverseGeocodeResult{
+					Address:          "北京市朝阳区测试路100号",
+					FormattedAddress: "北京市朝阳区测试路100号",
+					Province:         "北京市",
+					City:             "北京市",
+					District:         "朝阳区",
+					Street:           "测试路",
+					StreetNumber:     "100号",
+				}}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
+			name: "BadRequest_ReverseGeocodeAddressMismatch",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+			},
+			configureServer: func(server *Server) {
+				server.mapClient = stubMapClient{reverseResult: &maps.ReverseGeocodeResult{
+					Address:          "北京市海淀区光华路200号",
+					FormattedAddress: "北京市海淀区光华路200号",
+					Province:         "北京市",
+					City:             "北京市",
+					District:         "海淀区",
+					Street:           "光华路",
+					StreetNumber:     "200号",
+				}}
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusBadRequest, recorder.Code)
+				var response ErrorResponse
+				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), &response))
+				require.Equal(t, ErrInvalidAddress.Code, response.Code)
+				require.Contains(t, response.Error, "地图定位与营业执照注册地址不一致")
+				require.Contains(t, response.Error, "北京市海淀区光华路200号")
 			},
 		},
 		{
@@ -962,6 +1061,9 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			tc.buildStubs(t, store)
 
 			server := newTestServer(t, store)
+			if tc.configureServer != nil {
+				tc.configureServer(server)
+			}
 			recorder := httptest.NewRecorder()
 
 			request, err := http.NewRequest(http.MethodPost, "/v1/merchant/application/submit", nil)

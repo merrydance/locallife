@@ -23,6 +23,7 @@ import { getMediaDisplayUrl } from '../../../../utils/media'
 import { getStableBarHeights } from '../../../../utils/responsive'
 import { getErrorDebugMessage, getErrorUserMessage } from '../../../../utils/user-facing'
 import { ensureMerchantConsoleAccess } from '../../../../utils/console-access'
+import { reverseGeocode } from '../../../../api/location'
 
 type ApplicationForm = {
   merchantName: string
@@ -75,7 +76,7 @@ function buildForm(draft: MerchantApplicationDraftResponse): ApplicationForm {
   return {
     merchantName: draft.merchant_name || draft.business_license_ocr?.enterprise_name || '',
     contactPhone: draft.contact_phone || '',
-    businessAddress: draft.business_address || '',
+    businessAddress: draft.business_address || draft.business_license_ocr?.address || '',
     businessLicenseNumber: draft.business_license_number || draft.business_license_ocr?.reg_num || draft.business_license_ocr?.credit_code || '',
     businessScope: draft.business_scope || draft.business_license_ocr?.business_scope || '',
     legalPersonName: draft.legal_person_name || draft.id_card_front_ocr?.name || draft.business_license_ocr?.legal_representative || '',
@@ -104,8 +105,8 @@ function buildLocationLabel(address: string) {
   return '--'
 }
 
-function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSuccessCallbackResult) {
-  const address = result.address || ''
+function buildChosenLocationAddress(result: WechatMiniprogram.ChooseLocationSuccessCallbackResult, geocodedAddress = '') {
+  const address = geocodedAddress.trim() || result.address || ''
   const name = result.name || ''
   if (address && name) {
     return address.includes(name) ? address : `${address} ${name}`
@@ -338,6 +339,7 @@ Page({
     ])
     const licenseUrl = resolveDraftPublicAssetUrl(draft.business_license_url)
     const foodPermitUrl = resolveDraftPublicAssetUrl(draft.food_permit_url)
+    const locationLabel = await this.resolveLocationLabel(draft.latitude, draft.longitude, draft.business_address)
 
     const form = keepDirty ? this.data.form : buildForm(draft)
     const initialForm = buildForm(draft)
@@ -364,7 +366,7 @@ Page({
       regionId: draft.region_id || 0,
       latitude: draft.latitude || '',
       longitude: draft.longitude || '',
-      locationLabel: buildLocationLabel(draft.business_address || form.businessAddress),
+      locationLabel,
       form,
       initialForm,
       hasChanges: keepDirty ? hasFormChanged(this.data.form, initialForm) : false,
@@ -414,6 +416,20 @@ Page({
       idCardBackOcrTheme: getOcrTagTheme(draft.id_card_back_ocr?.status),
       ocrNoticeMessage: buildMerchantApplicationOCRNoticeMessage(ocrStatuses)
     })
+  },
+
+  async resolveLocationLabel(latitude?: string | null, longitude?: string | null, fallbackAddress?: string | null) {
+    const lat = Number(latitude || 0)
+    const lng = Number(longitude || 0)
+    if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) {
+      try {
+        const geocoded = await reverseGeocode({ latitude: lat, longitude: lng })
+        return buildLocationLabel(geocoded.formatted_address || geocoded.address || '')
+      } catch (error) {
+        logger.warn('Resolve merchant application location label failed', error, 'merchant-application-page')
+      }
+    }
+    return buildLocationLabel(String(fallbackAddress || ''))
   },
 
   async resolvePrivateAssetUrl(assetId?: number | null) {
@@ -856,14 +872,15 @@ Page({
       success: async (result) => {
         const previousForm = this.data.form
         const previousHasChanges = this.data.hasChanges
-        const fullAddress = buildChosenLocationAddress(result)
-        const nextForm = {
-          ...previousForm,
-          businessAddress: fullAddress || previousForm.businessAddress
-        }
+        const geocoded = await reverseGeocode({ latitude: result.latitude, longitude: result.longitude }).catch(() => null)
+        const fullAddress = buildChosenLocationAddress(result, geocoded?.formatted_address || geocoded?.address || '')
+        const nextForm = { ...previousForm }
 
         this.setData({
           form: nextForm,
+          latitude: String(result.latitude),
+          longitude: String(result.longitude),
+          locationLabel: buildLocationLabel(fullAddress),
           hasChanges: hasFormChanged(nextForm, this.data.initialForm),
           actionNoticeMessage: ''
         })
@@ -871,7 +888,6 @@ Page({
         wx.showLoading({ title: '保存位置中...' })
         try {
           const updated = await updateMerchantBasicInfo({
-            business_address: nextForm.businessAddress.trim() || undefined,
             latitude: String(result.latitude),
             longitude: String(result.longitude)
           })

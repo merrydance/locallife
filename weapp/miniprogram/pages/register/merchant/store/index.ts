@@ -2,6 +2,8 @@ import { logger } from '../../../../utils/logger'
 import { ErrorHandler } from '../../../../utils/error-handler'
 import { DraftStorage } from '../../../../utils/draft-storage'
 import {
+  buildMerchantApplicationOCRStatusView,
+  buildMerchantApplicationStatusView,
   getMerchantApplication,
   updateMerchantBasicInfo,
   ocrBusinessLicense,
@@ -23,7 +25,7 @@ import { getMediaDisplayUrl } from '../../../../utils/media'
 import { getErrorUserMessage } from '../../../../utils/user-facing'
 import Navigation from '../../../../utils/navigation'
 import { buildAgreementConsentPayload } from '../../../../api/agreement-consent'
-import { getCurrentRegion, searchRegions, type RegionSearchResult } from '../../../../api/location'
+import { getCurrentRegion, reverseGeocode, searchRegions, type RegionSearchResult } from '../../../../api/location'
 
 const DRAFT_KEY = 'merchant_register_draft'
 
@@ -51,6 +53,36 @@ type MerchantDraftExt = MerchantApplicationDraftResponse & {
   bank_name?: string
   bank_account?: string
   bank_account_name?: string
+}
+
+function buildLegalBusinessAddress(data?: MerchantDraftExt): string {
+  return String(data?.business_address || data?.business_license_ocr?.address || '').trim()
+}
+
+function buildMapLocationLabel(params: {
+  geocodedAddress?: string
+  chosenAddress?: string
+  chosenName?: string
+  latitude?: number
+  longitude?: number
+}): string {
+  const geocodedAddress = String(params.geocodedAddress || '').trim()
+  if (geocodedAddress) return geocodedAddress
+
+  const chosenAddress = String(params.chosenAddress || '').trim()
+  const chosenName = String(params.chosenName || '').trim()
+  if (chosenAddress && chosenName) {
+    return chosenAddress.includes(chosenName) ? chosenAddress : `${chosenAddress} ${chosenName}`
+  }
+  if (chosenAddress) return chosenAddress
+  if (chosenName) return chosenName
+
+  const lat = Number(params.latitude)
+  const lng = Number(params.longitude)
+  if (Number.isFinite(lat) && Number.isFinite(lng) && lat && lng) {
+    return `已选位置：${lat.toFixed(6)}, ${lng.toFixed(6)}`
+  }
+  return ''
 }
 
 type ImageFieldItem = {
@@ -238,8 +270,6 @@ type UploadField = 'license' | 'foodPermit' | 'idCardFront' | 'idCardBack'
 
 type OCRFieldKey = 'business_license_ocr' | 'food_permit_ocr' | 'id_card_front_ocr' | 'id_card_back_ocr'
 
-type OCRDisplayStateValue = 'idle' | 'processing' | 'done' | 'failed'
-
 type UploadFeedbackState = 'idle' | 'processing' | 'success' | 'error'
 
 type UploadFeedback = {
@@ -256,15 +286,27 @@ type MerchantUploadFeedback = {
 }
 
 type MerchantOCRDisplayState = {
-  businessLicense: OCRDisplayStateValue
-  foodPermit: OCRDisplayStateValue
-  idCard: OCRDisplayStateValue
+  businessLicenseReady: boolean
+  businessLicenseProcessing: boolean
+  businessLicenseFailed: boolean
+  foodPermitReady: boolean
+  foodPermitProcessing: boolean
+  foodPermitFailed: boolean
+  idCardReady: boolean
+  idCardProcessing: boolean
+  idCardFailed: boolean
 }
 
 const DEFAULT_MERCHANT_OCR_DISPLAY_STATE: MerchantOCRDisplayState = {
-  businessLicense: 'idle',
-  foodPermit: 'idle',
-  idCard: 'idle'
+  businessLicenseReady: false,
+  businessLicenseProcessing: false,
+  businessLicenseFailed: false,
+  foodPermitReady: false,
+  foodPermitProcessing: false,
+  foodPermitFailed: false,
+  idCardReady: false,
+  idCardProcessing: false,
+  idCardFailed: false
 }
 
 const EMPTY_UPLOAD_FEEDBACK: UploadFeedback = {
@@ -474,11 +516,12 @@ Page({
       this.setData({ applicationInitialized: true })
 
       // 检查申请状态 - 如果已提交或已通过，直接跳转
-      if (data.status === 'approved') {
+      const statusView = buildMerchantApplicationStatusView(data.status)
+      if (statusView.isApproved) {
         wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
         return
       }
-      if (data.status === 'submitted') {
+      if (statusView.isSubmitted) {
         wx.showToast({ title: '申请审核中', icon: 'none' })
         this.setData({ currentStep: 5 })
         this.startPollingStatus()
@@ -495,8 +538,8 @@ Page({
         ...this.data.formData,
         name: safeStr(data.merchant_name),
         phone: safeStr(data.contact_phone),
-        address: safeStr(data.business_address),
-        addressDetail: safeStr(data.business_address_detail),
+        address: buildLegalBusinessAddress(data),
+        addressDetail: '',
         regionId: Number(data.region_id || 0),
         latitude: data.latitude ? parseFloat(data.latitude) : 0,
         longitude: data.longitude ? parseFloat(data.longitude) : 0,
@@ -633,6 +676,7 @@ Page({
         ...this.data.formData,
         licenseName: toSafeString(data.business_license_ocr?.enterprise_name),
         creditCode: toSafeString(data.business_license_number || data.business_license_ocr?.reg_num || data.business_license_ocr?.credit_code),
+        address: toSafeString(data.business_address || data.business_license_ocr?.address || this.data.formData.address),
         registerAddress: toSafeString(data.business_license_ocr?.address),
         licenseValidity: toSafeString(data.business_license_ocr?.valid_period),
         businessScope: toSafeString(data.business_scope || data.business_license_ocr?.business_scope),
@@ -739,7 +783,7 @@ Page({
       }
     ]
 
-    const hasInProgress = checks.some((item) => item.uploaded && item.status !== 'failed' && item.status !== 'done' && !item.ready)
+    const hasInProgress = checks.some((item) => item.uploaded && buildMerchantApplicationOCRStatusView(item.status).isPending && !item.ready)
     if (!hasInProgress) {
       return ''
     }
@@ -761,38 +805,26 @@ Page({
       (data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || this.data.idCardBackImages.length > 0
     )
 
-    const businessLicenseStatus = data?.business_license_ocr?.status || ''
-    const foodPermitStatus = data?.food_permit_ocr?.status || ''
-    const idCardFrontStatus = data?.id_card_front_ocr?.status || ''
-    const idCardBackStatus = data?.id_card_back_ocr?.status || ''
+    const businessLicenseStatusView = buildMerchantApplicationOCRStatusView(data?.business_license_ocr?.status)
+    const foodPermitStatusView = buildMerchantApplicationOCRStatusView(data?.food_permit_ocr?.status)
+    const idCardFrontStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_front_ocr?.status)
+    const idCardBackStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_back_ocr?.status)
 
-    const businessLicenseDone = businessLicenseStatus === 'done' || hasMerchantBusinessLicenseResult(data)
-    const foodPermitDone = foodPermitStatus === 'done' || hasMerchantFoodPermitResult(data)
-    const idCardFrontDone = idCardFrontStatus === 'done' || hasMerchantIDCardFrontResult(data)
-    const idCardBackDone = idCardBackStatus === 'done' || hasMerchantIDCardBackResult(data)
+    const businessLicenseDone = businessLicenseStatusView.isReady || hasMerchantBusinessLicenseResult(data)
+    const foodPermitDone = foodPermitStatusView.isReady || hasMerchantFoodPermitResult(data)
+    const idCardFrontDone = idCardFrontStatusView.isReady || hasMerchantIDCardFrontResult(data)
+    const idCardBackDone = idCardBackStatusView.isReady || hasMerchantIDCardBackResult(data)
 
     return {
-      businessLicense: businessLicenseDone
-          ? 'done'
-        : businessLicenseStatus === 'failed'
-          ? 'failed'
-          : businessLicenseUploaded
-            ? 'processing'
-            : 'idle',
-      foodPermit: foodPermitDone
-          ? 'done'
-        : foodPermitStatus === 'failed'
-          ? 'failed'
-          : foodPermitUploaded
-            ? 'processing'
-            : 'idle',
-      idCard: idCardFrontDone && idCardBackDone
-          ? 'done'
-        : idCardFrontStatus === 'failed' || idCardBackStatus === 'failed'
-          ? 'failed'
-          : idCardFrontUploaded || idCardBackUploaded
-            ? 'processing'
-            : 'idle'
+      businessLicenseReady: businessLicenseDone,
+      businessLicenseFailed: !businessLicenseDone && businessLicenseStatusView.isFailed,
+      businessLicenseProcessing: !businessLicenseDone && !businessLicenseStatusView.isFailed && businessLicenseUploaded,
+      foodPermitReady: foodPermitDone,
+      foodPermitFailed: !foodPermitDone && foodPermitStatusView.isFailed,
+      foodPermitProcessing: !foodPermitDone && !foodPermitStatusView.isFailed && foodPermitUploaded,
+      idCardReady: idCardFrontDone && idCardBackDone,
+      idCardFailed: !(idCardFrontDone && idCardBackDone) && (idCardFrontStatusView.isFailed || idCardBackStatusView.isFailed),
+      idCardProcessing: !(idCardFrontDone && idCardBackDone) && !(idCardFrontStatusView.isFailed || idCardBackStatusView.isFailed) && (idCardFrontUploaded || idCardBackUploaded)
     }
   },
 
@@ -810,39 +842,39 @@ Page({
       (data?.id_card_back_media_asset_id && data.id_card_back_media_asset_id > 0) || this.data.idCardBackImages.length > 0
     )
 
-    const businessLicenseStatus = data?.business_license_ocr?.status || ''
-    const foodPermitStatus = data?.food_permit_ocr?.status || ''
-    const idCardFrontStatus = data?.id_card_front_ocr?.status || ''
-    const idCardBackStatus = data?.id_card_back_ocr?.status || ''
-    const businessLicenseReady = businessLicenseStatus === 'done' || hasMerchantBusinessLicenseResult(data)
-    const foodPermitReady = foodPermitStatus === 'done' || hasMerchantFoodPermitResult(data)
-    const idCardFrontReady = idCardFrontStatus === 'done' || hasMerchantIDCardFrontResult(data)
-    const idCardBackReady = idCardBackStatus === 'done' || hasMerchantIDCardBackResult(data)
+    const businessLicenseStatusView = buildMerchantApplicationOCRStatusView(data?.business_license_ocr?.status)
+    const foodPermitStatusView = buildMerchantApplicationOCRStatusView(data?.food_permit_ocr?.status)
+    const idCardFrontStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_front_ocr?.status)
+    const idCardBackStatusView = buildMerchantApplicationOCRStatusView(data?.id_card_back_ocr?.status)
+    const businessLicenseReady = businessLicenseStatusView.isReady || hasMerchantBusinessLicenseResult(data)
+    const foodPermitReady = foodPermitStatusView.isReady || hasMerchantFoodPermitResult(data)
+    const idCardFrontReady = idCardFrontStatusView.isReady || hasMerchantIDCardFrontResult(data)
+    const idCardBackReady = idCardBackStatusView.isReady || hasMerchantIDCardBackResult(data)
 
     return {
       license: businessLicenseUploaded
-        ? businessLicenseStatus === 'failed'
+        ? businessLicenseStatusView.isFailed
           ? createUploadFeedback('error', '识别失败', data?.business_license_ocr?.error || '请重新上传清晰、完整的营业执照')
           : businessLicenseReady
             ? createUploadFeedback('success', '识别成功', '已回填主体名称、统一信用代码和经营范围')
             : createUploadFeedback('processing', '证照识别中', '正在识别营业执照信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       foodPermit: foodPermitUploaded
-        ? foodPermitStatus === 'failed'
+        ? foodPermitStatusView.isFailed
           ? createUploadFeedback('error', '识别失败', data?.food_permit_ocr?.error || '请重新上传清晰、完整的食品经营许可证')
           : foodPermitReady
             ? createUploadFeedback('success', '识别成功', '已回填食品经营许可证有效期')
             : createUploadFeedback('processing', '证照识别中', '正在识别食品经营许可证信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idCardFront: idCardFrontUploaded
-        ? idCardFrontStatus === 'failed'
+        ? idCardFrontStatusView.isFailed
           ? createUploadFeedback('error', '识别失败', data?.id_card_front_ocr?.error || '请重新上传清晰、完整的身份证人像面')
           : idCardFrontReady
             ? createUploadFeedback('success', '识别成功', '已回填法人姓名和身份证号')
             : createUploadFeedback('processing', '证照识别中', '正在识别身份证人像面信息')
         : { ...EMPTY_UPLOAD_FEEDBACK },
       idCardBack: idCardBackUploaded
-        ? idCardBackStatus === 'failed'
+        ? idCardBackStatusView.isFailed
           ? createUploadFeedback('error', '识别失败', data?.id_card_back_ocr?.error || '请重新上传清晰、完整的身份证国徽面')
           : idCardBackReady
             ? createUploadFeedback('success', '识别成功', '已回填身份证有效期')
@@ -889,7 +921,7 @@ Page({
     const latestDraft = result.draft as MerchantDraftExt
     const latestOCR = latestDraft[fieldKey]
     this.updateOcrProgressMessage(latestDraft)
-    if (latestOCR?.status === 'done') {
+    if (buildMerchantApplicationOCRStatusView(latestOCR?.status).isReady) {
       onRecognized(latestOCR as OCRResult)
     }
   },
@@ -916,7 +948,7 @@ Page({
     const { formData } = this.data
     const merchantName = formData.name?.trim() || formData.licenseName?.trim()
     const contactPhone = formData.phone?.trim()
-    const businessAddress = formData.addressDetail || formData.address
+    const businessAddress = formData.address?.trim() || formData.registerAddress?.trim()
     const regionId = toSafeNumber(formData.regionId)
 
     const hasSyncableFields = Boolean(
@@ -1133,40 +1165,29 @@ Page({
   onChooseAddress() {
     wx.chooseLocation({
       success: async (res) => {
-        // 用户强调需要显示详细地址 (省市区+街道+门牌+名称)
-        // 无论返回结构如何，都要尽可能组合出完整地址
         const addr = res.address || ''
         const name = res.name || ''
+        const geocoded = await reverseGeocode({ latitude: res.latitude, longitude: res.longitude }).catch(() => null)
+        const locationLabel = buildMapLocationLabel({
+          geocodedAddress: geocoded?.formatted_address || geocoded?.address,
+          chosenAddress: addr,
+          chosenName: name,
+          latitude: res.latitude,
+          longitude: res.longitude
+        })
 
-        // 组合地址: 优先全部信息，确保不遗漏
-        let fullAddress = ''
-        if (addr && name) {
-          // 如果地址已包含名称，不重复
-          fullAddress = addr.includes(name) ? addr : `${addr} ${name}`
-        } else if (addr) {
-          fullAddress = addr
-        } else if (name) {
-          fullAddress = name
-        }
-
-        // 如果 fullAddress 还是空的，尝试用经纬度提示
-        if (!fullAddress && (res.latitude || res.longitude)) {
-          fullAddress = `位置: ${res.latitude.toFixed(6)}, ${res.longitude.toFixed(6)}`
-        }
-
-        console.log('[ChooseLocation] Final Address:', fullAddress, { res })
+        console.log('[ChooseLocation] Final Location Label:', locationLabel, { res, geocoded })
 
         // 使用 setData 的回调确保视图更新
         this.setData({
-          'formData.address': fullAddress,
-          'formData.addressDetail': fullAddress, // 同时设置 addressDetail 保持一致性
+          'formData.addressDetail': locationLabel,
           'formData.regionId': 0,
           'formData.latitude': res.latitude,
           'formData.longitude': res.longitude
         }, () => {
           this.saveDraft()
           void (async () => {
-            const resolvedRegionId = await this.resolveAndSyncRegionId(res.latitude, res.longitude, fullAddress)
+            const resolvedRegionId = await this.resolveAndSyncRegionId(res.latitude, res.longitude, geocoded?.formatted_address || geocoded?.address || addr)
             if (!resolvedRegionId) {
               await this.syncToBackend()
             }
@@ -1316,7 +1337,7 @@ Page({
         return
       }
 
-      let resolvedRegionId = await this.resolveAndSyncRegionId(latitude, longitude, address)
+      let resolvedRegionId = await this.resolveAndSyncRegionId(latitude, longitude, this.data.formData.addressDetail || address)
 
       if (!resolvedRegionId) {
         const syncedDraft = await this.syncToBackend()
@@ -1381,6 +1402,7 @@ Page({
             'formData.licenseName': ocr.enterprise_name || '',
             'formData.creditCode': ocr.reg_num || ocr.credit_code || '',
             'formData.registerAddress': ocr.address || '',
+            'formData.address': ocr.address || this.data.formData.address || '',
             'formData.legalPerson': ocr.legal_representative || '',
             'formData.licenseValidity': ocr.valid_period || '',
             'formData.businessScope': ocr.business_scope || '',
@@ -1940,7 +1962,7 @@ Page({
     try {
       // 1. Sync latest data to backend (prevent "empty merchant name" error)
       if (!toSafeNumber(this.data.formData.regionId)) {
-        const resolvedRegionId = await this.resolveAndSyncRegionId(formData.latitude, formData.longitude, formData.address)
+        const resolvedRegionId = await this.resolveAndSyncRegionId(formData.latitude, formData.longitude, formData.addressDetail || formData.address)
         if (resolvedRegionId && resolvedRegionId !== toSafeNumber(this.data.formData.regionId)) {
           this.setData({ 'formData.regionId': resolvedRegionId })
         }
@@ -1968,7 +1990,8 @@ Page({
       logger.info('[MerchantRegister] 提交结果', result)
 
       // 4. 检查审核结果
-      if (result.status === 'approved') {
+      const resultStatusView = buildMerchantApplicationStatusView(result.status)
+      if (resultStatusView.isApproved) {
         DraftStorage.clear(DRAFT_KEY)
 
         // 更新用户角色为商户（后端已授予 MERCHANT 角色）
@@ -1978,7 +2001,7 @@ Page({
 
         wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
         return // 立即返回，不重置 isSubmitting
-      } else if (result.status === 'rejected') {
+      } else if (resultStatusView.isRejected) {
         this.setData({
           currentStep: 4,
           isSubmitting: false,
@@ -2017,7 +2040,8 @@ Page({
       attempts++
       try {
         const res = await getMyApplication()
-        if (res.status === 'approved') {
+        const pollingStatusView = buildMerchantApplicationStatusView(res.status)
+        if (pollingStatusView.isApproved) {
           clearInterval(intervalId)
           DraftStorage.clear(DRAFT_KEY)
 
@@ -2034,7 +2058,7 @@ Page({
               wx.reLaunch({ url: '/pages/merchant/dashboard/index' })
             }
           })
-        } else if (res.status === 'rejected') {
+        } else if (pollingStatusView.isRejected) {
           clearInterval(intervalId)
           this.setData({
             currentStep: 4,

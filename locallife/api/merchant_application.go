@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/merrydance/locallife/algorithm"
 	db "github.com/merrydance/locallife/db/sqlc"
+	"github.com/merrydance/locallife/maps"
 	"github.com/merrydance/locallife/media"
 	"github.com/merrydance/locallife/ocr"
 	"github.com/merrydance/locallife/token"
@@ -1003,9 +1004,25 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		return apierr(ErrApplicationInvalidState.Code, "营业执照经营范围未识别到餐饮相关内容，请确认经营范围后重试")
 	}
 
-	// 5. 检查地址匹配（营业执照地址与填写的商户地址）
-	if !isAddressMatch(licenseOCR.Address, app.BusinessAddress) {
-		return apierr(ErrInvalidAddress.Code, "营业执照注册地址与您填写的店铺地址不一致，请核对后重试")
+	// 5. 检查地址匹配（营业执照地址与地图坐标反查地址）
+	reviewAddresses, reviewErr := server.resolveMerchantLocationReviewAddresses(ctx, app)
+	if reviewErr != nil {
+		log.Warn().Err(reviewErr).Int64("application_id", app.ID).Msg("merchant application: reverse geocode failed, fallback to stored address")
+	}
+	matchedAddress, matched := matchMerchantLicenseAddress(licenseOCR.Address, reviewAddresses)
+	if !matched {
+		reviewAddress := app.BusinessAddress
+		if len(reviewAddresses) > 0 {
+			reviewAddress = reviewAddresses[0]
+		}
+		return apierr(ErrInvalidAddress.Code, fmt.Sprintf("地图定位与营业执照注册地址不一致，请重新在地图上选择店铺位置。营业执照地址：%s；当前定位解析地址：%s。", licenseOCR.Address, strings.TrimSpace(reviewAddress)))
+	}
+	if matchedAddress != "" && matchedAddress != app.BusinessAddress {
+		log.Info().
+			Int64("application_id", app.ID).
+			Str("license_address", licenseOCR.Address).
+			Str("review_address", matchedAddress).
+			Msg("merchant application address matched by geocoded location")
 	}
 
 	// 6. 检查地址是否已被占用（GPS 距离去重）
@@ -1474,6 +1491,73 @@ func isAddressMatch(licenseAddr, businessAddr string) bool {
 	}
 
 	return false
+}
+
+func (server *Server) resolveMerchantLocationReviewAddresses(ctx context.Context, app db.MerchantApplication) ([]string, error) {
+	fallbackAddresses := uniqueNonEmptyAddresses(app.BusinessAddress)
+	if server.mapClient == nil || !app.Latitude.Valid || !app.Longitude.Valid {
+		return fallbackAddresses, nil
+	}
+
+	lat := pgNumericToFloat64(app.Latitude)
+	lng := pgNumericToFloat64(app.Longitude)
+	result, err := server.mapClient.ReverseGeocode(ctx, maps.Location{Lat: lat, Lng: lng})
+	if err != nil {
+		if len(fallbackAddresses) > 0 {
+			return fallbackAddresses, err
+		}
+		return nil, err
+	}
+
+	geocodedAddresses := buildMerchantLocationReviewAddresses(result)
+	if len(geocodedAddresses) == 0 {
+		return fallbackAddresses, nil
+	}
+	return geocodedAddresses, nil
+}
+
+func buildMerchantLocationReviewAddresses(result *maps.ReverseGeocodeResult) []string {
+	if result == nil {
+		return nil
+	}
+
+	componentAddress := strings.TrimSpace(result.Province + result.City + result.District + result.Street + result.StreetNumber)
+	districtStreetAddress := strings.TrimSpace(result.District + result.Street + result.StreetNumber)
+	streetAddress := strings.TrimSpace(result.Street + result.StreetNumber)
+
+	return uniqueNonEmptyAddresses(
+		result.Address,
+		result.FormattedAddress,
+		componentAddress,
+		districtStreetAddress,
+		streetAddress,
+	)
+}
+
+func uniqueNonEmptyAddresses(addresses ...string) []string {
+	seen := make(map[string]struct{}, len(addresses))
+	result := make([]string, 0, len(addresses))
+	for _, address := range addresses {
+		trimmed := strings.TrimSpace(address)
+		if trimmed == "" {
+			continue
+		}
+		if _, exists := seen[trimmed]; exists {
+			continue
+		}
+		seen[trimmed] = struct{}{}
+		result = append(result, trimmed)
+	}
+	return result
+}
+
+func matchMerchantLicenseAddress(licenseAddress string, reviewAddresses []string) (string, bool) {
+	for _, reviewAddress := range reviewAddresses {
+		if isAddressMatch(licenseAddress, reviewAddress) {
+			return reviewAddress, true
+		}
+	}
+	return "", false
 }
 
 // parsedAddress 解析后的地址结构

@@ -45,7 +45,7 @@
               <t-cell wx:if="{{rejectReason}}" title="驳回原因" description="{{rejectReason}}" align="top" />
               <t-cell title="店铺名" note="{{form.merchantName}}" />
               <t-cell title="电话" note="{{form.contactPhone}}" />
-              <t-cell title="经营位置" note="{{locationLabel}}" />
+              <t-cell title="地图定位" note="{{locationLabel}}" />
               <t-cell title="信用代码" note="{{form.businessLicenseNumber}}" />
               <t-cell title="法人姓名" note="{{form.legalPersonName}}" />
               <t-cell title="法人证件号" note="{{form.legalPersonIdNumber}}" />

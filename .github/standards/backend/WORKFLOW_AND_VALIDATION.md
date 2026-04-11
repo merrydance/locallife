@@ -85,6 +85,8 @@
 - generated artifact consistency
 - file-size guardrails
 
+当前 `/.github/workflows/backend-focused-gosec.yml` 还会对变更涉及的高风险 backend Go 包做 focused SAST；默认覆盖 `api`、`logic`、`worker`、`media`、`wechat` 与 `util` 范围，并在发现问题或扫描失败时阻断 workflow，而不是只做提醒。
+
 ## 8. Handoff Expectation
 
 交付 backend 任务时，至少说明：
