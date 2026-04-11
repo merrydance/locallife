@@ -259,6 +259,19 @@ type EcommerceClientInterface interface {
 	// QueryEcommerceWithdrawByOutRequestNo 通过外部申请单号查询提现状态
 	QueryEcommerceWithdrawByOutRequestNo(ctx context.Context, subMchID, outRequestNo string) (*EcommerceWithdrawResponse, error)
 
+	// ==================== 商户违规通知 ====================
+	// QueryViolationNotification 查询商户违规通知回调地址
+	QueryViolationNotification(ctx context.Context) (*ViolationNotificationConfigResponse, error)
+
+	// CreateViolationNotification 创建商户违规通知回调地址
+	CreateViolationNotification(ctx context.Context, req *ViolationNotificationConfigRequest) (*ViolationNotificationConfigResponse, error)
+
+	// UpdateViolationNotification 修改商户违规通知回调地址
+	UpdateViolationNotification(ctx context.Context, req *ViolationNotificationConfigRequest) (*ViolationNotificationConfigResponse, error)
+
+	// DeleteViolationNotification 删除商户违规通知回调地址
+	DeleteViolationNotification(ctx context.Context) error
+
 	// ==================== 通知解密 ====================
 	// DecryptPartnerPaymentNotification 解密服务商模式单笔支付通知
 	DecryptPartnerPaymentNotification(notification *PaymentNotification) (*PartnerPaymentNotificationResource, error)
@@ -280,6 +293,9 @@ type EcommerceClientInterface interface {
 
 	// DecryptComplaintNotification 解密用户投诉通知
 	DecryptComplaintNotification(notification *PaymentNotification) (*ComplaintNotification, error)
+
+	// DecryptViolationNotification 解密商户违规通知
+	DecryptViolationNotification(notification *PaymentNotification) (*ViolationNotificationResource, error)
 
 	// VerifyNotificationSignature 验证微信支付回调签名
 	VerifyNotificationSignature(signature, timestamp, nonce, body string) error

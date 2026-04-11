@@ -2,6 +2,8 @@ package wechat
 
 import (
 	"context"
+	"crypto/aes"
+	"crypto/cipher"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha1"
@@ -1115,7 +1117,233 @@ func TestCreateEcommerceWithdraw_UsesDedicatedNotifyURL(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "wd_001", resp.WithdrawID)
 	require.Equal(t, "MW202604060001", resp.OutRequestNo)
+}
+
+func TestCreateViolationNotification_UsesConfiguredNotifyURL(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "test_api_v3_key_32bytes_long__",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+			NotifyURL:             "https://example.com/fallback-notify",
+		},
+		SpMchID:            "service-mchid-001",
+		SpAppID:            "service-appid-001",
+		ViolationNotifyURL: "https://example.com/violation-notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPost, req.Method)
+			require.Equal(t, violationNotificationURL, req.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "https://example.com/violation-notify", body["notify_url"])
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"notify_url":"https://example.com/violation-notify"}`)),
+			}, nil
+		}),
 	}
+
+	resp, err := client.CreateViolationNotification(context.Background(), nil)
+	require.NoError(t, err)
+	require.NotNil(t, resp.NotifyURL)
+	require.Equal(t, "https://example.com/violation-notify", *resp.NotifyURL)
+}
+
+func TestQueryViolationNotification(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "0123456789abcdef0123456789abcdef",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodGet, req.Method)
+			require.Equal(t, violationNotificationURL, req.URL.Path)
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"notify_url":"https://example.com/current-violation-notify"}`)),
+			}, nil
+		}),
+	}
+
+	resp, err := client.QueryViolationNotification(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, resp.NotifyURL)
+	require.Equal(t, "https://example.com/current-violation-notify", *resp.NotifyURL)
+}
+
+func TestUpdateViolationNotification_UsesExplicitNotifyURL(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "0123456789abcdef0123456789abcdef",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID:            "service-mchid-001",
+		SpAppID:            "service-appid-001",
+		ViolationNotifyURL: "https://example.com/fallback-violation-notify",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodPut, req.Method)
+			require.Equal(t, violationNotificationURL, req.URL.Path)
+
+			var body map[string]any
+			require.NoError(t, json.NewDecoder(req.Body).Decode(&body))
+			require.Equal(t, "https://example.com/override-violation-notify", body["notify_url"])
+
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader(`{"notify_url":"https://example.com/override-violation-notify"}`)),
+			}, nil
+		}),
+	}
+
+	notifyURL := "https://example.com/override-violation-notify"
+	resp, err := client.UpdateViolationNotification(context.Background(), &ViolationNotificationConfigRequest{NotifyURL: &notifyURL})
+	require.NoError(t, err)
+	require.NotNil(t, resp.NotifyURL)
+	require.Equal(t, notifyURL, *resp.NotifyURL)
+}
+
+func TestDeleteViolationNotification(t *testing.T) {
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	platformPrivateKey, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              "0123456789abcdef0123456789abcdef",
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+
+	client.httpClient = &http.Client{
+		Transport: signedEcommerceTransport(t, platformPrivateKey, "PUB_KEY_ID_0123456789", func(req *http.Request) (*http.Response, error) {
+			require.Equal(t, http.MethodDelete, req.Method)
+			require.Equal(t, violationNotificationURL, req.URL.Path)
+
+			return &http.Response{
+				StatusCode: http.StatusNoContent,
+				Header:     make(http.Header),
+				Body:       io.NopCloser(strings.NewReader("")),
+			}, nil
+		}),
+	}
+
+	require.NoError(t, client.DeleteViolationNotification(context.Background()))
+}
+
+func TestDecryptViolationNotification(t *testing.T) {
+	const validAPIV3Key = "0123456789abcdef0123456789abcdef"
+
+	merchantPrivateKey, _ := generateTestKeyPair(t)
+	_, platformPublicKey := generateTestKeyPair(t)
+
+	tempDir := t.TempDir()
+	privateKeyPath := createTestPrivateKeyFile(t, tempDir, merchantPrivateKey)
+	publicKeyPath := createTestPublicKeyFile(t, tempDir, platformPublicKey)
+
+	client, err := NewEcommerceClient(EcommerceClientConfig{
+		PaymentClientConfig: PaymentClientConfig{
+			MchID:                 "ignored_base_mchid",
+			AppID:                 "service-appid-001",
+			SerialNumber:          "test_serial",
+			APIV3Key:              validAPIV3Key,
+			PrivateKeyPath:        privateKeyPath,
+			PlatformPublicKeyPath: publicKeyPath,
+			PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
+		},
+		SpMchID: "service-mchid-001",
+		SpAppID: "service-appid-001",
+	})
+	require.NoError(t, err)
+	client.apiV3Key = validAPIV3Key
+
+	plaintext := `{"sub_mchid":"1900009231","company_name":"财付通支付科技有限公司","record_id":"200201820200101080076610000","punish_plan":"关闭支付权限","punish_time":"2015-05-20T13:29:35+08:00","punish_description":"利用特殊行业违规经营，加重处罚","risk_type":"ONE_YUAN_PURCHASES","risk_description":"涉嫌一元购"}`
+	nonce := "0123456789ab"
+	associatedData := "violation"
+	ciphertext := encryptEcommerceNotificationResource(t, validAPIV3Key, plaintext, associatedData, nonce)
+
+	notification := &PaymentNotification{ID: "notif_001", EventType: "VIOLATION.PUNISH", ResourceType: "encrypt-resource"}
+	notification.Resource.Algorithm = "AEAD_AES_256_GCM"
+	notification.Resource.Ciphertext = ciphertext
+	notification.Resource.Nonce = nonce
+	notification.Resource.AssociatedData = associatedData
+
+	resource, err := client.DecryptViolationNotification(notification)
+	require.NoError(t, err)
+	require.Equal(t, "1900009231", resource.SubMchID)
+	require.Equal(t, "财付通支付科技有限公司", resource.CompanyName)
+	require.Equal(t, "200201820200101080076610000", resource.RecordID)
+	require.Equal(t, "关闭支付权限", resource.PunishPlan)
+	require.Equal(t, "利用特殊行业违规经营，加重处罚", resource.PunishDescription)
+	require.Equal(t, "ONE_YUAN_PURCHASES", resource.RiskType)
+	require.Equal(t, "涉嫌一元购", resource.RiskDescription)
+	require.Equal(t, "2015-05-20T13:29:35+08:00", resource.PunishTime.Format(time.RFC3339))
+}
 
 func decryptEcommerceTestCiphertext(t *testing.T, privateKey *rsa.PrivateKey, ciphertext string) string {
 	t.Helper()
@@ -1124,4 +1352,14 @@ func decryptEcommerceTestCiphertext(t *testing.T, privateKey *rsa.PrivateKey, ci
 	plaintext, err := rsa.DecryptOAEP(sha1.New(), rand.Reader, privateKey, decoded, nil)
 	require.NoError(t, err)
 	return string(plaintext)
+}
+
+func encryptEcommerceNotificationResource(t *testing.T, apiV3Key, plaintext, associatedData, nonce string) string {
+	t.Helper()
+	block, err := aes.NewCipher([]byte(apiV3Key))
+	require.NoError(t, err)
+	gcm, err := cipher.NewGCM(block)
+	require.NoError(t, err)
+	ciphertext := gcm.Seal(nil, []byte(nonce), []byte(plaintext), []byte(associatedData))
+	return base64.StdEncoding.EncodeToString(ciphertext)
 }

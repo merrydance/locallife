@@ -51,7 +51,7 @@ func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {
 }
 
 func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
-	configDir := writeTestConfigFile(t, "ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nWECHAT_MINI_APP_ID=wx-mini-app\nWECHAT_MINI_APP_SECRET=mini-secret\nWECHAT_PAY_MCH_ID=1900000109\nWECHAT_PAY_SERIAL_NUMBER=serial-001\nWECHAT_PAY_PRIVATE_KEY_PATH=./certs/apiclient_key.pem\nWECHAT_PAY_API_V3_KEY=0123456789abcdef0123456789abcdef\nWECHAT_PAY_NOTIFY_URL=https://example.com/pay/notify\nWECHAT_PAY_REFUND_NOTIFY_URL=https://example.com/pay/refund-notify\nWECHAT_SHIPPING_SETTLE_NOTIFY_URL=https://example.com/pay/settlement-notify\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=./certs/platform.pem\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_001\nWECHAT_PAY_HTTP_TIMEOUT=45s\nWECHAT_ECOMMERCE_SP_MCHID=service-mchid-001\nWECHAT_ECOMMERCE_SP_APPID=service-appid-001\nWECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL=https://example.com/ecommerce/payment-notify\nWECHAT_ECOMMERCE_COMBINE_NOTIFY_URL=https://example.com/ecommerce/combine-notify\nWECHAT_ECOMMERCE_REFUND_NOTIFY_URL=https://example.com/ecommerce/refund-notify\nWECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL=https://example.com/ecommerce/withdraw-notify\nWECHAT_ECOMMERCE_SP_NAME=测试平台服务商\nWECHAT_ECOMMERCE_SP_SERIAL_NUMBER=sp-serial-001\nWECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH=./certs/sp_apiclient_key.pem\nWECHAT_ECOMMERCE_SP_API_V3_KEY=abcdef0123456789abcdef0123456789\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH=./certs/sp-platform.pem\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_SP_001\nREDIS_REQUIRED=true\n")
+	configDir := writeTestConfigFile(t, "ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nWECHAT_MINI_APP_ID=wx-mini-app\nWECHAT_MINI_APP_SECRET=mini-secret\nWECHAT_PAY_MCH_ID=1900000109\nWECHAT_PAY_SERIAL_NUMBER=serial-001\nWECHAT_PAY_PRIVATE_KEY_PATH=./certs/apiclient_key.pem\nWECHAT_PAY_API_V3_KEY=0123456789abcdef0123456789abcdef\nWECHAT_PAY_NOTIFY_URL=https://example.com/pay/notify\nWECHAT_PAY_REFUND_NOTIFY_URL=https://example.com/pay/refund-notify\nWECHAT_SHIPPING_SETTLE_NOTIFY_URL=https://example.com/pay/settlement-notify\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=./certs/platform.pem\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_001\nWECHAT_PAY_HTTP_TIMEOUT=45s\nWECHAT_ECOMMERCE_SP_MCHID=service-mchid-001\nWECHAT_ECOMMERCE_SP_APPID=service-appid-001\nWECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL=https://example.com/ecommerce/payment-notify\nWECHAT_ECOMMERCE_COMBINE_NOTIFY_URL=https://example.com/ecommerce/combine-notify\nWECHAT_ECOMMERCE_REFUND_NOTIFY_URL=https://example.com/ecommerce/refund-notify\nWECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL=https://example.com/ecommerce/withdraw-notify\nWECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL=https://example.com/ecommerce/violation-notify\nWECHAT_ECOMMERCE_SP_NAME=测试平台服务商\nWECHAT_ECOMMERCE_SP_SERIAL_NUMBER=sp-serial-001\nWECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH=./certs/sp_apiclient_key.pem\nWECHAT_ECOMMERCE_SP_API_V3_KEY=abcdef0123456789abcdef0123456789\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH=./certs/sp-platform.pem\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_SP_001\nREDIS_REQUIRED=true\n")
 
 	config, err := LoadConfig(configDir)
 	require.NoError(t, err)
@@ -74,6 +74,7 @@ func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
 	require.Equal(t, "https://example.com/ecommerce/combine-notify", config.WechatEcommerceCombineNotifyURL)
 	require.Equal(t, "https://example.com/ecommerce/refund-notify", config.WechatEcommerceRefundNotifyURL)
 	require.Equal(t, "https://example.com/ecommerce/withdraw-notify", config.WechatEcommerceWithdrawNotifyURL)
+	require.Equal(t, "https://example.com/ecommerce/violation-notify", config.WechatEcommerceViolationNotifyURL)
 	require.Equal(t, "测试平台服务商", config.WechatEcommerceSpName)
 	require.Equal(t, "sp-serial-001", config.WechatEcommerceSpSerialNumber)
 	require.Equal(t, "./certs/sp_apiclient_key.pem", config.WechatEcommerceSpPrivateKeyPath)
@@ -93,16 +94,19 @@ func TestEffectiveWechatEcommerceNotifyURLs(t *testing.T) {
 	require.Equal(t, "https://example.com/v1/webhooks/wechat-ecommerce/combine-notify", config.EffectiveWechatEcommerceCombineNotifyURL())
 	require.Equal(t, "https://example.com/v1/webhooks/wechat-ecommerce/refund-notify", config.EffectiveWechatEcommerceRefundNotifyURL())
 	require.Equal(t, "https://example.com/v1/webhooks/wechat-ecommerce/withdraw-notify", config.EffectiveWechatEcommerceWithdrawNotifyURL())
+	require.Equal(t, "https://example.com/v1/webhooks/wechat-ecommerce/violation-notify", config.EffectiveWechatEcommerceViolationNotifyURL())
 
 	config.WechatEcommercePaymentNotifyURL = "https://override.example.com/ecommerce/payment-notify"
 	config.WechatEcommerceCombineNotifyURL = "https://override.example.com/ecommerce/combine-notify"
 	config.WechatEcommerceRefundNotifyURL = "https://override.example.com/ecommerce/refund-notify"
 	config.WechatEcommerceWithdrawNotifyURL = "https://override.example.com/ecommerce/withdraw-notify"
+	config.WechatEcommerceViolationNotifyURL = "https://override.example.com/ecommerce/violation-notify"
 
 	require.Equal(t, "https://override.example.com/ecommerce/payment-notify", config.EffectiveWechatEcommercePaymentNotifyURL())
 	require.Equal(t, "https://override.example.com/ecommerce/combine-notify", config.EffectiveWechatEcommerceCombineNotifyURL())
 	require.Equal(t, "https://override.example.com/ecommerce/refund-notify", config.EffectiveWechatEcommerceRefundNotifyURL())
 	require.Equal(t, "https://override.example.com/ecommerce/withdraw-notify", config.EffectiveWechatEcommerceWithdrawNotifyURL())
+	require.Equal(t, "https://override.example.com/ecommerce/violation-notify", config.EffectiveWechatEcommerceViolationNotifyURL())
 }
 
 func TestValidateWechatEcommerceConfig(t *testing.T) {

@@ -3927,6 +3927,19 @@ definitions:
           $ref: '#/definitions/api.platformOperatorRuleItem'
         type: array
     type: object
+  api.listPlatformWechatMerchantViolationsResponse:
+    properties:
+      limit:
+        type: integer
+      page:
+        type: integer
+      total:
+        type: integer
+      violations:
+        items:
+          $ref: '#/definitions/api.platformWechatMerchantViolationResponse'
+        type: array
+    type: object
   api.listProfitSharingConfigAuditsResponse:
     properties:
       items:
@@ -6053,6 +6066,55 @@ definitions:
         type: integer
       total_orders:
         type: integer
+    type: object
+  api.platformViolationNotificationConfigRequest:
+    properties:
+      notify_url:
+        type: string
+    type: object
+  api.platformViolationNotificationConfigResponse:
+    properties:
+      configured:
+        type: boolean
+      effective_notify_url:
+        type: string
+      notify_url:
+        type: string
+    type: object
+  api.platformWechatMerchantViolationResponse:
+    properties:
+      company_name:
+        type: string
+      created_at:
+        type: string
+      event_type:
+        type: string
+      id:
+        type: integer
+      last_received_at:
+        type: string
+      latest_notification_id:
+        type: string
+      latest_notify_time:
+        type: string
+      merchant_id:
+        type: integer
+      punish_description:
+        type: string
+      punish_plan:
+        type: string
+      punish_time:
+        type: string
+      record_id:
+        type: string
+      risk_description:
+        type: string
+      risk_type:
+        type: string
+      sub_mch_id:
+        type: string
+      updated_at:
+        type: string
     type: object
   api.printMerchantOrderResponse:
     properties:
@@ -24196,6 +24258,241 @@ paths:
       security:
       - BearerAuth: []
       summary: 获取平台分账账单下载地址
+      tags:
+      - 平台财务
+  /v1/platform/finance/wechat-ecommerce/violation-notification:
+    delete:
+      description: 管理员删除微信支付平台收付通商户违规通知回调地址；若微信侧已不存在则幂等返回 204
+      responses:
+        "204":
+          description: 删除成功
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 删除商户违规通知回调地址
+      tags:
+      - 平台财务
+    get:
+      description: 管理员查询微信支付平台收付通商户违规通知回调地址；未配置时返回 configured=false
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformViolationNotificationConfigResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询商户违规通知回调地址
+      tags:
+      - 平台财务
+    post:
+      consumes:
+      - application/json
+      description: 管理员在微信支付平台收付通侧创建商户违规通知回调地址；未传 notify_url 时使用当前服务配置
+      parameters:
+      - description: 回调地址配置
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/api.platformViolationNotificationConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformViolationNotificationConfigResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 创建商户违规通知回调地址
+      tags:
+      - 平台财务
+    put:
+      consumes:
+      - application/json
+      description: 管理员更新微信支付平台收付通商户违规通知回调地址；未传 notify_url 时使用当前服务配置
+      parameters:
+      - description: 回调地址配置
+        in: body
+        name: request
+        schema:
+          $ref: '#/definitions/api.platformViolationNotificationConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformViolationNotificationConfigResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 支付服务未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 更新商户违规通知回调地址
+      tags:
+      - 平台财务
+  /v1/platform/finance/wechat-ecommerce/violations:
+    get:
+      description: 管理员分页查看微信支付平台收付通商户违规记录，支持按 merchant_id、sub_mch_id、event_type、risk_type
+        过滤
+      parameters:
+      - description: 商户ID
+        in: query
+        name: merchant_id
+        type: integer
+      - description: 二级商户号
+        in: query
+        name: sub_mch_id
+        type: string
+      - description: 违规事件类型
+        in: query
+        name: event_type
+        type: string
+      - description: 风险类型
+        in: query
+        name: risk_type
+        type: string
+      - description: 页码，默认 1
+        in: query
+        name: page
+        type: integer
+      - description: 每页数量，默认 20，最大 100
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.listPlatformWechatMerchantViolationsResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 查询商户违规记录列表
+      tags:
+      - 平台财务
+  /v1/platform/finance/wechat-ecommerce/violations/{record_id}:
+    get:
+      description: 管理员按 record_id 查询单条微信支付平台收付通商户违规记录
+      parameters:
+      - description: 微信侧违规记录ID
+        in: path
+        name: record_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformWechatMerchantViolationResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "404":
+          description: 违规记录不存在
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "500":
+          description: 服务器错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取商户违规记录详情
       tags:
       - 平台财务
   /v1/platform/operational-configs:

@@ -271,6 +271,7 @@ type Querier interface {
 	CountUserRecentTakeoutOrders(ctx context.Context, arg CountUserRecentTakeoutOrdersParams) (int64, error)
 	CountUserVouchersByStatus(ctx context.Context, userID int64) (CountUserVouchersByStatusRow, error)
 	CountWechatComplaintsByMerchant(ctx context.Context, arg CountWechatComplaintsByMerchantParams) (int64, error)
+	CountWechatMerchantViolations(ctx context.Context, arg CountWechatMerchantViolationsParams) (int64, error)
 	CountWithdrawalRecords(ctx context.Context, arg CountWithdrawalRecordsParams) (int64, error)
 	// =====================================================================
 	// Appeal Queries - 申诉相关查询
@@ -1077,6 +1078,7 @@ type Querier interface {
 	GetWechatComplaint(ctx context.Context, id int64) (WechatComplaint, error)
 	GetWechatComplaintByComplaintID(ctx context.Context, complaintID string) (WechatComplaint, error)
 	GetWechatComplaintByComplaintIDForUpdate(ctx context.Context, complaintID string) (WechatComplaint, error)
+	GetWechatMerchantViolationByRecordID(ctx context.Context, recordID string) (WechatMerchantViolation, error)
 	GetWechatNotification(ctx context.Context, id string) (WechatNotification, error)
 	GetWithdrawalRecord(ctx context.Context, id int64) (WithdrawalRecord, error)
 	GetWithdrawalRecordByOutRequestNo(ctx context.Context, outRequestNo pgtype.Text) (WithdrawalRecord, error)
@@ -1441,6 +1443,7 @@ type Querier interface {
 	ListWechatComplaintsByMerchant(ctx context.Context, arg ListWechatComplaintsByMerchantParams) ([]WechatComplaint, error)
 	// 通过 sub_mch_id 查询（运营商/平台使用）
 	ListWechatComplaintsBySubMchID(ctx context.Context, arg ListWechatComplaintsBySubMchIDParams) ([]WechatComplaint, error)
+	ListWechatMerchantViolations(ctx context.Context, arg ListWechatMerchantViolationsParams) ([]WechatMerchantViolation, error)
 	ListWechatNotificationsByOutTradeNo(ctx context.Context, outTradeNo pgtype.Text) ([]WechatNotification, error)
 	ListWithdrawalRecords(ctx context.Context, arg ListWithdrawalRecordsParams) ([]WithdrawalRecord, error)
 	MarkAllNotificationsAsRead(ctx context.Context, userID int64) error
@@ -1812,6 +1815,7 @@ type Querier interface {
 	UpsertWechatAccessToken(ctx context.Context, arg UpsertWechatAccessTokenParams) (WechatAccessToken, error)
 	// 插入或更新投诉记录（幂等，微信每日同步时使用 ON CONFLICT 更新）
 	UpsertWechatComplaint(ctx context.Context, arg UpsertWechatComplaintParams) (WechatComplaint, error)
+	UpsertWechatMerchantViolation(ctx context.Context, arg UpsertWechatMerchantViolationParams) (WechatMerchantViolation, error)
 }
 
 var _ Querier = (*Queries)(nil)

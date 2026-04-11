@@ -2793,6 +2793,21 @@ func (mr *MockStoreMockRecorder) CountWechatComplaintsByMerchant(ctx, arg any) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWechatComplaintsByMerchant", reflect.TypeOf((*MockStore)(nil).CountWechatComplaintsByMerchant), ctx, arg)
 }
 
+// CountWechatMerchantViolations mocks base method.
+func (m *MockStore) CountWechatMerchantViolations(ctx context.Context, arg db.CountWechatMerchantViolationsParams) (int64, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CountWechatMerchantViolations", ctx, arg)
+	ret0, _ := ret[0].(int64)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CountWechatMerchantViolations indicates an expected call of CountWechatMerchantViolations.
+func (mr *MockStoreMockRecorder) CountWechatMerchantViolations(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWechatMerchantViolations", reflect.TypeOf((*MockStore)(nil).CountWechatMerchantViolations), ctx, arg)
+}
+
 // CountWithdrawalRecords mocks base method.
 func (m *MockStore) CountWithdrawalRecords(ctx context.Context, arg db.CountWithdrawalRecordsParams) (int64, error) {
 	m.ctrl.T.Helper()
@@ -10889,6 +10904,21 @@ func (mr *MockStoreMockRecorder) GetWechatComplaintByComplaintIDForUpdate(ctx, c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWechatComplaintByComplaintIDForUpdate", reflect.TypeOf((*MockStore)(nil).GetWechatComplaintByComplaintIDForUpdate), ctx, complaintID)
 }
 
+// GetWechatMerchantViolationByRecordID mocks base method.
+func (m *MockStore) GetWechatMerchantViolationByRecordID(ctx context.Context, recordID string) (db.WechatMerchantViolation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWechatMerchantViolationByRecordID", ctx, recordID)
+	ret0, _ := ret[0].(db.WechatMerchantViolation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWechatMerchantViolationByRecordID indicates an expected call of GetWechatMerchantViolationByRecordID.
+func (mr *MockStoreMockRecorder) GetWechatMerchantViolationByRecordID(ctx, recordID any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWechatMerchantViolationByRecordID", reflect.TypeOf((*MockStore)(nil).GetWechatMerchantViolationByRecordID), ctx, recordID)
+}
+
 // GetWechatNotification mocks base method.
 func (m *MockStore) GetWechatNotification(ctx context.Context, id string) (db.WechatNotification, error) {
 	m.ctrl.T.Helper()
@@ -15067,6 +15097,21 @@ func (m *MockStore) ListWechatComplaintsBySubMchID(ctx context.Context, arg db.L
 func (mr *MockStoreMockRecorder) ListWechatComplaintsBySubMchID(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWechatComplaintsBySubMchID", reflect.TypeOf((*MockStore)(nil).ListWechatComplaintsBySubMchID), ctx, arg)
+}
+
+// ListWechatMerchantViolations mocks base method.
+func (m *MockStore) ListWechatMerchantViolations(ctx context.Context, arg db.ListWechatMerchantViolationsParams) ([]db.WechatMerchantViolation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListWechatMerchantViolations", ctx, arg)
+	ret0, _ := ret[0].([]db.WechatMerchantViolation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListWechatMerchantViolations indicates an expected call of ListWechatMerchantViolations.
+func (mr *MockStoreMockRecorder) ListWechatMerchantViolations(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWechatMerchantViolations", reflect.TypeOf((*MockStore)(nil).ListWechatMerchantViolations), ctx, arg)
 }
 
 // ListWechatNotificationsByOutTradeNo mocks base method.
@@ -19901,6 +19946,21 @@ func (m *MockStore) UpsertWechatComplaint(ctx context.Context, arg db.UpsertWech
 func (mr *MockStoreMockRecorder) UpsertWechatComplaint(ctx, arg any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWechatComplaint", reflect.TypeOf((*MockStore)(nil).UpsertWechatComplaint), ctx, arg)
+}
+
+// UpsertWechatMerchantViolation mocks base method.
+func (m *MockStore) UpsertWechatMerchantViolation(ctx context.Context, arg db.UpsertWechatMerchantViolationParams) (db.WechatMerchantViolation, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpsertWechatMerchantViolation", ctx, arg)
+	ret0, _ := ret[0].(db.WechatMerchantViolation)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpsertWechatMerchantViolation indicates an expected call of UpsertWechatMerchantViolation.
+func (mr *MockStoreMockRecorder) UpsertWechatMerchantViolation(ctx, arg any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWechatMerchantViolation", reflect.TypeOf((*MockStore)(nil).UpsertWechatMerchantViolation), ctx, arg)
 }
 
 // UseVoucherTx mocks base method.

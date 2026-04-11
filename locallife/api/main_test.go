@@ -47,6 +47,9 @@ p, admin, /v1/platform/profit-sharing/*, GET
 p, admin, /v1/platform/profit-sharing/*, POST
 p, admin, /v1/platform/profit-sharing/*, PATCH
 p, admin, /v1/platform/finance/*, GET
+p, admin, /v1/platform/finance/*, POST
+p, admin, /v1/platform/finance/*, PUT
+p, admin, /v1/platform/finance/*, DELETE
 p, admin, /v1/platform/refunds/*, POST
 p, admin, /v1/admin/*, GET
 p, admin, /v1/admin/*, POST

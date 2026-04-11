@@ -81,13 +81,14 @@ const (
 // EcommerceClient 平台收付通客户端
 // 用于多商户场景，支持分账功能
 type EcommerceClient struct {
-	*PaymentClient           // 复用基础支付客户端
-	spMchID           string // 服务商商户号
-	spAppID           string // 服务商 AppID
-	spMchName         string // 服务商名称（可选）
-	partnerNotifyURL  string
-	combineNotifyURL  string
-	withdrawNotifyURL string
+	*PaymentClient            // 复用基础支付客户端
+	spMchID            string // 服务商商户号
+	spAppID            string // 服务商 AppID
+	spMchName          string // 服务商名称（可选）
+	partnerNotifyURL   string
+	combineNotifyURL   string
+	withdrawNotifyURL  string
+	violationNotifyURL string
 }
 
 // EcommerceClientConfig 平台收付通客户端配置
@@ -99,6 +100,7 @@ type EcommerceClientConfig struct {
 	PartnerNotifyURL    string // 收付通普通支付回调地址（空则回退到 PaymentClientConfig.NotifyURL）
 	CombineNotifyURL    string // 收付通合单支付回调地址（空则回退到 PartnerNotifyURL / PaymentClientConfig.NotifyURL）
 	WithdrawNotifyURL   string // 收付通提现回调地址（空则不为提现请求上送 notify_url）
+	ViolationNotifyURL  string // 收付通商户违规通知回调地址（空则回退到 PartnerNotifyURL / PaymentClientConfig.NotifyURL）
 }
 
 // PartnerJSAPIOrderRequest 服务商模式单笔 JSAPI 下单请求。
@@ -217,15 +219,20 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 		combineNotifyURL = partnerNotifyURL
 	}
 	withdrawNotifyURL := strings.TrimSpace(cfg.WithdrawNotifyURL)
+	violationNotifyURL := strings.TrimSpace(cfg.ViolationNotifyURL)
+	if violationNotifyURL == "" {
+		violationNotifyURL = partnerNotifyURL
+	}
 
 	return &EcommerceClient{
-		PaymentClient:     baseClient,
-		spMchID:           spMchID,
-		spAppID:           spAppID,
-		spMchName:         spMchName,
-		partnerNotifyURL:  partnerNotifyURL,
-		combineNotifyURL:  combineNotifyURL,
-		withdrawNotifyURL: withdrawNotifyURL,
+		PaymentClient:      baseClient,
+		spMchID:            spMchID,
+		spAppID:            spAppID,
+		spMchName:          spMchName,
+		partnerNotifyURL:   partnerNotifyURL,
+		combineNotifyURL:   combineNotifyURL,
+		withdrawNotifyURL:  withdrawNotifyURL,
+		violationNotifyURL: violationNotifyURL,
 	}, nil
 }
 

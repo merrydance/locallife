@@ -496,6 +496,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) CreateSubsidy(ctx, req any) 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSubsidy", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreateSubsidy), ctx, req)
 }
 
+// CreateViolationNotification mocks base method.
+func (m *MockEcommerceClientInterface) CreateViolationNotification(ctx context.Context, req *wechat.ViolationNotificationConfigRequest) (*wechat.ViolationNotificationConfigResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateViolationNotification", ctx, req)
+	ret0, _ := ret[0].(*wechat.ViolationNotificationConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateViolationNotification indicates an expected call of CreateViolationNotification.
+func (mr *MockEcommerceClientInterfaceMockRecorder) CreateViolationNotification(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateViolationNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).CreateViolationNotification), ctx, req)
+}
+
 // DecryptCombinePaymentNotification mocks base method.
 func (m *MockEcommerceClientInterface) DecryptCombinePaymentNotification(notification *wechat.PaymentNotification) (*wechat.CombinePaymentNotification, error) {
 	m.ctrl.T.Helper()
@@ -601,6 +616,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptSettlementNotificatio
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptSettlementNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptSettlementNotification), notification)
 }
 
+// DecryptViolationNotification mocks base method.
+func (m *MockEcommerceClientInterface) DecryptViolationNotification(notification *wechat.PaymentNotification) (*wechat.ViolationNotificationResource, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DecryptViolationNotification", notification)
+	ret0, _ := ret[0].(*wechat.ViolationNotificationResource)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DecryptViolationNotification indicates an expected call of DecryptViolationNotification.
+func (mr *MockEcommerceClientInterfaceMockRecorder) DecryptViolationNotification(notification any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecryptViolationNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DecryptViolationNotification), notification)
+}
+
 // DeleteProfitSharingReceiver mocks base method.
 func (m *MockEcommerceClientInterface) DeleteProfitSharingReceiver(ctx context.Context, req *wechat.DeleteReceiverRequest) (*wechat.DeleteReceiverResponse, error) {
 	m.ctrl.T.Helper()
@@ -614,6 +644,20 @@ func (m *MockEcommerceClientInterface) DeleteProfitSharingReceiver(ctx context.C
 func (mr *MockEcommerceClientInterfaceMockRecorder) DeleteProfitSharingReceiver(ctx, req any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteProfitSharingReceiver", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DeleteProfitSharingReceiver), ctx, req)
+}
+
+// DeleteViolationNotification mocks base method.
+func (m *MockEcommerceClientInterface) DeleteViolationNotification(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteViolationNotification", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteViolationNotification indicates an expected call of DeleteViolationNotification.
+func (mr *MockEcommerceClientInterfaceMockRecorder) DeleteViolationNotification(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteViolationNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).DeleteViolationNotification), ctx)
 }
 
 // EncryptSensitiveData mocks base method.
@@ -1122,6 +1166,21 @@ func (mr *MockEcommerceClientInterfaceMockRecorder) QuerySubMerchantSettlementAp
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QuerySubMerchantSettlementApplication", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QuerySubMerchantSettlementApplication), ctx, subMchID, applicationNo, accountNumberRule)
 }
 
+// QueryViolationNotification mocks base method.
+func (m *MockEcommerceClientInterface) QueryViolationNotification(ctx context.Context) (*wechat.ViolationNotificationConfigResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "QueryViolationNotification", ctx)
+	ret0, _ := ret[0].(*wechat.ViolationNotificationConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// QueryViolationNotification indicates an expected call of QueryViolationNotification.
+func (mr *MockEcommerceClientInterfaceMockRecorder) QueryViolationNotification(ctx any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "QueryViolationNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).QueryViolationNotification), ctx)
+}
+
 // RespondComplaint mocks base method.
 func (m *MockEcommerceClientInterface) RespondComplaint(ctx context.Context, req wechat.ComplaintResponseRequest) error {
 	m.ctrl.T.Helper()
@@ -1164,6 +1223,21 @@ func (m *MockEcommerceClientInterface) SearchBanksByBankAccount(ctx context.Cont
 func (mr *MockEcommerceClientInterfaceMockRecorder) SearchBanksByBankAccount(ctx, accountNumber any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SearchBanksByBankAccount", reflect.TypeOf((*MockEcommerceClientInterface)(nil).SearchBanksByBankAccount), ctx, accountNumber)
+}
+
+// UpdateViolationNotification mocks base method.
+func (m *MockEcommerceClientInterface) UpdateViolationNotification(ctx context.Context, req *wechat.ViolationNotificationConfigRequest) (*wechat.ViolationNotificationConfigResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateViolationNotification", ctx, req)
+	ret0, _ := ret[0].(*wechat.ViolationNotificationConfigResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateViolationNotification indicates an expected call of UpdateViolationNotification.
+func (mr *MockEcommerceClientInterfaceMockRecorder) UpdateViolationNotification(ctx, req any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateViolationNotification", reflect.TypeOf((*MockEcommerceClientInterface)(nil).UpdateViolationNotification), ctx, req)
 }
 
 // UploadImage mocks base method.

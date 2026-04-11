@@ -621,7 +621,7 @@ type EcommerceApplyment struct {
 	SubjectID    int64       `json:"subject_id"`
 	OutRequestNo string      `json:"out_request_no"`
 	ApplymentID  pgtype.Int8 `json:"applyment_id"`
-	// 微信主体类型: 2401-小微商户(个人), 2500-个体工商户, 2600-企业
+	// 微信主体类型: 2401-小微商户, 2500-个人卖家, 4-个体工商户, 2-企业, 3-事业单位, 2502-政府机关, 1708-社会组织
 	OrganizationType      string      `json:"organization_type"`
 	BusinessLicenseNumber pgtype.Text `json:"business_license_number"`
 	BusinessLicenseCopy   pgtype.Text `json:"business_license_copy"`
@@ -2361,6 +2361,26 @@ type WechatComplaint struct {
 	WxpayUpdateTime        pgtype.Timestamptz `json:"wxpay_update_time"`
 	CreatedAt              time.Time          `json:"created_at"`
 	UpdatedAt              pgtype.Timestamptz `json:"updated_at"`
+}
+
+// 微信支付平台收付通商户违规通知记录；由违规 webhook 持久化，供平台审计与运营处理
+type WechatMerchantViolation struct {
+	ID                   int64              `json:"id"`
+	RecordID             string             `json:"record_id"`
+	SubMchID             string             `json:"sub_mch_id"`
+	MerchantID           pgtype.Int8        `json:"merchant_id"`
+	CompanyName          string             `json:"company_name"`
+	EventType            string             `json:"event_type"`
+	RiskType             string             `json:"risk_type"`
+	RiskDescription      string             `json:"risk_description"`
+	PunishPlan           string             `json:"punish_plan"`
+	PunishTime           pgtype.Timestamptz `json:"punish_time"`
+	PunishDescription    string             `json:"punish_description"`
+	LatestNotificationID string             `json:"latest_notification_id"`
+	LatestNotifyTime     time.Time          `json:"latest_notify_time"`
+	LastReceivedAt       time.Time          `json:"last_received_at"`
+	CreatedAt            time.Time          `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
 }
 
 // 微信支付回调通知记录表，用于防止重复处理（幂等性）

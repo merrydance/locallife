@@ -185,12 +185,13 @@ func NewServer(config util.Config, store db.Store, weatherCache weather.WeatherC
 				PlatformPublicKeyPath:   config.EffectiveWechatEcommercePlatformPublicKeyPath(),
 				PlatformPublicKeyID:     config.EffectiveWechatEcommercePlatformPublicKeyID(),
 			},
-			SpMchID:           config.WechatEcommerceSpMchID,
-			SpAppID:           config.WechatEcommerceSpAppID,
-			SpMchName:         config.WechatEcommerceSpName,
-			PartnerNotifyURL:  config.EffectiveWechatEcommercePaymentNotifyURL(),
-			CombineNotifyURL:  config.EffectiveWechatEcommerceCombineNotifyURL(),
-			WithdrawNotifyURL: config.EffectiveWechatEcommerceWithdrawNotifyURL(),
+			SpMchID:            config.WechatEcommerceSpMchID,
+			SpAppID:            config.WechatEcommerceSpAppID,
+			SpMchName:          config.WechatEcommerceSpName,
+			PartnerNotifyURL:   config.EffectiveWechatEcommercePaymentNotifyURL(),
+			CombineNotifyURL:   config.EffectiveWechatEcommerceCombineNotifyURL(),
+			WithdrawNotifyURL:  config.EffectiveWechatEcommerceWithdrawNotifyURL(),
+			ViolationNotifyURL: config.EffectiveWechatEcommerceViolationNotifyURL(),
 		})
 		if err != nil {
 			return nil, fmt.Errorf("cannot create ecommerce client: %w", err)
@@ -531,6 +532,7 @@ func (server *Server) setupRouter() {
 		webhooksGroup.POST("/wechat-ecommerce/profit-sharing-notify", server.handleProfitSharingNotify)
 		// 微信用户投诉通知（合规要求，状态变更实时推送）
 		webhooksGroup.POST("/wechat-ecommerce/complaint-notify", server.handleComplaintNotify)
+		webhooksGroup.POST("/wechat-ecommerce/violation-notify", server.handleViolationNotify)
 		// 小程序「发货信息管理」结算事件（trade_manage_order_settlement）
 		webhooksGroup.POST("/wechat-miniprogram/settlement-notify", server.handleOrderSettlementNotify)
 	}
@@ -1411,6 +1413,12 @@ func (server *Server) setupRouter() {
 		platformFinanceGroup.GET("/account/balance", server.getPlatformAccountBalance)
 		platformFinanceGroup.GET("/bills/fund-flow/download-url", server.getPlatformFundFlowBillDownloadURL)
 		platformFinanceGroup.GET("/bills/profit-sharing/download-url", server.getPlatformProfitSharingBillDownloadURL)
+		platformFinanceGroup.GET("/wechat-ecommerce/violation-notification", server.getPlatformViolationNotificationConfig)
+		platformFinanceGroup.POST("/wechat-ecommerce/violation-notification", server.createPlatformViolationNotificationConfig)
+		platformFinanceGroup.PUT("/wechat-ecommerce/violation-notification", server.updatePlatformViolationNotificationConfig)
+		platformFinanceGroup.DELETE("/wechat-ecommerce/violation-notification", server.deletePlatformViolationNotificationConfig)
+		platformFinanceGroup.GET("/wechat-ecommerce/violations", server.listPlatformWechatMerchantViolations)
+		platformFinanceGroup.GET("/wechat-ecommerce/violations/:record_id", server.getPlatformWechatMerchantViolation)
 	}
 
 	platformOperatorRulesGroup := authGroup.Group("/platform/operator-rules")

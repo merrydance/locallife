@@ -55,6 +55,7 @@ type Config struct {
 	WechatEcommerceCombineNotifyURL        string        `mapstructure:"WECHAT_ECOMMERCE_COMBINE_NOTIFY_URL"`          // 收付通合单支付回调URL
 	WechatEcommerceRefundNotifyURL         string        `mapstructure:"WECHAT_ECOMMERCE_REFUND_NOTIFY_URL"`           // 收付通退款回调URL
 	WechatEcommerceWithdrawNotifyURL       string        `mapstructure:"WECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL"`         // 收付通提现回调URL
+	WechatEcommerceViolationNotifyURL      string        `mapstructure:"WECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL"`        // 收付通商户违规通知回调URL
 	WechatEcommerceSpName                  string        `mapstructure:"WECHAT_ECOMMERCE_SP_NAME"`                     // 收付通服务商主体全称（可选，用于分账接收方姓名）
 	WechatEcommerceSpSerialNumber          string        `mapstructure:"WECHAT_ECOMMERCE_SP_SERIAL_NUMBER"`            // 收付通服务商 API 证书序列号
 	WechatEcommerceSpPrivateKeyPath        string        `mapstructure:"WECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH"`         // 收付通服务商 API 私钥文件路径
@@ -245,6 +246,10 @@ func (c Config) EffectiveWechatEcommerceRefundNotifyURL() string {
 
 func (c Config) EffectiveWechatEcommerceWithdrawNotifyURL() string {
 	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommerceWithdrawNotifyURL, "/v1/webhooks/wechat-ecommerce/withdraw-notify")
+}
+
+func (c Config) EffectiveWechatEcommerceViolationNotifyURL() string {
+	return deriveWechatEcommerceWebhookURL(c.WechatPayNotifyURL, c.WechatEcommerceViolationNotifyURL, "/v1/webhooks/wechat-ecommerce/violation-notify")
 }
 
 func (c Config) ValidateWechatEcommerceConfig() error {
