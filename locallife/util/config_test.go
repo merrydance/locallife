@@ -1,8 +1,10 @@
 package util
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -17,6 +19,14 @@ func writeTestConfigFile(t *testing.T, content string) string {
 	err := os.WriteFile(configPath, []byte(content), 0o600)
 	require.NoError(t, err)
 	return dir
+}
+
+func testWechatPayAPIV3Key() string {
+	return strings.Repeat("a", 32)
+}
+
+func testWechatEcommerceAPIV3Key() string {
+	return strings.Repeat("b", 32)
 }
 
 func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {
@@ -51,7 +61,9 @@ func TestLoadConfig_DefaultsAndTrimQuotes(t *testing.T) {
 }
 
 func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
-	configDir := writeTestConfigFile(t, "ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nWECHAT_MINI_APP_ID=wx-mini-app\nWECHAT_MINI_APP_SECRET=mini-secret\nWECHAT_PAY_MCH_ID=1900000109\nWECHAT_PAY_SERIAL_NUMBER=serial-001\nWECHAT_PAY_PRIVATE_KEY_PATH=./certs/apiclient_key.pem\nWECHAT_PAY_API_V3_KEY=0123456789abcdef0123456789abcdef\nWECHAT_PAY_NOTIFY_URL=https://example.com/pay/notify\nWECHAT_PAY_REFUND_NOTIFY_URL=https://example.com/pay/refund-notify\nWECHAT_SHIPPING_SETTLE_NOTIFY_URL=https://example.com/pay/settlement-notify\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=./certs/platform.pem\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_001\nWECHAT_PAY_HTTP_TIMEOUT=45s\nWECHAT_ECOMMERCE_SP_MCHID=service-mchid-001\nWECHAT_ECOMMERCE_SP_APPID=service-appid-001\nWECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL=https://example.com/ecommerce/payment-notify\nWECHAT_ECOMMERCE_COMBINE_NOTIFY_URL=https://example.com/ecommerce/combine-notify\nWECHAT_ECOMMERCE_REFUND_NOTIFY_URL=https://example.com/ecommerce/refund-notify\nWECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL=https://example.com/ecommerce/withdraw-notify\nWECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL=https://example.com/ecommerce/violation-notify\nWECHAT_ECOMMERCE_SP_NAME=测试平台服务商\nWECHAT_ECOMMERCE_SP_SERIAL_NUMBER=sp-serial-001\nWECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH=./certs/sp_apiclient_key.pem\nWECHAT_ECOMMERCE_SP_API_V3_KEY=abcdef0123456789abcdef0123456789\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH=./certs/sp-platform.pem\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_SP_001\nREDIS_REQUIRED=true\n")
+	payKey := testWechatPayAPIV3Key()
+	spKey := testWechatEcommerceAPIV3Key()
+	configDir := writeTestConfigFile(t, fmt.Sprintf("ENVIRONMENT=test\nDB_SOURCE=postgresql:///test\nMIGRATION_URL=file://db/migration\nWECHAT_MINI_APP_ID=wx-mini-app\nWECHAT_MINI_APP_SECRET=mini-secret\nWECHAT_PAY_MCH_ID=1900000109\nWECHAT_PAY_SERIAL_NUMBER=serial-001\nWECHAT_PAY_PRIVATE_KEY_PATH=./certs/apiclient_key.pem\nWECHAT_PAY_API_V3_KEY=%s\nWECHAT_PAY_NOTIFY_URL=https://example.com/pay/notify\nWECHAT_PAY_REFUND_NOTIFY_URL=https://example.com/pay/refund-notify\nWECHAT_SHIPPING_SETTLE_NOTIFY_URL=https://example.com/pay/settlement-notify\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_PATH=./certs/platform.pem\nWECHAT_PAY_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_001\nWECHAT_PAY_HTTP_TIMEOUT=45s\nWECHAT_ECOMMERCE_SP_MCHID=service-mchid-001\nWECHAT_ECOMMERCE_SP_APPID=service-appid-001\nWECHAT_ECOMMERCE_PAYMENT_NOTIFY_URL=https://example.com/ecommerce/payment-notify\nWECHAT_ECOMMERCE_COMBINE_NOTIFY_URL=https://example.com/ecommerce/combine-notify\nWECHAT_ECOMMERCE_REFUND_NOTIFY_URL=https://example.com/ecommerce/refund-notify\nWECHAT_ECOMMERCE_WITHDRAW_NOTIFY_URL=https://example.com/ecommerce/withdraw-notify\nWECHAT_ECOMMERCE_VIOLATION_NOTIFY_URL=https://example.com/ecommerce/violation-notify\nWECHAT_ECOMMERCE_SP_NAME=测试平台服务商\nWECHAT_ECOMMERCE_SP_SERIAL_NUMBER=sp-serial-001\nWECHAT_ECOMMERCE_SP_PRIVATE_KEY_PATH=./certs/sp_apiclient_key.pem\nWECHAT_ECOMMERCE_SP_API_V3_KEY=%s\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH=./certs/sp-platform.pem\nWECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_ID=PUB_KEY_ID_SP_001\nREDIS_REQUIRED=true\n", payKey, spKey))
 
 	config, err := LoadConfig(configDir)
 	require.NoError(t, err)
@@ -61,7 +73,7 @@ func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
 	require.Equal(t, "1900000109", config.WechatPayMchID)
 	require.Equal(t, "serial-001", config.WechatPaySerialNumber)
 	require.Equal(t, "./certs/apiclient_key.pem", config.WechatPayPrivateKeyPath)
-	require.Equal(t, "0123456789abcdef0123456789abcdef", config.WechatPayAPIV3Key)
+	require.Equal(t, payKey, config.WechatPayAPIV3Key)
 	require.Equal(t, "https://example.com/pay/notify", config.WechatPayNotifyURL)
 	require.Equal(t, "https://example.com/pay/refund-notify", config.WechatPayRefundNotifyURL)
 	require.Equal(t, "https://example.com/pay/settlement-notify", config.WechatShippingSettleNotifyURL)
@@ -78,7 +90,7 @@ func TestLoadConfig_ReadsWechatPaymentAndEcommerceConfig(t *testing.T) {
 	require.Equal(t, "测试平台服务商", config.WechatEcommerceSpName)
 	require.Equal(t, "sp-serial-001", config.WechatEcommerceSpSerialNumber)
 	require.Equal(t, "./certs/sp_apiclient_key.pem", config.WechatEcommerceSpPrivateKeyPath)
-	require.Equal(t, "abcdef0123456789abcdef0123456789", config.WechatEcommerceSpAPIV3Key)
+	require.Equal(t, spKey, config.WechatEcommerceSpAPIV3Key)
 	require.Equal(t, "./certs/sp-platform.pem", config.WechatEcommerceSpPlatformPublicKeyPath)
 	require.Equal(t, "PUB_KEY_ID_SP_001", config.WechatEcommerceSpPlatformPublicKeyID)
 	require.True(t, config.RedisRequired)
@@ -143,7 +155,7 @@ func TestValidateWechatEcommerceConfig(t *testing.T) {
 				WechatEcommerceSpAppID:                 "service-appid-001",
 				WechatEcommerceSpSerialNumber:          "sp-serial-001",
 				WechatEcommerceSpPrivateKeyPath:        "./certs/sp_apiclient_key.pem",
-				WechatEcommerceSpAPIV3Key:              "abcdef0123456789abcdef0123456789",
+				WechatEcommerceSpAPIV3Key:              testWechatEcommerceAPIV3Key(),
 				WechatEcommerceSpPlatformPublicKeyPath: "./certs/sp-platform.pem",
 			},
 			want: "WECHAT_ECOMMERCE_SP_PLATFORM_PUBLIC_KEY_PATH",

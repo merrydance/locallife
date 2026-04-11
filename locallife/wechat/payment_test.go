@@ -32,6 +32,10 @@ func (fn paymentRoundTripFunc) RoundTrip(req *http.Request) (*http.Response, err
 	return fn(req)
 }
 
+func testAPIV3Key() string {
+	return strings.Repeat("a", 32)
+}
+
 // 生成测试用的 RSA 密钥对
 func generateTestKeyPair(t *testing.T) (*rsa.PrivateKey, *rsa.PublicKey) {
 	privateKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -112,7 +116,7 @@ func TestNewPaymentClient_WithPlatformPublicKey(t *testing.T) {
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
-		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		APIV3Key:              testAPIV3Key(),
 		PrivateKeyPath:        privateKeyPath,
 		PlatformPublicKeyPath: publicKeyPath,
 		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
@@ -143,7 +147,7 @@ func TestNewPaymentClient_WithPlatformCertificate(t *testing.T) {
 		MchID:                   "test_mch_id",
 		AppID:                   "test_app_id",
 		SerialNumber:            "test_serial",
-		APIV3Key:                "test_api_v3_key_32bytes_long__",
+		APIV3Key:                testAPIV3Key(),
 		PrivateKeyPath:          privateKeyPath,
 		PlatformCertificatePath: certPath,
 		NotifyURL:               "https://example.com/notify",
@@ -172,7 +176,7 @@ func TestNewPaymentClient_PublicKeyWithoutID_Error(t *testing.T) {
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
-		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		APIV3Key:              testAPIV3Key(),
 		PrivateKeyPath:        privateKeyPath,
 		PlatformPublicKeyPath: publicKeyPath,
 		// PlatformPublicKeyID 缺失
@@ -200,7 +204,7 @@ func TestEncryptSensitiveData_WithPublicKey(t *testing.T) {
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
-		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		APIV3Key:              testAPIV3Key(),
 		PrivateKeyPath:        privateKeyPath,
 		PlatformPublicKeyPath: publicKeyPath,
 		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
@@ -236,7 +240,7 @@ func TestEncryptSensitiveData_WithCertificate(t *testing.T) {
 		MchID:                   "test_mch_id",
 		AppID:                   "test_app_id",
 		SerialNumber:            "test_serial",
-		APIV3Key:                "test_api_v3_key_32bytes_long__",
+		APIV3Key:                testAPIV3Key(),
 		PrivateKeyPath:          privateKeyPath,
 		PlatformCertificatePath: certPath,
 		NotifyURL:               "https://example.com/notify",
@@ -267,7 +271,7 @@ func TestEncryptSensitiveData_NoCertOrKey_Error(t *testing.T) {
 		MchID:          "test_mch_id",
 		AppID:          "test_app_id",
 		SerialNumber:   "test_serial",
-		APIV3Key:       "test_api_v3_key_32bytes_long__",
+		APIV3Key:       testAPIV3Key(),
 		PrivateKeyPath: privateKeyPath,
 		NotifyURL:      "https://example.com/notify",
 	})
@@ -296,7 +300,7 @@ func TestGetPlatformCertificateSerial_WithPublicKey(t *testing.T) {
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
-		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		APIV3Key:              testAPIV3Key(),
 		PrivateKeyPath:        privateKeyPath,
 		PlatformPublicKeyPath: publicKeyPath,
 		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
@@ -326,7 +330,7 @@ func TestGetPlatformCertificateSerial_WithCertificate(t *testing.T) {
 		MchID:                   "test_mch_id",
 		AppID:                   "test_app_id",
 		SerialNumber:            "test_serial",
-		APIV3Key:                "test_api_v3_key_32bytes_long__",
+		APIV3Key:                testAPIV3Key(),
 		PrivateKeyPath:          privateKeyPath,
 		PlatformCertificatePath: certPath,
 		NotifyURL:               "https://example.com/notify",
@@ -447,7 +451,7 @@ func TestQueryOrderByOutTradeNo_VerifiesResponseSignature(t *testing.T) {
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
-		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		APIV3Key:              testAPIV3Key(),
 		PrivateKeyPath:        privateKeyPath,
 		PlatformPublicKeyPath: publicKeyPath,
 		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
@@ -487,7 +491,7 @@ func TestQueryOrderByOutTradeNo_MissingResponseSignatureFails(t *testing.T) {
 		MchID:                 "test_mch_id",
 		AppID:                 "test_app_id",
 		SerialNumber:          "test_serial",
-		APIV3Key:              "test_api_v3_key_32bytes_long__",
+		APIV3Key:              testAPIV3Key(),
 		PrivateKeyPath:        privateKeyPath,
 		PlatformPublicKeyPath: publicKeyPath,
 		PlatformPublicKeyID:   "PUB_KEY_ID_0123456789",
