@@ -158,7 +158,7 @@ Prompt 库必须接受和代码同等级的基础门禁。
 
 | Area | Implementation Must Push | Implementation Must Not | Review Must Check |
 | --- | --- | --- | --- |
-| Weapp | 以后端契约为唯一真相；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复 | 不要猜后端字段、状态、权限或统计语义；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案 | setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确 |
+| Weapp | 以后端契约为唯一真相；先盘点后端能力并组合成任务域，再决定组件边界和一页还是一组页面；service / state / handlers / WXML / WXSS / feedback 一起改；显式处理 loading / success / empty / error / retry / re-entry；说明弱网、重复点击与冷启动恢复 | 不要猜后端字段、状态、权限或统计语义；不要按接口数量机械拆页面；不要把所有能力堆进同一页面；不要只改 WXML / WXSS；不要把金额语义、角色边界或结果语义混掉；不要把重写 TDesign 内部样式当常规方案 | 能力组合是否合理；组件与页面边界是否清楚；setData 粒度、状态恢复、弱网与重入、支付结果、角色边界、页面壳一致性、反馈通道是否正确 |
 
 ### 3.4 Cross-Stack Rules
 

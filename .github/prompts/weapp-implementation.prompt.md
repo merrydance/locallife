@@ -25,12 +25,14 @@ Request:
 
 Implementation must push:
 
-- Start from the user task, first-screen essentials, and current-page boundary before coding or styling
+- Start from backend-supported capabilities and the user task before coding or styling
 - Treat the real backend contract as the only source of truth for fields, statuses, permissions, pagination, and metric meaning
-- Keep information architecture and page boundary decisions ahead of component and styling choices, following the role-matched weapp standards instead of local page guesswork
+- First inventory backend entities, fields, states, actions, permissions, and async outcomes; then group them into task domains before deciding any view structure
+- Decide component boundaries before page polish: if a region owns local state, repeated add/remove/edit flows, dense editing UI, or reusable task-specific interaction, extract a dedicated domain component first
+- Decide page boundaries after capability grouping and component boundaries: choose one page vs a page group by task continuity, first-screen clarity, information density, local-state complexity, and failure/recovery behavior
+- Keep information architecture and page boundary decisions ahead of TDesign and styling choices, following the role-matched weapp standards instead of local page guesswork
 - For TDesign-first refactor or style-reset requests, default to full-page information architecture and layout redesign rather than patching the legacy page shell unless the user explicitly asks for a local adjustment only
 - Use TDesign MCP and the role-matched design standard to justify major component choices and any user-visible non-TDesign exception
-- Extract complex regions into dedicated domain components when they own local state, repeated add/remove/edit flows, dense layout, or reusable task-specific interaction
 - Wire service calls, page state, handlers, WXML, WXSS, and user-visible feedback end to end
 - State which role-side design document governed the visual decisions and whether any exception crossed that boundary
 - Report any user-visible area that still does not use TDesign, any backend-contract ambiguity, and any remaining weak-network, re-entry, duplicate-tap, or payment-state risk
@@ -38,6 +40,9 @@ Implementation must push:
 Implementation must not do:
 
 - Do not invent backend fields, states, permissions, metric semantics, or pagination conclusions
+- Do not map one backend interface to one page by default
+- Do not decide page count, section layout, or component choice before capability grouping and page-boundary reasoning are explicit
+- Do not keep adding capabilities to one page once it no longer has a single clear primary task
 - Do not preserve the legacy page layout by default when the request is a refactor, redesign, style unification, or TDesign rewrite
 - Do not jump from the old WXML structure straight to component selection without first inventorying the backend-supported capabilities and actions
 - Do not force unfinished, future, unsupported, or cross-role capabilities into the current page just to make it look complete
@@ -85,8 +90,8 @@ TDesign-first refactor mode:
 
 Diagnosis-first mode:
 
-- If the user asked for a page方案, do not jump straight to code. First establish page task, first-screen hierarchy, page boundary, backend truth, and TDesign-first UI composition.
-- The diagnosis-first structure must cover: target page, user role, primary task, current problems, first-screen essentials, backend-source verification, problem diagnosis, proposed solution, implementation steps, non-goals, risk level, and validation plan.
+- If the user asked for a page方案, do not jump straight to code. First establish backend capability inventory, capability grouping, component boundaries, page boundaries, first-screen hierarchy, backend truth, and then TDesign-first UI composition.
+- The diagnosis-first structure must cover: backend capability inventory, capability grouping, target user role, primary task, proposed component boundaries, page vs page-group decision, first-screen essentials, backend-source verification, problem diagnosis, proposed solution, implementation steps, non-goals, risk level, and validation plan.
 - The page solution must keep UI consistency, small-screen usability, TDesign-first composition, and page shell stability as required deliverables instead of optional polish.
 - The page solution must explicitly state whether the page belongs to consumer or non-consumer visual scope and avoid borrowing the wrong side's design language.
 

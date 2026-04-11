@@ -19,6 +19,7 @@
 
 默认执行规则：
 
+- 当前长期生效的 weapp 活文档只有 4 份：`PAGE_DELIVERY_BASELINE.md`、`DESIGN_SYSTEM.md`、`NON_CONSUMER_DESIGN_SYSTEM.md`、`REVIEW_CHECKLIST.md`。
 - 不再把交互、性能、反馈、API 契约拆成多个默认必读标准。
 - `PAGE_DELIVERY_BASELINE.md` 是小程序页面与组件交付的单一默认权威来源。
 - `DESIGN_SYSTEM.md` 负责顾客侧视觉与组件视觉基线；`NON_CONSUMER_DESIGN_SYSTEM.md` 负责非顾客侧视觉与组件视觉基线；两者都不得削弱 `PAGE_DELIVERY_BASELINE.md` 的硬性要求。
@@ -42,6 +43,7 @@
 
 - 保留为分主题背景材料、历史拆分规则来源或专项深挖参考。
 - 不再作为默认实现、默认 review 或 app-wide instruction 的并行权威入口。
+- 不在这些文档中继续新增新的长期硬规则；若规则需要长期生效，应回收到 4 份活文档之一。
 - 若这些文档与 `PAGE_DELIVERY_BASELINE.md` 的执行口径冲突，以 `PAGE_DELIVERY_BASELINE.md` 为准。
 
 ## 审查辅助清单
@@ -51,7 +53,7 @@
 作用：
 
 - 提供可直接贴进 PR review 的压缩版审查清单。
-- 它不是新的权威层，也不再是默认审查热路径入口。
+- 它不是新的权威层；清单项只负责压缩检查，不负责再定义一套并行标准。
 - 做整体升级型 review 时，可配合历史蓝图文档一起使用。
 
 ## 当前运行时实现参考
@@ -94,9 +96,32 @@
 5. `weapp/miniprogram/utils/user-facing.ts`（仅在需要核对错误对象与用户文案映射实现时读取）
 6. `weapp/miniprogram/utils/prompt-feedback.ts`（仅在需要核对 Toast/Modal 去重守卫时读取）
 
+## 文档归属规则
+
+后续维护时，默认按下面的归属关系落内容：
+
+- 活文档：可以新增长期硬规则。
+- 专题参考文档：只能补充背景、案例、拆分视角、常见误区和诊断提示，不能再新增默认 gate。
+- instructions：只能保留 Read First、始终生效的执行约束和路径级反模式，不重复标准正文。
+- prompts：只组织任务输入、输出结构和验收方式，不承载长期规范。
+- 运行时实现参考：只回答“代码里现在怎么接”，不定义产品或交付规则。
+
+建议按下表判断新内容该放哪里：
+
+| 内容类型 | 应放位置 |
+| :--- | :--- |
+| 页面交付的默认硬规则 | `PAGE_DELIVERY_BASELINE.md` |
+| 顾客侧视觉、token、组件视觉表达 | `DESIGN_SYSTEM.md` |
+| 非顾客侧视觉、page shell、TDesign-first 表达 | `NON_CONSUMER_DESIGN_SYSTEM.md` |
+| 压缩版审查问题 | `REVIEW_CHECKLIST.md` |
+| 交互、性能、API 主题展开 | 对应专题参考文档 |
+| 风险分级、验证证据、剩余风险、发布口径 | 工程治理标准 |
+| 错误对象、提示守卫、运行时接入细节 | `weapp/miniprogram/utils/*` |
+
 ## 维护规则
 
 - 新增小程序长期规则时，优先放入本目录下已有权威文档，而不是在 instructions 或 prompts 中重复复制。
+- 不要再把长期硬规则写入专题参考文档；专题文档只保留背景、例子、展开说明或历史上下文。
 - instructions 只应保留执行约束和 Read First 入口，不应重复本目录中的完整正文。
 - prompts 只应组织任务输入和验收方式，不应承载长期标准正文。
 - 运行时实现参考只保留守卫、错误对象、接入工具、例外项和当前实现细节，不再重复页面交互或 API contract 的主规范。

@@ -1,14 +1,16 @@
 # Mini Program API Interaction Contract
 
-本文件定义 LocalLife 小程序消费后端接口时必须遵守的交互契约与状态承接规则。
+本文件用于补充说明 LocalLife 小程序消费后端接口时常见的真值边界、请求语义与状态承接问题。
 
-它不描述具体 API 列表，也不记录重构过程。它只定义页面与服务之间必须长期稳定遵守的规则。
+它不描述具体 API 列表，也不记录重构过程。本文件不再新增新的长期硬规则，只把接口消费中最容易出问题的主题集中展开，供设计、实现和 review 时补查。
 
 本文件只保留后端真值、请求语义与异步结果 contract 的专题展开，不再单独充当小程序页面交付的默认权威入口。默认页面壳体、结果承接、提示通道、请求预算和高风险路径规则，统一以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准；若需核对运行时错误对象字段与提示接入实现，再按需查看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`。
 
+阅读约定：本文件后续保留的“必须”“不允许”“应优先”等措辞，都只视为对活文档规则的接口消费视角展开，不单独形成新的默认 gate。
+
 ## 1. 目标
 
-前端消费 API 的目标不是“请求成功就算完成”，而是：
+前端消费 API 的参考目标不是“请求成功就算完成”，而是：
 
 - 页面状态与后端真值关系清晰。
 - 用户能理解当前结果是否最终可信。
@@ -106,21 +108,9 @@
 5. 成功、失败、空态或未知结果有可见承接。
 6. 后续刷新、回读、跳转或结果页与新状态保持一致。
 
-## 13. 评审最低检查项
+## 13. 使用方式
 
-每次接口消费改动，至少检查以下问题：
-
-1. 请求参数、响应字段、状态枚举和类型是否与真实后端契约一致。
-2. 分页结束条件是否依赖真实契约。
-3. 登录失效恢复是否破坏当前任务流。
-4. 是否把本地状态假装成后端状态。
-5. 异步确认、轮询或回调延迟时，用户是否还有清晰的状态承接。
-6. 失败提示是否已经过用户文案映射。
-7. 是否存在重复点击、重复提交、重复轮询风险。
-
-## 14. 与其他文档的关系
-
-- 默认页面交付、状态恢复、请求边界与高风险路径：先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-- 视觉与 page shell 补充：顾客侧按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧按需看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
-- 小程序运行时提示接入：按需看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`
-- 若需查看旧专题拆分材料中的交互展开，可按需看 `.github/standards/weapp/INTERACTION_STANDARDS.md`
+- 默认实现、默认审查和默认交付判断，先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 与 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
+- 当争议集中在后端真值、分页结束条件、登录恢复、乐观更新、重试语义、异步结果或实时恢复时，再回来看本文件对应章节。
+- 小程序运行时提示接入按需看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`。
+- 若问题主要是页面状态区分、反馈通道和任务承接，再按需回看 `.github/standards/weapp/INTERACTION_STANDARDS.md`。

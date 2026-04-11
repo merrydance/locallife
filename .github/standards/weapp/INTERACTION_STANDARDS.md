@@ -1,14 +1,16 @@
 # Mini Program Interaction Standards
 
-本文件定义 LocalLife 小程序的页面级交互标准与任务流承接规则。
+本文件用于补充说明 LocalLife 小程序的页面级交互模式与任务流承接方式。
 
 它不负责视觉样式定义；相关内容如需补充参考，顾客侧按需查看 `.github/standards/weapp/DESIGN_SYSTEM.md`，非顾客侧按需查看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
 
-默认页面交付、状态恢复、请求边界、分页真值、反馈承接和高风险路径约束，统一以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准。本文件只保留页面交互与任务流承接的专题展开；若与默认基线口径不一致，以默认基线为准。
+默认页面交付、状态恢复、请求边界、分页真值、反馈承接和高风险路径约束，统一以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准。本文件不再新增新的长期硬规则，只把交互相关问题按主题重排，便于诊断、设计和 review 时补查；若与默认基线口径不一致，以默认基线为准。
+
+阅读约定：本文件后续保留的“必须”“不应”“不要”等措辞，都只视为对活文档规则的专题展开与例子化重排，不单独形成新的默认 gate。
 
 ## 1. 目标
 
-小程序交互标准要同时满足两类要求：
+小程序交互参考主要帮助回答两类问题：
 
 - 用户能在真实任务流中稳定完成任务，而不是只看到“功能存在”。
 - 页面在弱网、回退、重入、刷新、异步确认等情况下仍保持状态可信。
@@ -121,20 +123,9 @@
 - 当一个编辑区已经拥有独立的局部状态、独立的增删改流程、独立的局部校验与反馈时，应优先拆成领域组件；页面只保留后端契约映射、初始数据加载、最终提交和跨区块结果承接。
 - 拆出的领域组件仍应保持显式输入输出边界，不得在组件内部偷偷吸收页面级请求、路由跳转或角色判断逻辑。
 
-## 9. 交互评审最低检查项
+## 9. 使用方式
 
-每次页面改动，至少检查以下问题：
-
-1. 用户是否能看出当前页面的主任务是什么。
-2. 首屏失败、空态、局部刷新失败是否被正确区分。
-3. 成功结果是否由页面结构承接，而不是只靠 Toast。
-4. 返回页面、前后台切换、重新进入后，状态是否还能恢复到可信状态。
-5. 核心动作是否防止重复点击，且用户能感知处理中状态。
-6. 是否存在将服务失败误伪装成空数据或默认值的情况。
-
-## 10. 与其他文档的关系
-
-- 默认页面交付与状态恢复口径：先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-- 视觉与 page shell 补充：顾客侧按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧按需看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
-- 运行时提示系统接入细节：按需看 `weapp/miniprogram/utils/prompt-feedback.ts` 和 `weapp/miniprogram/utils/user-facing.ts`
-- 若需查看旧专题拆分材料中的 API contract 展开，可按需看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`
+- 默认实现、默认审查和默认交付判断，先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 与 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
+- 当问题集中在任务流承接、页面状态区分、反馈通道选择、返回恢复或重入恢复时，再回来看本文件对应章节。
+- 运行时提示系统接入细节按需看 `weapp/miniprogram/utils/prompt-feedback.ts` 和 `weapp/miniprogram/utils/user-facing.ts`。
+- 若需要继续追接口真值、重试语义或异步结果承接，再按需看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`。

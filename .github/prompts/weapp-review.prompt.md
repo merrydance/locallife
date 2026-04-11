@@ -22,6 +22,8 @@ Request:
 
 Review must prioritize:
 
+- Wrong capability grouping, such as one-interface-one-page mapping or oversized all-in-one pages with no single primary task
+- Missing domain-component extraction when dense local workflows are left inline in a page shell
 - Broken service-to-state-to-view wiring
 - Missing page states, missing recovery paths, and weak-network regressions
 - Backend-truth drift, fake local truth, and incomplete state propagation
@@ -55,6 +57,9 @@ Optional context:
 
 Baseline review must check:
 
+- Backend-supported capabilities were grouped into sensible user tasks before page and component boundaries were chosen, instead of being mirrored mechanically from interface count
+- The changed surface still has a clear page boundary: one page when the task stays singular and first-screen-readable, a page group when task continuity, density, or local-state complexity requires separation
+- Regions with independent local state, repeated edit flows, or dense composition were extracted into domain components when needed instead of being left as one oversized page block
 - New fields and actions propagate through service layer, state, handlers, and visible UI
 - Request parameters, response fields, enums, and types stay aligned with the real backend contract instead of drifting from page-local assumptions
 - Backend semantics are treated as the only source of truth; if the code is guessing around missing or ambiguous backend meaning, call that out as a finding or residual risk
@@ -82,6 +87,7 @@ Payment / high-risk review add-on:
 
 Output rules:
 
+- When present, report capability-grouping, page-boundary, and component-boundary defects before lower-level implementation defects, because they usually invalidate the rest of the page decision.
 - Separate proven code defects from interaction defects when both exist
 - In overall upgrade audit mode, also separate baseline violations from upgrade opportunities so the review can distinguish “must fix” from “should redesign”
 - If a high-risk flow was changed but not actually validated, call it out as residual risk even when no direct bug is proven

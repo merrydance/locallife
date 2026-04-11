@@ -1,14 +1,16 @@
 # Mini Program Performance And Preload Standards
 
-本文件定义 LocalLife 小程序在入口页、聚合页、首屏性能、预加载、请求预算、弱网韧性和跨角色数据拉取上的长期标准。
+本文件用于补充说明 LocalLife 小程序在入口页、聚合页、首屏性能、预加载、请求预算、弱网韧性和跨角色数据拉取上的常见判断方式。
 
 它不负责视觉设计。默认页面交付与非视觉规则仍以 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 为准；视觉内容如需补充查看，顾客侧按需参考 `.github/standards/weapp/DESIGN_SYSTEM.md`，非顾客侧按需参考 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`。
 
-本文件只作为性能、预加载、请求预算与弱网退化的专题展开，不再单独充当小程序页面交付的默认权威入口。若本文件与 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 口径不一致，以后者为准。
+本文件只作为性能、预加载、请求预算与弱网退化的专题参考，不再单独充当小程序页面交付的默认权威入口，也不再新增新的长期硬规则。若本文件与 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 口径不一致，以后者为准。
+
+阅读约定：本文件后续保留的“必须”“不允许”“禁止”等措辞，都只视为对活文档规则的性能视角展开，不单独形成新的默认 gate。
 
 ## 1. 目标
 
-性能与预加载标准需要同时满足三件事：
+性能与预加载参考主要帮助回答三件事：
 
 - 首屏关键任务尽快可用，而不是“加载很多但用户还不能开始操作”。
 - 聚合页和入口页优先把当前任务做清楚，而不是把多个子页面和低频能力一起抢跑出来。
@@ -164,20 +166,8 @@
 - 弱网下优先保证当前页主任务可继续，而不是尽力把所有预热都拉完。
 - 静默预取失败时，应允许页面在用户真正进入相关区域时再显式重试。
 
-## 12. 评审最低检查项
+## 12. 使用方式
 
-每次涉及入口页、聚合页、首屏、列表、工作台、首页、支付页或角色主入口的改动，至少检查：
-
-1. 首屏关键路径请求是否受控。
-2. 是否存在 per-item 请求扇出。
-3. 是否拉取了当前任务并不需要的子页面或其他角色接口。
-4. `onShow` 是否无条件重拉重型数据。
-5. 聚合页是否把多个区块同时当成首屏刚需，导致主任务失焦。
-6. 预加载是否有明确收益，而不是基于模糊猜测。
-7. 弱网下预加载失败是否能安全退化。
-
-## 13. 与其他文档的关系
-
-- 默认页面交付、状态恢复、分页真值、提示承接与请求边界，先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
-- 视觉与 page shell 补充：顾客侧按需看 `.github/standards/weapp/DESIGN_SYSTEM.md`；非顾客侧按需看 `.github/standards/weapp/NON_CONSUMER_DESIGN_SYSTEM.md`
-- 运行时错误映射与提示接入实现：按需看 `weapp/miniprogram/utils/user-facing.ts` 和 `weapp/miniprogram/utils/prompt-feedback.ts`
+- 默认实现、默认审查和默认交付判断，先看 `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md` 与 `.github/standards/weapp/REVIEW_CHECKLIST.md`。
+- 当争议集中在首屏请求预算、`onShow` 刷新量、预加载收益、跨角色预热或弱网退化时，再回来看本文件对应章节。
+- 若问题已经涉及接口聚合能力、分页真值或本地状态假装后端结果，再按需转看 `.github/standards/weapp/API_INTERACTION_CONTRACT.md`。
