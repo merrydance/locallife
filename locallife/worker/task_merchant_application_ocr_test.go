@@ -363,6 +363,17 @@ func TestParseFoodPermitOCRText_RejectsSuspiciousCompanyName(t *testing.T) {
 	require.Equal(t, "2027年01月08日", data.ValidTo)
 }
 
+func TestParseFoodPermitOCRText_UsesRegistrationBusinessName(t *testing.T) {
+	t.Parallel()
+
+	var data foodPermitOCRData
+	parseFoodPermitOCRText(&data, "食品小作坊小餐饮登记证\n商号名称：宁晋县玉水轩鱼味馆\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日")
+
+	require.Equal(t, "宁晋县玉水轩鱼味馆", data.CompanyName)
+	require.Equal(t, "2130528020946", data.PermitNo)
+	require.Equal(t, "2030年12月31日", data.ValidTo)
+}
+
 func TestProcessTaskMerchantApplicationBusinessLicenseOCR_UsesOCRJob(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	defer ctrl.Finish()

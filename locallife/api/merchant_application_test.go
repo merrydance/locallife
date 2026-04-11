@@ -881,6 +881,76 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 		},
 		{
+			name: "Approved_FoodPermitRegistrationTitleIgnored",
+			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
+				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)
+			},
+			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
+				app := randomMerchantAppDraftWithData(user.ID)
+				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					PermitNo:     "2130528020946",
+					CompanyName:  "食品小作坊小餐饮登记证",
+					OperatorName: "张三",
+					ValidTo:      "2030年12月31日",
+					RawText:      "食品小作坊小餐饮登记证\n商号名称：测试餐饮有限公司\n经营者姓名：张三\n登记证编号：2130528020946\n有效期至：2030年12月31日",
+					OCRAt:        time.Now().Format(time.RFC3339),
+				})
+				require.NoError(t, err)
+				app.FoodPermitOcr = foodPermitOCR
+
+				store.EXPECT().
+					GetMerchantApplicationDraft(gomock.Any(), user.ID).
+					Times(1).
+					Return(app, nil)
+
+				store.EXPECT().
+					UpdateMerchantApplicationFoodPermit(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(app, nil)
+
+				submittedApp := app
+				submittedApp.Status = "submitted"
+				store.EXPECT().
+					SubmitMerchantApplication(gomock.Any(), app.ID).
+					Times(1).
+					Return(submittedApp, nil)
+
+				store.EXPECT().
+					ListMerchantLocationsInRegion(gomock.Any(), submittedApp.RegionID.Int64).
+					Times(1).
+					Return([]db.ListMerchantLocationsInRegionRow{}, nil)
+
+				store.EXPECT().
+					CheckBusinessLicenseExists(gomock.Any(), db.CheckBusinessLicenseExistsParams{
+						BusinessLicenseNumber: submittedApp.BusinessLicenseNumber,
+						ID:                    submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				store.EXPECT().
+					CheckLegalPersonIDExists(gomock.Any(), db.CheckLegalPersonIDExistsParams{
+						LegalPersonIDNumber: submittedApp.LegalPersonIDNumber,
+						ID:                  submittedApp.ID,
+					}).
+					Times(1).
+					Return(int64(0), nil)
+
+				approvedApp := submittedApp
+				approvedApp.Status = "approved"
+				store.EXPECT().
+					ApproveMerchantApplicationTx(gomock.Any(), gomock.Any()).
+					Times(1).
+					Return(db.ApproveMerchantApplicationTxResult{
+						Application: approvedApp,
+						Merchant:    db.Merchant{ID: 1},
+					}, nil)
+			},
+			checkResponse: func(t *testing.T, recorder *httptest.ResponseRecorder) {
+				require.Equal(t, http.StatusOK, recorder.Code)
+			},
+		},
+		{
 			name: "BadRequest_FoodPermitNameUnreadable",
 			setupAuth: func(t *testing.T, request *http.Request, tokenMaker token.Maker) {
 				addAuthorization(t, request, tokenMaker, authorizationTypeBearer, user.ID, time.Minute)

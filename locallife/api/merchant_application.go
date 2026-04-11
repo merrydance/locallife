@@ -1260,7 +1260,7 @@ func isSuspiciousFoodPermitCompanyName(name string) bool {
 	if len([]rune(name)) > 30 {
 		return true
 	}
-	suspiciousKeywords := []string{"地址", "经营场所", "面积", "办理", "许可证", "项目", "路东", "路西", "请", "《"}
+	suspiciousKeywords := []string{"地址", "经营场所", "面积", "办理", "许可证", "登记证", "项目", "食品", "小作坊", "小餐饮", "路东", "路西", "请", "《"}
 	for _, keyword := range suspiciousKeywords {
 		if strings.Contains(name, keyword) {
 			return true
@@ -1866,10 +1866,10 @@ func reparseFoodPermitMissingFields(ocr *FoodPermitOCRData) bool {
 
 	// 提取企业/商号名称
 	if ocr.CompanyName == "" || isSuspiciousFoodPermitCompanyName(ocr.CompanyName) {
-		nameRe := regexp.MustCompile(`(?:经营者名称|单位名称|名\s*称|主体名称|商号名称)\s*[:：]?\s*([^\n\r]{2,30})`)
+		nameRe := regexp.MustCompile(`(?:经营者名称|单位名称|主体名称|商号名称)\s*[:：]?\s*([^\n\r]{2,30})`)
 		if m := nameRe.FindStringSubmatch(raw); m != nil {
 			candidate := normalizeCompanyName(strings.TrimSpace(m[1]))
-			if candidate != "" && candidate != ocr.CompanyName {
+			if candidate != "" && !isSuspiciousFoodPermitCompanyName(candidate) && candidate != ocr.CompanyName {
 				ocr.CompanyName = candidate
 				changed = true
 			}
@@ -1905,7 +1905,7 @@ func populateFoodPermitOCRDataFromNormalized(ocrData *FoodPermitOCRData, result 
 		ocrData.PermitNo = licenseNumber
 		changed = true
 	}
-	if companyName := normalizeCompanyName(strings.TrimSpace(result.BusinessName)); companyName != "" && (ocrData.CompanyName == "" || isSuspiciousFoodPermitCompanyName(ocrData.CompanyName)) {
+	if companyName := normalizeCompanyName(strings.TrimSpace(result.BusinessName)); companyName != "" && !isSuspiciousFoodPermitCompanyName(companyName) && (ocrData.CompanyName == "" || isSuspiciousFoodPermitCompanyName(ocrData.CompanyName)) {
 		if companyName != ocrData.CompanyName {
 			ocrData.CompanyName = companyName
 			changed = true

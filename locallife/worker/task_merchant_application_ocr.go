@@ -428,7 +428,7 @@ func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string, logFai
 	// 企业名称匹配 - 使用多种模式尝试提取
 	namePatterns := []*regexp.Regexp{
 		// 模式1: 标准格式 "经营者名称：XXX"
-		regexp.MustCompile(`(?m)(?:经营者名称|单位名称|名\s*称)\s*[:：]?\s*([^\n\r]{2,50})`),
+		regexp.MustCompile(`(?m)(?:经营者名称|单位名称)\s*[:：]?\s*([^\n\r]{2,50})`),
 		// 模式2: "主体名称：XXX"
 		regexp.MustCompile(`(?m)主体名称\s*[:：]?\s*([^\n\r]{2,50})`),
 		// 模式3: "商号名称：XXX"（小餐饮/小作坊登记证格式）
@@ -646,7 +646,7 @@ func isLikelyFoodPermitCompanyName(name string) bool {
 		return false
 	}
 	suspiciousKeywords := []string{
-		"地址", "经营场所", "面积", "办理", "许可证", "项目", "食品", "路东", "路西", "路北", "路南", "《", "》", "请",
+		"地址", "经营场所", "面积", "办理", "许可证", "登记证", "项目", "食品", "小作坊", "小餐饮", "路东", "路西", "路北", "路南", "《", "》", "请",
 	}
 	for _, keyword := range suspiciousKeywords {
 		if strings.Contains(name, keyword) {
