@@ -12,6 +12,7 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -19,10 +20,11 @@ import (
 
 const (
 	tradeBillAPIPath           = "/v3/bill/tradebill"
+	fundFlowBillAPIPath        = "/v3/bill/fundflowbill"
 	refundBillAPIPath          = "/v3/bill/refundbill"
+	profitSharingBillAPIPath   = "/v3/profitsharing/bills"
 	ecommerceTradeBillAPIPath  = "/v3/ecommerce/bill/tradebill"
 	ecommerceRefundBillAPIPath = "/v3/ecommerce/bill/refundbill"
-	wxPayBillAPIBase           = "https://api.mch.weixin.qq.com"
 )
 
 var (
@@ -93,6 +95,37 @@ func (c *PaymentClient) DownloadTradeBill(ctx context.Context, billDate time.Tim
 	return c.fetchAndParseBill(ctx, apiPath, "商户订单号", "微信订单号", "订单金额")
 }
 
+// GetTradeBillDownloadURL 获取交易账单下载地址。
+func (c *PaymentClient) GetTradeBillDownloadURL(ctx context.Context, billDate time.Time, subMchID, billType, tarType string) (*BillDownloadURLResponse, error) {
+	params := url.Values{}
+	params.Set("bill_date", billDate.Format("2006-01-02"))
+	if subMchID != "" {
+		params.Set("sub_mchid", subMchID)
+	}
+	if billType != "" {
+		params.Set("bill_type", billType)
+	}
+	if tarType != "" {
+		params.Set("tar_type", tarType)
+	}
+
+	return c.getBillDownloadURL(ctx, buildBillRequestPath(tradeBillAPIPath, params))
+}
+
+// GetFundFlowBillDownloadURL 获取资金账单下载地址。
+func (c *PaymentClient) GetFundFlowBillDownloadURL(ctx context.Context, billDate time.Time, accountType, tarType string) (*BillDownloadURLResponse, error) {
+	params := url.Values{}
+	params.Set("bill_date", billDate.Format("2006-01-02"))
+	if accountType != "" {
+		params.Set("account_type", accountType)
+	}
+	if tarType != "" {
+		params.Set("tar_type", tarType)
+	}
+
+	return c.getBillDownloadURL(ctx, buildBillRequestPath(fundFlowBillAPIPath, params))
+}
+
 // DownloadRefundBill 下载指定日期的退款账单
 // 对应 refund_orders WHERE refund_type = 'miniprogram' AND status = 'success'
 func (c *PaymentClient) DownloadRefundBill(ctx context.Context, billDate time.Time) (map[string]BillRecord, error) {
@@ -119,6 +152,20 @@ func (c *EcommerceClient) DownloadEcommerceRefundBill(ctx context.Context, billD
 	return c.fetchAndParseBill(ctx, apiPath, "商户退款单号", "微信退款单号", "退款金额")
 }
 
+// GetProfitSharingBillDownloadURL 获取分账账单下载地址。
+func (c *EcommerceClient) GetProfitSharingBillDownloadURL(ctx context.Context, billDate time.Time, subMchID, tarType string) (*BillDownloadURLResponse, error) {
+	params := url.Values{}
+	params.Set("bill_date", billDate.Format("2006-01-02"))
+	if subMchID != "" {
+		params.Set("sub_mchid", subMchID)
+	}
+	if tarType != "" {
+		params.Set("tar_type", tarType)
+	}
+
+	return c.getBillDownloadURL(ctx, buildBillRequestPath(profitSharingBillAPIPath, params))
+}
+
 // fetchAndParseBill 通用账单获取与解析流程：
 // 1. 调 API 获取下载 URL
 // 2. 下载 gzip 账单文件（带签名认证）
@@ -129,27 +176,13 @@ func (c *PaymentClient) fetchAndParseBill(
 	outTradeNoCol, transactionIDCol, amountCol string,
 ) (map[string]BillRecord, error) {
 	// 第一步：获取账单下载 URL
-	respBytes, err := c.doRequest(ctx, http.MethodGet, apiPath, nil)
+	urlResp, err := c.getBillDownloadURL(ctx, apiPath)
 	if err != nil {
-		return nil, fmt.Errorf("get bill download url: %w", normalizeBillDownloadURLError(err))
-	}
-	var urlResp BillDownloadURLResponse
-	if err := json.Unmarshal(respBytes, &urlResp); err != nil {
-		return nil, fmt.Errorf("parse bill download url response: %w", err)
-	}
-	if urlResp.DownloadURL == "" {
-		return nil, fmt.Errorf("empty download_url in response")
-	}
-
-	// 第二步：从完整 URL 中提取路径（去掉 base），用于生成请求签名
-	billPath := strings.TrimPrefix(urlResp.DownloadURL, wxPayBillAPIBase)
-	if billPath == urlResp.DownloadURL {
-		return nil, fmt.Errorf("unexpected download url format (expected %s prefix): %s",
-			wxPayBillAPIBase, urlResp.DownloadURL)
+		return nil, err
 	}
 
 	// 第三步：下载账单文件。文件下载接口不返回响应签名，需跳过响应验签。
-	fileBytes, err := c.doRequestWithoutResponseVerification(ctx, http.MethodGet, billPath, nil)
+	fileBytes, err := c.DownloadBillFile(ctx, urlResp.DownloadURL)
 	if err != nil {
 		return nil, fmt.Errorf("download bill file: %w", err)
 	}
@@ -159,6 +192,40 @@ func (c *PaymentClient) fetchAndParseBill(
 
 	// 第四步：解压并解析 CSV
 	return parseBillGzip(fileBytes, outTradeNoCol, transactionIDCol, amountCol)
+}
+
+func (c *PaymentClient) getBillDownloadURL(ctx context.Context, apiPath string) (*BillDownloadURLResponse, error) {
+	respBytes, err := c.doRequest(ctx, http.MethodGet, apiPath, nil)
+	if err != nil {
+		return nil, fmt.Errorf("get bill download url: %w", normalizeBillDownloadURLError(err))
+	}
+
+	var urlResp BillDownloadURLResponse
+	if err := json.Unmarshal(respBytes, &urlResp); err != nil {
+		return nil, fmt.Errorf("parse bill download url response: %w", err)
+	}
+	if strings.TrimSpace(urlResp.DownloadURL) == "" {
+		return nil, fmt.Errorf("empty download_url in response")
+	}
+
+	return &urlResp, nil
+}
+
+// DownloadBillFile 下载账单文件原始字节。
+func (c *PaymentClient) DownloadBillFile(ctx context.Context, downloadURL string) ([]byte, error) {
+	if strings.TrimSpace(downloadURL) == "" {
+		return nil, fmt.Errorf("download url is required")
+	}
+
+	return c.doRequestWithoutResponseVerification(ctx, http.MethodGet, downloadURL, nil)
+}
+
+func buildBillRequestPath(basePath string, params url.Values) string {
+	if len(params) == 0 {
+		return basePath
+	}
+
+	return basePath + "?" + params.Encode()
 }
 
 func verifyBillHash(fileBytes []byte, hashType, hashValue string) error {

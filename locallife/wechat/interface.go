@@ -3,6 +3,7 @@ package wechat
 import (
 	"context"
 	"mime/multipart"
+	"time"
 )
 
 const (
@@ -245,6 +246,12 @@ type EcommerceClientInterface interface {
 
 	// QueryPlatformFundDayEndBalance 查询平台商户指定日期日终余额
 	QueryPlatformFundDayEndBalance(ctx context.Context, accountType, date string) (*PlatformFundBalanceResponse, error)
+
+	// GetFundFlowBillDownloadURL 获取平台资金账单下载地址
+	GetFundFlowBillDownloadURL(ctx context.Context, billDate time.Time, accountType, tarType string) (*BillDownloadURLResponse, error)
+
+	// GetProfitSharingBillDownloadURL 获取平台分账账单下载地址
+	GetProfitSharingBillDownloadURL(ctx context.Context, billDate time.Time, subMchID, tarType string) (*BillDownloadURLResponse, error)
 
 	// CreateEcommerceWithdraw 发起二级商户提现
 	CreateEcommerceWithdraw(ctx context.Context, req *EcommerceWithdrawRequest) (*EcommerceWithdrawResponse, error)

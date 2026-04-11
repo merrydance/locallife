@@ -1409,6 +1409,8 @@ func (server *Server) setupRouter() {
 	platformFinanceGroup.Use(server.CasbinRoleMiddleware(RoleAdmin))
 	{
 		platformFinanceGroup.GET("/account/balance", server.getPlatformAccountBalance)
+		platformFinanceGroup.GET("/bills/fund-flow/download-url", server.getPlatformFundFlowBillDownloadURL)
+		platformFinanceGroup.GET("/bills/profit-sharing/download-url", server.getPlatformProfitSharingBillDownloadURL)
 	}
 
 	platformOperatorRulesGroup := authGroup.Group("/platform/operator-rules")

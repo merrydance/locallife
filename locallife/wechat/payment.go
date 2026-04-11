@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -935,8 +936,21 @@ func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path s
 		}
 	}
 
-	url := wxPayBaseURL + path
-	req, err := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(bodyBytes))
+	requestURL := wxPayBaseURL + path
+	signaturePath := path
+	if strings.HasPrefix(path, "https://") || strings.HasPrefix(path, "http://") {
+		parsedURL, parseErr := url.Parse(path)
+		if parseErr != nil {
+			return nil, fmt.Errorf("parse request url: %w", parseErr)
+		}
+		if parsedURL.Scheme == "" || parsedURL.Host == "" {
+			return nil, fmt.Errorf("invalid absolute request url: %s", path)
+		}
+		requestURL = parsedURL.String()
+		signaturePath = parsedURL.RequestURI()
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, requestURL, bytes.NewReader(bodyBytes))
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -961,7 +975,7 @@ func (c *PaymentClient) doRequestWithOptions(ctx context.Context, method, path s
 	if err != nil {
 		return nil, err
 	}
-	signature, err := c.generateSignature(method, path, timestamp, nonceStr, bodyBytes)
+	signature, err := c.generateSignature(method, signaturePath, timestamp, nonceStr, bodyBytes)
 	if err != nil {
 		return nil, fmt.Errorf("generate signature: %w", err)
 	}

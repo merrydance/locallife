@@ -5945,6 +5945,23 @@ definitions:
       title:
         type: string
     type: object
+  api.platformBillDownloadResponse:
+    properties:
+      account_type:
+        type: string
+      bill_date:
+        type: string
+      download_url:
+        type: string
+      hash_type:
+        type: string
+      hash_value:
+        type: string
+      sub_mch_id:
+        type: string
+      tar_type:
+        type: string
+    type: object
   api.platformDailyStatRow:
     properties:
       active_merchants:
@@ -24073,6 +24090,112 @@ paths:
       security:
       - BearerAuth: []
       summary: 查询平台微信支付账户余额
+      tags:
+      - 平台财务
+  /v1/platform/finance/bills/fund-flow/download-url:
+    get:
+      description: 管理员调用微信支付资金账单接口，获取平台商户号账单下载地址
+      parameters:
+      - description: 账单日期，格式 YYYY-MM-DD
+        in: query
+        name: bill_date
+        required: true
+        type: string
+      - description: 账户类型，默认 BASIC
+        enum:
+        - BASIC
+        - OPERATION
+        - FEES
+        in: query
+        name: account_type
+        type: string
+      - description: 压缩类型，默认 GZIP
+        enum:
+        - GZIP
+        in: query
+        name: tar_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformBillDownloadResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信支付未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取平台资金账单下载地址
+      tags:
+      - 平台财务
+  /v1/platform/finance/bills/profit-sharing/download-url:
+    get:
+      description: 管理员调用微信支付分账账单接口，获取平台或指定子商户分账账单下载地址
+      parameters:
+      - description: 账单日期，格式 YYYY-MM-DD
+        in: query
+        name: bill_date
+        required: true
+        type: string
+      - description: 指定子商户号；不传则获取服务商下全部分账账单
+        in: query
+        name: sub_mchid
+        type: string
+      - description: 压缩类型，默认 GZIP
+        enum:
+        - GZIP
+        in: query
+        name: tar_type
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/api.platformBillDownloadResponse'
+        "400":
+          description: 参数错误
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "401":
+          description: 未认证
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "403":
+          description: 无权限
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "502":
+          description: 微信支付调用失败
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+        "503":
+          description: 微信支付未配置
+          schema:
+            $ref: '#/definitions/api.ErrorResponse'
+      security:
+      - BearerAuth: []
+      summary: 获取平台分账账单下载地址
       tags:
       - 平台财务
   /v1/platform/operational-configs:

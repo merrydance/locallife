@@ -22477,6 +22477,169 @@
                 }
             }
         },
+        "/v1/platform/finance/bills/fund-flow/download-url": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员调用微信支付资金账单接口，获取平台商户号账单下载地址",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "获取平台资金账单下载地址",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "账单日期，格式 YYYY-MM-DD",
+                        "name": "bill_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "BASIC",
+                            "OPERATION",
+                            "FEES"
+                        ],
+                        "type": "string",
+                        "description": "账户类型，默认 BASIC",
+                        "name": "account_type",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "GZIP"
+                        ],
+                        "type": "string",
+                        "description": "压缩类型，默认 GZIP",
+                        "name": "tar_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformBillDownloadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信支付未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/v1/platform/finance/bills/profit-sharing/download-url": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "description": "管理员调用微信支付分账账单接口，获取平台或指定子商户分账账单下载地址",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "平台财务"
+                ],
+                "summary": "获取平台分账账单下载地址",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "账单日期，格式 YYYY-MM-DD",
+                        "name": "bill_date",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "指定子商户号；不传则获取服务商下全部分账账单",
+                        "name": "sub_mchid",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "GZIP"
+                        ],
+                        "type": "string",
+                        "description": "压缩类型，默认 GZIP",
+                        "name": "tar_type",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/api.platformBillDownloadResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "参数错误",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "未认证",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "无权限",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "502": {
+                        "description": "微信支付调用失败",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "微信支付未配置",
+                        "schema": {
+                            "$ref": "#/definitions/api.ErrorResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/v1/platform/operational-configs": {
             "get": {
                 "security": [
@@ -39508,6 +39671,32 @@
                     "type": "string"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "api.platformBillDownloadResponse": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "type": "string"
+                },
+                "bill_date": {
+                    "type": "string"
+                },
+                "download_url": {
+                    "type": "string"
+                },
+                "hash_type": {
+                    "type": "string"
+                },
+                "hash_value": {
+                    "type": "string"
+                },
+                "sub_mch_id": {
+                    "type": "string"
+                },
+                "tar_type": {
                     "type": "string"
                 }
             }
