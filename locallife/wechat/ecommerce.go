@@ -81,12 +81,12 @@ const (
 // EcommerceClient 平台收付通客户端
 // 用于多商户场景，支持分账功能
 type EcommerceClient struct {
-	*PaymentClient          // 复用基础支付客户端
-	spMchID          string // 服务商商户号
-	spAppID          string // 服务商 AppID
-	spMchName        string // 服务商名称（可选）
-	partnerNotifyURL string
-	combineNotifyURL string
+	*PaymentClient           // 复用基础支付客户端
+	spMchID           string // 服务商商户号
+	spAppID           string // 服务商 AppID
+	spMchName         string // 服务商名称（可选）
+	partnerNotifyURL  string
+	combineNotifyURL  string
 	withdrawNotifyURL string
 }
 
@@ -219,12 +219,12 @@ func NewEcommerceClient(cfg EcommerceClientConfig) (*EcommerceClient, error) {
 	withdrawNotifyURL := strings.TrimSpace(cfg.WithdrawNotifyURL)
 
 	return &EcommerceClient{
-		PaymentClient:    baseClient,
-		spMchID:          spMchID,
-		spAppID:          spAppID,
-		spMchName:        spMchName,
-		partnerNotifyURL: partnerNotifyURL,
-		combineNotifyURL: combineNotifyURL,
+		PaymentClient:     baseClient,
+		spMchID:           spMchID,
+		spAppID:           spAppID,
+		spMchName:         spMchName,
+		partnerNotifyURL:  partnerNotifyURL,
+		combineNotifyURL:  combineNotifyURL,
 		withdrawNotifyURL: withdrawNotifyURL,
 	}, nil
 }
@@ -387,7 +387,7 @@ func (c *EcommerceClient) ClosePartnerOrder(ctx context.Context, outTradeNo, sub
 // EcommerceApplymentRequest 二级商户进件申请请求
 type EcommerceApplymentRequest struct {
 	OutRequestNo         string                    `json:"out_request_no"`                   // 业务申请编号
-	OrganizationType     string                    `json:"organization_type"`                // 主体类型: 2401-小微, 2500-个人卖家, 4-个体工商户, 2-企业
+	OrganizationType     string                    `json:"organization_type"`                // 主体类型: 2401-小微, 2500-个人卖家, 4-个体工商户, 2-企业, 3-事业单位, 2502-政府机关, 1708-社会组织
 	FinanceInstitution   bool                      `json:"finance_institution"`              // 是否金融机构
 	BusinessLicense      *BusinessLicenseInfo      `json:"business_license_info,omitempty"`  // 营业执照信息（个体户/企业必填）
 	IDCardInfo           *ApplymentIDCardInfo      `json:"id_card_info"`                     // 法人身份证信息

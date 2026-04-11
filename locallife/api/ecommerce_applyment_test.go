@@ -143,6 +143,7 @@ func TestMerchantBindBankAPI(t *testing.T) {
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
 					DoAndReturn(func(_ any, arg db.CreateEcommerceApplymentParams) (db.EcommerceApplyment, error) {
+						require.Equal(t, "4", arg.OrganizationType)
 						require.Equal(t, "其他银行", arg.AccountBank)
 						require.True(t, arg.AccountBankCode.Valid)
 						require.Equal(t, int64(1099), arg.AccountBankCode.Int64)
@@ -506,6 +507,68 @@ func TestBuildApplymentBusinessTime(t *testing.T) {
 	require.Empty(t, buildApplymentBusinessTime("长期"))
 	require.Empty(t, buildApplymentBusinessTime("永久有效"))
 	require.Equal(t, `["2020-01-01","长期"]`, buildApplymentBusinessTime("2020年01月01日至长期"))
+}
+
+func TestResolveApplymentOrganizationType(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		name               string
+		businessLicenseNum string
+		licenseType        string
+		subjectName        string
+		defaultType        string
+		want               string
+	}{
+		{
+			name:               "NoBusinessLicenseFallsBackToMicro",
+			businessLicenseNum: "",
+			defaultType:        "4",
+			want:               "2401",
+		},
+		{
+			name:               "IndividualLicenseUses4",
+			businessLicenseNum: "91440300TEST123456",
+			licenseType:        "个体工商户",
+			defaultType:        "4",
+			want:               "4",
+		},
+		{
+			name:               "EnterpriseLicenseUses2",
+			businessLicenseNum: "91440300TEST123456",
+			licenseType:        "有限责任公司",
+			defaultType:        "4",
+			want:               "2",
+		},
+		{
+			name:               "InstitutionUses3",
+			businessLicenseNum: "91440300TEST123456",
+			licenseType:        "事业单位法人",
+			defaultType:        "4",
+			want:               "3",
+		},
+		{
+			name:               "GovernmentUses2502",
+			businessLicenseNum: "91440300TEST123456",
+			licenseType:        "政府机关",
+			defaultType:        "4",
+			want:               "2502",
+		},
+		{
+			name:               "SocialOrganizationUses1708",
+			businessLicenseNum: "91440300TEST123456",
+			licenseType:        "社会团体",
+			defaultType:        "4",
+			want:               "1708",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := resolveApplymentOrganizationType(tc.businessLicenseNum, tc.licenseType, tc.subjectName, tc.defaultType)
+			require.Equal(t, tc.want, got)
+		})
+	}
 }
 
 // ==================== 商户开户状态查询测试 ====================

@@ -116,6 +116,7 @@ func TestOperatorBindBankAPI(t *testing.T) {
 					CreateEcommerceApplyment(gomock.Any(), gomock.Any()).
 					Times(1).
 					DoAndReturn(func(_ any, arg db.CreateEcommerceApplymentParams) (db.EcommerceApplyment, error) {
+						require.Equal(t, "2", arg.OrganizationType)
 						require.Equal(t, "其他银行", arg.AccountBank)
 						require.True(t, arg.AccountBankCode.Valid)
 						require.Equal(t, int64(1099), arg.AccountBankCode.Int64)

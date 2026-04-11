@@ -20,13 +20,17 @@ func createRandomEcommerceApplymentForMerchant(t *testing.T) EcommerceApplyment 
 
 // createRandomEcommerceApplymentWithSubject 创建指定主体的进件记录
 func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string, subjectID int64) EcommerceApplyment {
+	return createRandomEcommerceApplymentWithSubjectAndOrgType(t, subjectType, subjectID, "2401")
+}
+
+func createRandomEcommerceApplymentWithSubjectAndOrgType(t *testing.T, subjectType string, subjectID int64, organizationType string) EcommerceApplyment {
 	outRequestNo := util.RandomString(20)
 
 	arg := CreateEcommerceApplymentParams{
 		SubjectType:           subjectType,
 		SubjectID:             subjectID,
 		OutRequestNo:          outRequestNo,
-		OrganizationType:      "2401", // 小微商户
+		OrganizationType:      organizationType,
 		BusinessLicenseNumber: pgtype.Text{String: util.RandomString(18), Valid: true},
 		BusinessLicenseCopy:   pgtype.Text{String: "https://example.com/license.jpg", Valid: true},
 		MerchantName:          util.RandomString(10),
@@ -82,6 +86,21 @@ func createRandomEcommerceApplymentWithSubject(t *testing.T, subjectType string,
 
 func TestCreateEcommerceApplyment(t *testing.T) {
 	createRandomEcommerceApplymentForMerchant(t)
+}
+
+func TestCreateEcommerceApplymentSupportedOrganizationTypes(t *testing.T) {
+	t.Parallel()
+
+	merchant := createRandomMerchantForTest(t)
+	organizationTypes := []string{"2401", "2500", "4", "2", "3", "2502", "1708"}
+
+	for _, organizationType := range organizationTypes {
+		organizationType := organizationType
+		t.Run(organizationType, func(t *testing.T) {
+			applyment := createRandomEcommerceApplymentWithSubjectAndOrgType(t, "merchant", merchant.ID, organizationType)
+			require.Equal(t, organizationType, applyment.OrganizationType)
+		})
+	}
 }
 
 func TestGetEcommerceApplyment(t *testing.T) {
