@@ -523,11 +523,11 @@ func TestSubmitMerchantApplication(t *testing.T) {
 	user, _ := randomUser(t)
 
 	testCases := []struct {
-		name          string
-		setupAuth     func(t *testing.T, request *http.Request, tokenMaker token.Maker)
-		buildStubs    func(t *testing.T, store *mockdb.MockStore)
+		name            string
+		setupAuth       func(t *testing.T, request *http.Request, tokenMaker token.Maker)
+		buildStubs      func(t *testing.T, store *mockdb.MockStore)
 		configureServer func(server *Server)
-		checkResponse func(t *testing.T, recorder *httptest.ResponseRecorder)
+		checkResponse   func(t *testing.T, recorder *httptest.ResponseRecorder)
 	}{
 		{
 			name: "Approved",
@@ -717,7 +717,9 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
+				ocrJobID := int64(501)
 				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					OCRJobID:     &ocrJobID,
 					PermitNo:     "JY11105000000001",
 					CompanyName:  "地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东",
 					OperatorName: "张三",
@@ -786,7 +788,9 @@ func TestSubmitMerchantApplication(t *testing.T) {
 			},
 			buildStubs: func(t *testing.T, store *mockdb.MockStore) {
 				app := randomMerchantAppDraftWithData(user.ID)
+				ocrJobID := int64(501)
 				foodPermitOCR, err := json.Marshal(FoodPermitOCRData{
+					OCRJobID:     &ocrJobID,
 					PermitNo:     "JY11105000000001",
 					CompanyName:  "地址：生祠经营场所面积在50平米以上的小餐饮办理《食品河北省邢台市宁晋县经济开发区希望路北段路东",
 					OperatorName: "张三",
@@ -801,6 +805,11 @@ func TestSubmitMerchantApplication(t *testing.T) {
 					GetMerchantApplicationDraft(gomock.Any(), user.ID).
 					Times(1).
 					Return(app, nil)
+
+				store.EXPECT().
+					GetOCRJob(gomock.Any(), ocrJobID).
+					Times(1).
+					Return(db.OcrJob{ID: ocrJobID, Provider: "wechat", Status: "succeeded"}, nil)
 
 				store.EXPECT().
 					ListMerchantLocationsInRegion(gomock.Any(), app.RegionID.Int64).

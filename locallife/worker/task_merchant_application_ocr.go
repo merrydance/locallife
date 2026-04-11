@@ -200,6 +200,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 		LeaseOwner: "worker:merchant_food_permit",
 	})
 	if err != nil {
+		log.Warn().Err(err).Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", payload.OCRJobID).Str("provider", job.Provider).Msg("food permit OCR job failed")
 		alertEmittedAt := processor.publishOCRFailureAlert(ctx, job, err)
 		failed := foodPermitOCRData{
 			Status:         string(ocr.JobStatusFailed),
@@ -231,8 +232,10 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 		OCRAt:     normalized.RecognizedAt.Format(time.RFC3339),
 	}
 	if normalized.FoodPermit != nil {
-		ocrData.RawText = normalized.FoodPermit.RawText
-		parseFoodPermitOCRText(&ocrData, normalized.FoodPermit.RawText)
+		populateFoodPermitOCRDataFromNormalized(&ocrData, normalized.FoodPermit)
+		if ocrData.RawText != "" {
+			parseFoodPermitOCRTextFallback(&ocrData, ocrData.RawText)
+		}
 	}
 	ocrJSON, _ := json.Marshal(ocrData)
 	_, err = processor.store.UpdateMerchantApplicationFoodPermit(ctx, db.UpdateMerchantApplicationFoodPermitParams{
@@ -243,7 +246,7 @@ func (processor *RedisTaskProcessor) processMerchantApplicationFoodPermitOCRJob(
 		return fmt.Errorf("update merchant application food permit: %w", err)
 	}
 	processor.writeOCRJobAudit(ctx, job, "ocr_job_succeeded", map[string]any{"status": job.Status})
-	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Msg("✅ food permit OCR updated from ocr job")
+	log.Info().Int64("application_id", payload.ApplicationID).Int64("ocr_job_id", job.ID).Str("provider", job.Provider).Msg("✅ food permit OCR updated from ocr job")
 	return nil
 }
 
@@ -395,6 +398,33 @@ func formatPgTimestamp(value pgtype.Timestamptz) string {
 }
 
 func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
+	parseFoodPermitOCRTextInternal(data, text, true)
+}
+
+func parseFoodPermitOCRTextFallback(data *foodPermitOCRData, text string) {
+	if data == nil || text == "" {
+		return
+	}
+	parsed := foodPermitOCRData{}
+	parseFoodPermitOCRTextInternal(&parsed, text, false)
+	if data.CompanyName == "" {
+		data.CompanyName = parsed.CompanyName
+	}
+	if data.OperatorName == "" {
+		data.OperatorName = parsed.OperatorName
+	}
+	if data.PermitNo == "" {
+		data.PermitNo = parsed.PermitNo
+	}
+	if data.ValidFrom == "" {
+		data.ValidFrom = parsed.ValidFrom
+	}
+	if data.ValidTo == "" {
+		data.ValidTo = parsed.ValidTo
+	}
+}
+
+func parseFoodPermitOCRTextInternal(data *foodPermitOCRData, text string, logFailure bool) {
 	// 企业名称匹配 - 使用多种模式尝试提取
 	namePatterns := []*regexp.Regexp{
 		// 模式1: 标准格式 "经营者名称：XXX"
@@ -425,7 +455,7 @@ func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
 	}
 
 	// 如果未能提取企业名称，记录日志便于迭代优化
-	if data.CompanyName == "" {
+	if logFailure && data.CompanyName == "" {
 		log.Warn().
 			Str("raw_text_preview", truncateString(text, 200)).
 			Msg("food permit company name extraction failed")
@@ -487,6 +517,55 @@ func parseFoodPermitOCRText(data *foodPermitOCRData, text string) {
 		data.ValidFrom = normalizeDate(match[1])
 		data.ValidTo = normalizeDate(match[2])
 	}
+}
+
+func populateFoodPermitOCRDataFromNormalized(data *foodPermitOCRData, result *ocr.FoodPermitResult) {
+	if data == nil || result == nil {
+		return
+	}
+	data.RawText = strings.TrimSpace(result.RawText)
+	if licenseNumber := strings.TrimSpace(result.LicenseNumber); licenseNumber != "" {
+		data.PermitNo = licenseNumber
+	}
+	if companyName := cleanCompanyName(strings.ReplaceAll(strings.TrimSpace(result.BusinessName), " ", "")); isLikelyFoodPermitCompanyName(companyName) {
+		data.CompanyName = companyName
+	}
+	if operatorName := strings.TrimSpace(result.OperatorName); operatorName != "" {
+		data.OperatorName = operatorName
+	}
+	validFrom, validTo := parseFoodPermitValidPeriod(result.ValidPeriod)
+	if validFrom != "" {
+		data.ValidFrom = validFrom
+	}
+	if validTo != "" {
+		data.ValidTo = validTo
+	}
+}
+
+func parseFoodPermitValidPeriod(raw string) (string, string) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", ""
+	}
+	raw = strings.ReplaceAll(raw, " 年", "年")
+	raw = strings.ReplaceAll(raw, "年 ", "年")
+	raw = strings.ReplaceAll(raw, " 月", "月")
+	raw = strings.ReplaceAll(raw, "月 ", "月")
+	raw = strings.ReplaceAll(raw, " 日", "日")
+	raw = strings.ReplaceAll(raw, "日 ", "日")
+	if strings.Contains(raw, "长期") || strings.Contains(raw, "永久") {
+		return "", "长期"
+	}
+	datePattern := `\d{4}年\d{1,2}月\d{1,2}日`
+	rangeRegex := regexp.MustCompile(`(` + datePattern + `)\s*[至到-]\s*(` + datePattern + `)`)
+	if match := rangeRegex.FindStringSubmatch(raw); len(match) > 2 {
+		return match[1], match[2]
+	}
+	singleRegex := regexp.MustCompile(`(` + datePattern + `)`)
+	if match := singleRegex.FindStringSubmatch(raw); len(match) > 1 {
+		return "", match[1]
+	}
+	return "", raw
 }
 
 // truncateString 截断字符串用于日志

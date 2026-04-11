@@ -1104,12 +1104,15 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		matchedByRawText = true
 	}
 	if permitName == "" {
+		server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "name_unreadable")
 		return ErrMerchantFoodPermitNameUnreadable
 	}
 	if !companyNamesMatch(licenseName, permitName) {
 		if isSuspiciousFoodPermitCompanyName(permitName) {
+			server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "suspicious_company_name")
 			return ErrMerchantFoodPermitNameUnreadable
 		}
+		server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "name_mismatch")
 		return apierr(ErrMerchantFoodPermitNameMismatch.Code, fmt.Sprintf("食品经营许可证主体名称与营业执照企业名称不一致，请核对后重试。营业执照：%s；食品经营许可证：%s。", licenseName, permitName))
 	}
 	// 仅前缀宽松匹配通过（非完全一致）时，额外要求经营者姓名与营业执照法人一致
@@ -1117,6 +1120,7 @@ func (server *Server) checkMerchantApplicationApproval(ctx *gin.Context, app db.
 		permitOperator := strings.TrimSpace(foodPermitOCR.OperatorName)
 		licenseLegalPerson := strings.TrimSpace(licenseOCR.LegalRepresentative)
 		if licenseLegalPerson != "" && permitOperator != "" && licenseLegalPerson != permitOperator {
+			server.logFoodPermitValidationFailure(ctx, app, foodPermitOCR, licenseName, permitName, "operator_mismatch")
 			return apierr(ErrMerchantFoodPermitNameMismatch.Code, fmt.Sprintf("食品经营许可证主体名称与营业执照企业名称未完全一致，且食品经营许可证经营者（%s）与营业执照法人（%s）不一致，请核对证照信息后重试。", permitOperator, licenseLegalPerson))
 		}
 	}
@@ -1285,6 +1289,37 @@ func normalizeCompanyName(name string) string {
 	name = strings.ReplaceAll(name, "（", "(")
 	name = strings.ReplaceAll(name, "）", ")")
 	return name
+}
+
+func (server *Server) logFoodPermitValidationFailure(ctx *gin.Context, app db.MerchantApplication, foodPermitOCR FoodPermitOCRData, licenseName, permitName, reason string) {
+	logger := log.Warn().
+		Int64("application_id", app.ID).
+		Int64("user_id", app.UserID).
+		Str("reason", reason).
+		Str("license_name", licenseName).
+		Str("permit_name", permitName)
+	if foodPermitOCR.OCRJobID != nil && *foodPermitOCR.OCRJobID > 0 {
+		logger = logger.Int64("ocr_job_id", *foodPermitOCR.OCRJobID)
+		if server.store != nil {
+			job, err := server.store.GetOCRJob(ctx, *foodPermitOCR.OCRJobID)
+			if err != nil {
+				log.Warn().Err(err).Int64("application_id", app.ID).Int64("ocr_job_id", *foodPermitOCR.OCRJobID).Msg("submit merchant application: load food permit ocr job failed")
+			} else {
+				logger = logger.Str("ocr_provider", job.Provider).Str("ocr_job_status", job.Status)
+			}
+		}
+	}
+	if foodPermitOCR.RawText != "" {
+		logger = logger.Str("raw_text_preview", truncateMerchantOCRText(foodPermitOCR.RawText, 200))
+	}
+	logger.Msg("submit merchant application: food permit validation failed")
+}
+
+func truncateMerchantOCRText(text string, maxLen int) string {
+	if len(text) <= maxLen {
+		return text
+	}
+	return text[:maxLen] + "..."
 }
 
 // isChineseDateAtLeastDaysAfterNow 判断形如 2025年12月31日/长期 的日期是否至少晚于 now + days。
