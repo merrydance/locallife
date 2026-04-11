@@ -129,6 +129,11 @@ export interface WebLoginSessionStatus {
   consumed_at?: string
 }
 
+export interface AppBindCodeResponse {
+  code: string
+  expires_in: number
+}
+
 // 兼容性别名
 export type RefreshTokenRequest = RenewAccessTokenRequest
 
@@ -203,6 +208,13 @@ export function confirmWebLoginSession(code: string, sig?: string, ts?: number) 
     url: '/v1/auth/web-login/confirm',
     method: 'POST',
     data: { code, sig, ts }
+  })
+}
+
+export function generateAppBindCode() {
+  return request<AppBindCodeResponse>({
+    url: '/v1/auth/app-bind/code',
+    method: 'POST'
   })
 }
 
