@@ -109,6 +109,14 @@ Mini Program:
 - `.github/standards/weapp/PAGE_DELIVERY_BASELINE.md`
 - `.github/standards/weapp/README.md`
 
+Flutter Merchant App:
+
+- `.github/standards/flutter/README.md`
+- `.github/standards/flutter/FLUTTER_APP_ARCHITECTURE.md`
+- `.github/standards/flutter/APP_AUTH_BINDING.md`
+- `.github/standards/flutter/PUSH_NOTIFICATION_STANDARDS.md`
+- `.github/standards/flutter/ANDROID_KEEP_ALIVE_GUIDE.md`
+
 Domain modules:
 
 - `.github/standards/domains/media/*`
